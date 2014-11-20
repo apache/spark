@@ -29,7 +29,7 @@ from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
-    PairDeserializer, CompressedSerializer, AutoBatchedSerializer, NoOpSerializer
+    PairDeserializer, AutoBatchedSerializer, NoOpSerializer, LargeObjectSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 from pyspark.traceback_utils import CallSite, first_spark_call
@@ -624,7 +624,8 @@ class SparkContext(object):
         object for reading it in distributed functions. The variable will
         be sent to each cluster only once.
         """
-        ser = CompressedSerializer(PickleSerializer())
+        ser = LargeObjectSerializer()
+
         # pass large object by py4j is very slow and need much memory
         tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
         ser.dump_stream([value], tempFile)

@@ -15,11 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java
+package org.apache.spark.streaming;
 
-/**
- * Set of interfaces to represent functions in Spark's Java API. Users create implementations of
- * these interfaces to pass functions to various Java API methods for Spark. Please visit Spark's
- * Java programming guide for more details.
- */
-package object function 
+import org.apache.spark.streaming.api.java.JavaStreamingContext;
+import org.junit.After;
+import org.junit.Before;
+
+public abstract class LocalJavaStreamingContext {
+
+    protected transient JavaStreamingContext ssc;
+
+    @Before
+    public void setUp() {
+        System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock");
+        ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
+        ssc.checkpoint("checkpoint");
+    }
+
+    @After
+    public void tearDown() {
+        ssc.stop();
+        ssc = null;
+    }
+}
