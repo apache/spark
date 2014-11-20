@@ -21,8 +21,7 @@ import org.apache.spark.sql.QueryTest
 import org.scalatest.BeforeAndAfterAll
 import java.io.File
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.orc.OrcData
-import org.apache.spark.sql.hive.orc.OrcDataWithKey
+import org.apache.spark.sql.catalyst.expressions.Row
 
 // The data where the partitioning key exists only in the directory structure.
 case class OrcData(intField: Int, stringField: String)
@@ -48,7 +47,7 @@ abstract class OrcTest extends QueryTest with BeforeAndAfterAll {
         .saveAsOrcFile(partDir.getCanonicalPath)
     }
 
-    partitionedTableDirWithKey = File.createTempFile("parquettests", "sparksql")
+    partitionedTableDirWithKey = File.createTempFile("orctests", "sparksql")
     partitionedTableDirWithKey.delete()
     partitionedTableDirWithKey.mkdir()
 
@@ -60,7 +59,7 @@ abstract class OrcTest extends QueryTest with BeforeAndAfterAll {
     }
   }
 
-  Seq("partitioned_parquet", "partitioned_parquet_with_key").foreach { table =>
+  Seq("partitioned_orc", "partitioned_orc_with_key").foreach { table =>
     test(s"project the partitioning column $table") {
       checkAnswer(
         sql(s"SELECT p, count(*) FROM $table group by p"),
@@ -134,11 +133,37 @@ abstract class OrcTest extends QueryTest with BeforeAndAfterAll {
 
   test("non-part select(*)") {
     checkAnswer(
-      sql("SELECT COUNT(*) FROM normal_parquet"),
+      sql("SELECT COUNT(*) FROM normal_orc"),
       10)
   }
 }
 
-class OrcSourceSuite {
+class OrcSourceSuite extends OrcTest {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
 
+    sql( s"""
+      create temporary table partitioned_orc
+      USING org.apache.spark.sql.hive.orc
+      OPTIONS (
+        path '${partitionedTableDir.getCanonicalPath}'
+      )
+    """)
+
+    sql( s"""
+      create temporary table partitioned_orc_with_key
+      USING org.apache.spark.sql.hive.orc
+      OPTIONS (
+        path '${partitionedTableDirWithKey.getCanonicalPath}'
+      )
+    """)
+
+    sql( s"""
+      create temporary table normal_orc
+      USING org.apache.spark.sql.hive.orc
+      OPTIONS (
+        path '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
+      )
+    """)
+  }
 }

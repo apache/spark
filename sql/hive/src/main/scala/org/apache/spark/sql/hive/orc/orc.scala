@@ -37,7 +37,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.expressions.{SpecificMutableRow, Attribute, Expression, Row}
-import org.apache.spark.sql.hive.{HadoopTableReader, HiveMetastoreTypes}
+import org.apache.spark.sql.hive.{HiveShim, HadoopTableReader, HiveMetastoreTypes}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.parquet.FileSystemHelper
 
@@ -81,11 +81,10 @@ private[orc] case class Partition(partitionValues: Map[String, Any], files: Seq[
 case class OrcRelation2(path: String)(@transient val sqlContext: SQLContext)
   extends CatalystScan with Logging {
 
-  // used for what?
-  val prop: Properties = new Properties
-
   @transient
   lazy val serde: OrcSerde = initSerde
+
+  val prop: Properties = new Properties
 
   private def initSerde(): OrcSerde = {
     val serde = new OrcSerde
@@ -239,7 +238,7 @@ case class OrcRelation2(path: String)(@transient val sqlContext: SQLContext)
 
     assert(ids.size == names.size, "columns id and name length does not match!")
     if (ids != null && !ids.isEmpty) {
-      ColumnProjectionUtils.appendReadColumns(conf, ids, names)
+      HiveShim.appendReadColumns(conf, ids, names)
     }
   }
 }

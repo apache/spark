@@ -24,12 +24,13 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.planning._
-import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.StringType
 import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan}
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
+import org.apache.spark.sql.hive.orc.{WriteToOrcFile, InsertIntoOrcTable, OrcRelation, OrcTableScan}
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.{SQLContext, SchemaRDD, Strategy}
 
@@ -229,6 +230,26 @@ private[hive] trait HiveStrategies {
             Seq(DescribeCommand(planLater(o), describe.output)(context))
         }
 
+      case _ => Nil
+    }
+  }
+
+  object OrcOperations extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case WriteToOrcFile(path, child) =>
+        val relation =
+          OrcRelation.create(path, child, sparkContext.hadoopConfiguration, sqlContext)
+        InsertIntoOrcTable(relation, planLater(child), overwrite = true) :: Nil
+      case logical.InsertIntoTable(table: OrcRelation, partition, child, overwrite) =>
+        InsertIntoOrcTable(table, planLater(child), overwrite) :: Nil
+      case PhysicalOperation(projectList, filters, relation: OrcRelation) =>
+        // TODO: need to implement predict push down.
+        val prunePushedDownFilters = identity[Seq[Expression]] _
+        pruneFilterProject(
+          projectList,
+          filters,
+          prunePushedDownFilters,
+          OrcTableScan(_, relation, None)) :: Nil
       case _ => Nil
     }
   }
