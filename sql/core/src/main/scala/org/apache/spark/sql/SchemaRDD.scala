@@ -475,7 +475,7 @@ class SchemaRDD(
   }
 
   override def persist(newLevel: StorageLevel): this.type = {
-    sqlContext.cacheQuery(this, newLevel)
+    sqlContext.cacheQuery(this, None, newLevel)
     this
   }
 
