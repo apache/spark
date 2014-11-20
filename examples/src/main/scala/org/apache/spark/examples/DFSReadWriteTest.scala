@@ -94,12 +94,13 @@ object DFSReadWriteTest {
   }
 
   def runLocalWordCount(fileContents: List[String]): Int = {
-    fileContents.flatMap {
-      ln => ln.split(" ") }.flatMap {
-      ln => ln.split("\t") }.filter {
-      ln => ln.size > 0 }.groupBy {
-      w => w }.mapValues {
-      lst => lst.size }.values.sum
+    fileContents.flatMap(_.split(" "))
+      .flatMap(_.split("\t"))
+      .filter(_.size > 0)
+      .groupBy(w => w)
+      .mapValues(_.size)
+      .values
+      .sum
   }
 
   def main(args: Array[String]) {
