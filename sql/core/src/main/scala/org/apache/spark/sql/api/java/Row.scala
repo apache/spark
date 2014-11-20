@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.api.java
 
+import org.apache.spark.sql.catalyst.types.date.Date
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 import scala.annotation.varargs
@@ -127,6 +128,7 @@ object Row {
     case seq: scala.collection.Seq[_] =>
       JavaConversions.seqAsJavaList(seq.map(toJavaValue))
     case decimal: BigDecimal => decimal.underlying()
+    case date: Date => date.toJavaDate
     case other => other
   }
 
@@ -141,6 +143,7 @@ object Row {
     case list: java.util.List[_] =>
       JListWrapper(list).map(toScalaValue)
     case decimal: java.math.BigDecimal => BigDecimal(decimal)
+    case date: java.sql.Date => Date(date)
     case other => other
   }
 

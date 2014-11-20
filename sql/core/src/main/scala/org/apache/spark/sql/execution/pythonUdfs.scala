@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.{List => JList, Map => JMap}
 
+import org.apache.spark.sql.catalyst.types.date.Date
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 import scala.collection.JavaConversions._
@@ -139,6 +140,8 @@ object EvaluatePython {
 
     case (dec: BigDecimal, dt: DecimalType) => dec.underlying()  // Pyrolite can handle BigDecimal
 
+    case (date: Date, DateType) => date.toJavaDate
+
     // Pyrolite can handle Timestamp
     case (other, _) => other
   }
@@ -174,7 +177,7 @@ object EvaluatePython {
       }): Row
 
     case (c: java.util.Calendar, DateType) =>
-      new java.sql.Date(c.getTime().getTime())
+      Date(c.getTime().getTime())
 
     case (c: java.util.Calendar, TimestampType) =>
       new java.sql.Timestamp(c.getTime().getTime())
