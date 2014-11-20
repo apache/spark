@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 @echo off
 
 rem
