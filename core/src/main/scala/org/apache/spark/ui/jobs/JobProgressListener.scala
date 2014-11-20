@@ -49,8 +49,6 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   type PoolName = String
   type ExecutorId = String
 
-  // Define all of our state:
-
   // Jobs:
   val activeJobs = new HashMap[JobId, JobUIData]
   val completedJobs = ListBuffer[JobUIData]()
@@ -151,9 +149,18 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       group <- Option(props.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
     ) yield group
     val jobData: JobUIData =
-      new JobUIData(jobStart.jobId, Some(System.currentTimeMillis), None, jobStart.stageIds,
-        jobGroup, JobExecutionStatus.RUNNING)
-    // Compute (a potential underestimate of) the number of tasks that will be run by this job:
+      new JobUIData(
+        jobId = jobStart.jobId,
+        startTime = Some(System.currentTimeMillis),
+        endTime = None,
+        stageIds = jobStart.stageIds,
+        jobGroup = jobGroup,
+        status = JobExecutionStatus.RUNNING)
+    // Compute (a potential underestimate of) the number of tasks that will be run by this job.
+    // This may be an underestimate because the job start event references all of the result
+    // stages's transitive stage dependencies, but some of these stages might be skipped if their
+    // output is available from earlier runs.
+    // See https://github.com/apache/spark/pull/3009 for a more extensive discussion.
     jobData.numTasks = {
       val allStages = jobStart.stageInfos
       val missingStages = allStages.filter(_.completionTime.isEmpty)
@@ -195,8 +202,8 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
           // If this is a pending stage and no other job depends on it, then it won't be run.
           // To prevent memory leaks, remove this data since it won't be cleaned up as stages
           // finish / fail:
-          if (stageInfo.submissionTime.isEmpty && stageInfo.completionTime.isEmpty
-            && jobsUsingStage.isEmpty) {
+          val isPendingStage = stageInfo.submissionTime.isEmpty && stageInfo.completionTime.isEmpty
+          if (isPendingStage && jobsUsingStage.isEmpty) {
             stageIdToInfo.remove(stageId)
             stageIdToData.remove((stageId, stageInfo.attemptId))
           }
