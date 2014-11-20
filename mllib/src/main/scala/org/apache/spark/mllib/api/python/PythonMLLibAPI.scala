@@ -510,11 +510,11 @@ class PythonMLLibAPI extends Serializable {
       algoStr: String,
       numClasses: Int,
       categoricalFeaturesInfo: JMap[Int, Int],
+      numTrees: Int,
+      featureSubsetStrategy: String,
       impurityStr: String,
       maxDepth: Int,
       maxBins: Int,
-      numTrees: Int,
-      featureSubsetStrategy: String,
       seed: Int): RandomForestModel = {
 
     val algo = Algo.fromString(algoStr)

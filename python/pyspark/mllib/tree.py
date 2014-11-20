@@ -236,16 +236,17 @@ class RandomForest(object):
     supportedFeatureSubsetStrategies = ("auto", "all", "sqrt", "log2", "onethird")
 
     @classmethod
-    def _train(cls, data, type, numClasses, features, impurity, maxDepth, maxBins,
-               numTrees, featureSubsetStrategy, seed):
+    def _train(cls, data, algo, numClasses, categoricalFeaturesInfo, numTrees,
+               featureSubsetStrategy, impurity, maxDepth, maxBins, seed):
         first = data.first()
         assert isinstance(first, LabeledPoint), "the data should be RDD of LabeledPoint"
         if featureSubsetStrategy not in cls.supportedFeatureSubsetStrategies:
             raise ValueError("unsupported featureSubsetStrategy: %s" % featureSubsetStrategy)
         if seed is None:
             seed = random.randint(0, 1 << 30)
-        model = callMLlibFunc("trainRandomForestModel", data, type, numClasses, features,
-                              impurity, maxDepth, maxBins, numTrees, featureSubsetStrategy, seed)
+        model = callMLlibFunc("trainRandomForestModel", data, algo, numClasses,
+                              categoricalFeaturesInfo, numTrees, featureSubsetStrategy, impurity,
+                              maxDepth, maxBins, seed)
         return RandomForestModel(model)
 
     @classmethod
@@ -320,8 +321,8 @@ class RandomForest(object):
         [1.0, 0.0]
         """
         return cls._train(data, "classification", numClassesForClassification,
-                          categoricalFeaturesInfo, impurity, maxDepth, maxBins, numTrees,
-                          featureSubsetStrategy, seed)
+                          categoricalFeaturesInfo, numTrees, featureSubsetStrategy, impurity,
+                          maxDepth, maxBins, seed)
 
     @classmethod
     def trainRegressor(cls, data, categoricalFeaturesInfo, numTrees, featureSubsetStrategy="auto",
@@ -378,8 +379,8 @@ class RandomForest(object):
         >>> model.predict(rdd).collect()
         [1.0, 0.5]
         """
-        return cls._train(data, "regression", 0, categoricalFeaturesInfo, impurity,
-                          maxDepth, maxBins, numTrees, featureSubsetStrategy, seed)
+        return cls._train(data, "regression", 0, categoricalFeaturesInfo, numTrees,
+                          featureSubsetStrategy, impurity, maxDepth, maxBins, seed)
 
 
 def _test():
