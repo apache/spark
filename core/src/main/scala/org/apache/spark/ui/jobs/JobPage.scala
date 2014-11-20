@@ -22,13 +22,13 @@ import scala.xml.{NodeSeq, Node}
 
 import javax.servlet.http.HttpServletRequest
 
+import org.apache.spark.JobExecutionStatus
 import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 
 /** Page showing statistics and stage list for a given job */
 private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
   private val listener = parent.listener
-  private val sc = parent.sc
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
@@ -43,6 +43,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
           s"Details for Job $jobId", content, parent)
       }
       val jobData = jobDataOption.get
+      val isComplete = jobData.status != JobExecutionStatus.RUNNING
       val stages = jobData.stageIds.map { stageId =>
         // This could be empty if the JobProgressListener hasn't received information about the
         // stage or if the stage information has been garbage collected
@@ -55,7 +56,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       val completedStages = mutable.Buffer[StageInfo]()
       val failedStages = mutable.Buffer[StageInfo]()
       for (stage <- stages) {
-        if (stage.submissionTime.isEmpty) {
+        if (!isComplete && stage.submissionTime.isEmpty) {
           pendingStages += stage
         } else if (stage.completionTime.isDefined) {
           if (stage.failureReason.isDefined) {

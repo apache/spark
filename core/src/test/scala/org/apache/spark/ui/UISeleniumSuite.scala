@@ -221,4 +221,21 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       }
     }
   }
+
+  test("stages that aren't run do not show up in 'pending stages' after a job finishes") {
+    withSpark(newSparkContext()) { sc =>
+      // Create an RDD that involves multiple stages:
+      val rdd =
+        sc.parallelize(Seq(1, 2, 3)).map(identity).groupBy(identity).map(identity).groupBy(identity)
+      // Run it twice; this will cause the second job to have two "phantom" stages that were
+      // mentioned in its job start event but which were never actually executed:
+      rdd.count()
+      rdd.count()
+      // Check that the "pending stages" section is empty:
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs/job/?id=1")
+        find(id("pending")).get.text should be ("Pending Stages (0)")
+      }
+    }
+  }
 }
