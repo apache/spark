@@ -25,6 +25,14 @@ object HiveFromSpark {
   case class Record(key: Int, value: String)
 
   def main(args: Array[String]) {
+
+    if (args.length < 1) {
+      System.err.println("Usage: HiveFromSpark <file>")
+      System.exit(1)
+    }
+    // Data path for a table type of (Int, String)
+    val path = args(0)
+
     val sparkConf = new SparkConf().setAppName("HiveFromSpark")
     val sc = new SparkContext(sparkConf)
 
@@ -35,7 +43,7 @@ object HiveFromSpark {
     import hiveContext._
 
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    sql("LOAD DATA LOCAL INPATH 'src/main/resources/kv1.txt' INTO TABLE src")
+    sql(s"LOAD DATA LOCAL INPATH '$path' INTO TABLE src")
 
     // Queries are expressed in HiveQL
     println("Result of 'SELECT *': ")
