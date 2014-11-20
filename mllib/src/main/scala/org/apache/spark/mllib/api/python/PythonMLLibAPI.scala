@@ -230,6 +230,41 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib LogisticRegressionWithLBFGS.train()
+   */
+  def trainLogisticRegressionModelWithLBFGS(
+      data: JavaRDD[LabeledPoint],
+      numIterations: Int,
+      initialWeights: Vector,
+      regParam: Double,
+      regType: String,
+      intercept: Boolean,
+      corrections: Int,
+      tolerance: Double): JList[Object] = {
+    val LogRegAlg = new LogisticRegressionWithLBFGS()
+    LogRegAlg.setIntercept(intercept)
+    LogRegAlg.optimizer
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      .setNumCorrections(corrections)
+      .setConvergenceTol(tolerance)
+    if (regType == "l2") {
+      LogRegAlg.optimizer.setUpdater(new SquaredL2Updater)
+    } else if (regType == "l1") {
+      LogRegAlg.optimizer.setUpdater(new L1Updater)
+    } else if (regType == null) {
+      LogRegAlg.optimizer.setUpdater(new SimpleUpdater)
+    } else {
+      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
+        + " Can only be initialized using the following string values: ['l1', 'l2', None].")
+    }
+    trainRegressionModel(
+      LogRegAlg,
+      data,
+      initialWeights)
+  }
+
+  /**
    * Java stub for NaiveBayes.train()
    */
   def trainNaiveBayes(

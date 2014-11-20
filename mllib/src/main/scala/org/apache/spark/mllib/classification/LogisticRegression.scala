@@ -64,7 +64,7 @@ class LogisticRegressionModel (
     val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
     val score = 1.0 / (1.0 + math.exp(-margin))
     threshold match {
-      case Some(t) => if (score < t) 0.0 else 1.0
+      case Some(t) => if (score > t) 1.0 else 0.0
       case None => score
     }
   }
