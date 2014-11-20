@@ -17,15 +17,13 @@ class LocalWorker(multiprocessing.Process):
         self.result_queue = result_queue
 
     def run(self):
-        proc_name = self.name
         while True:
             key, command = self.task_queue.get()
             if key is None:
                 # Received poison pill, no more tasks to run
                 self.task_queue.task_done()
                 break
-            BASE_FOLDER = getconf().get('core', 'BASE_FOLDER')
-            print command
+            logging.info(command)
             command = (
                 "exec bash -c '"
                 "cd $AIRFLOW_HOME;\n" +
@@ -34,11 +32,13 @@ class LocalWorker(multiprocessing.Process):
                 "'"
             ).format(**locals())
             try:
-                sp = subprocess.Popen(command, shell=True).wait()
+                subprocess.Popen(command, shell=True).wait()
             except Exception as e:
-                self.result_queue.put((key, State.FAILED))
-                raise e
-            self.result_queue.put((key, State.SUCCESS))
+                state = State.FAILED
+                logging.error(str(e))
+                # raise e
+            state = State.SUCCESS
+            self.result_queue.put((key, state))
             self.task_queue.task_done()
             time.sleep(1)
 

@@ -1,5 +1,7 @@
 import logging
 
+from airflow.utils import State
+
 
 class BaseExecutor(object):
 
@@ -17,9 +19,10 @@ class BaseExecutor(object):
     def queue_command(self, key, command):
         """
         """
-        logging.info("Adding to queue: " + command)
-        self.commands[key] = "running"
-        self.execute_async(key, command)
+        if key not in self.commands or self.commands[key] in State.runnable():
+            logging.info("Adding to queue: " + command)
+            self.commands[key] = State.RUNNING
+            self.execute_async(key, command)
 
     def change_state(self, key, state):
         self.commands[key] = state
