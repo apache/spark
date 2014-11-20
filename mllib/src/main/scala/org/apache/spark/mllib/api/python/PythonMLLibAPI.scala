@@ -40,10 +40,10 @@ import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.stat.test.ChiSqTestResult
-import org.apache.spark.mllib.tree.DecisionTree
+import org.apache.spark.mllib.tree.{RandomForest, DecisionTree}
 import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
 import org.apache.spark.mllib.tree.impurity._
-import org.apache.spark.mllib.tree.model.DecisionTreeModel
+import org.apache.spark.mllib.tree.model.{RandomForestModel, DecisionTreeModel}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -497,6 +497,40 @@ class PythonMLLibAPI extends Serializable {
       minInfoGain = minInfoGain)
 
     DecisionTree.train(data.rdd, strategy)
+  }
+
+  /**
+   * Java stub for Python mllib RandomForest.train().
+   * This stub returns a handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on exit;
+   * see the Py4J documentation.
+   */
+  def trainRandomForestModel(
+      data: JavaRDD[LabeledPoint],
+      algoStr: String,
+      numClasses: Int,
+      categoricalFeaturesInfo: JMap[Int, Int],
+      numTrees: Int,
+      featureSubsetStrategy: String,
+      impurityStr: String,
+      maxDepth: Int,
+      maxBins: Int,
+      seed: Int): RandomForestModel = {
+
+    val algo = Algo.fromString(algoStr)
+    val impurity = Impurities.fromString(impurityStr)
+    val strategy = new Strategy(
+      algo = algo,
+      impurity = impurity,
+      maxDepth = maxDepth,
+      numClassesForClassification = numClasses,
+      maxBins = maxBins,
+      categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap)
+    if (algo == Algo.Classification) {
+      RandomForest.trainClassifier(data.rdd, strategy, numTrees, featureSubsetStrategy, seed)
+    } else {
+      RandomForest.trainRegressor(data.rdd, strategy, numTrees, featureSubsetStrategy, seed)
+    }
   }
 
   /**

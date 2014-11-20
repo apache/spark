@@ -230,8 +230,7 @@ object RandomForest extends Serializable with Logging {
    *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
-   *                                if numTrees > 1 (forest) set to "sqrt" for classification and
-   *                                  to "onethird" for regression.
+   *                                if numTrees > 1 (forest) set to "sqrt".
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
    * @return a random forest model that can be used for prediction
    */
@@ -261,8 +260,7 @@ object RandomForest extends Serializable with Logging {
    *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
-   *                                if numTrees > 1 (forest) set to "sqrt" for classification and
-   *                                  to "onethird" for regression.
+   *                                if numTrees > 1 (forest) set to "sqrt".
    * @param impurity Criterion used for information gain calculation.
    *                 Supported values: "gini" (recommended) or "entropy".
    * @param maxDepth Maximum depth of the tree.
@@ -318,8 +316,7 @@ object RandomForest extends Serializable with Logging {
    *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
-   *                                if numTrees > 1 (forest) set to "sqrt" for classification and
-   *                                  to "onethird" for regression.
+   *                                if numTrees > 1 (forest) set to "onethird".
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
    * @return a random forest model that can be used for prediction
    */
@@ -348,8 +345,7 @@ object RandomForest extends Serializable with Logging {
    *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
-   *                                if numTrees > 1 (forest) set to "sqrt" for classification and
-   *                                  to "onethird" for regression.
+   *                                if numTrees > 1 (forest) set to "onethird".
    * @param impurity Criterion used for information gain calculation.
    *                 Supported values: "variance".
    * @param maxDepth Maximum depth of the tree.
