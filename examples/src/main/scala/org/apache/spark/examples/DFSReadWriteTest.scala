@@ -80,17 +80,6 @@ object DFSReadWriteTest {
 
     i += 1
     dfsDirPath = new File(args(i))
-    if(!dfsDirPath.exists) {
-      System.err.println("Given path (" + args(i) + ") does not exist.\n")
-      printUsage()
-      System.exit(1)
-    }
-
-    if(dfsDirPath.isDirectory) {
-      System.err.println("Given path (" + args(i) + ") is not a directory.\n")
-      printUsage()
-      System.exit(1)
-    }
   }
 
   def runLocalWordCount(fileContents: List[String]): Int = {
@@ -137,10 +126,10 @@ object DFSReadWriteTest {
 
     if(localWordCount == dfsWordCount) {
       println(s"Success! Local Word Count ($localWordCount) " +
-        "and DFS Word Count ($dfsWordCount) agree.")
+        s"and DFS Word Count ($dfsWordCount) agree.")
     } else {
       println(s"Failure! Local Word Count ($localWordCount) " +
-        "and DFS Word Count ($dfsWordCount) disagree.")
+        s"and DFS Word Count ($dfsWordCount) disagree.")
     }
 
   }
