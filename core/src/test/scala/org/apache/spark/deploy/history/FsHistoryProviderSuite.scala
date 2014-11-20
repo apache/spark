@@ -138,6 +138,30 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     }
   }
 
+  test("SPARK-3697: ignore directories that cannot be read.") {
+    val logFile1 = new File(testDir, "new1")
+    writeFile(logFile1, true, None,
+      SparkListenerApplicationStart("app1-1", None, 1L, "test"),
+      SparkListenerApplicationEnd(2L)
+      )
+    val logFile2 = new File(testDir, "new2")
+    writeFile(logFile2, true, None,
+      SparkListenerApplicationStart("app1-2", None, 1L, "test"),
+      SparkListenerApplicationEnd(2L)
+      )
+    logFile2.setReadable(false, false)
+
+    val conf = new SparkConf()
+      .set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
+      .set("spark.history.fs.updateInterval", "0")
+    val provider = new FsHistoryProvider(conf)
+    provider.checkForLogs()
+
+    val list = provider.getListing().toSeq
+    list should not be (null)
+    list.size should be (1)
+  }
+
   private def writeFile(file: File, isNewFormat: Boolean, codec: Option[CompressionCodec],
     events: SparkListenerEvent*) = {
     val out =
