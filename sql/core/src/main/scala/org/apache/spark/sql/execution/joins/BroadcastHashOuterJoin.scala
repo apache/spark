@@ -31,8 +31,14 @@ import org.apache.spark.util.collection.CompactBuffer
 
 /**
  * :: DeveloperApi ::
- * Performs a hash based outer join for two child relations by shuffling the data using
- * the join keys. This operator requires loading the associated partition in both side into memory.
+ * Performs a hash based outer join for two child relations. When the output RDD of this operator is
+ * being constructed, a Spark job is asynchronously started to calculate the values for the
+ * broadcasted relation.  This data is then placed in a Spark broadcast variable.  The streamed
+ * relation is not shuffled.
+ * Comment:In left(right) outer join only the right(left) table has an
+ * estimated physical size smaller than the user-settable threshold
+ * [[org.apache.spark.sql.SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]] the planner
+ * would mark it as the broadcasted relation.
  */
 @DeveloperApi
 case class BroadcastHashOuterJoin(
@@ -74,16 +80,11 @@ case class BroadcastHashOuterJoin(
   @transient private[this] lazy val BroadcastSideKeyGenerator: Projection =
     newProjection(broadcastKeys, broadcastPlan.output)
 
-
   @transient private[this] lazy val streamSideKeyGenerator: () => MutableProjection =
     newMutableProjection(streamedKeys, streamedPlan.output)
 
-  // TODO we need to rewrite all of the iterators with our own implementation instead of the Scala
-  // iterator for performance purpose.
-
   @transient private[this] lazy val DUMMY_LIST = Seq[Row](null)
   @transient private[this] lazy val EMPTY_LIST = Seq.empty[Row]
-
 
   private[this] def buildHashTable(
       iter: Iterator[Row], keyGenerator: Projection): JavaHashMap[Row, CompactBuffer[Row]] = {
@@ -105,11 +106,9 @@ case class BroadcastHashOuterJoin(
   }
 
   override def execute() = {
-
     val input: Array[Row] = broadcastPlan.execute().map(_.copy()).collect()
     val hashed = buildHashTable(input.iterator, BroadcastSideKeyGenerator)
     val broadcastHashTable = sparkContext.broadcast(hashed)
-
     val boundCondition =
       condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
 
@@ -124,11 +123,10 @@ case class BroadcastHashOuterJoin(
           streamedRow =>
             val rowKey = joinKey(streamedRow)
             val broadcastRow = broadcastHashTable.value.getOrElse(rowKey, EMPTY_LIST)
+            var matched = false
             joinType match {
               case LeftOuter =>
                 joinedRow.withLeft(streamedRow)
-                var matched = false
-                //val rightNullRow = new GenericRow(right.output.length)
                 (if (!rowKey.anyNull) broadcastRow.collect {
                   case r if (boundCondition(joinedRow.withRight(r))) =>
                     matched = true
@@ -142,11 +140,8 @@ case class BroadcastHashOuterJoin(
                   // If we didn't get any proper row, then append a single row with empty right
                   joinedRow.withRight(broadcastNulls).copy
                 })
-
               case RightOuter =>
                 joinedRow.withRight(streamedRow)
-                var matched = false
-                //val leftNullRow = new GenericRow(left.output.length)
                 (if (!rowKey.anyNull) broadcastRow.collect {
                   case r if (boundCondition(joinedRow.withLeft(r))) =>
                     matched = true
@@ -156,15 +151,13 @@ case class BroadcastHashOuterJoin(
                 }) ++ DUMMY_LIST.filter(_ => !matched).map(_ => {
                   // DUMMY_LIST.filter(_ => !matched) is a tricky way to add additional row,
                   // as we don't know whether we need to append it until finish iterating all of the
-                  // records in right side.
-                  // If we didn't get any proper row, then append a single row with empty right
-                  joinedRow.withRight(broadcastNulls).copy
+                  // records in left side.
+                  // If we didn't get any proper row, then append a single row with empty left
+                  joinedRow.withLeft(broadcastNulls).copy
                 })
-
               case _ => Nil
             }
         }
-
     }
   }
 }
