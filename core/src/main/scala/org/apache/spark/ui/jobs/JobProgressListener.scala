@@ -189,7 +189,19 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
         jobData.status = JobExecutionStatus.FAILED
     }
     for (stageId <- jobData.stageIds) {
-      stageIdToActiveJobIds.get(stageId).foreach(_.remove(jobEnd.jobId))
+      stageIdToActiveJobIds.get(stageId).foreach { jobsUsingStage =>
+        jobsUsingStage.remove(jobEnd.jobId)
+        stageIdToInfo.get(stageId).foreach { stageInfo =>
+          // If this is a pending stage and no other job depends on it, then it won't be run.
+          // To prevent memory leaks, remove this data since it won't be cleaned up as stages
+          // finish / fail:
+          if (stageInfo.submissionTime.isEmpty && stageInfo.completionTime.isEmpty
+            && jobsUsingStage.isEmpty) {
+            stageIdToInfo.remove(stageId)
+            stageIdToData.remove((stageId, stageInfo.attemptId))
+          }
+        }
+      }
     }
   }
 

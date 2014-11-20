@@ -55,8 +55,9 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
   }
 
   private def runJob(listener: SparkListener, jobId: Int, shouldFail: Boolean = false) {
+    val stagesThatWontBeRun = jobId * 200 to jobId * 200 + 10
     val stageIds = jobId * 100 to jobId * 100 + 50
-    listener.onJobStart(createJobStartEvent(jobId, stageIds))
+    listener.onJobStart(createJobStartEvent(jobId, stageIds ++ stagesThatWontBeRun))
     for (stageId <- stageIds) {
       listener.onStageSubmitted(createStageStartEvent(stageId))
       listener.onStageCompleted(createStageEndEvent(stageId, failed = stageId % 2 == 0))
