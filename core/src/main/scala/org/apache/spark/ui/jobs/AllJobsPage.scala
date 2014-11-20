@@ -21,9 +21,9 @@ import scala.xml.{Node, NodeSeq}
 
 import javax.servlet.http.HttpServletRequest
 
+import org.apache.spark.JobExecutionStatus
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.ui.jobs.UIData.JobUIData
-
 
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
@@ -47,6 +47,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val lastStageData = lastStageInfo.flatMap { s =>
         listener.stageIdToData.get((s.stageId, s.attemptId))
       }
+      val isComplete = job.status == JobExecutionStatus.SUCCEEDED
       val lastStageName = lastStageInfo.map(_.name).getOrElse("(Unknown Stage Name)")
       val lastStageDescription = lastStageData.flatMap(_.description).getOrElse("")
       val duration: Option[Long] = {
@@ -59,7 +60,6 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val formattedSubmissionTime = job.startTime.map(UIUtils.formatDate).getOrElse("Unknown")
       val detailUrl =
         "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), job.jobId)
-
       <tr>
         <td sorttable_customkey={job.jobId.toString}>
           {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
@@ -73,12 +73,14 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         </td>
         <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
         <td class="stage-progress-cell">
-          {job.completedStageIndices.size}/{job.stageIds.size}
-          {if (job.numFailedStages > 0) s"(${job.numFailedStages} failed)" else ""}
+          {job.completedStageIndices.size}/{job.stageIds.size - job.numSkippedStages}
+          {if (job.numFailedStages > 0) s"(${job.numFailedStages} failed)"}
+          {if (job.numSkippedStages > 0) s"(${job.numSkippedStages} skipped)"}
         </td>
         <td class="progress-cell">
-          {UIUtils.makeProgressBar(job.numActiveTasks, job.numCompletedTasks,
-          job.numFailedTasks, job.numTasks)}
+          {UIUtils.makeProgressBar(started = job.numActiveTasks, completed = job.numCompletedTasks,
+           failed = job.numFailedTasks, skipped = job.numSkippedTasks,
+           total = job.numTasks - job.numSkippedTasks)}
         </td>
       </tr>
     }

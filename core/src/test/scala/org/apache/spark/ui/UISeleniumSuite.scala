@@ -17,6 +17,8 @@
 
 package org.apache.spark.ui
 
+import scala.collection.JavaConversions._
+
 import org.openqa.selenium.{By, WebDriver}
 import org.openqa.selenium.htmlunit.HtmlUnitDriver
 import org.scalatest._
@@ -224,6 +226,34 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
     }
   }
 
+  test("job progress bars / cells reflect skipped stages / tasks") {
+    withSpark(newSparkContext()) { sc =>
+      // Create an RDD that involves multiple stages:
+      val rdd = sc.parallelize(1 to 8, 8)
+        .map(x => x).groupBy((x: Int) => x, numPartitions = 8)
+        .flatMap(x => x._2).groupBy((x: Int) => x, numPartitions = 8)
+      // Run it twice; this will cause the second job to have two "phantom" stages that were
+      // mentioned in its job start event but which were never actually executed:
+      rdd.count()
+      rdd.count()
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs")
+        // The completed jobs table should have two rows. The first row will be the most recent job:
+        val firstRow = find(cssSelector("tbody tr")).get.underlying
+        val firstRowColumns = firstRow.findElements(By.tagName("td"))
+        firstRowColumns(0).getText should be ("1")
+        firstRowColumns(4).getText should be ("1/1 (2 skipped)")
+        firstRowColumns(5).getText should be ("8/8 (16 skipped)")
+        // The second row is the first run of the job, where nothing was skipped:
+        val secondRow = findAll(cssSelector("tbody tr")).toSeq(1).underlying
+        val secondRowColumns = secondRow.findElements(By.tagName("td"))
+        secondRowColumns(0).getText should be ("0")
+        secondRowColumns(4).getText should be ("3/3")
+        secondRowColumns(5).getText should be ("24/24")
+      }
+    }
+  }
+
   test("stages that aren't run appear as 'skipped stages' after a job finishes") {
     withSpark(newSparkContext()) { sc =>
       // Create an RDD that involves multiple stages:
@@ -246,7 +276,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
         // Instead, it's safer to check that each row contains a link to a stage details page.
         findAll(cssSelector("tbody tr")).foreach { row =>
           val link = row.underlying.findElement(By.xpath(".//a"))
-          link.getAttribute("href") should include("stage")
+          link.getAttribute("href") should include ("stage")
         }
       }
     }
