@@ -29,7 +29,7 @@ import scala.util.Try
 
 import com.google.common.cache.CacheBuilder
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{BlockLocation, FileStatus, Path}
+import org.apache.hadoop.fs.{FileSystem, BlockLocation, FileStatus, Path}
 import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputCommitter, FileOutputFormat => NewFileOutputFormat}
@@ -361,7 +361,7 @@ private[parquet] class FilteringParquetRowInputFormat
 
   private var footers: JList[Footer] = _
 
-  private var fileStatuses= Map.empty[Path, FileStatus]
+  private var fileStatuses = Map.empty[Path, FileStatus]
 
   override def createRecordReader(
       inputSplit: InputSplit,
@@ -379,6 +379,26 @@ private[parquet] class FilteringParquetRowInputFormat
     } else {
       new ParquetRecordReader[Row](readSupport)
     }
+  }
+
+  override def listStatus(jobContext: JobContext): JList[FileStatus] = {
+    val conf = ContextUtil.getConfiguration(jobContext)
+    val paths = NewFileInputFormat.getInputPaths(jobContext)
+    if (paths.isEmpty) { return new ArrayList[FileStatus]() }
+    val fs = paths.head.getFileSystem(conf)
+    val statuses = new ArrayList[FileStatus]
+    paths.foreach { p =>
+      val cached = FilteringParquetRowInputFormat.statusCache.getIfPresent(p)
+      if (cached == null) {
+        logWarning(s"Status cache miss for $p")
+        val res = fs.listStatus(p).filterNot(_.getPath.getName.startsWith("_"))
+        res.foreach(statuses.add)
+        FilteringParquetRowInputFormat.statusCache.put(p, res)
+      } else {
+        cached.foreach(statuses.add)
+      }
+    }
+    statuses
   }
 
   override def getFooters(jobContext: JobContext): JList[Footer] = {
@@ -405,7 +425,9 @@ private[parquet] class FilteringParquetRowInputFormat
         }
         val newFooters = new mutable.HashMap[FileStatus, Footer]
         if (toFetch.size > 0) {
+          val startFetch = System.currentTimeMillis
           val fetched = getFooters(conf, toFetch)
+          logInfo(s"Fetched $toFetch footers in ${System.currentTimeMillis - startFetch} ms")
           for ((status, i) <- toFetch.zipWithIndex) {
             newFooters(status) = fetched.get(i)
           }
@@ -588,6 +610,10 @@ private[parquet] class FilteringParquetRowInputFormat
 }
 
 private[parquet] object FilteringParquetRowInputFormat {
+  val statusCache = CacheBuilder.newBuilder()
+    .maximumSize(20000)
+    .build[Path, Array[FileStatus]]()
+
   private val footerCache = CacheBuilder.newBuilder()
     .maximumSize(20000)
     .build[FileStatus, Footer]()
