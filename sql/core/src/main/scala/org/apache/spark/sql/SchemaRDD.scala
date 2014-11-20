@@ -307,7 +307,7 @@ class SchemaRDD(
    * Filters tuples using a function over the value of the specified column.
    *
    * {{{
-   *   schemaRDD.sfilter('a)((a: Int) => ...)
+   *   schemaRDD.where('a)((a: Int) => ...)
    * }}}
    *
    * @group Query
