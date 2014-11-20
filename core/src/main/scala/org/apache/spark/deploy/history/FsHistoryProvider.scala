@@ -22,6 +22,7 @@ import java.io.{BufferedInputStream, FileNotFoundException, InputStream}
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.permission.AccessControlException
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -162,19 +163,27 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       var newLastModifiedTime = lastModifiedTime
       val logInfos = fs.listStatus(new Path(logDir))
         .filter { entry =>
-          val isFinishedApplication =
-            if (isLegacyLogDirectory(entry)) {
-              fs.exists(new Path(entry.getPath(), APPLICATION_COMPLETE))
-            } else {
-              !entry.getPath().getName().endsWith(EventLoggingListener.IN_PROGRESS)
-            }
+          try {
+            val isFinishedApplication =
+              if (isLegacyLogDirectory(entry)) {
+                fs.exists(new Path(entry.getPath(), APPLICATION_COMPLETE))
+              } else {
+                !entry.getPath().getName().endsWith(EventLoggingListener.IN_PROGRESS)
+              }
 
-          if (isFinishedApplication) {
-            val modTime = getModificationTime(entry)
-            newLastModifiedTime = math.max(newLastModifiedTime, modTime)
-            modTime >= lastModifiedTime
-          } else {
-            false
+            if (isFinishedApplication) {
+              val modTime = getModificationTime(entry)
+              newLastModifiedTime = math.max(newLastModifiedTime, modTime)
+              modTime >= lastModifiedTime
+            } else {
+              false
+            }
+          } catch {
+            case e: AccessControlException =>
+              // Do not use "logInfo" since these messages can get pretty noisy if printed on
+              // every poll.
+              logDebug(s"No permission to read $entry, ignoring.")
+              false
           }
         }
         .flatMap { entry =>
