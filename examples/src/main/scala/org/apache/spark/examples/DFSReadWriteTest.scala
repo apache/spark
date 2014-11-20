@@ -36,7 +36,7 @@ import org.apache.spark.SparkContext._
 object DFSReadWriteTest {
   
   private var localFilePath: File = new File(".")
-  private var dfsDirPath: File = new File(".")
+  private var dfsDirPath: String = ""
 
   private val NPARAMS = 2
 
@@ -79,7 +79,7 @@ object DFSReadWriteTest {
     }
 
     i += 1
-    dfsDirPath = new File(args(i))
+    dfsDirPath = args(i)
   }
 
   def runLocalWordCount(fileContents: List[String]): Int = {
@@ -106,7 +106,7 @@ object DFSReadWriteTest {
     val sc = new SparkContext(conf)
 
     println("Writing local file to DFS")
-    val dfsFilename = dfsDirPath.toString() + "/dfs_read_write_test"
+    val dfsFilename = dfsDirPath + "/dfs_read_write_test"
     val fileRDD = sc.parallelize(fileContents)
     fileRDD.saveAsTextFile(dfsFilename)
 
