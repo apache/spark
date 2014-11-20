@@ -93,9 +93,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     require(n == sample.size, s"Dimensions mismatch when adding new sample." +
       s" Expecting $n but got ${sample.size}.")
 
-    sample.activeIterator(true).foreach {
-      case (index, value) => add(index, value)
-    }
+    sample.foreach(true)(x => add(x._1, x._2))
 
     totalCnt += 1
     this
