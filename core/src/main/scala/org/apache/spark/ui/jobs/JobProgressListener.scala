@@ -61,7 +61,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   val stageIdToInfo = new HashMap[StageId, StageInfo]
   
   // Number of completed and failed stages, may not actually equal to completedStages.size and 
-  // failedStages.size respectively due to completedStage and failedStages only maintain the latest
+  // failedStages.size respectively due to completedStages and failedStages only maintain the latest
   // part of the stages, the earlier ones will be removed when there are too many stages for 
   // memory sake.
   var numCompletedStages = 0
