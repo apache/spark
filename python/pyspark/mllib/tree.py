@@ -184,7 +184,12 @@ class DecisionTree(object):
                           impurity, maxDepth, maxBins, minInstancesPerNode, minInfoGain)
 
 
-class WeightedEnsembleModel(JavaModelWrapper):
+class RandomForestModel(JavaModelWrapper):
+    """
+    Represents a random forest model.
+
+    EXPERIMENTAL: This is an experimental API. It will probably be modified in future.
+    """
     def predict(self, x):
         """
         Predict values for a single data point or an RDD of points using the model trained.
@@ -195,11 +200,11 @@ class WeightedEnsembleModel(JavaModelWrapper):
         else:
             return self.call("predict", _convert_to_vector(x))
 
-    def numWeakHypotheses(self):
+    def numTrees(self):
         """
         Get number of trees in forest.
         """
-        return self.call("numWeakHypotheses")
+        return self.call("numTrees")
 
     def totalNumNodes(self):
         """
@@ -214,14 +219,6 @@ class WeightedEnsembleModel(JavaModelWrapper):
     def toDebugString(self):
         """ Full model """
         return self._java_model.toDebugString()
-
-
-class RandomForestModel(WeightedEnsembleModel):
-    """
-    A model trained by :class:`RandomForest`
-
-    EXPERIMENTAL: This is an experimental API. It will probably be modified in future.
-    """
 
 
 class RandomForest(object):
@@ -282,18 +279,18 @@ class RandomForest(object):
         >>> data = [
         ...     LabeledPoint(0.0, [0.0]),
         ...     LabeledPoint(0.0, [1.0]),
-        ...     LabeledPoint(1.0, [4.0]),
-        ...     LabeledPoint(1.0, [5.0])
+        ...     LabeledPoint(1.0, [2.0]),
+        ...     LabeledPoint(1.0, [3.0])
         ... ]
-        >>> model = RandomForest.trainClassifier(sc.parallelize(data), 2, {}, 2, seed=42)
-        >>> model.numWeakHypotheses()
-        2
+        >>> model = RandomForest.trainClassifier(sc.parallelize(data), 2, {}, 3, seed=42)
+        >>> model.numTrees()
+        3
         >>> model.totalNumNodes()
-        4
+        7
         >>> print model,
-        WeightedEnsembleModel classifier with 2 trees
+        TreeEnsembleModel classifier with 3 trees
         >>> print model.toDebugString(),
-        WeightedEnsembleModel classifier with 2 trees
+        TreeEnsembleModel classifier with 3 trees
         <BLANKLINE>
           Tree 0:
             Predict: 1.0
@@ -302,13 +299,18 @@ class RandomForest(object):
              Predict: 0.0
             Else (feature 0 > 1.0)
              Predict: 1.0
+          Tree 2:
+            If (feature 0 <= 1.0)
+             Predict: 0.0
+            Else (feature 0 > 1.0)
+             Predict: 1.0
         >>> model.predict([2.0])
         1.0
-        >>> model.predict([0.0])  #TODO: will fix it later
-        1.0
-        >>> rdd = sc.parallelize([[1.0], [0.0]])
+        >>> model.predict([0.0])
+        0.0
+        >>> rdd = sc.parallelize([[3.0], [1.0]])
         >>> model.predict(rdd).collect()
-        [1.0, 1.0]
+        [1.0, 0.0]
         """
         return cls._train(data, "classification", numClassesForClassification,
                           categoricalFeaturesInfo, impurity, maxDepth, maxBins, numTrees,
@@ -355,7 +357,7 @@ class RandomForest(object):
         ... ]
         >>>
         >>> model = RandomForest.trainRegressor(sc.parallelize(sparse_data), {}, 2, seed=42)
-        >>> model.numWeakHypotheses()
+        >>> model.numTrees()
         2
         >>> model.totalNumNodes()
         4
