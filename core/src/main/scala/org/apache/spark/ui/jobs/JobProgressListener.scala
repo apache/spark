@@ -58,6 +58,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   // Stages:
   val activeStages = new HashMap[StageId, StageInfo]
   val completedStages = ListBuffer[StageInfo]()
+  val skippedStages = ListBuffer[StageInfo]()
   val failedStages = ListBuffer[StageInfo]()
   val stageIdToData = new HashMap[(StageId, StageAttemptId), StageUIData]
   val stageIdToInfo = new HashMap[StageId, StageInfo]
@@ -106,6 +107,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       "completedJobs" -> completedJobs.size,
       "failedJobs" -> failedJobs.size,
       "completedStages" -> completedStages.size,
+      "skippedStages" -> skippedStages.size,
       "failedStages" -> failedStages.size
     )
   }
@@ -199,13 +201,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       stageIdToActiveJobIds.get(stageId).foreach { jobsUsingStage =>
         jobsUsingStage.remove(jobEnd.jobId)
         stageIdToInfo.get(stageId).foreach { stageInfo =>
-          // If this is a pending stage and no other job depends on it, then it won't be run.
-          // To prevent memory leaks, remove this data since it won't be cleaned up as stages
-          // finish / fail:
-          val isPendingStage = stageInfo.submissionTime.isEmpty && stageInfo.completionTime.isEmpty
-          if (isPendingStage && jobsUsingStage.isEmpty) {
-            stageIdToInfo.remove(stageId)
-            stageIdToData.remove((stageId, stageInfo.attemptId))
+          if (stageInfo.submissionTime.isEmpty) {
+            // if this stage is pending, it won't complete, so mark it as "skipped":
+            skippedStages += stageInfo
+            trimStagesIfNecessary(skippedStages)
           }
         }
       }

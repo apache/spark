@@ -51,17 +51,14 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
           new StageInfo(stageId, 0, "Unknown", 0, Seq.empty, "Unknown"))
       }
 
-      val pendingStages = mutable.Buffer[StageInfo]()
       val activeStages = mutable.Buffer[StageInfo]()
       val completedStages = mutable.Buffer[StageInfo]()
+      // If the job is completed, then any pending stages are displayed as "skipped":
+      val pendingOrSkippedStages = mutable.Buffer[StageInfo]()
       val failedStages = mutable.Buffer[StageInfo]()
       for (stage <- stages) {
         if (stage.submissionTime.isEmpty) {
-          if (!isComplete) {
-            pendingStages += stage
-          } else {
-            // Do nothing so that we don't display pending stages for completed jobs
-          }
+          pendingOrSkippedStages += stage
         } else if (stage.completionTime.isDefined) {
           if (stage.failureReason.isDefined) {
             failedStages += stage
@@ -77,8 +74,8 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
         new StageTableBase(activeStages.sortBy(_.submissionTime).reverse,
           parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
           killEnabled = parent.killEnabled)
-      val pendingStagesTable =
-        new StageTableBase(pendingStages.sortBy(_.stageId).reverse,
+      val pendingOrSkippedStagesTable =
+        new StageTableBase(pendingOrSkippedStages.sortBy(_.stageId).reverse,
           parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
           killEnabled = false)
       val completedStagesTable =
@@ -88,6 +85,12 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       val failedStagesTable =
         new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse, parent.basePath,
           parent.listener, isFairScheduler = parent.isFairScheduler)
+
+      val shouldShowActiveStages = activeStages.nonEmpty
+      val shouldShowPendingStages = !isComplete && pendingOrSkippedStages.nonEmpty
+      val shouldShowCompletedStages = completedStages.nonEmpty
+      val shouldShowSkippedStages = isComplete && pendingOrSkippedStages.nonEmpty
+      val shouldShowFailedStages = failedStages.nonEmpty
 
       val summary: NodeSeq =
         <div>
@@ -102,36 +105,73 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
                   <strong>Job Group:</strong>
                   {jobData.jobGroup.get}
                 </li>
-              } else Seq.empty
+              }
             }
-            <li>
-              <a href="#active"><strong>Active Stages:</strong></a>
-              {activeStages.size}
-            </li>
-            <li>
-              <a href="#pending"><strong>Pending Stages:</strong></a>
-              {pendingStages.size}
-            </li>
-            <li>
-              <a href="#completed"><strong>Completed Stages:</strong></a>
-              {completedStages.size}
-            </li>
-            <li>
-              <a href="#failed"><strong>Failed Stages:</strong></a>
-              {failedStages.size}
-            </li>
+            {
+              if (shouldShowActiveStages) {
+                <li>
+                  <a href="#active"><strong>Active Stages:</strong></a>
+                  {activeStages.size}
+                </li>
+              }
+            }
+            {
+              if (shouldShowPendingStages) {
+                <li>
+                  <a href="#pending">
+                    <strong>Pending Stages:</strong>
+                  </a>{pendingOrSkippedStages.size}
+                </li>
+              }
+            }
+            {
+              if (shouldShowCompletedStages) {
+                <li>
+                  <a href="#completed"><strong>Completed Stages:</strong></a>
+                  {completedStages.size}
+                </li>
+              }
+            }
+            {
+              if (shouldShowSkippedStages) {
+              <li>
+                <a href="#skipped"><strong>Skipped Stages:</strong></a>
+                {pendingOrSkippedStages.size}
+              </li>
+            }
+            }
+            {
+              if (shouldShowFailedStages) {
+                <li>
+                  <a href="#failed"><strong>Failed Stages:</strong></a>
+                  {failedStages.size}
+                </li>
+              }
+            }
           </ul>
         </div>
 
-      val content = summary ++
-        <h4 id="active">Active Stages ({activeStages.size})</h4> ++
-        activeStagesTable.toNodeSeq ++
-        <h4 id="pending">Pending Stages ({pendingStages.size})</h4> ++
-        pendingStagesTable.toNodeSeq ++
-        <h4 id="completed">Completed Stages ({completedStages.size})</h4> ++
-        completedStagesTable.toNodeSeq ++
-        <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
-        failedStagesTable.toNodeSeq
+      var content = summary
+      if (shouldShowActiveStages) {
+        content ++= <h4 id="active">Active Stages ({activeStages.size})</h4> ++
+          activeStagesTable.toNodeSeq
+      }
+      if (shouldShowPendingStages) {
+        content ++= <h4 id="pending">Pending Stages ({pendingOrSkippedStages.size})</h4> ++
+          pendingOrSkippedStagesTable.toNodeSeq
+      }
+      if (shouldShowCompletedStages) {
+        content ++= <h4 id="completed">Completed Stages ({completedStages.size})</h4> ++
+          completedStagesTable.toNodeSeq
+      }
+      if (shouldShowSkippedStages) {
+        content ++= <h4 id="skipped">Skipped Stages ({pendingOrSkippedStages.size})</h4> ++
+          pendingOrSkippedStagesTable.toNodeSeq
+      }
+      if (shouldShowFailedStages) {
+        content ++= <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
+          failedStagesTable.toNodeSeq
+      }
       UIUtils.headerSparkPage(s"Details for Job $jobId", content, parent)
     }
   }

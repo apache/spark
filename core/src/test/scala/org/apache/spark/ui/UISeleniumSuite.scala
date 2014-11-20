@@ -210,6 +210,8 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       rdd.countAsync()
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs/job/?id=0")
+        find(id("active")).get.text should be ("Active Stages (1)")
+        find(id("pending")).get.text should be ("Pending Stages (2)")
         // Essentially, we want to check that none of the stage rows show
         // "No data available for this stage". Checking for the absence of that string is brittle
         // because someone could change the error message and cause this test to pass by accident.
@@ -222,7 +224,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
     }
   }
 
-  test("stages that aren't run do not show up in 'pending stages' after a job finishes") {
+  test("stages that aren't run appear as 'skipped stages' after a job finishes") {
     withSpark(newSparkContext()) { sc =>
       // Create an RDD that involves multiple stages:
       val rdd =
@@ -233,14 +235,22 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       rdd.count()
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs/job/?id=1")
-        find(id("pending")).get.text should be ("Pending Stages (0)")
-        find(id("active")).get.text should be ("Active Stages (0)")
+        find(id("pending")) should be (None)
+        find(id("active")) should be (None)
+        find(id("failed")) should be (None)
         find(id("completed")).get.text should be ("Completed Stages (1)")
-        find(id("failed")).get.text should be ("Failed Stages (0)")
+        find(id("skipped")).get.text should be ("Skipped Stages (2)")
+        // Essentially, we want to check that none of the stage rows show
+        // "No data available for this stage". Checking for the absence of that string is brittle
+        // because someone could change the error message and cause this test to pass by accident.
+        // Instead, it's safer to check that each row contains a link to a stage details page.
+        findAll(cssSelector("tbody tr")).foreach { row =>
+          val link = row.underlying.findElement(By.xpath(".//a"))
+          link.getAttribute("href") should include("stage")
+        }
       }
     }
   }
-
 
   test("jobs with stages that are skipped should show correct link descriptions on all jobs page") {
     withSpark(newSparkContext()) { sc =>
