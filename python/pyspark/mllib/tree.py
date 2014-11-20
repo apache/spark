@@ -32,7 +32,8 @@ class DecisionTreeModel(JavaModelWrapper):
     """
     A decision tree model for classification or regression.
 
-    EXPERIMENTAL: This is an experimental API. It will probably be modified in future.
+    EXPERIMENTAL: This is an experimental API.
+                  It will probably be modified in future.
     """
     def predict(self, x):
         """
@@ -67,7 +68,8 @@ class DecisionTree(object):
     """
     Learning algorithm for a decision tree model for classification or regression.
 
-    EXPERIMENTAL: This is an experimental API. It will probably be modified in future.
+    EXPERIMENTAL: This is an experimental API.
+                  It will probably be modified in future.
     """
 
     @classmethod
@@ -98,8 +100,8 @@ class DecisionTree(object):
                          E.g., depth 0 means 1 leaf node.
                          Depth 1 means 1 internal node + 2 leaf nodes.
         :param maxBins: Number of bins used for finding splits at each node.
-        :param minInstancesPerNode: Min number of instances required at child nodes to create
-                                    the parent split
+        :param minInstancesPerNode: Min number of instances required at child
+                                    nodes to create the parent split
         :param minInfoGain: Min info gain required to create a split
         :return: DecisionTreeModel
 
@@ -153,8 +155,8 @@ class DecisionTree(object):
                          E.g., depth 0 means 1 leaf node.
                          Depth 1 means 1 internal node + 2 leaf nodes.
         :param maxBins: Number of bins used for finding splits at each node.
-        :param minInstancesPerNode: Min number of instances required at child nodes to create
-                                    the parent split
+        :param minInstancesPerNode: Min number of instances required at child
+                                    nodes to create the parent split
         :param minInfoGain: Min info gain required to create a split
         :return: DecisionTreeModel
 
@@ -188,11 +190,13 @@ class RandomForestModel(JavaModelWrapper):
     """
     Represents a random forest model.
 
-    EXPERIMENTAL: This is an experimental API. It will probably be modified in future.
+    EXPERIMENTAL: This is an experimental API.
+                  It will probably be modified in future.
     """
     def predict(self, x):
         """
-        Predict values for a single data point or an RDD of points using the model trained.
+        Predict values for a single data point or an RDD of points using
+        the model trained.
         """
         if isinstance(x, RDD):
             return self.call("predict", x.map(_convert_to_vector))
@@ -225,7 +229,8 @@ class RandomForest(object):
     """
     Learning algorithm for a random forest model for classification or regression.
 
-    EXPERIMENTAL: This is an experimental API. It will probably be modified in future.
+    EXPERIMENTAL: This is an experimental API.
+                  It will probably be modified in future.
     """
 
     supportedFeatureSubsetStrategies = ("auto", "all", "sqrt", "log2", "onethird")
@@ -248,28 +253,31 @@ class RandomForest(object):
                         featureSubsetStrategy="auto", impurity="gini", maxDepth=4, maxBins=32,
                         seed=None):
         """
-        Method to train a decision tree model for binary or multiclass classification.
+        Method to train a decision tree model for binary or multiclass
+        classification.
 
-        :param data: Training dataset: RDD of LabeledPoint.
-                     Labels should take values {0, 1, ..., numClasses-1}.
+        :param data: Training dataset: RDD of LabeledPoint. Labels should take
+               values {0, 1, ..., numClasses-1}.
         :param numClassesForClassification: number of classes for classification.
         :param categoricalFeaturesInfo: Map storing arity of categorical features.
-                                    E.g., an entry (n -> k) indicates that feature n is categorical
-                                    with k categories indexed from 0: {0, 1, ..., k-1}.
+               E.g., an entry (n -> k) indicates that feature n is categorical
+               with k categories indexed from 0: {0, 1, ..., k-1}.
         :param numTrees: Number of trees in the random forest.
-        :param featureSubsetStrategy: Number of features to consider for splits at each node.
-                                  Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
-                                  If "auto" is set, this parameter is set based on numTrees:
-                                    if numTrees == 1, set to "all";
-                                    if numTrees > 1 (forest) set to "sqrt" for classification and
-                                      to "onethird" for regression.
+        :param featureSubsetStrategy: Number of features to consider for splits at
+               each node.
+               Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+               If "auto" is set, this parameter is set based on numTrees:
+               if numTrees == 1, set to "all";
+               if numTrees > 1 (forest) set to "sqrt" for classification and to
+               "onethird" for regression.
         :param impurity: Criterion used for information gain calculation.
-                     Supported values: "gini" (recommended) or "entropy".
-        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1 leaf node; depth 1 means
-                         1 internal node + 2 leaf nodes. (default: 4)
-        :param maxBins: maximum number of bins used for splitting features (default: 100)
-        :param seed:  Random seed for bootstrapping and choosing feature subsets.
-        :return: WeightedEnsembleModel that can be used for prediction
+               Supported values: "gini" (recommended) or "entropy".
+        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1 leaf node;
+               depth 1 means 1 internal node + 2 leaf nodes. (default: 4)
+        :param maxBins: maximum number of bins used for splitting features
+               (default: 100)
+        :param seed: Random seed for bootstrapping and choosing feature subsets.
+        :return: RandomForestModel that can be used for prediction
 
         Example usage:
 
@@ -322,26 +330,29 @@ class RandomForest(object):
         """
         Method to train a decision tree model for regression.
 
-        :param data: Training dataset: RDD of LabeledPoint.
-                     Labels are real numbers.
-        :param categoricalFeaturesInfo: Map storing arity of categorical features.
-                                     E.g., an entry (n -> k) indicates that feature
-                                     n is categorical with k categories indexed from 0:
-                                     {0, 1, ..., k-1}.
+        :param data: Training dataset: RDD of LabeledPoint. Labels are
+               real numbers.
+        :param categoricalFeaturesInfo: Map storing arity of categorical
+               features. E.g., an entry (n -> k) indicates that feature
+               n is categorical with k categories indexed from 0:
+               {0, 1, ..., k-1}.
         :param numTrees: Number of trees in the random forest.
-        :param featureSubsetStrategy: Number of features to consider for splits at each node.
-                                   Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
-                                   If "auto" is set, this parameter is set based on numTrees:
-                                   if numTrees == 1, set to "all";
-                                   if numTrees > 1 (forest) set to "sqrt" for classification and
-                                   to "onethird" for regression.
+        :param featureSubsetStrategy: Number of features to consider for
+               splits at each node.
+               Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+               If "auto" is set, this parameter is set based on numTrees:
+               if numTrees == 1, set to "all";
+               if numTrees > 1 (forest) set to "sqrt" for classification and
+               to "onethird" for regression.
         :param impurity: Criterion used for information gain calculation.
-                         Supported values: "variance".
-        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1 leaf node;
-                         depth 1 means 1 internal node + 2 leaf nodes.(default: 4)
-        :param maxBins: maximum number of bins used for splitting features (default: 100)
-        :param seed:  Random seed for bootstrapping and choosing feature subsets.
-        :return: WeightedEnsembleModel that can be used for prediction
+               Supported values: "variance".
+        :param maxDepth: Maximum depth of the tree. E.g., depth 0 means 1
+               leaf node; depth 1 means 1 internal node + 2 leaf nodes.
+               (default: 4)
+        :param maxBins: maximum number of bins used for splitting features
+               (default: 100)
+        :param seed: Random seed for bootstrapping and choosing feature subsets.
+        :return: RandomForestModel that can be used for prediction
 
         Example usage:
 
