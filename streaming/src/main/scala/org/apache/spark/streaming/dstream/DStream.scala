@@ -254,7 +254,7 @@ abstract class DStream[T: ClassTag] (
   }
 
   private[streaming] def remember(duration: Duration) {
-    if (duration != null && duration > rememberDuration) {
+    if (duration != null && (rememberDuration == null || duration > rememberDuration)) {
       rememberDuration = duration
       logInfo("Duration for remembering RDDs set to " + rememberDuration + " for " + this)
     }
