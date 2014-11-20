@@ -66,13 +66,13 @@ object DFSReadWriteTest {
     var i = 0
 
     localFilePath = new File(args(i))
-    if(! localFilePath.exists()) {
+    if(!localFilePath.exists) {
       System.err.println("Given path (" + args(i) + ") does not exist.\n")
       printUsage()
       System.exit(1)
     }
 
-    if(! localFilePath.isFile()) {
+    if(!localFilePath.isFile) {
       System.err.println("Given path (" + args(i) + ") is not a file.\n")
       printUsage()
       System.exit(1)
@@ -80,13 +80,13 @@ object DFSReadWriteTest {
 
     i += 1
     dfsDirPath = new File(args(i))
-    if(! dfsDirPath.exists()) {
+    if(!dfsDirPath.exists) {
       System.err.println("Given path (" + args(i) + ") does not exist.\n")
       printUsage()
       System.exit(1)
     }
 
-    if(! dfsDirPath.isDirectory()) {
+    if(dfsDirPath.isDirectory) {
       System.err.println("Given path (" + args(i) + ") is not a directory.\n")
       printUsage()
       System.exit(1)
@@ -131,13 +131,11 @@ object DFSReadWriteTest {
 
     sc.stop()
 
-    if(localWordCount == dfsWordCount)
-    {
+    if(localWordCount == dfsWordCount) {
       println("Success! Local Word Count (" + localWordCount + 
         ") and DFS Word Count (" + dfsWordCount + ") agree.")
     }
-    else
-    {
+    else {
       println("Failure! Local Word Count (" + localWordCount + 
         ") and DFS Word Count (" + dfsWordCount + ") disagree.")
     }
