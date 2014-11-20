@@ -17,10 +17,10 @@
 
 package org.apache.spark.examples
 
+import java.io.File
+import scala.io.Source._
 import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.SparkContext._
-import scala.io.Source._
-import java.io.File
 
 object DFSReadWriteTest {
   
