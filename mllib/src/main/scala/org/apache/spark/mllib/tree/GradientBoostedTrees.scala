@@ -39,11 +39,10 @@ import org.apache.spark.storage.StorageLevel
  * Notes:
  *  - This currently can be run with several loss functions.  However, only SquaredError is
  *    fully supported.  Specifically, the loss function should be used to compute the gradient
- *    (to re-label training instances on each iteration) and to weight tree ensembles.
+ *    (to re-label training instances on each iteration) and to weight weak hypotheses.
  *    Currently, gradients are computed correctly for the available loss functions,
- *    but tree predictions are not computed correctly for LogLoss or AbsoluteError since they
- *    use the mean of the samples at each leaf node.  Running with those losses will likely behave
- *    reasonably, but lacks the same guarantees.
+ *    but weak hypothesis weights are not computed correctly for LogLoss or AbsoluteError.
+ *    Running with those losses will likely behave reasonably, but lacks the same guarantees.
  *
  * @param boostingStrategy Parameters for the gradient boosting algorithm.
  */
@@ -126,11 +125,11 @@ object GradientBoostedTrees extends Logging {
     val baseLearnerWeights = new Array[Double](numIterations)
     val loss = boostingStrategy.loss
     val learningRate = boostingStrategy.learningRate
-    // Prepare strategy for tree ensembles. Tree ensembles use regression with variance impurity.
-    val ensembleStrategy = boostingStrategy.treeStrategy.copy
-    ensembleStrategy.algo = Regression
-    ensembleStrategy.impurity = Variance
-    ensembleStrategy.assertValid()
+    // Prepare strategy for individual trees, which use regression with variance impurity.
+    val treeStrategy = boostingStrategy.treeStrategy.copy
+    treeStrategy.algo = Regression
+    treeStrategy.impurity = Variance
+    treeStrategy.assertValid()
 
     // Cache input
     if (input.getStorageLevel == StorageLevel.NONE) {
@@ -146,7 +145,7 @@ object GradientBoostedTrees extends Logging {
 
     // Initialize tree
     timer.start("building tree 0")
-    val firstTreeModel = new DecisionTree(ensembleStrategy).run(data)
+    val firstTreeModel = new DecisionTree(treeStrategy).run(data)
     baseLearners(0) = firstTreeModel
     baseLearnerWeights(0) = 1.0
     val startingModel = new GradientBoostedTreesModel(Regression, Array(firstTreeModel), Array(1.0))
@@ -164,7 +163,7 @@ object GradientBoostedTrees extends Logging {
       logDebug("###################################################")
       logDebug("Gradient boosting tree iteration " + m)
       logDebug("###################################################")
-      val model = new DecisionTree(ensembleStrategy).run(data)
+      val model = new DecisionTree(treeStrategy).run(data)
       timer.stop(s"building tree $m")
       // Create partial model
       baseLearners(m) = model

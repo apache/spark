@@ -86,7 +86,7 @@ private[tree] sealed class TreeEnsembleModel(
    * @return predicted category from the trained model
    */
   private def predictBySumming(features: Vector): Double = {
-    val treePredictions = trees.map(learner => learner.predict(features))
+    val treePredictions = trees.map(_.predict(features))
     blas.ddot(numTrees, treePredictions, 1, treeWeights, 1)
   }
 
@@ -174,5 +174,5 @@ private[tree] sealed class TreeEnsembleModel(
   /**
    * Get total number of nodes, summed over all trees in the forest.
    */
-  def totalNumNodes: Int = trees.map(tree => tree.numNodes).sum
+  def totalNumNodes: Int = trees.map(_.numNodes).sum
 }

@@ -386,7 +386,7 @@ object RandomForest extends Serializable with Logging {
       impurity: String,
       maxDepth: Int,
       maxBins: Int,
-      seed: Int): TreeEnsembleModel = {
+      seed: Int): RandomForestModel = {
     trainRegressor(input.rdd,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins, seed)
