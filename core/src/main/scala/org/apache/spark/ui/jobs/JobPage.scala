@@ -56,8 +56,12 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       val completedStages = mutable.Buffer[StageInfo]()
       val failedStages = mutable.Buffer[StageInfo]()
       for (stage <- stages) {
-        if (!isComplete && stage.submissionTime.isEmpty) {
-          pendingStages += stage
+        if (stage.submissionTime.isEmpty) {
+          if (!isComplete) {
+            pendingStages += stage
+          } else {
+            // Do nothing so that we don't display pending stages for completed jobs
+          }
         } else if (stage.completionTime.isDefined) {
           if (stage.failureReason.isDefined) {
             failedStages += stage

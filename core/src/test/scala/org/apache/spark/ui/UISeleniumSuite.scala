@@ -231,16 +231,18 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       // mentioned in its job start event but which were never actually executed:
       rdd.count()
       rdd.count()
-      // Check that the "pending stages" section is empty:
       eventually(timeout(10 seconds), interval(50 milliseconds)) {
         go to (sc.ui.get.appUIAddress.stripSuffix("/") + "/jobs/job/?id=1")
         find(id("pending")).get.text should be ("Pending Stages (0)")
+        find(id("active")).get.text should be ("Active Stages (0)")
+        find(id("completed")).get.text should be ("Completed Stages (1)")
+        find(id("failed")).get.text should be ("Failed Stages (0)")
       }
     }
   }
 
 
-  test("jobs with stages thatare skipped should show correct link descriptions on jobs page") {
+  test("jobs with stages that are skipped should show correct link descriptions on all jobs page") {
     withSpark(newSparkContext()) { sc =>
       // Create an RDD that involves multiple stages:
       val rdd =
