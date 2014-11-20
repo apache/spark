@@ -436,10 +436,10 @@ class StreamingContext private[streaming] (
 
   /**
    * Start the execution of the streams.
+   *
+   * @throws SparkException if the context has already been started or stopped.
    */
   def start(): Unit = synchronized {
-    // Throw exception if the context has already been started once
-    // or if a stopped context is being started again
     if (state == Started) {
       throw new SparkException("StreamingContext has already been started")
     }
@@ -472,8 +472,10 @@ class StreamingContext private[streaming] (
   /**
    * Stop the execution of the streams immediately (does not wait for all received data
    * to be processed).
-   * @param stopSparkContext Stop the associated SparkContext or not
    *
+   * @param stopSparkContext if true, stops the associated SparkContext. The underlying SparkContext
+   *                         will be stopped regardless of whether this StreamingContext has been
+   *                         started.
    */
   def stop(stopSparkContext: Boolean = true): Unit = synchronized {
     stop(stopSparkContext, false)
@@ -482,25 +484,27 @@ class StreamingContext private[streaming] (
   /**
    * Stop the execution of the streams, with option of ensuring all received data
    * has been processed.
-   * @param stopSparkContext Stop the associated SparkContext or not
-   * @param stopGracefully Stop gracefully by waiting for the processing of all
+   *
+   * @param stopSparkContext if true, stops the associated SparkContext. The underlying SparkContext
+   *                         will be stopped regardless of whether this StreamingContext has been
+   *                         started.
+   * @param stopGracefully if true, stops gracefully by waiting for the processing of all
    *                       received data to be completed
    */
   def stop(stopSparkContext: Boolean, stopGracefully: Boolean): Unit = synchronized {
-    // Warn (but not fail) if context is stopped twice,
-    // or context is stopped before starting
-    if (state == Initialized) {
-      logWarning("StreamingContext has not been started yet")
-      return
+    state match {
+      case Initialized => logWarning("StreamingContext has not been started yet")
+      case Stopped => logWarning("StreamingContext has already been stopped")
+      case Started =>
+        scheduler.stop(stopGracefully)
+        logInfo("StreamingContext stopped successfully")
+        waiter.notifyStop()
     }
-    if (state == Stopped) {
-      logWarning("StreamingContext has already been stopped")
-      return
-    } // no need to throw an exception as its okay to stop twice
-    scheduler.stop(stopGracefully)
-    logInfo("StreamingContext stopped successfully")
-    waiter.notifyStop()
+    // Even if the streaming context has not been started, we still need to stop the SparkContext.
+    // Even if we have already stopped, we still need to attempt to stop the SparkContext because
+    // a user might stop(stopSparkContext = false) and then call stop(stopSparkContext = true).
     if (stopSparkContext) sc.stop()
+    // The state should always be Stopped after calling `stop()`, even if we haven't started yet:
     state = Stopped
   }
 }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 import java.util.{ArrayList => JArrayList, Map => JMap}
 
 import scala.collection.JavaConversions._
@@ -25,9 +25,7 @@ import scala.collection.mutable.{ArrayBuffer, Map => SMap}
 import scala.math._
 
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
 import org.apache.hadoop.hive.shims.ShimLoader
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hive.service.cli._
@@ -37,9 +35,9 @@ import org.apache.hive.service.cli.session.HiveSession
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.plans.logical.SetCommand
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.{Row => SparkRow, SQLConf, SchemaRDD}
-import org.apache.spark.sql.hive.{HiveMetastoreTypes, HiveContext}
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
+import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
+import org.apache.spark.sql.{SQLConf, SchemaRDD, Row => SparkRow}
 
 /**
  * A compatibility layer for interacting with Hive version 0.12.0.
@@ -71,8 +69,9 @@ private[hive] class SparkExecuteStatementOperation(
     statement: String,
     confOverlay: JMap[String, String])(
     hiveContext: HiveContext,
-    sessionToActivePool: SMap[HiveSession, String]) extends ExecuteStatementOperation(
-  parentSession, statement, confOverlay) with Logging {
+    sessionToActivePool: SMap[HiveSession, String])
+  extends ExecuteStatementOperation(parentSession, statement, confOverlay) with Logging {
+
   private var result: SchemaRDD = _
   private var iter: Iterator[SparkRow] = _
   private var dataTypes: Array[DataType] = _
@@ -123,7 +122,7 @@ private[hive] class SparkExecuteStatementOperation(
         to.addColumnValue(ColumnValue.doubleValue(from.getDouble(ordinal)))
       case FloatType =>
         to.addColumnValue(ColumnValue.floatValue(from.getFloat(ordinal)))
-      case DecimalType =>
+      case DecimalType() =>
         val hiveDecimal = from.get(ordinal).asInstanceOf[BigDecimal].bigDecimal
         to.addColumnValue(ColumnValue.stringValue(new HiveDecimal(hiveDecimal)))
       case LongType =>
@@ -132,14 +131,13 @@ private[hive] class SparkExecuteStatementOperation(
         to.addColumnValue(ColumnValue.byteValue(from.getByte(ordinal)))
       case ShortType =>
         to.addColumnValue(ColumnValue.shortValue(from.getShort(ordinal)))
+      case DateType =>
+        to.addColumnValue(ColumnValue.dateValue(from(ordinal).asInstanceOf[Date]))
       case TimestampType =>
         to.addColumnValue(
           ColumnValue.timestampValue(from.get(ordinal).asInstanceOf[Timestamp]))
       case BinaryType | _: ArrayType | _: StructType | _: MapType =>
-        val hiveString = result
-          .queryExecution
-          .asInstanceOf[HiveContext#QueryExecution]
-          .toHiveString((from.get(ordinal), dataTypes(ordinal)))
+        val hiveString = HiveContext.toHiveString((from.get(ordinal), dataTypes(ordinal)))
         to.addColumnValue(ColumnValue.stringValue(hiveString))
     }
   }
@@ -156,7 +154,7 @@ private[hive] class SparkExecuteStatementOperation(
         to.addColumnValue(ColumnValue.doubleValue(null))
       case FloatType =>
         to.addColumnValue(ColumnValue.floatValue(null))
-      case DecimalType =>
+      case DecimalType() =>
         to.addColumnValue(ColumnValue.stringValue(null: HiveDecimal))
       case LongType =>
         to.addColumnValue(ColumnValue.longValue(null))
@@ -164,6 +162,8 @@ private[hive] class SparkExecuteStatementOperation(
         to.addColumnValue(ColumnValue.byteValue(null))
       case ShortType =>
         to.addColumnValue(ColumnValue.shortValue(null))
+      case DateType =>
+        to.addColumnValue(ColumnValue.dateValue(null))
       case TimestampType =>
         to.addColumnValue(ColumnValue.timestampValue(null))
       case BinaryType | _: ArrayType | _: StructType | _: MapType =>
@@ -202,13 +202,12 @@ private[hive] class SparkExecuteStatementOperation(
         hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }
       iter = {
-        val resultRdd = result.queryExecution.toRdd
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
         if (useIncrementalCollect) {
-          resultRdd.toLocalIterator
+          result.toLocalIterator
         } else {
-          resultRdd.collect().iterator
+          result.collect().iterator
         }
       }
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
@@ -217,6 +216,7 @@ private[hive] class SparkExecuteStatementOperation(
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.
       case e: Throwable =>
+        setState(OperationState.ERROR)
         logError("Error executing query:",e)
         throw new HiveSQLException(e.toString)
     }

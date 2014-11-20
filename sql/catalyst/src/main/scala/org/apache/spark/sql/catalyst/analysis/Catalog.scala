@@ -28,6 +28,8 @@ trait Catalog {
 
   def caseSensitive: Boolean
 
+  def tableExists(db: Option[String], tableName: String): Boolean
+
   def lookupRelation(
     databaseName: Option[String],
     tableName: String,
@@ -82,6 +84,14 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
     tables.clear()
   }
 
+  override def tableExists(db: Option[String], tableName: String): Boolean = {
+    val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
+    tables.get(tblName) match {
+      case Some(_) => true
+      case None => false
+    }
+  }
+
   override def lookupRelation(
       databaseName: Option[String],
       tableName: String,
@@ -106,6 +116,14 @@ trait OverrideCatalog extends Catalog {
 
   // TODO: This doesn't work when the database changes...
   val overrides = new mutable.HashMap[(Option[String],String), LogicalPlan]()
+
+  abstract override def tableExists(db: Option[String], tableName: String): Boolean = {
+    val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
+    overrides.get((dbName, tblName)) match {
+      case Some(_) => true
+      case None => super.tableExists(db, tableName)
+    }
+  }
 
   abstract override def lookupRelation(
     databaseName: Option[String],
@@ -148,6 +166,10 @@ trait OverrideCatalog extends Catalog {
 object EmptyCatalog extends Catalog {
 
   val caseSensitive: Boolean = true
+
+  def tableExists(db: Option[String], tableName: String): Boolean = {
+    throw new UnsupportedOperationException
+  }
 
   def lookupRelation(
     databaseName: Option[String],

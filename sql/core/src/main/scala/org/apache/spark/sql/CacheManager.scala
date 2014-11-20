@@ -103,6 +103,19 @@ private[sql] trait CacheManager {
     cachedData.remove(dataIndex)
   }
 
+  /** Tries to remove the data for the given SchemaRDD from the cache if it's cached */
+  private[sql] def tryUncacheQuery(
+      query: SchemaRDD,
+      blocking: Boolean = true): Boolean = writeLock {
+    val planToCache = query.queryExecution.analyzed
+    val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
+    val found = dataIndex >= 0
+    if (found) {
+      cachedData(dataIndex).cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
+      cachedData.remove(dataIndex)
+    }
+    found
+  }
 
   /** Optionally returns cached data for the given SchemaRDD */
   private[sql] def lookupCachedData(query: SchemaRDD): Option[CachedData] = readLock {

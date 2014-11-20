@@ -74,9 +74,9 @@ object SVDPlusPlus {
     var g = Graph.fromEdges(edges, defaultF(conf.rank)).cache()
 
     // Calculate initial bias and norm
-    val t0 = g.mapReduceTriplets(
-      et => Iterator((et.srcId, (1L, et.attr)), (et.dstId, (1L, et.attr))),
-        (g1: (Long, Double), g2: (Long, Double)) => (g1._1 + g2._1, g1._2 + g2._2))
+    val t0 = g.aggregateMessages[(Long, Double)](
+      ctx => { ctx.sendToSrc((1L, ctx.attr)); ctx.sendToDst((1L, ctx.attr)) },
+      (g1, g2) => (g1._1 + g2._1, g1._2 + g2._2))
 
     g = g.outerJoinVertices(t0) {
       (vid: VertexId, vd: (DoubleMatrix, DoubleMatrix, Double, Double),
@@ -84,15 +84,17 @@ object SVDPlusPlus {
         (vd._1, vd._2, msg.get._2 / msg.get._1, 1.0 / scala.math.sqrt(msg.get._1))
     }
 
-    def mapTrainF(conf: Conf, u: Double)
-        (et: EdgeTriplet[(DoubleMatrix, DoubleMatrix, Double, Double), Double])
-      : Iterator[(VertexId, (DoubleMatrix, DoubleMatrix, Double))] = {
-      val (usr, itm) = (et.srcAttr, et.dstAttr)
+    def sendMsgTrainF(conf: Conf, u: Double)
+        (ctx: EdgeContext[
+          (DoubleMatrix, DoubleMatrix, Double, Double),
+          Double,
+          (DoubleMatrix, DoubleMatrix, Double)]) {
+      val (usr, itm) = (ctx.srcAttr, ctx.dstAttr)
       val (p, q) = (usr._1, itm._1)
       var pred = u + usr._3 + itm._3 + q.dot(usr._2)
       pred = math.max(pred, conf.minVal)
       pred = math.min(pred, conf.maxVal)
-      val err = et.attr - pred
+      val err = ctx.attr - pred
       val updateP = q.mul(err)
         .subColumnVector(p.mul(conf.gamma7))
         .mul(conf.gamma2)
@@ -102,16 +104,16 @@ object SVDPlusPlus {
       val updateY = q.mul(err * usr._4)
         .subColumnVector(itm._2.mul(conf.gamma7))
         .mul(conf.gamma2)
-      Iterator((et.srcId, (updateP, updateY, (err - conf.gamma6 * usr._3) * conf.gamma1)),
-        (et.dstId, (updateQ, updateY, (err - conf.gamma6 * itm._3) * conf.gamma1)))
+      ctx.sendToSrc((updateP, updateY, (err - conf.gamma6 * usr._3) * conf.gamma1))
+      ctx.sendToDst((updateQ, updateY, (err - conf.gamma6 * itm._3) * conf.gamma1))
     }
 
     for (i <- 0 until conf.maxIters) {
       // Phase 1, calculate pu + |N(u)|^(-0.5)*sum(y) for user nodes
       g.cache()
-      val t1 = g.mapReduceTriplets(
-        et => Iterator((et.srcId, et.dstAttr._2)),
-        (g1: DoubleMatrix, g2: DoubleMatrix) => g1.addColumnVector(g2))
+      val t1 = g.aggregateMessages[DoubleMatrix](
+        ctx => ctx.sendToSrc(ctx.dstAttr._2),
+        (g1, g2) => g1.addColumnVector(g2))
       g = g.outerJoinVertices(t1) {
         (vid: VertexId, vd: (DoubleMatrix, DoubleMatrix, Double, Double),
          msg: Option[DoubleMatrix]) =>
@@ -121,8 +123,8 @@ object SVDPlusPlus {
 
       // Phase 2, update p for user nodes and q, y for item nodes
       g.cache()
-      val t2 = g.mapReduceTriplets(
-        mapTrainF(conf, u),
+      val t2 = g.aggregateMessages(
+        sendMsgTrainF(conf, u),
         (g1: (DoubleMatrix, DoubleMatrix, Double), g2: (DoubleMatrix, DoubleMatrix, Double)) =>
           (g1._1.addColumnVector(g2._1), g1._2.addColumnVector(g2._2), g1._3 + g2._3))
       g = g.outerJoinVertices(t2) {
@@ -135,20 +137,18 @@ object SVDPlusPlus {
     }
 
     // calculate error on training set
-    def mapTestF(conf: Conf, u: Double)
-        (et: EdgeTriplet[(DoubleMatrix, DoubleMatrix, Double, Double), Double])
-      : Iterator[(VertexId, Double)] =
-    {
-      val (usr, itm) = (et.srcAttr, et.dstAttr)
+    def sendMsgTestF(conf: Conf, u: Double)
+        (ctx: EdgeContext[(DoubleMatrix, DoubleMatrix, Double, Double), Double, Double]) {
+      val (usr, itm) = (ctx.srcAttr, ctx.dstAttr)
       val (p, q) = (usr._1, itm._1)
       var pred = u + usr._3 + itm._3 + q.dot(usr._2)
       pred = math.max(pred, conf.minVal)
       pred = math.min(pred, conf.maxVal)
-      val err = (et.attr - pred) * (et.attr - pred)
-      Iterator((et.dstId, err))
+      val err = (ctx.attr - pred) * (ctx.attr - pred)
+      ctx.sendToDst(err)
     }
     g.cache()
-    val t3 = g.mapReduceTriplets(mapTestF(conf, u), (g1: Double, g2: Double) => g1 + g2)
+    val t3 = g.aggregateMessages[Double](sendMsgTestF(conf, u), _ + _)
     g = g.outerJoinVertices(t3) {
       (vid: VertexId, vd: (DoubleMatrix, DoubleMatrix, Double, Double), msg: Option[Double]) =>
         if (msg.isDefined) (vd._1, vd._2, vd._3, msg.get) else vd

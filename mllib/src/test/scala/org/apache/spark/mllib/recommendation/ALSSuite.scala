@@ -25,7 +25,7 @@ import org.scalatest.FunSuite
 import org.jblas.DoubleMatrix
 
 import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.recommendation.ALS.BlockStats
 import org.apache.spark.mllib.optimization.Constraint._
 
@@ -86,7 +86,7 @@ object ALSSuite {
 }
 
 
-class ALSSuite extends FunSuite with LocalSparkContext {
+class ALSSuite extends FunSuite with MLlibTestSparkContext {
 
   test("rank-1 matrices") {
     testALS(50, 100, 1, 15, 0.7, 0.3)

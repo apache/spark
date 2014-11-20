@@ -28,21 +28,22 @@ import net.razorvine.pickle._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.api.python.{PythonRDD, SerDeUtil}
+import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.mllib.classification._
 import org.apache.spark.mllib.clustering._
 import org.apache.spark.mllib.feature._
-import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.random.{RandomRDDs => RG}
 import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
-import org.apache.spark.mllib.tree.DecisionTree
-import org.apache.spark.mllib.tree.impurity._
-import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
+import org.apache.spark.mllib.stat.test.ChiSqTestResult
+import org.apache.spark.mllib.tree.DecisionTree
+import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
+import org.apache.spark.mllib.tree.impurity._
+import org.apache.spark.mllib.tree.model.DecisionTreeModel
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -103,9 +104,11 @@ class PythonMLLibAPI extends Serializable {
       lrAlg.optimizer.setUpdater(new SquaredL2Updater)
     } else if (regType == "l1") {
       lrAlg.optimizer.setUpdater(new L1Updater)
-    } else if (regType != "none") {
-      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
-        + " Can only be initialized using the following string values: [l1, l2, none].")
+    } else if (regType == null) {
+      lrAlg.optimizer.setUpdater(new SimpleUpdater)
+    } else {
+        throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
+          + " Can only be initialized using the following string values: ['l1', 'l2', None].")
     }
     trainRegressionModel(
       lrAlg,
@@ -180,9 +183,11 @@ class PythonMLLibAPI extends Serializable {
       SVMAlg.optimizer.setUpdater(new SquaredL2Updater)
     } else if (regType == "l1") {
       SVMAlg.optimizer.setUpdater(new L1Updater)
-    } else if (regType != "none") {
+    } else if (regType == null) {
+      SVMAlg.optimizer.setUpdater(new SimpleUpdater)
+    } else {
       throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
-        + " Can only be initialized using the following string values: [l1, l2, none].")
+        + " Can only be initialized using the following string values: ['l1', 'l2', None].")
     }
     trainRegressionModel(
       SVMAlg,
@@ -213,9 +218,46 @@ class PythonMLLibAPI extends Serializable {
       LogRegAlg.optimizer.setUpdater(new SquaredL2Updater)
     } else if (regType == "l1") {
       LogRegAlg.optimizer.setUpdater(new L1Updater)
-    } else if (regType != "none") {
+    } else if (regType == null) {
+      LogRegAlg.optimizer.setUpdater(new SimpleUpdater)
+    } else {
       throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
-        + " Can only be initialized using the following string values: [l1, l2, none].")
+        + " Can only be initialized using the following string values: ['l1', 'l2', None].")
+    }
+    trainRegressionModel(
+      LogRegAlg,
+      data,
+      initialWeights)
+  }
+
+  /**
+   * Java stub for Python mllib LogisticRegressionWithLBFGS.train()
+   */
+  def trainLogisticRegressionModelWithLBFGS(
+      data: JavaRDD[LabeledPoint],
+      numIterations: Int,
+      initialWeights: Vector,
+      regParam: Double,
+      regType: String,
+      intercept: Boolean,
+      corrections: Int,
+      tolerance: Double): JList[Object] = {
+    val LogRegAlg = new LogisticRegressionWithLBFGS()
+    LogRegAlg.setIntercept(intercept)
+    LogRegAlg.optimizer
+      .setNumIterations(numIterations)
+      .setRegParam(regParam)
+      .setNumCorrections(corrections)
+      .setConvergenceTol(tolerance)
+    if (regType == "l2") {
+      LogRegAlg.optimizer.setUpdater(new SquaredL2Updater)
+    } else if (regType == "l1") {
+      LogRegAlg.optimizer.setUpdater(new L1Updater)
+    } else if (regType == null) {
+      LogRegAlg.optimizer.setUpdater(new SimpleUpdater)
+    } else {
+      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
+        + " Can only be initialized using the following string values: ['l1', 'l2', None].")
     }
     trainRegressionModel(
       LogRegAlg,
@@ -250,7 +292,7 @@ class PythonMLLibAPI extends Serializable {
       .setInitializationMode(initializationMode)
       // Disable the uncached input warning because 'data' is a deliberately uncached MappedRDD.
       .disableUncachedWarning()
-    return kMeansAlg.run(data.rdd)
+    kMeansAlg.run(data.rdd)
   }
 
   /**
@@ -275,13 +317,27 @@ class PythonMLLibAPI extends Serializable {
    * the Py4J documentation.
    */
   def trainALSModel(
-      ratings: JavaRDD[Rating],
+      ratingsJRDD: JavaRDD[Rating],
       rank: Int,
       iterations: Int,
       constraint: Constraint,
       lambda: Double,
-      blocks: Int): MatrixFactorizationModel = {
-    new MatrixFactorizationModelWrapper(ALS.train(ratings.rdd, rank, iterations, constraint, lambda, blocks))
+      blocks: Int,
+      seed: java.lang.Long): MatrixFactorizationModel = {
+
+    val als = new ALS()
+      .setRank(rank)
+      .setIterations(iterations)
+      .setUserLambda(lambda)
+      .setProductLambda(lambda)
+      .setUserConstraint(constraint)
+      .setProductConstraint(constraint)
+      .setBlocks(blocks)
+
+    if (seed != null) als.setSeed(seed)
+
+    val model =  als.run(ratingsJRDD.rdd)
+    new MatrixFactorizationModelWrapper(model)
   }
 
   /**
@@ -297,9 +353,24 @@ class PythonMLLibAPI extends Serializable {
       constraint: Constraint,
       lambda: Double,
       blocks: Int,
-      alpha: Double): MatrixFactorizationModel = {
-    new MatrixFactorizationModelWrapper(
-      ALS.trainImplicit(ratingsJRDD.rdd, rank, iterations, constraint, lambda, blocks, alpha))
+      alpha: Double,
+      seed: java.lang.Long): MatrixFactorizationModel = {
+
+    val als = new ALS()
+      .setImplicitPrefs(true)
+      .setRank(rank)
+      .setIterations(iterations)
+      .setUserLambda(lambda)
+      .setProductLambda(lambda)
+      .setUserConstraint(constraint)
+      .setProductConstraint(constraint)
+      .setBlocks(blocks)
+      .setAlpha(alpha)
+      
+    if (seed != null) als.setSeed(seed)
+
+    val model =  als.run(ratingsJRDD.rdd)
+    new MatrixFactorizationModelWrapper(model)
   }
 
   /**
@@ -455,6 +526,31 @@ class PythonMLLibAPI extends Serializable {
    */
   def corr(x: JavaRDD[Double], y: JavaRDD[Double], method: String): Double = {
     Statistics.corr(x.rdd, y.rdd, getCorrNameOrDefault(method))
+  }
+
+  /**
+   * Java stub for mllib Statistics.chiSqTest()
+   */
+  def chiSqTest(observed: Vector, expected: Vector): ChiSqTestResult = {
+    if (expected == null) {
+      Statistics.chiSqTest(observed)
+    } else {
+      Statistics.chiSqTest(observed, expected)
+    }
+  }
+
+  /**
+   * Java stub for mllib Statistics.chiSqTest(observed: Matrix)
+   */
+  def chiSqTest(observed: Matrix): ChiSqTestResult = {
+    Statistics.chiSqTest(observed)
+  }
+
+  /**
+   * Java stub for mllib Statistics.chiSqTest(RDD[LabelPoint])
+   */
+  def chiSqTest(data: JavaRDD[LabeledPoint]): Array[ChiSqTestResult] = {
+    Statistics.chiSqTest(data.rdd)
   }
 
   // used by the corr methods to retrieve the name of the correlation method passed in via pyspark
@@ -739,7 +835,7 @@ private[spark] object SerDe extends Serializable {
   def javaToPython(jRDD: JavaRDD[Any]): JavaRDD[Array[Byte]] = {
     jRDD.rdd.mapPartitions { iter =>
       initialize()  // let it called in executor
-      new PythonRDD.AutoBatchedPickler(iter)
+      new SerDeUtil.AutoBatchedPickler(iter)
     }
   }
 

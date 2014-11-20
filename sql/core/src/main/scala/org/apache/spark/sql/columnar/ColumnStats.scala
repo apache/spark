@@ -70,11 +70,30 @@ private[sql] sealed trait ColumnStats extends Serializable {
   def collectedStatistics: Row
 }
 
+/**
+ * A no-op ColumnStats only used for testing purposes.
+ */
 private[sql] class NoopColumnStats extends ColumnStats {
+  override def gatherStats(row: Row, ordinal: Int): Unit = super.gatherStats(row, ordinal)
 
-  override def gatherStats(row: Row, ordinal: Int): Unit = {}
+  def collectedStatistics = Row(null, null, nullCount, count, 0L)
+}
 
-  override def collectedStatistics = Row()
+private[sql] class BooleanColumnStats extends ColumnStats {
+  protected var upper = false
+  protected var lower = true
+
+  override def gatherStats(row: Row, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
+    if (!row.isNullAt(ordinal)) {
+      val value = row.getBoolean(ordinal)
+      if (value > upper) upper = value
+      if (value < lower) lower = value
+      sizeInBytes += BOOLEAN.defaultSize
+    }
+  }
+
+  def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
 }
 
 private[sql] class ByteColumnStats extends ColumnStats {
@@ -228,4 +247,26 @@ private[sql] class TimestampColumnStats extends ColumnStats {
   }
 
   def collectedStatistics = Row(lower, upper, nullCount, count, sizeInBytes)
+}
+
+private[sql] class BinaryColumnStats extends ColumnStats {
+  override def gatherStats(row: Row, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
+    if (!row.isNullAt(ordinal)) {
+      sizeInBytes += BINARY.actualSize(row, ordinal)
+    }
+  }
+
+  def collectedStatistics = Row(null, null, nullCount, count, sizeInBytes)
+}
+
+private[sql] class GenericColumnStats extends ColumnStats {
+  override def gatherStats(row: Row, ordinal: Int): Unit = {
+    super.gatherStats(row, ordinal)
+    if (!row.isNullAt(ordinal)) {
+      sizeInBytes += GENERIC.actualSize(row, ordinal)
+    }
+  }
+
+  def collectedStatistics = Row(null, null, nullCount, count, sizeInBytes)
 }

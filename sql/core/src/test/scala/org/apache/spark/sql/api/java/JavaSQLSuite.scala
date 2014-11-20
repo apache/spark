@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.api.java
 
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
+
 import scala.beans.BeanProperty
 
 import org.scalatest.FunSuite
