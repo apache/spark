@@ -24,6 +24,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.impl.TimeTracker
+import org.apache.spark.mllib.tree.impurity.Variance
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTreesModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -38,10 +39,11 @@ import org.apache.spark.storage.StorageLevel
  * Notes:
  *  - This currently can be run with several loss functions.  However, only SquaredError is
  *    fully supported.  Specifically, the loss function should be used to compute the gradient
- *    (to re-label training instances on each iteration) and to weight weak hypotheses.
+ *    (to re-label training instances on each iteration) and to weight tree ensembles.
  *    Currently, gradients are computed correctly for the available loss functions,
- *    but weak hypothesis weights are not computed correctly for LogLoss or AbsoluteError.
- *    Running with those losses will likely behave reasonably, but lacks the same guarantees.
+ *    but tree predictions are not computed correctly for LogLoss or AbsoluteError since they
+ *    use the mean of the samples at each leaf node.  Running with those losses will likely behave
+ *    reasonably, but lacks the same guarantees.
  *
  * @param boostingStrategy Parameters for the gradient boosting algorithm.
  */
@@ -127,7 +129,7 @@ object GradientBoostedTrees extends Logging {
     // Prepare strategy for tree ensembles. Tree ensembles use regression with variance impurity.
     val ensembleStrategy = boostingStrategy.treeStrategy.copy
     ensembleStrategy.algo = Regression
-    ensembleStrategy.impurity = impurity.Variance
+    ensembleStrategy.impurity = Variance
     ensembleStrategy.assertValid()
 
     // Cache input

@@ -17,13 +17,12 @@
 
 package org.apache.spark.mllib.tree.model
 
-import org.apache.spark.api.java.JavaRDD
-
 import scala.collection.mutable
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy._
@@ -171,9 +170,6 @@ private[tree] sealed class TreeEnsembleModel(
    * Get number of trees in forest.
    */
   def numTrees: Int = trees.size
-
-  // TODO: Remove these helpers methods once class is generalized to support any base learning
-  // algorithms.
 
   /**
    * Get total number of nodes, summed over all trees in the forest.
