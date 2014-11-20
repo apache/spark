@@ -58,13 +58,19 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @return DecisionTreeModel that can be used for prediction
    */
-  def train(input: RDD[LabeledPoint]): DecisionTreeModel = {
+  def run(input: RDD[LabeledPoint]): DecisionTreeModel = {
     // Note: random seed will not be used since numTrees = 1.
     val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all", seed = 0)
-    val rfModel = rf.train(input)
-    rfModel.weakHypotheses(0)
+    val rfModel = rf.run(input)
+    rfModel.trees(0)
   }
 
+  /**
+   * Trains a decision tree model over an RDD. This is deprecated because it hides the static
+   * methods with the same name in Java.
+   */
+  @deprecated("Please use DecisionTree.run instead.", "1.2.0")
+  def train(input: RDD[LabeledPoint]): DecisionTreeModel = run(input)
 }
 
 object DecisionTree extends Serializable with Logging {
@@ -86,7 +92,7 @@ object DecisionTree extends Serializable with Logging {
    * @return DecisionTreeModel that can be used for prediction
   */
   def train(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeModel = {
-    new DecisionTree(strategy).train(input)
+    new DecisionTree(strategy).run(input)
   }
 
   /**
@@ -112,7 +118,7 @@ object DecisionTree extends Serializable with Logging {
       impurity: Impurity,
       maxDepth: Int): DecisionTreeModel = {
     val strategy = new Strategy(algo, impurity, maxDepth)
-    new DecisionTree(strategy).train(input)
+    new DecisionTree(strategy).run(input)
   }
 
   /**
@@ -140,7 +146,7 @@ object DecisionTree extends Serializable with Logging {
       maxDepth: Int,
       numClassesForClassification: Int): DecisionTreeModel = {
     val strategy = new Strategy(algo, impurity, maxDepth, numClassesForClassification)
-    new DecisionTree(strategy).train(input)
+    new DecisionTree(strategy).run(input)
   }
 
   /**
@@ -177,7 +183,7 @@ object DecisionTree extends Serializable with Logging {
       categoricalFeaturesInfo: Map[Int,Int]): DecisionTreeModel = {
     val strategy = new Strategy(algo, impurity, maxDepth, numClassesForClassification, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo)
-    new DecisionTree(strategy).train(input)
+    new DecisionTree(strategy).run(input)
   }
 
   /**
