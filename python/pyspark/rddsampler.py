@@ -38,15 +38,18 @@ class RDDSamplerBase(object):
         return self._random.random()
 
     def getPoissonSample(self, mean):
-        # Using Knuth's algorithm described in http://en.wikipedia.org/wiki/Poisson_distribution
-        if mean < 20.0:  # one exp and k+1 random calls
+        # Using Knuth's algorithm described in
+        # http://en.wikipedia.org/wiki/Poisson_distribution
+        if mean < 20.0:
+            # one exp and k+1 random calls
             l = math.exp(-mean)
             p = self._random.random()
             k = 0
             while p > l:
                 k += 1
                 p *= self._random.random()
-        else:  # switch to the log domain, k+1 expovariate (random + log) calls
+        else:
+            # switch to the log domain, k+1 expovariate (random + log) calls
             p = self._random.expovariate(mean)
             k = 0
             while p < 1.0:
