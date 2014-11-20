@@ -105,6 +105,10 @@ object MimaExcludes {
             // SPARK-4062
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.kafka.KafkaReceiver#MessageHandler.this")
+          ) ++ Seq(
+            // SPARK-3325
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.api.java.JavaDStreamLike.print")
           )
 
         case v if v.startsWith("1.1") =>
