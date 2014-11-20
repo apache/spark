@@ -19,12 +19,19 @@ package org.apache.spark.scheduler
 
 import java.util.concurrent.Semaphore
 
+import akka.actor.ActorSystem
+import org.apache.spark.network.BlockTransferService
+import org.apache.spark.network.buffer.ManagedBuffer
+import org.apache.spark.serializer.Serializer
+import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.storage.{BlockId, BlockManagerMaster, BlockManager}
+
 import scala.collection.mutable
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 import org.scalatest.Matchers
 
-import org.apache.spark.{LocalSparkContext, SparkContext}
+import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.executor.TaskMetrics
 
@@ -202,6 +209,60 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     stageInfo.rddInfos.forall(_.numPartitions == 4) should be {true}
   }
 
+  //SEE SPARK-2208: hack BlockManager to have a sleep when read shuffle data
+  test("local metrics with fetchWaitTime") {
+    val listener = new SaveStageAndTaskInfo
+    val sc2 = new SparkContext("local", "SparkListenerSuite2")
+
+    val env = SparkEnv.get
+    val bm: BlockManager = env.blockManager
+    val numOfCore = Runtime.getRuntime().availableProcessors()
+    val maxMemory = getMaxMemory(env.conf)
+
+    val hackedBlockManager = new SlowBlockManager(env.executorId, env.actorSystem, bm.master,
+      env.serializer, maxMemory, env.conf, env.mapOutputTracker, env.shuffleManager, env.blockTransferService, env.securityManager,numOfCore)
+
+
+    val hackEnv = new SparkEnv(env.executorId, env.actorSystem, env.serializer, env.closureSerializer, env.cacheManager, env.mapOutputTracker,
+      env.shuffleManager, env.broadcastManager, env.blockTransferService, hackedBlockManager, env.securityManager, env.httpFileServer, env.sparkFilesDir,
+      env.metricsSystem, env.shuffleMemoryManager, env.conf)
+
+
+    SparkEnv.set(hackEnv)
+    hackedBlockManager.initialize(env.conf.get("spark.app.id"))
+
+    sc2.addSparkListener(listener)
+    sc2.addSparkListener(new StatsReportListener)
+    // just to make sure some of the tasks take a noticeable amount of time
+    val w = { i: Int =>
+      if (i == 0)
+        Thread.sleep(100)
+      i
+    }
+
+    val d = sc2.parallelize(0 to 1e4.toInt, 64).map(w)
+    d.count()
+    assert(sc2.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    listener.stageInfos.size should be (1)
+
+    val d2 = d.map { i => w(i) -> i * 2 }.setName("shuffle input 1")
+    val d3 = d.map { i => w(i) -> (0 to (i % 5)) }.setName("shuffle input 2")
+    val d4 = d2.cogroup(d3, numOfCore).map { case (k, (v1, v2)) =>
+      w(k) -> (v1.size, v2.size)
+    }
+    d4.setName("A Cogroup")
+    d4.collectAsMap()
+
+    listener.stageInfos.foreach { case (stageInfo, taskInfoMetrics) =>
+      if (stageInfo.rddInfos.exists(_.name == d4.name)) {
+        checkNonZeroAvg(
+          taskInfoMetrics.map(_._2.shuffleReadMetrics.get.fetchWaitTime),
+          stageInfo + " fetchWaitTime")
+      }
+    }
+    SparkEnv.set(env)
+  }
+
   test("local metrics") {
     val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
@@ -240,13 +301,6 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
         taskInfoMetrics.map(_._2.executorDeserializeTime),
         stageInfo + " executorDeserializeTime")
 
-      /* Test is disabled (SEE SPARK-2208)
-      if (stageInfo.rddInfos.exists(_.name == d4.name)) {
-        checkNonZeroAvg(
-          taskInfoMetrics.map(_._2.shuffleReadMetrics.get.fetchWaitTime),
-          stageInfo + " fetchWaitTime")
-      }
-      */
 
       taskInfoMetrics.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0l)
@@ -424,4 +478,27 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     override def onJobEnd(jobEnd: SparkListenerJobEnd) = { throw new Exception }
   }
 
+  private def getMaxMemory(conf: SparkConf): Long = {
+    val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
+    val safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9)
+    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
+  }
+
+  private class SlowBlockManager( executorId: String,
+                                  actorSystem: ActorSystem,
+                                  master: BlockManagerMaster,
+                                  defaultSerializer: Serializer,
+                                  maxMemory: Long,
+                                  conf: SparkConf,
+                                  mapOutputTracker: MapOutputTracker,
+                                  shuffleManager: ShuffleManager,
+                                  blockTransferService: BlockTransferService,
+                                  securityManager: SecurityManager,
+                                  numUsableCores: Int) extends BlockManager(executorId, actorSystem, master,
+                          defaultSerializer, maxMemory, conf, mapOutputTracker, shuffleManager,blockTransferService,securityManager,numUsableCores) {
+    override def getBlockData(blockId: BlockId): ManagedBuffer = {
+      Thread.sleep(1)
+      super.getBlockData(blockId)
+    }
+  }
 }
