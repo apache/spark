@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.columnar
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.date.Date
 
 private[sql] class ColumnStatisticsSchema(a: Attribute) extends Serializable {
   val upperBound = AttributeReference(a.name + ".upperBound", a.dataType, nullable = true)()

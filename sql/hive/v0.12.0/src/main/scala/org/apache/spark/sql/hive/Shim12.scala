@@ -37,6 +37,7 @@ import org.apache.hadoop.hive.serde2.{Deserializer, ColumnProjectionUtils}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
 import org.apache.hadoop.mapred.InputFormat
+import org.apache.spark.sql.catalyst.types.date.Date
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
@@ -105,7 +106,7 @@ private[hive] object HiveShim {
   def getDateWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(
       PrimitiveCategory.DATE,
-      if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[java.sql.Date]))
+      if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[Date].toDays))
 
   def getTimestampWritableConstantObjectInspector(value: Any): ObjectInspector =
     PrimitiveObjectInspectorFactory.getPrimitiveWritableConstantObjectInspector(

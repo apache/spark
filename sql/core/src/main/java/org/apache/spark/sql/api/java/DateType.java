@@ -18,7 +18,7 @@
 package org.apache.spark.sql.api.java;
 
 /**
- * The data type representing java.sql.Date values.
+ * The data type representing int values of daysSinceEpoch.
  *
  * {@code DateType} is represented by the singleton object {@link DataType#DateType}.
  */

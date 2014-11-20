@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.catalyst.types
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
-import scala.math.Numeric.{FloatAsIfIntegral, BigDecimalAsIfIntegral, DoubleAsIfIntegral}
+import scala.math.Numeric.{FloatAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
 import scala.util.parsing.combinator.RegexParsers
@@ -33,6 +33,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Row}
 import org.apache.spark.sql.catalyst.types.decimal._
+import org.apache.spark.sql.catalyst.types.date._
 import org.apache.spark.sql.catalyst.util.Metadata
 import org.apache.spark.util.Utils
 
@@ -302,9 +303,7 @@ case object DateType extends NativeType {
 
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
 
-  private[sql] val ordering = new Ordering[JvmType] {
-    def compare(x: Date, y: Date) = x.compareTo(y)
-  }
+  private[sql] val ordering = implicitly[Ordering[JvmType]]
 }
 
 abstract class NumericType extends NativeType with PrimitiveType {

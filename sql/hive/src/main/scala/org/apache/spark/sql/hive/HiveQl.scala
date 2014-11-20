@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.sql.Date
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.lib.Node
@@ -32,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.date.Date
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 /* Implicit conversions */
@@ -1100,7 +1100,7 @@ private[hive] object HiveQl {
       Literal(BaseSemanticAnalyzer.unescapeSQLString(ast.getText))
 
     case ast: ASTNode if ast.getType == HiveParser.TOK_DATELITERAL =>
-      Literal(Date.valueOf(ast.getText.substring(1, ast.getText.length - 1)))
+      Literal(Date(ast.getText.substring(1, ast.getText.length - 1)))
 
     case a: ASTNode =>
       throw new NotImplementedError(

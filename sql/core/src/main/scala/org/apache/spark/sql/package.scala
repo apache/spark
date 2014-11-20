@@ -172,7 +172,7 @@ package object sql {
   /**
    * :: DeveloperApi ::
    *
-   * The data type representing `java.sql.Date` values.
+   * The data type representing `Int` values.
    *
    * @group dataType
    */
