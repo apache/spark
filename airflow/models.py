@@ -377,8 +377,7 @@ class TaskInstance(Base):
             self, verbose=True,
             ignore_dependencies=False,
             force=False,
-            mark_success=False,
-            ):
+            mark_success=False,):
         """
         Runs the task instnace.
         """
@@ -601,7 +600,6 @@ class BackfillJob(BaseJob):
                 if ti.state == State.SUCCESS and key in task_instances:
                     del task_instances[key]
                 elif ti.is_runnable():
-                    print "Runnable: " + ti.task_id
                     executor.queue_command(
                         key=ti.key, command=ti.command(
                             mark_success=mark_success,
@@ -1101,7 +1099,12 @@ class DAG(Base):
             self.add_task(task)
 
     def db_merge(self):
+        BO = BaseOperator
         session = settings.Session()
+        tasks = session.query(BO).filter(BO.dag_id==self.dag_id).all()
+        for t in tasks:
+            session.delete(t)
+        session.commit()
         session.merge(self)
         session.commit()
 

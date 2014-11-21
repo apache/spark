@@ -5,6 +5,7 @@ build
 dist
 env
 initdb.py
+dbinit.py
 logs
 *.cfg
 MANIFEST

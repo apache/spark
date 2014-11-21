@@ -228,6 +228,7 @@ def initdb(args):
 
 if __name__ == '__main__':
 
+    reload(logging)
     logging.root.handlers = []
 
     parser = argparse.ArgumentParser()

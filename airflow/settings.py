@@ -22,7 +22,7 @@ if BASE_FOLDER not in sys.path:
 Session = sessionmaker()
 #engine = create_engine('mysql://airflow:airflow@localhost/airflow')
 engine = create_engine(
-    SQL_ALCHEMY_CONN, pool_size=25)
+    SQL_ALCHEMY_CONN, pool_size=50)
 Session.configure(bind=engine)
 
 # can't move this to configuration due to ConfigParser interpolation
