@@ -99,7 +99,7 @@ case class HashOuterJoin(
 
   private[this] def rightOuterIterator(
       key: Row, leftIter: Iterable[Row], rightRow: Row): Iterator[Row] = {
-    val leftNullRow = new GenericRow(right.output.length)
+    val leftNullRow = new GenericRow(left.output.length)
     val boundCondition =
       condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
 
