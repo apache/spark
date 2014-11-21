@@ -70,8 +70,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
     require(n == sample.size, s"Dimensions mismatch when adding new sample." +
       s" Expecting $n but got ${sample.size}.")
 
-    sample.foreachActive((index, value) => {
-      if(value != 0.0){
+    sample.foreachActive { (index, value) =>
+      if (value != 0.0) {
         if (currMax(index) < value) {
           currMax(index) = value
         }
@@ -88,7 +88,7 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
 
         nnz(index) += 1.0
       }
-    })
+    }
 
     totalCnt += 1
     this
