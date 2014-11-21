@@ -437,7 +437,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }
     val path = origPath.makeQualified(fs)
 
-    val children = fs.listStatus(path).filterNot { status =>
+    val children = fs.globStatus(path).filterNot { status =>
       val name = status.getPath.getName
       (name(0) == '.' || name(0) == '_') && name != ParquetFileWriter.PARQUET_METADATA_FILE
     }
