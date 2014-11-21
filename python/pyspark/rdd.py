@@ -310,8 +310,11 @@ class RDD(object):
 
     def sample(self, withReplacement, fraction, seed=None):
         """
-        Return a sampled subset of this RDD (relies on numpy and falls back
-        on default random generator if numpy is unavailable).
+        Return a sampled subset of this RDD.
+
+        >>> rdd = sc.parallelize(range(100), 4)
+        >>> rdd.sample(False, 0.1, 81).count()
+        10
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
@@ -343,8 +346,7 @@ class RDD(object):
     # this is ported from scala/spark/RDD.scala
     def takeSample(self, withReplacement, num, seed=None):
         """
-        Return a fixed-size sampled subset of this RDD (currently requires
-        numpy).
+        Return a fixed-size sampled subset of this RDD.
 
         >>> rdd = sc.parallelize(range(0, 10))
         >>> len(rdd.takeSample(True, 20, 1))

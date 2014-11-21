@@ -15,12 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.tree.configuration
+package org.apache.spark.streaming;
 
-/**
- * Enum to select ensemble combining strategy for base learners
- */
-private[tree] object EnsembleCombiningStrategy extends Enumeration {
-  type EnsembleCombiningStrategy = Value
-  val Average, Sum, Vote = Value
+import org.apache.spark.streaming.api.java.JavaStreamingContext;
+import org.junit.After;
+import org.junit.Before;
+
+public abstract class LocalJavaStreamingContext {
+
+    protected transient JavaStreamingContext ssc;
+
+    @Before
+    public void setUp() {
+        System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock");
+        ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
+        ssc.checkpoint("checkpoint");
+    }
+
+    @After
+    public void tearDown() {
+        ssc.stop();
+        ssc = null;
+    }
 }
