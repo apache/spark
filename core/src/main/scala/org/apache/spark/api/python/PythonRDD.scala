@@ -47,7 +47,7 @@ private[spark] class PythonRDD(
     pythonIncludes: JList[String],
     preservePartitoning: Boolean,
     pythonExec: String,
-    broadcastVars: JList[Broadcast[Array[Byte]]],
+    broadcastVars: JList[Broadcast[Array[Array[Byte]]]],
     accumulator: Accumulator[JList[Array[Byte]]])
   extends RDD[Array[Byte]](parent) {
 
@@ -230,8 +230,8 @@ private[spark] class PythonRDD(
           if (!oldBids.contains(broadcast.id)) {
             // send new broadcast
             dataOut.writeLong(broadcast.id)
-            dataOut.writeInt(broadcast.value.length)
-            dataOut.write(broadcast.value)
+            dataOut.writeLong(broadcast.value.map(_.length.toLong).sum)
+            broadcast.value.foreach(dataOut.write)
             oldBids.add(broadcast.id)
           }
         }
@@ -368,16 +368,24 @@ private[spark] object PythonRDD extends Logging {
     }
   }
 
-  def readBroadcastFromFile(sc: JavaSparkContext, filename: String): Broadcast[Array[Byte]] = {
+  def readBroadcastFromFile(
+      sc: JavaSparkContext,
+      filename: String): Broadcast[Array[Array[Byte]]] = {
+    val size = new File(filename).length()
     val file = new DataInputStream(new FileInputStream(filename))
+    val blockSize = 1 << 20
+    val n = ((size + blockSize - 1) / blockSize).toInt
+    val obj = new Array[Array[Byte]](n)
     try {
-      val length = file.readInt()
-      val obj = new Array[Byte](length)
-      file.readFully(obj)
-      sc.broadcast(obj)
+      for (i <- 0 until n) {
+        val length = if (i < (n - 1)) blockSize else (size % blockSize).toInt
+        obj(i) = new Array[Byte](length)
+        file.readFully(obj(i))
+      }
     } finally {
       file.close()
     }
+    sc.broadcast(obj)
   }
 
   def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream) {
