@@ -44,9 +44,7 @@ __all__ = ['SparkContext']
 # the default ones for Spark if they are not configured by user.
 DEFAULT_CONFIGS = {
     "spark.serializer.objectStreamReset": 100,
-    "spark.rdd.compress": True,
-    # added for ES
-    'es.nodes': '104.131.165.122:9200'
+    "spark.rdd.compress": True
 }
 
 
