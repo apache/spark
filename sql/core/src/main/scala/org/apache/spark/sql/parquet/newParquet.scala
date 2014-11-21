@@ -189,12 +189,9 @@ case class ParquetRelation2(path: String)(@transient val sqlContext: SQLContext)
     }
 
     val selectedPartitions = partitions.filter(p => partitionFilters.forall(_(p)))
-
-    selectedPartitions.flatMap(_.files).foreach { status =>
-      val path = status.getPath
-      val qualifiedPath = path.getFileSystem(jobConf).makeQualified(path)
-      org.apache.hadoop.mapreduce.lib.input.FileInputFormat.addInputPath(job, qualifiedPath)
-    }
+    val fs = FileSystem.get(new java.net.URI(path), sparkContext.hadoopConfiguration)
+    val selectedFiles = selectedPartitions.flatMap(_.files).map(f => fs.makeQualified(f.getPath))
+    org.apache.hadoop.mapreduce.lib.input.FileInputFormat.setInputPaths(job, selectedFiles:_*)
 
     // Push down filters when possible
     predicates
