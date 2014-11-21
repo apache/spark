@@ -74,8 +74,12 @@ class PythonMLLibAPI extends Serializable {
       learner: GeneralizedLinearAlgorithm[_ <: GeneralizedLinearModel],
       data: JavaRDD[LabeledPoint],
       initialWeights: Vector): JList[Object] = {
-    val model = learner.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), initialWeights)
-    List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
+    try {
+      val model = learner.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), initialWeights)
+      List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
+    } finally {
+      data.rdd.unpersist(false)
+    }
   }
 
   /**
@@ -89,7 +93,7 @@ class PythonMLLibAPI extends Serializable {
     } else if (regType == null || regType == "none") {
       new SimpleUpdater
     } else {
-      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
+      throw new IllegalArgumentException("Invalid value for 'regType' parameter."
         + " Can only be initialized using the following string values: ['l1', 'l2', None].")
     }
   }
@@ -266,7 +270,11 @@ class PythonMLLibAPI extends Serializable {
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
-    kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
+    try {
+      kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
+    } finally {
+      data.rdd.unpersist(false)
+    }
   }
 
   /**
@@ -308,7 +316,7 @@ class PythonMLLibAPI extends Serializable {
 
     if (seed != null) als.setSeed(seed)
 
-    val model =  als.run(ratingsJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
+    val model =  als.run(ratingsJRDD.rdd)
     new MatrixFactorizationModelWrapper(model)
   }
 
@@ -339,7 +347,7 @@ class PythonMLLibAPI extends Serializable {
 
     if (seed != null) als.setSeed(seed)
 
-    val model =  als.run(ratingsJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
+    val model =  als.run(ratingsJRDD.rdd)
     new MatrixFactorizationModelWrapper(model)
   }
 
@@ -400,15 +408,15 @@ class PythonMLLibAPI extends Serializable {
       numPartitions: Int,
       numIterations: Int,
       seed: Long): Word2VecModelWrapper = {
-    val data = dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
     val word2vec = new Word2Vec()
       .setVectorSize(vectorSize)
       .setLearningRate(learningRate)
       .setNumPartitions(numPartitions)
       .setNumIterations(numIterations)
       .setSeed(seed)
+    val data = dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
     val model = word2vec.fit(data)
-    data.unpersist()
+    data.unpersist(false)
     new Word2VecModelWrapper(model)
   }
 
@@ -470,8 +478,11 @@ class PythonMLLibAPI extends Serializable {
       categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap,
       minInstancesPerNode = minInstancesPerNode,
       minInfoGain = minInfoGain)
-    val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
-    DecisionTree.train(cached, strategy)
+    try {
+      DecisionTree.train(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), strategy)
+    } finally {
+      data.rdd.unpersist(false)
+    }
   }
 
   /**
@@ -502,10 +513,14 @@ class PythonMLLibAPI extends Serializable {
       maxBins = maxBins,
       categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap)
     val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
-    if (algo == Algo.Classification) {
-      RandomForest.trainClassifier(cached, strategy, numTrees, featureSubsetStrategy, seed)
-    } else {
-      RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, seed)
+    try {
+      if (algo == Algo.Classification) {
+        RandomForest.trainClassifier(cached, strategy, numTrees, featureSubsetStrategy, seed)
+      } else {
+        RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, seed)
+      }
+    } finally {
+      cached.unpersist(false)
     }
   }
 
@@ -687,7 +702,7 @@ private[spark] object SerDe extends Serializable {
     def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       if (obj == this) {
         out.write(Opcodes.GLOBAL)
-        out.write((module + "\n" + name + "\n").getBytes())
+        out.write((module + "\n" + name + "\n").getBytes)
       } else {
         pickler.save(this)  // it will be memorized by Pickler
         saveState(obj, out, pickler)
