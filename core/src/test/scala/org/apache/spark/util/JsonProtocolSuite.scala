@@ -21,8 +21,6 @@ import java.util.Properties
 
 import scala.collection.Map
 
-import org.json4s.JsonAST.JObject
-import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.FunSuite
 
@@ -51,7 +49,8 @@ class JsonProtocolSuite extends FunSuite {
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true))
     val jobStart = {
       val stageIds = Seq[Int](1, 2, 3, 4)
-      val stageInfos = stageIds.map(x => makeStageInfo(x, x * 200, x * 300, x * 400L, x * 500L))
+      val stageInfos = stageIds.map(x =>
+        makeStageInfo(x, x * 200, x * 300, x * 400L, x * 500L))
       SparkListenerJobStart(10, stageInfos, properties)
     }
     val jobEnd = SparkListenerJobEnd(20, JobSucceeded)
@@ -233,11 +232,13 @@ class JsonProtocolSuite extends FunSuite {
   test("SparkListenerJobStart backward compatibility") {
     // Prior to Spark 1.2.0, SparkListenerJobStart did not have a "Stage Infos" property.
     val stageIds = Seq[Int](1, 2, 3, 4)
-    val stageInfos = stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, "unknown"))
+    val stageInfos = stageIds.map(x => makeStageInfo(x, x * 200, x * 300, x * 400, x * 500))
+    val dummyStageInfos =
+      stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, "unknown"))
     val jobStart = SparkListenerJobStart(10, stageInfos, properties)
     val oldEvent = JsonProtocol.jobStartToJson(jobStart).removeField({_._1 == "Stage Infos"})
-      .asInstanceOf[JObject] ~ ("Stage IDs" -> stageIds)
-    val expectedJobStart = SparkListenerJobStart(10, stageInfos, properties)
+    val expectedJobStart =
+      SparkListenerJobStart(10, dummyStageInfos, properties)
     assertEquals(expectedJobStart, JsonProtocol.jobStartFromJson(oldEvent))
   }
 
@@ -1321,6 +1322,12 @@ class JsonProtocolSuite extends FunSuite {
       |        }
       |      ]
       |    }
+      |  ],
+      |  "Stage IDs": [
+      |    1,
+      |    2,
+      |    3,
+      |    4
       |  ],
       |  "Properties": {
       |    "France": "Paris",

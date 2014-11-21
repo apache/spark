@@ -31,6 +31,21 @@ import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 import org.apache.spark._
 
+/**
+ * Serializes SparkListener events to/from JSON.  This protocol provides strong backwards-
+ * and forwards-compatibility guarantees: any version of Spark should be able to read JSON output
+ * written by any other version, including newer versions.
+ *
+ * JsonProtocolSuite contains backwards-compatibility tests which check that the current version of
+ * JsonProtocol is able to read output written by earlier versions.  We do not currently have tests
+ * for reading newer JSON output with older Spark versions.
+ *
+ * To ensure that we provide these guarantees, follow these rules when modifying these methods:
+ *
+ *  - Never delete any JSON fields.
+ *  - Any new JSON fields should be optional; use `Utils.jsonOption` when reading these fields
+ *    in `*FromJson` methods.
+ */
 private[spark] object JsonProtocol {
   // TODO: Remove this file and put JSON serialization into each individual class.
 
@@ -121,8 +136,8 @@ private[spark] object JsonProtocol {
     val properties = propertiesToJson(jobStart.properties)
     ("Event" -> Utils.getFormattedClassName(jobStart)) ~
     ("Job ID" -> jobStart.jobId) ~
-    // ("Stage IDs" -> jobStart.stageIds) ~  // Removed in 1.2.0
-    ("Stage Infos" -> jobStart.stageInfos.map(stageInfoToJson)) ~  // Added in 1.2.0
+    ("Stage Infos" -> jobStart.stageInfos.map(stageInfoToJson)) ~  // Added in Spark 1.2.0
+    ("Stage IDs" -> jobStart.stageIds) ~
     ("Properties" -> properties)
   }
 
@@ -454,20 +469,13 @@ private[spark] object JsonProtocol {
 
   def jobStartFromJson(json: JValue): SparkListenerJobStart = {
     val jobId = (json \ "Job ID").extract[Int]
+    val stageIds = (json \ "Stage IDs").extract[List[JValue]].map(_.extract[Int])
     val properties = propertiesFromJson(json \ "Properties")
-    val stageInfos = {
-      // Prior to 1.2.0, we serialized stageIds but not stageInfos; in 1.2.0, we do the opposite.
-      // This block of code handles backwards compatibility:
-      val stageIds: Option[Seq[Int]] =
-        Utils.jsonOption(json \ "Stage IDs").map(_.extract[List[JValue]].map(_.extract[Int]))
-      if (stageIds.isDefined) { // Reading JSON written prior to 1.2.0
-        stageIds.get.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, "unknown"))
-      } else { // Reading JSON written after 1.2.0
-        Utils.jsonOption(json \ "Stage Infos")
-          .map(_.extract[Seq[JValue]].map(stageInfoFromJson)).getOrElse(Seq.empty)
+    // The "Stage Infos" field was added in Spark 1.2.0
+    val stageInfos = Utils.jsonOption(json \ "Stage Infos")
+      .map(_.extract[Seq[JValue]].map(stageInfoFromJson)).getOrElse {
+        stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, "unknown"))
       }
-    }
-
     SparkListenerJobStart(jobId, stageInfos, properties)
   }
 
