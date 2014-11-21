@@ -74,7 +74,7 @@ class PythonMLLibAPI extends Serializable {
       learner: GeneralizedLinearAlgorithm[_ <: GeneralizedLinearModel],
       data: JavaRDD[LabeledPoint],
       initialWeights: Vector): JList[Object] = {
-    val model = learner.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER), initialWeights)
+    val model = learner.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), initialWeights)
     List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
   }
 
@@ -266,7 +266,7 @@ class PythonMLLibAPI extends Serializable {
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
-    kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
+    kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
   }
 
   /**
@@ -470,7 +470,7 @@ class PythonMLLibAPI extends Serializable {
       categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap,
       minInstancesPerNode = minInstancesPerNode,
       minInfoGain = minInfoGain)
-    val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
+    val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
     DecisionTree.train(cached, strategy)
   }
 
@@ -501,7 +501,7 @@ class PythonMLLibAPI extends Serializable {
       numClassesForClassification = numClasses,
       maxBins = maxBins,
       categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap)
-    val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
+    val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
     if (algo == Algo.Classification) {
       RandomForest.trainClassifier(cached, strategy, numTrees, featureSubsetStrategy, seed)
     } else {
