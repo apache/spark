@@ -122,7 +122,6 @@ private[spark] object JsonProtocol {
     ("Event" -> Utils.getFormattedClassName(jobStart)) ~
     ("Job ID" -> jobStart.jobId) ~
     ("Stage Infos" -> jobStart.stageInfos.map(stageInfoToJson)) ~
-    ("Stage IDs" -> jobStart.stageIds) ~
     ("Properties" -> properties)
   }
 
