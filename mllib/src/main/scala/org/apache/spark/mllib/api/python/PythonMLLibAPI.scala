@@ -85,7 +85,7 @@ class PythonMLLibAPI extends Serializable {
   /**
    * Return the Updater from string
    */
-  def getUpdateFromString(regType: String): Updater = {
+  def getUpdaterFromString(regType: String): Updater = {
     if (regType == "l2") {
       new SquaredL2Updater
     } else if (regType == "l1") {
@@ -117,7 +117,7 @@ class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
-    lrAlg.optimizer.setUpdater(getUpdateFromString(regType))
+    lrAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       lrAlg,
       data,
@@ -187,7 +187,7 @@ class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
-    SVMAlg.optimizer.setUpdater(getUpdateFromString(regType))
+    SVMAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       SVMAlg,
       data,
@@ -213,7 +213,7 @@ class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
-    LogRegAlg.optimizer.setUpdater(getUpdateFromString(regType))
+    LogRegAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       LogRegAlg,
       data,
@@ -239,7 +239,7 @@ class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setNumCorrections(corrections)
       .setConvergenceTol(tolerance)
-    LogRegAlg.optimizer.setUpdater(getUpdateFromString(regType))
+    LogRegAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       LogRegAlg,
       data,
