@@ -117,6 +117,7 @@ class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
+    lrAlg.optimizer.setUpdater(getUpdateFromString(regType))
     trainRegressionModel(
       lrAlg,
       data,
@@ -414,10 +415,12 @@ class PythonMLLibAPI extends Serializable {
       .setNumPartitions(numPartitions)
       .setNumIterations(numIterations)
       .setSeed(seed)
-    val data = dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
-    val model = word2vec.fit(data)
-    data.unpersist(false)
-    new Word2VecModelWrapper(model)
+    try {
+      val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
+      new Word2VecModelWrapper(model)
+    } finally {
+      dataJRDD.rdd.unpersist(false)
+    }
   }
 
   private[python] class Word2VecModelWrapper(model: Word2VecModel) {
