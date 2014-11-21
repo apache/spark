@@ -52,8 +52,10 @@ import org.apache.spark.util.io.ByteArrayChunkOutputStream
  * @param obj object to broadcast
  * @param id A unique identifier for the broadcast variable.
  */
-private[spark] class TorrentBroadcast[T: ClassTag](obj: T, @transient isLocal: Boolean, id: Long)
-  extends Broadcast[T](id) with Logging with Serializable {
+private[spark] class TorrentBroadcast[T: ClassTag](
+    @transient obj: T,
+    @transient isLocal: Boolean,
+    id: Long) extends Broadcast[T](id) with Logging with Serializable {
 
   /**
    * Value of the broadcast object on executors. This is reconstructed by [[readBroadcastBlock]],
