@@ -373,7 +373,7 @@ private[spark] object PythonRDD extends Logging {
       filename: String): Broadcast[Array[Array[Byte]]] = {
     val size = new File(filename).length()
     val file = new DataInputStream(new FileInputStream(filename))
-    val blockSize = 1 << 20
+    val blockSize = sc.conf.getInt("spark.broadcast.blockSize", 4096) * 1024
     val n = ((size + blockSize - 1) / blockSize).toInt
     val obj = new Array[Array[Byte]](n)
     try {
