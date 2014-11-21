@@ -37,6 +37,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var amQueue = sparkConf.get("spark.yarn.queue", "default")
   var amMemory: Int = 512 // MB
   var appName: String = "Spark"
+  var yarnExtraJavaOptions: String = null
   var priority = 0
 
   // Additional memory to allocate to containers

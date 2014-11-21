@@ -8,3 +8,4 @@
 # spark.serializer                 org.apache.spark.serializer.KryoSerializer
 # spark.driver.memory              5g
 # spark.executor.extraJavaOptions  -XX:+PrintGCDetails -Dkey=value -Dnumbers="one two three"
+# spark.yarn.extraJavaOptions      -XX:+PrintGCDetails -Dkey=value -Dnumbers="one two three"
