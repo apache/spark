@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.types.NullType
 
 /* Implicits */
 import org.apache.spark.sql.catalyst.dsl._
@@ -280,6 +281,74 @@ class DslQuerySuite extends QueryTest {
       // SELECT *, foo(key, value) FROM testData
       testData.select(Star(None), foo.call('key, 'value)).limit(3),
       (1, "1", "11") :: (2, "2", "22") :: (3, "3", "33") :: Nil
+    )
+  }
+
+  test("sqrt") {
+    checkAnswer(
+      testData.select(sqrt('key)).orderBy('key asc),
+      (1 to 100).map(n => Seq(math.sqrt(n)))
+    )
+
+    checkAnswer(
+      testData.select(sqrt('value), 'key).orderBy('key asc, 'value asc),
+      (1 to 100).map(n => Seq(math.sqrt(n), n))
+    )
+
+    checkAnswer(
+      testData.select(sqrt(Literal(null, NullType))),
+      (1 to 100).map(_ => Seq(null))
+    )
+  }
+
+  test("abs") {
+    checkAnswer(
+      testData.select(abs('key)).orderBy('key asc),
+      (1 to 100).map(n => Seq(n))
+    )
+
+    checkAnswer(
+      negativeData.select(abs('key)).orderBy('key desc),
+      (1 to 100).map(n => Seq(n))
+    )
+
+    checkAnswer(
+      testData.select(abs(Literal(null, NullType))),
+      (1 to 100).map(_ => Seq(null))
+    )
+  }
+
+  test("upper") {
+    checkAnswer(
+      lowerCaseData.select(upper('l)),
+      ('a' to 'd').map(c => Seq(c.toString.toUpperCase()))
+    )
+
+    checkAnswer(
+      testData.select(upper('value), 'key),
+      (1 to 100).map(n => Seq(n.toString, n))
+    )
+
+    checkAnswer(
+      testData.select(upper(Literal(null, NullType))),
+      (1 to 100).map(n => Seq(null))
+    )
+  }
+
+  test("lower") {
+    checkAnswer(
+      upperCaseData.select(lower('L)),
+      ('A' to 'F').map(c => Seq(c.toString.toLowerCase()))
+    )
+
+    checkAnswer(
+      testData.select(lower('value), 'key),
+      (1 to 100).map(n => Seq(n.toString, n))
+    )
+
+    checkAnswer(
+      testData.select(lower(Literal(null, NullType))),
+      (1 to 100).map(n => Seq(null))
     )
   }
 }
