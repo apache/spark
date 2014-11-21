@@ -76,6 +76,8 @@
               </excludes>
             </filter>
           </filters>
+          <!-- Disable relocation declared in root pom. -->
+          <relocations combine.self="override" />
         </configuration>
         <executions>
           <execution>

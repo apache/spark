@@ -93,11 +93,6 @@
         <version>2.2</version>
         <executions>
           <execution>
-            <goals>
-              <goal>test-jar</goal>
-            </goals>
-          </execution>
-          <execution>
             <id>test-jar-on-test-compile</id>
             <phase>test-compile</phase>
             <goals>
@@ -105,6 +100,15 @@
             </goals>
           </execution>
         </executions>
+      </plugin>
+      <!-- Disable relocation in the shade plugin invocation. -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <configuration>
+          <shadeTestJar>true</shadeTestJar>
+          <relocations combine.self="override" />
+        </configuration>
       </plugin>
     </plugins>
   </build>
