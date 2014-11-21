@@ -326,6 +326,8 @@ private[hive] trait HiveInspectors {
         })
         ObjectInspectorFactory.getStandardConstantMapObjectInspector(keyOI, valueOI, map)
       }
+    case Literal(_, dt) => sys.error(s"Hive doesn't support the constant type [$dt].")
+    case _ if expr.foldable => toInspector(Literal(expr.eval(), expr.dataType))
     case _ => toInspector(expr.dataType)
   }
 
