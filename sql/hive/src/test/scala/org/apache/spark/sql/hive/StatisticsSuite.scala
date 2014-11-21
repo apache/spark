@@ -214,7 +214,9 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
       // Using `sparkPlan` because for relevant patterns in HashJoin to be
       // matched, other strategies need to be applied.
-      var bhj = rdd.queryExecution.sparkPlan.collect { case j: BroadcastHashOuterJoin => j }
+      var bhj = rdd.queryExecution.sparkPlan.collect {
+        case j: BroadcastHashOuterJoin => j
+      }
       assert(bhj.size === 1,
         s"actual query plans do not contain broadcast join: ${rdd.queryExecution}")
 
@@ -223,16 +225,20 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
       TestHive.settings.synchronized {
         val tmp = autoBroadcastJoinThreshold
 
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
+        sql( s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
         rdd = sql(query)
-        bhj = rdd.queryExecution.sparkPlan.collect { case j: BroadcastHashOuterJoin => j }
+        bhj = rdd.queryExecution.sparkPlan.collect {
+          case j: BroadcastHashOuterJoin => j
+        }
         assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
 
-        val shj = rdd.queryExecution.sparkPlan.collect { case j: HashOuterJoin => j }
+        val shj = rdd.queryExecution.sparkPlan.collect {
+          case j: HashOuterJoin => j
+        }
         assert(shj.size === 1,
           "ShuffledHashJoin should be planned when BroadcastHashJoin is turned off")
 
-        sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
+        sql( s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
       }
 
       after()
@@ -241,13 +247,12 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
     /** Tests for MetastoreRelation */
     val leftOuterJoinQuery =
       """SELECT * FROM hashouterjoinsrc a
-        | left outer JOIN hashouterjoinsrc b ON a.key = 238 AND a.key = b.key"""
-    val leftAnswer = Seq(
-      (238,"val_238",238,"val_238"),
-      (null,null,null,null),
-      (311,"val_311",null,null),
-      (345,"val_27",null,null)
-    )
+        |left outer JOIN hashouterjoinsrc b ON a.key = 238 AND a.key = b.key""".stripMargin
+    val leftAnswer = (238, "val_238", 238, "val_238") ::
+        (null, "", null, null) ::
+        (311, "val_311", null, null) ::
+        (345, "val_27", null, null) :: Nil
+
     mkTest(
       () => (),
       () => (),
@@ -258,13 +263,11 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
     val rightOuterJoinQuery =
       """SELECT * FROM hashouterjoinsrc a
-        | right outer JOIN hashouterjoinsrc b ON a.key = 238 AND a.key = b.key"""
-    val rigthAnswer = Seq(
-      (238,"val_238", 238,"val_238"),
-      (null,null,null,null),
-      (null,null,311,"val_311"),
-      (null,null,345,"val_27")
-    )
+        |right outer JOIN hashouterjoinsrc b ON a.key = 238 AND a.key = b.key""".stripMargin
+    val rigthAnswer = (238, "val_238", 238, "val_238") ::
+        (null, null, null, "") ::
+        (null, null, 311, "val_311") ::
+        (null, null, 345, "val_27") :: Nil
     mkTest(
       () => (),
       () => (),
@@ -272,7 +275,6 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
       rigthAnswer,
       implicitly[ClassTag[MetastoreRelation]]
     )
-
   }
 
 }
