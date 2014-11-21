@@ -39,6 +39,10 @@ private[spark] object SQLConf {
 
   val COLUMN_NAME_OF_CORRUPT_RECORD = "spark.sql.columnNameOfCorruptRecord"
 
+  // Options used to control behaviors of schema inference.
+  val SCHEMA_CONVERT_STRUCT_TO_MAP = "spark.sql.schema.convertStructToMap"
+  val SCHEMA_CONVERT_STRUCT_TO_MAP_THRESHOLD = "spark.sql.schema.convertStructToMapThreshold"
+
   // Options that control which operators can be chosen by the query planner.  These should be
   // considered hints and may be ignored by future versions of Spark SQL.
   val EXTERNAL_SORT = "spark.sql.planner.externalSort"
@@ -147,6 +151,21 @@ private[sql] trait SQLConf {
 
   private[spark] def columnNameOfCorruptRecord: String =
     getConf(COLUMN_NAME_OF_CORRUPT_RECORD, "_corrupt_record")
+
+  /**
+   * When set to true, we will automatically convert a StructType to a MapType when
+   * the number of fields exceed the given threshold (convertStructToMapThreshold)
+   * and all fields have the same data type.
+   */
+  private[spark] def convertStructToMap: Boolean =
+    getConf(SCHEMA_CONVERT_STRUCT_TO_MAP, "false").toBoolean
+
+  /**
+   * The threshold of the number of fields to control if we will convert a StructType to a
+   * MapType during schema inference. The default value is 100.
+   */
+  private[spark] def convertStructToMapThreshold: Int =
+    getConf(SCHEMA_CONVERT_STRUCT_TO_MAP_THRESHOLD, "100").toInt
 
   /** ********************** SQLConf functionality methods ************ */
 

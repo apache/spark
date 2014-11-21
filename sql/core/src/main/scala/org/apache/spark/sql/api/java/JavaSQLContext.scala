@@ -165,7 +165,7 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
     val columnNameOfCorruptJsonRecord = sqlContext.columnNameOfCorruptRecord
     val appliedScalaSchema =
       JsonRDD.nullTypeToStringType(
-        JsonRDD.inferSchema(json.rdd, 1.0, columnNameOfCorruptJsonRecord))
+        JsonRDD.inferSchema(json.rdd, 1.0, sqlContext))
     val scalaRowRDD =
       JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema, columnNameOfCorruptJsonRecord)
     val logicalPlan =
@@ -185,7 +185,7 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
       Option(asScalaDataType(schema)).getOrElse(
         JsonRDD.nullTypeToStringType(
           JsonRDD.inferSchema(
-            json.rdd, 1.0, columnNameOfCorruptJsonRecord))).asInstanceOf[SStructType]
+            json.rdd, 1.0, sqlContext))).asInstanceOf[SStructType]
     val scalaRowRDD = JsonRDD.jsonStringToRow(
       json.rdd, appliedScalaSchema, columnNameOfCorruptJsonRecord)
     val logicalPlan =

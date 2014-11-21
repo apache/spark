@@ -689,6 +689,24 @@ class JsonSuite extends QueryTest {
     )
   }
 
+  test("Automatically convert a StructType to MapType") {
+    val oldConvertStructToMap = TestSQLContext.convertStructToMap
+    val oldConvertStructToMapThreshold = TestSQLContext.convertStructToMapThreshold
+    TestSQLContext.setConf(SQLConf.SCHEMA_CONVERT_STRUCT_TO_MAP, "true")
+    TestSQLContext.setConf(SQLConf.SCHEMA_CONVERT_STRUCT_TO_MAP_THRESHOLD, "5")
+
+    val jsonSchemaRDD = jsonRDD(mapType1)
+    val schema = StructType(
+      StructField("map", MapType(StringType, IntegerType, true), true) :: Nil)
+
+    assert(schema === jsonSchemaRDD.schema)
+
+    TestSQLContext.setConf(
+      SQLConf.SCHEMA_CONVERT_STRUCT_TO_MAP, oldConvertStructToMap.toString)
+    TestSQLContext.setConf(
+      SQLConf.SCHEMA_CONVERT_STRUCT_TO_MAP_THRESHOLD, oldConvertStructToMapThreshold.toString)
+  }
+
   test("SPARK-2096 Correctly parse dot notations") {
     val jsonSchemaRDD = jsonRDD(complexFieldAndType2)
     jsonSchemaRDD.registerTempTable("jsonTable")

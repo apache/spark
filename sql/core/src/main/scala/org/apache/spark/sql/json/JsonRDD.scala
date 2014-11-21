@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.json
 
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
-import org.apache.spark.sql.types.util.DataTypeConversions
-
 import scala.collection.Map
 import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
 import scala.math.BigDecimal
@@ -28,12 +25,15 @@ import java.sql.{Date, Timestamp}
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.databind.ObjectMapper
 
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.types.util.DataTypeConversions
 
 private[sql] object JsonRDD extends Logging {
 
@@ -47,15 +47,17 @@ private[sql] object JsonRDD extends Logging {
   private[sql] def inferSchema(
       json: RDD[String],
       samplingRatio: Double = 1.0,
-      columnNameOfCorruptRecords: String): StructType = {
+      sqlContext: SQLContext): StructType = {
     require(samplingRatio > 0, s"samplingRatio ($samplingRatio) should be greater than 0")
     val schemaData = if (samplingRatio > 0.99) json else json.sample(false, samplingRatio, 1)
-    val allKeys =
-      parseJson(schemaData, columnNameOfCorruptRecords).map(allKeysWithValueTypes).reduce(_ ++ _)
-    createSchema(allKeys)
+    val parsedJson = parseJson(schemaData, sqlContext.columnNameOfCorruptRecord)
+    val allKeys = parsedJson.map(allKeysWithValueTypes).reduce(_ ++ _)
+    createSchema(allKeys, sqlContext)
   }
 
-  private def createSchema(allKeys: Set[(String, DataType)]): StructType = {
+  private def createSchema(
+      allKeys: Set[(String, DataType)],
+      sqlContext: SQLContext): StructType = {
     // Resolve type conflicts
     val resolved = allKeys.groupBy {
       case (key, dataType) => key
@@ -128,25 +130,36 @@ private[sql] object JsonRDD extends Logging {
       StructType((topLevelFields ++ structFields).sortBy(_.name))
     }
 
-    makeStruct(resolved.keySet.toSeq, Nil)
-  }
-
-  private[sql] def nullTypeToStringType(struct: StructType): StructType = {
-    val fields = struct.fields.map {
-      case StructField(fieldName, dataType, nullable, _) => {
-        val newType = dataType match {
-          case NullType => StringType
-          case ArrayType(NullType, containsNull) => ArrayType(StringType, containsNull)
-          case ArrayType(struct: StructType, containsNull) =>
-            ArrayType(nullTypeToStringType(struct), containsNull)
-          case struct: StructType =>nullTypeToStringType(struct)
-          case other: DataType => other
+    // For any field with a StructType in the given struct, if the number of fields exceed
+    // a given number and these fields all have the same data type, convert this StructType to
+    // a MapType.
+    def structFieldToMap(struct: StructType): StructType = {
+      struct.transformFieldTypeUp {
+        case StructType(fields) if fields.size >= sqlContext.convertStructToMapThreshold => {
+          val valueType =
+            fields.map(field => field.dataType).foldLeft(Some(NullType): Option[DataType]) {
+              case (Some(dataType1), dataType2) =>
+                HiveTypeCoercion.findTightestCommonType(dataType1, dataType2)
+              case (None, dataType2) => None
+            }
+          valueType match {
+            case Some(dataType) =>
+              val valueContainsNull = fields.map(field => field.nullable).reduce(_ || _)
+              MapType(StringType, dataType, valueContainsNull)
+            case None => StructType(fields)
+          }
         }
-        StructField(fieldName, newType, nullable)
       }
     }
 
-    StructType(fields)
+    val schema = makeStruct(resolved.keySet.toSeq, Nil)
+    if (sqlContext.convertStructToMap) structFieldToMap(schema) else schema
+  }
+
+  private[sql] def nullTypeToStringType(struct: StructType): StructType = {
+    struct.transformFieldTypeUp {
+      case NullType => StringType
+    }
   }
 
   /**
