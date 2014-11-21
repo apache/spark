@@ -59,9 +59,12 @@ case class SparkListenerTaskEnd(
 case class SparkListenerJobStart(
     jobId: Int,
     stageInfos: Seq[StageInfo],
-    stageIds: Seq[Int],  // Note: this is here for backwards-compatibility
     properties: Properties = null)
-  extends SparkListenerEvent
+  extends SparkListenerEvent {
+  // Note: this is here for backwards-compatibility with older versions of this event which
+  // only stored stageIds and not StageInfos:
+  val stageIds: Seq[Int] = stageInfos.map(_.stageId)
+}
 
 @DeveloperApi
 case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkListenerEvent

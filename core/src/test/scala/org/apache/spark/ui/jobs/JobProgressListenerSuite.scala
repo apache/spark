@@ -46,7 +46,7 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     val stageInfos = stageIds.map { stageId =>
       new StageInfo(stageId, 0, stageId.toString, 0, null, "")
     }
-    SparkListenerJobStart(jobId, stageInfos, stageIds)
+    SparkListenerJobStart(jobId, stageInfos)
   }
 
   private def createJobEndEvent(jobId: Int, failed: Boolean = false) = {

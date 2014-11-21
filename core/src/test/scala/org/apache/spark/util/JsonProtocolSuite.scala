@@ -49,9 +49,8 @@ class JsonProtocolSuite extends FunSuite {
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true))
     val jobStart = {
       val stageIds = Seq[Int](1, 2, 3, 4)
-      val stageInfos = stageIds.map(x =>
-        makeStageInfo(x * 100, x * 200, x * 300, x * 400L, x * 500L))
-      SparkListenerJobStart(10, stageInfos, stageIds, properties)
+      val stageInfos = stageIds.map(x => makeStageInfo(x, x * 200, x * 300, x * 400L, x * 500L))
+      SparkListenerJobStart(10, stageInfos, properties)
     }
     val jobEnd = SparkListenerJobEnd(20, JobSucceeded)
     val environmentUpdate = SparkListenerEnvironmentUpdate(Map[String, Seq[(String, String)]](
@@ -231,15 +230,12 @@ class JsonProtocolSuite extends FunSuite {
 
   test("SparkListenerJobStart backward compatibility") {
     // Prior to Spark 1.2.0, SparkListenerJobStart did not have a "Stage Infos" property.
-    val jobStart = {
-      val stageIds = Seq[Int](1, 2, 3, 4)
-      val stageInfos = stageIds.map(x =>
-        makeStageInfo(x * 100, x * 200, x * 300, x * 400L, x * 500L))
-      SparkListenerJobStart(10, stageInfos, stageIds, properties)
-    }
+    val stageIds = Seq[Int](1, 2, 3, 4)
+    val stageInfos = stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, "unknown"))
+    val jobStart = SparkListenerJobStart(10, stageInfos, properties)
     val oldEvent = JsonProtocol.jobStartToJson(jobStart).removeField({_._1 == "Stage Infos"})
-    val expectedJobStart = SparkListenerJobStart(10, Seq.empty, Seq[Int](1, 2, 3, 4), properties)
-    assert(expectedJobStart === JsonProtocol.jobStartFromJson(oldEvent))
+    val expectedJobStart = SparkListenerJobStart(10, stageInfos, properties)
+    assertEquals(expectedJobStart, JsonProtocol.jobStartFromJson(oldEvent))
   }
 
   /** -------------------------- *
@@ -1071,12 +1067,27 @@ class JsonProtocolSuite extends FunSuite {
       |  "Job ID": 10,
       |  "Stage Infos": [
       |    {
-      |      "Stage ID": 100,
+      |      "Stage ID": 1,
       |      "Stage Attempt ID": 0,
       |      "Stage Name": "greetings",
       |      "Number of Tasks": 200,
       |      "RDD Info": [
-      |
+      |        {
+      |          "RDD ID": 1,
+      |          "Name": "mayor",
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use Tachyon": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 200,
+      |          "Number of Cached Partitions": 300,
+      |          "Memory Size": 400,
+      |          "Tachyon Size": 0,
+      |          "Disk Size": 500
+      |        }
       |      ],
       |      "Details": "details",
       |      "Accumulables": [
@@ -1095,12 +1106,43 @@ class JsonProtocolSuite extends FunSuite {
       |      ]
       |    },
       |    {
-      |      "Stage ID": 200,
+      |      "Stage ID": 2,
       |      "Stage Attempt ID": 0,
       |      "Stage Name": "greetings",
       |      "Number of Tasks": 400,
       |      "RDD Info": [
-      |
+      |        {
+      |          "RDD ID": 2,
+      |          "Name": "mayor",
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use Tachyon": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 400,
+      |          "Number of Cached Partitions": 600,
+      |          "Memory Size": 800,
+      |          "Tachyon Size": 0,
+      |          "Disk Size": 1000
+      |        },
+      |        {
+      |          "RDD ID": 3,
+      |          "Name": "mayor",
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use Tachyon": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 401,
+      |          "Number of Cached Partitions": 601,
+      |          "Memory Size": 801,
+      |          "Tachyon Size": 0,
+      |          "Disk Size": 1001
+      |        }
       |      ],
       |      "Details": "details",
       |      "Accumulables": [
@@ -1119,12 +1161,59 @@ class JsonProtocolSuite extends FunSuite {
       |      ]
       |    },
       |    {
-      |      "Stage ID": 300,
+      |      "Stage ID": 3,
       |      "Stage Attempt ID": 0,
       |      "Stage Name": "greetings",
       |      "Number of Tasks": 600,
       |      "RDD Info": [
-      |
+      |        {
+      |          "RDD ID": 3,
+      |          "Name": "mayor",
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use Tachyon": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 600,
+      |          "Number of Cached Partitions": 900,
+      |          "Memory Size": 1200,
+      |          "Tachyon Size": 0,
+      |          "Disk Size": 1500
+      |        },
+      |        {
+      |          "RDD ID": 4,
+      |          "Name": "mayor",
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use Tachyon": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 601,
+      |          "Number of Cached Partitions": 901,
+      |          "Memory Size": 1201,
+      |          "Tachyon Size": 0,
+      |          "Disk Size": 1501
+      |        },
+      |        {
+      |          "RDD ID": 5,
+      |          "Name": "mayor",
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use Tachyon": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 602,
+      |          "Number of Cached Partitions": 902,
+      |          "Memory Size": 1202,
+      |          "Tachyon Size": 0,
+      |          "Disk Size": 1502
+      |        }
       |      ],
       |      "Details": "details",
       |      "Accumulables": [
@@ -1143,12 +1232,75 @@ class JsonProtocolSuite extends FunSuite {
       |      ]
       |    },
       |    {
-      |      "Stage ID": 400,
+      |      "Stage ID": 4,
       |      "Stage Attempt ID": 0,
       |      "Stage Name": "greetings",
       |      "Number of Tasks": 800,
       |      "RDD Info": [
-      |
+      |        {
+      |          "RDD ID": 4,
+      |          "Name": "mayor",
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use Tachyon": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 800,
+      |          "Number of Cached Partitions": 1200,
+      |          "Memory Size": 1600,
+      |          "Tachyon Size": 0,
+      |          "Disk Size": 2000
+      |        },
+      |        {
+      |          "RDD ID": 5,
+      |          "Name": "mayor",
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use Tachyon": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 801,
+      |          "Number of Cached Partitions": 1201,
+      |          "Memory Size": 1601,
+      |          "Tachyon Size": 0,
+      |          "Disk Size": 2001
+      |        },
+      |        {
+      |          "RDD ID": 6,
+      |          "Name": "mayor",
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use Tachyon": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 802,
+      |          "Number of Cached Partitions": 1202,
+      |          "Memory Size": 1602,
+      |          "Tachyon Size": 0,
+      |          "Disk Size": 2002
+      |        },
+      |        {
+      |          "RDD ID": 7,
+      |          "Name": "mayor",
+      |          "Storage Level": {
+      |            "Use Disk": true,
+      |            "Use Memory": true,
+      |            "Use Tachyon": false,
+      |            "Deserialized": true,
+      |            "Replication": 1
+      |          },
+      |          "Number of Partitions": 803,
+      |          "Number of Cached Partitions": 1203,
+      |          "Memory Size": 1603,
+      |          "Tachyon Size": 0,
+      |          "Disk Size": 2003
+      |        }
       |      ],
       |      "Details": "details",
       |      "Accumulables": [

@@ -751,7 +751,7 @@ class DAGScheduler(
         localExecutionEnabled && allowLocal && finalStage.parents.isEmpty && partitions.length == 1
       if (shouldRunLocally) {
         // Compute very short actions like first() or take() with no parent stages locally.
-        listenerBus.post(SparkListenerJobStart(job.jobId, Seq.empty, Seq.empty, properties))
+        listenerBus.post(SparkListenerJobStart(job.jobId, Seq.empty, properties))
         runLocally(job)
       } else {
         jobIdToActiveJob(jobId) = job
@@ -759,7 +759,7 @@ class DAGScheduler(
         finalStage.resultOfJob = Some(job)
         val stageIds = jobIdToStageIds(jobId).toArray
         val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
-        listenerBus.post(SparkListenerJobStart(job.jobId, stageInfos, stageIds, properties))
+        listenerBus.post(SparkListenerJobStart(job.jobId, stageInfos, properties))
         submitStage(finalStage)
       }
     }

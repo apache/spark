@@ -454,11 +454,21 @@ private[spark] object JsonProtocol {
 
   def jobStartFromJson(json: JValue): SparkListenerJobStart = {
     val jobId = (json \ "Job ID").extract[Int]
-    val stageIds = (json \ "Stage IDs").extract[List[JValue]].map(_.extract[Int])
     val properties = propertiesFromJson(json \ "Properties")
-    val stageInfos = Utils.jsonOption(json \ "Stage Infos")
-      .map(_.extract[Seq[JValue]].map(stageInfoFromJson)).getOrElse(Seq.empty)
-    SparkListenerJobStart(jobId, stageInfos, stageIds, properties)
+    val stageInfos = {
+      // Prior to 1.2.0, we serialized stageIds but not stageInfos; in 1.2.0, we do the opposite.
+      // This block of code handles backwards compatibility:
+      val stageIds: Option[Seq[Int]] =
+        Utils.jsonOption(json \ "Stage IDs").map(_.extract[List[JValue]].map(_.extract[Int]))
+      if (stageIds.isDefined) {
+        stageIds.get.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, "unknown"))
+      } else {
+        Utils.jsonOption(json \ "Stage Infos")
+          .map(_.extract[Seq[JValue]].map(stageInfoFromJson)).getOrElse(Seq.empty)
+      }
+    }
+
+    SparkListenerJobStart(jobId, stageInfos, properties)
   }
 
   def jobEndFromJson(json: JValue): SparkListenerJobEnd = {
