@@ -74,15 +74,35 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
       ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[ShuffledHashJoin]),
       ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[ShuffledHashJoin]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[ShuffledHashJoin]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[ShuffledHashJoin])
+      // TODO add BroadcastNestedLoopJoin
+    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+  }
+
+  test("broadcasted hash outer join operator selection") {
+    clearCache()
+    sql("CACHE TABLE testData")
+
+    Seq(
+      ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[BroadcastHashOuterJoin]),
+      ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
+        classOf[BroadcastHashOuterJoin]),
+      ("SELECT * FROM testData full outer join testData2 ON key = a", classOf[HashOuterJoin])
+    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+
+    val tmp = autoBroadcastJoinThreshold
+
+    sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
+
+    Seq(
       ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[HashOuterJoin]),
       ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
         classOf[HashOuterJoin]),
-      ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
-        classOf[HashOuterJoin]),
       ("SELECT * FROM testData full outer join testData2 ON key = a", classOf[HashOuterJoin])
-      // TODO add BroadcastNestedLoopJoin
     ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+
+    sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-$tmp""")
+    sql("UNCACHE TABLE testData")
   }
 
   test("broadcasted hash join operator selection") {
