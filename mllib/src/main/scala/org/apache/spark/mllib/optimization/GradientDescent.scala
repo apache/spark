@@ -187,7 +187,7 @@ object GradientDescent extends Logging {
       val (gradientSum, lossSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i)
         .treeAggregate((BDV.zeros[Double](n), 0.0, 0.0))(
           seqOp = (c, v) => {
-            // c: (grad, loss), v: (label, features)
+            // c: (grad, loss, count), v: (label, features)
             val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(c._1))
             (c._1, c._2 + l, c._3 + 1)
           },
