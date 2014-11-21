@@ -95,6 +95,9 @@ public class LogReporter extends ScheduledReporter {
 
     super(registry, "log-reporter", filter, rateUnit, durationUnit);
     this.logger = Logger.getLogger("com.shopify.metrics");
+    this.logger.setAdditivity(false);
+
+    String file = String.format("%s/spark.metrics.log", directory);
 
     try {
       PatternLayout layout = new PatternLayout("%d{ISO8601} %c %m%n");
