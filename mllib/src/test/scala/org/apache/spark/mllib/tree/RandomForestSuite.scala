@@ -28,12 +28,12 @@ import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.impl.DecisionTreeMetadata
 import org.apache.spark.mllib.tree.impurity.{Gini, Variance}
 import org.apache.spark.mllib.tree.model.Node
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 /**
  * Test suite for [[RandomForest]].
  */
-class RandomForestSuite extends FunSuite with LocalSparkContext {
+class RandomForestSuite extends FunSuite with MLlibTestSparkContext {
   def binaryClassificationTestWithContinuousFeatures(strategy: Strategy) {
     val arr = EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
     val rdd = sc.parallelize(arr)
@@ -41,8 +41,8 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
 
     val rf = RandomForest.trainClassifier(rdd, strategy, numTrees = numTrees,
       featureSubsetStrategy = "auto", seed = 123)
-    assert(rf.weakHypotheses.size === 1)
-    val rfTree = rf.weakHypotheses(0)
+    assert(rf.trees.size === 1)
+    val rfTree = rf.trees(0)
 
     val dt = DecisionTree.train(rdd, strategy)
 
@@ -65,7 +65,8 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
     " comparing DecisionTree vs. RandomForest(numTrees = 1)") {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
-      numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo, useNodeIdCache = true)
+      numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo,
+      useNodeIdCache = true)
     binaryClassificationTestWithContinuousFeatures(strategy)
   }
 
@@ -76,8 +77,8 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
 
     val rf = RandomForest.trainRegressor(rdd, strategy, numTrees = numTrees,
       featureSubsetStrategy = "auto", seed = 123)
-    assert(rf.weakHypotheses.size === 1)
-    val rfTree = rf.weakHypotheses(0)
+    assert(rf.trees.size === 1)
+    val rfTree = rf.trees(0)
 
     val dt = DecisionTree.train(rdd, strategy)
 
@@ -175,7 +176,8 @@ class RandomForestSuite extends FunSuite with LocalSparkContext {
   test("Binary classification with continuous features and node Id cache: subsampling features") {
     val categoricalFeaturesInfo = Map.empty[Int, Int]
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
-      numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo, useNodeIdCache = true)
+      numClassesForClassification = 2, categoricalFeaturesInfo = categoricalFeaturesInfo,
+      useNodeIdCache = true)
     binaryClassificationTestWithContinuousFeaturesAndSubsampledFeatures(strategy)
   }
 

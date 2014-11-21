@@ -18,12 +18,11 @@
 package org.apache.spark.util
 
 import java.io._
+import java.lang.management.ManagementFactory
 import java.net._
 import java.nio.ByteBuffer
-import java.util.jar.Attributes.Name
-import java.util.{Properties, Locale, Random, UUID}
-import java.util.concurrent.{ThreadFactory, ConcurrentHashMap, Executors, ThreadPoolExecutor}
-import java.util.jar.{Manifest => JarManifest}
+import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadFactory, ThreadPoolExecutor}
+import java.util.{Locale, Properties, Random, UUID}
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -37,13 +36,14 @@ import com.google.common.io.{ByteStreams, Files}
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.commons.lang3.SystemUtils
 import org.apache.hadoop.conf.Configuration
-import org.apache.log4j.PropertyConfigurator
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+import org.apache.log4j.PropertyConfigurator
 import org.eclipse.jetty.util.MultiException
 import org.json4s._
-import tachyon.client.{TachyonFile,TachyonFS}
+import tachyon.client.{TachyonFS, TachyonFile}
 
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 
 /** CallSite represents a place in user code. It can have a short and a long form. */
@@ -350,8 +350,8 @@ private[spark] object Utils extends Logging {
    * Download a file to target directory. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
    *
-   * If `useCache` is true, first attempts to fetch the file to a local cache that's shared 
-   * across executors running the same application. `useCache` is used mainly for 
+   * If `useCache` is true, first attempts to fetch the file to a local cache that's shared
+   * across executors running the same application. `useCache` is used mainly for
    * the executors, and not in local mode.
    *
    * Throws SparkException if the target file already exists and has different contents than
@@ -398,7 +398,7 @@ private[spark] object Utils extends Logging {
     } else {
       doFetchFile(url, targetDir, fileName, conf, securityMgr, hadoopConf)
     }
-    
+
     // Decompress the file if it's a .tar or .tar.gz
     if (fileName.endsWith(".tar.gz") || fileName.endsWith(".tgz")) {
       logInfo("Untarring " + fileName)
@@ -753,6 +753,7 @@ private[spark] object Utils extends Logging {
   /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
+   * Throws an exception if deletion is unsuccessful.
    */
   def deleteRecursively(file: File) {
     if (file != null) {
@@ -1596,19 +1597,31 @@ private[spark] object Utils extends Logging {
       .orNull
   }
 
-  /** Return a nice string representation of the exception, including the stack trace. */
+  /**
+   * Return a nice string representation of the exception. It will call "printStackTrace" to
+   * recursively generate the stack trace including the exception and its causes.
+   */
   def exceptionString(e: Throwable): String = {
-    if (e == null) "" else exceptionString(getFormattedClassName(e), e.getMessage, e.getStackTrace)
+    if (e == null) {
+      ""
+    } else {
+      // Use e.printStackTrace here because e.getStackTrace doesn't include the cause
+      val stringWriter = new StringWriter()
+      e.printStackTrace(new PrintWriter(stringWriter))
+      stringWriter.toString
+    }
   }
 
-  /** Return a nice string representation of the exception, including the stack trace. */
-  def exceptionString(
-      className: String,
-      description: String,
-      stackTrace: Array[StackTraceElement]): String = {
-    val desc = if (description == null) "" else description
-    val st = if (stackTrace == null) "" else stackTrace.map("        " + _).mkString("\n")
-    s"$className: $desc\n$st"
+  /** Return a thread dump of all threads' stacktraces.  Used to capture dumps for the web UI */
+  def getThreadDump(): Array[ThreadStackTrace] = {
+    // We need to filter out null values here because dumpAllThreads() may return null array
+    // elements for threads that are dead / don't exist.
+    val threadInfos = ManagementFactory.getThreadMXBean.dumpAllThreads(true, true).filter(_ != null)
+    threadInfos.sortBy(_.getThreadId).map { case threadInfo =>
+      val stackTrace = threadInfo.getStackTrace.map(_.toString).mkString("\n")
+      ThreadStackTrace(threadInfo.getThreadId, threadInfo.getThreadName,
+        threadInfo.getThreadState, stackTrace)
+    }
   }
 
   /**
@@ -1687,7 +1700,7 @@ private[spark] object Utils extends Logging {
   def isBindCollision(exception: Throwable): Boolean = {
     exception match {
       case e: BindException =>
-        if (e.getMessage != null && e.getMessage.contains("Address already in use")) {
+        if (e.getMessage != null) {
           return true
         }
         isBindCollision(e.getCause)
@@ -1761,12 +1774,19 @@ private[spark] object Utils extends Logging {
     s"$libraryPathEnvName=$libraryPath$ampersand"
   }
 
-  lazy val sparkVersion =
-    SparkContext.jarOfObject(this).map { path =>
-      val manifestUrl = new URL(s"jar:file:$path!/META-INF/MANIFEST.MF")
-      val manifest = new JarManifest(manifestUrl.openStream())
-      manifest.getMainAttributes.getValue(Name.IMPLEMENTATION_VERSION)
-    }.getOrElse("Unknown")
+  /**
+   * Return the value of a config either through the SparkConf or the Hadoop configuration
+   * if this is Yarn mode. In the latter case, this defaults to the value set through SparkConf
+   * if the key is not set in the Hadoop configuration.
+   */
+  def getSparkOrYarnConfig(conf: SparkConf, key: String, default: String): String = {
+    val sparkValue = conf.get(key, default)
+    if (SparkHadoopUtil.get.isYarnMode) {
+      SparkHadoopUtil.get.newConfiguration(conf).get(key, sparkValue)
+    } else {
+      sparkValue
+    }
+  }
 }
 
 /**

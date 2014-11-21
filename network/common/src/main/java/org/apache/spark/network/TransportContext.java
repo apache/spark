@@ -17,12 +17,16 @@
 
 package org.apache.spark.network;
 
+import java.util.List;
+
+import com.google.common.collect.Lists;
 import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.spark.network.client.TransportClient;
+import org.apache.spark.network.client.TransportClientBootstrap;
 import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.client.TransportResponseHandler;
 import org.apache.spark.network.protocol.MessageDecoder;
@@ -64,8 +68,17 @@ public class TransportContext {
     this.decoder = new MessageDecoder();
   }
 
+  /**
+   * Initializes a ClientFactory which runs the given TransportClientBootstraps prior to returning
+   * a new Client. Bootstraps will be executed synchronously, and must run successfully in order
+   * to create a Client.
+   */
+  public TransportClientFactory createClientFactory(List<TransportClientBootstrap> bootstraps) {
+    return new TransportClientFactory(this, bootstraps);
+  }
+
   public TransportClientFactory createClientFactory() {
-    return new TransportClientFactory(this);
+    return createClientFactory(Lists.<TransportClientBootstrap>newArrayList());
   }
 
   /** Create a server which will attempt to bind to a specific port. */

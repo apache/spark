@@ -18,11 +18,12 @@
 package org.apache.spark.network.client;
 
 import java.io.Closeable;
+import java.io.IOException;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Throwables;
 import com.google.common.util.concurrent.SettableFuture;
@@ -117,8 +118,12 @@ public class TransportClient implements Closeable {
               serverAddr, future.cause());
             logger.error(errorMsg, future.cause());
             handler.removeFetchRequest(streamChunkId);
-            callback.onFailure(chunkIndex, new RuntimeException(errorMsg, future.cause()));
             channel.close();
+            try {
+              callback.onFailure(chunkIndex, new IOException(errorMsg, future.cause()));
+            } catch (Exception e) {
+              logger.error("Uncaught exception in RPC response callback handler!", e);
+            }
           }
         }
       });
@@ -148,8 +153,12 @@ public class TransportClient implements Closeable {
               serverAddr, future.cause());
             logger.error(errorMsg, future.cause());
             handler.removeRpcRequest(requestId);
-            callback.onFailure(new RuntimeException(errorMsg, future.cause()));
             channel.close();
+            try {
+              callback.onFailure(new IOException(errorMsg, future.cause()));
+            } catch (Exception e) {
+              logger.error("Uncaught exception in RPC response callback handler!", e);
+            }
           }
         }
       });
@@ -176,6 +185,8 @@ public class TransportClient implements Closeable {
 
     try {
       return result.get(timeoutMs, TimeUnit.MILLISECONDS);
+    } catch (ExecutionException e) {
+      throw Throwables.propagate(e.getCause());
     } catch (Exception e) {
       throw Throwables.propagate(e);
     }
@@ -185,5 +196,13 @@ public class TransportClient implements Closeable {
   public void close() {
     // close is a local operation and should finish with milliseconds; timeout just to be safe
     channel.close().awaitUninterruptibly(10, TimeUnit.SECONDS);
+  }
+
+  @Override
+  public String toString() {
+    return Objects.toStringHelper(this)
+      .add("remoteAdress", channel.remoteAddress())
+      .add("isActive", isActive())
+      .toString();
   }
 }

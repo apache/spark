@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.linalg
 
+import breeze.linalg.{DenseMatrix => BDM}
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
@@ -154,5 +155,22 @@ class VectorsSuite extends FunSuite {
       case _ =>
         throw new RuntimeException(s"copy returned ${dvCopy.getClass} on ${dv.getClass}.")
     }
+  }
+
+  test("VectorUDT") {
+    val dv0 = Vectors.dense(Array.empty[Double])
+    val dv1 = Vectors.dense(1.0, 2.0)
+    val sv0 = Vectors.sparse(2, Array.empty, Array.empty)
+    val sv1 = Vectors.sparse(2, Array(1), Array(2.0))
+    val udt = new VectorUDT()
+    for (v <- Seq(dv0, dv1, sv0, sv1)) {
+      assert(v === udt.deserialize(udt.serialize(v)))
+    }
+  }
+
+  test("fromBreeze") {
+    val x = BDM.zeros[Double](10, 10)
+    val v = Vectors.fromBreeze(x(::, 0))
+    assert(v.size === x.rows)
   }
 }

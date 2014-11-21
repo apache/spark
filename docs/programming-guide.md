@@ -117,6 +117,8 @@ The first thing a Spark program must do is to create a [SparkContext](api/scala/
 how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object
 that contains information about your application.
 
+Only one SparkContext may be active per JVM.  You must `stop()` the active SparkContext before creating a new one.
+
 {% highlight scala %}
 val conf = new SparkConf().setAppName(appName).setMaster(master)
 new SparkContext(conf)
@@ -1131,7 +1133,7 @@ method. The code below shows this:
 
 {% highlight scala %}
 scala> val broadcastVar = sc.broadcast(Array(1, 2, 3))
-broadcastVar: spark.Broadcast[Array[Int]] = spark.Broadcast(b5c40191-a864-4c7d-b9bf-d87e1a4e787c)
+broadcastVar: org.apache.spark.broadcast.Broadcast[Array[Int]] = Broadcast(0)
 
 scala> broadcastVar.value
 res0: Array[Int] = Array(1, 2, 3)

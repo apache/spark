@@ -211,8 +211,22 @@ class HadoopRDD[K, V](
 
       val split = theSplit.asInstanceOf[HadoopPartition]
       logInfo("Input split: " + split.inputSplit)
-      var reader: RecordReader[K, V] = null
       val jobConf = getJobConf()
+
+      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
+      // Find a function that will return the FileSystem bytes read by this thread. Do this before
+      // creating RecordReader, because RecordReader's constructor might read some bytes
+      val bytesReadCallback = if (split.inputSplit.value.isInstanceOf[FileSplit]) {
+        SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(
+          split.inputSplit.value.asInstanceOf[FileSplit].getPath, jobConf)
+      } else {
+        None
+      }
+      if (bytesReadCallback.isDefined) {
+        context.taskMetrics.inputMetrics = Some(inputMetrics)
+      }
+
+      var reader: RecordReader[K, V] = null
       val inputFormat = getInputFormat(jobConf)
       HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmm").format(createTime),
         context.stageId, theSplit.index, context.attemptId.toInt, jobConf)
@@ -223,17 +237,6 @@ class HadoopRDD[K, V](
       val key: K = reader.createKey()
       val value: V = reader.createValue()
 
-      val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      // Find a function that will return the FileSystem bytes read by this thread.
-      val bytesReadCallback = if (split.inputSplit.value.isInstanceOf[FileSplit]) {
-        SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(
-          split.inputSplit.value.asInstanceOf[FileSplit].getPath, jobConf)
-      } else {
-        None
-      }
-      if (bytesReadCallback.isDefined) {
-        context.taskMetrics.inputMetrics = Some(inputMetrics)
-      }
       var recordsSinceMetricsUpdate = 0
 
       override def getNext() = {

@@ -46,7 +46,7 @@ private[sql] trait CacheManager {
   def isCached(tableName: String): Boolean = lookupCachedData(table(tableName)).nonEmpty
 
   /** Caches the specified table in-memory. */
-  def cacheTable(tableName: String): Unit = cacheQuery(table(tableName))
+  def cacheTable(tableName: String): Unit = cacheQuery(table(tableName), Some(tableName))
 
   /** Removes the specified table from the in-memory cache. */
   def uncacheTable(tableName: String): Unit = uncacheQuery(table(tableName))
@@ -81,6 +81,7 @@ private[sql] trait CacheManager {
    */
   private[sql] def cacheQuery(
       query: SchemaRDD,
+      tableName: Option[String] = None,
       storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = writeLock {
     val planToCache = query.queryExecution.analyzed
     if (lookupCachedData(planToCache).nonEmpty) {
@@ -90,7 +91,11 @@ private[sql] trait CacheManager {
         CachedData(
           planToCache,
           InMemoryRelation(
-            useCompression, columnBatchSize, storageLevel, query.queryExecution.executedPlan))
+            useCompression,
+            columnBatchSize,
+            storageLevel,
+            query.queryExecution.executedPlan,
+            tableName))
     }
   }
 

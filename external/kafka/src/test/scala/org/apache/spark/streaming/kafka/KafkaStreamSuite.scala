@@ -19,51 +19,57 @@ package org.apache.spark.streaming.kafka
 
 import java.io.File
 import java.net.InetSocketAddress
-import java.util.{Properties, Random}
+import java.util.Properties
 
 import scala.collection.mutable
+import scala.concurrent.duration._
+import scala.language.postfixOps
+import scala.util.Random
 
 import kafka.admin.CreateTopicCommand
 import kafka.common.{KafkaException, TopicAndPartition}
-import kafka.producer.{KeyedMessage, ProducerConfig, Producer}
-import kafka.utils.ZKStringSerializer
+import kafka.producer.{KeyedMessage, Producer, ProducerConfig}
 import kafka.serializer.{StringDecoder, StringEncoder}
 import kafka.server.{KafkaConfig, KafkaServer}
-
+import kafka.utils.ZKStringSerializer
 import org.I0Itec.zkclient.ZkClient
+import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
+import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.concurrent.Eventually
 
-import org.apache.zookeeper.server.ZooKeeperServer
-import org.apache.zookeeper.server.NIOServerCnxnFactory
-
-import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.util.Utils
 
-class KafkaStreamSuite extends TestSuiteBase {
-  import KafkaTestUtils._
+/**
+ * This is an abstract base class for Kafka testsuites. This has the functionality to set up
+ * and tear down local Kafka servers, and to push data using Kafka producers.
+ */
+abstract class KafkaStreamSuiteBase extends FunSuite with Eventually with Logging {
 
-  val zkHost = "localhost"
-  var zkPort: Int = 0
-  val zkConnectionTimeout = 6000
-  val zkSessionTimeout = 6000
+  var zkAddress: String = _
+  var zkClient: ZkClient = _
 
-  protected var brokerPort = 9092
-  protected var brokerConf: KafkaConfig = _
-  protected var zookeeper: EmbeddedZookeeper = _
-  protected var zkClient: ZkClient = _
-  protected var server: KafkaServer = _
-  protected var producer: Producer[String, String] = _
+  private val zkHost = "localhost"
+  private val zkConnectionTimeout = 6000
+  private val zkSessionTimeout = 6000
+  private var zookeeper: EmbeddedZookeeper = _
+  private var zkPort: Int = 0
+  private var brokerPort = 9092
+  private var brokerConf: KafkaConfig = _
+  private var server: KafkaServer = _
+  private var producer: Producer[String, String] = _
 
-  override def useManualClock = false
-
-  override def beforeFunction() {
+  def setupKafka() {
     // Zookeeper server startup
     zookeeper = new EmbeddedZookeeper(s"$zkHost:$zkPort")
     // Get the actual zookeeper binding port
     zkPort = zookeeper.actualPort
+    zkAddress = s"$zkHost:$zkPort"
     logInfo("==================== 0 ====================")
 
-    zkClient = new ZkClient(s"$zkHost:$zkPort", zkSessionTimeout, zkConnectionTimeout,
+    zkClient = new ZkClient(zkAddress, zkSessionTimeout, zkConnectionTimeout,
       ZKStringSerializer)
     logInfo("==================== 1 ====================")
 
@@ -71,7 +77,7 @@ class KafkaStreamSuite extends TestSuiteBase {
     var bindSuccess: Boolean = false
     while(!bindSuccess) {
       try {
-        val brokerProps = getBrokerConfig(brokerPort, s"$zkHost:$zkPort")
+        val brokerProps = getBrokerConfig()
         brokerConf = new KafkaConfig(brokerProps)
         server = new KafkaServer(brokerConf)
         logInfo("==================== 2 ====================")
@@ -89,53 +95,30 @@ class KafkaStreamSuite extends TestSuiteBase {
 
     Thread.sleep(2000)
     logInfo("==================== 4 ====================")
-    super.beforeFunction()
   }
 
-  override def afterFunction() {
-    producer.close()
-    server.shutdown()
+  def tearDownKafka() {
+    if (producer != null) {
+      producer.close()
+      producer = null
+    }
+
+    if (server != null) {
+      server.shutdown()
+      server = null
+    }
+
     brokerConf.logDirs.foreach { f => Utils.deleteRecursively(new File(f)) }
 
-    zkClient.close()
-    zookeeper.shutdown()
+    if (zkClient != null) {
+      zkClient.close()
+      zkClient = null
+    }
 
-    super.afterFunction()
-  }
-
-  test("Kafka input stream") {
-    val ssc = new StreamingContext(master, framework, batchDuration)
-    val topic = "topic1"
-    val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
-    createTopic(topic)
-    produceAndSendMessage(topic, sent)
-
-    val kafkaParams = Map("zookeeper.connect" -> s"$zkHost:$zkPort",
-      "group.id" -> s"test-consumer-${random.nextInt(10000)}",
-      "auto.offset.reset" -> "smallest")
-
-    val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
-      ssc,
-      kafkaParams,
-      Map(topic -> 1),
-      StorageLevel.MEMORY_ONLY)
-    val result = new mutable.HashMap[String, Long]()
-    stream.map { case (k, v) => v }
-      .countByValue()
-      .foreachRDD { r =>
-        val ret = r.collect()
-        ret.toMap.foreach { kv =>
-          val count = result.getOrElseUpdate(kv._1, 0) + kv._2
-          result.put(kv._1, count)
-        }
-      }
-    ssc.start()
-    ssc.awaitTermination(3000)
-
-    assert(sent.size === result.size)
-    sent.keys.foreach { k => assert(sent(k) === result(k).toInt) }
-
-    ssc.stop()
+    if (zookeeper != null) {
+      zookeeper.shutdown()
+      zookeeper = null
+    }
   }
 
   private def createTestMessage(topic: String, sent: Map[String, Int])
@@ -150,58 +133,43 @@ class KafkaStreamSuite extends TestSuiteBase {
     CreateTopicCommand.createTopic(zkClient, topic, 1, 1, "0")
     logInfo("==================== 5 ====================")
     // wait until metadata is propagated
-    waitUntilMetadataIsPropagated(Seq(server), topic, 0, 1000)
+    waitUntilMetadataIsPropagated(topic, 0)
   }
 
   def produceAndSendMessage(topic: String, sent: Map[String, Int]) {
-    val brokerAddr = brokerConf.hostName + ":" + brokerConf.port
-    producer = new Producer[String, String](new ProducerConfig(getProducerConfig(brokerAddr)))
+    producer = new Producer[String, String](new ProducerConfig(getProducerConfig()))
     producer.send(createTestMessage(topic, sent): _*)
+    producer.close()
     logInfo("==================== 6 ====================")
   }
-}
 
-object KafkaTestUtils {
-  val random = new Random()
-
-  def getBrokerConfig(port: Int, zkConnect: String): Properties = {
+  private def getBrokerConfig(): Properties = {
     val props = new Properties()
     props.put("broker.id", "0")
     props.put("host.name", "localhost")
-    props.put("port", port.toString)
+    props.put("port", brokerPort.toString)
     props.put("log.dir", Utils.createTempDir().getAbsolutePath)
-    props.put("zookeeper.connect", zkConnect)
+    props.put("zookeeper.connect", zkAddress)
     props.put("log.flush.interval.messages", "1")
     props.put("replica.socket.timeout.ms", "1500")
     props
   }
 
-  def getProducerConfig(brokerList: String): Properties = {
+  private def getProducerConfig(): Properties = {
+    val brokerAddr = brokerConf.hostName + ":" + brokerConf.port
     val props = new Properties()
-    props.put("metadata.broker.list", brokerList)
+    props.put("metadata.broker.list", brokerAddr)
     props.put("serializer.class", classOf[StringEncoder].getName)
     props
   }
 
-  def waitUntilTrue(condition: () => Boolean, waitTime: Long): Boolean = {
-    val startTime = System.currentTimeMillis()
-    while (true) {
-      if (condition())
-        return true
-      if (System.currentTimeMillis() > startTime + waitTime)
-        return false
-      Thread.sleep(waitTime.min(100L))
+  private def waitUntilMetadataIsPropagated(topic: String, partition: Int) {
+    eventually(timeout(1000 milliseconds), interval(100 milliseconds)) {
+      assert(
+        server.apis.leaderCache.keySet.contains(TopicAndPartition(topic, partition)),
+        s"Partition [$topic, $partition] metadata not propagated after timeout"
+      )
     }
-    // Should never go to here
-    throw new RuntimeException("unexpected error")
-  }
-
-  def waitUntilMetadataIsPropagated(servers: Seq[KafkaServer], topic: String, partition: Int,
-      timeout: Long) {
-    assert(waitUntilTrue(() =>
-      servers.foldLeft(true)(_ && _.apis.leaderCache.keySet.contains(
-        TopicAndPartition(topic, partition))), timeout),
-      s"Partition [$topic, $partition] metadata not propagated after timeout")
   }
 
   class EmbeddedZookeeper(val zkConnect: String) {
@@ -227,3 +195,53 @@ object KafkaTestUtils {
     }
   }
 }
+
+
+class KafkaStreamSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
+  var ssc: StreamingContext = _
+
+  before {
+    setupKafka()
+  }
+
+  after {
+    if (ssc != null) {
+      ssc.stop()
+      ssc = null
+    }
+    tearDownKafka()
+  }
+
+  test("Kafka input stream") {
+    val sparkConf = new SparkConf().setMaster("local[4]").setAppName(this.getClass.getSimpleName)
+    ssc = new StreamingContext(sparkConf, Milliseconds(500))
+    val topic = "topic1"
+    val sent = Map("a" -> 5, "b" -> 3, "c" -> 10)
+    createTopic(topic)
+    produceAndSendMessage(topic, sent)
+
+    val kafkaParams = Map("zookeeper.connect" -> zkAddress,
+      "group.id" -> s"test-consumer-${Random.nextInt(10000)}",
+      "auto.offset.reset" -> "smallest")
+
+    val stream = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
+      ssc, kafkaParams, Map(topic -> 1), StorageLevel.MEMORY_ONLY)
+    val result = new mutable.HashMap[String, Long]()
+    stream.map(_._2).countByValue().foreachRDD { r =>
+      val ret = r.collect()
+      ret.toMap.foreach { kv =>
+        val count = result.getOrElseUpdate(kv._1, 0) + kv._2
+        result.put(kv._1, count)
+      }
+    }
+    ssc.start()
+    eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
+      assert(sent.size === result.size)
+      sent.keys.foreach { k =>
+        assert(sent(k) === result(k).toInt)
+      }
+    }
+    ssc.stop()
+  }
+}
+

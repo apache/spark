@@ -60,13 +60,13 @@ private[sql] class MyDenseVectorUDT extends UserDefinedType[MyDenseVector] {
 }
 
 class UserDefinedTypeSuite extends QueryTest {
+  val points = Seq(
+    MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
+    MyLabeledPoint(0.0, new MyDenseVector(Array(0.2, 2.0))))
+  val pointsRDD: RDD[MyLabeledPoint] = sparkContext.parallelize(points)
+
 
   test("register user type: MyDenseVector for MyLabeledPoint") {
-    val points = Seq(
-      MyLabeledPoint(1.0, new MyDenseVector(Array(0.1, 1.0))),
-      MyLabeledPoint(0.0, new MyDenseVector(Array(0.2, 2.0))))
-    val pointsRDD: RDD[MyLabeledPoint] = sparkContext.parallelize(points)
-
     val labels: RDD[Double] = pointsRDD.select('label).map { case Row(v: Double) => v }
     val labelsArrays: Array[Double] = labels.collect()
     assert(labelsArrays.size === 2)
@@ -79,5 +79,13 @@ class UserDefinedTypeSuite extends QueryTest {
     assert(featuresArrays.size === 2)
     assert(featuresArrays.contains(new MyDenseVector(Array(0.1, 1.0))))
     assert(featuresArrays.contains(new MyDenseVector(Array(0.2, 2.0))))
+  }
+
+  test("UDTs and UDFs") {
+    registerFunction("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
+    pointsRDD.registerTempTable("points")
+    checkAnswer(
+      sql("SELECT testType(features) from points"),
+      Seq(Row(true), Row(true)))
   }
 }
