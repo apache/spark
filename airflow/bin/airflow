@@ -107,13 +107,32 @@ def clear(args):
 
 
 def webserver(args):
+    print 'Running Tornado server on host {host} and port {port}...'.format(host=args.hostname, port=args.port)
+    from tornado.httpserver import HTTPServer
+    from tornado.ioloop import IOLoop
+    from tornado import log
+    from tornado.wsgi import WSGIContainer
+    from airflow.www.app import app
+
+    logging.basicConfig(level=logging.DEBUG,
+      format=settings.LOG_FORMAT)
+
+    print(settings.HEADER)
+
+    log.enable_pretty_logging()
+    # simple multi-process server
+    server = HTTPServer(WSGIContainer(app))
+    server.bind(args.port)
+    server.start(0)  # Forks multiple sub-processes
+    IOLoop.instance().start()
+
+def builtin(args):
     logging.basicConfig(level=logging.DEBUG,
       format=settings.LOG_FORMAT)
     print(settings.HEADER)
     from airflow.www.app import app
     print("Starting the web server on port {0} and host {1}.".format(args.port, args.hostname))
     app.run(debug=True, port=args.port, host=args.hostname)
-
 
 def master(args):
 

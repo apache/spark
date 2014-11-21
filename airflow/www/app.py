@@ -204,7 +204,7 @@ class Airflow(BaseView):
             base_date = dateutil.parser.parse(base_date)
 
         num_runs = request.args.get('num_runs')
-        num_runs = int(num_runs) if num_runs else 14
+        num_runs = int(num_runs) if num_runs else 25
         from_date = (base_date-(num_runs * dag.schedule_interval)).date()
         from_date = datetime.combine(from_date, datetime.min.time())
 
@@ -498,7 +498,7 @@ def filepath_formatter(view, context, model, name):
 
 
 def dag_formatter(view, context, model, name):
-    url = url_for('airflow.tree', dag_id=model.dag_id, num_runs=45)
+    url = url_for('airflow.tree', dag_id=model.dag_id, num_runs=25)
     link = Markup('<a href="{url}">{model.dag_id}</a>'.format(**locals()))
     return link
 
