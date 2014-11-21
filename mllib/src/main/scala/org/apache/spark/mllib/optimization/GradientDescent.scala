@@ -160,7 +160,6 @@ object GradientDescent extends Logging {
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
 
     val numExamples = data.count()
-    val miniBatchSize = numExamples * miniBatchFraction
 
     // if no data, return initial weights to avoid NaNs
     if (numExamples == 0) {
@@ -185,14 +184,16 @@ object GradientDescent extends Logging {
       val bcWeights = data.context.broadcast(weights)
       // Sample a subset (fraction miniBatchFraction) of the total data
       // compute and sum up the subgradients on this subset (this is one map-reduce)
-      val (gradientSum, lossSum) = data.sample(false, miniBatchFraction, 42 + i)
-        .treeAggregate((BDV.zeros[Double](n), 0.0))(
-          seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
-            val l = gradient.compute(features, label, bcWeights.value, Vectors.fromBreeze(grad))
-            (grad, loss + l)
+      val (gradientSum, lossSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i)
+        .treeAggregate((BDV.zeros[Double](n), 0.0, 0.0))(
+          seqOp = (c, v) => {
+            // c: (grad, loss), v: (label, features)
+            val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(c._1))
+            (c._1, c._2 + l, c._3 + 1)
           },
-          combOp = (c1, c2) => (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
-            (grad1 += grad2, loss1 + loss2)
+          combOp = (c1, c2) => {
+            // c: (grad, loss, count)
+            (c1._1 += c2._1, c1._2 + c2._2, c1._3 + c2._3)
           })
 
       /**
