@@ -28,11 +28,20 @@ public class NoOpRpcHandler extends RpcHandler {
     streamManager = new OneForOneStreamManager();
   }
 
+  /**
+   * @param client A channel client which enables the handler to make requests back to the sender
+   *               of this RPC. This will always be the exact same object for a particular channel.
+   * @param message The serialized bytes of the RPC.
+   * @param callback Callback which should be invoked exactly once upon success or failure of the
+   */
   @Override
   public void receive(TransportClient client, byte[] message, RpcResponseCallback callback) {
     throw new UnsupportedOperationException("Cannot handle messages");
   }
 
+  /**
+   * @return TODO
+   */
   @Override
   public StreamManager getStreamManager() { return streamManager; }
 }

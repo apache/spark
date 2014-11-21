@@ -53,7 +53,10 @@ public final class ChunkFetchSuccess implements ResponseMessage {
     streamChunkId.encode(buf);
   }
 
-  /** Decoding uses the given ByteBuf as our data, and will retain() it. */
+  /** Decoding uses the given ByteBuf as our data, and will retain() it.
+   * @param buf TODO
+   * @return TODO
+   * */
   public static ChunkFetchSuccess decode(ByteBuf buf) {
     StreamChunkId streamChunkId = StreamChunkId.decode(buf);
     buf.retain();

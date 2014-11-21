@@ -40,7 +40,10 @@ import io.netty.util.internal.PlatformDependent;
  * Utilities for creating various Netty constructs based on whether we're using EPOLL or NIO.
  */
 public class NettyUtils {
-  /** Creates a new ThreadFactory which prefixes each thread with the given name. */
+  /** Creates a new ThreadFactory which prefixes each thread with the given name.
+   * @param threadPoolPrefix TODO
+   * @return TODO
+   * */
   public static ThreadFactory createThreadFactory(String threadPoolPrefix) {
     return new ThreadFactoryBuilder()
       .setDaemon(true)
@@ -48,7 +51,12 @@ public class NettyUtils {
       .build();
   }
 
-  /** Creates a Netty EventLoopGroup based on the IOMode. */
+  /** Creates a Netty EventLoopGroup based on the IOMode.
+   * @param mode TODO
+   * @param numThreads TODO
+   * @param threadPrefix TODO
+   * @return TODO
+   */
   public static EventLoopGroup createEventLoop(IOMode mode, int numThreads, String threadPrefix) {
     ThreadFactory threadFactory = createThreadFactory(threadPrefix);
 
@@ -62,7 +70,10 @@ public class NettyUtils {
     }
   }
 
-  /** Returns the correct (client) SocketChannel class based on IOMode. */
+  /** Returns the correct (client) SocketChannel class based on IOMode.
+   * @param mode TODO
+   * @return TODO
+   * */
   public static Class<? extends Channel> getClientChannelClass(IOMode mode) {
     switch (mode) {
       case NIO:
@@ -74,7 +85,10 @@ public class NettyUtils {
     }
   }
 
-  /** Returns the correct ServerSocketChannel class based on IOMode. */
+  /** Returns the correct ServerSocketChannel class based on IOMode.
+   * @param mode TODO
+   * @return TODO
+   * */
   public static Class<? extends ServerChannel> getServerChannelClass(IOMode mode) {
     switch (mode) {
       case NIO:
@@ -89,6 +103,7 @@ public class NettyUtils {
   /**
    * Creates a LengthFieldBasedFrameDecoder where the first 8 bytes are the length of the frame.
    * This is used before all decoders.
+   * @return TODO
    */
   public static ByteToMessageDecoder createFrameDecoder() {
     // maxFrameLength = 2G
@@ -99,7 +114,10 @@ public class NettyUtils {
     return new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 8, -8, 8);
   }
 
-  /** Returns the remote address on the channel or "<remote address>" if none exists. */
+  /** Returns the remote address on the channel or "remote address" if none exists.
+   * @param channel TODO
+   * @return TODO
+   * */
   public static String getRemoteAddress(Channel channel) {
     if (channel != null && channel.remoteAddress() != null) {
       return channel.remoteAddress().toString();
@@ -112,6 +130,10 @@ public class NettyUtils {
    * are disabled because the ByteBufs are allocated by the event loop thread, but released by the
    * executor thread rather than the event loop thread. Those thread-local caches actually delay
    * the recycling of buffers, leading to larger memory usage.
+   * @param allowDirectBufs TODO
+   * @param allowCache TODO
+   * @param numCores TODO
+   * @return TODO
    */
   public static PooledByteBufAllocator createPooledByteBufAllocator(
       boolean allowDirectBufs,

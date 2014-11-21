@@ -44,12 +44,14 @@ public abstract class RpcHandler {
   /**
    * Returns the StreamManager which contains the state about which streams are currently being
    * fetched by a TransportClient.
+   * @return TODO
    */
   public abstract StreamManager getStreamManager();
 
   /**
    * Invoked when the connection associated with the given client has been invalidated.
    * No further requests will come from this client.
+   * @param client TODO
    */
   public void connectionTerminated(TransportClient client) { }
 }

@@ -29,7 +29,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.buffer.ManagedBuffer;
 
 /**
- * StreamManager which allows registration of an Iterator<ManagedBuffer>, which are individually
+ * StreamManager which allows registration of an Iterator of ManagedBuffer, which are individually
  * fetched as chunks by the client. Each registered buffer is one chunk.
  */
 public class OneForOneStreamManager extends StreamManager {
@@ -95,6 +95,8 @@ public class OneForOneStreamManager extends StreamManager {
    * callers. Each ManagedBuffer will be release()'d after it is transferred on the wire. If a
    * client connection is closed before the iterator is fully drained, then the remaining buffers
    * will all be release()'d.
+   * @param buffers TODO
+   * @return TODO
    */
   public long registerStream(Iterator<ManagedBuffer> buffers) {
     long myStreamId = nextStreamId.getAndIncrement();
