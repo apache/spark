@@ -57,76 +57,14 @@ title: GraphX Programming Guide
 
 # Overview
 
-GraphX is the new (alpha) Spark API for graphs and graph-parallel computation. At a high level,
-GraphX extends the Spark [RDD](api/scala/index.html#org.apache.spark.rdd.RDD) by introducing the
-[Resilient Distributed Property Graph](#property_graph): a directed multigraph with properties
+GraphX is a new component in Spark for graphs and graph-parallel computation. At a high level,
+GraphX extends the Spark [RDD](api/scala/index.html#org.apache.spark.rdd.RDD) by introducing a
+new [Graph](#property_graph) abstraction: a directed multigraph with properties
 attached to each vertex and edge.  To support graph computation, GraphX exposes a set of fundamental
 operators (e.g., [subgraph](#structural_operators), [joinVertices](#join_operators), and
-[aggregateMessages](#aggregateMessages)) as well as an optimized variant of the [Pregel](#pregel) API. In
-addition, GraphX includes a growing collection of graph [algorithms](#graph_algorithms) and
+[aggregateMessages](#aggregateMessages)) as well as an optimized variant of the [Pregel](#pregel) API. In addition, GraphX includes a growing collection of graph [algorithms](#graph_algorithms) and
 [builders](#graph_builders) to simplify graph analytics tasks.
 
-
-## Motivation
-
-From social networks to language modeling, the growing scale and importance of
-graph data has driven the development of numerous new *graph-parallel* systems
-(e.g., [Giraph](http://giraph.apache.org) and
-[GraphLab](http://graphlab.org)).  By restricting the types of computation that can be
-expressed and introducing new techniques to partition and distribute graphs,
-these systems can efficiently execute sophisticated graph algorithms orders of
-magnitude faster than more general *data-parallel* systems.
-
-<p style="text-align: center;">
-  <img src="img/data_parallel_vs_graph_parallel.png"
-       title="Data-Parallel vs. Graph-Parallel"
-       alt="Data-Parallel vs. Graph-Parallel"
-       width="50%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
-
-However, the same restrictions that enable these substantial performance gains also make it
-difficult to express many of the important stages in a typical graph-analytics pipeline:
-constructing the graph, modifying its structure, or expressing computation that spans multiple
-graphs.  Furthermore, how we look at data depends on our objectives and the same raw data may have
-many different table and graph views.
-
-<p style="text-align: center;">
-  <img src="img/tables_and_graphs.png"
-       title="Tables and Graphs"
-       alt="Tables and Graphs"
-       width="50%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
-
-As a consequence, it is often necessary to be able to move between table and graph views.
-However, existing graph analytics pipelines must compose graph-parallel and data-
-parallel systems, leading to extensive data movement and duplication and a complicated programming
-model.
-
-<p style="text-align: center;">
-  <img src="img/graph_analytics_pipeline.png"
-       title="Graph Analytics Pipeline"
-       alt="Graph Analytics Pipeline"
-       width="50%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
-
-The goal of the GraphX project is to unify graph-parallel and data-parallel computation in one
-system with a single composable API. The GraphX API enables users to view data both as a graph and
-as collections (i.e., RDDs) without data movement or duplication. By incorporating recent advances
-in graph-parallel systems, GraphX is able to optimize the execution of graph operations.
-
-<!-- ## GraphX Replaces the Spark Bagel API
-
-Prior to the release of GraphX, graph computation in Spark was expressed using Bagel, an
-implementation of Pregel.  GraphX improves upon Bagel by exposing a richer property graph API, a
-more streamlined version of the Pregel abstraction, and system optimizations to improve performance
-and reduce memory overhead.  While we plan to eventually deprecate Bagel, we will continue to
-support the [Bagel API](api/scala/index.html#org.apache.spark.bagel.package) and
-[Bagel programming guide](bagel-programming-guide.html). However, we encourage Bagel users to
-explore the new GraphX API and comment on issues that may complicate the transition from Bagel.
- -->
 
 ## Migrating from Spark 1.1
 
@@ -174,7 +112,7 @@ identifiers.
 The property graph is parameterized over the vertex (`VD`) and edge (`ED`) types.  These
 are the types of the objects associated with each vertex and edge respectively.
 
-> GraphX optimizes the representation of vertex and edge types when they are plain old data types
+> GraphX optimizes the representation of vertex and edge types when they are primitive data types
 > (e.g., int, double, etc...) reducing the in memory footprint by storing them in specialized
 > arrays.
 
@@ -791,14 +729,13 @@ Graphs are inherently recursive data structures as properties of vertices depend
 their neighbors which in turn depend on properties of *their* neighbors.  As a
 consequence many important graph algorithms iteratively recompute the properties of each vertex
 until a fixed-point condition is reached.  A range of graph-parallel abstractions have been proposed
-to express these iterative algorithms.  GraphX exposes a Pregel-like operator which is a fusion of
-the widely used Pregel and GraphLab abstractions.
+to express these iterative algorithms.  GraphX exposes a variant of the Pregel API.
 
 At a high level the Pregel operator in GraphX is a bulk-synchronous parallel messaging abstraction
 *constrained to the topology of the graph*.  The Pregel operator executes in a series of super steps
 in which vertices receive the *sum* of their inbound messages from the previous super step, compute
 a new value for the vertex property, and then send messages to neighboring vertices in the next
-super step.  Unlike Pregel and instead more like GraphLab messages are computed in parallel as a
+super step.  Unlike Pregel, messages are computed in parallel as a
 function of the edge triplet and the message computation has access to both the source and
 destination vertex attributes.  Vertices that do not receive a message are skipped within a super
 step.  The Pregel operators terminates iteration and returns the final graph when there are no
