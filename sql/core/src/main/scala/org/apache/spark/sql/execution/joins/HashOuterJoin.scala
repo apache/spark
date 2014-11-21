@@ -68,63 +68,64 @@ case class HashOuterJoin(
   @transient private[this] lazy val DUMMY_LIST = Seq[Row](null)
   @transient private[this] lazy val EMPTY_LIST = Seq.empty[Row]
 
+  @transient private[this] lazy val joinedRow = new JoinedRow()
+
   // TODO we need to rewrite all of the iterators with our own implementation instead of the Scala
   // iterator for performance purpose.
 
   private[this] def leftOuterIterator(
       key: Row, leftRow: Row, rightIter: Iterable[Row]): Iterator[Row] = {
-    val joinedRow = new JoinedRow()
+    //val joinedRow = new JoinedRow()
     val rightNullRow = new GenericRow(right.output.length)
     val boundCondition =
       condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
 
     joinedRow.withLeft(leftRow)
-    var matched = false
-    val ret = (if (!key.anyNull) rightIter.collect {
-      case r if (boundCondition(joinedRow.withRight(r))) =>
-      matched = true
-      joinedRow.copy
-    } else {
-      Nil
-    }) ++ DUMMY_LIST.filter(_ => !matched).map( _ => {
-      // DUMMY_LIST.filter(_ => !matched) is a tricky way to add additional row,
-      // as we don't know whether we need to append it until finish iterating all of the
-      // records in right side.
-      // If we didn't get any proper row, then append a single row with empty right
-      joinedRow.withRight(rightNullRow).copy
-    })
+    val ret: Iterable[Row] = (
+      if (!key.anyNull) {
+        val temp = rightIter.collect {
+          case r if (boundCondition(joinedRow.withRight(r))) => joinedRow.copy
+        }
+        if (temp.size  == 0) {
+          List(joinedRow.withRight(rightNullRow).copy)
+        } else {
+          temp
+        }
+      } else {
+        Nil
+      }
+    )
     ret.iterator
   }
 
   private[this] def rightOuterIterator(
       key: Row, leftIter: Iterable[Row], rightRow: Row): Iterator[Row] = {
-    val joinedRow = new JoinedRow()
+    //val joinedRow = new JoinedRow()
     val leftNullRow = new GenericRow(right.output.length)
     val boundCondition =
       condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
 
     joinedRow.withRight(rightRow)
-    var matched = false
-    val ret = (if (!key.anyNull) leftIter.collect {
-      case l if (boundCondition(joinedRow.withLeft(l))) => {
-        matched = true
-        joinedRow.copy
+    val ret: Iterable[Row] = (
+      if (!key.anyNull) {
+        val temp = leftIter.collect {
+          case l if (boundCondition(joinedRow.withLeft(l))) => joinedRow.copy
+        }
+        if (temp.size  == 0) {
+          List(joinedRow.withLeft(leftNullRow).copy)
+        } else {
+          temp
+        }
+      } else {
+        Nil
       }
-    } else {
-      Nil
-    }) ++ DUMMY_LIST.filter(_ => !matched).map( _ => {
-      // DUMMY_LIST.filter(_ => !matched) is a tricky way to add additional row,
-      // as we don't know whether we need to append it until finish iterating all of the
-      // records in right side.
-      // If we didn't get any proper row, then append a single row with empty right
-      joinedRow.withLeft(leftNullRow).copy
-    })
+    )
     ret.iterator
   }
 
   private[this] def fullOuterIterator(
       key: Row, leftIter: Iterable[Row], rightIter: Iterable[Row]): Iterator[Row] = {
-    val joinedRow = new JoinedRow()
+    //val joinedRow = new JoinedRow()
     val leftNullRow = new GenericRow(left.output.length)
     val rightNullRow = new GenericRow(right.output.length)
     val boundCondition =
