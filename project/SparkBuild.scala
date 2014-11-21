@@ -101,14 +101,13 @@ object SparkBuild extends PomBuild {
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
 
-    if (profiles.exists(_.contains("scala-"))) {
-      profiles
-    } else if (System.getProperty("scala-2.11") != null) {
-      profiles ++ Seq("scala-2.11")
-    } else {
-      println("Enabled default scala profile")
-      profiles ++ Seq("scala-2.10")
+    if (System.getProperty("scala-2.11") == "") {
+      // To activate scala-2.11 profile, replace empty property value to non-empty value
+      // in the same way as Maven which handles -Dname as -Dname=true before executes build process.
+      // see: https://github.com/apache/maven/blob/maven-3.0.4/maven-embedder/src/main/java/org/apache/maven/cli/MavenCli.java#L1082
+      System.setProperty("scala-2.11", "true")
     }
+    profiles
   }
 
   Properties.envOrNone("SBT_MAVEN_PROPERTIES") match {
@@ -210,12 +209,14 @@ object OldDeps {
 
   def versionArtifact(id: String): Option[sbt.ModuleID] = {
     val fullId = id + "_2.10"
-    Some("org.apache.spark" % fullId % "1.1.0")
+    Some("org.apache.spark" % fullId % "1.2.0")
   }
 
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
     scalaVersion := "2.10.4",
+    // TODO: remove this as soon as 1.2.0 is published on Maven central.
+    resolvers += "spark-staging-1038" at "https://repository.apache.org/content/repositories/orgapachespark-1038/",
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
@@ -331,7 +332,7 @@ object Unidoc {
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, bagel, graphx, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
 
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
@@ -377,6 +378,7 @@ object TestSettings {
     javaOptions in Test += "-Dspark.testing=1",
     javaOptions in Test += "-Dspark.port.maxRetries=100",
     javaOptions in Test += "-Dspark.ui.enabled=false",
+    javaOptions in Test += "-Dspark.ui.showConsoleProgress=false",
     javaOptions in Test += "-Dspark.driver.allowMultipleContexts=true",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
@@ -384,7 +386,7 @@ object TestSettings {
     javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
     // This places test scope jars on the classpath of executors during tests.
-    javaOptions in Test += 
+    javaOptions in Test +=
       "-Dspark.executor.extraClassPath=" + (fullClasspath in Test).value.files.
       map(_.getAbsolutePath).mkString(":").stripSuffix(":"),
     javaOptions += "-Xmx3g",

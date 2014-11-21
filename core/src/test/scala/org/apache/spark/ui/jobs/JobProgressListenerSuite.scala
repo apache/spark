@@ -28,32 +28,102 @@ import org.apache.spark.util.Utils
 
 class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matchers {
 
+
+  private def createStageStartEvent(stageId: Int) = {
+    val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
+    SparkListenerStageSubmitted(stageInfo)
+  }
+
+  private def createStageEndEvent(stageId: Int, failed: Boolean = false) = {
+    val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
+    if (failed) {
+      stageInfo.failureReason = Some("Failed!")
+    }
+    SparkListenerStageCompleted(stageInfo)
+  }
+
+  private def createJobStartEvent(jobId: Int, stageIds: Seq[Int]) = {
+    SparkListenerJobStart(jobId, stageIds)
+  }
+
+  private def createJobEndEvent(jobId: Int, failed: Boolean = false) = {
+    val result = if (failed) JobFailed(new Exception("dummy failure")) else JobSucceeded
+    SparkListenerJobEnd(jobId, result)
+  }
+
+  private def runJob(listener: SparkListener, jobId: Int, shouldFail: Boolean = false) {
+    val stageIds = jobId * 100 to jobId * 100 + 50
+    listener.onJobStart(createJobStartEvent(jobId, stageIds))
+    for (stageId <- stageIds) {
+      listener.onStageSubmitted(createStageStartEvent(stageId))
+      listener.onStageCompleted(createStageEndEvent(stageId, failed = stageId % 2 == 0))
+    }
+    listener.onJobEnd(createJobEndEvent(jobId, shouldFail))
+  }
+
+  private def assertActiveJobsStateIsEmpty(listener: JobProgressListener) {
+    listener.getSizesOfActiveStateTrackingCollections.foreach { case (fieldName, size) =>
+      assert(size === 0, s"$fieldName was not empty")
+    }
+  }
+
   test("test LRU eviction of stages") {
     val conf = new SparkConf()
     conf.set("spark.ui.retainedStages", 5.toString)
     val listener = new JobProgressListener(conf)
 
-    def createStageStartEvent(stageId: Int) = {
-      val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
-      SparkListenerStageSubmitted(stageInfo)
-    }
-
-    def createStageEndEvent(stageId: Int) = {
-      val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
-      SparkListenerStageCompleted(stageInfo)
-    }
-
     for (i <- 1 to 50) {
       listener.onStageSubmitted(createStageStartEvent(i))
       listener.onStageCompleted(createStageEndEvent(i))
     }
+    assertActiveJobsStateIsEmpty(listener)
 
     listener.completedStages.size should be (5)
-    listener.completedStages.count(_.stageId == 50) should be (1)
-    listener.completedStages.count(_.stageId == 49) should be (1)
-    listener.completedStages.count(_.stageId == 48) should be (1)
-    listener.completedStages.count(_.stageId == 47) should be (1)
-    listener.completedStages.count(_.stageId == 46) should be (1)
+    listener.completedStages.map(_.stageId).toSet should be (Set(50, 49, 48, 47, 46))
+  }
+
+  test("test LRU eviction of jobs") {
+    val conf = new SparkConf()
+    conf.set("spark.ui.retainedStages", 5.toString)
+    conf.set("spark.ui.retainedJobs", 5.toString)
+    val listener = new JobProgressListener(conf)
+
+    // Run a bunch of jobs to get the listener into a state where we've exceeded both the
+    // job and stage retention limits:
+    for (jobId <- 1 to 10) {
+      runJob(listener, jobId, shouldFail = false)
+    }
+    for (jobId <- 200 to 210) {
+      runJob(listener, jobId, shouldFail = true)
+    }
+    assertActiveJobsStateIsEmpty(listener)
+    // Snapshot the sizes of various soft- and hard-size-limited collections:
+    val softLimitSizes = listener.getSizesOfSoftSizeLimitedCollections
+    val hardLimitSizes = listener.getSizesOfHardSizeLimitedCollections
+    // Run some more jobs:
+    for (jobId <- 11 to 50) {
+      runJob(listener, jobId, shouldFail = false)
+      // We shouldn't exceed the hard / soft limit sizes after the jobs have finished:
+      listener.getSizesOfSoftSizeLimitedCollections should be (softLimitSizes)
+      listener.getSizesOfHardSizeLimitedCollections should be (hardLimitSizes)
+    }
+
+    listener.completedJobs.size should be (5)
+    listener.completedJobs.map(_.jobId).toSet should be (Set(50, 49, 48, 47, 46))
+
+    for (jobId <- 51 to 100) {
+      runJob(listener, jobId, shouldFail = true)
+      // We shouldn't exceed the hard / soft limit sizes after the jobs have finished:
+      listener.getSizesOfSoftSizeLimitedCollections should be (softLimitSizes)
+      listener.getSizesOfHardSizeLimitedCollections should be (hardLimitSizes)
+    }
+    assertActiveJobsStateIsEmpty(listener)
+
+    // Completed and failed jobs each their own size limits, so this should still be the same:
+    listener.completedJobs.size should be (5)
+    listener.completedJobs.map(_.jobId).toSet should be (Set(50, 49, 48, 47, 46))
+    listener.failedJobs.size should be (5)
+    listener.failedJobs.map(_.jobId).toSet should be (Set(100, 99, 98, 97, 96))
   }
 
   test("test executor id to summary") {
