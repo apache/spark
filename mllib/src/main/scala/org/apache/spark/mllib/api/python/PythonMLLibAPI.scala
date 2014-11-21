@@ -78,7 +78,7 @@ class PythonMLLibAPI extends Serializable {
       val model = learner.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), initialWeights)
       List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
     } finally {
-      data.rdd.unpersist(false)
+      data.rdd.unpersist(blocking = false)
     }
   }
 
@@ -274,7 +274,7 @@ class PythonMLLibAPI extends Serializable {
     try {
       kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
     } finally {
-      data.rdd.unpersist(false)
+      data.rdd.unpersist(blocking = false)
     }
   }
 
@@ -419,7 +419,7 @@ class PythonMLLibAPI extends Serializable {
       val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
       new Word2VecModelWrapper(model)
     } finally {
-      dataJRDD.rdd.unpersist(false)
+      dataJRDD.rdd.unpersist(blocking = false)
     }
   }
 
@@ -484,7 +484,7 @@ class PythonMLLibAPI extends Serializable {
     try {
       DecisionTree.train(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), strategy)
     } finally {
-      data.rdd.unpersist(false)
+      data.rdd.unpersist(blocking = false)
     }
   }
 
@@ -523,7 +523,7 @@ class PythonMLLibAPI extends Serializable {
         RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, seed)
       }
     } finally {
-      cached.unpersist(false)
+      cached.unpersist(blocking = false)
     }
   }
 
