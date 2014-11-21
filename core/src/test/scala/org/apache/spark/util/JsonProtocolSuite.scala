@@ -21,6 +21,8 @@ import java.util.Properties
 
 import scala.collection.Map
 
+import org.json4s.JsonAST.JObject
+import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.FunSuite
 
@@ -234,6 +236,7 @@ class JsonProtocolSuite extends FunSuite {
     val stageInfos = stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, "unknown"))
     val jobStart = SparkListenerJobStart(10, stageInfos, properties)
     val oldEvent = JsonProtocol.jobStartToJson(jobStart).removeField({_._1 == "Stage Infos"})
+      .asInstanceOf[JObject] ~ ("Stage IDs" -> stageIds)
     val expectedJobStart = SparkListenerJobStart(10, stageInfos, properties)
     assertEquals(expectedJobStart, JsonProtocol.jobStartFromJson(oldEvent))
   }
@@ -320,7 +323,7 @@ class JsonProtocolSuite extends FunSuite {
       case (e1: SparkListenerJobStart, e2: SparkListenerJobStart) =>
         assert(e1.jobId === e2.jobId)
         assert(e1.properties === e2.properties)
-        assertSeqEquals(e1.stageIds, e2.stageIds, (i1: Int, i2: Int) => assert(i1 === i2))
+        assert(e1.stageIds === e2.stageIds)
       case (e1: SparkListenerJobEnd, e2: SparkListenerJobEnd) =>
         assert(e1.jobId === e2.jobId)
         assertEquals(e1.jobResult, e2.jobResult)
@@ -1318,12 +1321,6 @@ class JsonProtocolSuite extends FunSuite {
       |        }
       |      ]
       |    }
-      |  ],
-      |  "Stage IDs": [
-      |    1,
-      |    2,
-      |    3,
-      |    4
       |  ],
       |  "Properties": {
       |    "France": "Paris",

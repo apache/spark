@@ -121,7 +121,8 @@ private[spark] object JsonProtocol {
     val properties = propertiesToJson(jobStart.properties)
     ("Event" -> Utils.getFormattedClassName(jobStart)) ~
     ("Job ID" -> jobStart.jobId) ~
-    ("Stage Infos" -> jobStart.stageInfos.map(stageInfoToJson)) ~
+    // ("Stage IDs" -> jobStart.stageIds) ~  // Removed in 1.2.0
+    ("Stage Infos" -> jobStart.stageInfos.map(stageInfoToJson)) ~  // Added in 1.2.0
     ("Properties" -> properties)
   }
 
@@ -459,9 +460,9 @@ private[spark] object JsonProtocol {
       // This block of code handles backwards compatibility:
       val stageIds: Option[Seq[Int]] =
         Utils.jsonOption(json \ "Stage IDs").map(_.extract[List[JValue]].map(_.extract[Int]))
-      if (stageIds.isDefined) {
+      if (stageIds.isDefined) { // Reading JSON written prior to 1.2.0
         stageIds.get.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, "unknown"))
-      } else {
+      } else { // Reading JSON written after 1.2.0
         Utils.jsonOption(json \ "Stage Infos")
           .map(_.extract[Seq[JValue]].map(stageInfoFromJson)).getOrElse(Seq.empty)
       }
