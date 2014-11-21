@@ -196,15 +196,17 @@ object GradientDescent extends Logging {
             (c1._1 += c2._1, c1._2 + c2._2, c1._3 + c2._3)
           })
 
-      /**
-       * NOTE(Xinghao): lossSum is computed using the weights from the previous iteration
-       * and regVal is the regularization value computed in the previous iteration as well.
-       */
-      stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
-      val update = updater.compute(
-        weights, Vectors.fromBreeze(gradientSum / miniBatchSize), stepSize, i, regParam)
-      weights = update._1
-      regVal = update._2
+      if (miniBatchSize > 0.0) {
+        /**
+         * NOTE(Xinghao): lossSum is computed using the weights from the previous iteration
+         * and regVal is the regularization value computed in the previous iteration as well.
+         */
+        stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
+        val update = updater.compute(
+          weights, Vectors.fromBreeze(gradientSum / miniBatchSize), stepSize, i, regParam)
+        weights = update._1
+        regVal = update._2
+      }
     }
 
     logInfo("GradientDescent.runMiniBatchSGD finished. Last 10 stochastic losses %s".format(
