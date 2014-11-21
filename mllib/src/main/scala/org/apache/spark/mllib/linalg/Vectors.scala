@@ -80,13 +80,11 @@ sealed trait Vector extends Serializable {
   /**
    * Applies a function `f` to all the active elements of dense and sparse vector.
    *
-   * @param f the function takes (Int, Double) as input where the first element
-   *          in the tuple is the index, and the second element is the corresponding value.
-   * @param skippingZeros if true, skipping zero elements explicitly. It will be useful when
-   *                      iterating through dense vector which has lots of zero elements to be
-   *                      skipped. Default is false.
+   * @param f the function takes two parameters where the first parameter is the index of
+   *          the vector with type `Int`, and the second parameter is the corresponding value
+   *          with type `Double`.
    */
-  private[spark] def foreach(skippingZeros: Boolean = false)(f: ((Int, Double)) => Unit)
+  private[spark] def foreachActive(f: (Int, Double) => Unit)
 }
 
 /**
@@ -285,23 +283,14 @@ class DenseVector(val values: Array[Double]) extends Vector {
     new DenseVector(values.clone())
   }
 
-  private[spark] override def foreach(skippingZeros: Boolean = false)(f: ((Int, Double)) => Unit) {
+  private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
     var i = 0
     val localValuesSize = values.size
     val localValues = values
 
-    if (skippingZeros) {
-      while (i < localValuesSize) {
-        if (localValues(i) != 0.0) {
-          f(i, localValues(i))
-        }
-        i += 1
-      }
-    } else {
-      while (i < localValuesSize) {
-        f(i, localValues(i))
-        i += 1
-      }
+    while (i < localValuesSize) {
+      f(i, localValues(i))
+      i += 1
     }
   }
 }
@@ -341,24 +330,15 @@ class SparseVector(
 
   private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
-  private[spark] override def foreach(skippingZeros: Boolean = false)(f: ((Int, Double)) => Unit) {
+  private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
     var i = 0
     val localValuesSize = values.size
     val localIndices = indices
     val localValues = values
 
-    if (skippingZeros) {
-      while (i < localValuesSize) {
-        if (localValues(i) != 0.0) {
-          f(localIndices(i), localValues(i))
-        }
-        i += 1
-      }
-    } else {
-      while (i < localValuesSize) {
-        f(localIndices(i), localValues(i))
-        i += 1
-      }
+    while (i < localValuesSize) {
+      f(localIndices(i), localValues(i))
+      i += 1
     }
   }
 }
