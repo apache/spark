@@ -1464,34 +1464,34 @@ object SparkContext extends Logging {
   // make the compiler find them automatically. They are still kept here for backward compatibility
   // and just call the corresponding functions in `object RDD`.
 
-  @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
+  @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
     "kept here only for backward compatibility.", "1.2.0")
   def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
       (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
     RDD.rddToPairRDDFunctions(rdd)
   }
 
-  @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
+  @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
     "kept here only for backward compatibility.", "1.2.0")
   def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = RDD.rddToAsyncRDDActions(rdd)
 
-  @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
+  @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
     "kept here only for backward compatibility.", "1.2.0")
   def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
       rdd: RDD[(K, V)]) =
     RDD.rddToSequenceFileRDDFunctions(rdd)
 
-  @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
+  @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
     "kept here only for backward compatibility.", "1.2.0")
   def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](
       rdd: RDD[(K, V)]) =
     RDD.rddToOrderedRDDFunctions(rdd)
 
-  @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
+  @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
     "kept here only for backward compatibility.", "1.2.0")
   def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = RDD.doubleRDDToDoubleRDDFunctions(rdd)
 
-  @deprecated("Replaced by implicit functions in org.apache.spark.rdd package object. This is " +
+  @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
     "kept here only for backward compatibility.", "1.2.0")
   def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T]) =
     RDD.numericRDDToDoubleRDDFunctions(rdd)
