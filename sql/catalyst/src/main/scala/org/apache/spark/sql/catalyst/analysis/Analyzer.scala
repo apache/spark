@@ -179,9 +179,9 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {
           // Add missing attributes and then project them away after the sort.
-          Project(projectList,
+          Project(projectList.map(_.toAttribute),
             Sort(ordering,
-              Project(projectList ++ missingInProject ++ child.inputSet, child)))
+              Project(projectList ++ missingInProject, child)))
         } else {
           logDebug(s"Failed to find $missingInProject in ${p.output.mkString(", ")}")
           s // Nothing we can do here. Return original plan.
