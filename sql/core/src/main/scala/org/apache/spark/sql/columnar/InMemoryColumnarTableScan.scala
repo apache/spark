@@ -36,8 +36,9 @@ private[sql] object InMemoryRelation {
       useCompression: Boolean,
       batchSize: Int,
       storageLevel: StorageLevel,
-      child: SparkPlan): InMemoryRelation =
-    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child)()
+      child: SparkPlan,
+      tableName: Option[String]): InMemoryRelation =
+    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)()
 }
 
 private[sql] case class CachedBatch(buffers: Array[Array[Byte]], stats: Row)
@@ -47,7 +48,8 @@ private[sql] case class InMemoryRelation(
     useCompression: Boolean,
     batchSize: Int,
     storageLevel: StorageLevel,
-    child: SparkPlan)(
+    child: SparkPlan,
+    tableName: Option[String])(
     private var _cachedColumnBuffers: RDD[CachedBatch] = null,
     private var _statistics: Statistics = null)
   extends LogicalPlan with MultiInstanceRelation {
@@ -137,13 +139,13 @@ private[sql] case class InMemoryRelation(
       }
     }.persist(storageLevel)
 
-    cached.setName(child.toString)
+    cached.setName(tableName.map(n => s"In-memory table $n").getOrElse(child.toString))
     _cachedColumnBuffers = cached
   }
 
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
-      newOutput, useCompression, batchSize, storageLevel, child)(
+      newOutput, useCompression, batchSize, storageLevel, child, tableName)(
       _cachedColumnBuffers, statisticsToBePropagated)
   }
 
@@ -155,7 +157,8 @@ private[sql] case class InMemoryRelation(
       useCompression,
       batchSize,
       storageLevel,
-      child)(
+      child,
+      tableName)(
       _cachedColumnBuffers,
       statisticsToBePropagated).asInstanceOf[this.type]
   }

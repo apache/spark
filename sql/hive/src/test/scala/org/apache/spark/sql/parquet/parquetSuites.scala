@@ -34,71 +34,52 @@ case class ParquetDataWithKey(p: Int, intField: Int, stringField: String)
 
 
 /**
- * Tests for our SerDe -> Native parquet scan conversion.
+ * A suite to test the automatic conversion of metastore tables with parquet data to use the
+ * built in parquet support.
  */
-class ParquetMetastoreSuite extends QueryTest with BeforeAndAfterAll {
+class ParquetMetastoreSuite extends ParquetTest {
   override def beforeAll(): Unit = {
-    val partitionedTableDir = File.createTempFile("parquettests", "sparksql")
-    partitionedTableDir.delete()
-    partitionedTableDir.mkdir()
-
-    (1 to 10).foreach { p =>
-      val partDir = new File(partitionedTableDir, s"p=$p")
-      sparkContext.makeRDD(1 to 10)
-        .map(i => ParquetData(i, s"part-$p"))
-        .saveAsParquetFile(partDir.getCanonicalPath)
-    }
-
-    val partitionedTableDirWithKey = File.createTempFile("parquettests", "sparksql")
-    partitionedTableDirWithKey.delete()
-    partitionedTableDirWithKey.mkdir()
-
-    (1 to 10).foreach { p =>
-      val partDir = new File(partitionedTableDirWithKey, s"p=$p")
-      sparkContext.makeRDD(1 to 10)
-        .map(i => ParquetDataWithKey(p, i, s"part-$p"))
-        .saveAsParquetFile(partDir.getCanonicalPath)
-    }
+    super.beforeAll()
 
     sql(s"""
-    create external table partitioned_parquet
-    (
-      intField INT,
-      stringField STRING
-    )
-    PARTITIONED BY (p int)
-    ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-     STORED AS
-     INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-     OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-    location '${partitionedTableDir.getCanonicalPath}'
+      create external table partitioned_parquet
+      (
+        intField INT,
+        stringField STRING
+      )
+      PARTITIONED BY (p int)
+      ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+       STORED AS
+       INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+       OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      location '${partitionedTableDir.getCanonicalPath}'
     """)
 
     sql(s"""
-    create external table partitioned_parquet_with_key
-    (
-      intField INT,
-      stringField STRING
-    )
-    PARTITIONED BY (p int)
-    ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-     STORED AS
-     INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-     OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-    location '${partitionedTableDirWithKey.getCanonicalPath}'
+      create external table partitioned_parquet_with_key
+      (
+        intField INT,
+        stringField STRING
+      )
+      PARTITIONED BY (p int)
+      ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+       STORED AS
+       INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+       OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      location '${partitionedTableDirWithKey.getCanonicalPath}'
     """)
 
     sql(s"""
-    create external table normal_parquet
-    (
-      intField INT,
-      stringField STRING
-    )
-    ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-     STORED AS
-     INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-     OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-    location '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
+      create external table normal_parquet
+      (
+        intField INT,
+        stringField STRING
+      )
+      ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+       STORED AS
+       INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+       OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+      location '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
     """)
 
     (1 to 10).foreach { p =>
@@ -114,6 +95,82 @@ class ParquetMetastoreSuite extends QueryTest with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     setConf("spark.sql.hive.convertMetastoreParquet", "false")
+  }
+
+  test("conversion is working") {
+    assert(
+      sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
+        case _: HiveTableScan => true
+      }.isEmpty)
+    assert(
+      sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
+        case _: ParquetTableScan => true
+      }.nonEmpty)
+  }
+}
+
+/**
+ * A suite of tests for the Parquet support through the data sources API.
+ */
+class ParquetSourceSuite extends ParquetTest {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+
+    sql( s"""
+      create temporary table partitioned_parquet
+      USING org.apache.spark.sql.parquet
+      OPTIONS (
+        path '${partitionedTableDir.getCanonicalPath}'
+      )
+    """)
+
+    sql( s"""
+      create temporary table partitioned_parquet_with_key
+      USING org.apache.spark.sql.parquet
+      OPTIONS (
+        path '${partitionedTableDirWithKey.getCanonicalPath}'
+      )
+    """)
+
+    sql( s"""
+      create temporary table normal_parquet
+      USING org.apache.spark.sql.parquet
+      OPTIONS (
+        path '${new File(partitionedTableDir, "p=1").getCanonicalPath}'
+      )
+    """)
+  }
+}
+
+/**
+ * A collection of tests for parquet data with various forms of partitioning.
+ */
+abstract class ParquetTest extends QueryTest with BeforeAndAfterAll {
+  var partitionedTableDir: File = null
+  var partitionedTableDirWithKey: File = null
+
+  override def beforeAll(): Unit = {
+    partitionedTableDir = File.createTempFile("parquettests", "sparksql")
+    partitionedTableDir.delete()
+    partitionedTableDir.mkdir()
+
+    (1 to 10).foreach { p =>
+      val partDir = new File(partitionedTableDir, s"p=$p")
+      sparkContext.makeRDD(1 to 10)
+        .map(i => ParquetData(i, s"part-$p"))
+        .saveAsParquetFile(partDir.getCanonicalPath)
+    }
+
+    partitionedTableDirWithKey = File.createTempFile("parquettests", "sparksql")
+    partitionedTableDirWithKey.delete()
+    partitionedTableDirWithKey.mkdir()
+
+    (1 to 10).foreach { p =>
+      val partDir = new File(partitionedTableDirWithKey, s"p=$p")
+      sparkContext.makeRDD(1 to 10)
+        .map(i => ParquetDataWithKey(p, i, s"part-$p"))
+        .saveAsParquetFile(partDir.getCanonicalPath)
+    }
   }
 
   Seq("partitioned_parquet", "partitioned_parquet_with_key").foreach { table =>
@@ -192,16 +249,5 @@ class ParquetMetastoreSuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT COUNT(*) FROM normal_parquet"),
       10)
-  }
-
-  test("conversion is working") {
-    assert(
-      sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
-        case _: HiveTableScan => true
-      }.isEmpty)
-    assert(
-      sql("SELECT * FROM normal_parquet").queryExecution.executedPlan.collect {
-        case _: ParquetTableScan => true
-      }.nonEmpty)
   }
 }

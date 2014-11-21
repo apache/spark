@@ -16,12 +16,13 @@
 */
 package org.apache.spark.sql.sources
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SQLConf, Row, SQLContext, StructType}
 import org.apache.spark.sql.catalyst.expressions.{Expression, Attribute}
 
 /**
+ * ::DeveloperApi::
  * Implemented by objects that produce relations for a specific kind of data source.  When
  * Spark SQL is given a DDL operation with a USING clause specified, this interface is used to
  * pass in the parameters specified by a user.
@@ -40,6 +41,7 @@ trait RelationProvider {
 }
 
 /**
+ * ::DeveloperApi::
  * Represents a collection of tuples with a known schema.  Classes that extend BaseRelation must
  * be able to produce the schema of their data in the form of a [[StructType]]  Concrete
  * implementation should inherit from one of the descendant `Scan` classes, which define various
@@ -65,6 +67,7 @@ abstract class BaseRelation {
 }
 
 /**
+ * ::DeveloperApi::
  * A BaseRelation that can produce all of its tuples as an RDD of Row objects.
  */
 @DeveloperApi
@@ -73,6 +76,7 @@ abstract class TableScan extends BaseRelation {
 }
 
 /**
+ * ::DeveloperApi::
  * A BaseRelation that can eliminate unneeded columns before producing an RDD
  * containing all of its tuples as Row objects.
  */
@@ -82,6 +86,7 @@ abstract class PrunedScan extends BaseRelation {
 }
 
 /**
+ * ::DeveloperApi::
  * A BaseRelation that can eliminate unneeded columns and filter using selected
  * predicates before producing an RDD containing all matching tuples as Row objects.
  *
@@ -93,3 +98,18 @@ abstract class PrunedScan extends BaseRelation {
 abstract class PrunedFilteredScan extends BaseRelation {
   def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row]
 }
+
+/**
+ * ::Experimental::
+ * An interface for experimenting with a more direct connection to the query planner.  Compared to
+ * [[PrunedFilteredScan]], this operator receives the raw expressions from the
+ * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].  Unlike the other APIs this
+ * interface is not designed to be binary compatible across releases and thus should only be used
+ * for experimentation.
+ */
+@Experimental
+abstract class CatalystScan extends BaseRelation {
+  def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row]
+}
+
+

@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql
 
-import java.util.{List => JList}
-
-import org.apache.spark.api.python.SerDeUtil
+import java.util.{Map => JMap, List => JList}
+import java.io.StringWriter
 
 import scala.collection.JavaConversions._
+
+import com.fasterxml.jackson.core.JsonFactory
 
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, Partitioner, TaskContext}
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.api.java.JavaSchemaRDD
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -35,6 +37,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.storage.StorageLevel
 
@@ -130,6 +133,20 @@ class SchemaRDD(
    * @group schema
    */
   lazy val schema: StructType = queryExecution.analyzed.schema
+
+  /**
+   * Returns a new RDD with each row transformed to a JSON string.
+   *
+   * @group schema
+   */
+  def toJSON: RDD[String] = {
+    val rowSchema = this.schema
+    this.mapPartitions { iter =>
+      val jsonFactory = new JsonFactory()
+      iter.map(JsonRDD.rowToJSON(rowSchema, jsonFactory))
+    }
+  }
+
 
   // =======================================================================
   // Query DSL
@@ -290,7 +307,7 @@ class SchemaRDD(
    * Filters tuples using a function over the value of the specified column.
    *
    * {{{
-   *   schemaRDD.sfilter('a)((a: Int) => ...)
+   *   schemaRDD.where('a)((a: Int) => ...)
    * }}}
    *
    * @group Query
@@ -475,7 +492,7 @@ class SchemaRDD(
   }
 
   override def persist(newLevel: StorageLevel): this.type = {
-    sqlContext.cacheQuery(this, newLevel)
+    sqlContext.cacheQuery(this, None, newLevel)
     this
   }
 

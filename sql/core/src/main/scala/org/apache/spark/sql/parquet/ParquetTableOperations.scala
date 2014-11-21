@@ -361,7 +361,7 @@ private[parquet] class FilteringParquetRowInputFormat
 
   private var footers: JList[Footer] = _
 
-  private var fileStatuses= Map.empty[Path, FileStatus]
+  private var fileStatuses = Map.empty[Path, FileStatus]
 
   override def createRecordReader(
       inputSplit: InputSplit,
@@ -405,7 +405,9 @@ private[parquet] class FilteringParquetRowInputFormat
         }
         val newFooters = new mutable.HashMap[FileStatus, Footer]
         if (toFetch.size > 0) {
+          val startFetch = System.currentTimeMillis
           val fetched = getFooters(conf, toFetch)
+          logInfo(s"Fetched $toFetch footers in ${System.currentTimeMillis - startFetch} ms")
           for ((status, i) <- toFetch.zipWithIndex) {
             newFooters(status) = fetched.get(i)
           }

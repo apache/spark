@@ -157,6 +157,13 @@ class Strategy (
     require(maxMemoryInMB <= 10240,
       s"DecisionTree Strategy requires maxMemoryInMB <= 10240, but was given $maxMemoryInMB")
   }
+
+  /** Returns a shallow copy of this instance. */
+  def copy: Strategy = {
+    new Strategy(algo, impurity, maxDepth, numClassesForClassification, maxBins,
+      quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode, minInfoGain,
+      maxMemoryInMB, subsamplingRate, useNodeIdCache, checkpointDir, checkpointInterval)
+  }
 }
 
 @Experimental
