@@ -17,6 +17,7 @@
 
 import os
 import cPickle
+import gc
 from tempfile import NamedTemporaryFile
 
 
@@ -87,7 +88,11 @@ class Broadcast(object):
             flag = f.read(1)
             data = f.read()
             if flag == 'P':
-                return cPickle.loads(data)
+                gc.disable()
+                try:
+                    return cPickle.loads(data)
+                finally:
+                    gc.enable()
             else:
                 return data.decode('utf8') if flag == 'U' else data
 
