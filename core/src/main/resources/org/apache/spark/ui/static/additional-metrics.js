@@ -26,13 +26,6 @@ $(function() {
         // Switch the class of the arrow from open to closed.
         $(this).find('.expand-additional-metrics-arrow').toggleClass('arrow-open');
         $(this).find('.expand-additional-metrics-arrow').toggleClass('arrow-closed');
-
-        // If clicking caused the metrics to expand, automatically check all options for additional
-        // metrics (don't trigger a click when collapsing metrics, because it leads to weird
-        // toggling behavior).
-        if (!$(additionalMetricsDiv).hasClass('collapsed')) {
-            $(this).parent().find('input:checkbox:not(:checked)').trigger('click');
-        }
     });
 
     $("input:checkbox:not(:checked)").each(function() {
@@ -46,6 +39,16 @@ $(function() {
         var column = "table ." + $(this).attr("name");
         $(column).toggle();
         stripeTables();
+    });
+
+    $("#select-all-metrics").click(function() {
+       if (this.checked) {
+          // Toggle all un-checked options.
+          $('input:checkbox:not(:checked)').trigger('click');
+       } else {
+          // Toggle all checked options.
+          $('input:checkbox:checked').trigger('click');
+       }
     });
 
     // Trigger a click on the checkbox if a user clicks the label next to it.

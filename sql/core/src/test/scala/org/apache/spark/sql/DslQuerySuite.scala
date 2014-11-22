@@ -156,22 +156,58 @@ class DslQuerySuite extends QueryTest {
 
   test("average") {
     checkAnswer(
-      testData2.groupBy()(avg('a)),
+      testData2.aggregate(avg('a)),
       2.0)
+
+    checkAnswer(
+      testData2.aggregate(avg('a), sumDistinct('a)), // non-partial
+      (2.0, 6.0) :: Nil)
+
+    checkAnswer(
+      decimalData.aggregate(avg('a)),
+      BigDecimal(2.0))
+    checkAnswer(
+      decimalData.aggregate(avg('a), sumDistinct('a)), // non-partial
+      (BigDecimal(2.0), BigDecimal(6)) :: Nil)
+
+    checkAnswer(
+      decimalData.aggregate(avg('a cast DecimalType(10, 2))),
+      BigDecimal(2.0))
+    checkAnswer(
+      decimalData.aggregate(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))), // non-partial
+      (BigDecimal(2.0), BigDecimal(6)) :: Nil)
   }
 
   test("null average") {
     checkAnswer(
-      testData3.groupBy()(avg('b)),
+      testData3.aggregate(avg('b)),
       2.0)
 
     checkAnswer(
-      testData3.groupBy()(avg('b), countDistinct('b)),
+      testData3.aggregate(avg('b), countDistinct('b)),
       (2.0, 1) :: Nil)
+
+    checkAnswer(
+      testData3.aggregate(avg('b), sumDistinct('b)), // non-partial
+      (2.0, 2.0) :: Nil)
+  }
+
+  test("zero average") {
+    checkAnswer(
+      emptyTableData.aggregate(avg('a)),
+      null)
+
+    checkAnswer(
+      emptyTableData.aggregate(avg('a), sumDistinct('b)), // non-partial
+      (null, null) :: Nil)
   }
 
   test("count") {
     assert(testData2.count() === testData2.map(_ => 1).count())
+
+    checkAnswer(
+      testData2.aggregate(count('a), sumDistinct('a)), // non-partial
+      (6, 6.0) :: Nil)
   }
 
   test("null count") {
@@ -186,13 +222,34 @@ class DslQuerySuite extends QueryTest {
     )
 
     checkAnswer(
-      testData3.groupBy()(count('a), count('b), count(1), countDistinct('a), countDistinct('b)),
+      testData3.aggregate(count('a), count('b), count(1), countDistinct('a), countDistinct('b)),
       (2, 1, 2, 2, 1) :: Nil
+    )
+
+    checkAnswer(
+      testData3.aggregate(count('b), countDistinct('b), sumDistinct('b)), // non-partial
+      (1, 1, 2) :: Nil
     )
   }
 
   test("zero count") {
     assert(emptyTableData.count() === 0)
+
+    checkAnswer(
+      emptyTableData.aggregate(count('a), sumDistinct('a)), // non-partial
+      (0, null) :: Nil)
+  }
+
+  test("zero sum") {
+    checkAnswer(
+      emptyTableData.aggregate(sum('a)),
+      null)
+  }
+
+  test("zero sum distinct") {
+    checkAnswer(
+      emptyTableData.aggregate(sumDistinct('a)),
+      null)
   }
 
   test("except") {
