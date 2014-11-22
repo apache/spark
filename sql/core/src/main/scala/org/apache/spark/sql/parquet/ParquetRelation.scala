@@ -28,8 +28,9 @@ import parquet.schema.MessageType
 
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
+import org.apache.spark.sql.catalyst.types.StructType
 
 /**
  * Relation that consists of data stored in a Parquet columnar format.
@@ -47,7 +48,8 @@ private[sql] case class ParquetRelation(
     path: String,
     @transient conf: Option[Configuration],
     @transient sqlContext: SQLContext,
-    partitioningAttributes: Seq[Attribute] = Nil)
+    partitioningAttributes: Seq[Attribute] = Nil,
+    inheritedOutput: Option[Seq[Attribute]] = None)
   extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
@@ -60,12 +62,13 @@ private[sql] case class ParquetRelation(
       .getSchema
 
   /** Attributes */
-  override val output =
+  override val output = inheritedOutput.getOrElse {
     partitioningAttributes ++
-    ParquetTypesConverter.readSchemaFromFile(
-      new Path(path.split(",").head),
-      conf,
-      sqlContext.isParquetBinaryAsString)
+      ParquetTypesConverter.readSchemaFromFile(
+        new Path(path.split(",").head),
+        conf,
+        sqlContext.isParquetBinaryAsString)
+  }
 
   override def newInstance() = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
 
@@ -89,7 +92,7 @@ private[sql] object ParquetRelation {
     // checks first to see if there's any handlers already set
     // and if not it creates them. If this method executes prior
     // to that class being loaded then:
-    //  1) there's no handlers installed so there's none to 
+    //  1) there's no handlers installed so there's none to
     // remove. But when it IS finally loaded the desired affect
     // of removing them is circumvented.
     //  2) The parquet.Log static initializer calls setUseParentHanders(false)
