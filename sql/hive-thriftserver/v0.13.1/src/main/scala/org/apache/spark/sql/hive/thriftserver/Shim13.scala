@@ -22,7 +22,6 @@ import java.sql.{Date, Timestamp}
 import java.util.concurrent.Future
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
 import scala.math._
@@ -107,7 +106,6 @@ private[hive] class SparkExecuteStatementOperation(
         }
       }
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
-      setHasResultSet(true)
     } catch {
       // Actually do need to catch Throwable as some failures don't inherit from Exception and
       // HiveServer will silently swallow them.
@@ -215,6 +213,7 @@ private[hive] class SparkExecuteStatementOperation(
     logInfo(s"Running query '$statement'")
     val opConfig: HiveConf = getConfigForOperation
     setState(OperationState.RUNNING)
+    setHasResultSet(true)
 
     if (!shouldRunAsync) {
       runInternal(statement)
