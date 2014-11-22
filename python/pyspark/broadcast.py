@@ -75,7 +75,7 @@ class Broadcast(object):
         """ Return the broadcasted value
         """
         if not hasattr(self, "_value") and self._path is not None:
-            self._value = cPickle.load(open(self._path))
+            self._value = cPickle.loads(open(self._path, 'rb', 4 << 20).read())
         return self._value
 
     def unpersist(self, blocking=False):
