@@ -57,7 +57,8 @@ private[sql] case class ParquetRelation(
   def parquetSchema: MessageType = {
     ParquetTypesConverter.readMetaData(new Path(path), conf)
       .map(_.getFileMetaData.getSchema)
-      .getOrElse(new MessageType("empty parquet", Seq.empty))
+      .getOrElse(
+        throw new IllegalArgumentException(s"Could not find Parquet metadata at path $path"))
   }
 
   /** Attributes */

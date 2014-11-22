@@ -135,22 +135,22 @@ private[sql] object ParquetFilters {
       case LessThan(NamedExpression(name, _), Literal(value, dataType)) =>
         makeLt.lift(dataType).map(_(name, value))
       case LessThan(Literal(value, dataType), NamedExpression(name, _)) =>
-        makeLt.lift(dataType).map(_(name, value))
+        makeGt.lift(dataType).map(_(name, value))
 
       case LessThanOrEqual(NamedExpression(name, _), Literal(value, dataType)) =>
         makeLtEq.lift(dataType).map(_(name, value))
       case LessThanOrEqual(Literal(value, dataType), NamedExpression(name, _)) =>
-        makeLtEq.lift(dataType).map(_(name, value))
+        makeGtEq.lift(dataType).map(_(name, value))
 
       case GreaterThan(NamedExpression(name, _), Literal(value, dataType)) =>
         makeGt.lift(dataType).map(_(name, value))
       case GreaterThan(Literal(value, dataType), NamedExpression(name, _)) =>
-        makeGt.lift(dataType).map(_(name, value))
+        makeLt.lift(dataType).map(_(name, value))
 
       case GreaterThanOrEqual(NamedExpression(name, _), Literal(value, dataType)) =>
         makeGtEq.lift(dataType).map(_(name, value))
       case GreaterThanOrEqual(Literal(value, dataType), NamedExpression(name, _)) =>
-        makeGtEq.lift(dataType).map(_(name, value))
+        makeLtEq.lift(dataType).map(_(name, value))
 
       case And(lhs, rhs) =>
         (createFilter(lhs) ++ createFilter(rhs)).reduceOption(FilterApi.and)
