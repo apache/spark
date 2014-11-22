@@ -185,7 +185,7 @@ object GradientDescent extends Logging {
       // Sample a subset (fraction miniBatchFraction) of the total data
       // compute and sum up the subgradients on this subset (this is one map-reduce)
       val (gradientSum, lossSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i)
-        .treeAggregate((BDV.zeros[Double](n), 0.0, 0.0))(
+        .treeAggregate((BDV.zeros[Double](n), 0.0, 0L))(
           seqOp = (c, v) => {
             // c: (grad, loss, count), v: (label, features)
             val l = gradient.compute(v._2, v._1, bcWeights.value, Vectors.fromBreeze(c._1))
@@ -196,14 +196,14 @@ object GradientDescent extends Logging {
             (c1._1 += c2._1, c1._2 + c2._2, c1._3 + c2._3)
           })
 
-      if (miniBatchSize > 0.0) {
+      if (miniBatchSize > 0) {
         /**
          * NOTE(Xinghao): lossSum is computed using the weights from the previous iteration
          * and regVal is the regularization value computed in the previous iteration as well.
          */
         stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
         val update = updater.compute(
-          weights, Vectors.fromBreeze(gradientSum / miniBatchSize), stepSize, i, regParam)
+          weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble), stepSize, i, regParam)
         weights = update._1
         regVal = update._2
       }
