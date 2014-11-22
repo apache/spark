@@ -25,12 +25,11 @@ object HiveFromSpark {
   case class Record(key: Int, value: String)
 
   def main(args: Array[String]) {
-
     val sparkConf = new SparkConf().setAppName("HiveFromSpark")
     val sc = new SparkContext(sparkConf)
     val path = s"${System.getenv("SPARK_HOME")}/examples/src/main/resources/kv1.txt"
 
-    // A local hive context creates an instance of the Hive Metastore in process, storing
+    // A local hive context creates an instance of the Hive Metastore in process, storing 
     // the warehouse data in the current directory.  This location can be overridden by
     // specifying a second parameter to the constructor.
     val hiveContext = new HiveContext(sc)
