@@ -940,8 +940,6 @@ class DAGScheduler(
     }
     event.reason match {
       case Success =>
-        // only save AccumulatorValue when it's the first successfully finished
-        // task
         if (event.accumUpdates != null) {
           try {
             event.accumUpdates.foreach { case (id, partialValue) =>
@@ -970,7 +968,9 @@ class DAGScheduler(
             stage.resultOfJob match {
               case Some(job) =>
                 if (!job.finished(rt.outputId)) {
-                  Accumulators.add(event.accumUpdates)
+                  if (event.accumUpdates != null) {
+                    Accumulators.add(event.accumUpdates)
+                  }
                   job.finished(rt.outputId) = true
                   job.numFinished += 1
                   // If the whole job has finished, remove it
