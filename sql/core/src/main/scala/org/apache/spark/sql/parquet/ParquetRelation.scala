@@ -18,6 +18,7 @@
 package org.apache.spark.sql.parquet
 
 import java.io.IOException
+import scala.collection.JavaConversions._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -53,11 +54,11 @@ private[sql] case class ParquetRelation(
   self: Product =>
 
   /** Schema derived from ParquetFile */
-  def parquetSchema: MessageType =
-    ParquetTypesConverter
-      .readMetaData(new Path(path), conf)
-      .getFileMetaData
-      .getSchema
+  def parquetSchema: MessageType = {
+    ParquetTypesConverter.readMetaData(new Path(path), conf)
+      .map(_.getFileMetaData.getSchema)
+      .getOrElse(new MessageType("empty parquet", Seq.empty))
+  }
 
   /** Attributes */
   override val output =
