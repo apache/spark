@@ -528,9 +528,6 @@ class TaskModelView(ModelViewOnly):
     column_formatters = {
         'dag': dag_formatter,
     }
-mv = TaskModelView(
-    models.BaseOperator, session, name="Tasks", category="Objects")
-admin.add_view(mv)
 
 
 class TaskInstanceModelView(ModelViewOnly):
@@ -580,7 +577,7 @@ class ReloadTaskView(BaseView):
     @expose('/')
     def index(self):
         logging.info("Reloading the dags")
-        bag = models.DagBag();
+        dagbag.collect_dags()
         return redirect(url_for('dags.index_view'))
 admin.add_view(ReloadTaskView(name='Reload DAGs', category="Admin"))
 

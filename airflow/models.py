@@ -44,9 +44,9 @@ class DagBag(object):
             self,
             dag_folder=getconf().get('core', 'DAGS_FOLDER'),
             executor=DEFAULT_EXECUTOR):
-        self.dags = {}
         logging.info("Filling up the DagBag from " + dag_folder)
-        self.collect_dags(dag_folder)
+        self.dag_folder = dag_folder
+        self.collect_dags()
         self.executor = executor
 
     def process_file(self, filepath):
@@ -76,15 +76,17 @@ class DagBag(object):
                     if getconf().getboolean('misc', 'RUN_AS_MASTER'):
                         dag.db_merge()
 
-    def collect_dags(self, file_location):
+    def collect_dags(self):
         """
         Given a file path or a folder, this file looks for python modules,
         imports them and adds them to the dagbag collection.
         """
-        if os.path.isfile(file_location):
-            self.process_file(file_location)
-        elif os.path.isdir(file_location):
-            for root, dirs, files in os.walk(file_location):
+
+        self.dags = {}
+        if os.path.isfile(self.dag_folder):
+            self.process_file(self.dag_folder)
+        elif os.path.isdir(self.dag_folder):
+            for root, dirs, files in os.walk(self.dag_folder):
                 for f in files:
                     filepath = root + '/' + f
                     self.process_file(filepath)
@@ -377,8 +379,7 @@ class TaskInstance(Base):
             self, verbose=True,
             ignore_dependencies=False,
             force=False,
-            mark_success=False,
-            ):
+            mark_success=False,):
         """
         Runs the task instnace.
         """
@@ -518,7 +519,7 @@ class BaseJob(Base):
     __tablename__ = "job"
 
     id = Column(Integer, primary_key=True)
-    dag_id = Column(String(ID_LEN), ForeignKey('dag.dag_id'))
+    dag_id = Column(String(ID_LEN),)
     state = Column(String(20))
     job_type = Column(String(30))
     start_date = Column(DateTime())
@@ -601,7 +602,6 @@ class BackfillJob(BaseJob):
                 if ti.state == State.SUCCESS and key in task_instances:
                     del task_instances[key]
                 elif ti.is_runnable():
-                    print "Runnable: " + ti.task_id
                     executor.queue_command(
                         key=ti.key, command=ti.command(
                             mark_success=mark_success,
@@ -690,7 +690,7 @@ class BaseOperator(Base):
 
     __tablename__ = "task"
 
-    dag_id = Column(String(ID_LEN), ForeignKey('dag.dag_id'), primary_key=True)
+    dag_id = Column(String(ID_LEN), primary_key=True)
     task_id = Column(String(ID_LEN), primary_key=True)
     owner = Column(String(500))
     task_type = Column(String(20))
@@ -926,8 +926,6 @@ class DAG(Base):
     parallelism = Column(Integer)
     full_filepath = Column(String(2000))
 
-    tasks = relationship(
-        "BaseOperator", cascade="all, delete-orphan", backref='dag')
 
     def __init__(
             self, dag_id,
@@ -935,6 +933,7 @@ class DAG(Base):
             start_date=None, end_date=None, parallelism=0,
             full_filepath=None, executor=DEFAULT_EXECUTOR):
 
+        self.tasks = []
         utils.validate_key(dag_id)
         self.dag_id = dag_id
         self.executor = executor
@@ -1101,7 +1100,12 @@ class DAG(Base):
             self.add_task(task)
 
     def db_merge(self):
+        BO = BaseOperator
         session = settings.Session()
+        tasks = session.query(BO).filter(BO.dag_id==self.dag_id).all()
+        for t in tasks:
+            session.delete(t)
+        session.commit()
         session.merge(self)
         session.commit()
 
