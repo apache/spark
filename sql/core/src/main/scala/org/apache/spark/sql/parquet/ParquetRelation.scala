@@ -18,7 +18,6 @@
 package org.apache.spark.sql.parquet
 
 import java.io.IOException
-import scala.collection.JavaConversions._
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path

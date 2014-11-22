@@ -106,7 +106,6 @@ private[hive] trait HiveStrategies {
 
         val path = relation.hiveQlTable.getPath
         val conf = hiveContext.sparkContext.hadoopConfiguration
-
         val meta = ParquetTypesConverter.readMetaData(path, Some(conf))
 
         if (meta.isEmpty) {
