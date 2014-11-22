@@ -1670,10 +1670,10 @@ private[spark] object Utils extends Logging {
     for (offset <- 0 to maxRetries) {
       // Do not increment port if port is 0, which is treated as a special port
       val tryPort = if (port == 0) {
-        (startPort + Math.random() * (endPort - startPort)).toInt
+        port
       } else {
         // If the new port wraps around, ensure it is in range(startPort, endPort)
-        ((port + offset - startPort) % (endPort - startPort)) + startPort
+        ((port + offset) % (endPort - startPort + 1)) + startPort
       }
       try {
         val (service, port) = startService(tryPort)
