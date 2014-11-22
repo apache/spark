@@ -112,9 +112,6 @@ class DAGScheduler(
   //       stray messages to detect.
   private val failedEpoch = new HashMap[String, Long]
 
-  // (stageId, partitionId)
-  private val updatedAccumulators = new HashSet[(Int, Int)]
-
   private val dagSchedulerActorSupervisor =
     env.actorSystem.actorOf(Props(new DAGSchedulerActorSupervisor(this)))
 
@@ -435,21 +432,6 @@ class DAGScheduler(
     stageIdToStage -= stageId
     logDebug("After removal of stage %d, remaining stages = %d"
       .format(stageId, stageIdToStage.size))
-  }
-
-  /**
-   * detect the duplicate accumulator value and save the accumulator values
-   * @param accumValue the accumulator values received from the task
-   * @param stageId the stage which the task belongs to
-   * @param partitionId the partitionId the task belongs to
-   */
-  private def saveAccumulatorValue(accumValue: Map[Long, Any],
-                                   stageId: Int, partitionId: Int): Unit = {
-    // de-duplicate
-    if (accumValue != null && !updatedAccumulators.contains((stageId, partitionId))) {
-      Accumulators.add(accumValue)
-      updatedAccumulators.add((stageId, partitionId))
-    }
   }
 
   /**
@@ -962,7 +944,6 @@ class DAGScheduler(
         // task
         if (event.accumUpdates != null) {
           try {
-            saveAccumulatorValue(event.accumUpdates, stage.id, task.partitionId)
             event.accumUpdates.foreach { case (id, partialValue) =>
               val acc = Accumulators.originals(id).asInstanceOf[Accumulable[Any, Any]]
               // To avoid UI cruft, ignore cases where value wasn't updated
@@ -989,6 +970,7 @@ class DAGScheduler(
             stage.resultOfJob match {
               case Some(job) =>
                 if (!job.finished(rt.outputId)) {
+                  Accumulators.add(event.accumUpdates)
                   job.finished(rt.outputId) = true
                   job.numFinished += 1
                   // If the whole job has finished, remove it

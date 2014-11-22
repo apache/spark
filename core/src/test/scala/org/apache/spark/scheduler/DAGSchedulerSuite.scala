@@ -738,35 +738,6 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     assert(scheduler.sc.dagScheduler === null)
   }
 
-  test("accumulator not calculated for resubmitted shuffle stage") {
-    //just for register
-    val accum = new Accumulator[Int](0, SparkContext.IntAccumulatorParam)
-    val shuffleOneRdd = new MyRDD(sc, 2, Nil)
-    val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
-    val shuffleTwoRdd = new MyRDD(sc, 2, List(shuffleDepOne))
-    val shuffleDepTwo = new ShuffleDependency(shuffleTwoRdd, null)
-    val finalRdd = new MyRDD(sc, 1, List(shuffleDepTwo))
-    submit(finalRdd, Array(0))
-    // have the first stage complete normally
-    completeWithAccumulator(accum.id, taskSets(0), Seq(
-      (Success, makeMapStatus("hostA", 2)),
-      (Success, makeMapStatus("hostB", 2))))
-    // have the second stage complete normally
-    completeWithAccumulator(accum.id, taskSets(1), Seq(
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostC", 1))))
-    // fail the third stage because hostA went down
-    completeWithAccumulator(accum.id, taskSets(2), Seq(
-      (FetchFailed(makeBlockManagerId("hostA"), shuffleDepTwo.shuffleId, 0, 0, ""), null)))
-    scheduler.resubmitFailedStages()
-    completeWithAccumulator(accum.id, taskSets(3), Seq((Success, makeMapStatus("hostA", 2))))
-    completeWithAccumulator(accum.id, taskSets(4), Seq((Success, makeMapStatus("hostA", 1))))
-    completeWithAccumulator(accum.id, taskSets(5), Seq((Success, 42)))
-    assert(results === Map(0 -> 42))
-    assert(Accumulators.originals(accum.id).value === 5)
-    assertDataStructuresEmpty
-  }
-
   test("accumulator not calculated for resubmitted result stage") {
     //just for register
     val accum = new Accumulator[Int](0, SparkContext.IntAccumulatorParam)

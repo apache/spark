@@ -227,12 +227,10 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  * @param param helper object defining how to add elements of type `T`
  * @tparam T result type
  */
-class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T],
-                     name: Option[String])
+class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], name: Option[String])
     extends Accumulable[T,T](initialValue, param, name) {
 
-  def this(initialValue: T, param: AccumulatorParam[T]) =
-    this(initialValue, param, None)
+  def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None)
 }
 
 /**
@@ -285,6 +283,7 @@ private object Accumulators {
     return ret
   }
 
+  // Add values to the original accumulators with some given IDs
   def add(values: Map[Long, Any]): Unit = synchronized {
     for ((id, value) <- values) {
       if (originals.contains(id)) {
