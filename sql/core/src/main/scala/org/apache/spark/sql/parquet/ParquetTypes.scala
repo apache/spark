@@ -452,7 +452,7 @@ private[sql] object ParquetTypesConverter extends Logging {
     // all data in a single Parquet file have the same schema, which is normally true.
     children
       // Try any non-"_metadata" file first...
-      .find(_.getPath.getName != ParquetFileWriter.PARQUET_METADATA_FILE)
+      .find(file => file.getPath.getName != ParquetFileWriter.PARQUET_METADATA_FILE && !file.isDir)
       // ... and fallback to "_metadata" if no such file exists (which implies the Parquet file is
       // empty, thus normally the "_metadata" file is expected to be fairly small).
       .orElse(children.find(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE))
