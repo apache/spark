@@ -106,7 +106,7 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
     compareRDDs(rddOrig, rddCopy, "testsource", ParquetTestData.testSchemaFieldNames)
   }
 
-  test("String issue for Parquet Table") {
+  test("SPARK-4553: String issue for Parquet Table") {
     sql("CREATE TABLE parquet_string(key INT, value STRING)")
     sql("INSERT OVERWRITE TABLE parquet_string SELECT * FROM src")
     sql("SELECT * FROM parquet_string").collect.foreach(println)
