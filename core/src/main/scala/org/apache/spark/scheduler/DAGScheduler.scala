@@ -964,7 +964,8 @@ class DAGScheduler(
                         }
                       }
                     } catch {
-                      // If we see an exception during accumulator update, just log the error and move on.
+                      // If we see an exception during accumulator update, just log the
+                      // error and move on.
                       case e: Exception =>
                         logError(s"Failed to update accumulators for $task", e)
                     }
