@@ -1,4 +1,4 @@
-# Default system properties included when running spark-submit.
+# Default system properties included when running spark-submit or spark-shell.
 # This is useful for setting default environmental settings.
 
 # Example:
