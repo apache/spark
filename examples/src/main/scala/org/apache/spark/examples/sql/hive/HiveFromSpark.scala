@@ -26,17 +26,11 @@ object HiveFromSpark {
 
   def main(args: Array[String]) {
 
-    if (args.length < 1) {
-      System.err.println("Usage: HiveFromSpark <file>")
-      System.exit(1)
-    }
-    // Data path for a table type of (Int, String)
-    val path = args(0)
-
     val sparkConf = new SparkConf().setAppName("HiveFromSpark")
     val sc = new SparkContext(sparkConf)
+    val path = s"${System.getenv("SPARK_HOME")}/examples/src/main/resources/kv1.txt"
 
-    // A local hive context creates an instance of the Hive Metastore in process, storing 
+    // A local hive context creates an instance of the Hive Metastore in process, storing
     // the warehouse data in the current directory.  This location can be overridden by
     // specifying a second parameter to the constructor.
     val hiveContext = new HiveContext(sc)
