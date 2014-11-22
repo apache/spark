@@ -15,21 +15,9 @@
 # limitations under the License.
 #
 
-"""
->>> from pyspark.context import SparkContext
->>> sc = SparkContext('local', 'test')
->>> b = sc.broadcast([1, 2, 3, 4, 5])
->>> b.value
-[1, 2, 3, 4, 5]
->>> sc.parallelize([0, 0]).flatMap(lambda x: b.value).collect()
-[1, 2, 3, 4, 5, 1, 2, 3, 4, 5]
->>> b.unpersist()
-
->>> large_broadcast = sc.broadcast(list(range(10000)))
-"""
 import os
-
-from pyspark.serializers import LargeObjectSerializer
+import cPickle
+from tempfile import NamedTemporaryFile
 
 
 __all__ = ['Broadcast']
@@ -49,44 +37,61 @@ def _from_id(bid):
 class Broadcast(object):
 
     """
-    A broadcast variable created with
-    L{SparkContext.broadcast()<pyspark.context.SparkContext.broadcast>}.
+    A broadcast variable created with L{SparkContext.broadcast()}.
     Access its value through C{.value}.
+
+    Examples:
+
+    >>> from pyspark.context import SparkContext
+    >>> sc = SparkContext('local', 'test')
+    >>> b = sc.broadcast([1, 2, 3, 4, 5])
+    >>> b.value
+    [1, 2, 3, 4, 5]
+    >>> sc.parallelize([0, 0]).flatMap(lambda x: b.value).collect()
+    [1, 2, 3, 4, 5, 1, 2, 3, 4, 5]
+    >>> b.unpersist()
+
+    >>> large_broadcast = sc.broadcast(range(10000))
     """
 
-    def __init__(self, bid, value, java_broadcast=None,
-                 pickle_registry=None, path=None):
+    def __init__(self, sc=None, value=None, pickle_registry=None, path=None):
         """
-        Should not be called directly by users -- use
-        L{SparkContext.broadcast()<pyspark.context.SparkContext.broadcast>}
+        Should not be called directly by users -- use L{SparkContext.broadcast()}
         instead.
         """
-        self.bid = bid
-        if path is None:
-            self._value = value
-        self._jbroadcast = java_broadcast
-        self._pickle_registry = pickle_registry
-        self.path = path
+        if sc is not None:
+            tempFile = NamedTemporaryFile(delete=False, dir=sc._temp_dir)
+            cPickle.dump(value, tempFile, 2)
+            tempFile.close()
+            self._path = tempFile.name
+            self._jbroadcast = sc._jvm.PythonRDD.readBroadcastFromFile(sc._jsc, self._path)
+            self._pickle_registry = pickle_registry
+        else:
+            self._jbroadcast = None
+            self._path = path
 
     @property
     def value(self):
         """ Return the broadcasted value
         """
-        if not hasattr(self, "_value") and self.path is not None:
-            ser = LargeObjectSerializer()
-            self._value = ser.load_stream(open(self.path)).next()
+        if not hasattr(self, "_value") and self._path is not None:
+            self._value = cPickle.load(open(self._path))
         return self._value
 
     def unpersist(self, blocking=False):
         """
         Delete cached copies of this broadcast on the executors.
         """
+        if self._jbroadcast is None:
+            raise Exception("Broadcast can only be unpersisted in driver")
         self._jbroadcast.unpersist(blocking)
-        os.unlink(self.path)
+        os.unlink(self._path)
 
     def __reduce__(self):
+        if self._jbroadcast is None:
+            raise Exception("Broadcast can only be serialized in driver")
         self._pickle_registry.add(self)
-        return (_from_id, (self.bid, ))
+        return _from_id, (self._jbroadcast.id(),)
 
 
 if __name__ == "__main__":
