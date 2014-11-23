@@ -751,7 +751,6 @@ private[spark] object SerDe extends Serializable {
       out.write(Opcodes.BINSTRING)
       out.write(PickleUtils.integer_to_bytes(bytes.length))
       out.write(bytes)
-
       out.write(Opcodes.TUPLE1)
     }
 
@@ -792,15 +791,32 @@ private[spark] object SerDe extends Serializable {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val v: SparseVector = obj.asInstanceOf[SparseVector]
-      saveObjects(out, pickler, v.size, v.indices, v.values)
+      val n = v.indices.size
+      val bytes = new Array[Byte](12 * n)
+      val order = ByteOrder.nativeOrder()
+      ByteBuffer.wrap(bytes).order(order).asIntBuffer().put(v.indices)
+      ByteBuffer.wrap(bytes, 4 * n, 8 * n).order(order).asDoubleBuffer().put(v.values)
+
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(v.size))
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(bytes.length))
+      out.write(bytes)
+      out.write(Opcodes.TUPLE2)
     }
 
     def construct(args: Array[Object]): Object = {
-      if (args.length != 3) {
-        throw new PickleException("should be 3")
+      if (args.length != 2) {
+        throw new PickleException("should be 2")
       }
-      new SparseVector(args(0).asInstanceOf[Int], args(1).asInstanceOf[Array[Int]],
-        args(2).asInstanceOf[Array[Double]])
+      val bytes = args(1).asInstanceOf[String].getBytes("ISO-8859-1")
+      val n = bytes.length / 12
+      val indices = new Array[Int](n)
+      val values = new Array[Double](n)
+      val order = ByteOrder.nativeOrder()
+      ByteBuffer.wrap(bytes, 0, n * 4).order(order).asIntBuffer().get(indices)
+      ByteBuffer.wrap(bytes, n * 4, n * 8).order(order).asDoubleBuffer().get(values)
+      new SparseVector(args(0).asInstanceOf[Int], indices, values)
     }
   }
 

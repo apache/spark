@@ -316,21 +316,26 @@ class SparseVector(Vector):
         assert 1 <= len(args) <= 2, "must pass either 2 or 3 arguments"
         if len(args) == 1:
             pairs = args[0]
-            if type(pairs) == dict:
-                pairs = pairs.items()
-            pairs = sorted(pairs)
-            self.indices = array.array('i', [p[0] for p in pairs])
-            self.values = array.array('d', [p[1] for p in pairs])
+            if isinstance(pairs, basestring):
+                l = len(pairs) / (4 + 8)
+                self.indices = np.frombuffer(pairs, np.uint32, count=l)
+                self.values = np.frombuffer(pairs, np.float64, l, offset=l * 4)
+            else:
+                if type(pairs) == dict:
+                    pairs = pairs.items()
+                pairs = sorted(pairs)
+                self.indices = np.array([p[0] for p in pairs], dtype=np.uint32)
+                self.values = np.array([p[1] for p in pairs], dtype=np.float64)
         else:
             assert len(args[0]) == len(args[1]), "index and value arrays not same length"
-            self.indices = array.array('i', args[0])
-            self.values = array.array('d', args[1])
+            self.indices = np.array(args[0], dtype=np.uint32)
+            self.values = np.array(args[1], dtype=np.float64)
             for i in xrange(len(self.indices) - 1):
                 if self.indices[i] >= self.indices[i + 1]:
                     raise TypeError("indices array must be sorted")
 
     def __reduce__(self):
-        return (SparseVector, (self.size, self.indices, self.values))
+        return (SparseVector, (self.size, self.indices.tostring() + self.values.tostring()))
 
     def dot(self, other):
         """
@@ -466,8 +471,8 @@ class SparseVector(Vector):
         Returns a copy of this SparseVector as a 1-dimensional NumPy array.
         """
         arr = np.zeros((self.size,), dtype=np.float64)
-        for i in xrange(len(self.indices)):
-            arr[self.indices[i]] = self.values[i]
+        for i, v in zip(self.indices, self.values):
+            arr[i] = v
         return arr
 
     def __len__(self):
@@ -498,8 +503,8 @@ class SparseVector(Vector):
         """
         return (isinstance(other, self.__class__)
                 and other.size == self.size
-                and other.indices == self.indices
-                and other.values == self.values)
+                and all(other.indices == self.indices)
+                and all(other.values == self.values))
 
     def __ne__(self, other):
         return not self.__eq__(other)

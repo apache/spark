@@ -62,6 +62,7 @@ def _squared_distance(a, b):
 class VectorTests(PySparkTestCase):
 
     def _test_serialize(self, v):
+        self.assertEqual(v, ser.loads(ser.dumps(v)))
         jvec = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(v)))
         nv = ser.loads(str(self.sc._jvm.SerDe.dumps(jvec)))
         self.assertEqual(v, nv)
