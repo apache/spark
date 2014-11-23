@@ -74,6 +74,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val IS = Keyword("IS")
   protected val JOIN = Keyword("JOIN")
   protected val LAST = Keyword("LAST")
+  protected val LCASE = Keyword("LCASE")
   protected val LEFT = Keyword("LEFT")
   protected val LIKE = Keyword("LIKE")
   protected val LIMIT = Keyword("LIMIT")
@@ -101,6 +102,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val THEN = Keyword("THEN")
   protected val TIMESTAMP = Keyword("TIMESTAMP")
   protected val TRUE = Keyword("TRUE")
+  protected val UCASE = Keyword("UCASE")
   protected val UNION = Keyword("UNION")
   protected val UPPER = Keyword("UPPER")
   protected val WHEN = Keyword("WHEN")
@@ -289,6 +291,8 @@ class SqlParser extends AbstractSparkSQLParser {
     | MAX   ~ "(" ~> expression <~ ")" ^^ { case exp => Max(exp) }
     | UPPER ~ "(" ~> expression <~ ")" ^^ { case exp => Upper(exp) }
     | LOWER ~ "(" ~> expression <~ ")" ^^ { case exp => Lower(exp) }
+    | UCASE ~ "(" ~> expression <~ ")" ^^ { case exp => Upper(exp) }
+    | LCASE ~ "(" ~> expression <~ ")" ^^ { case exp => Lower(exp) }
     | IF ~ "(" ~> expression ~ ("," ~> expression) ~ ("," ~> expression) <~ ")" ^^
       { case c ~ t ~ f => If(c, t, f) }
     | CASE ~> expression.? ~ (WHEN ~> expression ~ (THEN ~> expression)).* ~
