@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.api.python
 
+import java.nio.{ByteBuffer, ByteOrder}
 import java.io.OutputStream
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
@@ -741,7 +742,17 @@ private[spark] object SerDe extends Serializable {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val vector: DenseVector = obj.asInstanceOf[DenseVector]
-      saveObjects(out, pickler, vector.toArray)
+      val bytes = new Array[Byte](8 * vector.size)
+      val bb = ByteBuffer.wrap(bytes)
+      bb.order(ByteOrder.nativeOrder())
+      val db = bb.asDoubleBuffer()
+      db.put(vector.toArray)
+
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(bytes.length))
+      out.write(bytes)
+
+      out.write(Opcodes.TUPLE1)
     }
 
     def construct(args: Array[Object]): Object = {
@@ -749,7 +760,13 @@ private[spark] object SerDe extends Serializable {
       if (args.length != 1) {
         throw new PickleException("should be 1")
       }
-      new DenseVector(args(0).asInstanceOf[Array[Double]])
+      val bytes = args(0).asInstanceOf[String].getBytes("ISO-8859-1")
+      val bb = ByteBuffer.wrap(bytes, 0, bytes.length)
+      bb.order(ByteOrder.nativeOrder())
+      val db = bb.asDoubleBuffer()
+      val ans = new Array[Double](bytes.length/8)
+      db.get(ans)
+      Vectors.dense(ans)
     }
   }
 

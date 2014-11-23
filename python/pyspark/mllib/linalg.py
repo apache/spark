@@ -173,12 +173,16 @@ class DenseVector(Vector):
     A dense vector represented by a value array.
     """
     def __init__(self, ar):
-        if not isinstance(ar, array.array):
-            ar = array.array('d', ar)
+        if isinstance(ar, (bytearray, basestring)):
+            ar = np.frombuffer(ar, dtype=np.float64)
+        elif not isinstance(ar, np.ndarray):
+            ar = np.array(ar, dtype=np.float64)
+        if ar.dtype != np.float64:
+            ar.astype(np.float64)
         self.array = ar
 
     def __reduce__(self):
-        return DenseVector, (self.array,)
+        return DenseVector, (self.array.tostring(),)
 
     def dot(self, other):
         """
@@ -207,9 +211,10 @@ class DenseVector(Vector):
             ...
         AssertionError: dimension mismatch
         """
-        if type(other) == np.ndarray and other.ndim > 1:
-            assert len(self) == other.shape[0], "dimension mismatch"
-            return np.dot(self.toArray(), other)
+        if type(other) == np.ndarray:
+            if other.ndim > 1:
+                assert len(self) == other.shape[0], "dimension mismatch"
+            return np.dot(self.array, other)
         elif _have_scipy and scipy.sparse.issparse(other):
             assert len(self) == other.shape[0], "dimension mismatch"
             return other.transpose().dot(self.toArray())
@@ -261,7 +266,7 @@ class DenseVector(Vector):
         return np.dot(diff, diff)
 
     def toArray(self):
-        return np.array(self.array)
+        return self.array
 
     def __getitem__(self, item):
         return self.array[item]
@@ -276,7 +281,7 @@ class DenseVector(Vector):
         return "DenseVector([%s])" % (', '.join(_format_float(i) for i in self.array))
 
     def __eq__(self, other):
-        return isinstance(other, DenseVector) and self.array == other.array
+        return isinstance(other, DenseVector) and all(self.array == other.array)
 
     def __ne__(self, other):
         return not self == other
