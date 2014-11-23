@@ -362,7 +362,7 @@ class QuadraticMinimizer(nGram: Int,
       for (j <- 0 until H.columns) {
         wsH.put(i, j, H.get(i, j))
       }
-    rho = computeRho(wsH)
+    rho = computeRho(H)
     for (i <- 0 until H.rows) wsH.put(i, i, wsH.get(i, i) + rho)
 
     val solveStart = System.nanoTime()
