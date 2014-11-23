@@ -173,7 +173,7 @@ class DenseVector(Vector):
     A dense vector represented by a value array.
     """
     def __init__(self, ar):
-        if isinstance(ar, (bytearray, basestring)):
+        if isinstance(ar, basestring):
             ar = np.frombuffer(ar, dtype=np.float64)
         elif not isinstance(ar, np.ndarray):
             ar = np.array(ar, dtype=np.float64)
@@ -319,7 +319,7 @@ class SparseVector(Vector):
             if isinstance(pairs, basestring):
                 l = len(pairs) / (4 + 8)
                 self.indices = np.frombuffer(pairs, np.uint32, count=l)
-                self.values = np.frombuffer(pairs, np.float64, l, offset=l * 4)
+                self.values = np.frombuffer(pairs, np.float64, count=l, offset=l * 4)
             else:
                 if type(pairs) == dict:
                     pairs = pairs.items()
