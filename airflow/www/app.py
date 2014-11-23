@@ -452,8 +452,8 @@ class Airflow(BaseView):
             },
             'plotOptions': {
                 'series': {
-                    # 'borderColor': 'black',
-                    'minPointLength': 5,
+                    'cursor': 'pointer',
+                    'minPointLength': 4,
                 },
             },
             'legend': {
@@ -466,6 +466,7 @@ class Airflow(BaseView):
         return self.render(
             'admin/gantt.html',
             dag=dag,
+            execution_date=dttm.isoformat(),
             form=form,
             hc=json.dumps(hc, indent=4),
             height=height,
