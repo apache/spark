@@ -90,8 +90,6 @@ class HiveUdfSuite extends QueryTest {
       
     checkAnswer(sql("SELECT percentile(key, array(1, 1)) FROM src LIMIT 1"),
       sql("SELECT array(max(key), max(key)) FROM src").collect().toSeq)
-      
-    TestHive.reset()
   }
 
   test("Generic UDAF aggregates") {
