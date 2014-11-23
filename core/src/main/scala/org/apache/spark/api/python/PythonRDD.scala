@@ -812,8 +812,7 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
  * An Wrapper for Python Broadcast, which is written into disk by Python. It also will
  * write the data into disk after deserialization, then Python can read it from disks.
  */
-private[spark] class PythonBroadcast(@transient var path: String)
-  extends Serializable with Closeable {
+private[spark] class PythonBroadcast(@transient var path: String) extends Serializable {
 
   /**
    * Read data from disks, then copy it to `out`
@@ -829,16 +828,10 @@ private[spark] class PythonBroadcast(@transient var path: String)
 
   /**
    * Write data into disk, using randomly generated name.
-   * @param in
    */
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    val localDirs = SparkEnv.get.blockManager.diskBlockManager.localDirs
-    val random = new scala.util.Random(System.currentTimeMillis())
-    val dir = localDirs(random.nextInt(localDirs.size))
-    var file = new File(dir, UUID.randomUUID.toString)
-    while (file.exists()) {
-      file = new File(dir, UUID.randomUUID().toString)
-    }
+    val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
+    val file = File.createTempFile("broadcast", "", dir)
     path = file.getAbsolutePath
     val out = new FileOutputStream(file)
     try {
@@ -851,7 +844,7 @@ private[spark] class PythonBroadcast(@transient var path: String)
   /**
    * Delete the file once the object is GCed.
    */
-  def close(): Unit = {
+  override def finalize() {
     if (!path.isEmpty) {
       val file = new File(path)
       if (file.exists()) {

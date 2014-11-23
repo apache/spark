@@ -88,6 +88,8 @@ class Broadcast(object):
             flag = f.read(1)
             data = f.read()
             if flag == 'P':
+                # cPickle.loads() may create lots of objects, disable GC
+                # temporary for better performance
                 gc.disable()
                 try:
                     return cPickle.loads(data)

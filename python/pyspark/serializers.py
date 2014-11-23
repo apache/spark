@@ -448,21 +448,20 @@ class AutoSerializer(FramedSerializer):
             raise ValueError("invalid sevialization type: %s" % _type)
 
 
-class CompressedSerializer(Serializer):
+class CompressedSerializer(FramedSerializer):
     """
     Compress the serialized data
     """
     def __init__(self, serializer):
+        FramedSerializer.__init__(self)
+        assert isinstance(serializer, FramedSerializer), "serializer must be a FramedSerializer"
         self.serializer = serializer
 
-    def load_stream(self, stream):
-        stream = CompressedStream(stream, "r")
-        return self.serializer.load_stream(stream)
+    def dumps(self, obj):
+        return zlib.compress(self.serializer.dumps(obj), 1)
 
-    def dump_stream(self, iterator, stream):
-        stream = CompressedStream(stream, "w")
-        self.serializer.dump_stream(iterator, stream)
-        stream.flush()
+    def loads(self, obj):
+        return self.serializer.loads(zlib.decompress(obj))
 
 
 class UTF8Deserializer(Serializer):

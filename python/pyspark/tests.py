@@ -237,6 +237,17 @@ class SerializationTestCase(unittest.TestCase):
         self.assertTrue("exit" in foo.func_code.co_names)
         ser.dumps(foo)
 
+    def test_compressed_serializer(self):
+        ser = CompressedSerializer(PickleSerializer())
+        from StringIO import StringIO
+        io = StringIO()
+        ser.dump_stream(["abc", u"123", range(5)], io)
+        io.seek(0)
+        self.assertEqual(["abc", u"123", range(5)], list(ser.load_stream(io)))
+        ser.dump_stream(range(1000), io)
+        io.seek(0)
+        self.assertEqual(["abc", u"123", range(5)] + range(1000), list(ser.load_stream(io)))
+
 
 class PySparkTestCase(unittest.TestCase):
 
