@@ -24,7 +24,16 @@
     <script src="{{ admin_static.url(
       filename='datetimepicker/bootstrap-datetimepicker.js') }}"></script>
     <script>
+      execution_date = '{{ execution_date }}';
       hc = {{ hc|safe }};
+      hc.plotOptions.series.point = {
+        events: {
+            click: function(p){
+                call_modal(this.category, execution_date);
+            }
+        }
+      };
+
       hc.tooltip = {
         formatter: function() {
           duration = new Date(this.point.high - this.point.low);
