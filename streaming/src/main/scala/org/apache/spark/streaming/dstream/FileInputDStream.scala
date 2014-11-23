@@ -227,7 +227,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   }
 
   private def fs: FileSystem = {
-    if (fs_ == null) fs_ = directoryPath.getFileSystem(new Configuration())
+    if (fs_ == null) fs_ = directoryPath.getFileSystem(ssc.sparkContext.hadoopConfiguration)
     fs_
   }
 
