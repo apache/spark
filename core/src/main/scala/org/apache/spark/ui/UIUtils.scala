@@ -206,6 +206,11 @@ private[spark] object UIUtils extends Logging {
           </div>
           {content}
         </div>
+        <div id="footer">
+          <div class="container-fluid">
+            <p class="muted credit">Spark {org.apache.spark.SPARK_VERSION}</p>
+          </div>
+        </div>
       </body>
     </html>
   }
@@ -231,6 +236,11 @@ private[spark] object UIUtils extends Logging {
             </div>
           </div>
           {content}
+        </div>
+        <div id="footer">
+          <div class="container-fluid">
+            <p class="muted credit">Spark {org.apache.spark.SPARK_VERSION}</p>
+          </div>
         </div>
       </body>
     </html>
