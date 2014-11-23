@@ -587,25 +587,35 @@ class DenseMatrix(Matrix):
     """
     def __init__(self, numRows, numCols, values):
         Matrix.__init__(self, numRows, numCols)
+        if isinstance(values, basestring):
+            values = np.frombuffer(values, dtype=np.float64)
+        elif not isinstance(values, np.ndarray):
+            values = np.array(values, dtype=np.float64)
         assert len(values) == numRows * numCols
-        if not isinstance(values, array.array):
-            values = array.array('d', values)
+        if values.dtype != np.float64:
+            values.astype(np.float64)
         self.values = values
 
     def __reduce__(self):
-        return DenseMatrix, (self.numRows, self.numCols, self.values)
+        return DenseMatrix, (self.numRows, self.numCols, self.values.tostring())
 
     def toArray(self):
         """
         Return an numpy.ndarray
 
-        >>> arr = array.array('d', [float(i) for i in range(4)])
+        >>> arr = np.array([float(i) for i in range(4)])
         >>> m = DenseMatrix(2, 2, arr)
         >>> m.toArray()
         array([[ 0.,  2.],
                [ 1.,  3.]])
         """
-        return np.reshape(self.values, (self.numRows, self.numCols), order='F')
+        return self.values.reshape((self.numRows, self.numCols), order='F')
+
+    def __eq__(self, other):
+        return (isinstance(other, DenseMatrix) and
+                self.numRows == other.numRows and
+                self.numCols == other.numCols and
+                all(self.values == other.values))
 
 
 class Matrices(object):
