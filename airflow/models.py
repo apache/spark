@@ -586,21 +586,39 @@ class BackfillJob(BaseJob):
         session.commit()
 
         # Build a list of all intances to run
-        task_instances = {}
+        tasks_to_run = {}
+        failed = []
+        succeeded = []
+        running = []
+        wont_run = []
         for task in self.dag.tasks:
             start_date = start_date or task.start_date
             end_date = end_date or task.end_date or datetime.now()
             for dttm in utils.date_range(
                     start_date, end_date, task.dag.schedule_interval):
                 ti = TaskInstance(task, dttm)
-                task_instances[ti.key] = ti
+                tasks_to_run[ti.key] = ti
 
         # Triggering what is ready to get triggered
-        while task_instances:
-            for key, ti in task_instances.items():
+        while tasks_to_run:
+            msg = (
+                "Yet to run: {0} | "
+                "Succeeded: {1} | "
+                "Running: {2} | "
+                "Failed: {3} | "
+                "Won't run: {4} ").format(
+                len(tasks_to_run),
+                len(succeeded),
+                len(running),
+                len(failed),
+                len(wont_run))
+
+            logging.info(msg)
+            for key, ti in tasks_to_run.items():
                 ti.refresh_from_db()
-                if ti.state == State.SUCCESS and key in task_instances:
-                    del task_instances[key]
+                if ti.state == State.SUCCESS and key in tasks_to_run:
+                    succeeded.append(key)
+                    del tasks_to_run[key]
                 elif ti.is_runnable():
                     executor.queue_command(
                         key=ti.key, command=ti.command(
@@ -608,26 +626,33 @@ class BackfillJob(BaseJob):
                             pickle=pickle)
                     )
                     ti.state = State.RUNNING
-            if task_instances:
+                    running.append(key)
+            if tasks_to_run:
                 self.heartbeat()
             executor.heartbeat()
 
             # Reacting to events
             for key, state in executor.get_event_buffer().items():
+                running.remove(key)
                 dag_id, task_id, execution_date = key
-                ti = task_instances[key]
+                if key not in tasks_to_run:
+                    continue
+                ti = tasks_to_run[key]
                 ti.refresh_from_db()
                 if ti.state == State.FAILED:
+                    failed.append(key)
                     logging.error("Task instance " + str(key) + " failed")
-                    del task_instances[key]
+                    del tasks_to_run[key]
                     # Removing downstream tasks from the one that has failed
                     for t in dag.get_task(task_id).get_flat_relatives(
                             upstream=False):
                         key = (ti.dag_id, t.task_id, execution_date)
-                        if key in task_instances:
-                            del task_instances[key]
+                        if key in tasks_to_run:
+                            wont_run.append(key)
+                            del tasks_to_run[key]
                 elif ti.state == State.SUCCESS:
-                    del task_instances[key]
+                    succeeded.append(key)
+                    del tasks_to_run[key]
         executor.end()
         logging.info("Run summary:")
         session.close()
