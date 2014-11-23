@@ -52,8 +52,8 @@ import org.apache.spark.util.{TimeStampedHashMap, Utils}
  *
  * The trailing end of the window is the "ignore threshold" and all files whose mod times
  * are less than this threshold are assumed to have already been selected and are therefore
- * ignored. Files whose mode times are within the "remember window" are checked against files that have
- * already been selected. This is how new files are identified in each batch -
+ * ignored. Files whose mode times are within the "remember window" are checked against files
+ * that have already been selected. This is how new files are identified in each batch -
  * files whose mod times are greater than the ignore threshold and have not been considered
  * within the remember window.
  *
@@ -294,16 +294,16 @@ object FileInputDStream {
    * older than this "window" of remembering will be ignored. So if new files are visible
    * within this window, then the file will get selected in the next batch.
    */
-  private val MIN_REMEMBER_DURATION = Minutes(1)
+  private val REMEMBER_DURATION = Minutes(1)
 
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
 
   /**
    * Calculate the number of last batches to remember, such that all the files selected in
-   * at least last MIN_REMEMBER_DURATION duration can be remembered.
+   * at least last REMEMBER_DURATION duration can be remembered.
    */
   def calculateNumBatchesToRemember(batchDuration: Duration): Int = {
-    math.ceil(MIN_REMEMBER_DURATION.milliseconds.toDouble / batchDuration.milliseconds).toInt
+    math.ceil(REMEMBER_DURATION.milliseconds.toDouble / batchDuration.milliseconds).toInt
   }
 
 }
