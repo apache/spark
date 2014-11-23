@@ -160,7 +160,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
       val filter = new PathFilter {
-        def accept(path: Path): Boolean = shouldSelectFile(path)
+        def accept(path: Path): Boolean = isNewFile(currentTime, path)
       }
       val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
       val timeTaken = System.currentTimeMillis - lastNewFileFindingTime
@@ -182,7 +182,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     }
   }
 
-  private def shouldSelectFile(path: Path): Boolean = {
+  private def isNewFile(currentTime: Long, path: Path): Boolean = {
     val pathStr = path.toString
     // Reject file if it does not satisfy filter
     if (!filter(path)) {
@@ -193,7 +193,15 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     val modTime = getFileModTime(path)
     if (modTime <= modTimeIgnoreThreshold) {
       // Use <= instead of < to avoid SPARK-4518
-      logDebug(s"$pathStr ignored as mod time $modTime < ignore time $modTimeIgnoreThreshold")
+      logDebug(s"$pathStr ignored as mod time $modTime <= ignore time $modTimeIgnoreThreshold")
+      return false
+    }
+    // Reject file if the file has mod time that file stream is not ready to select. This
+    // can occur if the driver was recovered and the missing batches (during downtime) are
+    // being generated. In that, batch of t (running actually at t+x can see files with mod
+    // time t+x.
+    if (modTime > currentTime) {
+      logDebug(s"$pathStr not selected as mod time $modTime <= current time $currentTime")
       return false
     }
     // Reject file if it was considered earlier
