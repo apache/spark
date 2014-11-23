@@ -132,7 +132,7 @@ private[spark] class ExternalSorter[K, V, C](
   // files open at a time and thus more memory allocated to buffers.
   private val bypassMergeThreshold = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
   private val bypassMergeSort =
-    (numPartitions <= bypassMergeThreshold && aggregator.isEmpty && ordering.isEmpty)
+    numPartitions <= bypassMergeThreshold && aggregator.isEmpty && ordering.isEmpty
 
   // Array of file writers for each partition, used if bypassMergeSort is true and we've spilled
   private var partitionWriters: Array[BlockObjectWriter] = null
@@ -205,6 +205,11 @@ private[spark] class ExternalSorter[K, V, C](
         map.changeValue((getPartition(kv._1), kv._1), update)
         maybeSpillCollection(usingMap = true)
       }
+    } else if (bypassMergeSort) {
+      // SPARK-4479: Also bypass buffering if merge sort is bypassed to avoid defensive copies
+      spillToPartitionFiles(records.map { kv =>
+        ((getPartition(kv._1), kv._1), kv._2.asInstanceOf[C])
+      })
     } else {
       // Stick values into our buffer
       while (records.hasNext) {
@@ -336,6 +341,10 @@ private[spark] class ExternalSorter[K, V, C](
    * @param collection whichever collection we're using (map or buffer)
    */
   private def spillToPartitionFiles(collection: SizeTrackingPairCollection[(Int, K), C]): Unit = {
+    spillToPartitionFiles(collection.iterator)
+  }
+
+  private def spillToPartitionFiles(iterator: Iterator[((Int, K), C)]): Unit = {
     assert(bypassMergeSort)
 
     // Create our file writers if we haven't done so yet
@@ -350,7 +359,7 @@ private[spark] class ExternalSorter[K, V, C](
       }
     }
 
-    val it = collection.iterator  // No need to sort stuff, just write each element out
+    val it = iterator     // No need to sort stuff, just write each element out
     while (it.hasNext) {
       val elem = it.next()
       val partitionId = elem._1._1
@@ -405,7 +414,7 @@ private[spark] class ExternalSorter[K, V, C](
     })
     heap.enqueue(bufferedIters: _*)  // Will contain only the iterators with hasNext = true
     new Iterator[Product2[K, C]] {
-      override def hasNext: Boolean = !heap.isEmpty
+      override def hasNext: Boolean = heap.nonEmpty
 
       override def next(): Product2[K, C] = {
         if (!hasNext) {
