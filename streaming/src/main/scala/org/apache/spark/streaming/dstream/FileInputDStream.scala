@@ -19,11 +19,9 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream}
 
-import scala.Some
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
