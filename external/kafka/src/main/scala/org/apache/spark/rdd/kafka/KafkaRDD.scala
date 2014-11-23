@@ -39,7 +39,7 @@ private[spark] case class KafkaRDDPartition(
   untilOffset: Long
 ) extends Partition
 
-/** A batch-oriented interface to Kafka.
+/** A batch-oriented interface for consuming from Kafka.
   * Each given Kafka topic/partition corresponds to an RDD partition.
   * Starting and ending offsets are specified in advance, so that you can control exactly-once semantics.
   * For an easy interface to Kafka-managed offsets, see {@link org.apache.spark.rdd.kafka.KafkaCluster}
@@ -74,34 +74,31 @@ class KafkaRDD[
   override def compute(thePart: Partition, context: TaskContext) = new NextIterator[R] {
     context.addTaskCompletionListener{ context => closeIfNeeded() }
 
+    val kc = new KafkaCluster(kafkaParams)
     val part = thePart.asInstanceOf[KafkaRDDPartition]
-    val props = new Properties()
-    kafkaParams.foreach(param => props.put(param._1, param._2))
-    val fetchSize = Option(props.getProperty("fetch.message.max.bytes")).map(_.toInt).getOrElse(1024*1024)
-    val leaderBackoff = Option(props.getProperty("refresh.leader.backoff.ms")).map(_.toLong).getOrElse(200L)
-    val consumerConfig = new ConsumerConfig(props)
     val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
-      .newInstance(consumerConfig.props)
+      .newInstance(kc.config.props)
       .asInstanceOf[Decoder[K]]
     val valueDecoder = classTag[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
-      .newInstance(consumerConfig.props)
+      .newInstance(kc.config.props)
       .asInstanceOf[Decoder[V]]
-    val consumer: SimpleConsumer = ???
+    val consumer: SimpleConsumer = kc.connectLeader(part.topic, part.partition)
+      .getOrElse(throw new Exception(s"Couldn't connect to leader for topic ${part.topic} ${part.partition}"))
     var requestOffset = part.fromOffset
     var iter: Iterator[MessageAndOffset] = null
 
     override def getNext: R = {
       if (iter == null || !iter.hasNext) {
         val req = new FetchRequestBuilder().
-          addFetch(part.topic, part.partition, requestOffset, fetchSize).
+          addFetch(part.topic, part.partition, requestOffset, kc.config.fetchMessageMaxBytes).
           build()
         val resp = consumer.fetch(req)
         if (resp.hasError) {
           val err = resp.errorCode(part.topic, part.partition)
           if (err == ErrorMapping.LeaderNotAvailableCode ||
             err == ErrorMapping.NotLeaderForPartitionCode) {
-            log.error(s"Lost leader for topic ${part.topic} partition ${part.partition}, sleeping for ${leaderBackoff}ms")
-            Thread.sleep(leaderBackoff)
+            log.error(s"Lost leader for topic ${part.topic} partition ${part.partition}, sleeping for ${kc.config.refreshLeaderBackoffMs}ms")
+            Thread.sleep(kc.config.refreshLeaderBackoffMs)
           }
           // Let normal rdd retry sort out reconnect attempts
           throw ErrorMapping.exceptionFor(err)
