@@ -52,7 +52,7 @@ class PartialBlockFetcherIterator(
   // Get the updated map output
   private def updateStatuses() {
     fetchTime += 1
-    logDebug("Still missing " + statuses.filter(_ == null).size +" map outputs for reduce "
+    logDebug("Still missing " + statuses.filter(_ == null).size + " map outputs for reduce "
       + reduceId + " of shuffle " + shuffleId + " next fetchTime=" + fetchTime)
     val update = SparkEnv.get.mapOutputTracker.getUpdatedStatus(shuffleId, reduceId)
     statuses = update
