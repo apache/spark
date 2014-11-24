@@ -418,13 +418,12 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   private def assertEquals(bm1: BlockManagerId, bm2: BlockManagerId) {
-    try {
+    if (bm1 == null || bm2 == null) {
       assert(bm1 === bm2)
-    } catch {
-      case e: Exception =>
-        assert(bm1.executorId === bm2.executorId)
-        assert(bm1.host === bm2.host)
-        assert(bm1.port === bm2.port)
+    } else {
+      assert(bm1.executorId === bm2.executorId)
+      assert(bm1.host === bm2.host)
+      assert(bm1.port === bm2.port)
     }
   }
 
