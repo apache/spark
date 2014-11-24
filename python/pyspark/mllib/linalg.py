@@ -26,12 +26,11 @@ SciPy is available in their environment.
 import sys
 import array
 import copy_reg
-import itertools
 
 import numpy as np
 
 from pyspark.sql import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
-    IntegerType, ByteType, Row
+    IntegerType, ByteType
 
 
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors', 'DenseMatrix', 'Matrices']
@@ -472,8 +471,7 @@ class SparseVector(Vector):
         Returns a copy of this SparseVector as a 1-dimensional NumPy array.
         """
         arr = np.zeros((self.size,), dtype=np.float64)
-        for i, v in itertools.izip(self.indices, self.values):
-            arr[i] = v
+        arr[self.indices] = self.values
         return arr
 
     def __len__(self):
