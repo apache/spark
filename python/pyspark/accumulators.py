@@ -266,7 +266,7 @@ class AccumulatorServer(SocketServer.TCPServer):
 
 def _start_update_server():
     """Start a TCP server to receive accumulator updates in a daemon thread, and returns it"""
-    server = AccumulatorServer(("localhost", 0), _UpdateRequestHandler)
+    server = AccumulatorServer(("127.0.0.1", 0), _UpdateRequestHandler)
     thread = threading.Thread(target=server.serve_forever)
     thread.daemon = True
     thread.start()
