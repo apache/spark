@@ -77,6 +77,7 @@ class VectorTests(PySparkTestCase):
         self._test_serialize(DenseVector(array([1., 2., 3., 4.])))
         self._test_serialize(DenseVector(pyarray.array('d', range(10))))
         self._test_serialize(SparseVector(4, {1: 1, 3: 2}))
+        self._test_serialize(SparseVector(3, {}))
         self._test_serialize(DenseMatrix(2, 3, range(6)))
 
     def test_dot(self):

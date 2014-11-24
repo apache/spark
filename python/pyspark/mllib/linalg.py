@@ -26,6 +26,7 @@ SciPy is available in their environment.
 import sys
 import array
 import copy_reg
+import itertools
 
 import numpy as np
 
@@ -281,7 +282,7 @@ class DenseVector(Vector):
         return "DenseVector([%s])" % (', '.join(_format_float(i) for i in self.array))
 
     def __eq__(self, other):
-        return isinstance(other, DenseVector) and all(self.array == other.array)
+        return isinstance(other, DenseVector) and np.array_equal(self.array, other.array)
 
     def __ne__(self, other):
         return not self == other
@@ -316,31 +317,26 @@ class SparseVector(Vector):
         assert 1 <= len(args) <= 2, "must pass either 2 or 3 arguments"
         if len(args) == 1:
             pairs = args[0]
-            if isinstance(pairs, basestring):
-                l = len(pairs) / (4 + 8)
-                assert len(pairs) == l * 12, "unexpected length: %d" % len(pairs)
-                if l:
-                    self.indices = np.frombuffer(pairs[:l * 4], np.uint32)
-                    self.values = np.frombuffer(pairs[l * 4:], np.float64)
-                else:
-                    self.indices = np.array([], dtype=np.uint32)
-                    self.values = np.array([], dtype=np.float64)
-            else:
-                if type(pairs) == dict:
-                    pairs = pairs.items()
-                pairs = sorted(pairs)
-                self.indices = np.array([p[0] for p in pairs], dtype=np.uint32)
-                self.values = np.array([p[1] for p in pairs], dtype=np.float64)
+            if type(pairs) == dict:
+                pairs = pairs.items()
+            pairs = sorted(pairs)
+            self.indices = np.array([p[0] for p in pairs], dtype=np.int32)
+            self.values = np.array([p[1] for p in pairs], dtype=np.float64)
         else:
-            assert len(args[0]) == len(args[1]), "index and value arrays not same length"
-            self.indices = np.array(args[0], dtype=np.uint32)
-            self.values = np.array(args[1], dtype=np.float64)
+            if isinstance(args[0], basestring):
+                assert isinstance(args[1], str), "values should be string too"
+                self.indices = np.frombuffer(args[0], np.int32)
+                self.values = np.frombuffer(args[1], np.float64)
+            else:
+                self.indices = np.array(args[0], dtype=np.int32)
+                self.values = np.array(args[1], dtype=np.float64)
+            assert len(self.indices) == len(self.values), "index and value arrays not same length"
             for i in xrange(len(self.indices) - 1):
                 if self.indices[i] >= self.indices[i + 1]:
                     raise TypeError("indices array must be sorted")
 
     def __reduce__(self):
-        return (SparseVector, (self.size, self.indices.tostring() + self.values.tostring()))
+        return (SparseVector, (self.size, self.indices.tostring(), self.values.tostring()))
 
     def dot(self, other):
         """
@@ -476,7 +472,7 @@ class SparseVector(Vector):
         Returns a copy of this SparseVector as a 1-dimensional NumPy array.
         """
         arr = np.zeros((self.size,), dtype=np.float64)
-        for i, v in zip(self.indices, self.values):
+        for i, v in itertools.izip(self.indices, self.values):
             arr[i] = v
         return arr
 
@@ -508,8 +504,8 @@ class SparseVector(Vector):
         """
         return (isinstance(other, self.__class__)
                 and other.size == self.size
-                and all(other.indices == self.indices)
-                and all(other.values == self.values))
+                and np.array_equal(other.indices, self.indices)
+                and np.array_equal(other.values, self.values))
 
     def __ne__(self, other):
         return not self.__eq__(other)
@@ -608,8 +604,7 @@ class DenseMatrix(Matrix):
         """
         Return an numpy.ndarray
 
-        >>> arr = np.array([float(i) for i in range(4)])
-        >>> m = DenseMatrix(2, 2, arr)
+        >>> m = DenseMatrix(2, 2, range(4))
         >>> m.toArray()
         array([[ 0.,  2.],
                [ 1.,  3.]])

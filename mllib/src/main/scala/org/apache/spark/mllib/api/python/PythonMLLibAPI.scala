@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.api.python
 
-import java.nio.{ByteBuffer, ByteOrder}
 import java.io.OutputStream
+import java.nio.{ByteBuffer, ByteOrder}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
@@ -746,7 +746,7 @@ private[spark] object SerDe extends Serializable {
       val bb = ByteBuffer.wrap(bytes)
       bb.order(ByteOrder.nativeOrder())
       val db = bb.asDoubleBuffer()
-      db.put(vector.toArray)
+      db.put(vector.values)
 
       out.write(Opcodes.BINSTRING)
       out.write(PickleUtils.integer_to_bytes(bytes.length))
@@ -763,7 +763,7 @@ private[spark] object SerDe extends Serializable {
       val bb = ByteBuffer.wrap(bytes, 0, bytes.length)
       bb.order(ByteOrder.nativeOrder())
       val db = bb.asDoubleBuffer()
-      val ans = new Array[Double](bytes.length/8)
+      val ans = new Array[Double](bytes.length / 8)
       db.get(ans)
       Vectors.dense(ans)
     }
@@ -807,33 +807,39 @@ private[spark] object SerDe extends Serializable {
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val v: SparseVector = obj.asInstanceOf[SparseVector]
       val n = v.indices.size
-      val bytes = new Array[Byte](12 * n)
+      val indiceBytes = new Array[Byte](4 * n)
       val order = ByteOrder.nativeOrder()
-      ByteBuffer.wrap(bytes).order(order).asIntBuffer().put(v.indices)
-      ByteBuffer.wrap(bytes, 4 * n, 8 * n).order(order).asDoubleBuffer().put(v.values)
+      ByteBuffer.wrap(indiceBytes).order(order).asIntBuffer().put(v.indices)
+      val valueBytes = new Array[Byte](8 * n)
+      ByteBuffer.wrap(valueBytes).order(order).asDoubleBuffer().put(v.values)
 
       out.write(Opcodes.BININT)
       out.write(PickleUtils.integer_to_bytes(v.size))
       out.write(Opcodes.BINSTRING)
-      out.write(PickleUtils.integer_to_bytes(bytes.length))
-      out.write(bytes)
-      out.write(Opcodes.TUPLE2)
+      out.write(PickleUtils.integer_to_bytes(indiceBytes.length))
+      out.write(indiceBytes)
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(valueBytes.length))
+      out.write(valueBytes)
+      out.write(Opcodes.TUPLE3)
     }
 
     def construct(args: Array[Object]): Object = {
-      if (args.length != 2) {
-        throw new PickleException("should be 2")
+      if (args.length != 3) {
+        throw new PickleException("should be 3")
       }
-      val bytes = args(1).asInstanceOf[String].getBytes("ISO-8859-1")
-      val n = bytes.length / 12
+      val size = args(0).asInstanceOf[Int]
+      val indiceBytes = args(1).asInstanceOf[String].getBytes("ISO-8859-1")
+      val valueBytes = args(2).asInstanceOf[String].getBytes("ISO-8859-1")
+      val n = indiceBytes.length / 4
       val indices = new Array[Int](n)
       val values = new Array[Double](n)
       if (n > 0) {
         val order = ByteOrder.nativeOrder()
-        ByteBuffer.wrap(bytes, 0, n * 4).order(order).asIntBuffer().get(indices)
-        ByteBuffer.wrap(bytes, n * 4, n * 8).order(order).asDoubleBuffer().get(values)
+        ByteBuffer.wrap(indiceBytes).order(order).asIntBuffer().get(indices)
+        ByteBuffer.wrap(valueBytes).order(order).asDoubleBuffer().get(values)
       }
-      new SparseVector(args(0).asInstanceOf[Int], indices, values)
+      new SparseVector(size, indices, values)
     }
   }
 
