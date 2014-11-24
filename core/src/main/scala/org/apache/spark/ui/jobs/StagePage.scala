@@ -31,7 +31,7 @@ import org.apache.spark.util.{Utils, Distribution}
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 
 /** Page showing statistics and task list for a given stage */
-private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
+private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -114,6 +114,10 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
           </span>
           <div class="additional-metrics collapsed">
             <ul style="list-style-type:none">
+              <li>
+                  <input type="checkbox" id="select-all-metrics"/>
+                  <span class="additional-metric-title"><em>(De)select All</em></span>
+              </li>
               <li>
                 <span data-toggle="tooltip"
                       title={ToolTips.SCHEDULER_DELAY} data-placement="right">

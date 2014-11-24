@@ -29,7 +29,7 @@
 """
 import os
 
-from pyspark.serializers import CompressedSerializer, PickleSerializer
+from pyspark.serializers import LargeObjectSerializer
 
 
 __all__ = ['Broadcast']
@@ -73,7 +73,7 @@ class Broadcast(object):
         """ Return the broadcasted value
         """
         if not hasattr(self, "_value") and self.path is not None:
-            ser = CompressedSerializer(PickleSerializer())
+            ser = LargeObjectSerializer()
             self._value = ser.load_stream(open(self.path)).next()
         return self._value
 

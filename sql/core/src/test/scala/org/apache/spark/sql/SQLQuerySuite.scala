@@ -976,22 +976,22 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("Concatenation") {
- /*   checkAnswer(
+    checkAnswer(
       sql("SELECT key || key FROM testData ORDER BY key"),
       (1 to 100).map(s => Seq(s.toString * 2)))
 
     checkAnswer(
       sql("SELECT key || key || key FROM testData ORDER BY key"),
-      (1 to 100).map(s => Seq(s.toString * 3)))*/
-/*
+      (1 to 100).map(s => Seq(s.toString * 3)))
+
     checkAnswer(
       sql("SELECT a + b FROM testData2 order by b"),
       (1 to 100).map(s => Seq(s.toString * 3)))
-*/
+
     checkAnswer(
       sql("SELECT value || key FROM testData ORDER BY key"),
       (1 to 100).map(s => Seq(s.toString * 2)))
-/*
+
     checkAnswer(
       sql("SELECT value || value FROM testData ORDER BY key"),
       (1 to 100).map(s => Seq(s.toString * 2)))
@@ -1014,6 +1014,25 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
     checkAnswer(
       sql("SELECT key || null FROM testData ORDER BY key"),
-      (1 to 100).map(_ => Seq(null)))*/
+      (1 to 100).map(_ => Seq(null)))
+  }
+
+  test("SPARK-4432 Fix attribute reference resolution error when using ORDER BY") {
+    checkAnswer(
+      sql("SELECT a + b FROM testData2 ORDER BY a"),
+      Seq(2, 3, 3 ,4 ,4 ,5).map(Seq(_))
+    )
+  }
+
+  test("Supporting relational operator '<=>' in Spark SQL") {
+    val nullCheckData1 = TestData(1,"1") :: TestData(2,null) :: Nil
+    val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
+    rdd1.registerTempTable("nulldata1")
+    val nullCheckData2 = TestData(1,"1") :: TestData(2,null) :: Nil
+    val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
+    rdd2.registerTempTable("nulldata2")
+    checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
+      "nulldata2 on nulldata1.value <=> nulldata2.value"),
+        (1 to 2).map(i => Seq(i)))
   }
 }

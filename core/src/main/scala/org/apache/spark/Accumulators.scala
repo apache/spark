@@ -244,6 +244,36 @@ trait AccumulatorParam[T] extends AccumulableParam[T, T] {
   }
 }
 
+object AccumulatorParam {
+
+  // The following implicit objects were in SparkContext before 1.2 and users had to
+  // `import SparkContext._` to enable them. Now we move them here to make the compiler find
+  // them automatically. However, as there are duplicate codes in SparkContext for backward
+  // compatibility, please update them accordingly if you modify the following implicit objects.
+
+  implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
+    def addInPlace(t1: Double, t2: Double): Double = t1 + t2
+    def zero(initialValue: Double) = 0.0
+  }
+
+  implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
+    def addInPlace(t1: Int, t2: Int): Int = t1 + t2
+    def zero(initialValue: Int) = 0
+  }
+
+  implicit object LongAccumulatorParam extends AccumulatorParam[Long] {
+    def addInPlace(t1: Long, t2: Long) = t1 + t2
+    def zero(initialValue: Long) = 0L
+  }
+
+  implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
+    def addInPlace(t1: Float, t2: Float) = t1 + t2
+    def zero(initialValue: Float) = 0f
+  }
+
+  // TODO: Add AccumulatorParams for other types, e.g. lists and strings
+}
+
 // TODO: The multi-thread support in accumulators is kind of lame; check
 // if there's a more intuitive way of doing it right
 private object Accumulators {

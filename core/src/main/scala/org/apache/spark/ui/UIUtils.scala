@@ -169,7 +169,8 @@ private[spark] object UIUtils extends Logging {
       title: String,
       content: => Seq[Node],
       activeTab: SparkUITab,
-      refreshInterval: Option[Int] = None): Seq[Node] = {
+      refreshInterval: Option[Int] = None,
+      helpText: Option[String] = None): Seq[Node] = {
 
     val appName = activeTab.appName
     val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
@@ -178,6 +179,9 @@ private[spark] object UIUtils extends Logging {
         <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
       </li>
     }
+    val helpButton: Seq[Node] = helpText.map { helpText =>
+      <a data-toggle="tooltip" data-placement="bottom" title={helpText}>(?)</a>
+    }.getOrElse(Seq.empty)
 
     <html>
       <head>
@@ -201,6 +205,7 @@ private[spark] object UIUtils extends Logging {
             <div class="span12">
               <h3 style="vertical-align: bottom; display: inline-block;">
                 {title}
+                {helpButton}
               </h3>
             </div>
           </div>
@@ -282,5 +287,25 @@ private[spark] object UIUtils extends Logging {
         {data.map(r => generateDataRow(r))}
       </tbody>
     </table>
+  }
+
+  def makeProgressBar(
+      started: Int,
+      completed: Int,
+      failed: Int,
+      skipped:Int,
+      total: Int): Seq[Node] = {
+    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
+    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
+
+    <div class="progress">
+      <span style="text-align:center; position:absolute; width:100%; left:0;">
+        {completed}/{total}
+        { if (failed > 0) s"($failed failed)" }
+        { if (skipped > 0) s"($skipped skipped)" }
+      </span>
+      <div class="bar bar-completed" style={completeWidth}></div>
+      <div class="bar bar-running" style={startWidth}></div>
+    </div>
   }
 }
