@@ -24,7 +24,7 @@ import scala.util.{Failure, Success, Try}
 import org.apache.spark._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockFetcherIterator, ShuffleBlockId}
+import org.apache.spark.storage.{BlockId, BlockManagerId, PartialBlockFetcherIterator, ShuffleBlockFetcherIterator, ShuffleBlockId}
 import org.apache.spark.util.CompletionIterator
 
 private[hash] object BlockStoreShuffleFetcher extends Logging {
@@ -39,18 +39,39 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
     val blockManager = SparkEnv.get.blockManager
 
     val startTime = System.currentTimeMillis
-    val statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, reduceId)
-    logDebug("Fetching map output location for shuffle %d, reduce %d took %d ms".format(
-      shuffleId, reduceId, System.currentTimeMillis - startTime))
+    var statuses: Array[(BlockManagerId, Long)] = null
+    val blockFetcherItr = if (blockManager.conf.getBoolean("spark.scheduler.removeStageBarrier", false)) {
+      statuses = SparkEnv.get.mapOutputTracker.getUpdatedStatus(shuffleId, reduceId)
+      logDebug("Fetching partial output for shuffle %d, reduce %d took %d ms".format(
+        shuffleId, reduceId, System.currentTimeMillis - startTime))
+      new PartialBlockFetcherIterator(
+        context,
+        SparkEnv.get.blockManager.shuffleClient,
+        blockManager,
+        statuses,
+        serializer,
+        shuffleId,
+        reduceId)
+    }else{
+      statuses = SparkEnv.get.mapOutputTracker.getServerStatuses(shuffleId, reduceId)
+      logDebug("Fetching map output location for shuffle %d, reduce %d took %d ms".format(
+        shuffleId, reduceId, System.currentTimeMillis - startTime))
+      val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
+      for (((address, size), index) <- statuses.zipWithIndex) {
+        splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, size))
+      }
 
-    val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
-    for (((address, size), index) <- statuses.zipWithIndex) {
-      splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, size))
-    }
-
-    val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = splitsByAddress.toSeq.map {
-      case (address, splits) =>
-        (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
+      val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = splitsByAddress.toSeq.map {
+        case (address, splits) =>
+          (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
+      }
+      new ShuffleBlockFetcherIterator(
+        context,
+        SparkEnv.get.blockManager.shuffleClient,
+        blockManager,
+        blocksByAddress,
+        serializer,
+        SparkEnv.get.conf.getLong("spark.reducer.maxMbInFlight", 48) * 1024 * 1024)
     }
 
     def unpackBlock(blockPair: (BlockId, Try[Iterator[Any]])) : Iterator[T] = {
@@ -73,13 +94,6 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
       }
     }
 
-    val blockFetcherItr = new ShuffleBlockFetcherIterator(
-      context,
-      SparkEnv.get.blockManager.shuffleClient,
-      blockManager,
-      blocksByAddress,
-      serializer,
-      SparkEnv.get.conf.getLong("spark.reducer.maxMbInFlight", 48) * 1024 * 1024)
     val itr = blockFetcherItr.flatMap(unpackBlock)
 
     val completionIter = CompletionIterator[T, Iterator[T]](itr, {

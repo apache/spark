@@ -112,6 +112,10 @@ class DAGScheduler(
   //       stray messages to detect.
   private val failedEpoch = new HashMap[String, Long]
 
+  val removeStageBarrier = sc.getConf.getBoolean("spark.scheduler.removeStageBarrier", false)
+  // Track the pre-started stages depending on a stage (the key)
+  private val dependantStagePreStarted = new HashMap[Stage, ArrayBuffer[Stage]]()
+
   private val dagSchedulerActorSupervisor =
     env.actorSystem.actorOf(Props(new DAGSchedulerActorSupervisor(this)))
 
@@ -901,6 +905,51 @@ class DAGScheduler(
     }
   }
 
+  // Select a waiting stage to pre-start
+  private def getPreStartableStage(stage: Stage): Option[Stage] = {
+    for (waitingStage <- waitingStages) {
+      val missingParents = getMissingParentStages(waitingStage)
+      if(missingParents.contains(stage)){
+        for (parent <- missingParents) {
+          if(!(waitingStages.contains(parent) || failedStages.contains(parent)
+            || parent.pendingTasks.size > 0 || parent.rdd.getStorageLevel != StorageLevel.NONE)){
+            return Some(waitingStage)
+          }
+        }
+      }
+    }
+    None
+  }
+
+  private def maybePreStartWaitingStage(stage: Stage) {
+    if (removeStageBarrier && taskScheduler.isInstanceOf[TaskSchedulerImpl]) {
+      val backend = taskScheduler.asInstanceOf[TaskSchedulerImpl].backend
+      var numPendingTask:Int = 0
+      runningStages.foreach { stage =>
+        numPendingTask += stage.pendingTasks.size
+      }
+      val numWaitingStage = waitingStages.size
+      if (backend.freeSlotAvail(numPendingTask) && numWaitingStage > 0 &&
+        stage.shuffleDep.isDefined) {
+        for (preStartStage <- getPreStartableStage(stage)) {
+          logInfo("Pre-start stage " + preStartStage.id)
+          // Register map output finished so far
+          mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
+            stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray, changeEpoch = false)
+          waitingStages -= preStartStage
+          runningStages += preStartStage
+          // Inform parent stages that the dependant stage has been pre-started
+          for (parentStage <- getMissingParentStages(preStartStage)
+               if runningStages.contains(parentStage)) {
+            dependantStagePreStarted.getOrElseUpdate(
+              parentStage, new ArrayBuffer[Stage]()) += preStartStage
+          }
+          submitMissingTasks(preStartStage, activeJobForStage(preStartStage).get)
+        }
+      }
+    }
+  }
+
   /**
    * Responds to a task finishing. This is called inside the event loop so it assumes that it can
    * modify the scheduler's internal state. Use taskEnded() to post a task end event from outside.
@@ -1002,6 +1051,13 @@ class DAGScheduler(
             } else {
               stage.addOutputLoc(smt.partitionId, status)
             }
+            // Need to register map outputs progressively if remove stage barrier is enabled
+            if (removeStageBarrier && dependantStagePreStarted.contains(stage) &&
+              stage.shuffleDep.isDefined) {
+              mapOutputTracker.registerMapOutputs(stage.shuffleDep.get.shuffleId,
+                stage.outputLocs.map(list => if (list.isEmpty) null else list.head).toArray,
+                changeEpoch = false)
+            }
             if (runningStages.contains(stage) && stage.pendingTasks.isEmpty) {
               markStageAsFinished(stage)
               logInfo("looking for newly runnable stages")
@@ -1046,6 +1102,9 @@ class DAGScheduler(
                   submitMissingTasks(stage, jobId)
                 }
               }
+              dependantStagePreStarted -= stage
+            } else if(removeStageBarrier){
+              maybePreStartWaitingStage(stage)
             }
           }
 

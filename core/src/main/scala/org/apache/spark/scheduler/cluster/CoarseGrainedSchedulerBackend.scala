@@ -348,6 +348,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
    */
   protected def doKillExecutors(executorIds: Seq[String]): Boolean = false
 
+  override def freeSlotAvail(numPendingTask: Int): Boolean = {
+    numPendingTask * scheduler.CPUS_PER_TASK < totalCoreCount.get()
+  }
+
 }
 
 private[spark] object CoarseGrainedSchedulerBackend {
