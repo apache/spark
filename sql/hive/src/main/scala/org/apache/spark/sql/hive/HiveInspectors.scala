@@ -196,21 +196,47 @@ private[hive] trait HiveInspectors {
     null
   } else {
     oi match {
+      case x: SettableStructObjectInspector =>
+        val fieldRefs = x.getAllStructFieldRefs
+        val row = a.asInstanceOf[Seq[_]]
+        val result = x.create()
+        var i = 0
+        while (i < fieldRefs.length) {
+          x.setStructFieldData(
+            result,
+            fieldRefs.get(i),
+            wrap(row(i), fieldRefs.get(i).getFieldObjectInspector))
+          i += 1
+        }
+
+        result
       case x: ConstantObjectInspector => x.getWritableConstantValue
       case x: PrimitiveObjectInspector => a match {
-        // TODO what if x.preferWritable() == true? reuse the writable?
+        case s: String if x.preferWritable() => HiveShim.getStringWritable(s)
         case s: String => s: java.lang.String
+        case i: Int if x.preferWritable() => HiveShim.getIntWritable(i)
         case i: Int => i: java.lang.Integer
+        case b: Boolean if x.preferWritable() => HiveShim.getBooleanWritable(b)
         case b: Boolean => b: java.lang.Boolean
+        case f: Float if x.preferWritable() => HiveShim.getFloatWritable(f)
         case f: Float => f: java.lang.Float
+        case d: Double if x.preferWritable() => HiveShim.getDoubleWritable(d)
         case d: Double => d: java.lang.Double
+        case l: Long if x.preferWritable() => HiveShim.getLongWritable(l)
         case l: Long => l: java.lang.Long
+        case l: Short if x.preferWritable() => HiveShim.getShortWritable(l)
         case l: Short => l: java.lang.Short
+        case l: Byte if x.preferWritable() => HiveShim.getByteWritable(l)
         case l: Byte => l: java.lang.Byte
+        case b: BigDecimal if x.preferWritable() => HiveShim.getDecimalWritable(b.underlying())
         case b: BigDecimal => HiveShim.createDecimal(b.underlying())
+        case d: Decimal if x.preferWritable() => HiveShim.getDecimalWritable(d.toBigDecimal.underlying())
         case d: Decimal => HiveShim.createDecimal(d.toBigDecimal.underlying())
+        case b: Array[Byte] if x.preferWritable() => HiveShim.getBinaryWritable(b)
         case b: Array[Byte] => b
+        case d: java.sql.Date if x.preferWritable() => HiveShim.getDateWritable(d)
         case d: java.sql.Date => d
+        case t: java.sql.Timestamp if x.preferWritable() => HiveShim.getTimestampWritable(t)
         case t: java.sql.Timestamp => t
       }
       case x: StructObjectInspector =>
