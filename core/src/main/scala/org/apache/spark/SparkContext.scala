@@ -83,6 +83,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // contains a map from hostname to a list of input format splits on the host.
   private[spark] var preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()
 
+  val startTime = System.currentTimeMillis()
+
   /**
    * Create a SparkContext that loads settings from system properties (for instance, when
    * launching with ./bin/spark-submit).
@@ -268,8 +270,6 @@ class SparkContext(config: SparkConf) extends Logging {
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = SparkHadoopUtil.get.newConfiguration(conf)
-
-  val startTime = System.currentTimeMillis()
 
   // Add each JAR given through the constructor
   if (jars != null) {
