@@ -66,8 +66,6 @@ def launch_gateway():
         if gateway_port_candidate>0:
             command += ["--gateway_port", "%d" % gateway_port_candidate]
 
-        print command
-
         if not on_windows:
             # Don't send ctrl-c / SIGINT to the Java gateway:
             def preexec_func():
