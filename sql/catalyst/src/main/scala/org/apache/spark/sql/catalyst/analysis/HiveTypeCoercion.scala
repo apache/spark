@@ -460,15 +460,6 @@ trait HiveTypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case g @ GetItem(c, o @ IntegralType()) if o.dataType != IntegerType =>
-        GetItem(c, Cast(o, IntegerType)) 
-
-      case s @ Substring(r, p @ IntegralType(), l @ IntegralType()) =>
-        Substring(r,
-          { if (p.dataType != IntegerType) Cast(p, IntegerType) else p },
-          { if (l.dataType != IntegerType) Cast(l, IntegerType) else l }
-        ) 
-
       case a @ CreateArray(children) if !a.resolved =>
         val commonType = a.childTypes.reduce(
           (a,b) =>
