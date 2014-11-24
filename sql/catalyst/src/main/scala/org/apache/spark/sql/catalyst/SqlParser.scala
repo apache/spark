@@ -262,7 +262,6 @@ class SqlParser extends AbstractSparkSQLParser {
       | "-" ^^^ { (e1: Expression, e2: Expression) => Subtract(e1, e2) }
       )
 
-
   protected lazy val productExpression: Parser[Expression] =
     baseExpression *
       ( "*" ^^^ { (e1: Expression, e2: Expression) => Multiply(e1, e2) }
@@ -363,7 +362,6 @@ class SqlParser extends AbstractSparkSQLParser {
 
   protected lazy val baseExpression: Parser[Expression] =
     ( "*" ^^^ Star(None)
-//    | primary
     | primary * ("||" ^^^ {(e1: Expression, e2: Expression) => Concat(e1, e2) })
     )
 
