@@ -51,20 +51,20 @@ import org.apache.spark.util.{TimeStampedHashMap, Utils}
  * The trailing end of the window is the "ignore threshold" and all files whose mod times
  * are less than this threshold are assumed to have already been selected and are therefore
  * ignored. Files whose mode times are within the "remember window" are checked against files
- * that have already been selected. This is how new files are identified in each batch -
- * files whose mod times are greater than the ignore threshold and have not been considered
- * within the remember window.
+ * that have already been selected. At a high level, this is how new files are identified in
+ * each batch - files whose mod times are greater than the ignore threshold and
+ * have not been considered within the remember window. See the documentation on the method
+ * `isNewFile` for more details.
  *
  * This makes some assumptions from the underlying file system that the system is monitoring.
- * - If a file is to be visible in the file listings, it must be visible within a certain
- * duration of the mod time of the file. This duration is the "remember window", which is set to
- * 1 minute (see `FileInputDStream.MIN_REMEMBER_DURATION`). Otherwise, the file will not be
- * selected as the mod time will be less than the ignore threshold when it become visible.
+ * - The clock of the file system is assumed to synchronized with the clock of the machine running
+ *   the streaming app.
+ * - If a file is to be visible in the directory listings, it must be visible within a certain
+ *   duration of the mod time of the file. This duration is the "remember window", which is set to
+ *   1 minute (see `FileInputDStream.REMEMBER_DURATION`). Otherwise, the file will not be
+ *   selected as the mod time will be less than the ignore threshold when it become visible.
  * - Once a file is visible, the mod time cannot change. If it does due to appends, then the
- * processing semantics are undefined.
- * - The time of the file system does not need to be synchronized with the time of the system
- * running Spark Streaming. The mod time is used to ignore old files based on the threshold,
- * and we use the mod times of selected files to define that threshold.
+ *   processing semantics are undefined.
  */
 private[streaming]
 class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : ClassTag](
@@ -99,9 +99,6 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
 
   // Read-through cache of file mod times, used to speed up mod time lookups
   @transient private var fileToModTime = new TimeStampedHashMap[String, Long](true)
-
-  // Ignore threshold based on file mod time; files older that this mod time will be ignored
-  @transient private var modTimeIgnoreThreshold = -1L
 
   // Timestamp of the last round of finding files
   @transient private var lastNewFileFindingTime = 0L
@@ -146,21 +143,25 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   }
 
   /**
-   * Find files which have modification timestamp <= current time and return a 3-tuple of
-   * (new files found, latest modification time among them, files with latest modification time)
+   * Find new files for the batch of `currentTime`. This is done by first calculating the
+   * ignore threshold for file mod times, and then getting a list of files filtered based on
+   * the current batch time and the ignore threshold. The ignore threshold is the max of
+   * initial ignore threshold and the trailing end of the remember window (that is, which ever
+   * is later in time).
    */
   private def findNewFiles(currentTime: Long): Array[String] = {
     try {
       lastNewFileFindingTime = System.currentTimeMillis
 
-      modTimeIgnoreThreshold = math.max(
-        initialModTimeIgnoreThreshold,
-        currentTime - durationToRemember.milliseconds
+      // Calculate ignore threshold
+      val modTimeIgnoreThreshold = math.max(
+        initialModTimeIgnoreThreshold,   // initial threshold based on newFilesOnly setting
+        currentTime - durationToRemember.milliseconds  // trailing end of the remember window
       )
       logDebug(s"Getting new files for time $currentTime, " +
         s"ignoring files older than $modTimeIgnoreThreshold")
       val filter = new PathFilter {
-        def accept(path: Path): Boolean = isNewFile(currentTime, path)
+        def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
       }
       val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
       val timeTaken = System.currentTimeMillis - lastNewFileFindingTime
@@ -182,7 +183,25 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     }
   }
 
-  private def isNewFile(currentTime: Long, path: Path): Boolean = {
+  /**
+   * Identify whether the given `path` is a new file for the batch of `currentTime`. For it to be
+   * accepted, it has to pass the following criteria.
+   * - It must pass the user-provided file filter.
+   * - It must be newer than the ignore threshold. It is assumed that files older than the ignore
+   *   threshold have already been considered or are existing files before start
+   *   (when newFileOnly = true).
+   * - It must not be present in the recently selected files that this class remembers.
+   * - It must not be newer than the time of the batch (i.e. `currentTime` for which this
+   *   file is being tested. This can occur if the driver was recovered, and the missing batches
+   *   (during downtime) are being generated. In that case, a batch of time T may be generated
+   *   at time T+x. Say x = 5. If that batch T contains file of mod time T+5, then bad things can
+   *   happen. Let's say the selected files are remembered for 60 seconds.  At time t+61,
+   *   the batch of time t is forgotten, and the ignore threshold is still T+1.
+   *   The files with mod time T+5 are not remembered and cannot be ignored (since, t+5 > t+1).
+   *   Hence they can get selected as new files again. To prevent this, files whose mod time is more
+   *   than current batch time are not considered.
+   */
+  private def isNewFile(path: Path, currentTime: Long, modTimeIgnoreThreshold: Long): Boolean = {
     val pathStr = path.toString
     // Reject file if it does not satisfy filter
     if (!filter(path)) {
@@ -196,12 +215,9 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
       logDebug(s"$pathStr ignored as mod time $modTime <= ignore time $modTimeIgnoreThreshold")
       return false
     }
-    // Reject file if the file has mod time that file stream is not ready to select. This
-    // can occur if the driver was recovered and the missing batches (during downtime) are
-    // being generated. In that, batch of t (running actually at t+x can see files with mod
-    // time t+x.
+    // Reject file if mod time > current batch time
     if (modTime > currentTime) {
-      logDebug(s"$pathStr not selected as mod time $modTime <= current time $currentTime")
+      logDebug(s"$pathStr not selected as mod time $modTime > current time $currentTime")
       return false
     }
     // Reject file if it was considered earlier
@@ -213,7 +229,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     return true
   }
 
-    /** Generate one RDD from an array of files */
+  /** Generate one RDD from an array of files */
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
     val fileRDDs = files.map(file =>{
       val rdd = context.sparkContext.newAPIHadoopFile[K, V, F](file)
@@ -227,6 +243,11 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     new UnionRDD(context.sparkContext, fileRDDs)
   }
 
+  /** Get file mod time from cache or fetch it from the file system */
+  private def getFileModTime(path: Path) = {
+    fileToModTime.getOrElseUpdate(path.toString, fs.getFileStatus(path).getModificationTime())
+  }
+
   private def directoryPath: Path = {
     if (path_ == null) path_ = new Path(directory)
     path_
@@ -235,11 +256,6 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   private def fs: FileSystem = {
     if (fs_ == null) fs_ = directoryPath.getFileSystem(ssc.sparkContext.hadoopConfiguration)
     fs_
-  }
-
-  private def getFileModTime(path: Path) = {
-    // Get file mod time from cache or fetch it from the file system
-    fileToModTime.getOrElseUpdate(path.toString, fs.getFileStatus(path).getModificationTime())
   }
 
   private def reset()  {
@@ -311,5 +327,4 @@ object FileInputDStream {
   def calculateNumBatchesToRemember(batchDuration: Duration): Int = {
     math.ceil(REMEMBER_DURATION.milliseconds.toDouble / batchDuration.milliseconds).toInt
   }
-
 }
