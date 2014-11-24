@@ -20,6 +20,7 @@ package org.apache.spark.deploy
 import java.io.{File, PrintStream}
 import java.lang.reflect.{Modifier, InvocationTargetException}
 import java.net.URL
+import java.util.Properties
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
@@ -149,7 +150,16 @@ object SparkSubmit {
     if (args.isPython) {
       if (args.primaryResource == PYSPARK_SHELL) {
         args.mainClass = "py4j.GatewayServer"
-        args.childArgs = ArrayBuffer("--die-on-broken-pipe", "0")
+
+        var gateway_port = 0;
+        // extract gateway_port from childArgs
+        for (i <- 1 until args.childArgs.length){
+          if (args.childArgs(i-1) == "--gateway_port"){
+            gateway_port = args.childArgs(i).toInt
+          }
+        }
+        
+        args.childArgs = ArrayBuffer("--die-on-broken-pipe", gateway_port.toString)
       } else {
         // If a python file is provided, add it to the child arguments and list of files to deploy.
         // Usage: PythonAppRunner <main python file> <extra python files> [app arguments]
