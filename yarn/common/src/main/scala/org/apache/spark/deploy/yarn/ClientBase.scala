@@ -225,29 +225,39 @@ private[spark] trait ClientBase extends Logging {
       }
     }
 
+    if (cachedSecondaryJarLinks.nonEmpty) {
+      sparkConf.set(CONF_SPARK_YARN_SECONDARY_JARS, cachedSecondaryJarLinks.mkString(","))
+    }
+
     /**
      * Do the same for datanucleus jars, if they exist in spark home. Find all datanucleus-* jars,
      * copy them to the remote fs, and add them to the class path.
      */
     for (libsDir <- sparkDatanucleusJars(sparkConf)) {
-      val libsURI = getQualifiedLocalPath(new URI(libsDir)).toUri()
-      val jars = FileSystem.get(libsURI, hadoopConf).listFiles(new Path(libsURI.getPath), false)
-      while (jars.hasNext) {
-        val jar = jars.next()
-        val name = jar.getPath.getName
-        if (name.startsWith("datanucleus-")) {
-          // copy to remote and add to classpath
-          val src = jar.getPath
-          val destPath = copyFileToRemote(dst, src, replication)
-          distCacheMgr.addResource(fs, hadoopConf, destPath,
-            localResources, LocalResourceType.FILE, name, statCache)
-          cachedSecondaryJarLinks += name
+      val libsURI = new URI(libsDir)
+      val jarLinks = ListBuffer.empty[String]
+      if (libsURI.getScheme != LOCAL_SCHEME) {
+        val localURI = getQualifiedLocalPath(libsURI).toUri()
+        val jars = FileSystem.get(localURI, hadoopConf).listFiles(new Path(localURI.getPath), false)
+        while (jars.hasNext) {
+          val jar = jars.next()
+          val name = jar.getPath.getName
+          if (name.startsWith("datanucleus-")) {
+            // copy to remote and add to classpath
+            val src = jar.getPath
+            val destPath = copyFileToRemote(dst, src, replication)
+            distCacheMgr.addResource(fs, hadoopConf, destPath,
+              localResources, LocalResourceType.FILE, name, statCache)
+            jarLinks += name
+          }
         }
+      } else {
+        jarLinks += libsURI.toString + Path.SEPARATOR + "*"
       }
-    }
 
-    if (cachedSecondaryJarLinks.nonEmpty) {
-      sparkConf.set(CONF_SPARK_YARN_SECONDARY_JARS, cachedSecondaryJarLinks.mkString(","))
+      if (jarLinks.nonEmpty) {
+        sparkConf.set(CONF_SPARK_DATANUCLEUS_JARS, jarLinks.mkString(","))
+      }
     }
 
     localResources
@@ -577,6 +587,10 @@ private[spark] object ClientBase extends Logging {
   // Location of the datanucleus jars
   val CONF_SPARK_DATANUCLEUS_DIR = "spark.yarn.datanucleus.dir"
 
+  // Internal config to propagate the locations of datanucleus jars found to add to the
+  // classpath of the executors
+  val CONF_SPARK_DATANUCLEUS_JARS = "spark.yarn.datanucleus.jars"
+
   // Internal config to propagate the locations of any extra jars to add to the classpath
   // of the executors
   val CONF_SPARK_YARN_SECONDARY_JARS = "spark.yarn.secondary.jars"
@@ -721,6 +735,13 @@ private[spark] object ClientBase extends Logging {
       addFileToClasspath(sparkJar(sparkConf), SPARK_JAR, env)
       populateHadoopClasspath(conf, env)
       addUserClasspath(args, sparkConf, env)
+    }
+
+    // Add datanucleus jars to classpath
+    for (entries <- sparkConf.getOption(CONF_SPARK_DATANUCLEUS_JARS)) {
+      entries.split(",").filter(_.nonEmpty).foreach { entry =>
+        addFileToClasspath(entry, null, env)
+      }
     }
 
     // Append all jar files under the working directory to the classpath.
