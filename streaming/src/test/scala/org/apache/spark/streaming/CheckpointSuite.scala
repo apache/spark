@@ -265,7 +265,7 @@ class CheckpointSuite extends TestSuiteBase {
 
     // Verify whether files created have been recorded correctly or not
     var fileInputDStream = ssc.graph.getInputStreams().head.asInstanceOf[FileInputDStream[_, _, _]]
-    def recordedFiles = fileInputDStream.files.values.flatMap(x => x)
+    def recordedFiles = fileInputDStream.batchTimeToSelectedFiles.values.flatten
     assert(!recordedFiles.filter(_.endsWith("1")).isEmpty)
     assert(!recordedFiles.filter(_.endsWith("2")).isEmpty)
     assert(!recordedFiles.filter(_.endsWith("3")).isEmpty)
