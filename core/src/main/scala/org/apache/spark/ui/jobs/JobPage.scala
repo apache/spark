@@ -80,8 +80,7 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
           killEnabled = false)
       val completedStagesTable =
         new StageTableBase(completedStages.sortBy(_.submissionTime).reverse, parent.basePath,
-          parent.listener, isFairScheduler = parent.isFairScheduler,
-          killEnabled = parent.killEnabled)
+          parent.listener, isFairScheduler = parent.isFairScheduler, killEnabled = false)
       val failedStagesTable =
         new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse, parent.basePath,
           parent.listener, isFairScheduler = parent.isFairScheduler)
