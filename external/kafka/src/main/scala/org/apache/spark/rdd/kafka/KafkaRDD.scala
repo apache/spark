@@ -105,7 +105,7 @@ class KafkaRDD[
         }
         iter = resp.messageSet(part.topic, part.partition)
           .iterator
-          .filter(_.offset < requestOffset)
+          .dropWhile(_.offset < requestOffset)
       }
       val item = iter.next
       if (item.offset >= part.untilOffset) {
