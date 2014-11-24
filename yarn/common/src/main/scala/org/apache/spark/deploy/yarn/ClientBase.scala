@@ -361,8 +361,7 @@ private[spark] trait ClientBase extends Logging {
     }
 
     // include yarn am specific java options
-    sparkConf.getOption("spark.yarn.extraJavaOptions")
-      .orElse(sys.env.get("SPARK_YARN_JAVA_OPTS"))
+    sparkConf.getOption("spark.yarn.am.extraJavaOptions")
       .foreach(opts => javaOpts += opts)
 
     // For log4j configuration to reference
