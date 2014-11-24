@@ -207,9 +207,11 @@ private[spark] class ExternalSorter[K, V, C](
       }
     } else if (bypassMergeSort) {
       // SPARK-4479: Also bypass buffering if merge sort is bypassed to avoid defensive copies
-      spillToPartitionFiles(records.map { kv =>
-        ((getPartition(kv._1), kv._1), kv._2.asInstanceOf[C])
-      })
+      if (records.hasNext) {
+        spillToPartitionFiles(records.map { kv =>
+          ((getPartition(kv._1), kv._1), kv._2.asInstanceOf[C])
+        })
+      }
     } else {
       // Stick values into our buffer
       while (records.hasNext) {
@@ -758,8 +760,10 @@ private[spark] class ExternalSorter[K, V, C](
     context.taskMetrics.memoryBytesSpilled += memoryBytesSpilled
     context.taskMetrics.diskBytesSpilled += diskBytesSpilled
     context.taskMetrics.shuffleWriteMetrics.filter(_ => bypassMergeSort).foreach { m =>
-      m.shuffleBytesWritten += curWriteMetrics.shuffleBytesWritten
-      m.shuffleWriteTime += curWriteMetrics.shuffleWriteTime
+      if (curWriteMetrics != null) {
+        m.shuffleBytesWritten += curWriteMetrics.shuffleBytesWritten
+        m.shuffleWriteTime += curWriteMetrics.shuffleWriteTime
+      }
     }
 
     lengths
