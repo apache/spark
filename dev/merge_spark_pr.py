@@ -215,36 +215,12 @@ def fix_version_from_branch(branch, versions):
 
 
 def resolve_jira(title, merge_branches, comment):
+
+    def get_version_json(version_str):
+        return filter(lambda v: v.name == version_str, versions)[0].raw
+
     asf_jira = jira.client.JIRA({'server': JIRA_API_BASE},
                                 basic_auth=(JIRA_USERNAME, JIRA_PASSWORD))
-
-    default_jira_id = ""
-    search = re.findall("SPARK-[0-9]{4,5}", title)
-    if len(search) > 0:
-        default_jira_id = search[0]
-
-    jira_id = raw_input("Enter a JIRA id [%s]: " % default_jira_id)
-    if jira_id == "":
-        jira_id = default_jira_id
-
-    try:
-        issue = asf_jira.issue(jira_id)
-    except Exception as e:
-        fail("ASF JIRA could not find %s\n%s" % (jira_id, e))
-
-    cur_status = issue.fields.status.name
-    cur_summary = issue.fields.summary
-    cur_assignee = issue.fields.assignee
-    if cur_assignee is None:
-        cur_assignee = "NOT ASSIGNED!!!"
-    else:
-        cur_assignee = cur_assignee.displayName
-
-    if cur_status == "Resolved" or cur_status == "Closed":
-        fail("JIRA issue %s already has status '%s'" % (jira_id, cur_status))
-    print ("=== JIRA %s ===" % jira_id)
-    print ("summary\t\t%s\nassignee\t%s\nstatus\t\t%s\nurl\t\t%s/%s\n" % (
-        cur_summary, cur_assignee, cur_status, JIRA_BASE, jira_id))
 
     versions = asf_jira.project_versions("SPARK")
     versions = sorted(versions, key=lambda x: x.name, reverse=True)
@@ -263,21 +239,44 @@ def resolve_jira(title, merge_branches, comment):
                 default_fix_versions = filter(lambda x: x != v, default_fix_versions)
     default_fix_versions = ",".join(default_fix_versions)
 
-    fix_versions = raw_input("Enter comma-separated fix version(s) [%s]: " % default_fix_versions)
-    if fix_versions == "":
-        fix_versions = default_fix_versions
-    fix_versions = fix_versions.replace(" ", "").split(",")
+    search_jira_ids = re.findall("SPARK-[0-9]{4,5}", title)
 
-    def get_version_json(version_str):
-        return filter(lambda v: v.name == version_str, versions)[0].raw
+    for search_jira_id in search_jira_ids:
+        jira_id = raw_input("Enter a JIRA id [%s]: " % search_jira_id)
+        if jira_id == "":
+            jira_id = search_jira_id
 
-    jira_fix_versions = map(lambda v: get_version_json(v), fix_versions)
+        try:
+            issue = asf_jira.issue(jira_id)
+        except Exception as e:
+            fail("ASF JIRA could not find %s\n%s" % (jira_id, e))
 
-    resolve = filter(lambda a: a['name'] == "Resolve Issue", asf_jira.transitions(jira_id))[0]
-    asf_jira.transition_issue(
-        jira_id, resolve["id"], fixVersions=jira_fix_versions, comment=comment)
+        cur_status = issue.fields.status.name
+        cur_summary = issue.fields.summary
+        cur_assignee = issue.fields.assignee
+        if cur_assignee is None:
+            cur_assignee = "NOT ASSIGNED!!!"
+        else:
+            cur_assignee = cur_assignee.displayName
 
-    print "Succesfully resolved %s with fixVersions=%s!" % (jira_id, fix_versions)
+        if cur_status == "Resolved" or cur_status == "Closed":
+            fail("JIRA issue %s already has status '%s'" % (jira_id, cur_status))
+        print ("=== JIRA %s ===" % jira_id)
+        print ("summary\t\t%s\nassignee\t%s\nstatus\t\t%s\nurl\t\t%s/%s\n" % (
+            cur_summary, cur_assignee, cur_status, JIRA_BASE, jira_id))
+
+        fix_versions = raw_input("Enter comma-separated fix version(s) [%s]: " % default_fix_versions)
+        if fix_versions == "":
+            fix_versions = default_fix_versions
+        fix_versions = fix_versions.replace(" ", "").split(",")
+
+        jira_fix_versions = map(lambda v: get_version_json(v), fix_versions)
+
+        resolve = filter(lambda a: a['name'] == "Resolve Issue", asf_jira.transitions(jira_id))[0]
+        asf_jira.transition_issue(
+            jira_id, resolve["id"], fixVersions=jira_fix_versions, comment=comment)
+
+        print "Succesfully resolved %s with fixVersions=%s!" % (jira_id, fix_versions)
 
 
 branches = get_json("%s/branches" % GITHUB_API_BASE)
