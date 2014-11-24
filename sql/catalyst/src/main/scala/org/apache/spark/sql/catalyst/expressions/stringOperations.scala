@@ -275,7 +275,7 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
 
 /**
  * A function that concatenates two strings.
-  */
+ */
 case class Concat(left: Expression, right: Expression) extends BinaryExpression {
 
   type EvaluatedType = Any
