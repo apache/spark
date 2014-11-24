@@ -54,3 +54,4 @@ export(
        "setCheckpointDir"
       )
 export("sparkR.init")
+useDynLib(SparkR, stringHashCode)
