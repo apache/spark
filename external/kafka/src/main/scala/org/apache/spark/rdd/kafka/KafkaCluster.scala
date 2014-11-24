@@ -20,8 +20,8 @@ package org.apache.spark.rdd.kafka
 import scala.util.control.NonFatal
 import scala.collection.mutable.ArrayBuffer
 import java.util.Properties
-import kafka.api.{OffsetRequest, OffsetResponse, OffsetFetchRequest, OffsetFetchResponse, PartitionOffsetRequestInfo, TopicMetadataRequest, TopicMetadataResponse}
-import kafka.common.{ErrorMapping, TopicAndPartition}
+import kafka.api.{OffsetCommitRequest, OffsetRequest, OffsetFetchRequest, PartitionOffsetRequestInfo, TopicMetadata, TopicMetadataRequest, TopicMetadataResponse}
+import kafka.common.{ErrorMapping, OffsetMetadataAndError, TopicAndPartition}
 import kafka.consumer.{ConsumerConfig, SimpleConsumer}
 
 /**
@@ -69,6 +69,27 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
     Left(errs)
   }
 
+  def getPartitions(topics: Set[String]): Either[Err, Set[TopicAndPartition]] =
+    getPartitionMetadata(topics).right.map { r =>
+      r.flatMap { tm: TopicMetadata =>
+        tm.partitionsMetadata.map { pm =>
+          TopicAndPartition(tm.topic, pm.partitionId)
+        }    
+      }
+    }
+
+  def getPartitionMetadata(topics: Set[String]): Either[Err, Set[TopicMetadata]] = {
+    val req = TopicMetadataRequest(TopicMetadataRequest.CurrentVersion, 0, config.clientId, topics.toSeq)
+    val errs = new Err
+    withBrokers(errs) { consumer =>
+      val resp: TopicMetadataResponse = consumer.send(req)
+      // error codes here indicate missing / just created topic,
+      // repeating on a different broker wont be useful
+      return Right(resp.topicsMetadata.toSet)
+    }
+    Left(errs)
+  }
+
   def getLatestLeaderOffsets(topicAndPartitions: Set[TopicAndPartition]): Either[Err, Map[TopicAndPartition, Long]] =
     getLeaderOffsets(topicAndPartitions, OffsetRequest.LatestTime)
 
@@ -94,7 +115,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
     )
     val errs = new Err
     withBrokers(errs) { consumer =>
-      val resp: OffsetResponse = consumer.getOffsetsBefore(req)
+      val resp = consumer.getOffsetsBefore(req)
       val respMap = resp.partitionErrorAndOffsets
       val needed = topicAndPartitions.diff(result.keys.toSet)
       needed.foreach { tp =>
@@ -116,17 +137,28 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
   }
 
   def getConsumerOffsets(groupId: String, topicAndPartitions: Set[TopicAndPartition]): Either[Err, Map[TopicAndPartition, Long]] = {
-    var result = Map[TopicAndPartition, Long]()
+    getConsumerOffsetMetadata(groupId, topicAndPartitions).right.map { r =>
+      r.map { kv =>
+        kv._1 -> kv._2.offset
+      }
+    }
+  }
+
+  def getConsumerOffsetMetadata(
+    groupId: String,
+    topicAndPartitions: Set[TopicAndPartition]
+  ): Either[Err, Map[TopicAndPartition, OffsetMetadataAndError]] = {
+    var result = Map[TopicAndPartition, OffsetMetadataAndError]()
     val req = OffsetFetchRequest(groupId, topicAndPartitions.toSeq)
     val errs = new Err
     withBrokers(errs) { consumer =>
-      val resp: OffsetFetchResponse = consumer.fetchOffsets(req)
+      val resp = consumer.fetchOffsets(req)
       val respMap = resp.requestInfo
       val needed = topicAndPartitions.diff(result.keys.toSet)
       needed.foreach { tp =>
         respMap.get(tp).foreach { offsetMeta =>
           if (offsetMeta.error == ErrorMapping.NoError) {
-            result += tp -> offsetMeta.offset
+            result += tp -> offsetMeta
           } else {
             errs.append(ErrorMapping.exceptionFor(offsetMeta.error))
           }
@@ -141,7 +173,41 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
     Left(errs)
   }
 
-  def setConsumerOffsets(groupId: String, offsets: Map[TopicAndPartition, Long]): Unit = ???
+  def setConsumerOffsets(groupId: String, offsets: Map[TopicAndPartition, Long]): Unit = {
+    setConsumerOffsetMetadata(groupId, offsets.map { kv =>
+      kv._1 -> OffsetMetadataAndError(kv._2)
+    })
+  }
+
+  def setConsumerOffsetMetadata(
+    groupId: String,
+    metadata: Map[TopicAndPartition, OffsetMetadataAndError]
+  ): Either[Err, Map[TopicAndPartition, Short]] = {
+    var result = Map[TopicAndPartition, Short]()
+    val req = OffsetCommitRequest(groupId, metadata)
+    val errs = new Err
+    val topicAndPartitions = metadata.keys.toSet
+    withBrokers(errs) { consumer =>
+      val resp = consumer.commitOffsets(req)
+      val respMap = resp.requestInfo
+      val needed = topicAndPartitions.diff(result.keys.toSet)
+      needed.foreach { tp =>
+        respMap.get(tp).foreach { err =>
+          if (err == ErrorMapping.NoError) {
+            result += tp -> err
+          } else {
+            errs.append(ErrorMapping.exceptionFor(err))
+          }
+        }
+      }
+      if (result.keys.size == topicAndPartitions.size) {
+        return Right(result)
+      }
+    }
+    val missing = topicAndPartitions.diff(result.keys.toSet)
+    errs.append(new Exception(s"Couldn't set offsets for ${missing}"))
+    Left(errs)
+  }
 
   private def withBrokers(errs: Err)(fn: SimpleConsumer => Any): Unit = {
     brokers.foreach { hp =>

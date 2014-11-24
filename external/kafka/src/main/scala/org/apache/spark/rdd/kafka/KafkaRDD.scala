@@ -35,8 +35,8 @@ private[spark] case class KafkaRDDPartition(
   override val index: Int,
   topic: String,
   partition: Int,
-  afterOffset: Long,
-  throughOffset: Long
+  fromOffset: Long,
+  untilOffset: Long
 ) extends Partition
 
 /** A batch-oriented interface for consuming from Kafka.
@@ -46,8 +46,8 @@ private[spark] case class KafkaRDDPartition(
   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">configuration parameters</a>.
   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-  * @param afterOffsets per-topic/partition Kafka offsets defining the (exclusive) starting point of the batch
-  * @param throughOffsets per-topic/partition Kafka offsets defining the (inclusive) ending point of the batch
+  * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive) starting point of the batch
+  * @param untilOffsets per-topic/partition Kafka offsets defining the (exclusive) ending point of the batch
   * @param messageHandler function for translating each message into the desired type
   */
 class KafkaRDD[
@@ -58,71 +58,80 @@ class KafkaRDD[
   R: ClassTag](
     sc: SparkContext,
     kafkaParams: Map[String, String],
-    afterOffsets: Map[TopicAndPartition, Long],
-    throughOffsets: Map[TopicAndPartition, Long],
+    fromOffsets: Map[TopicAndPartition, Long],
+    untilOffsets: Map[TopicAndPartition, Long],
     messageHandler: MessageAndMetadata[K, V] => R
   ) extends RDD[R](sc, Nil) with Logging {
 
-  assert(afterOffsets.keys == throughOffsets.keys,
+  assert(fromOffsets.keys == untilOffsets.keys,
     "Must provide both from and until offsets for each topic/partition")
 
-  override def getPartitions: Array[Partition] = afterOffsets.zipWithIndex.map { kvi =>
+  override def getPartitions: Array[Partition] = fromOffsets.zipWithIndex.map { kvi =>
     val ((tp, from), index) = kvi
-    new KafkaRDDPartition(index, tp.topic, tp.partition, from, throughOffsets(tp))
+    new KafkaRDDPartition(index, tp.topic, tp.partition, from, untilOffsets(tp))
   }.toArray
 
-  override def compute(thePart: Partition, context: TaskContext) = new NextIterator[R] {
-    context.addTaskCompletionListener{ context => closeIfNeeded() }
-
-    val kc = new KafkaCluster(kafkaParams)
+  override def compute(thePart: Partition, context: TaskContext) = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
-    val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
-      .newInstance(kc.config.props)
-      .asInstanceOf[Decoder[K]]
-    val valueDecoder = classTag[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
-      .newInstance(kc.config.props)
-      .asInstanceOf[Decoder[V]]
-    val consumer: SimpleConsumer = kc.connectLeader(part.topic, part.partition).fold(
-      errs => throw new Exception(s"""Couldn't connect to leader for topic ${part.topic} ${part.partition}: ${errs.mkString("\n")}"""),
-      consumer => consumer
-    )
-    var requestOffset = part.afterOffset + 1
-    var iter: Iterator[MessageAndOffset] = null
+    if (part.fromOffset >= part.untilOffset) {
+      log.warn(s"Beginning offset is same or after ending offset, skipping ${part.topic} ${part.partition}")
+      Iterator.empty
+    } else {
+      new NextIterator[R] {
+        context.addTaskCompletionListener{ context => closeIfNeeded() }
 
-    override def getNext: R = {
-      if (iter == null || !iter.hasNext) {
-        val req = new FetchRequestBuilder().
-          addFetch(part.topic, part.partition, requestOffset, kc.config.fetchMessageMaxBytes).
-          build()
-        val resp = consumer.fetch(req)
-        if (resp.hasError) {
-          val err = resp.errorCode(part.topic, part.partition)
-          if (err == ErrorMapping.LeaderNotAvailableCode ||
-            err == ErrorMapping.NotLeaderForPartitionCode) {
-            log.error(s"Lost leader for topic ${part.topic} partition ${part.partition}, sleeping for ${kc.config.refreshLeaderBackoffMs}ms")
-            Thread.sleep(kc.config.refreshLeaderBackoffMs)
+        val kc = new KafkaCluster(kafkaParams)
+        log.info(s"Computing partition ${part.topic} ${part.partition} ${part.fromOffset} -> ${part.untilOffset}")
+        val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
+          .newInstance(kc.config.props)
+          .asInstanceOf[Decoder[K]]
+        val valueDecoder = classTag[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
+          .newInstance(kc.config.props)
+          .asInstanceOf[Decoder[V]]
+        val consumer: SimpleConsumer = kc.connectLeader(part.topic, part.partition).fold(
+          errs => throw new Exception(s"""Couldn't connect to leader for topic ${part.topic} ${part.partition}: ${errs.mkString("\n")}"""),
+          consumer => consumer
+        )
+        var requestOffset = part.fromOffset
+        var iter: Iterator[MessageAndOffset] = null
+
+        override def close() = consumer.close()
+
+        override def getNext: R = {
+          if (iter == null || !iter.hasNext) {
+            log.info(s"Fetching ${part.topic}, ${part.partition}, ${requestOffset}")
+            val req = new FetchRequestBuilder().
+              addFetch(part.topic, part.partition, requestOffset, kc.config.fetchMessageMaxBytes).
+              build()
+            val resp = consumer.fetch(req)
+            if (resp.hasError) {
+              val err = resp.errorCode(part.topic, part.partition)
+              if (err == ErrorMapping.LeaderNotAvailableCode ||
+                err == ErrorMapping.NotLeaderForPartitionCode) {
+                log.error(s"Lost leader for topic ${part.topic} partition ${part.partition}, sleeping for ${kc.config.refreshLeaderBackoffMs}ms")
+                Thread.sleep(kc.config.refreshLeaderBackoffMs)
+              }
+              // Let normal rdd retry sort out reconnect attempts
+              throw ErrorMapping.exceptionFor(err)
+            }
+            iter = resp.messageSet(part.topic, part.partition)
+              .iterator
+              .dropWhile(_.offset < requestOffset)
           }
-          // Let normal rdd retry sort out reconnect attempts
-          throw ErrorMapping.exceptionFor(err)
+          if (!iter.hasNext) {
+            finished = true
+            null.asInstanceOf[R]
+          } else {
+            val item = iter.next
+            if (item.offset > part.untilOffset) {
+              finished = true
+            }
+            requestOffset = item.nextOffset
+            messageHandler(new MessageAndMetadata(part.topic, part.partition, item.message, item.offset, keyDecoder, valueDecoder))
+          }
         }
-        iter = resp.messageSet(part.topic, part.partition)
-          .iterator
-          .dropWhile(_.offset < requestOffset)
-      }
-      if (!iter.hasNext) {
-        finished = true
-        null.asInstanceOf[R]
-      } else {
-        val item = iter.next
-        if (item.offset > part.throughOffset) {
-          finished = true
-        }
-        requestOffset = item.nextOffset
-        messageHandler(new MessageAndMetadata(part.topic, part.partition, item.message, item.offset, keyDecoder, valueDecoder))
       }
     }
-
-    override def close() = consumer.close()
   }
 
 }
