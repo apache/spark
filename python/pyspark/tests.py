@@ -803,7 +803,7 @@ class SQLTests(ReusedPySparkTestCase):
     @classmethod
     def tearDownClass(cls):
         ReusedPySparkTestCase.tearDownClass()
-        shutil.rmtree(cls.tempdir.name)
+        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 
     def setUp(self):
         self.sqlCtx = SQLContext(self.sc)
@@ -930,8 +930,9 @@ class SQLTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize([row])
         srdd = self.sqlCtx.inferSchema(rdd)
         srdd.registerTempTable("test")
-        row = self.sqlCtx.sql("select l[0].a AS la from test").first()
-        self.assertEqual(1, row.asDict()["la"])
+        row = self.sqlCtx.sql("select l, d from test").first()
+        self.assertEqual(1, row.asDict()["l"][0].a)
+        self.assertEqual(1.0, row.asDict()['d']['key'].c)
 
     def test_infer_schema_with_udt(self):
         from pyspark.tests import ExamplePoint, ExamplePointUDT

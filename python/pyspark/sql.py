@@ -1178,7 +1178,7 @@ def _create_cls(dataType):
 
         def asDict(self):
             """ Return as a dict """
-            return dict(zip(self.__FIELDS__, self))
+            return dict((n, getattr(self, n)) for n in self.__FIELDS__)
 
         def __repr__(self):
             # call collect __repr__ for nested objects
