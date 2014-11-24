@@ -47,7 +47,7 @@ print("""Welcome to
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
-   /__ / .__/\_,_/_/ /_/\_\   version 1.1.1
+   /__ / .__/\_,_/_/ /_/\_\   version 1.1.2-SNAPSHOT
       /_/
 """)
 print("Using Python version %s (%s, %s)" % (
