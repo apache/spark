@@ -324,8 +324,13 @@ class SparseVector(Vector):
         else:
             if isinstance(args[0], basestring):
                 assert isinstance(args[1], str), "values should be string too"
-                self.indices = np.frombuffer(args[0], np.int32)
-                self.values = np.frombuffer(args[1], np.float64)
+                if args[0]:
+                    self.indices = np.frombuffer(args[0], np.int32)
+                    self.values = np.frombuffer(args[1], np.float64)
+                else:
+                    # np.frombuffer() doesn't work well with empty string in older version
+                    self.indices = np.array([], dtype=np.int32)
+                    self.values = np.array([], dtype=np.float64)
             else:
                 self.indices = np.array(args[0], dtype=np.int32)
                 self.values = np.array(args[1], dtype=np.float64)
