@@ -19,18 +19,16 @@ package org.apache.spark.ui.jobs
 
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 
-/** Web UI showing progress status of all jobs in the given SparkContext. */
-private[ui] class JobProgressTab(parent: SparkUI) extends SparkUITab(parent, "stages") {
+/** Web UI showing progress status of all stages in the given SparkContext. */
+private[ui] class StagesTab(parent: SparkUI) extends SparkUITab(parent, "stages") {
   val sc = parent.sc
-  val conf = sc.map(_.conf).getOrElse(new SparkConf)
-  val killEnabled = sc.map(_.conf.getBoolean("spark.ui.killEnabled", true)).getOrElse(false)
+  val killEnabled = parent.killEnabled
   val listener = parent.jobProgressListener
 
-  attachPage(new JobProgressPage(this))
+  attachPage(new AllStagesPage(this))
   attachPage(new StagePage(this))
   attachPage(new PoolPage(this))
 
