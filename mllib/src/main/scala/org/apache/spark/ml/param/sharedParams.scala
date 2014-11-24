@@ -23,6 +23,13 @@ private[ml] trait HasRegParam extends Params {
   def getRegParam: Double = get(regParam)
 }
 
+private[ml] trait HasSmoothingParam extends Params {
+  /** param for smoothing parameter */
+  val smoothingParam: DoubleParam =
+    new DoubleParam(this, "smoothingParam", "smoothing parameter")
+  def getSmoothingParam: Double = get(smoothingParam)
+}
+
 private[ml] trait HasMaxIter extends Params {
   /** param for max number of iterations */
   val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations")
@@ -71,4 +78,10 @@ private[ml] trait HasOutputCol extends Params {
   /** param for output column name */
   val outputCol: Param[String] = new Param(this, "outputCol", "output column name")
   def getOutputCol: String = get(outputCol)
+}
+
+private[ml] trait HasWeightCol extends Params {
+  /** param for instance weight column name */
+  val weightCol: Param[String] = new Param(this, "weightCol", "instance weight column name")
+  def getWeightCol: String = get(weightCol)
 }
