@@ -985,8 +985,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       (1 to 100).map(s => Seq(s.toString * 3)))
 
     checkAnswer(
-      sql("SELECT a + b FROM testData2 order by b"),
-      (1 to 100).map(s => Seq(s.toString * 3)))
+      sql("SELECT key || value FROM testData ORDER BY key"),
+      (1 to 100).map(s => Seq(s.toString * 2)))
 
     checkAnswer(
       sql("SELECT value || key FROM testData ORDER BY key"),
