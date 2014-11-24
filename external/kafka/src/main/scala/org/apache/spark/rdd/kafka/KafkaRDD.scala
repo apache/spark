@@ -35,8 +35,8 @@ private[spark] case class KafkaRDDPartition(
   override val index: Int,
   topic: String,
   partition: Int,
-  fromOffset: Long,
-  untilOffset: Long
+  afterOffset: Long,
+  throughOffset: Long
 ) extends Partition
 
 /** A batch-oriented interface for consuming from Kafka.
@@ -46,8 +46,8 @@ private[spark] case class KafkaRDDPartition(
   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">configuration parameters</a>.
   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-  * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive) starting point of the batch
-  * @param untilOffsets per-topic/partition Kafka offsets defining the (exclusive) ending point of the batch
+  * @param afterOffsets per-topic/partition Kafka offsets defining the (exclusive) starting point of the batch
+  * @param throughOffsets per-topic/partition Kafka offsets defining the (inclusive) ending point of the batch
   * @param messageHandler function for translating each message into the desired type
   */
 class KafkaRDD[
@@ -58,17 +58,17 @@ class KafkaRDD[
   R: ClassTag](
     sc: SparkContext,
     kafkaParams: Map[String, String],
-    fromOffsets: Map[TopicAndPartition, Long],
-    untilOffsets: Map[TopicAndPartition, Long],
+    afterOffsets: Map[TopicAndPartition, Long],
+    throughOffsets: Map[TopicAndPartition, Long],
     messageHandler: MessageAndMetadata[K, V] => R
   ) extends RDD[R](sc, Nil) with Logging {
 
-  assert(fromOffsets.keys == untilOffsets.keys,
+  assert(afterOffsets.keys == throughOffsets.keys,
     "Must provide both from and until offsets for each topic/partition")
 
-  override def getPartitions: Array[Partition] = fromOffsets.zipWithIndex.map { kvi =>
+  override def getPartitions: Array[Partition] = afterOffsets.zipWithIndex.map { kvi =>
     val ((tp, from), index) = kvi
-    new KafkaRDDPartition(index, tp.topic, tp.partition, from, untilOffsets(tp))
+    new KafkaRDDPartition(index, tp.topic, tp.partition, from, throughOffsets(tp))
   }.toArray
 
   override def compute(thePart: Partition, context: TaskContext) = new NextIterator[R] {
@@ -84,7 +84,7 @@ class KafkaRDD[
       .asInstanceOf[Decoder[V]]
     val consumer: SimpleConsumer = kc.connectLeader(part.topic, part.partition)
       .getOrElse(throw new Exception(s"Couldn't connect to leader for topic ${part.topic} ${part.partition}"))
-    var requestOffset = part.fromOffset
+    var requestOffset = part.afterOffset + 1
     var iter: Iterator[MessageAndOffset] = null
 
     override def getNext: R = {
@@ -107,11 +107,14 @@ class KafkaRDD[
           .iterator
           .dropWhile(_.offset < requestOffset)
       }
-      val item = iter.next
-      if (item.offset >= part.untilOffset) {
+      if (!iter.hasNext) {
         finished = true
         null.asInstanceOf[R]
       } else {
+        val item = iter.next
+        if (item.offset > part.throughOffset) {
+          finished = true
+        }
         requestOffset = item.nextOffset
         messageHandler(new MessageAndMetadata(part.topic, part.partition, item.message, item.offset, keyDecoder, valueDecoder))
       }
