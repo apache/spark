@@ -40,7 +40,8 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
 
     val startTime = System.currentTimeMillis
     var statuses: Array[(BlockManagerId, Long)] = null
-    val blockFetcherItr = if (blockManager.conf.getBoolean("spark.scheduler.removeStageBarrier", false)) {
+    val blockFetcherItr = if (blockManager.conf.getBoolean("spark.scheduler.removeStageBarrier",
+      false)) {
       statuses = SparkEnv.get.mapOutputTracker.getUpdatedStatus(shuffleId, reduceId)
       logDebug("Fetching partial output for shuffle %d, reduce %d took %d ms".format(
         shuffleId, reduceId, System.currentTimeMillis - startTime))
@@ -60,7 +61,6 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
       for (((address, size), index) <- statuses.zipWithIndex) {
         splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, size))
       }
-
       val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = splitsByAddress.toSeq.map {
         case (address, splits) =>
           (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))

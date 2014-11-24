@@ -37,7 +37,8 @@ class PartialBlockFetcherIterator(
     reduceId: Int)
   extends Iterator[(BlockId, Try[Iterator[Any]])] with Logging {
 
-  private val mapOutputFetchInterval = SparkEnv.get.conf.getInt("spark.reducer.mapOutput.fetchInterval", 1000)
+  private val mapOutputFetchInterval =
+    SparkEnv.get.conf.getInt("spark.reducer.mapOutput.fetchInterval", 1000)
 
   private var iterator:Iterator[(BlockId, Try[Iterator[Any]])] = null
 
@@ -51,8 +52,8 @@ class PartialBlockFetcherIterator(
   // Get the updated map output
   private def updateStatuses() {
     fetchTime += 1
-    logDebug("Still missing " + statuses.filter(_ == null).size +
-      " map outputs for reduce " + reduceId + " of shuffle " + shuffleId +" next fetchTime="+ fetchTime)
+    logDebug("Still missing " + statuses.filter(_ == null).size +" map outputs for reduce "
+      + reduceId + " of shuffle " + shuffleId + " next fetchTime=" + fetchTime)
     val update = SparkEnv.get.mapOutputTracker.getUpdatedStatus(shuffleId, reduceId)
     statuses = update
   }
@@ -69,7 +70,8 @@ class PartialBlockFetcherIterator(
     }
     val splitsByAddress = new HashMap[BlockManagerId, ArrayBuffer[(Int, Long)]]
     for (index <- readyStatuses if !delegatedStatuses.contains(index)) {
-      splitsByAddress.getOrElseUpdate(statuses(index)._1, ArrayBuffer()) += ((index, statuses(index)._2))
+      splitsByAddress.getOrElseUpdate(statuses(index)._1, ArrayBuffer()) +=
+        ((index, statuses(index)._2))
       delegatedStatuses += index
     }
     val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = splitsByAddress.toSeq.map {
