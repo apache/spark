@@ -149,7 +149,7 @@ class LogisticRegressionModel private[ml] (
   }
 
   override def predictRaw(features: Vector): Vector = {
-    val m = margin(m)
+    val m = margin(features)
     Vectors.dense(Array(-m, m))
   }
 }

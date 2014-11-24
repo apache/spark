@@ -57,10 +57,11 @@ class AdaBoost extends Classifier[AdaBoost, AdaBoostModel]
     val featuresColName = paramMap(featuresCol)
     val wl = paramMap(weakLearner)
     val featuresRDD: RDD[Vector] = wl match {
-      case wlTagged: WeakLearner =>
+      case wlTagged: WeakLearner[_] =>
         val wlParamMap = paramMap(weakLearnerParamMap)
         val wlFeaturesColName = wlParamMap(wl.featuresCol)
-        val origFeaturesRDD = dataset.select(featuresColName.attr).as(wlFeaturesColName.attr)
+        // TODO: How do I get this to use the string value of wlFeaturesColName?
+        val origFeaturesRDD = dataset.select(featuresColName.attr).as('wlFeaturesColName)
         wlTagged.getNativeFeatureRDD(origFeaturesRDD, wlParamMap)
       case _ =>
         dataset.select(featuresColName.attr).map { case Row(features: Vector) => features }
