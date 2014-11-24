@@ -319,8 +319,12 @@ class SparseVector(Vector):
             if isinstance(pairs, basestring):
                 l = len(pairs) / (4 + 8)
                 assert len(pairs) == l * 12, "unexpected length: %d" % len(pairs)
-                self.indices = np.frombuffer(pairs[:l * 4], np.uint32)
-                self.values = np.frombuffer(pairs[l * 4:], np.float64)
+                if l:
+                    self.indices = np.frombuffer(pairs[:l * 4], np.uint32)
+                    self.values = np.frombuffer(pairs[l * 4:], np.float64)
+                else:
+                    self.indices = np.array([], dtype=np.uint32)
+                    self.values = np.array([], dtype=np.float64)
             else:
                 if type(pairs) == dict:
                     pairs = pairs.items()

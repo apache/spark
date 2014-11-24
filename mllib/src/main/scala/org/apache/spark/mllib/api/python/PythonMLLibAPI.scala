@@ -828,9 +828,11 @@ private[spark] object SerDe extends Serializable {
       val n = bytes.length / 12
       val indices = new Array[Int](n)
       val values = new Array[Double](n)
-      val order = ByteOrder.nativeOrder()
-      ByteBuffer.wrap(bytes, 0, n * 4).order(order).asIntBuffer().get(indices)
-      ByteBuffer.wrap(bytes, n * 4, n * 8).order(order).asDoubleBuffer().get(values)
+      if (n > 0) {
+        val order = ByteOrder.nativeOrder()
+        ByteBuffer.wrap(bytes, 0, n * 4).order(order).asIntBuffer().get(indices)
+        ByteBuffer.wrap(bytes, n * 4, n * 8).order(order).asDoubleBuffer().get(values)
+      }
       new SparseVector(args(0).asInstanceOf[Int], indices, values)
     }
   }
