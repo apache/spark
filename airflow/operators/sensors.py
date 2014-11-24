@@ -5,7 +5,6 @@ from time import sleep
 from airflow import settings
 from airflow.configuration import getconf
 from airflow.hooks import HiveHook
-from airflow.hooks import MySqlHook
 from airflow.models import BaseOperator
 from airflow.models import DatabaseConnection as DB
 from airflow.models import State
@@ -16,7 +15,11 @@ from airflow.utils import apply_defaults
 class BaseSensorOperator(BaseOperator):
 
     @apply_defaults
-    def __init__(self, poke_interval=5, timeout=60*60*24*7, *args, **kwargs):
+    def __init__(
+            self,
+            poke_interval=60,
+            timeout=60*60*24*7,
+            *args, **kwargs):
         super(BaseSensorOperator, self).__init__(*args, **kwargs)
         self.poke_interval = poke_interval
         self.timeout = timeout
@@ -25,6 +28,10 @@ class BaseSensorOperator(BaseOperator):
         self.retries = 0
 
     def poke(self):
+        '''
+        Function that the sensors defined while deriving this class should
+        override.
+        '''
         raise Exception('Override me.')
 
     def execute(self, execution_date):
@@ -33,6 +40,7 @@ class BaseSensorOperator(BaseOperator):
             sleep(self.poke_interval)
             if (datetime.now() - started_at).seconds > self.timeout:
                 raise Exception('Snap. Time is OUT.')
+        logging.info("Success criteria met. Exiting.")
 
 
 class SqlSensor(BaseSensorOperator):
@@ -138,7 +146,7 @@ class HivePartitionSensor(BaseSensorOperator):
 
     def poke(self):
         logging.info(
-            'Poking for table {self.schema}{self.table}, '
+            'Poking for table {self.schema}.{self.table}, '
             'partition {self.partition}'.format(**locals()))
         return self.hook.check_for_partition(
             self.schema, self.table, self.partition)

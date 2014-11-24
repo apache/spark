@@ -138,6 +138,9 @@ def webserver(args):
 
 def master(args):
 
+    # Sleep time (seconds) between master runs
+    MASTER_SLEEP_INTERVAL = 60
+
     logging.basicConfig(level=logging.DEBUG)
     logging.info("Starting a master scheduler")
 
@@ -199,7 +202,7 @@ def master(args):
                             executor.queue_command(ti.key, ti.command())
                 executor.heartbeat()
             session.close()
-        sleep(5)
+        sleep(MASTER_SLEEP_INTERVAL)
     executor.end()
 
 
