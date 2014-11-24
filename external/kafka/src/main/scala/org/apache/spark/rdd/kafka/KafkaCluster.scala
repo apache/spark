@@ -18,8 +18,9 @@
 package org.apache.spark.rdd.kafka
 
 import scala.util.control.NonFatal
+import scala.collection.mutable.ArrayBuffer
 import java.util.Properties
-import kafka.api.{OffsetRequest, OffsetResponse, PartitionOffsetRequestInfo, TopicMetadataRequest, TopicMetadataResponse}
+import kafka.api.{OffsetRequest, OffsetResponse, OffsetFetchRequest, OffsetFetchResponse, PartitionOffsetRequestInfo, TopicMetadataRequest, TopicMetadataResponse}
 import kafka.common.{ErrorMapping, TopicAndPartition}
 import kafka.consumer.{ConsumerConfig, SimpleConsumer}
 
@@ -30,6 +31,8 @@ import kafka.consumer.{ConsumerConfig, SimpleConsumer}
   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form
   */
 class KafkaCluster(val kafkaParams: Map[String, String]) {
+  type Err = ArrayBuffer[Throwable]
+
   val brokers: Array[(String, Int)] =
     kafkaParams.get("metadata.broker.list")
       .orElse(kafkaParams.get("bootstrap.servers"))
@@ -47,79 +50,113 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
   def connect(hostAndPort: (String, Int)): SimpleConsumer =
     connect(hostAndPort._1, hostAndPort._2)
 
-  def connectLeader(topic: String, partition: Int): Option[SimpleConsumer] =
-    findLeader(topic, partition).map(connect)
+  def connectLeader(topic: String, partition: Int): Either[Err, SimpleConsumer] =
+    findLeader(topic, partition).right.map(connect)
 
-  def findLeader(topic: String, partition: Int): Option[(String, Int)] = {
+  def findLeader(topic: String, partition: Int): Either[Err, (String, Int)] = {
     val req = TopicMetadataRequest(TopicMetadataRequest.CurrentVersion, 0, config.clientId, Seq(topic))
-    brokers.foreach { hp =>
-      var consumer: SimpleConsumer = null
-      try {
-        consumer = connect(hp)
-        val resp: TopicMetadataResponse = consumer.send(req)
-        resp.topicsMetadata.find(_.topic == topic).flatMap { t =>
-          t.partitionsMetadata.find(_.partitionId == partition)
-        }.foreach { partitionMeta =>
-          partitionMeta.leader.foreach { leader =>
-            return Some((leader.host, leader.port))
-          }
+    val errs = new Err
+    withBrokers(errs) { consumer =>
+      val resp: TopicMetadataResponse = consumer.send(req)
+      resp.topicsMetadata.find(_.topic == topic).flatMap { t =>
+        t.partitionsMetadata.find(_.partitionId == partition)
+      }.foreach { partitionMeta =>
+        partitionMeta.leader.foreach { leader =>
+          return Right((leader.host, leader.port))
         }
-      } catch {
-        case NonFatal(e) =>
-      } finally {
-        if (consumer != null) consumer.close()
       }
     }
-    None
+    Left(errs)
   }
 
-  def getLatestLeaderOffsets(topicAndPartitions: Set[TopicAndPartition]): Map[TopicAndPartition, Long] =
+  def getLatestLeaderOffsets(topicAndPartitions: Set[TopicAndPartition]): Either[Err, Map[TopicAndPartition, Long]] =
     getLeaderOffsets(topicAndPartitions, OffsetRequest.LatestTime)
 
-  def getEarliestLeaderOffsets(topicAndPartitions: Set[TopicAndPartition]): Map[TopicAndPartition, Long] =
+  def getEarliestLeaderOffsets(topicAndPartitions: Set[TopicAndPartition]): Either[Err, Map[TopicAndPartition, Long]] =
     getLeaderOffsets(topicAndPartitions, OffsetRequest.EarliestTime)
 
-  def getLeaderOffsets(topicAndPartitions: Set[TopicAndPartition], before: Long): Map[TopicAndPartition, Long] =
-    getLeaderOffsets(topicAndPartitions, before, 1).map { kv =>
-      // mapValues isnt serializable, see SI-7005
-      kv._1 -> kv._2.head
+  def getLeaderOffsets(topicAndPartitions: Set[TopicAndPartition], before: Long): Either[Err, Map[TopicAndPartition, Long]] =
+    getLeaderOffsets(topicAndPartitions, before, 1).right.map { r =>
+      r.map { kv =>
+        // mapValues isnt serializable, see SI-7005
+        kv._1 -> kv._2.head
+      }
     }
 
-  def getLeaderOffsets(topicAndPartitions: Set[TopicAndPartition], before: Long, maxNumOffsets: Int): Map[TopicAndPartition, Seq[Long]] = {
+  def getLeaderOffsets(
+    topicAndPartitions: Set[TopicAndPartition],
+    before: Long,
+    maxNumOffsets: Int
+  ): Either[Err, Map[TopicAndPartition, Seq[Long]]] = {
     var result = Map[TopicAndPartition, Seq[Long]]()
     val req = OffsetRequest(
       topicAndPartitions.map(tp => tp -> PartitionOffsetRequestInfo(before, 1)).toMap
     )
+    val errs = new Err
+    withBrokers(errs) { consumer =>
+      val resp: OffsetResponse = consumer.getOffsetsBefore(req)
+      val respMap = resp.partitionErrorAndOffsets
+      val needed = topicAndPartitions.diff(result.keys.toSet)
+      needed.foreach { tp =>
+        respMap.get(tp).foreach { errAndOffsets =>
+          if (errAndOffsets.error == ErrorMapping.NoError) {
+            result += tp -> errAndOffsets.offsets
+          } else {
+            errs.append(ErrorMapping.exceptionFor(errAndOffsets.error))
+          }
+        }
+      }
+      if (result.keys.size == topicAndPartitions.size) {
+        return Right(result)
+      }
+    }
+    val missing = topicAndPartitions.diff(result.keys.toSet)
+    errs.append(new Exception(s"Couldn't find offsets for ${missing}"))
+    Left(errs)
+  }
+
+  def getConsumerOffsets(groupId: String, topicAndPartitions: Set[TopicAndPartition]): Either[Err, Map[TopicAndPartition, Long]] = {
+    var result = Map[TopicAndPartition, Long]()
+    val req = OffsetFetchRequest(groupId, topicAndPartitions.toSeq)
+    val errs = new Err
+    withBrokers(errs) { consumer =>
+      val resp: OffsetFetchResponse = consumer.fetchOffsets(req)
+      val respMap = resp.requestInfo
+      val needed = topicAndPartitions.diff(result.keys.toSet)
+      needed.foreach { tp =>
+        respMap.get(tp).foreach { offsetMeta =>
+          if (offsetMeta.error == ErrorMapping.NoError) {
+            result += tp -> offsetMeta.offset
+          } else {
+            errs.append(ErrorMapping.exceptionFor(offsetMeta.error))
+          }
+        }
+      }
+      if (result.keys.size == topicAndPartitions.size) {
+        return Right(result)
+      }
+    }
+    val missing = topicAndPartitions.diff(result.keys.toSet)
+    errs.append(new Exception(s"Couldn't find offsets for ${missing}"))
+    Left(errs)
+  }
+
+  def setConsumerOffsets(groupId: String, offsets: Map[TopicAndPartition, Long]): Unit = ???
+
+  private def withBrokers(errs: Err)(fn: SimpleConsumer => Any): Unit = {
     brokers.foreach { hp =>
       var consumer: SimpleConsumer = null
       try {
         consumer = connect(hp)
-        val resp: OffsetResponse = consumer.getOffsetsBefore(req)
-        val respParts = resp.partitionErrorAndOffsets
-        val needed = topicAndPartitions.diff(result.keys.toSet)
-        needed.foreach { tp =>
-          respParts.get(tp).foreach { errAndOffsets =>
-            if (errAndOffsets.error == ErrorMapping.NoError) {
-              result += tp -> errAndOffsets.offsets
-            }
-          }
-        }
-        if (result.keys.size == topicAndPartitions.size) {
-          return result
-        }
+        fn(consumer)
       } catch {
         case NonFatal(e) =>
+          errs.append(e)
       } finally {
         if (consumer != null) consumer.close()
       }
     }
-    val missing = topicAndPartitions.diff(result.keys.toSet)
-    throw new Exception(s"Couldn't find offsets for ${missing}")
   }
-
-  def getConsumerOffsets(topicAndPartitions: Set[TopicAndPartition]): Map[TopicAndPartition, Long] = ???
-
-  def setConsumerOffsets(offsets: Map[TopicAndPartition, Long]): Unit = ???
 }
 
 object KafkaCluster {

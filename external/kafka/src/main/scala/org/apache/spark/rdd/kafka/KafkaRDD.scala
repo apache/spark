@@ -82,8 +82,10 @@ class KafkaRDD[
     val valueDecoder = classTag[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
       .newInstance(kc.config.props)
       .asInstanceOf[Decoder[V]]
-    val consumer: SimpleConsumer = kc.connectLeader(part.topic, part.partition)
-      .getOrElse(throw new Exception(s"Couldn't connect to leader for topic ${part.topic} ${part.partition}"))
+    val consumer: SimpleConsumer = kc.connectLeader(part.topic, part.partition).fold(
+      errs => throw new Exception(s"""Couldn't connect to leader for topic ${part.topic} ${part.partition}: ${errs.mkString("\n")}"""),
+      consumer => consumer
+    )
     var requestOffset = part.afterOffset + 1
     var iter: Iterator[MessageAndOffset] = null
 
