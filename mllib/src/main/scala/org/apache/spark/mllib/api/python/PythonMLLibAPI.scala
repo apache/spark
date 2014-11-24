@@ -691,6 +691,7 @@ class PythonMLLibAPI extends Serializable {
 private[spark] object SerDe extends Serializable {
 
   val PYSPARK_PACKAGE = "pyspark.mllib"
+  val LATIN1 = "ISO-8859-1"
 
   /**
    * Base class used for pickle
@@ -712,7 +713,7 @@ private[spark] object SerDe extends Serializable {
     def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       if (obj == this) {
         out.write(Opcodes.GLOBAL)
-        out.write((module + "\n" + name + "\n").getBytes())
+        out.write((module + "\n" + name + "\n").getBytes)
       } else {
         pickler.save(this)  // it will be memorized by Pickler
         saveState(obj, out, pickler)
@@ -759,7 +760,7 @@ private[spark] object SerDe extends Serializable {
       if (args.length != 1) {
         throw new PickleException("should be 1")
       }
-      val bytes = args(0).asInstanceOf[String].getBytes("ISO-8859-1")
+      val bytes = args(0).asInstanceOf[String].getBytes(LATIN1)
       val bb = ByteBuffer.wrap(bytes, 0, bytes.length)
       bb.order(ByteOrder.nativeOrder())
       val db = bb.asDoubleBuffer()
@@ -792,7 +793,7 @@ private[spark] object SerDe extends Serializable {
       if (args.length != 3) {
         throw new PickleException("should be 3")
       }
-      val bytes = args(2).asInstanceOf[String].getBytes("ISO-8859-1")
+      val bytes = args(2).asInstanceOf[String].getBytes(LATIN1)
       val n = bytes.length / 8
       val values = new Array[Double](n)
       val order = ByteOrder.nativeOrder()
@@ -829,8 +830,8 @@ private[spark] object SerDe extends Serializable {
         throw new PickleException("should be 3")
       }
       val size = args(0).asInstanceOf[Int]
-      val indiceBytes = args(1).asInstanceOf[String].getBytes("ISO-8859-1")
-      val valueBytes = args(2).asInstanceOf[String].getBytes("ISO-8859-1")
+      val indiceBytes = args(1).asInstanceOf[String].getBytes(LATIN1)
+      val valueBytes = args(2).asInstanceOf[String].getBytes(LATIN1)
       val n = indiceBytes.length / 4
       val indices = new Array[Int](n)
       val values = new Array[Double](n)
