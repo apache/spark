@@ -30,8 +30,6 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.CompletionIterator
 
 /**
- * Explain the boundaries of where this starts and why we have second thread
- *
  * Manages blocks of sorted data on disk that need to be merged together. Carries out a tiered
  * merge that will never merge more than spark.shuffle.maxMergeFactor segments at a time.  Except for
  * the final merge, which merges disk blocks to a returned iterator, TieredDiskMerger merges blocks
@@ -72,6 +70,7 @@ private[spark] class TieredDiskMerger[K, C](
 
   private val mergeFinished = new CountDownLatch(1)
 
+  /** Whether more on-disk blocks may come in */
   @volatile private var doneRegistering = false
 
  /** Number of bytes spilled on disk */

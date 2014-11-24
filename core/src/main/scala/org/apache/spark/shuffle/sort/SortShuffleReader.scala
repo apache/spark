@@ -17,6 +17,7 @@
 
 package org.apache.spark.shuffle.sort
 
+import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.util.Comparator
@@ -38,7 +39,7 @@ import org.apache.spark.util.collection.{MergeUtil, TieredDiskMerger}
  * map output block.
  *
  * As blocks are fetched, we store them in memory until we fail to acquire space from the
- * ShuffleMemoryManager. When this occurs, we merge the in-memory blocks to disk and go back to
+ * ShuffleMemoryManager. When this occurs, we merge some in-memory blocks to disk and go back to
  * fetching.
  *
  * TieredDiskMerger is responsible for managing the merged on-disk blocks and for supplying an
@@ -70,10 +71,10 @@ private[spark] class SortShuffleReader[K, C](
   private val inMemoryBlocks = new Queue[MemoryShuffleBlock]()
 
   /**
-   * Maintain the relation between shuffle block and its size. The reason we should maintain this
-   * is that the request shuffle block size is not equal to the result size because of
-   * compression of size. So here we should maintain this make sure the correctness of our
-   * algorithm.
+   * Maintain block manager and reported size of each shuffle block. The block manager is used for
+   * error reporting. The reported size, which, because of size compression, may be slightly
+   * different than the size of the actual fetched block, is used for calculating how many blocks
+   * to spill.
    */
   private val shuffleBlockMap = new HashMap[ShuffleBlockId, (BlockManagerId, Long)]()
 
@@ -97,7 +98,7 @@ private[spark] class SortShuffleReader[K, C](
   private var _memoryBytesSpilled: Long = 0L
   private var _diskBytesSpilled: Long = 0L
 
-  /** number of bytes left to fetch */
+  /** Number of bytes left to fetch */
   private var unfetchedBytes: Long = 0L
 
   def memoryBytesSpilled: Long = _memoryBytesSpilled
@@ -131,7 +132,7 @@ private[spark] class SortShuffleReader[K, C](
       val granted = shuffleMemoryManager.tryToAcquire(blockSize)
       if (granted >= blockSize) {
         if (blockData.isDirect) {
-          // If the memory shuffle block is allocated on direct buffer, copy it on heap,
+          // If the shuffle block is allocated on a direct buffer, copy it to an on-heap buffer,
           // otherwise off heap memory will be increased out of control.
           val onHeapBuffer = ByteBuffer.allocate(blockSize.toInt)
           onHeapBuffer.put(blockData.nioByteBuffer)
@@ -142,7 +143,7 @@ private[spark] class SortShuffleReader[K, C](
           inMemoryBlocks += MemoryShuffleBlock(blockId, blockData)
         }
       } else {
-        logDebug(s"Granted $granted memory is not enough to store shuffle block id $blockId, " +
+        logDebug(s"Granted $granted memory is not enough to store shuffle block $blockId, " +
           s"block size $blockSize, spilling in-memory blocks to release the memory")
 
         shuffleMemoryManager.release(granted)
@@ -162,7 +163,7 @@ private[spark] class SortShuffleReader[K, C](
     val mergedItr =
       MergeUtil.mergeSort(finalItrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
 
-    // Update the spilled info and do cleanup work when task is finished.
+    // Update the spill metrics and do cleanup work when task is finished.
     context.taskMetrics().memoryBytesSpilled += memoryBytesSpilled
     context.taskMetrics().diskBytesSpilled += diskBytesSpilled
 
@@ -182,95 +183,105 @@ private[spark] class SortShuffleReader[K, C](
     new InterruptibleIterator(context, completionItr.map(p => (p._1, p._2)))
   }
 
+  /**
+   * Called when we've failed to acquire memory for a block we've just fetched. Figure out how many
+   * blocks to spill and then spill them.
+   */
   private def spillInMemoryBlocks(tippingBlock: MemoryShuffleBlock): Unit = {
-    // Write merged blocks to disk
     val (tmpBlockId, file) = blockManager.diskBlockManager.createTempShuffleBlock()
 
-    def releaseTempShuffleMemory(blocks: ArrayBuffer[MemoryShuffleBlock]): Unit = {
-      for (block <- blocks) {
+    // If the remaining unfetched data would fit inside our current allocation, we don't want to
+    // waste time spilling blocks beyond the space needed for it.
+    // Note that the number of unfetchedBytes is not exact, because of the compression used on the
+    // sizes of map output blocks.
+    var bytesToSpill = unfetchedBytes
+    val blocksToSpill = new ArrayBuffer[MemoryShuffleBlock]()
+    blocksToSpill += tippingBlock
+    bytesToSpill -= tippingBlock.blockData.size
+    while (bytesToSpill > 0 && !inMemoryBlocks.isEmpty) {
+      val block = inMemoryBlocks.dequeue()
+      blocksToSpill += block
+      bytesToSpill -= block.blockData.size
+    }
+
+    _memoryBytesSpilled += blocksToSpill.map(_.blockData.size()).sum
+
+    if (blocksToSpill.size > 1) {
+      spillMultipleBlocks(file, tmpBlockId, blocksToSpill, tippingBlock)
+    } else {
+      spillSingleBlock(file, blocksToSpill.head)
+    }
+
+    tieredMerger.registerOnDiskBlock(tmpBlockId, file)
+
+    logInfo(s"Merged ${blocksToSpill.size} in-memory blocks into file ${file.getName}")
+  }
+
+  private def spillSingleBlock(file: File, block: MemoryShuffleBlock): Unit = {
+    val fos = new FileOutputStream(file)
+    val buffer = block.blockData.nioByteBuffer()
+    var channel = fos.getChannel
+    var success = false
+
+    try {
+      while (buffer.hasRemaining) {
+        channel.write(buffer)
+      }
+      success = true
+    } finally {
+      if (channel != null) {
+        channel.close()
+        channel = null
+      }
+      if (!success) {
+        if (file.exists()) {
+          file.delete()
+        }
+      } else {
+        _diskBytesSpilled += file.length()
+      }
+      // When we spill a single block, it's the single tipping block that we never acquired memory
+      // from the shuffle memory manager for, so we don't need to release any memory from there.
+      block.blockData.release()
+    }
+  }
+
+  /**
+   * Merge multiple in-memory blocks to a single on-disk file.
+   */
+  private def spillMultipleBlocks(file: File, tmpBlockId: BlockId,
+      blocksToSpill: Seq[MemoryShuffleBlock], tippingBlock: MemoryShuffleBlock): Unit = {
+    val itrGroup = inMemoryBlocksToIterators(blocksToSpill)
+    val partialMergedItr =
+      MergeUtil.mergeSort(itrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
+    val curWriteMetrics = new ShuffleWriteMetrics()
+    var writer = blockManager.getDiskWriter(tmpBlockId, file, ser, fileBufferSize, curWriteMetrics)
+    var success = false
+
+    try {
+      partialMergedItr.foreach(writer.write)
+      success = true
+    } finally {
+      if (!success) {
+        if (writer != null) {
+          writer.revertPartialWritesAndClose()
+          writer = null
+        }
+        if (file.exists()) {
+          file.delete()
+        }
+      } else {
+        writer.commitAndClose()
+        writer = null
+      }
+      for (block <- blocksToSpill) {
         block.blockData.release()
         if (block != tippingBlock) {
           shuffleMemoryManager.release(block.blockData.size)
         }
       }
     }
-
-    // If the remaining unfetched data would fit inside our current allocation, we don't want to
-    // waste time spilling blocks beyond the space needed for it.
-    // We use the request size to calculate the remaining spilled size to make sure the
-    // correctness, since the request size is slightly different from result block size because
-    // of size compression.
-    var bytesToSpill = unfetchedBytes
-    val blocksToSpill = new ArrayBuffer[MemoryShuffleBlock]()
-    blocksToSpill += tippingBlock
-    bytesToSpill -= shuffleBlockMap(tippingBlock.blockId.asInstanceOf[ShuffleBlockId])._2
-    while (bytesToSpill > 0 && !inMemoryBlocks.isEmpty) {
-      val block = inMemoryBlocks.dequeue()
-      blocksToSpill += block
-      bytesToSpill -= shuffleBlockMap(block.blockId.asInstanceOf[ShuffleBlockId])._2
-    }
-
-    _memoryBytesSpilled += blocksToSpill.map(_.blockData.size()).sum
-
-    if (blocksToSpill.size > 1) {
-      val itrGroup = inMemoryBlocksToIterators(blocksToSpill)
-      val partialMergedItr =
-        MergeUtil.mergeSort(itrGroup, keyComparator, dep.keyOrdering, dep.aggregator)
-      val curWriteMetrics = new ShuffleWriteMetrics()
-      var writer =
-        blockManager.getDiskWriter(tmpBlockId, file, ser, fileBufferSize, curWriteMetrics)
-      var success = false
-
-      try {
-        partialMergedItr.foreach(writer.write)
-        success = true
-      } finally {
-        if (!success) {
-          if (writer != null) {
-            writer.revertPartialWritesAndClose()
-            writer = null
-          }
-          if (file.exists()) {
-            file.delete()
-          }
-        } else {
-          writer.commitAndClose()
-          writer = null
-        }
-        releaseTempShuffleMemory(blocksToSpill)
-      }
-      _diskBytesSpilled += curWriteMetrics.shuffleBytesWritten
-
-    } else {
-      val fos = new FileOutputStream(file)
-      val buffer = blocksToSpill.map(_.blockData.nioByteBuffer()).head
-      var channel = fos.getChannel
-      var success = false
-
-      try {
-        while (buffer.hasRemaining) {
-          channel.write(buffer)
-        }
-        success = true
-      } finally {
-        if (channel != null) {
-          channel.close()
-          channel = null
-        }
-        if (!success) {
-          if (file.exists()) {
-            file.delete()
-          }
-        } else {
-          _diskBytesSpilled = file.length()
-        }
-        releaseTempShuffleMemory(blocksToSpill)
-      }
-    }
-
-    tieredMerger.registerOnDiskBlock(tmpBlockId, file)
-
-    logInfo(s"Merged ${blocksToSpill.size} in-memory blocks into file ${file.getName}")
+    _diskBytesSpilled += curWriteMetrics.shuffleBytesWritten
   }
 
   private def inMemoryBlocksToIterators(blocks: Seq[MemoryShuffleBlock])

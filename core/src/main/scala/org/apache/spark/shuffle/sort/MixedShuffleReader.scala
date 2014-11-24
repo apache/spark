@@ -21,6 +21,10 @@ import org.apache.spark.{TaskContext, Logging}
 import org.apache.spark.shuffle.{BaseShuffleHandle, ShuffleReader}
 import org.apache.spark.shuffle.hash.HashShuffleReader
 
+/**
+ * ShuffleReader that chooses SortShuffleReader or HashShuffleReader depending on whether there is
+ * a key ordering.
+ */
 private[spark] class MixedShuffleReader[K, C](
     handle: BaseShuffleHandle[K, _, C],
     startPartition: Int,
