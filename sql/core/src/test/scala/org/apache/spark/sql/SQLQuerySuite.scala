@@ -974,6 +974,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     dropTempTable("data")
   }
 
+  test("SPARK-4432 Fix attribute reference resolution error when using ORDER BY") {
+    checkAnswer(
+      sql("SELECT a + b FROM testData2 ORDER BY a"),
+      Seq(2, 3, 3 ,4 ,4 ,5).map(Seq(_))
+    )
+  }
+
   test("Supporting relational operator '<=>' in Spark SQL") {
     val nullCheckData1 = TestData(1,"1") :: TestData(2,null) :: Nil
     val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
