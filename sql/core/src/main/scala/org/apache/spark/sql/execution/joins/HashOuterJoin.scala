@@ -91,7 +91,7 @@ case class HashOuterJoin(
           temp
         }
       } else {
-        Nil
+        List(joinedRow.withRight(rightNullRow).copy)
       }
     )
     ret.iterator
@@ -115,7 +115,7 @@ case class HashOuterJoin(
           temp
         }
       } else {
-        Nil
+        List(joinedRow.withLeft(leftNullRow).copy)
       }
     )
     ret.iterator
