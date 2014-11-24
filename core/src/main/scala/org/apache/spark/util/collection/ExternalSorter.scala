@@ -132,7 +132,7 @@ private[spark] class ExternalSorter[K, V, C](
   // files open at a time and thus more memory allocated to buffers.
   private val bypassMergeThreshold = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200)
   private val bypassMergeSort =
-    numPartitions <= bypassMergeThreshold && aggregator.isEmpty && ordering.isEmpty
+    (numPartitions <= bypassMergeThreshold && aggregator.isEmpty && ordering.isEmpty)
 
   // Array of file writers for each partition, used if bypassMergeSort is true and we've spilled
   private var partitionWriters: Array[BlockObjectWriter] = null
@@ -359,9 +359,9 @@ private[spark] class ExternalSorter[K, V, C](
       }
     }
 
-    val it = iterator     // No need to sort stuff, just write each element out
-    while (it.hasNext) {
-      val elem = it.next()
+    // No need to sort stuff, just write each element out
+    while (iterator.hasNext) {
+      val elem = iterator.next()
       val partitionId = elem._1._1
       val key = elem._1._2
       val value = elem._2
@@ -414,7 +414,7 @@ private[spark] class ExternalSorter[K, V, C](
     })
     heap.enqueue(bufferedIters: _*)  // Will contain only the iterators with hasNext = true
     new Iterator[Product2[K, C]] {
-      override def hasNext: Boolean = heap.nonEmpty
+      override def hasNext: Boolean = !heap.isEmpty
 
       override def next(): Product2[K, C] = {
         if (!hasNext) {
