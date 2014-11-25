@@ -18,11 +18,11 @@
 package org.apache.spark.deploy.yarn
 
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
+import java.io.{File, FilenameFilter}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
 import scala.util.{Try, Success, Failure}
-import java.io.{File, FilenameFilter}
 
 import com.google.common.base.Objects
 import org.apache.hadoop.conf.Configuration
