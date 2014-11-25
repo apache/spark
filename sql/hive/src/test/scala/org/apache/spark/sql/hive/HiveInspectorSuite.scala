@@ -38,7 +38,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors with BeforeAndAfte
   private val originalTimeZone = TimeZone.getDefault
 
   override def beforeAll() {
-    // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
+    // Timezone is fixed to GMT
     TimeZone.setDefault(TimeZone.getTimeZone("GMT"))
   }
 
