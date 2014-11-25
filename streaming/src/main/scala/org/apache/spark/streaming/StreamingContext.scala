@@ -121,6 +121,11 @@ class StreamingContext private[streaming] (
     }
   }
 
+  if (sc.conf.get("spark.master") == "local" || sc.conf.get("spark.master") == "local[1]") {
+    logWarning("spark.master should be set as local[n], n > 1 in local mode if you have receivers" +
+      " to get data, otherwise Spark jobs will not get resources to process the received data.")
+  }
+
   private[streaming] val conf = sc.conf
 
   private[streaming] val env = SparkEnv.get
