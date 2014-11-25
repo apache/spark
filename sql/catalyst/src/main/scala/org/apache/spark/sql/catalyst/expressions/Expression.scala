@@ -142,6 +142,8 @@ abstract class Expression extends TreeNode[Expression] {
       val evalE2 = e2.eval(i: Row)
       if (evalE2 == null) {
         null
+      } else if (evalE2 == 0) {
+        null
       } else {
         e1.dataType match {
           case ft: FractionalType =>
