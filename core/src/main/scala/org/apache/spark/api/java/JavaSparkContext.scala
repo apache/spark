@@ -37,6 +37,7 @@ import org.apache.spark.AccumulatorParam._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.scheduler.InputFormatInfo
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
 
 /**
@@ -59,6 +60,15 @@ class JavaSparkContext(val sc: SparkContext)
    * @param conf a [[org.apache.spark.SparkConf]] object specifying Spark parameters
    */
   def this(conf: SparkConf) = this(new SparkContext(conf))
+
+  /**
+   * @param conf a [[org.apache.spark.SparkConf]] object specifying Spark parameters
+   * @param InputFormatInfo a [[org.apache.spark.scheduler.InputFormatInfo]] information about inputFormat
+   */
+  def this(conf: SparkConf, formats: java.util.List[InputFormatInfo]) ={
+    this(new SparkContext(conf, InputFormatInfo.computePreferredLocations(
+      JavaConversions.asScalaBuffer(formats))))
+  }
 
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
