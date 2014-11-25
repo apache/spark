@@ -27,7 +27,7 @@ import org.apache.spark.rdd.RDD
  * Class for squared error loss calculation.
  *
  * The squared (L2) error is defined as:
- *   (y - F(x))**2 / 2
+ *   (y - F(x))**2
  * where y is the label and F(x) is the model prediction for features x.
  */
 @DeveloperApi
@@ -36,7 +36,7 @@ object SquaredError extends Loss {
   /**
    * Method to calculate the gradients for the gradient boosting calculation for least
    * squares error calculation.
-   * The gradient with respect to F(x) is: - (y - F(x))
+   * The gradient with respect to F(x) is: - 2 (y - F(x))
    * @param model Ensemble model
    * @param point Instance of the training dataset
    * @return Loss gradient
@@ -44,7 +44,7 @@ object SquaredError extends Loss {
   override def gradient(
     model: TreeEnsembleModel,
     point: LabeledPoint): Double = {
-    model.predict(point.features) - point.label
+    2.0 * (model.predict(point.features) - point.label)
   }
 
   /**
@@ -59,6 +59,6 @@ object SquaredError extends Loss {
     data.map { y =>
       val err = model.predict(y.features) - y.label
       err * err
-    }.mean() / 2.0
+    }.mean()
   }
 }
