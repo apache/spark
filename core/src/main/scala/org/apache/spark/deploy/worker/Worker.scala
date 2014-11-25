@@ -176,7 +176,7 @@ private[spark] class Worker(
         throw new SparkException("Invalid spark URL: " + x)
     }
     connected = true
-    // Cancel any outstanding re-registeration attempts because we found a new master
+    // Cancel any outstanding re-registration attempts because we found a new master
     registrationRetryTimer.foreach(_.cancel())
     registrationRetryTimer = None
   }
@@ -190,7 +190,9 @@ private[spark] class Worker(
   }
 
   /**
-   * Re-register with the active master in case the master fails or the network is partitioned.
+   * Attempt to re-register with any active master that has been communicating with this worker.
+   * If there is none, attempt to register with all known masters.
+   *
    * During failures, it is important to register with only the active master instead of with
    * all known masters. Otherwise, the following race condition may cause a "duplicate worker"
    * error detailed in SPARK-4592:
@@ -204,9 +206,12 @@ private[spark] class Worker(
    * Instead, if we only register with the known active master, which must have died because
    * another master has taken over, then we can avoid registering with the same master twice.
    */
-  private def reregisterWithActiveMaster(): Unit = {
+  private def reregisterWithMaster(): Unit = {
     if (master != null) {
       master ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+    } else {
+      // We are retrying the initial registration
+      tryRegisterAllMasters()
     }
   }
 
@@ -218,7 +223,7 @@ private[spark] class Worker(
         registrationRetryTimer = None
       } else if (connectionAttemptCount <= TOTAL_REGISTRATION_RETRIES) {
         logInfo(s"Retrying connection to master (attempt # $connectionAttemptCount)")
-        reregisterWithActiveMaster()
+        reregisterWithMaster()
         if (connectionAttemptCount == INITIAL_REGISTRATION_RETRIES) {
           registrationRetryTimer.foreach(_.cancel())
           registrationRetryTimer = Some {
