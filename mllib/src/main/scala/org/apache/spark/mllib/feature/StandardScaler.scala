@@ -102,7 +102,7 @@ class StandardScalerModel private[mllib] (
         case dv: DenseVector =>
           val values = dv.values.clone()
           var i = 0
-          if(withStd) {
+          if (withStd) {
             val localFactor = factor
             while (i < values.length) {
               values(i) = (values(i) - localShift(i)) * localFactor(i)
