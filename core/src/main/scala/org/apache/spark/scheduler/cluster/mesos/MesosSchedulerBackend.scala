@@ -208,12 +208,10 @@ private[spark] class MesosSchedulerBackend(
    */
   override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
     inClassLoader() {
-      // Fail-fast on offers we know will be rejected
-      val (usableOffers, unUsableOffers) = offers.partition { o =>
+      val (acceptedOffers, declinedOffers) = offers.partition { o =>
         val mem = getResource(o.getResourcesList, "mem")
         val cpus = getResource(o.getResourcesList, "cpus")
         val slaveId = o.getSlaveId.getValue
-        // TODO(pwendell): Should below be 1 + scheduler.CPUS_PER_TASK?
         (mem >= MemoryUtils.calculateTotalMemory(sc) &&
           // need at least 1 for executor, 1 for task
           cpus >= 2 * scheduler.CPUS_PER_TASK) ||
@@ -221,12 +219,11 @@ private[spark] class MesosSchedulerBackend(
             cpus >= scheduler.CPUS_PER_TASK)
       }
 
-      val workerOffers = usableOffers.map { o =>
+      val offerableWorkers = acceptedOffers.map { o =>
         val cpus = if (slaveIdsWithExecutors.contains(o.getSlaveId.getValue)) {
           getResource(o.getResourcesList, "cpus").toInt
         } else {
           // If the executor doesn't exist yet, subtract CPU for executor
-          // TODO(pwendell): Should below just subtract "1"?
           getResource(o.getResourcesList, "cpus").toInt -
             scheduler.CPUS_PER_TASK
         }
@@ -236,20 +233,17 @@ private[spark] class MesosSchedulerBackend(
           cpus)
       }
 
-      val slaveIdToOffer = usableOffers.map(o => o.getSlaveId.getValue -> o).toMap
+      val slaveIdToOffer = acceptedOffers.map(o => o.getSlaveId.getValue -> o).toMap
 
       val mesosTasks = new HashMap[String, JArrayList[MesosTaskInfo]]
 
-      val slavesIdsOfAcceptedOffers = HashSet[String]()
-
       // Call into the TaskSchedulerImpl
-      val acceptedOffers = scheduler.resourceOffers(workerOffers).filter(!_.isEmpty)
-      acceptedOffers
+      scheduler.resourceOffers(offerableWorkers)
+        .filter(!_.isEmpty)
         .foreach { offer =>
           offer.foreach { taskDesc =>
             val slaveId = taskDesc.executorId
             slaveIdsWithExecutors += slaveId
-            slavesIdsOfAcceptedOffers += slaveId
             taskIdToSlaveId(taskDesc.taskId) = slaveId
             mesosTasks.getOrElseUpdate(slaveId, new JArrayList[MesosTaskInfo])
               .add(createMesosTask(taskDesc, slaveId))
@@ -263,14 +257,7 @@ private[spark] class MesosSchedulerBackend(
         d.launchTasks(Collections.singleton(slaveIdToOffer(slaveId).getId), tasks, filters)
       }
 
-      // Decline offers that weren't used
-      // NOTE: This logic assumes that we only get a single offer for each host in a given batch
-      for (o <- usableOffers if !slavesIdsOfAcceptedOffers.contains(o.getSlaveId.getValue)) {
-        d.declineOffer(o.getId)
-      }
-
-      // Decline offers we ruled out immediately
-      unUsableOffers.foreach(o => d.declineOffer(o.getId))
+      declinedOffers.foreach(o => d.declineOffer(o.getId))
     }
   }
 
