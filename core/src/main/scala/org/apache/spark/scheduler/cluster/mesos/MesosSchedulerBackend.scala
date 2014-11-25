@@ -257,6 +257,10 @@ private[spark] class MesosSchedulerBackend(
         d.launchTasks(Collections.singleton(slaveIdToOffer(slaveId).getId), tasks, filters)
       }
 
+      for (o <- acceptedOffers if !slaveIdsWithExecutors.contains(o.getSlaveId.getValue)) {
+        d.declineOffer(o.getId)
+      }
+
       declinedOffers.foreach(o => d.declineOffer(o.getId))
     }
   }
