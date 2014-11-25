@@ -15,7 +15,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.serializer import loads, dumps
-from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.mysql import LONGTEXT
 from airflow.executors import DEFAULT_EXECUTOR
 from airflow.configuration import getconf
@@ -44,43 +43,48 @@ class DagBag(object):
             executor=DEFAULT_EXECUTOR):
         logging.info("Filling up the DagBag from " + dag_folder)
         self.dag_folder = dag_folder
-        self.collect_dags()
+        self.dags = {}
+        self.file_last_changed = {}
         self.executor = executor
+        self.collect_dags()
 
-    def process_file(self, filepath):
+    def process_file(self, filepath, only_if_updated=True):
         """
         Given a path to a python module, this method imports the module and
         look for dag objects whithin it.
         """
         mod_name, file_ext = os.path.splitext(os.path.split(filepath)[-1])
+        dttm = datetime.fromtimestamp(os.path.getmtime(filepath))
+
         if file_ext != '.py':
             return
-        try:
-            logging.info("Importing " + filepath)
-            m = imp.load_source(mod_name, filepath)
-        except:
-            logging.error("Failed to import: " + filepath)
-            logging.error("Exception: " + str(sys.exc_info()))
-            traceback.print_exc(file=sys.stdout)
-        else:
+
+        if (    not only_if_updated or
+                filepath not in self.file_last_changed or
+                dttm != self.file_last_changed[filepath]):
+            try:
+                logging.info("Importing " + filepath)
+                m = imp.load_source(mod_name, filepath)
+            except:
+                logging.error("Failed to import: " + filepath)
+                # logging.error("Exception: " + str(sys.exc_info()))
+                # traceback.print_exc(file=sys.stdout)
+                return
+
             for dag in m.__dict__.values():
                 if type(dag) == DAG:
-                    dag.full_filepath = filepath
-                    if dag.dag_id in self.dags:
-                        raise Exception(
-                            'Two DAGs with the same dag_id: ' + str(dag.dag_id) + ' No good.')
-                    self.dags[dag.dag_id] = dag
                     dag.dagbag = self
-                    if getconf().getboolean('misc', 'RUN_AS_MASTER'):
-                        dag.db_merge()
+                    dag.full_filepath = filepath
+                    self.dags[dag.dag_id] = dag
+                    logging.info('Loaded DAG {dag}'.format(**locals()))
 
-    def collect_dags(self):
+            self.file_last_changed[filepath] = dttm
+
+    def collect_dags(self, only_if_updated=True):
         """
         Given a file path or a folder, this file looks for python modules,
         imports them and adds them to the dagbag collection.
         """
-
-        self.dags = {}
         if os.path.isfile(self.dag_folder):
             self.process_file(self.dag_folder)
         elif os.path.isdir(self.dag_folder):
@@ -1102,7 +1106,6 @@ class DAG(Base):
         """
         Shows an ascii tree representation of the DAG
         """
-
         def get_downstream(task, level=0):
             print (" " * level * 4) + str(task)
             level += 1

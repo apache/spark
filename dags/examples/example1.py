@@ -6,7 +6,7 @@ from datetime import datetime
 
 default_args = {
     'owner': 'max',
-    'start_date': datetime(2014, 10, 20),
+    'start_date': datetime(2014, 11, 1),
     'mysql_dbid': 'local_mysql',
 }
 
@@ -24,7 +24,7 @@ run_this = BashOperator(
 dag.add_task(run_this)
 run_this.set_downstream(run_this_last)
 
-for i in range(5):
+for i in range(9):
     i = str(i)
     task = BashOperator(
             task_id='runme_'+i,
