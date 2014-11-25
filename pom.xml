@@ -1394,7 +1394,7 @@
       </dependencies>
     </profile>
     <profile>
-      <id>hive-thriftserver</id>
+      <id>hive</id>
       <modules>
         <module>sql/hive-thriftserver</module>
       </modules>
