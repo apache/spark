@@ -31,9 +31,9 @@ import org.apache.spark.util.CompletionIterator
 
 /**
  * Manages blocks of sorted data on disk that need to be merged together. Carries out a tiered
- * merge that will never merge more than spark.shuffle.maxMergeFactor segments at a time.  Except for
- * the final merge, which merges disk blocks to a returned iterator, TieredDiskMerger merges blocks
- * from disk to disk.
+ * merge that will never merge more than spark.shuffle.maxMergeFactor segments at a time.
+ * Except for the final merge, which merges disk blocks to a returned iterator, TieredDiskMerger
+ * merges blocks from disk to disk.
  *
  * TieredDiskMerger carries out disk-to-disk merges in a background thread that can run concurrently
  * with blocks being deposited on disk.

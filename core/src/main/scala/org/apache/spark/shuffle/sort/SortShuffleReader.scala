@@ -53,7 +53,7 @@ private[spark] class SortShuffleReader[K, C](
     context: TaskContext)
   extends ShuffleReader[K, C] with Logging {
 
-  /** Manage the fetched in-memory shuffle block and related buffer*/
+  /** Manage the fetched in-memory shuffle block and related buffer */
   case class MemoryShuffleBlock(blockId: BlockId, blockData: ManagedBuffer)
 
   require(endPartition == startPartition + 1,
