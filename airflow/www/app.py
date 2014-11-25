@@ -114,7 +114,7 @@ class Airflow(BaseView):
         dag_id = request.args.get('dag_id')
         dag = dagbag.dags[dag_id]
         code = "".join(open(dag.full_filepath, 'r').readlines())
-        title = dag.filepath.replace(getconf().get('core', 'BASE_FOLDER') + '/dags/', '')
+        title = dag.filepath
         html_code = highlight(
             code, PythonLexer(), HtmlFormatter(noclasses=True))
         return self.render(
