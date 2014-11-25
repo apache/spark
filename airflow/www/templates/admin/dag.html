@@ -57,6 +57,9 @@
           <button id="btn_task" type="button" class="btn btn-primary">
             Task Details
           </button>
+          <button id="btn_ti" type="button" class="btn btn-primary">
+            Task Instances 
+          </button>
           <button id="btn_log" type="button" class="btn btn-primary">
             View Log
           </button>
@@ -128,6 +131,14 @@
       url = "{{ url_for('airflow.task') }}" +
         "?task_id=" + task_id +
         "&dag_id=" + dag_id;
+      window.location = url;
+    });
+
+    $("#btn_ti").click(function(){
+      url = "/admin/taskinstanceview/" +
+        "?flt1_dag_id_equals=" + dag_id +
+        "&flt2_task_id_equals=" + task_id +
+        "&sort=3&desc=1";
       window.location = url;
     });
 
