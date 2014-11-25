@@ -29,6 +29,8 @@ import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.util.Utils
+import org.apache.hadoop.io.{Text, IntWritable}
+import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 /**
  * This test suites tests the checkpointing functionality of DStreams -
@@ -203,6 +205,30 @@ class CheckpointSuite extends TestSuiteBase {
         .checkpoint(batchDuration * 2)
     }
     testCheckpointedOperation(input, operation, output, 7)
+  }
+
+  test("recovery with saveAsNewAPIHadoopFiles") {
+    val tempDir = Files.createTempDir()
+    try {
+      testCheckpointedOperation(
+        Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
+        (s: DStream[String]) => {
+          val output = s.map(x => (x, 1)).reduceByKey(_ + _)
+          output.saveAsNewAPIHadoopFiles(
+            tempDir.toURI.toString,
+            "result",
+            classOf[Text],
+            classOf[IntWritable],
+            classOf[TextOutputFormat[Text, IntWritable]])
+          (tempDir.toString, "result")
+          output
+        },
+        Seq(Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq(), Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq()),
+        3
+      )
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
   }
 
 
@@ -391,7 +417,9 @@ class CheckpointSuite extends TestSuiteBase {
     logInfo("Manual clock after advancing = " + clock.time)
     Thread.sleep(batchDuration.milliseconds)
 
-    val outputStream = ssc.graph.getOutputStreams.head.asInstanceOf[TestOutputStreamWithPartitions[V]]
+    val outputStream = ssc.graph.getOutputStreams.filter { dstream =>
+      dstream.isInstanceOf[TestOutputStreamWithPartitions[V]]
+    }.head.asInstanceOf[TestOutputStreamWithPartitions[V]]
     outputStream.output.map(_.flatten)
   }
 }
