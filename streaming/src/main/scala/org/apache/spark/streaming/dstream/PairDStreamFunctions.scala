@@ -26,6 +26,7 @@ import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
 import org.apache.spark.{HashPartitioner, Partitioner, SerializableWritable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.streaming.StreamingContext._
 
