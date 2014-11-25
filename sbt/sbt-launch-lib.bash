@@ -186,4 +186,3 @@ run() {
     "${sbt_commands[@]}" \
     "${residual_args[@]}"
 }
-
