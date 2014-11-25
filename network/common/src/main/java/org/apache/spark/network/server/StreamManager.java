@@ -40,10 +40,12 @@ public abstract class StreamManager {
    *
    * @param streamId id of a stream that has been previously registered with the StreamManager.
    * @param chunkIndex 0-indexed chunk of the stream that's requested
+   * @return TODO
    */
   public abstract ManagedBuffer getChunk(long streamId, int chunkIndex);
 
   /**
+   * @param streamId TODO
    * Indicates that the TCP connection that was tied to the given stream has been terminated. After
    * this occurs, we are guaranteed not to read from the stream again, so any state can be cleaned
    * up.

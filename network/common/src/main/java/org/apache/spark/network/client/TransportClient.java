@@ -49,7 +49,7 @@ import org.apache.spark.network.util.NettyUtils;
  * to perform this setup.
  *
  * For example, a typical workflow might be:
- * client.sendRPC(new OpenFile("/foo")) --> returns StreamId = 100
+ * client.sendRPC(new OpenFile("/foo")) -- returns StreamId = 100
  * client.fetchChunk(streamId = 100, chunkIndex = 0, callback)
  * client.fetchChunk(streamId = 100, chunkIndex = 1, callback)
  * ...
@@ -70,11 +70,18 @@ public class TransportClient implements Closeable {
   private final Channel channel;
   private final TransportResponseHandler handler;
 
+  /**
+   * @param channel TODO
+   * @param handler TODO
+   */
   public TransportClient(Channel channel, TransportResponseHandler handler) {
     this.channel = Preconditions.checkNotNull(channel);
     this.handler = Preconditions.checkNotNull(handler);
   }
 
+  /**
+   * @return TODO
+   */
   public boolean isActive() {
     return channel.isOpen() || channel.isActive();
   }
@@ -132,6 +139,8 @@ public class TransportClient implements Closeable {
   /**
    * Sends an opaque message to the RpcHandler on the server-side. The callback will be invoked
    * with the server's response or upon any failure.
+   * @param message TODO
+   * @param callback TODO
    */
   public void sendRpc(byte[] message, final RpcResponseCallback callback) {
     final String serverAddr = NettyUtils.getRemoteAddress(channel);
@@ -167,6 +176,9 @@ public class TransportClient implements Closeable {
   /**
    * Synchronously sends an opaque message to the RpcHandler on the server-side, waiting for up to
    * a specified timeout for a response.
+   * @param message TODO
+   * @param timeoutMs TODO
+   * @return TODO
    */
   public byte[] sendRpcSync(byte[] message, long timeoutMs) {
     final SettableFuture<byte[]> result = SettableFuture.create();

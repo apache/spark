@@ -30,12 +30,15 @@ import io.netty.buffer.ByteBuf;
  * Additionally, when adding a new Encodable Message, add it to {@link Message.Type}.
  */
 public interface Encodable {
-  /** Number of bytes of the encoded form of this object. */
+  /** Number of bytes of the encoded form of this object.
+   * @return TODO
+   * */
   int encodedLength();
 
   /**
    * Serializes this object by writing into the given ByteBuf.
    * This method must write exactly encodedLength() bytes.
+   * @param buf TODO
    */
   void encode(ByteBuf buf);
 }

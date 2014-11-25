@@ -72,21 +72,31 @@ public class TransportContext {
    * Initializes a ClientFactory which runs the given TransportClientBootstraps prior to returning
    * a new Client. Bootstraps will be executed synchronously, and must run successfully in order
    * to create a Client.
+   * @param bootstraps TODO
+   * @return TODO
    */
   public TransportClientFactory createClientFactory(List<TransportClientBootstrap> bootstraps) {
     return new TransportClientFactory(this, bootstraps);
   }
 
+  /**
+   * @return TODO
+   */
   public TransportClientFactory createClientFactory() {
     return createClientFactory(Lists.<TransportClientBootstrap>newArrayList());
   }
 
-  /** Create a server which will attempt to bind to a specific port. */
+  /** Create a server which will attempt to bind to a specific port.
+   * @param port TODO
+   * @return TODO
+   * */
   public TransportServer createServer(int port) {
     return new TransportServer(this, port);
   }
 
-  /** Creates a new server, binding to any available ephemeral port. */
+  /** Creates a new server, binding to any available ephemeral port.
+   * @return TODO
+   * */
   public TransportServer createServer() {
     return new TransportServer(this, 0);
   }
@@ -95,6 +105,8 @@ public class TransportContext {
    * Initializes a client or server Netty Channel Pipeline which encodes/decodes messages and
    * has a {@link org.apache.spark.network.server.TransportChannelHandler} to handle request or
    * response messages.
+   *
+   * @param channel TODO
    *
    * @return Returns the created TransportChannelHandler, which includes a TransportClient that can
    * be used to communicate on this channel. The TransportClient is directly associated with a

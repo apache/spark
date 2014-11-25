@@ -25,12 +25,20 @@ import org.apache.spark.network.protocol.Message;
  * Channel.)
  */
 public abstract class MessageHandler<T extends Message> {
-  /** Handles the receipt of a single message. */
+  /**
+   * Handles the receipt of a single message.
+   * @param message TODO
+   */
   public abstract void handle(T message);
 
-  /** Invoked when an exception was caught on the Channel. */
+  /**
+   * Invoked when an exception was caught on the Channel.
+   * @param cause TODO
+   */
   public abstract void exceptionCaught(Throwable cause);
 
-  /** Invoked when the channel this MessageHandler is on has been unregistered. */
+  /**
+   * Invoked when the channel this MessageHandler is on has been unregistered.
+   */
   public abstract void channelUnregistered();
 }

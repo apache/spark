@@ -36,12 +36,16 @@ import java.nio.ByteBuffer;
  */
 public abstract class ManagedBuffer {
 
-  /** Number of bytes of the data. */
+  /** Number of bytes of the data.
+   * @return TODO
+   * */
   public abstract long size();
 
   /**
    * Exposes this buffer's data as an NIO ByteBuffer. Changing the position and limit of the
    * returned ByteBuffer should not affect the content of this buffer.
+   * @return TODO
+   * @throws java.io.IOException TODO
    */
   // TODO: Deprecate this, usage may require expensive memory mapping or allocation.
   public abstract ByteBuffer nioByteBuffer() throws IOException;
@@ -50,22 +54,28 @@ public abstract class ManagedBuffer {
    * Exposes this buffer's data as an InputStream. The underlying implementation does not
    * necessarily check for the length of bytes read, so the caller is responsible for making sure
    * it does not go over the limit.
+   * @return TODO
+   * @throws java.io.IOException TODO
    */
   public abstract InputStream createInputStream() throws IOException;
 
   /**
    * Increment the reference count by one if applicable.
+   * @return TODO
    */
   public abstract ManagedBuffer retain();
 
   /**
    * If applicable, decrement the reference count by one and deallocates the buffer if the
    * reference count reaches zero.
+   * @return TODO
    */
   public abstract ManagedBuffer release();
 
   /**
    * Convert the buffer into an Netty object, used to write the data out.
+   * @return TODO
+   * @throws java.io.IOException TODO
    */
   public abstract Object convertToNetty() throws IOException;
 }

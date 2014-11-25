@@ -22,9 +22,13 @@ package org.apache.spark.network.client;
  * failure.
  */
 public interface RpcResponseCallback {
-  /** Successful serialized result from server. */
+  /** Successful serialized result from server.
+   * @param response TODO
+   * */
   void onSuccess(byte[] response);
 
-  /** Exception either propagated from server or raised on client side. */
+  /** Exception either propagated from server or raised on client side.
+   * @param e TODO
+   * */
   void onFailure(Throwable e);
 }
