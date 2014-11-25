@@ -143,7 +143,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
       }
     }
     val missing = topicAndPartitions.diff(result.keys.toSet)
-    errs.append(new Exception(s"Couldn't find offsets for ${missing}"))
+    errs.append(new Exception(s"Couldn't find leader offsets for ${missing}"))
     Left(errs)
   }
 
@@ -183,7 +183,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
       }
     }
     val missing = topicAndPartitions.diff(result.keys.toSet)
-    errs.append(new Exception(s"Couldn't find offsets for ${missing}"))
+    errs.append(new Exception(s"Couldn't find consumer offsets for ${missing}"))
     Left(errs)
   }
 
