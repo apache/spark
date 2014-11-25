@@ -145,6 +145,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors with BeforeAndAfte
       case (r1: Array[Byte], r2: Array[Byte])
         if r1 != null && r2 != null && r1.length == r2.length =>
         r1.zip(r2).map { case (b1, b2) => assert(b1 == b2) }
+      case (r1: Date, r2: Date) => assert(r1.compareTo(r2) == 0)
       case (r1, r2) => assert(r1 == r2)
     }
   }
