@@ -103,7 +103,8 @@ def clear(args):
         start_date=args.start_date,
         end_date=args.end_date,
         upstream=args.upstream,
-        downstream=args.downstream)
+        downstream=args.downstream,
+        only_failed=args.only_failed)
 
 
 def webserver(args):
@@ -181,12 +182,14 @@ def master(args):
                 else:
                     ti = ti_dict[task.task_id]
                     ti.task = task  # Hacky but worky
+                    logging.debug(
+                        'Trying: {ti}, state:{ti.state}'.format(**locals()))
                     if ti.state == State.UP_FOR_RETRY:
                         # If task instance if up for retry, make sure
                         # the retry delay is met
                         if ti.is_runnable():
-                            executor.queue_command(
-                                ti.key, ti.command())
+                            logging.debug('Queuing retry: ' + str(ti))
+                            executor.queue_command(ti.key, ti.command())
                     elif ti.state == State.RUNNING:
                         # Only one task at a time
                         continue
@@ -195,10 +198,11 @@ def master(args):
                         ti = TI(
                             task=task,
                             execution_date=ti.execution_date +
-                            task.schedule_interval
+                                task.schedule_interval
                         )
                         ti.refresh_from_db()
                         if ti.is_runnable():
+                            logging.debug('Adding to queue: ' + str(ti))
                             executor.queue_command(ti.key, ti.command())
                 executor.heartbeat()
             session.close()
@@ -295,6 +299,9 @@ if __name__ == '__main__':
     ht = "Include upstream tasks"
     parser_clear.add_argument(
         "-u", "--upstream", help=ht, action="store_true")
+    ht = "Only failed jobs"
+    parser_clear.add_argument(
+        "-f", "--only_failed", help=ht, action="store_true")
     ht = "Include downstream tasks"
     parser_clear.add_argument(
         "-d", "--downstream", help=ht, action="store_true")
