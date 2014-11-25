@@ -42,6 +42,8 @@ import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.execution.{ExtractPythonUdfs, QueryExecutionException, Command => PhysicalCommand}
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
 import org.apache.spark.sql.sources.DataSourceStrategy
+import org.apache.spark.SerializableWritable
+import org.apache.spark.broadcast.Broadcast
 
 /**
  * DEPRECATED: Use HiveContext instead.
@@ -242,6 +244,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         (state.getConf, state)
       }
       .get
+
+  protected[hive] var hiveConfBroadcast: Option[Broadcast[SerializableWritable[HiveConf]]] = None
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
