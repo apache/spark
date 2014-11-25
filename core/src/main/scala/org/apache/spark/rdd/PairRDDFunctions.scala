@@ -481,9 +481,203 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
    */
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
-    this.cogroup(other, partitioner).flatMapValues( pair =>
-      for (v <- pair._1; w <- pair._2) yield (v, w)
-    )
+    if(SparkEnv.get.conf.getBoolean("spark.join.skewed.enabled", false)) {
+      skewedJoin(other, partitioner)(ClassTag.AnyRef.asInstanceOf[ClassTag[W]])
+    } else {
+      this.cogroup(other, partitioner).flatMapValues { pair =>
+        for (v <- pair._1; w <- pair._2) yield (v, w)
+      }
+    }
+  }
+
+  /**
+   * ::Experimental::
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Performs a hash join across the cluster.
+   *
+   * It supports to join skewed data. If values of some key cannot be fit into memory, it will spill
+   * them to disk.
+   */
+  @Experimental
+  def skewedJoin[W: ClassTag](other: RDD[(K, W)]): RDD[(K, (V, W))] = {
+    skewedJoin(other, defaultPartitioner(self, other))
+  }
+
+  /**
+   * ::Experimental::
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Performs a hash join across the cluster.
+   *
+   * It supports to join skewed data. If values of some key cannot be fit into memory, it will spill
+   * them to disk.
+   */
+  @Experimental
+  def skewedJoin[W: ClassTag](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (V, W))] = {
+    skewedJoin(other, new HashPartitioner(numPartitions))
+  }
+
+  /**
+   * ::Experimental::
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
+   *
+   * It supports to join skewed data. If values of some key cannot be fit into memory, it will spill
+   * them to disk.
+   */
+  @Experimental
+  def skewedJoin[W: ClassTag](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
+    new SkewedJoinRDD[K, V, W, (V, W)](self, other, partitioner, JoinType.inner)
+  }
+
+  /**
+   * ::Experimental::
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
+   * using the existing partitioner/parallelism level.
+   *
+   * It supports to join skewed data. If values of some key cannot be fit into memory, it will spill
+   * them to disk.
+   */
+  @Experimental
+  def skewedLeftOuterJoin[W: ClassTag](other: RDD[(K, W)]): RDD[(K, (V, Option[W]))] = {
+    skewedLeftOuterJoin(other, defaultPartitioner(self, other))
+  }
+
+  /**
+   * ::Experimental::
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
+   * into `numPartitions` partitions.
+   *
+   * It supports to join skewed data. If values of some key cannot be fit into memory, it will spill
+   * them to disk.
+   */
+  @Experimental
+  def skewedLeftOuterJoin[W: ClassTag](other: RDD[(K, W)], numPartitions: Int):
+      RDD[(K, (V, Option[W]))] = {
+    skewedLeftOuterJoin(other, new HashPartitioner(numPartitions))
+  }
+
+  /**
+   * ::Experimental::
+   * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (v, Some(w))) for w in `other`, or the
+   * pair (k, (v, None)) if no elements in `other` have key k. Uses the given Partitioner to
+   * partition the output RDD.
+   *
+   * It supports to join skewed data. If values of some key cannot be fit into memory, it will spill
+   * them to disk.
+   */
+  @Experimental
+  def skewedLeftOuterJoin[W: ClassTag](other: RDD[(K, W)], partitioner: Partitioner):
+      RDD[(K, (V, Option[W]))] = {
+    new SkewedJoinRDD[K, V, W, (V, Option[W])](self, other, partitioner, JoinType.leftOuter)
+  }
+
+  /**
+   * ::Experimental::
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
+   * RDD using the existing partitioner/parallelism level.
+   *
+   * It supports to join skewed data. If values of some key cannot be fit into memory, it will spill
+   * them to disk.
+   */
+  @Experimental
+  def skewedRightOuterJoin[W: ClassTag](other: RDD[(K, W)]): RDD[(K, (Option[V], W))] = {
+    skewedRightOuterJoin(other, defaultPartitioner(self, other))
+  }
+
+  /**
+   * ::Experimental::
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
+   * RDD into the given number of partitions.
+   *
+   * It supports to join skewed data. If values of some key cannot be fit into memory, it will spill
+   * them to disk.
+   */
+  @Experimental
+  def skewedRightOuterJoin[W: ClassTag](other: RDD[(K, W)], numPartitions: Int):
+      RDD[(K, (Option[V], W))] = {
+    skewedRightOuterJoin(other, new HashPartitioner(numPartitions))
+  }
+
+  /**
+   * ::Experimental::
+   * Perform a right outer join of `this` and `other`. For each element (k, w) in `other`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), w)) for v in `this`, or the
+   * pair (k, (None, w)) if no elements in `this` have key k. Uses the given Partitioner to
+   * partition the output RDD.
+   *
+   * It supports to join skewed data. If values of some key cannot be fit into memory, it will spill
+   * them to disk.
+   */
+  @Experimental
+  def skewedRightOuterJoin[W: ClassTag](other: RDD[(K, W)], partitioner: Partitioner):
+     RDD[(K, (Option[V], W))] = {
+    new SkewedJoinRDD[K, V, W, (Option[V], W)](self, other, partitioner, JoinType.rightOuter)
+  }
+
+  /**
+   * ::Experimental::
+   * Perform a full outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), Some(w))) for w in `other`, or
+   * the pair (k, (Some(v), None)) if no elements in `other` have key k. Similarly, for each
+   * element (k, w) in `other`, the resulting RDD will either contain all pairs
+   * (k, (Some(v), Some(w))) for v in `this`, or the pair (k, (None, Some(w))) if no elements
+   * in `this` have key k. Hash-partitions the resulting RDD using the existing partitioner/
+   * parallelism level.
+   *
+   * It supports to join skewed data. If values of some key cannot be fit into memory, it will spill
+   * them to disk.
+   */
+  @Experimental
+  def skewedFullOuterJoin[W: ClassTag](other: RDD[(K, W)]): RDD[(K, (Option[V], Option[W]))] = {
+    skewedFullOuterJoin(other, defaultPartitioner(self, other))
+  }
+
+  /**
+   * ::Experimental::
+   * Perform a full outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), Some(w))) for w in `other`, or
+   * the pair (k, (Some(v), None)) if no elements in `other` have key k. Similarly, for each
+   * element (k, w) in `other`, the resulting RDD will either contain all pairs
+   * (k, (Some(v), Some(w))) for v in `this`, or the pair (k, (None, Some(w))) if no elements
+   * in `this` have key k. Hash-partitions the resulting RDD into the given number of partitions.
+   *
+   * It supports to join skewed data. If values of some key cannot be fit into memory, it will spill
+   * them to disk.
+   */
+  @Experimental
+  def skewedFullOuterJoin[W: ClassTag](other: RDD[(K, W)], numPartitions: Int):
+      RDD[(K, (Option[V], Option[W]))] = {
+    skewedFullOuterJoin(other, new HashPartitioner(numPartitions))
+  }
+
+  /**
+   * ::Experimental::
+   * Perform a full outer join of `this` and `other`. For each element (k, v) in `this`, the
+   * resulting RDD will either contain all pairs (k, (Some(v), Some(w))) for w in `other`, or
+   * the pair (k, (Some(v), None)) if no elements in `other` have key k. Similarly, for each
+   * element (k, w) in `other`, the resulting RDD will either contain all pairs
+   * (k, (Some(v), Some(w))) for v in `this`, or the pair (k, (None, Some(w))) if no elements
+   * in `this` have key k. Uses the given Partitioner to partition the output RDD.
+   *
+   * It supports to join skewed data. If values of some key cannot be fit into memory, it will spill
+   * them to disk.
+   */
+  @Experimental
+  def skewedFullOuterJoin[W: ClassTag](other: RDD[(K, W)], partitioner: Partitioner):
+      RDD[(K, (Option[V], Option[W]))] = {
+    new SkewedJoinRDD[K, V, W, (Option[V], Option[W])](self, other, partitioner, JoinType.fullOuter)
   }
 
   /**
@@ -493,11 +687,15 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * partition the output RDD.
    */
   def leftOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, Option[W]))] = {
-    this.cogroup(other, partitioner).flatMapValues { pair =>
-      if (pair._2.isEmpty) {
-        pair._1.map(v => (v, None))
-      } else {
-        for (v <- pair._1; w <- pair._2) yield (v, Some(w))
+    if(SparkEnv.get.conf.getBoolean("spark.join.skewed.enabled", false)) {
+      skewedLeftOuterJoin(other, partitioner)(ClassTag.AnyRef.asInstanceOf[ClassTag[W]])
+    } else {
+      this.cogroup(other, partitioner).flatMapValues { pair =>
+        if (pair._2.isEmpty) {
+          pair._1.map(v => (v, None))
+        } else {
+          for (v <- pair._1; w <- pair._2) yield (v, Some(w))
+        }
       }
     }
   }
@@ -510,11 +708,15 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def rightOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Option[V], W))] = {
-    this.cogroup(other, partitioner).flatMapValues { pair =>
-      if (pair._1.isEmpty) {
-        pair._2.map(w => (None, w))
-      } else {
-        for (v <- pair._1; w <- pair._2) yield (Some(v), w)
+    if(SparkEnv.get.conf.getBoolean("spark.join.skewed.enabled", false)) {
+      skewedRightOuterJoin(other, partitioner)(ClassTag.AnyRef.asInstanceOf[ClassTag[W]])
+    } else {
+      this.cogroup(other, partitioner).flatMapValues { pair =>
+        if (pair._1.isEmpty) {
+          pair._2.map(w => (None, w))
+        } else {
+          for (v <- pair._1; w <- pair._2) yield (Some(v), w)
+        }
       }
     }
   }
@@ -529,10 +731,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def fullOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Option[V], Option[W]))] = {
-    this.cogroup(other, partitioner).flatMapValues {
-      case (vs, Seq()) => vs.map(v => (Some(v), None))
-      case (Seq(), ws) => ws.map(w => (None, Some(w)))
-      case (vs, ws) => for (v <- vs; w <- ws) yield (Some(v), Some(w))
+    if(SparkEnv.get.conf.getBoolean("spark.join.skewed.enabled", false)) {
+      skewedFullOuterJoin(other, partitioner)(ClassTag.AnyRef.asInstanceOf[ClassTag[W]])
+    } else {
+      this.cogroup(other, partitioner).flatMapValues {
+        case (vs, Seq()) => vs.map(v => (Some(v), None))
+        case (Seq(), ws) => ws.map(w => (None, Some(w)))
+        case (vs, ws) => for (v <- vs; w <- ws) yield (Some(v), Some(w))
+      }
     }
   }
 
