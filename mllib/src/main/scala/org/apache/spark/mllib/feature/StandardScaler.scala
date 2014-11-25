@@ -85,7 +85,10 @@ class StandardScalerModel private[mllib] (
     f
   }
 
-  private val shift: Array[Double] = mean.toArray
+  // Since `shift` will be only used in `withMean` branch, we have it as
+  // `lazy val` so it will be evaluated in that branch. Note that we don't
+  // want to create this array multiple times in `transform` function.
+  private lazy val shift: Array[Double] = mean.toArray
 
   /**
    * Applies standardization transformation on a vector.
