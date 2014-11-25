@@ -190,32 +190,11 @@ private[spark] class Worker(
   }
 
   /**
-   * Attempt to re-register with any active master that has been communicating with this worker.
-   * If there is none, attempt to register with all known masters.
-   *
-   * During failures, it is important to register with only the active master instead of with
-   * all known masters. Otherwise, the following race condition may cause a "duplicate worker"
-   * error detailed in SPARK-4592:
-   *
-   *   (1) Master A fails and Worker attempts to reconnect to all masters
-   *   (2) Master B takes over and notifies Worker
-   *   (3) Worker responds by registering with Master B
-   *   (4) Meanwhile, Worker's previous reconnection attempt reaches Master B,
-   *       causing the same Worker to register with Master B twice
-   *
-   * Instead, if we only register with the known active master, which must have died because
-   * another master has taken over, then we can avoid registering with the same master twice.
+   * Re-register with the master because a network failure or a master failure has occurred.
+   * If the re-registration attempt threshold is exceeded, the worker exits with error.
+   * Note that for thread-safety this should only be called from the actor.
    */
   private def reregisterWithMaster(): Unit = {
-    if (master != null) {
-      master ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
-    } else {
-      // We are retrying the initial registration
-      tryRegisterAllMasters()
-    }
-  }
-
-  private def retryConnectToMaster() {
     Utils.tryOrExit {
       connectionAttemptCount += 1
       if (registered) {
@@ -223,12 +202,40 @@ private[spark] class Worker(
         registrationRetryTimer = None
       } else if (connectionAttemptCount <= TOTAL_REGISTRATION_RETRIES) {
         logInfo(s"Retrying connection to master (attempt # $connectionAttemptCount)")
-        reregisterWithMaster()
+        /**
+         * Re-register with the active master this worker has been communicating with. If there
+         * is none, then it means this worker is still bootstrapping and hasn't established a
+         * connection with a master yet, in which case we should re-register with all masters.
+         *
+         * It is important to re-register only with the active master during failures. Otherwise,
+         * if the worker unconditionally attempts to re-register with all masters, the following
+         * race condition may arise and cause a "duplicate worker" error detailed in SPARK-4592:
+         *
+         *   (1) Master A fails and Worker attempts to reconnect to all masters
+         *   (2) Master B takes over and notifies Worker
+         *   (3) Worker responds by registering with Master B
+         *   (4) Meanwhile, Worker's previous reconnection attempt reaches Master B,
+         *       causing the same Worker to register with Master B twice
+         *
+         * Instead, if we only register with the known active master, we can assume that the
+         * old master must have died because another master has taken over. Note that this is
+         * still not safe if the old master recovers within this interval, but this is a much
+         * less likely scenario.
+         */
+        if (master != null) {
+          master ! RegisterWorker(
+            workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+        } else {
+          // We are retrying the initial registration
+          tryRegisterAllMasters()
+        }
+        // We have exceeded the initial registration retry threshold
+        // All retries from now on should use a higher interval
         if (connectionAttemptCount == INITIAL_REGISTRATION_RETRIES) {
           registrationRetryTimer.foreach(_.cancel())
           registrationRetryTimer = Some {
             context.system.scheduler.schedule(PROLONGED_REGISTRATION_RETRY_INTERVAL,
-              PROLONGED_REGISTRATION_RETRY_INTERVAL)(retryConnectToMaster)
+              PROLONGED_REGISTRATION_RETRY_INTERVAL, self, ReregisterWithMaster)
           }
         }
       } else {
@@ -248,7 +255,7 @@ private[spark] class Worker(
         connectionAttemptCount = 0
         registrationRetryTimer = Some {
           context.system.scheduler.schedule(INITIAL_REGISTRATION_RETRY_INTERVAL,
-            INITIAL_REGISTRATION_RETRY_INTERVAL)(retryConnectToMaster)
+            INITIAL_REGISTRATION_RETRY_INTERVAL, self, ReregisterWithMaster)
         }
       case Some(_) =>
         logInfo("Not spawning another attempt to register with the master, since there is an" +
@@ -428,12 +435,15 @@ private[spark] class Worker(
       logInfo(s"$x Disassociated !")
       masterDisconnected()
 
-    case RequestWorkerState => {
+    case RequestWorkerState =>
       sender ! WorkerStateResponse(host, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, drivers.values.toList,
         finishedDrivers.values.toList, activeMasterUrl, cores, memory,
         coresUsed, memoryUsed, activeMasterWebUiUrl)
-    }
+
+    case ReregisterWithMaster =>
+      reregisterWithMaster()
+
   }
 
   private def masterDisconnected() {
