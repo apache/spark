@@ -47,7 +47,6 @@ MESOS_SPARK_EC2_BRANCH = "v4"
 AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/{b}/ami-list".format(b=MESOS_SPARK_EC2_BRANCH)
 
 
-
 class UsageError(Exception):
     pass
 
@@ -139,7 +138,7 @@ def parse_args():
         help="The SSH user you want to connect as (default: %default)")
     parser.add_option(
         "--delete-groups", action="store_true", default=False,
-        help="When destroying a cluster, delete the security groups that were created.")
+        help="When destroying a cluster, delete the security groups that were created")
     parser.add_option(
         "--use-existing-master", action="store_true", default=False,
         help="Launch fresh slaves, but use an existing stopped master if possible")
@@ -153,9 +152,6 @@ def parse_args():
     parser.add_option(
         "--user-data", type="string", default="",
         help="Path to a user-data file (most AMI's interpret this as an initialization script)")
-    parser.add_option(
-        "--security-group-prefix", type="string", default=None,
-        help="Use this prefix for the security group rather than the cluster name.")
     parser.add_option(
         "--authorized-address", type="string", default="0.0.0.0/0",
         help="Address to authorize on created security groups (default: %default)")
@@ -306,12 +302,8 @@ def launch_cluster(conn, opts, cluster_name):
             user_data_content = user_data_file.read()
 
     print "Setting up security groups..."
-    if opts.security_group_prefix is None:
-        master_group = get_or_make_group(conn, cluster_name + "-master")
-        slave_group = get_or_make_group(conn, cluster_name + "-slaves")
-    else:
-        master_group = get_or_make_group(conn, opts.security_group_prefix + "-master")
-        slave_group = get_or_make_group(conn, opts.security_group_prefix + "-slaves")
+    master_group = get_or_make_group(conn, cluster_name + "-master")
+    slave_group = get_or_make_group(conn, cluster_name + "-slaves")
     authorized_address = opts.authorized_address
     if master_group.rules == []:  # Group was just now created
         master_group.authorize(src_group=master_group)
@@ -336,11 +328,12 @@ def launch_cluster(conn, opts, cluster_name):
         slave_group.authorize('tcp', 60060, 60060, authorized_address)
         slave_group.authorize('tcp', 60075, 60075, authorized_address)
 
-    # Check if instances are already running with the cluster name
+    # Check if instances are already running in our groups
     existing_masters, existing_slaves = get_existing_cluster(conn, opts, cluster_name,
                                                              die_on_error=False)
     if existing_slaves or (existing_masters and not opts.use_existing_master):
-        print >> stderr, ("ERROR: There are already instances for name: %s " % cluster_name)
+        print >> stderr, ("ERROR: There are already instances running in " +
+                          "group %s or %s" % (master_group.name, slave_group.name))
         sys.exit(1)
 
     # Figure out Spark AMI
@@ -414,13 +407,9 @@ def launch_cluster(conn, opts, cluster_name):
                 for r in reqs:
                     id_to_req[r.id] = r
                 active_instance_ids = []
-                outstanding_request_ids = []
                 for i in my_req_ids:
-                    if i in id_to_req:
-                        if id_to_req[i].state == "active":
-                            active_instance_ids.append(id_to_req[i].instance_id)
-                        else:
-                            outstanding_request_ids.append(i)
+                    if i in id_to_req and id_to_req[i].state == "active":
+                        active_instance_ids.append(id_to_req[i].instance_id)
                 if len(active_instance_ids) == opts.slaves:
                     print "All %d slaves granted" % opts.slaves
                     reservations = conn.get_all_instances(active_instance_ids)
@@ -429,8 +418,8 @@ def launch_cluster(conn, opts, cluster_name):
                         slave_nodes += r.instances
                     break
                 else:
-                    print "%d of %d slaves granted, waiting longer for request ids including %s" % (
-                        len(active_instance_ids), opts.slaves, outstanding_request_ids[0:10])
+                    print "%d of %d slaves granted, waiting longer" % (
+                        len(active_instance_ids), opts.slaves)
         except:
             print "Canceling spot instance requests"
             conn.cancel_spot_instance_requests(my_req_ids)
@@ -488,29 +477,14 @@ def launch_cluster(conn, opts, cluster_name):
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
     # Give the instances descriptive names
-    # TODO: Add retry logic for tagging with name since it's used to identify a cluster.
     for master in master_nodes:
-        name = '{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id)
-        for i in range(0, 5):
-            try:
-                master.add_tag(key='Name', value=name)
-            except:
-                print "Failed attempt %i of 5 to tag %s" % ((i + 1), name)
-                if (i == 5):
-                    raise "Error - failed max attempts to add name tag"
-                time.sleep(5)
-
-
+        master.add_tag(
+            key='Name',
+            value='{cn}-master-{iid}'.format(cn=cluster_name, iid=master.id))
     for slave in slave_nodes:
-        name = '{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id)
-        for i in range(0, 5):
-            try:
-                slave.add_tag(key='Name', value=name)
-            except:
-                print "Failed attempt %i of 5 to tag %s" % ((i + 1), name)
-                if (i == 5):
-                    raise "Error - failed max attempts to add name tag"
-                time.sleep(5)
+        slave.add_tag(
+            key='Name',
+            value='{cn}-slave-{iid}'.format(cn=cluster_name, iid=slave.id))
 
     # Return all the instances
     return (master_nodes, slave_nodes)
@@ -528,10 +502,10 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
     for res in reservations:
         active = [i for i in res.instances if is_active(i)]
         for inst in active:
-            name = inst.tags.get(u'Name', "")
-            if name.startswith(cluster_name + "-master"):
+            group_names = [g.name for g in inst.groups]
+            if group_names == [cluster_name + "-master"]:
                 master_nodes.append(inst)
-            elif name.startswith(cluster_name + "-slave"):
+            elif group_names == [cluster_name + "-slaves"]:
                 slave_nodes.append(inst)
     if any((master_nodes, slave_nodes)):
         print "Found %d master(s), %d slaves" % (len(master_nodes), len(slave_nodes))
@@ -539,8 +513,7 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
         return (master_nodes, slave_nodes)
     else:
         if master_nodes == [] and slave_nodes != []:
-            print >> sys.stderr, "ERROR: Could not find master in with name " + \
-                cluster_name + "-master"
+            print >> sys.stderr, "ERROR: Could not find master in group " + cluster_name + "-master"
         else:
             print >> sys.stderr, "ERROR: Could not find any existing cluster"
         sys.exit(1)
@@ -976,11 +949,7 @@ def real_main():
             # Delete security groups as well
             if opts.delete_groups:
                 print "Deleting security groups (this will take some time)..."
-                if opts.security_group_prefix is None:
-                    group_names = [cluster_name + "-master", cluster_name + "-slaves"]
-                else:
-                    group_names = [opts.security_group_prefix + "-master",
-                                   opts.security_group_prefix + "-slaves"]
+                group_names = [cluster_name + "-master", cluster_name + "-slaves"]
                 wait_for_cluster_state(
                     cluster_instances=(master_nodes + slave_nodes),
                     cluster_state='terminated',
