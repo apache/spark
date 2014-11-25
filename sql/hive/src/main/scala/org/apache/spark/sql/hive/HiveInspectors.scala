@@ -18,9 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoFactory
 import org.apache.hadoop.hive.serde2.objectinspector._
-import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector._
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
@@ -192,80 +190,77 @@ private[hive] trait HiveInspectors {
    *           toInspector: DataType => ObjectInspector and
    *           toInspector: Expression => ObjectInspector
    */
-  def wrap(a: Any, oi: ObjectInspector): AnyRef = if (a == null) {
-    null
-  } else {
-    oi match {
-      case x: SettableStructObjectInspector =>
-        val fieldRefs = x.getAllStructFieldRefs
-        val row = a.asInstanceOf[Seq[_]]
-        val result = x.create()
-        var i = 0
-        while (i < fieldRefs.length) {
-          x.setStructFieldData(
-            result,
-            fieldRefs.get(i),
-            wrap(row(i), fieldRefs.get(i).getFieldObjectInspector))
-          i += 1
-        }
-
-        result
-      case x: ConstantObjectInspector => x.getWritableConstantValue
-      case x: PrimitiveObjectInspector => a match {
-        case s: String if x.preferWritable() => HiveShim.getStringWritable(s)
-        case s: String => s: java.lang.String
-        case i: Int if x.preferWritable() => HiveShim.getIntWritable(i)
-        case i: Int => i: java.lang.Integer
-        case b: Boolean if x.preferWritable() => HiveShim.getBooleanWritable(b)
-        case b: Boolean => b: java.lang.Boolean
-        case f: Float if x.preferWritable() => HiveShim.getFloatWritable(f)
-        case f: Float => f: java.lang.Float
-        case d: Double if x.preferWritable() => HiveShim.getDoubleWritable(d)
-        case d: Double => d: java.lang.Double
-        case l: Long if x.preferWritable() => HiveShim.getLongWritable(l)
-        case l: Long => l: java.lang.Long
-        case l: Short if x.preferWritable() => HiveShim.getShortWritable(l)
-        case l: Short => l: java.lang.Short
-        case l: Byte if x.preferWritable() => HiveShim.getByteWritable(l)
-        case l: Byte => l: java.lang.Byte
-        case b: BigDecimal if x.preferWritable() => HiveShim.getDecimalWritable(b.underlying())
-        case b: BigDecimal => HiveShim.createDecimal(b.underlying())
-        case d: Decimal if x.preferWritable() => HiveShim.getDecimalWritable(d.toBigDecimal.underlying())
-        case d: Decimal => HiveShim.createDecimal(d.toBigDecimal.underlying())
-        case b: Array[Byte] if x.preferWritable() => HiveShim.getBinaryWritable(b)
-        case b: Array[Byte] => b
-        case d: java.sql.Date if x.preferWritable() => HiveShim.getDateWritable(d)
-        case d: java.sql.Date => d
-        case t: java.sql.Timestamp if x.preferWritable() => HiveShim.getTimestampWritable(t)
-        case t: java.sql.Timestamp => t
+  def wrap(a: Any, oi: ObjectInspector): AnyRef = oi match {
+    case x: ConstantObjectInspector => x.getWritableConstantValue
+    case _ if a == null => null
+    case x: SettableStructObjectInspector =>
+      val fieldRefs = x.getAllStructFieldRefs
+      val row = a.asInstanceOf[Seq[_]]
+      val result = x.create()
+      var i = 0
+      while (i < fieldRefs.length) {
+        x.setStructFieldData(
+          result,
+          fieldRefs.get(i),
+          wrap(row(i), fieldRefs.get(i).getFieldObjectInspector))
+        i += 1
       }
-      case x: StructObjectInspector =>
-        val fieldRefs = x.getAllStructFieldRefs
-        val row = a.asInstanceOf[Seq[_]]
-        val result = new java.util.ArrayList[AnyRef](fieldRefs.length)
-        var i = 0
-        while (i < fieldRefs.length) {
-          result.add(wrap(row(i), fieldRefs.get(i).getFieldObjectInspector))
-          i += 1
-        }
 
-        result
-      case x: ListObjectInspector =>
-        val list = new java.util.ArrayList[Object]
-        a.asInstanceOf[Seq[_]].foreach {
-          v => list.add(wrap(v, x.getListElementObjectInspector))
-        }
-        list
-      case x: MapObjectInspector =>
-        // Some UDFs seem to assume we pass in a HashMap.
-        val hashMap = new java.util.HashMap[AnyRef, AnyRef]()
-        hashMap.putAll(a.asInstanceOf[Map[_, _]].map {
-          case (k, v) =>
-            wrap(k, x.getMapKeyObjectInspector) -> wrap(v, x.getMapValueObjectInspector)
-        })
-
-        hashMap
+      result
+    case x: PrimitiveObjectInspector => x match {
+      case _: StringObjectInspector if x.preferWritable() => HiveShim.getStringWritable(a)
+      case _: StringObjectInspector => a.asInstanceOf[java.lang.String]
+      case _: IntObjectInspector if x.preferWritable() => HiveShim.getIntWritable(a)
+      case _: IntObjectInspector => a.asInstanceOf[java.lang.Integer]
+      case _: BooleanObjectInspector if x.preferWritable() => HiveShim.getBooleanWritable(a)
+      case _: BooleanObjectInspector => a.asInstanceOf[java.lang.Boolean]
+      case _: FloatObjectInspector if x.preferWritable() => HiveShim.getFloatWritable(a)
+      case _: FloatObjectInspector => a.asInstanceOf[java.lang.Float]
+      case _: DoubleObjectInspector if x.preferWritable() => HiveShim.getDoubleWritable(a)
+      case _: DoubleObjectInspector => a.asInstanceOf[java.lang.Double]
+      case _: LongObjectInspector if x.preferWritable() => HiveShim.getLongWritable(a)
+      case _: LongObjectInspector => a.asInstanceOf[java.lang.Long]
+      case _: ShortObjectInspector if x.preferWritable() => HiveShim.getShortWritable(a)
+      case _: ShortObjectInspector => a.asInstanceOf[java.lang.Short]
+      case _: ByteObjectInspector if x.preferWritable() => HiveShim.getByteWritable(a)
+      case _: ByteObjectInspector => a.asInstanceOf[java.lang.Byte]
+      case _: HiveDecimalObjectInspector if x.preferWritable() =>
+        HiveShim.getDecimalWritable(a.asInstanceOf[Decimal])
+      case _: HiveDecimalObjectInspector =>
+        HiveShim.createDecimal(a.asInstanceOf[Decimal].toBigDecimal.underlying())
+      case _: BinaryObjectInspector if x.preferWritable() => HiveShim.getBinaryWritable(a)
+      case _: BinaryObjectInspector => a.asInstanceOf[Array[Byte]]
+      case _: DateObjectInspector if x.preferWritable() => HiveShim.getDateWritable(a)
+      case _: DateObjectInspector => a.asInstanceOf[java.sql.Date]
+      case _: TimestampObjectInspector if x.preferWritable() => HiveShim.getTimestampWritable(a)
+      case _: TimestampObjectInspector => a.asInstanceOf[java.sql.Timestamp]
     }
+    case x: StructObjectInspector =>
+      val fieldRefs = x.getAllStructFieldRefs
+      val row = a.asInstanceOf[Seq[_]]
+      val result = new java.util.ArrayList[AnyRef](fieldRefs.length)
+      var i = 0
+      while (i < fieldRefs.length) {
+        result.add(wrap(row(i), fieldRefs.get(i).getFieldObjectInspector))
+        i += 1
+      }
+
+      result
+    case x: ListObjectInspector =>
+      val list = new java.util.ArrayList[Object]
+      a.asInstanceOf[Seq[_]].foreach {
+        v => list.add(wrap(v, x.getListElementObjectInspector))
+      }
+      list
+    case x: MapObjectInspector =>
+      // Some UDFs seem to assume we pass in a HashMap.
+      val hashMap = new java.util.HashMap[AnyRef, AnyRef]()
+      hashMap.putAll(a.asInstanceOf[Map[_, _]].map {
+        case (k, v) =>
+          wrap(k, x.getMapKeyObjectInspector) -> wrap(v, x.getMapValueObjectInspector)
+      })
+
+      hashMap
   }
 
   def wrap(
