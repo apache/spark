@@ -81,7 +81,7 @@ The test error is calculated to measure the algorithm accuracy.
 
 <div data-lang="scala">
 {% highlight scala %}
-import org.apache.spark.mllib.tree.DecisionTree
+import org.apache.spark.mllib.tree.RandomForest
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.
@@ -90,16 +90,18 @@ val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 val splits = data.randomSplit(Array(0.7, 0.3))
 val (trainingData, testData) = (splits(0), splits(1))
 
-// Train a DecisionTree model.
+// Train a RandomForest model.
 //  Empty categoricalFeaturesInfo indicates all features are continuous.
 val numClasses = 2
 val categoricalFeaturesInfo = Map[Int, Int]()
+val numTrees = 3 // Use more in practice.
+val featureSubsetStrategy = "auto" // Let the algorithm choose.
 val impurity = "gini"
-val maxDepth = 5
+val maxDepth = 4
 val maxBins = 32
 
-val model = DecisionTree.trainClassifier(trainingData, numClasses, categoricalFeaturesInfo,
-  impurity, maxDepth, maxBins)
+val model = RandomForest.trainClassifier(trainingData, numClasses, categoricalFeaturesInfo,
+  numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins)
 
 // Evaluate model on test instances and compute test error
 val labelAndPreds = testData.map { point =>
@@ -108,26 +110,26 @@ val labelAndPreds = testData.map { point =>
 }
 val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.count()
 println("Test Error = " + testErr)
-println("Learned classification tree model:\n" + model.toDebugString)
+println("Learned classification forest model:\n" + model.toDebugString)
 {% endhighlight %}
 </div>
 
 <div data-lang="java">
 {% highlight java %}
-import java.util.HashMap;
 import scala.Tuple2;
+import java.util.HashMap;
+import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.tree.DecisionTree;
-import org.apache.spark.mllib.tree.model.DecisionTreeModel;
+import org.apache.spark.mllib.tree.RandomForest;
+import org.apache.spark.mllib.tree.model.RandomForestModel;
 import org.apache.spark.mllib.util.MLUtils;
-import org.apache.spark.SparkConf;
 
-SparkConf sparkConf = new SparkConf().setAppName("JavaDecisionTree");
+SparkConf sparkConf = new SparkConf().setAppName("JavaRandomForestClassification");
 JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
 // Load and parse the data file.
@@ -138,17 +140,20 @@ JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[]{0.7, 0.3});
 JavaRDD<LabeledPoint> trainingData = splits[0];
 JavaRDD<LabeledPoint> testData = splits[1];
 
-// Set parameters.
+// Train a RandomForest model.
 //  Empty categoricalFeaturesInfo indicates all features are continuous.
 Integer numClasses = 2;
-Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+Integer numTrees = 3; // Use more in practice.
+String featureSubsetStrategy = "auto"; // Let the algorithm choose.
 String impurity = "gini";
 Integer maxDepth = 5;
 Integer maxBins = 32;
+Integer seed = 12345;
 
-// Train a DecisionTree model for classification.
-final DecisionTreeModel model = DecisionTree.trainClassifier(trainingData, numClasses,
-  categoricalFeaturesInfo, impurity, maxDepth, maxBins);
+final RandomForestModel model = RandomForest.trainClassifier(trainingData, numClasses,
+  categoricalFeaturesInfo, numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins,
+  seed);
 
 // Evaluate model on test instances and compute test error
 JavaPairRDD<Double, Double> predictionAndLabel =
@@ -166,14 +171,13 @@ Double testErr =
     }
   }).count() / testData.count();
 System.out.println("Test Error: " + testErr);
-System.out.println("Learned classification tree model:\n" + model.toDebugString());
+System.out.println("Learned classification forest model:\n" + model.toDebugString());
 {% endhighlight %}
 </div>
 
 <div data-lang="python">
 {% highlight python %}
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.tree import DecisionTree
+from pyspark.mllib.tree import RandomForest
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file into an RDD of LabeledPoint.
@@ -181,23 +185,22 @@ data = MLUtils.loadLibSVMFile(sc, 'data/mllib/sample_libsvm_data.txt')
 # Split the data into training and test sets (30% held out for testing)
 (trainingData, testData) = data.randomSplit([0.7, 0.3])
 
-# Train a DecisionTree model.
+# Train a RandomForest model.
 #  Empty categoricalFeaturesInfo indicates all features are continuous.
-model = DecisionTree.trainClassifier(trainingData, numClasses=2, categoricalFeaturesInfo={},
-                                     impurity='gini', maxDepth=5, maxBins=32)
+#  Note: Use larger numTrees in practice.
+#  Setting featureSubsetStrategy="auto" lets the algorithm choose.
+model = RandomForest.trainClassifier(trainingData, numClasses=2, categoricalFeaturesInfo={},
+                                     numTrees=3, featureSubsetStrategy="auto",
+                                     impurity='gini', maxDepth=4, maxBins=32)
 
 # Evaluate model on test instances and compute test error
 predictions = model.predict(testData.map(lambda x: x.features))
 labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
 testErr = labelsAndPredictions.filter(lambda (v, p): v != p).count() / float(testData.count())
 print('Test Error = ' + str(testErr))
-print('Learned classification tree model:')
+print('Learned classification forest model:')
 print(model.toDebugString())
 {% endhighlight %}
-
-Note: When making predictions for a dataset, it is more efficient to do batch prediction rather
-than separately calling `predict` on each data point.  This is because the Python code makes calls
-to an underlying `DecisionTree` model in Scala.
 </div>
 
 </div>
@@ -215,7 +218,7 @@ The Mean Squared Error (MSE) is computed at the end to evaluate
 
 <div data-lang="scala">
 {% highlight scala %}
-import org.apache.spark.mllib.tree.DecisionTree
+import org.apache.spark.mllib.tree.RandomForest
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.
@@ -224,15 +227,18 @@ val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 val splits = data.randomSplit(Array(0.7, 0.3))
 val (trainingData, testData) = (splits(0), splits(1))
 
-// Train a DecisionTree model.
+// Train a RandomForest model.
 //  Empty categoricalFeaturesInfo indicates all features are continuous.
+val numClasses = 2
 val categoricalFeaturesInfo = Map[Int, Int]()
+val numTrees = 3 // Use more in practice.
+val featureSubsetStrategy = "auto" // Let the algorithm choose.
 val impurity = "variance"
-val maxDepth = 5
+val maxDepth = 4
 val maxBins = 32
 
-val model = DecisionTree.trainRegressor(trainingData, categoricalFeaturesInfo, impurity,
-  maxDepth, maxBins)
+val model = RandomForest.trainRegressor(trainingData, categoricalFeaturesInfo,
+  numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins)
 
 // Evaluate model on test instances and compute test error
 val labelsAndPredictions = testData.map { point =>
@@ -241,7 +247,7 @@ val labelsAndPredictions = testData.map { point =>
 }
 val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean()
 println("Test Mean Squared Error = " + testMSE)
-println("Learned regression tree model:\n" + model.toDebugString)
+println("Learned regression forest model:\n" + model.toDebugString)
 {% endhighlight %}
 </div>
 
@@ -256,12 +262,12 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.mllib.tree.DecisionTree;
-import org.apache.spark.mllib.tree.model.DecisionTreeModel;
+import org.apache.spark.mllib.tree.RandomForest;
+import org.apache.spark.mllib.tree.model.RandomForestModel;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.SparkConf;
 
-SparkConf sparkConf = new SparkConf().setAppName("JavaDecisionTree");
+SparkConf sparkConf = new SparkConf().setAppName("JavaRandomForest");
 JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
 // Load and parse the data file.
@@ -276,11 +282,11 @@ JavaRDD<LabeledPoint> testData = splits[1];
 //  Empty categoricalFeaturesInfo indicates all features are continuous.
 Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
 String impurity = "variance";
-Integer maxDepth = 5;
+Integer maxDepth = 4;
 Integer maxBins = 32;
 
-// Train a DecisionTree model.
-final DecisionTreeModel model = DecisionTree.trainRegressor(trainingData,
+// Train a RandomForest model.
+final RandomForestModel model = RandomForest.trainRegressor(trainingData,
   categoricalFeaturesInfo, impurity, maxDepth, maxBins);
 
 // Evaluate model on test instances and compute test error
@@ -305,14 +311,13 @@ Double testMSE =
     }
   }) / data.count();
 System.out.println("Test Mean Squared Error: " + testMSE);
-System.out.println("Learned regression tree model:\n" + model.toDebugString());
+System.out.println("Learned regression forest model:\n" + model.toDebugString());
 {% endhighlight %}
 </div>
 
 <div data-lang="python">
 {% highlight python %}
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.tree import DecisionTree
+from pyspark.mllib.tree import RandomForest
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file into an RDD of LabeledPoint.
@@ -320,23 +325,22 @@ data = MLUtils.loadLibSVMFile(sc, 'data/mllib/sample_libsvm_data.txt')
 # Split the data into training and test sets (30% held out for testing)
 (trainingData, testData) = data.randomSplit([0.7, 0.3])
 
-# Train a DecisionTree model.
+# Train a RandomForest model.
 #  Empty categoricalFeaturesInfo indicates all features are continuous.
-model = DecisionTree.trainRegressor(trainingData, categoricalFeaturesInfo={},
-                                    impurity='variance', maxDepth=5, maxBins=32)
+#  Note: Use larger numTrees in practice.
+#  Setting featureSubsetStrategy="auto" lets the algorithm choose.
+model = RandomForest.trainRegressor(trainingData, categoricalFeaturesInfo={},
+                                    numTrees=3, featureSubsetStrategy="auto",
+                                    impurity='variance', maxDepth=4, maxBins=32)
 
 # Evaluate model on test instances and compute test error
 predictions = model.predict(testData.map(lambda x: x.features))
 labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
 testMSE = labelsAndPredictions.map(lambda (v, p): (v - p) * (v - p)).sum() / float(testData.count())
 print('Test Mean Squared Error = ' + str(testMSE))
-print('Learned regression tree model:')
+print('Learned regression forest model:')
 print(model.toDebugString())
 {% endhighlight %}
-
-Note: When making predictions for a dataset, it is more efficient to do batch prediction rather
-than separately calling `predict` on each data point.  This is because the Python code makes calls
-to an underlying `DecisionTree` model in Scala.
 </div>
 
 </div>

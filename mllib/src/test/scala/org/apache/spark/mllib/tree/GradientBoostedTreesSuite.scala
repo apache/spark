@@ -87,7 +87,7 @@ class GradientBoostedTreesSuite extends FunSuite with MLlibTestSparkContext {
         val rdd = sc.parallelize(arr, 2)
 
         val treeStrategy = new Strategy(algo = Classification, impurity = Variance, maxDepth = 2,
-          numClassesForClassification = 2, categoricalFeaturesInfo = Map.empty,
+          numClasses = 2, categoricalFeaturesInfo = Map.empty,
           subsamplingRate = subsamplingRate)
         val boostingStrategy =
           new BoostingStrategy(treeStrategy, LogLoss, numIterations, learningRate)

@@ -55,7 +55,7 @@ import org.apache.spark.util.Utils
  *                 etc.
  * @param numTrees If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
  * @param featureSubsetStrategy Number of features to consider for splits at each node.
- *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+ *                              Supported: "auto", "all", "sqrt", "log2", "onethird".
  *                              If "auto" is set, this parameter is set based on numTrees:
  *                                if numTrees == 1, set to "all";
  *                                if numTrees > 1 (forest) set to "sqrt" for classification and
@@ -227,7 +227,7 @@ object RandomForest extends Serializable with Logging {
    * @param strategy Parameters for training each tree in the forest.
    * @param numTrees Number of trees in the random forest.
    * @param featureSubsetStrategy Number of features to consider for splits at each node.
-   *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+   *                              Supported: "auto", "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
    *                                if numTrees > 1 (forest) set to "sqrt".
@@ -251,13 +251,13 @@ object RandomForest extends Serializable with Logging {
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              Labels should take values {0, 1, ..., numClasses-1}.
-   * @param numClassesForClassification number of classes for classification.
+   * @param numClasses number of classes for classification.
    * @param categoricalFeaturesInfo Map storing arity of categorical features.
    *                                E.g., an entry (n -> k) indicates that feature n is categorical
    *                                with k categories indexed from 0: {0, 1, ..., k-1}.
    * @param numTrees Number of trees in the random forest.
    * @param featureSubsetStrategy Number of features to consider for splits at each node.
-   *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+   *                              Supported: "auto", "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
    *                                if numTrees > 1 (forest) set to "sqrt".
@@ -273,7 +273,7 @@ object RandomForest extends Serializable with Logging {
    */
   def trainClassifier(
       input: RDD[LabeledPoint],
-      numClassesForClassification: Int,
+      numClasses: Int,
       categoricalFeaturesInfo: Map[Int, Int],
       numTrees: Int,
       featureSubsetStrategy: String,
@@ -283,7 +283,7 @@ object RandomForest extends Serializable with Logging {
       seed: Int = Utils.random.nextInt()): RandomForestModel = {
     val impurityType = Impurities.fromString(impurity)
     val strategy = new Strategy(Classification, impurityType, maxDepth,
-      numClassesForClassification, maxBins, Sort, categoricalFeaturesInfo)
+      numClasses, maxBins, Sort, categoricalFeaturesInfo)
     trainClassifier(input, strategy, numTrees, featureSubsetStrategy, seed)
   }
 
@@ -292,7 +292,7 @@ object RandomForest extends Serializable with Logging {
    */
   def trainClassifier(
       input: JavaRDD[LabeledPoint],
-      numClassesForClassification: Int,
+      numClasses: Int,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
       numTrees: Int,
       featureSubsetStrategy: String,
@@ -300,7 +300,7 @@ object RandomForest extends Serializable with Logging {
       maxDepth: Int,
       maxBins: Int,
       seed: Int): RandomForestModel = {
-    trainClassifier(input.rdd, numClassesForClassification,
+    trainClassifier(input.rdd, numClasses,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       numTrees, featureSubsetStrategy, impurity, maxDepth, maxBins, seed)
   }
@@ -313,7 +313,7 @@ object RandomForest extends Serializable with Logging {
    * @param strategy Parameters for training each tree in the forest.
    * @param numTrees Number of trees in the random forest.
    * @param featureSubsetStrategy Number of features to consider for splits at each node.
-   *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+   *                              Supported: "auto", "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
    *                                if numTrees > 1 (forest) set to "onethird".
@@ -342,7 +342,7 @@ object RandomForest extends Serializable with Logging {
    *                                with k categories indexed from 0: {0, 1, ..., k-1}.
    * @param numTrees Number of trees in the random forest.
    * @param featureSubsetStrategy Number of features to consider for splits at each node.
-   *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
+   *                              Supported: "auto", "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
    *                                if numTrees > 1 (forest) set to "onethird".
