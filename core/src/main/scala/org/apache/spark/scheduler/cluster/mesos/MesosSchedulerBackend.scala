@@ -255,11 +255,10 @@ private[spark] class MesosSchedulerBackend(
 
       mesosTasks.foreach { case (slaveId, tasks) =>
         d.launchTasks(Collections.singleton(slaveIdToOffer(slaveId).getId), tasks, filters)
+        acceptedOffers -= slaveIdToOffer(slaveId)
       }
 
-      for (o <- acceptedOffers if !slaveIdsWithExecutors.contains(o.getSlaveId.getValue)) {
-        d.declineOffer(o.getId)
-      }
+      acceptedOffers.foreach(o => d.declineOffer(o.getId))
 
       declinedOffers.foreach(o => d.declineOffer(o.getId))
     }
