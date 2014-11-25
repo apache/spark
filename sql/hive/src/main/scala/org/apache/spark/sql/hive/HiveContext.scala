@@ -83,11 +83,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   private[spark] def convertMetastoreParquet: Boolean =
     getConf("spark.sql.hive.convertMetastoreParquet", "true") == "true"
 
-  private[spark] def parquetBinaryAsString = setConf("spark.sql.parquet.binaryAsString", "false")
+  private[spark] def parquetBinaryAsString = setConf("spark.sql.parquet.binaryAsString", "true")
 
   // Hive use parquet with older version, which do not differentiate between binary data and strings
   // So here set spark.sql.parquet.binaryAsString to true
-  parquetBinaryAsString
+  if (convertMetastoreParquet) {
+    parquetBinaryAsString
+  }
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
