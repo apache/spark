@@ -86,7 +86,7 @@ def parse_args():
         "-z", "--zone", default="",
         help="Availability zone to launch instances in, or 'all' to spread " +
              "slaves across multiple (an additional $0.01/Gb for bandwidth" +
-             "between zones applies)")
+             "between zones applies) (default: a single zone chosen at random)")
     parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use")
     parser.add_option(
         "-v", "--spark-version", default=DEFAULT_SPARK_VERSION,
