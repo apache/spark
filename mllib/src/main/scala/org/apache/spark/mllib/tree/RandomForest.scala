@@ -17,17 +17,18 @@
 
 package org.apache.spark.mllib.tree
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable
+import scala.collection.JavaConverters._
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
-import org.apache.spark.mllib.tree.configuration.Strategy
-import org.apache.spark.mllib.tree.impl.{BaggedPoint, TreePoint, DecisionTreeMetadata, TimeTracker}
+import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata, NodeIdCache,
+  TimeTracker, TreePoint}
 import org.apache.spark.mllib.tree.impurity.Impurities
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.rdd.RDD
@@ -59,7 +60,7 @@ import org.apache.spark.util.Utils
  *                                if numTrees == 1, set to "all";
  *                                if numTrees > 1 (forest) set to "sqrt" for classification and
  *                                  to "onethird" for regression.
- * @param seed  Random seed for bootstrapping and choosing feature subsets.
+ * @param seed Random seed for bootstrapping and choosing feature subsets.
  */
 @Experimental
 private class RandomForest (
@@ -78,9 +79,9 @@ private class RandomForest (
   /**
    * Method to train a decision tree model over an RDD
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
-   * @return RandomForestModel that can be used for prediction
+   * @return a random forest model that can be used for prediction
    */
-  def train(input: RDD[LabeledPoint]): RandomForestModel = {
+  def run(input: RDD[LabeledPoint]): RandomForestModel = {
 
     val timer = new TimeTracker()
 
@@ -111,11 +112,20 @@ private class RandomForest (
     // Bin feature values (TreePoint representation).
     // Cache input RDD for speedup during multiple passes.
     val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata)
-    val baggedInput = if (numTrees > 1) {
-      BaggedPoint.convertToBaggedRDD(treeInput, numTrees, seed)
-    } else {
-      BaggedPoint.convertToBaggedRDDWithoutSampling(treeInput)
-    }.persist(StorageLevel.MEMORY_AND_DISK)
+
+    val (subsample, withReplacement) = {
+      // TODO: Have a stricter check for RF in the strategy
+      val isRandomForest = numTrees > 1
+      if (isRandomForest) {
+        (1.0, true)
+      } else {
+        (strategy.subsamplingRate, false)
+      }
+    }
+
+    val baggedInput
+      = BaggedPoint.convertToBaggedRDD(treeInput, subsample, numTrees, withReplacement, seed)
+        .persist(StorageLevel.MEMORY_AND_DISK)
 
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
@@ -150,6 +160,19 @@ private class RandomForest (
      * in lower levels).
      */
 
+    // Create an RDD of node Id cache.
+    // At first, all the rows belong to the root nodes (node Id == 1).
+    val nodeIdCache = if (strategy.useNodeIdCache) {
+      Some(NodeIdCache.init(
+        data = baggedInput,
+        numTrees = numTrees,
+        checkpointDir = strategy.checkpointDir,
+        checkpointInterval = strategy.checkpointInterval,
+        initVal = 1))
+    } else {
+      None
+    }
+
     // FIFO queue of nodes to train: (treeIndex, node)
     val nodeQueue = new mutable.Queue[(Int, Node)]()
 
@@ -172,7 +195,7 @@ private class RandomForest (
       // Choose node splits, and enqueue new nodes as needed.
       timer.start("findBestSplits")
       DecisionTree.findBestSplits(baggedInput, metadata, topNodes, nodesForGroup,
-        treeToNodeToIndexInfo, splits, bins, nodeQueue, timer)
+        treeToNodeToIndexInfo, splits, bins, nodeQueue, timer, nodeIdCache = nodeIdCache)
       timer.stop("findBestSplits")
     }
 
@@ -183,8 +206,13 @@ private class RandomForest (
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
 
+    // Delete any remaining checkpoints used for node Id cache.
+    if (nodeIdCache.nonEmpty) {
+      nodeIdCache.get.deleteAllCheckpoints()
+    }
+
     val trees = topNodes.map(topNode => new DecisionTreeModel(topNode, strategy.algo))
-    RandomForestModel.build(trees)
+    new RandomForestModel(strategy.algo, trees)
   }
 
 }
@@ -202,10 +230,9 @@ object RandomForest extends Serializable with Logging {
    *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
-   *                                if numTrees > 1 (forest) set to "sqrt" for classification and
-   *                                  to "onethird" for regression.
+   *                                if numTrees > 1 (forest) set to "sqrt".
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
-   * @return RandomForestModel that can be used for prediction
+   * @return a random forest model that can be used for prediction
    */
   def trainClassifier(
       input: RDD[LabeledPoint],
@@ -216,7 +243,7 @@ object RandomForest extends Serializable with Logging {
     require(strategy.algo == Classification,
       s"RandomForest.trainClassifier given Strategy with invalid algo: ${strategy.algo}")
     val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
-    rf.train(input)
+    rf.run(input)
   }
 
   /**
@@ -233,8 +260,7 @@ object RandomForest extends Serializable with Logging {
    *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
-   *                                if numTrees > 1 (forest) set to "sqrt" for classification and
-   *                                  to "onethird" for regression.
+   *                                if numTrees > 1 (forest) set to "sqrt".
    * @param impurity Criterion used for information gain calculation.
    *                 Supported values: "gini" (recommended) or "entropy".
    * @param maxDepth Maximum depth of the tree.
@@ -243,7 +269,7 @@ object RandomForest extends Serializable with Logging {
    * @param maxBins maximum number of bins used for splitting features
    *                 (suggested value: 100)
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
-   * @return RandomForestModel that can be used for prediction
+   * @return a random forest model  that can be used for prediction
    */
   def trainClassifier(
       input: RDD[LabeledPoint],
@@ -290,10 +316,9 @@ object RandomForest extends Serializable with Logging {
    *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
-   *                                if numTrees > 1 (forest) set to "sqrt" for classification and
-   *                                  to "onethird" for regression.
+   *                                if numTrees > 1 (forest) set to "onethird".
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
-   * @return RandomForestModel that can be used for prediction
+   * @return a random forest model that can be used for prediction
    */
   def trainRegressor(
       input: RDD[LabeledPoint],
@@ -304,7 +329,7 @@ object RandomForest extends Serializable with Logging {
     require(strategy.algo == Regression,
       s"RandomForest.trainRegressor given Strategy with invalid algo: ${strategy.algo}")
     val rf = new RandomForest(strategy, numTrees, featureSubsetStrategy, seed)
-    rf.train(input)
+    rf.run(input)
   }
 
   /**
@@ -320,8 +345,7 @@ object RandomForest extends Serializable with Logging {
    *                              Supported: "auto" (default), "all", "sqrt", "log2", "onethird".
    *                              If "auto" is set, this parameter is set based on numTrees:
    *                                if numTrees == 1, set to "all";
-   *                                if numTrees > 1 (forest) set to "sqrt" for classification and
-   *                                  to "onethird" for regression.
+   *                                if numTrees > 1 (forest) set to "onethird".
    * @param impurity Criterion used for information gain calculation.
    *                 Supported values: "variance".
    * @param maxDepth Maximum depth of the tree.
@@ -330,7 +354,7 @@ object RandomForest extends Serializable with Logging {
    * @param maxBins maximum number of bins used for splitting features
    *                 (suggested value: 100)
    * @param seed  Random seed for bootstrapping and choosing feature subsets.
-   * @return RandomForestModel that can be used for prediction
+   * @return a random forest model that can be used for prediction
    */
   def trainRegressor(
       input: RDD[LabeledPoint],
@@ -450,5 +474,4 @@ object RandomForest extends Serializable with Logging {
       3 * totalBins
     }
   }
-
 }

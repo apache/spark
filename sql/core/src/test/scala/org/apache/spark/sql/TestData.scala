@@ -54,6 +54,17 @@ object TestData {
       TestData2(3, 2) :: Nil).toSchemaRDD
   testData2.registerTempTable("testData2")
 
+  case class DecimalData(a: BigDecimal, b: BigDecimal)
+  val decimalData =
+    TestSQLContext.sparkContext.parallelize(
+      DecimalData(1, 1) ::
+      DecimalData(1, 2) ::
+      DecimalData(2, 1) ::
+      DecimalData(2, 2) ::
+      DecimalData(3, 1) ::
+      DecimalData(3, 2) :: Nil).toSchemaRDD
+  decimalData.registerTempTable("decimalData")
+
   case class BinaryData(a: Array[Byte], b: Int)
   val binaryData =
     TestSQLContext.sparkContext.parallelize(
@@ -64,11 +75,12 @@ object TestData {
       BinaryData("123".getBytes(), 4) :: Nil).toSchemaRDD
   binaryData.registerTempTable("binaryData")
 
-  // TODO: There is no way to express null primitives as case classes currently...
+  case class TestData3(a: Int, b: Option[Int])
   val testData3 =
-    logical.LocalRelation('a.int, 'b.int).loadData(
-      (1, null) ::
-      (2, 2) :: Nil)
+    TestSQLContext.sparkContext.parallelize(
+      TestData3(1, None) ::
+      TestData3(2, Some(2)) :: Nil).toSchemaRDD
+  testData3.registerTempTable("testData3")
 
   val emptyTableData = logical.LocalRelation('a.int, 'b.int)
 
@@ -166,4 +178,23 @@ object TestData {
   // An RDD with 4 elements and 8 partitions
   val withEmptyParts = TestSQLContext.sparkContext.parallelize((1 to 4).map(IntField), 8)
   withEmptyParts.registerTempTable("withEmptyParts")
+
+  case class Person(id: Int, name: String, age: Int)
+  case class Salary(personId: Int, salary: Double)
+  val person = TestSQLContext.sparkContext.parallelize(
+    Person(0, "mike", 30) ::
+    Person(1, "jim", 20) :: Nil)
+  person.registerTempTable("person")
+  val salary = TestSQLContext.sparkContext.parallelize(
+    Salary(0, 2000.0) ::
+    Salary(1, 1000.0) :: Nil)
+  salary.registerTempTable("salary")
+
+  case class ComplexData(m: Map[Int, String], s: TestData, a: Seq[Int], b: Boolean)
+  val complexData =
+    TestSQLContext.sparkContext.parallelize(
+      ComplexData(Map(1 -> "1"), TestData(1, "1"), Seq(1), true)
+        :: ComplexData(Map(2 -> "2"), TestData(2, "2"), Seq(2), false)
+        :: Nil).toSchemaRDD
+  complexData.registerTempTable("complexData")
 }

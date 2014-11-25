@@ -25,19 +25,31 @@ import org.apache.spark.sql.catalyst.types._
 object HiveTypeCoercion {
   // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
   // The conversion for integral and floating point types have a linear widening hierarchy:
-  val numericPrecedence =
-    Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType)
-  val allPromotions: Seq[Seq[DataType]] = numericPrecedence :: Nil
+  private val numericPrecedence =
+    Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType.Unlimited)
 
+  /**
+   * Find the tightest common type of two types that might be used in a binary expression.
+   * This handles all numeric types except fixed-precision decimals interacting with each other or
+   * with primitive types, because in that case the precision and scale of the result depends on
+   * the operation. Those rules are implemented in [[HiveTypeCoercion.DecimalPrecision]].
+   */
   def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
     val valueTypes = Seq(t1, t2).filter(t => t != NullType)
     if (valueTypes.distinct.size > 1) {
-      // Try and find a promotion rule that contains both types in question.
-      val applicableConversion =
-        HiveTypeCoercion.allPromotions.find(p => p.contains(t1) && p.contains(t2))
-
-      // If found return the widest common type, otherwise None
-      applicableConversion.map(_.filter(t => t == t1 || t == t2).last)
+      // Promote numeric types to the highest of the two and all numeric types to unlimited decimal
+      if (numericPrecedence.contains(t1) && numericPrecedence.contains(t2)) {
+        Some(numericPrecedence.filter(t => t == t1 || t == t2).last)
+      } else if (t1.isInstanceOf[DecimalType] && t2.isInstanceOf[DecimalType]) {
+        // Fixed-precision decimals can up-cast into unlimited
+        if (t1 == DecimalType.Unlimited || t2 == DecimalType.Unlimited) {
+          Some(DecimalType.Unlimited)
+        } else {
+          None
+        }
+      } else {
+        None
+      }
     } else {
       Some(if (valueTypes.size == 0) NullType else valueTypes.head)
     }
@@ -59,6 +71,7 @@ trait HiveTypeCoercion {
     ConvertNaNs ::
     WidenTypes ::
     PromoteStrings ::
+    DecimalPrecision ::
     BooleanComparisons ::
     BooleanCasts ::
     StringToIntegralCasts ::
@@ -151,6 +164,7 @@ trait HiveTypeCoercion {
     import HiveTypeCoercion._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      // TODO: unions with fixed-precision decimals
       case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
         val castedInput = left.output.zip(right.output).map {
           // When a string is found on one side, make the other side a string too.
@@ -265,6 +279,110 @@ trait HiveTypeCoercion {
     }
   }
 
+  // scalastyle:off
+  /**
+   * Calculates and propagates precision for fixed-precision decimals. Hive has a number of
+   * rules for this based on the SQL standard and MS SQL:
+   * https://cwiki.apache.org/confluence/download/attachments/27362075/Hive_Decimal_Precision_Scale_Support.pdf
+   *
+   * In particular, if we have expressions e1 and e2 with precision/scale p1/s2 and p2/s2
+   * respectively, then the following operations have the following precision / scale:
+   *
+   *   Operation    Result Precision                        Result Scale
+   *   ------------------------------------------------------------------------
+   *   e1 + e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
+   *   e1 - e2      max(s1, s2) + max(p1-s1, p2-s2) + 1     max(s1, s2)
+   *   e1 * e2      p1 + p2 + 1                             s1 + s2
+   *   e1 / e2      p1 - s1 + s2 + max(6, s1 + p2 + 1)      max(6, s1 + p2 + 1)
+   *   e1 % e2      min(p1-s1, p2-s2) + max(s1, s2)         max(s1, s2)
+   *   sum(e1)      p1 + 10                                 s1
+   *   avg(e1)      p1 + 4                                  s1 + 4
+   *
+   * Catalyst also has unlimited-precision decimals. For those, all ops return unlimited precision.
+   *
+   * To implement the rules for fixed-precision types, we introduce casts to turn them to unlimited
+   * precision, do the math on unlimited-precision numbers, then introduce casts back to the
+   * required fixed precision. This allows us to do all rounding and overflow handling in the
+   * cast-to-fixed-precision operator.
+   *
+   * In addition, when mixing non-decimal types with decimals, we use the following rules:
+   * - BYTE gets turned into DECIMAL(3, 0)
+   * - SHORT gets turned into DECIMAL(5, 0)
+   * - INT gets turned into DECIMAL(10, 0)
+   * - LONG gets turned into DECIMAL(20, 0)
+   * - FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE (this is the same as Hive,
+   *   but note that unlimited decimals are considered bigger than doubles in WidenTypes)
+   */
+  // scalastyle:on
+  object DecimalPrecision extends Rule[LogicalPlan] {
+    import scala.math.{max, min}
+
+    // Conversion rules for integer types into fixed-precision decimals
+    val intTypeToFixed: Map[DataType, DecimalType] = Map(
+      ByteType -> DecimalType(3, 0),
+      ShortType -> DecimalType(5, 0),
+      IntegerType -> DecimalType(10, 0),
+      LongType -> DecimalType(20, 0)
+    )
+
+    def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+      // Skip nodes whose children have not been resolved yet
+      case e if !e.childrenResolved => e
+
+      case Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+        Cast(
+          Add(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
+          DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
+        )
+
+      case Subtract(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+        Cast(
+          Subtract(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
+          DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
+        )
+
+      case Multiply(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+        Cast(
+          Multiply(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
+          DecimalType(p1 + p2 + 1, s1 + s2)
+        )
+
+      case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+        Cast(
+          Divide(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
+          DecimalType(p1 - s1 + s2 + max(6, s1 + p2 + 1), max(6, s1 + p2 + 1))
+        )
+
+      case Remainder(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+        Cast(
+          Remainder(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
+          DecimalType(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
+        )
+
+      // Promote integers inside a binary expression with fixed-precision decimals to decimals,
+      // and fixed-precision decimals in an expression with floats / doubles to doubles
+      case b: BinaryExpression if b.left.dataType != b.right.dataType =>
+        (b.left.dataType, b.right.dataType) match {
+          case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
+            b.makeCopy(Array(Cast(b.left, intTypeToFixed(t)), b.right))
+          case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
+            b.makeCopy(Array(b.left, Cast(b.right, intTypeToFixed(t))))
+          case (t, DecimalType.Fixed(p, s)) if isFloat(t) =>
+            b.makeCopy(Array(b.left, Cast(b.right, DoubleType)))
+          case (DecimalType.Fixed(p, s), t) if isFloat(t) =>
+            b.makeCopy(Array(Cast(b.left, DoubleType), b.right))
+          case _ =>
+            b
+        }
+
+      // TODO: MaxOf, MinOf, etc might want other rules
+
+      // SUM and AVERAGE are handled by the implementations of those expressions
+    }
+  }
+
   /**
    * Changes Boolean values to Bytes so that expressions like true < false can be Evaluated.
    */
@@ -330,7 +448,7 @@ trait HiveTypeCoercion {
       case e if !e.childrenResolved => e
 
       case Cast(e @ StringType(), t: IntegralType) =>
-        Cast(Cast(e, DecimalType), t)
+        Cast(Cast(e, DecimalType.Unlimited), t)
     }
   }
 
@@ -383,10 +501,12 @@ trait HiveTypeCoercion {
 
       // Decimal and Double remain the same
       case d: Divide if d.resolved && d.dataType == DoubleType => d
-      case d: Divide if d.resolved && d.dataType == DecimalType => d
+      case d: Divide if d.resolved && d.dataType.isInstanceOf[DecimalType] => d
 
-      case Divide(l, r) if l.dataType == DecimalType => Divide(l, Cast(r, DecimalType))
-      case Divide(l, r) if r.dataType == DecimalType => Divide(Cast(l, DecimalType), r)
+      case Divide(l, r) if l.dataType.isInstanceOf[DecimalType] =>
+        Divide(l, Cast(r, DecimalType.Unlimited))
+      case Divide(l, r) if r.dataType.isInstanceOf[DecimalType] =>
+        Divide(Cast(l, DecimalType.Unlimited), r)
 
       case Divide(l, r) => Divide(Cast(l, DoubleType), Cast(r, DoubleType))
     }

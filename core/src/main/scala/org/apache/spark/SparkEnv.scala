@@ -32,6 +32,7 @@ import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.BlockTransferService
+import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
@@ -155,7 +156,7 @@ object SparkEnv extends Logging {
     assert(conf.contains("spark.driver.port"), "spark.driver.port is not set on the driver!")
     val hostname = conf.get("spark.driver.host")
     val port = conf.get("spark.driver.port").toInt
-    create(conf, "<driver>", hostname, port, true, isLocal, listenerBus)
+    create(conf, SparkContext.DRIVER_IDENTIFIER, hostname, port, true, isLocal, listenerBus)
   }
 
   /**
@@ -167,9 +168,11 @@ object SparkEnv extends Logging {
       executorId: String,
       hostname: String,
       port: Int,
+      numCores: Int,
       isLocal: Boolean,
       actorSystem: ActorSystem = null): SparkEnv = {
-    create(conf, executorId, hostname, port, false, isLocal, defaultActorSystem = actorSystem)
+    create(conf, executorId, hostname, port, false, isLocal, defaultActorSystem = actorSystem,
+      numUsableCores = numCores)
   }
 
   /**
@@ -183,7 +186,8 @@ object SparkEnv extends Logging {
       isDriver: Boolean,
       isLocal: Boolean,
       listenerBus: LiveListenerBus = null,
-      defaultActorSystem: ActorSystem = null): SparkEnv = {
+      defaultActorSystem: ActorSystem = null,
+      numUsableCores: Int = 0): SparkEnv = {
 
     // Listener bus is only used on the driver
     if (isDriver) {
@@ -272,14 +276,22 @@ object SparkEnv extends Logging {
 
     val shuffleMemoryManager = new ShuffleMemoryManager(conf)
 
-    val blockTransferService = new NioBlockTransferService(conf, securityManager)
+    val blockTransferService =
+      conf.get("spark.shuffle.blockTransferService", "netty").toLowerCase match {
+        case "netty" =>
+          new NettyBlockTransferService(conf, securityManager, numUsableCores)
+        case "nio" =>
+          new NioBlockTransferService(conf, securityManager)
+      }
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
       new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf, isDriver)
 
+    // NB: blockManager is not valid until initialize() is called later.
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
-      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService)
+      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
+      numUsableCores)
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 

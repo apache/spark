@@ -17,17 +17,17 @@
 
 package org.apache.spark.sql
 
+import java.util.TimeZone
+
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.joins.BroadcastHashJoin
-import org.apache.spark.sql.test._
-import org.scalatest.BeforeAndAfterAll
-import java.util.TimeZone
 
 /* Implicits */
-import TestSQLContext._
-import TestData._
+import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.test.TestSQLContext._
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
@@ -70,6 +70,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT ABS(2.5)"),
       2.5)
+  }
+
+  test("aggregation with codegen") {
+    val originalValue = codegenEnabled
+    setConf(SQLConf.CODEGEN_ENABLED, "true")
+    sql("SELECT key FROM testData GROUP BY key").collect()
+    setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
 
   test("SPARK-3176 Added Parser of SQL LAST()") {
@@ -189,7 +196,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Seq(Seq("1")))
   }
 
-  test("sorting") {
+  def sortTest() = {
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC"),
       Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)))
@@ -229,6 +236,20 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT * FROM mapData ORDER BY data[1] DESC"),
       mapData.collect().sortBy(_.data(1)).reverse.toSeq)
+  }
+
+  test("sorting") {
+    val before = externalSortEnabled
+    setConf(SQLConf.EXTERNAL_SORT, "false")
+    sortTest()
+    setConf(SQLConf.EXTERNAL_SORT, before.toString)
+  }
+
+  test("external sorting") {
+    val before = externalSortEnabled
+    setConf(SQLConf.EXTERNAL_SORT, "true")
+    sortTest()
+    setConf(SQLConf.EXTERNAL_SORT, before.toString)
   }
 
   test("limit") {
@@ -281,14 +302,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       3)
   }
 
-  // No support for primitive nulls yet.
-  ignore("null count") {
+  test("null count") {
     checkAnswer(
-      sql("SELECT a, COUNT(b) FROM testData3"),
-      Seq((1,0), (2, 1)))
+      sql("SELECT a, COUNT(b) FROM testData3 GROUP BY a"),
+      Seq((1, 0), (2, 1)))
 
     checkAnswer(
-      testData3.groupBy()(Count('a), Count('b), Count(1), CountDistinct('a :: Nil), CountDistinct('b :: Nil)),
+      sql("SELECT COUNT(a), COUNT(b), COUNT(1), COUNT(DISTINCT a), COUNT(DISTINCT b) FROM testData3"),
       (2, 1, 2, 2, 1) :: Nil)
   }
 
@@ -545,7 +565,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData"), Nil)
   }
 
- test("INTERSECT") {
+  test("INTERSECT") {
     checkAnswer(
       sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM lowerCaseData"),
       (1, "a") ::
@@ -695,6 +715,30 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT CAST(TRUE AS STRING), CAST(FALSE AS STRING) FROM testData LIMIT 1"),
       ("true", "false") :: Nil)
+  }
+
+  test("metadata is propagated correctly") {
+    val person = sql("SELECT * FROM person")
+    val schema = person.schema
+    val docKey = "doc"
+    val docValue = "first name"
+    val metadata = new MetadataBuilder()
+      .putString(docKey, docValue)
+      .build()
+    val schemaWithMeta = new StructType(Seq(
+      schema("id"), schema("name").copy(metadata = metadata), schema("age")))
+    val personWithMeta = applySchema(person, schemaWithMeta)
+    def validateMetadata(rdd: SchemaRDD): Unit = {
+      assert(rdd.schema("name").metadata.getString(docKey) == docValue)
+    }
+    personWithMeta.registerTempTable("personWithMeta")
+    validateMetadata(personWithMeta.select('name))
+    validateMetadata(personWithMeta.select("name".attr))
+    validateMetadata(personWithMeta.select('id, 'name))
+    validateMetadata(sql("SELECT * FROM personWithMeta"))
+    validateMetadata(sql("SELECT id, name FROM personWithMeta"))
+    validateMetadata(sql("SELECT * FROM personWithMeta JOIN salary ON id = personId"))
+    validateMetadata(sql("SELECT name, salary FROM personWithMeta JOIN salary ON id = personId"))
   }
 
   test("SPARK-3371 Renaming a function expression with group by gives error") {
@@ -882,5 +926,70 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     val data = sparkContext.parallelize(Seq("""{"key?number1": "value1", "key.number2": "value2"}"""))
     jsonRDD(data).registerTempTable("records")
     sql("SELECT `key?number1` FROM records")
+  }
+
+  test("SPARK-3814 Support Bitwise & operator") {
+    checkAnswer(sql("SELECT key&1 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise | operator") {
+    checkAnswer(sql("SELECT key|0 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise ^ operator") {
+    checkAnswer(sql("SELECT key^0 FROM testData WHERE key = 1 "), 1)
+  }
+
+  test("SPARK-3814 Support Bitwise ~ operator") {
+    checkAnswer(sql("SELECT ~key FROM testData WHERE key = 1 "), -2)
+  }
+
+  test("SPARK-4120 Join of multiple tables does not work in SparkSQL") {
+    checkAnswer(
+      sql(
+        """SELECT a.key, b.key, c.key
+          |FROM testData a,testData b,testData c
+          |where a.key = b.key and a.key = c.key
+        """.stripMargin),
+      (1 to 100).map(i => Seq(i, i, i)))
+  }
+
+  test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
+    checkAnswer(sql("SELECT key FROM testData WHERE key not between 0 and 10 order by key"),
+        (11 to 100).map(i => Seq(i)))
+  }
+
+  test("SPARK-4207 Query which has syntax like 'not like' is not working in Spark SQL") {
+    checkAnswer(sql("SELECT key FROM testData WHERE value not like '100%' order by key"),
+        (1 to 99).map(i => Seq(i)))
+  }
+
+  test("SPARK-4322 Grouping field with struct field as sub expression") {
+    jsonRDD(sparkContext.makeRDD("""{"a": {"b": [{"c": 1}]}}""" :: Nil)).registerTempTable("data")
+    checkAnswer(sql("SELECT a.b[0].c FROM data GROUP BY a.b[0].c"), 1)
+    dropTempTable("data")
+
+    jsonRDD(sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
+    checkAnswer(sql("SELECT a.b + 1 FROM data GROUP BY a.b + 1"), 2)
+    dropTempTable("data")
+  }
+
+  test("SPARK-4432 Fix attribute reference resolution error when using ORDER BY") {
+    checkAnswer(
+      sql("SELECT a + b FROM testData2 ORDER BY a"),
+      Seq(2, 3, 3 ,4 ,4 ,5).map(Seq(_))
+    )
+  }
+
+  test("Supporting relational operator '<=>' in Spark SQL") {
+    val nullCheckData1 = TestData(1,"1") :: TestData(2,null) :: Nil
+    val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
+    rdd1.registerTempTable("nulldata1")
+    val nullCheckData2 = TestData(1,"1") :: TestData(2,null) :: Nil
+    val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
+    rdd2.registerTempTable("nulldata2")
+    checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
+      "nulldata2 on nulldata1.value <=> nulldata2.value"),
+        (1 to 2).map(i => Seq(i)))
   }
 }

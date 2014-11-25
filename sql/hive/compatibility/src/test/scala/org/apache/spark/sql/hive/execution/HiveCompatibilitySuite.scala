@@ -103,6 +103,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf5",
     "udf_java_method",
     "create_merge_compressed",
+    "create_view_partitioned",
     "database_location",
     "database_properties",
 
@@ -229,7 +230,15 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // Needs constant object inspectors
     "udf_round",
-    "udf7"
+    "udf7",
+
+    // Sort with Limit clause causes failure.
+    "ctas",
+    "ctas_hadoop20",
+
+    // timestamp in array, the output format of Hive contains double quotes, while
+    // Spark SQL doesn't
+    "udf_sort_array"
   ) ++ HiveShim.compatibilityBlackList
 
   /**
@@ -857,6 +866,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_minute",
     "udf_modulo",
     "udf_month",
+    "udf_named_struct",
     "udf_negative",
     "udf_not",
     "udf_notequal",
@@ -890,6 +900,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_stddev_pop",
     "udf_stddev_samp",
     "udf_string",
+    "udf_struct",
     "udf_substring",
     "udf_subtract",
     "udf_sum",
@@ -959,6 +970,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "union_script",
     "varchar_2",
     "varchar_join1",
-    "varchar_union1"
+    "varchar_union1",
+    "view",
+    "view_cast",
+    "view_inputs"
   )
 }

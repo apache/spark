@@ -84,11 +84,11 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     <tr>
       <td><a href={uiAddress}>{info.id}</a></td>
       <td>{info.name}</td>
-      <td>{startTime}</td>
-      <td>{endTime}</td>
-      <td>{duration}</td>
+      <td sorttable_customkey={info.startTime.toString}>{startTime}</td>
+      <td sorttable_customkey={info.endTime.toString}>{endTime}</td>
+      <td sorttable_customkey={(info.endTime - info.startTime).toString}>{duration}</td>
       <td>{info.sparkUser}</td>
-      <td>{lastUpdated}</td>
+      <td sorttable_customkey={info.lastUpdated.toString}>{lastUpdated}</td>
     </tr>
   }
 }

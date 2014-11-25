@@ -59,7 +59,11 @@ for /f %%i in ('echo %1^| findstr /R "\.py"') do (
 )
 
 if [%PYTHON_FILE%] == [] (
-  %PYSPARK_PYTHON%
+  if [%IPYTHON%] == [1] (
+	ipython %IPYTHON_OPTS%
+  ) else (
+	%PYSPARK_PYTHON%
+  ) 
 ) else (
   echo.
   echo WARNING: Running python applications through ./bin/pyspark.cmd is deprecated as of Spark 1.0.

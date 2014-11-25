@@ -19,6 +19,8 @@ package org.apache.spark.deploy.worker
 
 import java.io.File
 
+import scala.collection.JavaConversions._
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
@@ -32,6 +34,7 @@ class ExecutorRunnerTest extends FunSuite {
       Command("foo", Seq(appId), Map(), Seq(), Seq(), Seq()), "appUiUrl")
     val er = new ExecutorRunner(appId, 1, appDesc, 8, 500, null, "blah", "worker321",
       new File(sparkHome), new File("ooga"), "blah", new SparkConf, ExecutorState.RUNNING)
-    assert(er.getCommandSeq.last === appId)
+    val builder = CommandUtils.buildProcessBuilder(appDesc.command, 512, sparkHome, er.substituteVariables)
+    assert(builder.command().last === appId)
   }
 }
