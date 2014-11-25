@@ -23,8 +23,8 @@ application. These properties can be set directly on a
 (e.g. master URL and application name), as well as arbitrary key-value pairs through the
 `set()` method. For example, we could initialize an application with two threads as follows:
 
-Note that we run with local[2], meaning two threads - which represents "minimal" parallelism, 
-which can help detect bugs that only exist when we run in a distributed context. 
+Note that we run with local[2], meaning two threads - which represents "minimal" parallelism,
+which can help detect bugs that only exist when we run in a distributed context.
 
 {% highlight scala %}
 val conf = new SparkConf()
@@ -35,7 +35,7 @@ val sc = new SparkContext(conf)
 {% endhighlight %}
 
 Note that we can have more than 1 thread in local mode, and in cases like spark streaming, we may actually
-require one to prevent any sort of starvation issues.  
+require one to prevent any sort of starvation issues.
 
 ## Dynamically Loading Spark Properties
 In some cases, you may want to avoid hard-coding certain configurations in a `SparkConf`. For
@@ -123,7 +123,7 @@ of the most common options to set are:
   <td>
     Limit of total size of serialized results of all partitions for each Spark action (e.g. collect).
     Should be at least 1M, or 0 for unlimited. Jobs will be aborted if the total size
-    is above this limit. 
+    is above this limit.
     Having a high limit may cause out-of-memory errors in driver (depends on spark.driver.memory
     and memory overhead of objects in JVM). Setting a proper limit can protect the driver from
     out-of-memory errors.
@@ -224,7 +224,6 @@ Apart from these, the following properties are also available, and may be useful
     (Experimental) Whether to give user-added jars precedence over Spark's own jars when
     loading classes in Executors. This feature can be used to mitigate conflicts between
     Spark's dependencies and user dependencies. It is currently an experimental feature.
-    (Currently, this setting does not work for YARN, see <a href="https://issues.apache.org/jira/browse/SPARK-2996">SPARK-2996</a> for more details).
   </td>
 </tr>
 <tr>
