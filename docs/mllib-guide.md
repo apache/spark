@@ -16,8 +16,10 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * random data generation  
 * [Classification and regression](mllib-classification-regression.html)
   * [linear models (SVMs, logistic regression, linear regression)](mllib-linear-methods.html)
-  * [decision trees](mllib-decision-tree.html)
   * [naive Bayes](mllib-naive-bayes.html)
+  * [decision trees](mllib-decision-tree.html)
+  * [random forests](mllib-random-forest.html)
+  * [gradient-boosted trees](mllib-gbt.html)
 * [Collaborative filtering](mllib-collaborative-filtering.html)
   * alternating least squares (ALS)
 * [Clustering](mllib-clustering.html)

@@ -1,149 +1,75 @@
 ---
 layout: global
-title: Decision Tree - MLlib
-displayTitle: <a href="mllib-guide.html">MLlib</a> - Decision Tree
+title: Random Forest - MLlib
+displayTitle: <a href="mllib-guide.html">MLlib</a> - Random Forest
 ---
 
 * Table of contents
 {:toc}
 
-[Decision trees](http://en.wikipedia.org/wiki/Decision_tree_learning)
-and their ensembles are popular methods for the machine learning tasks of
-classification and regression. Decision trees are widely used since they are easy to interpret,
-handle categorical features, extend to the multiclass classification setting, do not require
-feature scaling, and are able to capture non-linearities and feature interactions. Tree ensemble
-algorithms such as random forests and boosting are among the top performers for classification and
-regression tasks.
+[Random forests](http://en.wikipedia.org/wiki/Random_forest)
+are ensembles of [decision trees](mllib-decision-tree.html).
+Random forests are one of the most successful machine learning models for classification and
+regression.  They combine many decision trees in order to reduce the risk of overfitting.
+Like decision trees, random forests handle categorical features,
+extend to the multiclass classification setting, do not require
+feature scaling, and are able to capture non-linearities and feature interactions.
 
-MLlib supports decision trees for binary and multiclass classification and for regression,
-using both continuous and categorical features. The implementation partitions data by rows,
-allowing distributed training with millions of instances.
+MLlib supports random forests for binary and multiclass classification and for regression,
+using both continuous and categorical features.
+MLlib implements random forests using the existing [decision tree](mllib-decision-tree.html)
+implementation.  Please see the decision tree guide for more information on trees.
 
-Ensembles of trees are described in [random forests](mllib-random-forest.html) and
-[gradient-boosted trees](mllib-gbt.html).
+MLlib also supports learning ensembles of trees using Gradient Boosted Trees.  Refer to the [Gradient Boosted Trees guide](mllib-gbt.html) for a comparison of the two methods.
 
 ## Basic algorithm
 
-The decision tree is a greedy algorithm that performs a recursive binary partitioning of the feature
-space.  The tree predicts the same label for each bottommost (leaf) partition.
-Each partition is chosen greedily by selecting the *best split* from a set of possible splits,
-in order to maximize the information gain at a tree node. In other words, the split chosen at each
-tree node is chosen from the set `$\underset{s}{\operatorname{argmax}} IG(D,s)$` where `$IG(D,s)$`
-is the information gain when a split `$s$` is applied to a dataset `$D$`.
+Random forests train a set of decision trees separately, so the training can be done in parallel.
+The algorithm injects randomness into the training process so that each decision tree is a bit
+different.  Combining the predictions from each tree reduces the variance of the predictions,
+improving the performance on test data.
 
-### Node impurity and information gain
+### Training
 
-The *node impurity* is a measure of the homogeneity of the labels at the node. The current
-implementation provides two impurity measures for classification (Gini impurity and entropy) and one
-impurity measure for regression (variance).
+The randomness injected into the training process includes:
 
-<table class="table">
-  <thead>
-    <tr><th>Impurity</th><th>Task</th><th>Formula</th><th>Description</th></tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Gini impurity</td>
-	  <td>Classification</td>
-	  <td>$\sum_{i=1}^{C} f_i(1-f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $C$ is the number of unique labels.</td>
-    </tr>
-    <tr>
-      <td>Entropy</td>
-	  <td>Classification</td>
-	  <td>$\sum_{i=1}^{C} -f_ilog(f_i)$</td><td>$f_i$ is the frequency of label $i$ at a node and $C$ is the number of unique labels.</td>
-    </tr>
-    <tr>
-      <td>Variance</td>
-	  <td>Regression</td>
-     <td>$\frac{1}{N} \sum_{i=1}^{N} (x_i - \mu)^2$</td><td>$y_i$ is label for an instance,
-	  $N$ is the number of instances and $\mu$ is the mean given by $\frac{1}{N} \sum_{i=1}^N x_i$.</td>
-    </tr>
-  </tbody>
-</table>
+* Subsampling the original dataset on each iteration to get a different training set (a.k.a. bootstrapping).
+* Considering different random subsets of features to split on at each tree node.
 
-The *information gain* is the difference between the parent node impurity and the weighted sum of
-the two child node impurities. Assuming that a split $s$ partitions the dataset `$D$` of size `$N$`
-into two datasets `$D_{left}$` and `$D_{right}$` of sizes `$N_{left}$` and `$N_{right}$`,
-respectively, the information gain is:
+Apart from these randomizations, decision tree training is done in the same way as for individual decision trees.
 
-`$IG(D,s) = Impurity(D) - \frac{N_{left}}{N} Impurity(D_{left}) - \frac{N_{right}}{N} Impurity(D_{right})$`
+### Prediction
 
-### Split candidates
+To make a prediction on a new instance, a random forest must aggregate the predictions from its set of decision trees.  This aggregation is done differently for classification and regression.
 
-**Continuous features**
+*Classification*: Majority vote. Each tree's prediction is counted as a vote for one class.  The label is predicted to be the class which receives the most votes.
 
-For small datasets in single-machine implementations, the split candidates for each continuous
-feature are typically the unique values for the feature. Some implementations sort the feature
-values and then use the ordered unique values as split candidates for faster tree calculations.
+*Regression*: Averaging. Each tree predicts a real value.  The label is predicted to be the average of the tree predictions.
 
-Sorting feature values is expensive for large distributed datasets.
-This implementation computes an approximate set of split candidates by performing a quantile
-calculation over a sampled fraction of the data.
-The ordered splits create "bins" and the maximum number of such
-bins can be specified using the `maxBins` parameter.
+## Usage guide
 
-Note that the number of bins cannot be greater than the number of instances `$N$` (a rare scenario
-since the default `maxBins` value is 32). The tree algorithm automatically reduces the number of
-bins if the condition is not satisfied.
+We include a few guidelines for using random forests by discussing the various parameters.
+We omit some decision tree parameters since those are covered in the [decision tree guide](mllib-decision-tree.html).
 
-**Categorical features**
+The first two parameters we mention are the most important, and tuning them can often improve performance:
 
-For a categorical feature with `$M$` possible values (categories), one could come up with
-`$2^{M-1}-1$` split candidates. For binary (0/1) classification and regression,
-we can reduce the number of split candidates to `$M-1$` by ordering the
-categorical feature values by the average label. (See Section 9.2.4 in
-[Elements of Statistical Machine Learning](http://statweb.stanford.edu/~tibs/ElemStatLearn/) for
-details.) For example, for a binary classification problem with one categorical feature with three
-categories A, B and C whose corresponding proportions of label 1 are 0.2, 0.6 and 0.4, the categorical
-features are ordered as A, C, B. The two split candidates are A \| C, B
-and A , C \| B where \| denotes the split.
+* **numTrees**: Number of trees in the forest.
+  * Increasing the number of trees will decrease the variance in predictions, improving the model's test-time accuracy.
+  * Training time increases roughly linearly in the number of trees.
 
-In multiclass classification, all `$2^{M-1}-1$` possible splits are used whenever possible.
-When `$2^{M-1}-1$` is greater than the `maxBins` parameter, we use a (heuristic) method
-similar to the method used for binary classification and regression.
-The `$M$` categorical feature values are ordered by impurity,
-and the resulting `$M-1$` split candidates are considered.
+* **maxDepth**: Maximum depth of each tree in the forest.
+  * Increasing the depth makes the model more expressive and powerful.  However, deep trees take longer to train and are also more prone to overfitting.
+  * In general, it is acceptable to train deeper trees when using random forests than when using a single decision tree.  One tree is more likely to overfit than a random forest (because of the variance reduction from averaging multiple trees in the forest).
 
-### Stopping rule
+The next two parameters generally do not require tuning.  However, they can be tuned to speed up training.
 
-The recursive tree construction is stopped at a node when one of the two conditions is met:
+* **subsamplingRate**: This parameter specifies the size of the dataset used for training each tree in the forest, as a fraction of the size of the original dataset.  The default (1.0) is recommended, but decreasing this fraction can speed up training.
 
-1. The node depth is equal to the `maxDepth` training parameter.
-2. No split candidate leads to an information gain at the node.
-
-## Implementation details
-
-### Max memory requirements
-
-For faster processing, the decision tree algorithm performs simultaneous histogram computations for
-all nodes at each level of the tree. This could lead to high memory requirements at deeper levels
-of the tree, potentially leading to memory overflow errors. To alleviate this problem, a `maxMemoryInMB`
-training parameter specifies the maximum amount of memory at the workers (twice as much at the
-master) to be allocated to the histogram computation. The default value is conservatively chosen to
-be 256 MB to allow the decision algorithm to work in most scenarios. Once the memory requirements
-for a level-wise computation cross the `maxMemoryInMB` threshold, the node training tasks at each
-subsequent level are split into smaller tasks.
-
-Note that, if you have a large amount of memory, increasing `maxMemoryInMB` can lead to faster
-training by requiring fewer passes over the data.
-
-### Binning feature values
-
-Increasing `maxBins` allows the algorithm to consider more split candidates and make fine-grained
-split decisions.  However, it also increases computation and communication.
-
-Note that the `maxBins` parameter must be at least the maximum number of categories `$M$` for
-any categorical feature.
-
-### Scaling
-
-Computation scales approximately linearly in the number of training instances,
-in the number of features, and in the `maxBins` parameter.
-Communication scales approximately linearly in the number of features and in `maxBins`.
-
-The implemented algorithm reads both sparse and dense data. However, it is not optimized for sparse input.
+* **featureSubsetStrategy**: Number of features to use as candidates for splitting at each tree node.  The number is specified as a fraction or function of the total number of features.  Decreasing this number will speed up training, but can sometimes impact performance if too low.
 
 ## Examples
+
+TODO
 
 ### Classification
 
