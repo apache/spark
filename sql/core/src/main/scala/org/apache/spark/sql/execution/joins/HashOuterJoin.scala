@@ -69,15 +69,16 @@ case class HashOuterJoin(
   @transient private[this] lazy val EMPTY_LIST = Seq.empty[Row]
 
   @transient private[this] lazy val joinedRow = new JoinedRow()
+  @transient private[this] lazy val leftNullRow = new GenericRow(left.output.length)
+  @transient private[this] lazy val rightNullRow = new GenericRow(right.output.length)
+  @transient private[this] lazy val boundCondition =
+    condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
 
   // TODO we need to rewrite all of the iterators with our own implementation instead of the Scala
   // iterator for performance purpose.
 
   private[this] def leftOuterIterator(
       key: Row, leftRow: Row, rightIter: Iterable[Row]): Iterator[Row] = {
-    val rightNullRow = new GenericRow(right.output.length)
-    val boundCondition =
-      condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
 
     joinedRow.withLeft(leftRow)
     val ret: Iterable[Row] = (
@@ -86,12 +87,12 @@ case class HashOuterJoin(
           case r if (boundCondition(joinedRow.withRight(r))) => joinedRow.copy
         }
         if (temp.size  == 0) {
-          List(joinedRow.withRight(rightNullRow).copy)
+          joinedRow.withRight(rightNullRow).copy :: Nil
         } else {
           temp
         }
       } else {
-        List(joinedRow.withRight(rightNullRow).copy)
+        joinedRow.withRight(rightNullRow).copy :: Nil
       }
     )
     ret.iterator
@@ -99,9 +100,6 @@ case class HashOuterJoin(
 
   private[this] def rightOuterIterator(
       key: Row, leftIter: Iterable[Row], rightRow: Row): Iterator[Row] = {
-    val leftNullRow = new GenericRow(left.output.length)
-    val boundCondition =
-      condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
 
     joinedRow.withRight(rightRow)
     val ret: Iterable[Row] = (
@@ -110,12 +108,12 @@ case class HashOuterJoin(
           case l if (boundCondition(joinedRow.withLeft(l))) => joinedRow.copy
         }
         if (temp.size  == 0) {
-          List(joinedRow.withLeft(leftNullRow).copy)
+          joinedRow.withLeft(leftNullRow).copy :: Nil
         } else {
           temp
         }
       } else {
-        List(joinedRow.withLeft(leftNullRow).copy)
+        joinedRow.withLeft(leftNullRow).copy :: Nil
       }
     )
     ret.iterator
@@ -198,15 +196,17 @@ case class HashOuterJoin(
       joinType match {
         case LeftOuter => {
           val rightHashTable = buildHashTable(rightIter, newProjection(rightKeys, right.output))
+          val keyGenerator = newProjection(leftKeys, left.output)
           leftIter.flatMap( currentRow => {
-            val rowKey = newProjection(leftKeys, left.output)(currentRow)
+            val rowKey = keyGenerator(currentRow)
             leftOuterIterator(rowKey, currentRow, rightHashTable.getOrElse(rowKey, EMPTY_LIST))
           })
         }
         case RightOuter => {
           val leftHashTable = buildHashTable(leftIter, newProjection(leftKeys, left.output))
+          val keyGenerator = newProjection(rightKeys, right.output)
           rightIter.flatMap ( currentRow => {
-            val rowKey = newProjection(rightKeys, right.output)(currentRow)
+            val rowKey = keyGenerator(currentRow)
             rightOuterIterator(rowKey, leftHashTable.getOrElse(rowKey, EMPTY_LIST), currentRow)
           })
         }
