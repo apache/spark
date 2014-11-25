@@ -112,7 +112,7 @@ Hive 0.12.0 using the `-Phive-0.12.0` profile.
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -DskipTests clean package
 
 # Apache Hadoop 2.4.X with Hive 12 support
-mvn -Pyarn -Phive -Phive-thriftserver-0.12.0 -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -DskipTests clean package
+mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-0.12.0 -Phive-thriftserver -DskipTests clean package
 {% endhighlight %}
 
 # Building for Scala 2.11
