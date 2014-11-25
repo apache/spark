@@ -81,7 +81,7 @@ class KafkaRDD[
         context.addTaskCompletionListener{ context => closeIfNeeded() }
 
         val kc = new KafkaCluster(kafkaParams)
-        log.info(s"Computing partition ${part.topic} ${part.partition} ${part.fromOffset} -> ${part.untilOffset}")
+        log.info(s"Computing topic ${part.topic}, partition ${part.partition}, offsets ${part.fromOffset} -> ${part.untilOffset}")
         val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
           .newInstance(kc.config.props)
           .asInstanceOf[Decoder[K]]
@@ -99,7 +99,6 @@ class KafkaRDD[
 
         override def getNext: R = {
           if (iter == null || !iter.hasNext) {
-            log.info(s"Fetching ${part.topic}, ${part.partition}, ${requestOffset}")
             val req = new FetchRequestBuilder().
               addFetch(part.topic, part.partition, requestOffset, kc.config.fetchMessageMaxBytes).
               build()
