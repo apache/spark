@@ -28,13 +28,16 @@ import org.apache.spark.rdd.RDD
 /**
  * Model representing the result of matrix factorization.
  *
+ * NB: If you create the model directly using constructor, please be aware that fast prediction
+ * requires cached user/product features and the availability of their partitioning information.
+ *
  * @param rank Rank for the features in this model.
  * @param userFeatures RDD of tuples where each tuple represents the userId and
  *                     the features computed for this user.
  * @param productFeatures RDD of tuples where each tuple represents the productId
  *                        and the features computed for this product.
  */
-class MatrixFactorizationModel private[mllib] (
+class MatrixFactorizationModel(
     val rank: Int,
     val userFeatures: RDD[(Int, Array[Double])],
     val productFeatures: RDD[(Int, Array[Double])]) extends Serializable {
