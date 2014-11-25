@@ -34,7 +34,7 @@ import kafka.consumer.{ConsumerConfig, SimpleConsumer}
 class KafkaCluster(val kafkaParams: Map[String, String]) {
   type Err = ArrayBuffer[Throwable]
 
-  val brokers: Array[(String, Int)] =
+  val seedBrokers: Array[(String, Int)] =
     kafkaParams.get("metadata.broker.list")
       .orElse(kafkaParams.get("bootstrap.servers"))
       .getOrElse(throw new Exception("Must specify metadata.broker.list or bootstrap.servers"))
@@ -59,7 +59,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
     val req = TopicMetadataRequest(TopicMetadataRequest.CurrentVersion,
       0, config.clientId, Seq(topic))
     val errs = new Err
-    withBrokers(errs) { consumer =>
+    withBrokers(seedBrokers, errs) { consumer =>
       val resp: TopicMetadataResponse = consumer.send(req)
       resp.topicsMetadata.find(_.topic == topic).flatMap { t =>
         t.partitionsMetadata.find(_.partitionId == partition)
@@ -70,6 +70,33 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
       }
     }
     Left(errs)
+  }
+
+  def findLeaders(
+    topicAndPartitions: Set[TopicAndPartition]
+  ): Either[Err, Map[TopicAndPartition, (String, Int)]] = {
+    getPartitionMetadata(topicAndPartitions.map(_.topic)).right.flatMap { tms =>
+      val result = tms.flatMap { tm: TopicMetadata =>
+        tm.partitionsMetadata.flatMap { pm =>
+          val tp = TopicAndPartition(tm.topic, pm.partitionId)
+          if (topicAndPartitions(tp)) {
+            pm.leader.map { l =>
+              tp -> (l.host -> l.port)
+            }
+          } else {
+            None
+          }
+        }
+      }.toMap
+      if (result.keys.size == topicAndPartitions.size) {
+        Right(result)
+      } else {
+        val missing = topicAndPartitions.diff(result.keys.toSet)
+        val err = new Err
+        err.append(new Exception(s"Couldn't find leaders for ${missing}"))
+        Left(err)
+      }
+    }
   }
 
   def getPartitions(topics: Set[String]): Either[Err, Set[TopicAndPartition]] =
@@ -85,7 +112,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
     val req = TopicMetadataRequest(TopicMetadataRequest.CurrentVersion,
       0, config.clientId, topics.toSeq)
     val errs = new Err
-    withBrokers(errs) { consumer =>
+    withBrokers(seedBrokers, errs) { consumer =>
       val resp: TopicMetadataResponse = consumer.send(req)
       // error codes here indicate missing / just created topic,
       // repeating on a different broker wont be useful
@@ -115,36 +142,47 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
       }
     }
 
+  private def flip[K, V](m: Map[K, V]): Map[V, Seq[K]] =
+    m.groupBy(_._2).map { kv =>
+      kv._1 -> kv._2.keys.toSeq
+    }
+
   def getLeaderOffsets(
     topicAndPartitions: Set[TopicAndPartition],
     before: Long,
     maxNumOffsets: Int
   ): Either[Err, Map[TopicAndPartition, Seq[Long]]] = {
-    var result = Map[TopicAndPartition, Seq[Long]]()
-    val req = OffsetRequest(
-      topicAndPartitions.map(tp => tp -> PartitionOffsetRequestInfo(before, 1)).toMap
-    )
-    val errs = new Err
-    withBrokers(errs) { consumer =>
-      val resp = consumer.getOffsetsBefore(req)
-      val respMap = resp.partitionErrorAndOffsets
-      val needed = topicAndPartitions.diff(result.keys.toSet)
-      needed.foreach { tp =>
-        respMap.get(tp).foreach { errAndOffsets =>
-          if (errAndOffsets.error == ErrorMapping.NoError) {
-            result += tp -> errAndOffsets.offsets
-          } else {
-            errs.append(ErrorMapping.exceptionFor(errAndOffsets.error))
+    findLeaders(topicAndPartitions).right.flatMap { tpToLeader =>
+      val leaderToTp: Map[(String, Int), Seq[TopicAndPartition]] = flip(tpToLeader)
+      val leaders = leaderToTp.keys
+      var result = Map[TopicAndPartition, Seq[Long]]()
+      val errs = new Err
+      withBrokers(leaders, errs) { consumer =>
+        val needed: Seq[TopicAndPartition] = leaderToTp((consumer.host, consumer.port))
+        val req = OffsetRequest(
+          needed.map { tp =>
+            tp -> PartitionOffsetRequestInfo(before, maxNumOffsets)
+          }.toMap
+        )
+        val resp = consumer.getOffsetsBefore(req)
+        val respMap = resp.partitionErrorAndOffsets
+        needed.foreach { tp =>
+          respMap.get(tp).foreach { errAndOffsets =>
+            if (errAndOffsets.error == ErrorMapping.NoError) {
+              result += tp -> errAndOffsets.offsets
+            } else {
+              errs.append(ErrorMapping.exceptionFor(errAndOffsets.error))
+            }
           }
         }
+        if (result.keys.size == topicAndPartitions.size) {
+          return Right(result)
+        }
       }
-      if (result.keys.size == topicAndPartitions.size) {
-        return Right(result)
-      }
+      val missing = topicAndPartitions.diff(result.keys.toSet)
+      errs.append(new Exception(s"Couldn't find leader offsets for ${missing}"))
+      Left(errs)
     }
-    val missing = topicAndPartitions.diff(result.keys.toSet)
-    errs.append(new Exception(s"Couldn't find leader offsets for ${missing}"))
-    Left(errs)
   }
 
   def getConsumerOffsets(
@@ -165,7 +203,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
     var result = Map[TopicAndPartition, OffsetMetadataAndError]()
     val req = OffsetFetchRequest(groupId, topicAndPartitions.toSeq)
     val errs = new Err
-    withBrokers(errs) { consumer =>
+    withBrokers(seedBrokers, errs) { consumer =>
       val resp = consumer.fetchOffsets(req)
       val respMap = resp.requestInfo
       val needed = topicAndPartitions.diff(result.keys.toSet)
@@ -204,7 +242,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
     val req = OffsetCommitRequest(groupId, metadata)
     val errs = new Err
     val topicAndPartitions = metadata.keys.toSet
-    withBrokers(errs) { consumer =>
+    withBrokers(seedBrokers, errs) { consumer =>
       val resp = consumer.commitOffsets(req)
       val respMap = resp.requestInfo
       val needed = topicAndPartitions.diff(result.keys.toSet)
@@ -226,7 +264,8 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
     Left(errs)
   }
 
-  private def withBrokers(errs: Err)(fn: SimpleConsumer => Any): Unit = {
+  private def withBrokers(brokers: Iterable[(String, Int)], errs: Err)
+    (fn: SimpleConsumer => Any): Unit = {
     brokers.foreach { hp =>
       var consumer: SimpleConsumer = null
       try {
