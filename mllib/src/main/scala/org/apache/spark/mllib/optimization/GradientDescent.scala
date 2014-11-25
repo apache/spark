@@ -163,10 +163,12 @@ object GradientDescent extends Logging {
 
     // if no data, return initial weights to avoid NaNs
     if (numExamples == 0) {
-
-      logInfo("GradientDescent.runMiniBatchSGD returning initial weights, no data found")
+      logWarning("GradientDescent.runMiniBatchSGD returning initial weights, no data found")
       return (initialWeights, stochasticLossHistory.toArray)
+    }
 
+    if (numExamples * miniBatchFraction < 1) {
+      logWarning("The miniBatchFraction is too small")
     }
 
     // Initialize weights as a column vector
@@ -206,6 +208,8 @@ object GradientDescent extends Logging {
           weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble), stepSize, i, regParam)
         weights = update._1
         regVal = update._2
+      } else {
+        logWarning(s"Iteration ($i/$numIterations). The size of sampled batch is zero")
       }
     }
 
