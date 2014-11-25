@@ -22,6 +22,7 @@ import java.sql.Timestamp
 
 import org.apache.spark.sql.catalyst.types.date.Date
 
+import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
