@@ -205,8 +205,9 @@ private[spark] class Worker(
    * another master has taken over, then we can avoid registering with the same master twice.
    */
   private def reregisterWithActiveMaster(): Unit = {
-    assert(master != null, "Attempted to re-register with an active Master that is null")
-    master ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+    if (master != null) {
+      master ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+    }
   }
 
   private def retryConnectToMaster() {
