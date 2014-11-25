@@ -240,7 +240,6 @@ private[spark] class MesosSchedulerBackend(
 
       val mesosTasks = new HashMap[String, JArrayList[MesosTaskInfo]]
 
-
       val slavesIdsOfAcceptedOffers = HashSet[String]()
 
       // Call into the TaskSchedulerImpl
