@@ -22,15 +22,18 @@ import java.nio.charset.Charset
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+
 import com.google.common.io.Files
-import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.io.{IntWritable, Text}
+import org.apache.hadoop.mapred.TextOutputFormat
+import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
+
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.util.Utils
-import org.apache.hadoop.io.{Text, IntWritable}
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 /**
  * This test suites tests the checkpointing functionality of DStreams -
@@ -207,7 +210,30 @@ class CheckpointSuite extends TestSuiteBase {
     testCheckpointedOperation(input, operation, output, 7)
   }
 
-  test("recovery with saveAsNewAPIHadoopFiles") {
+  test("recovery with saveAsHadoopFiles operation") {
+    val tempDir = Files.createTempDir()
+    try {
+      testCheckpointedOperation(
+        Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
+        (s: DStream[String]) => {
+          val output = s.map(x => (x, 1)).reduceByKey(_ + _)
+          output.saveAsHadoopFiles(
+            tempDir.toURI.toString,
+            "result",
+            classOf[Text],
+            classOf[IntWritable],
+            classOf[TextOutputFormat[Text, IntWritable]])
+          output
+        },
+        Seq(Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq(), Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq()),
+        3
+      )
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
+  test("recovery with saveAsNewAPIHadoopFiles operation") {
     val tempDir = Files.createTempDir()
     try {
       testCheckpointedOperation(
@@ -219,8 +245,7 @@ class CheckpointSuite extends TestSuiteBase {
             "result",
             classOf[Text],
             classOf[IntWritable],
-            classOf[TextOutputFormat[Text, IntWritable]])
-          (tempDir.toString, "result")
+            classOf[NewTextOutputFormat[Text, IntWritable]])
           output
         },
         Seq(Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq(), Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq()),
@@ -230,7 +255,6 @@ class CheckpointSuite extends TestSuiteBase {
       Utils.deleteRecursively(tempDir)
     }
   }
-
 
   // This tests whether the StateDStream's RDD checkpoints works correctly such
   // that the system can recover from a master failure. This assumes as reliable,

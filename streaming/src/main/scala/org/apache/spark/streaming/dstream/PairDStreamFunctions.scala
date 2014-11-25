@@ -668,11 +668,13 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
-      conf: JobConf = new JobConf
+      conf: JobConf = new JobConf(ssc.sparkContext.hadoopConfiguration)
     ) {
+    // Wrap conf in SerializableWritable so that ForeachDStream can be serialized for checkpoints
+    val serializableConf = new SerializableWritable(conf)
     val saveFunc = (rdd: RDD[(K, V)], time: Time) => {
       val file = rddToFileName(prefix, suffix, time)
-      rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass, conf)
+      rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass, serializableConf.value)
     }
     self.foreachRDD(saveFunc)
   }
@@ -701,7 +703,7 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
       outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
       conf: Configuration = ssc.sparkContext.hadoopConfiguration
     ) {
-    // Wrap this in SerializableWritable so that ForeachDStream can be serialized for checkpoints
+    // Wrap conf in SerializableWritable so that ForeachDStream can be serialized for checkpoints
     val serializableConf = new SerializableWritable(conf)
     val saveFunc = (rdd: RDD[(K, V)], time: Time) => {
       val file = rddToFileName(prefix, suffix, time)
