@@ -41,13 +41,18 @@ private[spark] case class KafkaRDDPartition(
 
 /** A batch-oriented interface for consuming from Kafka.
   * Each given Kafka topic/partition corresponds to an RDD partition.
-  * Starting and ending offsets are specified in advance, so that you can control exactly-once semantics.
-  * For an easy interface to Kafka-managed offsets, see {@link org.apache.spark.rdd.kafka.KafkaCluster}
-  * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">configuration parameters</a>.
+  * Starting and ending offsets are specified in advance,
+  * so that you can control exactly-once semantics.
+  * For an easy interface to Kafka-managed offsets,
+  *  see {@link org.apache.spark.rdd.kafka.KafkaCluster}
+  * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+  * configuration parameters</a>.
   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-  * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive) starting point of the batch
-  * @param untilOffsets per-topic/partition Kafka offsets defining the (exclusive) ending point of the batch
+  * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
+  *  starting point of the batch
+  * @param untilOffsets per-topic/partition Kafka offsets defining the (exclusive)
+  *  ending point of the batch
   * @param messageHandler function for translating each message into the desired type
   */
 class KafkaRDD[
@@ -74,14 +79,16 @@ class KafkaRDD[
   override def compute(thePart: Partition, context: TaskContext) = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     if (part.fromOffset >= part.untilOffset) {
-      log.warn(s"Beginning offset is same or after ending offset, skipping ${part.topic} ${part.partition}")
+      log.warn("Beginning offset is same or after ending offset" +
+        s"skipping ${part.topic} ${part.partition}")
       Iterator.empty
     } else {
       new NextIterator[R] {
         context.addTaskCompletionListener{ context => closeIfNeeded() }
 
         val kc = new KafkaCluster(kafkaParams)
-        log.info(s"Computing topic ${part.topic}, partition ${part.partition}, offsets ${part.fromOffset} -> ${part.untilOffset}")
+        log.info(s"Computing topic ${part.topic}, partition ${part.partition}" +
+          s"offsets ${part.fromOffset} -> ${part.untilOffset}")
         val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
           .newInstance(kc.config.props)
           .asInstanceOf[Decoder[K]]
@@ -89,7 +96,9 @@ class KafkaRDD[
           .newInstance(kc.config.props)
           .asInstanceOf[Decoder[V]]
         val consumer: SimpleConsumer = kc.connectLeader(part.topic, part.partition).fold(
-          errs => throw new Exception(s"""Couldn't connect to leader for topic ${part.topic} ${part.partition}: ${errs.mkString("\n")}"""),
+          errs => throw new Exception(
+            s"Couldn't connect to leader for topic ${part.topic} ${part.partition}:" +
+              errs.mkString("\n")),
           consumer => consumer
         )
         var requestOffset = part.fromOffset
@@ -107,7 +116,8 @@ class KafkaRDD[
               val err = resp.errorCode(part.topic, part.partition)
               if (err == ErrorMapping.LeaderNotAvailableCode ||
                 err == ErrorMapping.NotLeaderForPartitionCode) {
-                log.error(s"Lost leader for topic ${part.topic} partition ${part.partition}, sleeping for ${kc.config.refreshLeaderBackoffMs}ms")
+                log.error(s"Lost leader for topic ${part.topic} partition ${part.partition}, " +
+                  s" sleeping for ${kc.config.refreshLeaderBackoffMs}ms")
                 Thread.sleep(kc.config.refreshLeaderBackoffMs)
               }
               // Let normal rdd retry sort out reconnect attempts
@@ -126,7 +136,8 @@ class KafkaRDD[
               finished = true
             }
             requestOffset = item.nextOffset
-            messageHandler(new MessageAndMetadata(part.topic, part.partition, item.message, item.offset, keyDecoder, valueDecoder))
+            messageHandler(new MessageAndMetadata(
+              part.topic, part.partition, item.message, item.offset, keyDecoder, valueDecoder))
           }
         }
       }
