@@ -133,7 +133,7 @@ private[spark] class SortShuffleReader[K, C](
       if (granted >= blockSize) {
         if (blockData.isDirect) {
           // If the shuffle block is allocated on a direct buffer, copy it to an on-heap buffer,
-          // otherwise off heap memory will be increased out of control.
+          // otherwise off heap memory will be increased to the shuffle memory size.
           val onHeapBuffer = ByteBuffer.allocate(blockSize.toInt)
           onHeapBuffer.put(blockData.nioByteBuffer)
 
@@ -143,8 +143,8 @@ private[spark] class SortShuffleReader[K, C](
           inMemoryBlocks += MemoryShuffleBlock(blockId, blockData)
         }
       } else {
-        logDebug(s"Granted $granted memory is not enough to store shuffle block $blockId, " +
-          s"block size $blockSize, spilling in-memory blocks to release the memory")
+        logDebug(s"Granted $granted memory is not enough to store shuffle block (id: $blockId, " +
+          s"size: $blockSize), spilling in-memory blocks to release the memory")
 
         shuffleMemoryManager.release(granted)
         spillInMemoryBlocks(MemoryShuffleBlock(blockId, blockData))
