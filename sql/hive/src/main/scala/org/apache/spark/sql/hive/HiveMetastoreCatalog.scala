@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.util.Utils
 
 /* Implicit conversions */
@@ -83,14 +84,35 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         databaseName, tblName, alias)(
           table.getTTable, partitions.map(part => part.getTPartition))(hive)
 
-      val schema = StructType.fromAttributes(relation.output)
+      if (hive.convertMetastoreParquet &&
+        relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet")) {
 
-      if (relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet")) {
-        if (relation.hiveQlTable.isPartitioned) {
-          hive.parquetFile(partitions.map(_.getLocation).mkString(","), schema).logicalPlan
+        val (path, partitionAttributes) = if (relation.hiveQlTable.isPartitioned) {
+          val partLocs = partitions.map(_.getLocation).mkString(",")
+          val partAttrs = table.getPartCols.map { f =>
+            val hivePartKey = relation
+              .partitionKeys
+              .find(_.name.toLowerCase == f.getName.toLowerCase)
+              .get
+
+            AttributeReference(
+              f.getName,
+              HiveMetastoreTypes.toDataType(f.getType),
+              nullable = true)(
+                exprId = hivePartKey.exprId,
+                qualifiers = Seq(alias.getOrElse(tableName)))
+          }
+          (partLocs, partAttrs)
         } else {
-          hive.parquetFile(relation.hiveQlTable.getDataLocation.toString, schema).logicalPlan
+          (relation.hiveQlTable.getDataLocation.toString, Nil)
         }
+
+        ParquetRelation(
+          path,
+          Some(hive.sparkContext.hadoopConfiguration),
+          hive,
+          partitionAttributes,
+          Some(relation.output))
       } else {
         relation
       }
@@ -507,7 +529,7 @@ private[hive] case class MetastoreRelation
   val output = attributes ++ partitionKeys
 
   /** An attribute map that can be used to lookup original attributes based on expression id. */
-  val attributeMap = AttributeMap(output.map(o => (o,o)))
+  val attributeMap = AttributeMap(output.map(o => (o, o)))
 
   /** An attribute map for determining the ordinal for non-partition columns. */
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
