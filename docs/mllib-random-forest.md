@@ -69,15 +69,13 @@ The next two parameters generally do not require tuning.  However, they can be t
 
 ## Examples
 
-TODO
-
 ### Classification
 
 The example below demonstrates how to load a
 [LIBSVM data file](http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/),
 parse it as an RDD of `LabeledPoint` and then
-perform classification using a decision tree with Gini impurity as an impurity measure and a
-maximum tree depth of 5. The training error is calculated to measure the algorithm accuracy.
+perform classification using a Random Forest.
+The test error is calculated to measure the algorithm accuracy.
 
 <div class="codetabs">
 
@@ -87,8 +85,10 @@ import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.
-// Cache the data since we will use it again to compute training error.
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").cache()
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+// Split the data into training and test sets (30% held out for testing)
+val splits = data.randomSplit(Array(0.7, 0.3))
+val (trainingData, testData) = (splits(0), splits(1))
 
 // Train a DecisionTree model.
 //  Empty categoricalFeaturesInfo indicates all features are continuous.
@@ -98,17 +98,17 @@ val impurity = "gini"
 val maxDepth = 5
 val maxBins = 32
 
-val model = DecisionTree.trainClassifier(data, numClasses, categoricalFeaturesInfo, impurity,
-  maxDepth, maxBins)
+val model = DecisionTree.trainClassifier(trainingData, numClasses, categoricalFeaturesInfo,
+  impurity, maxDepth, maxBins)
 
-// Evaluate model on training instances and compute training error
-val labelAndPreds = data.map { point =>
+// Evaluate model on test instances and compute test error
+val labelAndPreds = testData.map { point =>
   val prediction = model.predict(point.features)
   (point.label, prediction)
 }
-val trainErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / data.count
-println("Training Error = " + trainErr)
-println("Learned classification tree model:\n" + model)
+val testErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / testData.count()
+println("Test Error = " + testErr)
+println("Learned classification tree model:\n" + model.toDebugString)
 {% endhighlight %}
 </div>
 
@@ -116,7 +116,6 @@ println("Learned classification tree model:\n" + model)
 {% highlight java %}
 import java.util.HashMap;
 import scala.Tuple2;
-import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -132,37 +131,42 @@ SparkConf sparkConf = new SparkConf().setAppName("JavaDecisionTree");
 JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
 // Load and parse the data file.
-// Cache the data since we will use it again to compute training error.
 String datapath = "data/mllib/sample_libsvm_data.txt";
-JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD().cache();
+JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD();
+// Split the data into training and test sets (30% held out for testing)
+JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[]{0.7, 0.3});
+JavaRDD<LabeledPoint> trainingData = splits[0];
+JavaRDD<LabeledPoint> testData = splits[1];
 
 // Set parameters.
 //  Empty categoricalFeaturesInfo indicates all features are continuous.
 Integer numClasses = 2;
-HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
 String impurity = "gini";
 Integer maxDepth = 5;
 Integer maxBins = 32;
 
 // Train a DecisionTree model for classification.
-final DecisionTreeModel model = DecisionTree.trainClassifier(data, numClasses,
+final DecisionTreeModel model = DecisionTree.trainClassifier(trainingData, numClasses,
   categoricalFeaturesInfo, impurity, maxDepth, maxBins);
 
-// Evaluate model on training instances and compute training error
+// Evaluate model on test instances and compute test error
 JavaPairRDD<Double, Double> predictionAndLabel =
-  data.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
-    @Override public Tuple2<Double, Double> call(LabeledPoint p) {
+  testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
+    @Override
+    public Tuple2<Double, Double> call(LabeledPoint p) {
       return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
     }
   });
-Double trainErr =
+Double testErr =
   1.0 * predictionAndLabel.filter(new Function<Tuple2<Double, Double>, Boolean>() {
-    @Override public Boolean call(Tuple2<Double, Double> pl) {
+    @Override
+    public Boolean call(Tuple2<Double, Double> pl) {
       return !pl._1().equals(pl._2());
     }
-  }).count() / data.count();
-System.out.println("Training error: " + trainErr);
-System.out.println("Learned classification tree model:\n" + model);
+  }).count() / testData.count();
+System.out.println("Test Error: " + testErr);
+System.out.println("Learned classification tree model:\n" + model.toDebugString());
 {% endhighlight %}
 </div>
 
@@ -173,21 +177,22 @@ from pyspark.mllib.tree import DecisionTree
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file into an RDD of LabeledPoint.
-# Cache the data since we will use it again to compute training error.
-data = MLUtils.loadLibSVMFile(sc, 'data/mllib/sample_libsvm_data.txt').cache()
+data = MLUtils.loadLibSVMFile(sc, 'data/mllib/sample_libsvm_data.txt')
+# Split the data into training and test sets (30% held out for testing)
+(trainingData, testData) = data.randomSplit([0.7, 0.3])
 
 # Train a DecisionTree model.
 #  Empty categoricalFeaturesInfo indicates all features are continuous.
-model = DecisionTree.trainClassifier(data, numClasses=2, categoricalFeaturesInfo={},
+model = DecisionTree.trainClassifier(trainingData, numClasses=2, categoricalFeaturesInfo={},
                                      impurity='gini', maxDepth=5, maxBins=32)
 
-# Evaluate model on training instances and compute training error
-predictions = model.predict(data.map(lambda x: x.features))
-labelsAndPredictions = data.map(lambda lp: lp.label).zip(predictions)
-trainErr = labelsAndPredictions.filter(lambda (v, p): v != p).count() / float(data.count())
-print('Training Error = ' + str(trainErr))
+# Evaluate model on test instances and compute test error
+predictions = model.predict(testData.map(lambda x: x.features))
+labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
+testErr = labelsAndPredictions.filter(lambda (v, p): v != p).count() / float(testData.count())
+print('Test Error = ' + str(testErr))
 print('Learned classification tree model:')
-print(model)
+print(model.toDebugString())
 {% endhighlight %}
 
 Note: When making predictions for a dataset, it is more efficient to do batch prediction rather
@@ -202,8 +207,8 @@ to an underlying `DecisionTree` model in Scala.
 The example below demonstrates how to load a
 [LIBSVM data file](http://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/),
 parse it as an RDD of `LabeledPoint` and then
-perform regression using a decision tree with variance as an impurity measure and a maximum tree
-depth of 5. The Mean Squared Error (MSE) is computed at the end to evaluate
+perform regression using a Random Forest.
+The Mean Squared Error (MSE) is computed at the end to evaluate
 [goodness of fit](http://en.wikipedia.org/wiki/Goodness_of_fit).
 
 <div class="codetabs">
@@ -214,8 +219,10 @@ import org.apache.spark.mllib.tree.DecisionTree
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.
-// Cache the data since we will use it again to compute training error.
-val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt").cache()
+val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
+// Split the data into training and test sets (30% held out for testing)
+val splits = data.randomSplit(Array(0.7, 0.3))
+val (trainingData, testData) = (splits(0), splits(1))
 
 // Train a DecisionTree model.
 //  Empty categoricalFeaturesInfo indicates all features are continuous.
@@ -224,17 +231,17 @@ val impurity = "variance"
 val maxDepth = 5
 val maxBins = 32
 
-val model = DecisionTree.trainRegressor(data, categoricalFeaturesInfo, impurity,
+val model = DecisionTree.trainRegressor(trainingData, categoricalFeaturesInfo, impurity,
   maxDepth, maxBins)
 
-// Evaluate model on training instances and compute training error
-val labelsAndPredictions = data.map { point =>
+// Evaluate model on test instances and compute test error
+val labelsAndPredictions = testData.map { point =>
   val prediction = model.predict(point.features)
   (point.label, prediction)
 }
-val trainMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean()
-println("Training Mean Squared Error = " + trainMSE)
-println("Learned regression tree model:\n" + model)
+val testMSE = labelsAndPredictions.map{ case(v, p) => math.pow((v - p), 2)}.mean()
+println("Test Mean Squared Error = " + testMSE)
+println("Learned regression tree model:\n" + model.toDebugString)
 {% endhighlight %}
 </div>
 
@@ -254,45 +261,51 @@ import org.apache.spark.mllib.tree.model.DecisionTreeModel;
 import org.apache.spark.mllib.util.MLUtils;
 import org.apache.spark.SparkConf;
 
-// Load and parse the data file.
-// Cache the data since we will use it again to compute training error.
-String datapath = "data/mllib/sample_libsvm_data.txt";
-JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD().cache();
-
 SparkConf sparkConf = new SparkConf().setAppName("JavaDecisionTree");
 JavaSparkContext sc = new JavaSparkContext(sparkConf);
 
+// Load and parse the data file.
+String datapath = "data/mllib/sample_libsvm_data.txt";
+JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(sc.sc(), datapath).toJavaRDD();
+// Split the data into training and test sets (30% held out for testing)
+JavaRDD<LabeledPoint>[] splits = data.randomSplit(new double[]{0.7, 0.3});
+JavaRDD<LabeledPoint> trainingData = splits[0];
+JavaRDD<LabeledPoint> testData = splits[1];
+
 // Set parameters.
 //  Empty categoricalFeaturesInfo indicates all features are continuous.
-HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
 String impurity = "variance";
 Integer maxDepth = 5;
 Integer maxBins = 32;
 
 // Train a DecisionTree model.
-final DecisionTreeModel model = DecisionTree.trainRegressor(data,
+final DecisionTreeModel model = DecisionTree.trainRegressor(trainingData,
   categoricalFeaturesInfo, impurity, maxDepth, maxBins);
 
-// Evaluate model on training instances and compute training error
+// Evaluate model on test instances and compute test error
 JavaPairRDD<Double, Double> predictionAndLabel =
-  data.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
-    @Override public Tuple2<Double, Double> call(LabeledPoint p) {
+  testData.mapToPair(new PairFunction<LabeledPoint, Double, Double>() {
+    @Override
+    public Tuple2<Double, Double> call(LabeledPoint p) {
       return new Tuple2<Double, Double>(model.predict(p.features()), p.label());
     }
   });
-Double trainMSE =
+Double testMSE =
   predictionAndLabel.map(new Function<Tuple2<Double, Double>, Double>() {
-    @Override public Double call(Tuple2<Double, Double> pl) {
+    @Override
+    public Double call(Tuple2<Double, Double> pl) {
       Double diff = pl._1() - pl._2();
       return diff * diff;
     }
   }).reduce(new Function2<Double, Double, Double>() {
-    @Override public Double call(Double a, Double b) {
+    @Override
+    public Double call(Double a, Double b) {
       return a + b;
     }
   }) / data.count();
-System.out.println("Training Mean Squared Error: " + trainMSE);
-System.out.println("Learned regression tree model:\n" + model);
+System.out.println("Test Mean Squared Error: " + testMSE);
+System.out.println("Learned regression tree model:\n" + model.toDebugString());
 {% endhighlight %}
 </div>
 
@@ -303,21 +316,22 @@ from pyspark.mllib.tree import DecisionTree
 from pyspark.mllib.util import MLUtils
 
 # Load and parse the data file into an RDD of LabeledPoint.
-# Cache the data since we will use it again to compute training error.
-data = MLUtils.loadLibSVMFile(sc, 'data/mllib/sample_libsvm_data.txt').cache()
+data = MLUtils.loadLibSVMFile(sc, 'data/mllib/sample_libsvm_data.txt')
+# Split the data into training and test sets (30% held out for testing)
+(trainingData, testData) = data.randomSplit([0.7, 0.3])
 
 # Train a DecisionTree model.
 #  Empty categoricalFeaturesInfo indicates all features are continuous.
-model = DecisionTree.trainRegressor(data, categoricalFeaturesInfo={},
+model = DecisionTree.trainRegressor(trainingData, categoricalFeaturesInfo={},
                                     impurity='variance', maxDepth=5, maxBins=32)
 
-# Evaluate model on training instances and compute training error
-predictions = model.predict(data.map(lambda x: x.features))
-labelsAndPredictions = data.map(lambda lp: lp.label).zip(predictions)
-trainMSE = labelsAndPredictions.map(lambda (v, p): (v - p) * (v - p)).sum() / float(data.count())
-print('Training Mean Squared Error = ' + str(trainMSE))
+# Evaluate model on test instances and compute test error
+predictions = model.predict(testData.map(lambda x: x.features))
+labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
+testMSE = labelsAndPredictions.map(lambda (v, p): (v - p) * (v - p)).sum() / float(testData.count())
+print('Test Mean Squared Error = ' + str(testMSE))
 print('Learned regression tree model:')
-print(model)
+print(model.toDebugString())
 {% endhighlight %}
 
 Note: When making predictions for a dataset, it is more efficient to do batch prediction rather

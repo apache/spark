@@ -217,7 +217,7 @@ JavaRDD<LabeledPoint> testData = splits[1];
 // Set parameters.
 //  Empty categoricalFeaturesInfo indicates all features are continuous.
 Integer numClasses = 2;
-HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
 String impurity = "gini";
 Integer maxDepth = 5;
 Integer maxBins = 32;
@@ -270,10 +270,6 @@ print('Test Error = ' + str(testErr))
 print('Learned classification tree model:')
 print(model.toDebugString())
 {% endhighlight %}
-
-Note: When making predictions for a dataset, it is more efficient to do batch prediction rather
-than separately calling `predict` on each data point.  This is because the Python code makes calls
-to an underlying `DecisionTree` model in Scala.
 </div>
 
 </div>
@@ -350,7 +346,7 @@ JavaRDD<LabeledPoint> testData = splits[1];
 
 // Set parameters.
 //  Empty categoricalFeaturesInfo indicates all features are continuous.
-HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
+Map<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
 String impurity = "variance";
 Integer maxDepth = 5;
 Integer maxBins = 32;
@@ -409,10 +405,6 @@ print('Test Mean Squared Error = ' + str(testMSE))
 print('Learned regression tree model:')
 print(model.toDebugString())
 {% endhighlight %}
-
-Note: When making predictions for a dataset, it is more efficient to do batch prediction rather
-than separately calling `predict` on each data point.  This is because the Python code makes calls
-to an underlying `DecisionTree` model in Scala.
 </div>
 
 </div>

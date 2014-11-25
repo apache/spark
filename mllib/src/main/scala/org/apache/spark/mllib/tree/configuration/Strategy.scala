@@ -117,8 +117,8 @@ class Strategy (
    */
   def setCategoricalFeaturesInfo(
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]): Unit = {
-    setCategoricalFeaturesInfo(
-      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
+    this.categoricalFeaturesInfo =
+      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap
   }
 
   /**
