@@ -113,22 +113,13 @@ class KMeans private (
     this
   }
 
-  /** Whether a warning should be logged if the input RDD is uncached. */
-  private var warnOnUncachedInput = true
-
-  /** Disable warnings about uncached input. */
-  private[spark] def disableUncachedWarning(): this.type = {
-    warnOnUncachedInput = false
-    this
-  }  
-
   /**
    * Train a K-means model on the given set of points; `data` should be cached for high
    * performance, because this is an iterative algorithm.
    */
   def run(data: RDD[Vector]): KMeansModel = {
 
-    if (warnOnUncachedInput && data.getStorageLevel == StorageLevel.NONE) {
+    if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")
     }
@@ -143,7 +134,7 @@ class KMeans private (
     norms.unpersist()
 
     // Warn at the end of the run as well, for increased visibility.
-    if (warnOnUncachedInput && data.getStorageLevel == StorageLevel.NONE) {
+    if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data was not directly cached, which may hurt performance if its"
         + " parent RDDs are also uncached.")
     }

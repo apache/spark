@@ -76,6 +76,15 @@ sealed trait Vector extends Serializable {
   def copy: Vector = {
     throw new NotImplementedError(s"copy is not implemented for ${this.getClass}.")
   }
+
+  /**
+   * Applies a function `f` to all the active elements of dense and sparse vector.
+   *
+   * @param f the function takes two parameters where the first parameter is the index of
+   *          the vector with type `Int`, and the second parameter is the corresponding value
+   *          with type `Double`.
+   */
+  private[spark] def foreachActive(f: (Int, Double) => Unit)
 }
 
 /**
@@ -273,6 +282,17 @@ class DenseVector(val values: Array[Double]) extends Vector {
   override def copy: DenseVector = {
     new DenseVector(values.clone())
   }
+
+  private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
+    var i = 0
+    val localValuesSize = values.size
+    val localValues = values
+
+    while (i < localValuesSize) {
+      f(i, localValues(i))
+      i += 1
+    }
+  }
 }
 
 /**
@@ -309,4 +329,16 @@ class SparseVector(
   }
 
   private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+
+  private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
+    var i = 0
+    val localValuesSize = values.size
+    val localIndices = indices
+    val localValues = values
+
+    while (i < localValuesSize) {
+      f(localIndices(i), localValues(i))
+      i += 1
+    }
+  }
 }

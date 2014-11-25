@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.api.python
 
 import java.io.OutputStream
+import java.nio.{ByteBuffer, ByteOrder}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
@@ -40,10 +41,10 @@ import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
 import org.apache.spark.mllib.stat.test.ChiSqTestResult
-import org.apache.spark.mllib.tree.DecisionTree
+import org.apache.spark.mllib.tree.{RandomForest, DecisionTree}
 import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
 import org.apache.spark.mllib.tree.impurity._
-import org.apache.spark.mllib.tree.model.DecisionTreeModel
+import org.apache.spark.mllib.tree.model.{RandomForestModel, DecisionTreeModel}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -74,10 +75,28 @@ class PythonMLLibAPI extends Serializable {
       learner: GeneralizedLinearAlgorithm[_ <: GeneralizedLinearModel],
       data: JavaRDD[LabeledPoint],
       initialWeights: Vector): JList[Object] = {
-    // Disable the uncached input warning because 'data' is a deliberately uncached MappedRDD.
-    learner.disableUncachedWarning()
-    val model = learner.run(data.rdd, initialWeights)
-    List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
+    try {
+      val model = learner.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), initialWeights)
+      List(model.weights, model.intercept).map(_.asInstanceOf[Object]).asJava
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
+
+  /**
+   * Return the Updater from string
+   */
+  def getUpdaterFromString(regType: String): Updater = {
+    if (regType == "l2") {
+      new SquaredL2Updater
+    } else if (regType == "l1") {
+      new L1Updater
+    } else if (regType == null || regType == "none") {
+      new SimpleUpdater
+    } else {
+      throw new IllegalArgumentException("Invalid value for 'regType' parameter."
+        + " Can only be initialized using the following string values: ['l1', 'l2', None].")
+    }
   }
 
   /**
@@ -99,16 +118,7 @@ class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
-    if (regType == "l2") {
-      lrAlg.optimizer.setUpdater(new SquaredL2Updater)
-    } else if (regType == "l1") {
-      lrAlg.optimizer.setUpdater(new L1Updater)
-    } else if (regType == null) {
-      lrAlg.optimizer.setUpdater(new SimpleUpdater)
-    } else {
-        throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
-          + " Can only be initialized using the following string values: ['l1', 'l2', None].")
-    }
+    lrAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       lrAlg,
       data,
@@ -178,16 +188,7 @@ class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
-    if (regType == "l2") {
-      SVMAlg.optimizer.setUpdater(new SquaredL2Updater)
-    } else if (regType == "l1") {
-      SVMAlg.optimizer.setUpdater(new L1Updater)
-    } else if (regType == null) {
-      SVMAlg.optimizer.setUpdater(new SimpleUpdater)
-    } else {
-      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
-        + " Can only be initialized using the following string values: ['l1', 'l2', None].")
-    }
+    SVMAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       SVMAlg,
       data,
@@ -213,16 +214,7 @@ class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setStepSize(stepSize)
       .setMiniBatchFraction(miniBatchFraction)
-    if (regType == "l2") {
-      LogRegAlg.optimizer.setUpdater(new SquaredL2Updater)
-    } else if (regType == "l1") {
-      LogRegAlg.optimizer.setUpdater(new L1Updater)
-    } else if (regType == null) {
-      LogRegAlg.optimizer.setUpdater(new SimpleUpdater)
-    } else {
-      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
-        + " Can only be initialized using the following string values: ['l1', 'l2', None].")
-    }
+    LogRegAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       LogRegAlg,
       data,
@@ -248,16 +240,7 @@ class PythonMLLibAPI extends Serializable {
       .setRegParam(regParam)
       .setNumCorrections(corrections)
       .setConvergenceTol(tolerance)
-    if (regType == "l2") {
-      LogRegAlg.optimizer.setUpdater(new SquaredL2Updater)
-    } else if (regType == "l1") {
-      LogRegAlg.optimizer.setUpdater(new L1Updater)
-    } else if (regType == null) {
-      LogRegAlg.optimizer.setUpdater(new SimpleUpdater)
-    } else {
-      throw new java.lang.IllegalArgumentException("Invalid value for 'regType' parameter."
-        + " Can only be initialized using the following string values: ['l1', 'l2', None].")
-    }
+    LogRegAlg.optimizer.setUpdater(getUpdaterFromString(regType))
     trainRegressionModel(
       LogRegAlg,
       data,
@@ -289,9 +272,11 @@ class PythonMLLibAPI extends Serializable {
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
-      // Disable the uncached input warning because 'data' is a deliberately uncached MappedRDD.
-      .disableUncachedWarning()
-    kMeansAlg.run(data.rdd)
+    try {
+      kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
   }
 
   /**
@@ -425,16 +410,18 @@ class PythonMLLibAPI extends Serializable {
       numPartitions: Int,
       numIterations: Int,
       seed: Long): Word2VecModelWrapper = {
-    val data = dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER)
     val word2vec = new Word2Vec()
       .setVectorSize(vectorSize)
       .setLearningRate(learningRate)
       .setNumPartitions(numPartitions)
       .setNumIterations(numIterations)
       .setSeed(seed)
-    val model = word2vec.fit(data)
-    data.unpersist()
-    new Word2VecModelWrapper(model)
+    try {
+      val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
+      new Word2VecModelWrapper(model)
+    } finally {
+      dataJRDD.rdd.unpersist(blocking = false)
+    }
   }
 
   private[python] class Word2VecModelWrapper(model: Word2VecModel) {
@@ -495,8 +482,50 @@ class PythonMLLibAPI extends Serializable {
       categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap,
       minInstancesPerNode = minInstancesPerNode,
       minInfoGain = minInfoGain)
+    try {
+      DecisionTree.train(data.rdd.persist(StorageLevel.MEMORY_AND_DISK), strategy)
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
 
-    DecisionTree.train(data.rdd, strategy)
+  /**
+   * Java stub for Python mllib RandomForest.train().
+   * This stub returns a handle to the Java object instead of the content of the Java object.
+   * Extra care needs to be taken in the Python code to ensure it gets freed on exit;
+   * see the Py4J documentation.
+   */
+  def trainRandomForestModel(
+      data: JavaRDD[LabeledPoint],
+      algoStr: String,
+      numClasses: Int,
+      categoricalFeaturesInfo: JMap[Int, Int],
+      numTrees: Int,
+      featureSubsetStrategy: String,
+      impurityStr: String,
+      maxDepth: Int,
+      maxBins: Int,
+      seed: Int): RandomForestModel = {
+
+    val algo = Algo.fromString(algoStr)
+    val impurity = Impurities.fromString(impurityStr)
+    val strategy = new Strategy(
+      algo = algo,
+      impurity = impurity,
+      maxDepth = maxDepth,
+      numClassesForClassification = numClasses,
+      maxBins = maxBins,
+      categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap)
+    val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)
+    try {
+      if (algo == Algo.Classification) {
+        RandomForest.trainClassifier(cached, strategy, numTrees, featureSubsetStrategy, seed)
+      } else {
+        RandomForest.trainRegressor(cached, strategy, numTrees, featureSubsetStrategy, seed)
+      }
+    } finally {
+      cached.unpersist(blocking = false)
+    }
   }
 
   /**
@@ -656,6 +685,7 @@ class PythonMLLibAPI extends Serializable {
 private[spark] object SerDe extends Serializable {
 
   val PYSPARK_PACKAGE = "pyspark.mllib"
+  val LATIN1 = "ISO-8859-1"
 
   /**
    * Base class used for pickle
@@ -677,7 +707,7 @@ private[spark] object SerDe extends Serializable {
     def pickle(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       if (obj == this) {
         out.write(Opcodes.GLOBAL)
-        out.write((module + "\n" + name + "\n").getBytes())
+        out.write((module + "\n" + name + "\n").getBytes)
       } else {
         pickler.save(this)  // it will be memorized by Pickler
         saveState(obj, out, pickler)
@@ -707,7 +737,16 @@ private[spark] object SerDe extends Serializable {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val vector: DenseVector = obj.asInstanceOf[DenseVector]
-      saveObjects(out, pickler, vector.toArray)
+      val bytes = new Array[Byte](8 * vector.size)
+      val bb = ByteBuffer.wrap(bytes)
+      bb.order(ByteOrder.nativeOrder())
+      val db = bb.asDoubleBuffer()
+      db.put(vector.values)
+
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(bytes.length))
+      out.write(bytes)
+      out.write(Opcodes.TUPLE1)
     }
 
     def construct(args: Array[Object]): Object = {
@@ -715,7 +754,13 @@ private[spark] object SerDe extends Serializable {
       if (args.length != 1) {
         throw new PickleException("should be 1")
       }
-      new DenseVector(args(0).asInstanceOf[Array[Double]])
+      val bytes = args(0).asInstanceOf[String].getBytes(LATIN1)
+      val bb = ByteBuffer.wrap(bytes, 0, bytes.length)
+      bb.order(ByteOrder.nativeOrder())
+      val db = bb.asDoubleBuffer()
+      val ans = new Array[Double](bytes.length / 8)
+      db.get(ans)
+      Vectors.dense(ans)
     }
   }
 
@@ -724,15 +769,30 @@ private[spark] object SerDe extends Serializable {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val m: DenseMatrix = obj.asInstanceOf[DenseMatrix]
-      saveObjects(out, pickler, m.numRows, m.numCols, m.values)
+      val bytes = new Array[Byte](8 * m.values.size)
+      val order = ByteOrder.nativeOrder()
+      ByteBuffer.wrap(bytes).order(order).asDoubleBuffer().put(m.values)
+
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(m.numRows))
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(m.numCols))
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(bytes.length))
+      out.write(bytes)
+      out.write(Opcodes.TUPLE3)
     }
 
     def construct(args: Array[Object]): Object = {
       if (args.length != 3) {
         throw new PickleException("should be 3")
       }
-      new DenseMatrix(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int],
-        args(2).asInstanceOf[Array[Double]])
+      val bytes = args(2).asInstanceOf[String].getBytes(LATIN1)
+      val n = bytes.length / 8
+      val values = new Array[Double](n)
+      val order = ByteOrder.nativeOrder()
+      ByteBuffer.wrap(bytes).order(order).asDoubleBuffer().get(values)
+      new DenseMatrix(args(0).asInstanceOf[Int], args(1).asInstanceOf[Int], values)
     }
   }
 
@@ -741,15 +801,40 @@ private[spark] object SerDe extends Serializable {
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler) = {
       val v: SparseVector = obj.asInstanceOf[SparseVector]
-      saveObjects(out, pickler, v.size, v.indices, v.values)
+      val n = v.indices.size
+      val indiceBytes = new Array[Byte](4 * n)
+      val order = ByteOrder.nativeOrder()
+      ByteBuffer.wrap(indiceBytes).order(order).asIntBuffer().put(v.indices)
+      val valueBytes = new Array[Byte](8 * n)
+      ByteBuffer.wrap(valueBytes).order(order).asDoubleBuffer().put(v.values)
+
+      out.write(Opcodes.BININT)
+      out.write(PickleUtils.integer_to_bytes(v.size))
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(indiceBytes.length))
+      out.write(indiceBytes)
+      out.write(Opcodes.BINSTRING)
+      out.write(PickleUtils.integer_to_bytes(valueBytes.length))
+      out.write(valueBytes)
+      out.write(Opcodes.TUPLE3)
     }
 
     def construct(args: Array[Object]): Object = {
       if (args.length != 3) {
         throw new PickleException("should be 3")
       }
-      new SparseVector(args(0).asInstanceOf[Int], args(1).asInstanceOf[Array[Int]],
-        args(2).asInstanceOf[Array[Double]])
+      val size = args(0).asInstanceOf[Int]
+      val indiceBytes = args(1).asInstanceOf[String].getBytes(LATIN1)
+      val valueBytes = args(2).asInstanceOf[String].getBytes(LATIN1)
+      val n = indiceBytes.length / 4
+      val indices = new Array[Int](n)
+      val values = new Array[Double](n)
+      if (n > 0) {
+        val order = ByteOrder.nativeOrder()
+        ByteBuffer.wrap(indiceBytes).order(order).asIntBuffer().get(indices)
+        ByteBuffer.wrap(valueBytes).order(order).asDoubleBuffer().get(values)
+      }
+      new SparseVector(size, indices, values)
     }
   }
 

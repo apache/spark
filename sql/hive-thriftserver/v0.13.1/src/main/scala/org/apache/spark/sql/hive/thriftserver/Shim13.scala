@@ -43,7 +43,7 @@ import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
 import org.apache.spark.sql.{SchemaRDD, Row => SparkRow}
 
 /**
- * A compatibility layer for interacting with Hive version 0.12.0.
+ * A compatibility layer for interacting with Hive version 0.13.1.
  */
 private[thriftserver] object HiveThriftServerShim {
   val version = "0.13.1"
