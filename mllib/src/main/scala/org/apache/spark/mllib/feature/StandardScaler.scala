@@ -96,7 +96,6 @@ class StandardScalerModel private[mllib] (
    */
   override def transform(vector: Vector): Vector = {
     require(mean.size == vector.size)
-    val localFactor = factor
     if (withMean) {
       val localShift = shift
       vector match {
@@ -104,6 +103,7 @@ class StandardScalerModel private[mllib] (
           val values = dv.values.clone()
           var i = 0
           if(withStd) {
+            val localFactor = factor
             while (i < values.length) {
               values(i) = (values(i) - localShift(i)) * localFactor(i)
               i += 1
@@ -118,6 +118,7 @@ class StandardScalerModel private[mllib] (
         case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
       }
     } else if (withStd) {
+      val localFactor = factor
       vector match {
         case dv: DenseVector =>
           val values = dv.values.clone()
