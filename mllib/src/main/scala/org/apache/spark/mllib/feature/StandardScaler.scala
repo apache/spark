@@ -101,15 +101,16 @@ class StandardScalerModel private[mllib] (
       vector match {
         case dv: DenseVector =>
           val values = dv.values.clone()
+          val size = values.size
           var i = 0
           if (withStd) {
             val localFactor = factor
-            while (i < values.length) {
+            while (i < size) {
               values(i) = (values(i) - localShift(i)) * localFactor(i)
               i += 1
             }
           } else {
-            while (i < values.length) {
+            while (i < size) {
               values(i) -= localShift(i)
               i += 1
             }
@@ -122,8 +123,9 @@ class StandardScalerModel private[mllib] (
       vector match {
         case dv: DenseVector =>
           val values = dv.values.clone()
+          val size = values.size
           var i = 0
-          while(i < values.length) {
+          while(i < size) {
             values(i) *= localFactor(i)
             i += 1
           }
@@ -133,8 +135,9 @@ class StandardScalerModel private[mllib] (
           // so we can re-use it to save memory.
           val indices = sv.indices
           val values = sv.values.clone()
+          val size = values.size
           var i = 0
-          while (i < indices.length) {
+          while (i < size) {
             values(i) *= localFactor(indices(i))
             i += 1
           }
