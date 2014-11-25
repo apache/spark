@@ -165,7 +165,7 @@ case $option in
   (stop)
 
     if [ -f $pid ]; then
-      $TARGET_PID=`cat $pid`
+      TARGET_PID=`cat $pid`
       if kill -0 $TARGET_PID > /dev/null 2>&1; then
         echo stopping $command
         kill $TARGET_PID
