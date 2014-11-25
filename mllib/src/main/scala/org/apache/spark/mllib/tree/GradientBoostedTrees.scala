@@ -21,18 +21,17 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.BoostingStrategy
-import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy.Sum
+import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.impl.TimeTracker
-import org.apache.spark.mllib.tree.model.{WeightedEnsembleModel, DecisionTreeModel}
+import org.apache.spark.mllib.tree.impurity.Variance
+import org.apache.spark.mllib.tree.model.{DecisionTreeModel, GradientBoostedTreesModel}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**
  * :: Experimental ::
- * A class that implements Stochastic Gradient Boosting
- * for regression and binary classification problems.
+ * A class that implements Stochastic Gradient Boosting for regression and binary classification.
  *
  * The implementation is based upon:
  *   J.H. Friedman.  "Stochastic Gradient Boosting."  1999.
@@ -45,138 +44,80 @@ import org.apache.spark.storage.StorageLevel
  *    but weak hypothesis weights are not computed correctly for LogLoss or AbsoluteError.
  *    Running with those losses will likely behave reasonably, but lacks the same guarantees.
  *
- * @param boostingStrategy Parameters for the gradient boosting algorithm
+ * @param boostingStrategy Parameters for the gradient boosting algorithm.
  */
 @Experimental
-class GradientBoosting (
-    private val boostingStrategy: BoostingStrategy) extends Serializable with Logging {
-
-  boostingStrategy.weakLearnerParams.algo = Regression
-  boostingStrategy.weakLearnerParams.impurity = impurity.Variance
-
-  // Ensure values for weak learner are the same as what is provided to the boosting algorithm.
-  boostingStrategy.weakLearnerParams.numClassesForClassification =
-    boostingStrategy.numClassesForClassification
-
-  boostingStrategy.assertValid()
+class GradientBoostedTrees(private val boostingStrategy: BoostingStrategy)
+  extends Serializable with Logging {
 
   /**
    * Method to train a gradient boosting model
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @return WeightedEnsembleModel that can be used for prediction
+   * @return a gradient boosted trees model that can be used for prediction
    */
-  def train(input: RDD[LabeledPoint]): WeightedEnsembleModel = {
-    val algo = boostingStrategy.algo
+  def run(input: RDD[LabeledPoint]): GradientBoostedTreesModel = {
+    val algo = boostingStrategy.treeStrategy.algo
     algo match {
-      case Regression => GradientBoosting.boost(input, boostingStrategy)
+      case Regression => GradientBoostedTrees.boost(input, boostingStrategy)
       case Classification =>
         // Map labels to -1, +1 so binary classification can be treated as regression.
         val remappedInput = input.map(x => new LabeledPoint((x.label * 2) - 1, x.features))
-        GradientBoosting.boost(remappedInput, boostingStrategy)
+        GradientBoostedTrees.boost(remappedInput, boostingStrategy)
       case _ =>
         throw new IllegalArgumentException(s"$algo is not supported by the gradient boosting.")
     }
   }
 
+  /**
+   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees!#run]].
+   */
+  def run(input: JavaRDD[LabeledPoint]): GradientBoostedTreesModel = {
+    run(input.rdd)
+  }
 }
 
 
-object GradientBoosting extends Logging {
+object GradientBoostedTrees extends Logging {
 
   /**
    * Method to train a gradient boosting model.
    *
-   * Note: Using [[org.apache.spark.mllib.tree.GradientBoosting$#trainRegressor]]
-   *       is recommended to clearly specify regression.
-   *       Using [[org.apache.spark.mllib.tree.GradientBoosting$#trainClassifier]]
-   *       is recommended to clearly specify regression.
-   *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              For classification, labels should take values {0, 1, ..., numClasses-1}.
    *              For regression, labels are real numbers.
    * @param boostingStrategy Configuration options for the boosting algorithm.
-   * @return WeightedEnsembleModel that can be used for prediction
+   * @return a gradient boosted trees model that can be used for prediction
    */
   def train(
       input: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
-    new GradientBoosting(boostingStrategy).train(input)
+      boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {
+    new GradientBoostedTrees(boostingStrategy).run(input)
   }
 
   /**
-   * Method to train a gradient boosting classification model.
-   *
-   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
-   *              For regression, labels are real numbers.
-   * @param boostingStrategy Configuration options for the boosting algorithm.
-   * @return WeightedEnsembleModel that can be used for prediction
-   */
-  def trainClassifier(
-      input: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
-    val algo = boostingStrategy.algo
-    require(algo == Classification, s"Only Classification algo supported. Provided algo is $algo.")
-    new GradientBoosting(boostingStrategy).train(input)
-  }
-
-  /**
-   * Method to train a gradient boosting regression model.
-   *
-   * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   *              For classification, labels should take values {0, 1, ..., numClasses-1}.
-   *              For regression, labels are real numbers.
-   * @param boostingStrategy Configuration options for the boosting algorithm.
-   * @return WeightedEnsembleModel that can be used for prediction
-   */
-  def trainRegressor(
-      input: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
-    val algo = boostingStrategy.algo
-    require(algo == Regression, s"Only Regression algo supported. Provided algo is $algo.")
-    new GradientBoosting(boostingStrategy).train(input)
-  }
-
-  /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoosting$#train]]
+   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoostedTrees$#train]]
    */
   def train(
-    input: JavaRDD[LabeledPoint],
-    boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
+      input: JavaRDD[LabeledPoint],
+      boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {
     train(input.rdd, boostingStrategy)
-  }
-
-  /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoosting$#trainClassifier]]
-   */
-  def trainClassifier(
-      input: JavaRDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
-    trainClassifier(input.rdd, boostingStrategy)
-  }
-
-  /**
-   * Java-friendly API for [[org.apache.spark.mllib.tree.GradientBoosting$#trainRegressor]]
-   */
-  def trainRegressor(
-      input: JavaRDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
-    trainRegressor(input.rdd, boostingStrategy)
   }
 
   /**
    * Internal method for performing regression using trees as base learners.
    * @param input training dataset
    * @param boostingStrategy boosting parameters
-   * @return
+   * @return a gradient boosted trees model that can be used for prediction
    */
   private def boost(
       input: RDD[LabeledPoint],
-      boostingStrategy: BoostingStrategy): WeightedEnsembleModel = {
+      boostingStrategy: BoostingStrategy): GradientBoostedTreesModel = {
 
     val timer = new TimeTracker()
     timer.start("total")
     timer.start("init")
+
+    boostingStrategy.assertValid()
 
     // Initialize gradient boosting parameters
     val numIterations = boostingStrategy.numIterations
@@ -184,7 +125,11 @@ object GradientBoosting extends Logging {
     val baseLearnerWeights = new Array[Double](numIterations)
     val loss = boostingStrategy.loss
     val learningRate = boostingStrategy.learningRate
-    val strategy = boostingStrategy.weakLearnerParams
+    // Prepare strategy for individual trees, which use regression with variance impurity.
+    val treeStrategy = boostingStrategy.treeStrategy.copy
+    treeStrategy.algo = Regression
+    treeStrategy.impurity = Variance
+    treeStrategy.assertValid()
 
     // Cache input
     if (input.getStorageLevel == StorageLevel.NONE) {
@@ -200,11 +145,10 @@ object GradientBoosting extends Logging {
 
     // Initialize tree
     timer.start("building tree 0")
-    val firstTreeModel = new DecisionTree(strategy).train(data)
+    val firstTreeModel = new DecisionTree(treeStrategy).run(data)
     baseLearners(0) = firstTreeModel
     baseLearnerWeights(0) = 1.0
-    val startingModel = new WeightedEnsembleModel(Array(firstTreeModel), Array(1.0), Regression,
-      Sum)
+    val startingModel = new GradientBoostedTreesModel(Regression, Array(firstTreeModel), Array(1.0))
     logDebug("error of gbt = " + loss.computeError(startingModel, input))
     // Note: A model of type regression is used since we require raw prediction
     timer.stop("building tree 0")
@@ -219,7 +163,7 @@ object GradientBoosting extends Logging {
       logDebug("###################################################")
       logDebug("Gradient boosting tree iteration " + m)
       logDebug("###################################################")
-      val model = new DecisionTree(strategy).train(data)
+      val model = new DecisionTree(treeStrategy).run(data)
       timer.stop(s"building tree $m")
       // Create partial model
       baseLearners(m) = model
@@ -228,8 +172,8 @@ object GradientBoosting extends Logging {
       //       However, the behavior should be reasonable, though not optimal.
       baseLearnerWeights(m) = learningRate
       // Note: A model of type regression is used since we require raw prediction
-      val partialModel = new WeightedEnsembleModel(baseLearners.slice(0, m + 1),
-        baseLearnerWeights.slice(0, m + 1), Regression, Sum)
+      val partialModel = new GradientBoostedTreesModel(
+        Regression, baseLearners.slice(0, m + 1), baseLearnerWeights.slice(0, m + 1))
       logDebug("error of gbt = " + loss.computeError(partialModel, input))
       // Update data with pseudo-residuals
       data = input.map(point => LabeledPoint(-loss.gradient(partialModel, point),
@@ -242,8 +186,7 @@ object GradientBoosting extends Logging {
     logInfo("Internal timing for DecisionTree:")
     logInfo(s"$timer")
 
-    new WeightedEnsembleModel(baseLearners, baseLearnerWeights, boostingStrategy.algo, Sum)
-
+    new GradientBoostedTreesModel(
+      boostingStrategy.treeStrategy.algo, baseLearners, baseLearnerWeights)
   }
-
 }
