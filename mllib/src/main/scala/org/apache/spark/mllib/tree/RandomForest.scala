@@ -37,7 +37,8 @@ import org.apache.spark.util.Utils
 
 /**
  * :: Experimental ::
- * A class which implements a random forest learning algorithm for classification and regression.
+ * A class that implements a [[http://en.wikipedia.org/wiki/Random_forest  Random Forest]]
+ * learning algorithm for classification and regression.
  * It supports both continuous and categorical features.
  *
  * The settings for featureSubsetStrategy are based on the following references:
