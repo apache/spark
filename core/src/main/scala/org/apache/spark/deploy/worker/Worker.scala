@@ -201,7 +201,7 @@ private[spark] class Worker(
    *   (4) Meanwhile, Worker's previous reconnection attempt reaches Master B,
    *       causing the same Worker to register with Master B twice
    *
-   * Instead, if we only register with the known active master, which must be dead because
+   * Instead, if we only register with the known active master, which must have died because
    * another master has taken over, then we can avoid registering with the same master twice.
    */
   private def reregisterWithActiveMaster(): Unit = {
