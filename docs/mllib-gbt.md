@@ -96,7 +96,7 @@ maximum tree depth of 5. The training error is calculated to measure the algorit
 
 <div data-lang="scala">
 {% highlight scala %}
-import org.apache.spark.mllib.tree.DecisionTree
+import org.apache.spark.mllib.tree.GradientBoostedTrees
 import org.apache.spark.mllib.util.MLUtils
 
 // Load and parse the data file.
