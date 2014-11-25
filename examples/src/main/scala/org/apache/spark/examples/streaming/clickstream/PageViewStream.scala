@@ -50,7 +50,7 @@ object PageViewStream {
     val ssc = new StreamingContext("local[2]", "PageViewStream", Seconds(1),
       System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass).toSeq)
 
-    // Create a NetworkInputDStream on target host:port and convert each line to a PageView
+    // Create a ReceiverInputDStream on target host:port and convert each line to a PageView
     val pageViews = ssc.socketTextStream(host, port)
                        .flatMap(_.split("\n"))
                        .map(PageView.fromString(_))
