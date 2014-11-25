@@ -31,8 +31,11 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt
     val requestedFirst = (requestedPage - 1) * pageSize
+    val requestedIncomplete = Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
 
-    val allApps = parent.getApplicationList()
+    val allApps = parent.getApplicationList().filter( app =>
+      (!requestedIncomplete && !app.incomplete) || (requestedIncomplete && app.incomplete)
+    )
     val actualFirst = if (requestedFirst < allApps.size) requestedFirst else 0
     val apps = allApps.slice(actualFirst, Math.min(actualFirst + pageSize, allApps.size))
 
@@ -65,25 +68,26 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
               <h4>
                 Showing {actualFirst + 1}-{last + 1} of {allApps.size}
-                  <span style="float: right">
-                    {
-                      if (actualPage > 1) {
-                        <a href={"/?page=" + (actualPage - 1)}>&lt; </a>
-                        <a href={"/?page=1"}>1</a>
-                      }
+                {if (requestedIncomplete) "(incomplete applications)"}
+                <span style="float: right">
+                  {
+                    if (actualPage > 1) {
+                      <a href={makePageLink(actualPage - 1, requestedIncomplete)}>&lt; </a>
+                      <a href={makePageLink(1, requestedIncomplete)}>1</a>
                     }
-                    {if (actualPage - plusOrMinus > secondPageFromLeft) " ... "}
-                    {leftSideIndices}
-                    {actualPage}
-                    {rightSideIndices}
-                    {if (actualPage + plusOrMinus < secondPageFromRight) " ... "}
-                    {
-                      if (actualPage < pageCount) {
-                        <a href={"/?page=" + pageCount}>{pageCount}</a>
-                        <a href={"/?page=" + (actualPage + 1)}> &gt;</a>
-                      }
+                  }
+                  {if (actualPage - plusOrMinus > secondPageFromLeft) " ... "}
+                  {leftSideIndices}
+                  {actualPage}
+                  {rightSideIndices}
+                  {if (actualPage + plusOrMinus < secondPageFromRight) " ... "}
+                  {
+                    if (actualPage < pageCount) {
+                      <a href={makePageLink(pageCount, requestedIncomplete)}>{pageCount}</a>
+                      <a href={makePageLink(actualPage + 1, requestedIncomplete)}> &gt;</a>
                     }
-                  </span>
+                  }
+                </span>
               </h4> ++
               appTable
             } else {
@@ -96,6 +100,9 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
               </p>
             }
           }
+          <a href={makePageLink(actualPage, !requestedIncomplete)}>
+            {if (requestedIncomplete) {"Back to completed applications"} else {"Show incompleted applications"}}
+          </a>
         </div>
       </div>
     UIUtils.basicSparkPage(content, "History Server")
@@ -117,8 +124,8 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
     val uiAddress = HistoryServer.UI_PATH_PREFIX + s"/${info.id}"
     val startTime = UIUtils.formatDate(info.startTime)
-    val endTime = UIUtils.formatDate(info.endTime)
-    val duration = UIUtils.formatDuration(info.endTime - info.startTime)
+    val endTime = if(info.endTime != -1) UIUtils.formatDate(info.endTime) else "-"
+    val duration = if(info.endTime != -1) UIUtils.formatDuration(info.endTime - info.startTime) else "-"
     val lastUpdated = UIUtils.formatDate(info.lastUpdated)
     <tr>
       <td><a href={uiAddress}>{info.id}</a></td>
@@ -129,5 +136,12 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
       <td>{info.sparkUser}</td>
       <td sorttable_customkey={info.lastUpdated.toString}>{lastUpdated}</td>
     </tr>
+  }
+
+  private def makePageLink(linkPage: Int, showIncomplete: Boolean): String = {
+    "/?" + Array(
+      "page=" + linkPage,
+      "showIncomplete=" + showIncomplete
+    ).mkString("&")
   }
 }
