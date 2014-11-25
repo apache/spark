@@ -85,7 +85,7 @@ class StandardScalerModel private[mllib] (
     f
   }
 
-  private lazy val shift: Array[Double] = mean.toArray
+  private val shift: Array[Double] = mean.toArray
 
   /**
    * Applies standardization transformation on a vector.
@@ -97,19 +97,24 @@ class StandardScalerModel private[mllib] (
   override def transform(vector: Vector): Vector = {
     require(mean.size == vector.size)
     if (withMean) {
+      // By default, Scala generates Java methods for member variables. So every time when
+      // the member variables are accessed, `invokespecial` will be called which is expensive.
+      // This can be avoid by having a local reference of `shift`.
       val localShift = shift
       vector match {
         case dv: DenseVector =>
           val values = dv.values.clone()
           val size = values.size
-          var i = 0
           if (withStd) {
+            // Having a local reference of `factor` to avoid overhead as the comment before.
             val localFactor = factor
+            var i = 0
             while (i < size) {
               values(i) = (values(i) - localShift(i)) * localFactor(i)
               i += 1
             }
           } else {
+            var i = 0
             while (i < size) {
               values(i) -= localShift(i)
               i += 1
@@ -119,6 +124,7 @@ class StandardScalerModel private[mllib] (
         case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
       }
     } else if (withStd) {
+      // Having a local reference of `factor` to avoid overhead as the comment before.
       val localFactor = factor
       vector match {
         case dv: DenseVector =>
@@ -135,9 +141,9 @@ class StandardScalerModel private[mllib] (
           // so we can re-use it to save memory.
           val indices = sv.indices
           val values = sv.values.clone()
-          val size = values.size
+          val nnz = values.size
           var i = 0
-          while (i < size) {
+          while (i < nnz) {
             values(i) *= localFactor(indices(i))
             i += 1
           }
