@@ -1038,7 +1038,8 @@ class DAG(Base):
 
     def clear(
             self, start_date=None, end_date=None,
-            upstream=False, downstream=False):
+            upstream=False, downstream=False,
+            only_failed=False):
         session = settings.Session()
         """
         Clears a set of task instances associated with the current dag for
@@ -1052,6 +1053,8 @@ class DAG(Base):
             tis = tis.filter(TI.execution_date >= start_date)
         if end_date:
             tis = tis.filter(TI.execution_date <= end_date)
+        if only_failed:
+            tis = tis.filter(TI.state == State.FAILED)
 
         count = tis.count()
         tis.delete()
