@@ -21,7 +21,6 @@ import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.{UUID, Date}
-import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.HashMap
@@ -177,6 +176,9 @@ private[spark] class Worker(
         throw new SparkException("Invalid spark URL: " + x)
     }
     connected = true
+    // Cancel any outstanding re-registeration attempts because we found a new master
+    registrationRetryTimer.foreach(_.cancel())
+    registrationRetryTimer = None
   }
 
   private def tryRegisterAllMasters() {
@@ -187,6 +189,26 @@ private[spark] class Worker(
     }
   }
 
+  /**
+   * Re-register with the active master in case the master fails or the network is partitioned.
+   * During failures, it is important to register with only the active master instead of with
+   * all known masters. Otherwise, the following race condition may cause a "duplicate worker"
+   * error detailed in SPARK-4592:
+   *
+   *   (1) Master A fails and Worker attempts to reconnect to all masters
+   *   (2) Master B takes over and notifies Worker
+   *   (3) Worker responds by registering with Master B
+   *   (4) Meanwhile, Worker's previous reconnection attempt reaches Master B,
+   *       causing the same Worker to register with Master B twice
+   *
+   * Instead, if we only register with the known active master, which must be dead because
+   * another master has taken over, then we can avoid registering with the same master twice.
+   */
+  private def reregisterWithActiveMaster(): Unit = {
+    assert(master != null, "Attempted to re-register with an active Master that is null")
+    master ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+  }
+
   private def retryConnectToMaster() {
     Utils.tryOrExit {
       connectionAttemptCount += 1
@@ -195,7 +217,7 @@ private[spark] class Worker(
         registrationRetryTimer = None
       } else if (connectionAttemptCount <= TOTAL_REGISTRATION_RETRIES) {
         logInfo(s"Retrying connection to master (attempt # $connectionAttemptCount)")
-        tryRegisterAllMasters()
+        reregisterWithActiveMaster()
         if (connectionAttemptCount == INITIAL_REGISTRATION_RETRIES) {
           registrationRetryTimer.foreach(_.cancel())
           registrationRetryTimer = Some {
