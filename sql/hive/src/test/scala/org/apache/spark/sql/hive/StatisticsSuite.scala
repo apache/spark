@@ -230,13 +230,13 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         bhj = rdd.queryExecution.sparkPlan.collect {
           case j: BroadcastHashOuterJoin => j
         }
-        assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
+        assert(bhj.isEmpty, "BroadcastHashOuterJoin still planned even though it is switched off")
 
         val shj = rdd.queryExecution.sparkPlan.collect {
           case j: HashOuterJoin => j
         }
         assert(shj.size === 1,
-          "ShuffledHashJoin should be planned when BroadcastHashJoin is turned off")
+          "HashOuterJoin should be planned when BroadcastHashOuterJoin is turned off")
 
         sql( s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
       }

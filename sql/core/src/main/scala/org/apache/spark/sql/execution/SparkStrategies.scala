@@ -59,8 +59,9 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * will instead be used to decide the build side in a [[joins.ShuffledHashJoin]].
    *
    *  When planning a [[joins.BroadcastHashOuterJoin]].
-   *  In left(right) outer join ,if the right(left) side has an estimated physical size smaller than the
-   *  user-settable threshold [[org.apache.spark.sql.SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]],
+   *  In left(right) outer join ,if the right(left) side has an estimated physical size smaller 
+   *  than the user-settable threshold
+   *  [[org.apache.spark.sql.SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]],
    *  the planner would mark it as the ''broadcast'' relation and mark the other relation as the
    *  ''stream'' side.  The build table will be ''broadcasted'' to all of the executors involved
    *  in the join, as a [[org.apache.spark.broadcast.Broadcast]] object. They will use

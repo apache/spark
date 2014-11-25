@@ -155,7 +155,8 @@ case class BroadcastHashOuterJoin(
                   // If we didn't get any proper row, then append a single row with empty left
                   joinedRow.withLeft(broadcastNulls).copy
                 })
-              case _ => Nil
+              case x =>
+                throw new Exception(s"BroadcastHashOuterJoin should not take $x as the JoinType")
             }
         }
     }
