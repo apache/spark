@@ -1,6 +1,6 @@
 import sys
 
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy import create_engine
 
 from airflow.configuration import getconf
@@ -19,10 +19,11 @@ SQL_ALCHEMY_CONN = getconf().get('core', 'SQL_ALCHEMY_CONN')
 if BASE_FOLDER not in sys.path:
     sys.path.append(BASE_FOLDER)
 
-Session = sessionmaker()
 engine = create_engine(
-    SQL_ALCHEMY_CONN, pool_size=50)
-Session.configure(bind=engine)
+    SQL_ALCHEMY_CONN, pool_size=50, pool_recycle=3600)
+Session = scoped_session(sessionmaker(autocommit=False,
+        autoflush=False,
+        bind=engine))
 
 # can't move this to configuration due to ConfigParser interpolation
 LOG_FORMAT =  \

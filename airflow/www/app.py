@@ -63,6 +63,10 @@ def health():
     content = Markup(markdown.markdown("The server is healthy!"))
     return content;
 
+@app.teardown_appcontext
+def shutdown_session(exception=None):
+    settings.Session.remove()
+
 class HomeView(AdminIndexView):
     """
     Basic home view, just showing the README.md file
@@ -114,7 +118,7 @@ class Airflow(BaseView):
         dag_id = request.args.get('dag_id')
         dag = dagbag.dags[dag_id]
         code = "".join(open(dag.full_filepath, 'r').readlines())
-        title = dag.filepath
+        title = dag.filepath.replace(getconf().get('core', 'BASE_FOLDER') + '/dags/', '')
         html_code = highlight(
             code, PythonLexer(), HtmlFormatter(noclasses=True))
         return self.render(
