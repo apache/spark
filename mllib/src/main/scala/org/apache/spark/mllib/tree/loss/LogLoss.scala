@@ -65,9 +65,7 @@ object LogLoss extends Loss {
       // stable.
       if (margin >= 0) {
         2.0 * math.log1p(math.exp(-margin))
-        //math.log1p(math.exp(w))
       } else {
-        //w + math.log1p(math.exp(-w))
         2.0 * (-margin + math.log1p(math.exp(margin)))
       }
     }.mean()
