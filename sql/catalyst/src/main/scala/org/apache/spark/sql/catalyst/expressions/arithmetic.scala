@@ -106,12 +106,16 @@ case class Multiply(left: Expression, right: Expression) extends BinaryArithmeti
 case class Divide(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "/"
 
-  override def nullable = left.nullable || right.nullable || dataType.isInstanceOf[DecimalType]
+  override def nullable = true
 
-  override def eval(input: Row): Any = dataType match {
-    case _: FractionalType => f2(input, left, right, _.div(_, _))
-    case _: IntegralType => i2(input, left , right, _.quot(_, _))
-  }
+  override def eval(input: Row): Any =
+    if(right.eval(input) == 0) {
+      null
+    } else
+      dataType match {
+      case _: FractionalType => f2(input, left, right, _.div(_, _))
+      case _: IntegralType => i2(input, left , right, _.quot(_, _))
+    }
 
 }
 
