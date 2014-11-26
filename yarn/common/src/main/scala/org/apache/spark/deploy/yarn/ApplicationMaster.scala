@@ -106,10 +106,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
 
           if (!finished) {
-            // this shouldn't ever happen, but if it does assume weird failure
-            finish(FinalApplicationStatus.FAILED,
+            // This happens when the user application calls System.exit(). We have the choice
+            // of either failing of succeeding at this point. We report success to avoid
+            // retrying applications that have succeeded (System.exit(0)), which means that
+            // applications that explicitly exit with a non-zero status will also show up as
+            // succeeded in the RM UI.
+            finish(finalStatus,
               ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
-              "shutdown hook called without cleanly finishing")
+              "Shutdown hook called before final status was reported.")
           }
 
           if (!unregistered) {
@@ -164,17 +168,18 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   final def finish(status: FinalApplicationStatus, code: Int, msg: String = null) = synchronized {
     if (!finished) {
+      val inShutdown = Utils.inShutdown()
       logInfo(s"Final app status: ${status}, exitCode: ${code}" +
         Option(msg).map(msg => s", (reason: $msg)").getOrElse(""))
       exitCode = code
       finalStatus = status
       finalMsg = msg
       finished = true
-      if (Thread.currentThread() != reporterThread && reporterThread != null) {
+      if (!inShutdown && Thread.currentThread() != reporterThread && reporterThread != null) {
         logDebug("shutting down reporter thread")
         reporterThread.interrupt()
       }
-      if (Thread.currentThread() != userClassThread && userClassThread != null) {
+      if (!inShutdown && Thread.currentThread() != userClassThread && userClassThread != null) {
         logDebug("shutting down user thread")
         userClassThread.interrupt()
       }
