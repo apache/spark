@@ -23,6 +23,7 @@ import breeze.linalg.{DenseVector => BDV, Vector => BV}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
+import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
