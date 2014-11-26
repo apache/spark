@@ -34,7 +34,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.util.Utils
 
-class MLUtilsSuite extends FunSuite with LocalSparkContext {
+class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
 
   test("epsilon computation") {
     assert(1.0 + EPSILON > 1.0, s"EPSILON is too small: $EPSILON.")

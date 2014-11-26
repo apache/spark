@@ -18,24 +18,28 @@
 package org.apache.spark.sql
 
 import java.util.{Map => JMap, List => JList}
-
-import org.apache.spark.storage.StorageLevel
+import java.io.StringWriter
 
 import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
+
+import com.fasterxml.jackson.core.JsonFactory
 
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, Partitioner, TaskContext}
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.api.java.JavaSchemaRDD
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
-import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: AlphaComponent ::
@@ -113,18 +117,36 @@ class SchemaRDD(
   // =========================================================================================
 
   override def compute(split: Partition, context: TaskContext): Iterator[Row] =
-    firstParent[Row].compute(split, context).map(_.copy())
+    firstParent[Row].compute(split, context).map(ScalaReflection.convertRowToScala(_, this.schema))
 
   override def getPartitions: Array[Partition] = firstParent[Row].partitions
 
-  override protected def getDependencies: Seq[Dependency[_]] =
-    List(new OneToOneDependency(queryExecution.toRdd))
+  override protected def getDependencies: Seq[Dependency[_]] = {
+    schema // Force reification of the schema so it is available on executors.
 
-  /** Returns the schema of this SchemaRDD (represented by a [[StructType]]).
-    *
-    * @group schema
-    */
-  def schema: StructType = queryExecution.analyzed.schema
+    List(new OneToOneDependency(queryExecution.toRdd))
+  }
+
+  /**
+   * Returns the schema of this SchemaRDD (represented by a [[StructType]]).
+   *
+   * @group schema
+   */
+  lazy val schema: StructType = queryExecution.analyzed.schema
+
+  /**
+   * Returns a new RDD with each row transformed to a JSON string.
+   *
+   * @group schema
+   */
+  def toJSON: RDD[String] = {
+    val rowSchema = this.schema
+    this.mapPartitions { iter =>
+      val jsonFactory = new JsonFactory()
+      iter.map(JsonRDD.rowToJSON(rowSchema, jsonFactory))
+    }
+  }
+
 
   // =======================================================================
   // Query DSL
@@ -285,7 +307,7 @@ class SchemaRDD(
    * Filters tuples using a function over the value of the specified column.
    *
    * {{{
-   *   schemaRDD.sfilter('a)((a: Int) => ...)
+   *   schemaRDD.where('a)((a: Int) => ...)
    * }}}
    *
    * @group Query
@@ -382,12 +404,8 @@ class SchemaRDD(
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val fieldTypes = schema.fields.map(_.dataType)
-    this.mapPartitions { iter =>
-      val pickle = new Pickler
-      iter.map { row =>
-        EvaluatePython.rowToArray(row, fieldTypes)
-      }.grouped(100).map(batched => pickle.dumps(batched.toArray))
-    }
+    val jrdd = this.map(EvaluatePython.rowToArray(_, fieldTypes)).toJavaRDD()
+    SerDeUtil.javaToPython(jrdd)
   }
 
   /**
@@ -474,7 +492,7 @@ class SchemaRDD(
   }
 
   override def persist(newLevel: StorageLevel): this.type = {
-    sqlContext.cacheQuery(this, newLevel)
+    sqlContext.cacheQuery(this, None, newLevel)
     this
   }
 

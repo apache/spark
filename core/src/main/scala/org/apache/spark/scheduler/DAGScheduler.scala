@@ -751,14 +751,15 @@ class DAGScheduler(
         localExecutionEnabled && allowLocal && finalStage.parents.isEmpty && partitions.length == 1
       if (shouldRunLocally) {
         // Compute very short actions like first() or take() with no parent stages locally.
-        listenerBus.post(SparkListenerJobStart(job.jobId, Array[Int](), properties))
+        listenerBus.post(SparkListenerJobStart(job.jobId, Seq.empty, properties))
         runLocally(job)
       } else {
         jobIdToActiveJob(jobId) = job
         activeJobs += job
         finalStage.resultOfJob = Some(job)
-        listenerBus.post(SparkListenerJobStart(job.jobId, jobIdToStageIds(jobId).toArray,
-          properties))
+        val stageIds = jobIdToStageIds(jobId).toArray
+        val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
+        listenerBus.post(SparkListenerJobStart(job.jobId, stageInfos, properties))
         submitStage(finalStage)
       }
     }
@@ -1053,7 +1054,7 @@ class DAGScheduler(
         logInfo("Resubmitted " + task + ", so marking it as still running")
         stage.pendingTasks += task
 
-      case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
+      case FetchFailed(bmAddress, shuffleId, mapId, reduceId, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
         val mapStage = shuffleToMapStage(shuffleId)
 
@@ -1063,7 +1064,7 @@ class DAGScheduler(
         if (runningStages.contains(failedStage)) {
           logInfo(s"Marking $failedStage (${failedStage.name}) as failed " +
             s"due to a fetch failure from $mapStage (${mapStage.name})")
-          markStageAsFinished(failedStage, Some("Fetch failure"))
+          markStageAsFinished(failedStage, Some(failureMessage))
           runningStages -= failedStage
         }
 
@@ -1094,7 +1095,7 @@ class DAGScheduler(
           handleExecutorLost(bmAddress.executorId, fetchFailed = true, Some(task.epoch))
         }
 
-      case ExceptionFailure(className, description, stackTrace, metrics) =>
+      case ExceptionFailure(className, description, stackTrace, fullStackTrace, metrics) =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
 
       case TaskResultLost =>

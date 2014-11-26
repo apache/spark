@@ -27,8 +27,14 @@ import org.apache.spark.ui.{SparkUI, SparkUITab}
 
 private[ui] class ExecutorsTab(parent: SparkUI) extends SparkUITab(parent, "executors") {
   val listener = parent.executorsListener
+  val sc = parent.sc
+  val threadDumpEnabled =
+    sc.isDefined && parent.conf.getBoolean("spark.ui.threadDumpsEnabled", true)
 
-  attachPage(new ExecutorsPage(this))
+  attachPage(new ExecutorsPage(this, threadDumpEnabled))
+  if (threadDumpEnabled) {
+    attachPage(new ExecutorThreadDumpPage(this))
+  }
 }
 
 /**
@@ -42,6 +48,7 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
   val executorToTasksFailed = HashMap[String, Int]()
   val executorToDuration = HashMap[String, Long]()
   val executorToInputBytes = HashMap[String, Long]()
+  val executorToOutputBytes = HashMap[String, Long]()
   val executorToShuffleRead = HashMap[String, Long]()
   val executorToShuffleWrite = HashMap[String, Long]()
 
@@ -71,6 +78,10 @@ class ExecutorsListener(storageStatusListener: StorageStatusListener) extends Sp
         metrics.inputMetrics.foreach { inputMetrics =>
           executorToInputBytes(eid) =
             executorToInputBytes.getOrElse(eid, 0L) + inputMetrics.bytesRead
+        }
+        metrics.outputMetrics.foreach { outputMetrics =>
+          executorToOutputBytes(eid) =
+            executorToOutputBytes.getOrElse(eid, 0L) + outputMetrics.bytesWritten
         }
         metrics.shuffleReadMetrics.foreach { shuffleRead =>
           executorToShuffleRead(eid) =

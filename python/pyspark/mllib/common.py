@@ -54,15 +54,13 @@ _picklable_classes = [
 
 
 # this will call the MLlib version of pythonToJava()
-def _to_java_object_rdd(rdd, cache=False):
+def _to_java_object_rdd(rdd):
     """ Return an JavaRDD of Object by unpickling
 
     It will convert each Python object into Java object by Pyrolite, whenever the
     RDD is serialized in batch or not.
     """
     rdd = rdd._reserialize(AutoBatchedSerializer(PickleSerializer()))
-    if cache:
-        rdd.cache()
     return rdd.ctx._jvm.SerDe.pythonToJava(rdd._jrdd, True)
 
 
@@ -96,10 +94,15 @@ def _java2py(sc, r):
 
         if clsName == 'JavaRDD':
             jrdd = sc._jvm.SerDe.javaToPython(r)
-            return RDD(jrdd, sc, AutoBatchedSerializer(PickleSerializer()))
+            return RDD(jrdd, sc)
 
-        elif isinstance(r, (JavaArray, JavaList)) or clsName in _picklable_classes:
+        if clsName in _picklable_classes:
             r = sc._jvm.SerDe.dumps(r)
+        elif isinstance(r, (JavaArray, JavaList)):
+            try:
+                r = sc._jvm.SerDe.dumps(r)
+            except Py4JJavaError:
+                pass  # not pickable
 
     if isinstance(r, bytearray):
         r = PickleSerializer().loads(str(r))

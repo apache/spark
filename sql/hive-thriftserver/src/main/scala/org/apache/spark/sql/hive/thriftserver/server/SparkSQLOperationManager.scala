@@ -47,7 +47,7 @@ private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
 
     val operation = new SparkExecuteStatementOperation(parentSession, statement, confOverlay)(
       hiveContext, sessionToActivePool)
-   handleToOperation.put(operation.getHandle, operation)
-   operation
+    handleToOperation.put(operation.getHandle, operation)
+    operation
   }
 }

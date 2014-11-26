@@ -53,11 +53,6 @@ public abstract class DataType {
   public static final TimestampType TimestampType = new TimestampType();
 
   /**
-   * Gets the DecimalType object.
-   */
-  public static final DecimalType DecimalType = new DecimalType();
-
-  /**
    * Gets the DoubleType object.
    */
   public static final DoubleType DoubleType = new DoubleType();

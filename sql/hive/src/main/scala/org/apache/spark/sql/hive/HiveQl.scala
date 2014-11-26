@@ -21,6 +21,7 @@ import java.sql.Date
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.lib.Node
+import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
 
@@ -31,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -105,7 +107,6 @@ private[hive] object HiveQl {
     "TOK_DROPINDEX",
     "TOK_MSCK",
 
-    // TODO(marmbrus): Figure out how view are expanded by hive, as we might need to handle this.
     "TOK_ALTERVIEW_ADDPARTS",
     "TOK_ALTERVIEW_AS",
     "TOK_ALTERVIEW_DROPPARTS",
@@ -123,7 +124,6 @@ private[hive] object HiveQl {
 
   // Commands that we do not need to explain.
   protected val noExplainCommands = Seq(
-    "TOK_CREATETABLE",
     "TOK_DESCTABLE",
     "TOK_TRUNCATETABLE"     // truncate table" is a NativeCommand, does not need to explain.
   ) ++ nativeCommands
@@ -258,6 +258,14 @@ private[hive] object HiveQl {
     }
   }
 
+  /** Creates LogicalPlan for a given VIEW */
+  def createPlanForView(view: Table, alias: Option[String]) = alias match {
+    // because hive use things like `_c0` to build the expanded text
+    // currently we cannot support view from "create view v1(c1) as ..."
+    case None => Subquery(view.getTableName, createPlan(view.getViewExpandedText))
+    case Some(aliasText) => Subquery(aliasText, createPlan(view.getViewExpandedText))
+  }
+
   def parseDdl(ddl: String): Seq[Attribute] = {
     val tree =
       try {
@@ -325,7 +333,11 @@ private[hive] object HiveQl {
   }
 
   protected def nodeToDataType(node: Node): DataType = node match {
-    case Token("TOK_DECIMAL", Nil) => DecimalType
+    case Token("TOK_DECIMAL", precision :: scale :: Nil) =>
+      DecimalType(precision.getText.toInt, scale.getText.toInt)
+    case Token("TOK_DECIMAL", precision :: Nil) =>
+      DecimalType(precision.getText.toInt, 0)
+    case Token("TOK_DECIMAL", Nil) => DecimalType.Unlimited
     case Token("TOK_BIGINT", Nil) => LongType
     case Token("TOK_INT", Nil) => IntegerType
     case Token("TOK_TINYINT", Nil) => ByteType
@@ -408,6 +420,11 @@ private[hive] object HiveQl {
     case Token("TOK_EXPLAIN", explainArgs)
       if noExplainCommands.contains(explainArgs.head.getText) =>
       ExplainCommand(NoRelation)
+    case Token("TOK_EXPLAIN", explainArgs)
+      if "TOK_CREATETABLE" == explainArgs.head.getText =>
+      val Some(crtTbl) :: _ :: extended :: Nil =
+        getClauses(Seq("TOK_CREATETABLE", "FORMATTED", "EXTENDED"), explainArgs)
+      ExplainCommand(nodeToPlan(crtTbl), extended != None)
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
       val Some(query) :: _ :: extended :: Nil =
@@ -942,8 +959,12 @@ private[hive] object HiveQl {
       Cast(nodeToExpr(arg), BinaryType)
     case Token("TOK_FUNCTION", Token("TOK_BOOLEAN", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), BooleanType)
+    case Token("TOK_FUNCTION", Token("TOK_DECIMAL", precision :: scale :: nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), DecimalType(precision.getText.toInt, scale.getText.toInt))
+    case Token("TOK_FUNCTION", Token("TOK_DECIMAL", precision :: Nil) :: arg :: Nil) =>
+      Cast(nodeToExpr(arg), DecimalType(precision.getText.toInt, 0))
     case Token("TOK_FUNCTION", Token("TOK_DECIMAL", Nil) :: arg :: Nil) =>
-      Cast(nodeToExpr(arg), DecimalType)
+      Cast(nodeToExpr(arg), DecimalType.Unlimited)
     case Token("TOK_FUNCTION", Token("TOK_TIMESTAMP", Nil) :: arg :: Nil) =>
       Cast(nodeToExpr(arg), TimestampType)
     case Token("TOK_FUNCTION", Token("TOK_DATE", Nil) :: arg :: Nil) =>
@@ -1063,7 +1084,7 @@ private[hive] object HiveQl {
         } else if (ast.getText.endsWith("BD") || ast.getText.endsWith("D")) {
           // Literal decimal
           val strVal = ast.getText.stripSuffix("D").stripSuffix("B")
-          v = Literal(BigDecimal(strVal))
+          v = Literal(Decimal(strVal))
         } else {
           v = Literal(ast.getText.toDouble, DoubleType)
           v = Literal(ast.getText.toLong, LongType)

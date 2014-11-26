@@ -22,14 +22,14 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.2.0-SNAPSHOT</version>
+    <version>1.3.0-SNAPSHOT</version>
     <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-network-common_2.10</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project Common Network Code</name>
+  <name>Spark Project Networking</name>
   <url>http://spark.apache.org/</url>
   <properties>
     <sbt.project.name>network-common</sbt.project.name>
@@ -41,12 +41,13 @@
       <groupId>io.netty</groupId>
       <artifactId>netty-all</artifactId>
     </dependency>
+
+    <!-- Provided dependencies -->
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
+      <scope>provided</scope>
     </dependency>
-
-    <!-- Provided dependencies -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>

@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.util.Metadata
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
   def newExprId = ExprId(curId.getAndIncrement())
+  def unapply(expr: NamedExpression): Option[(String, DataType)] = Some(expr.name, expr.dataType)
 }
 
 /**
@@ -134,7 +135,7 @@ case class AttributeReference(
     val qualifiers: Seq[String] = Nil) extends Attribute with trees.LeafNode[Expression] {
 
   override def equals(other: Any) = other match {
-    case ar: AttributeReference => exprId == ar.exprId && dataType == ar.dataType
+    case ar: AttributeReference => name == ar.name && exprId == ar.exprId && dataType == ar.dataType
     case _ => false
   }
 

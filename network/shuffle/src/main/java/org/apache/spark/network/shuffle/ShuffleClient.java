@@ -17,8 +17,17 @@
 
 package org.apache.spark.network.shuffle;
 
+import java.io.Closeable;
+
 /** Provides an interface for reading shuffle files, either from an Executor or external service. */
-public interface ShuffleClient {
+public abstract class ShuffleClient implements Closeable {
+
+  /**
+   * Initializes the ShuffleClient, specifying this Executor's appId.
+   * Must be called before any other method on the ShuffleClient.
+   */
+  public void init(String appId) { }
+
   /**
    * Fetch a sequence of blocks from a remote node asynchronously,
    *
@@ -26,7 +35,7 @@ public interface ShuffleClient {
    * return a future so the underlying implementation can invoke onBlockFetchSuccess as soon as
    * the data of a block is fetched, rather than waiting for all blocks to be fetched.
    */
-  public void fetchBlocks(
+  public abstract void fetchBlocks(
       String host,
       int port,
       String execId,

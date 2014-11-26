@@ -23,9 +23,9 @@ import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, norm => brzNorm, s
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.{Matrices, Vectors, Vector}
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 
-class RowMatrixSuite extends FunSuite with LocalSparkContext {
+class RowMatrixSuite extends FunSuite with MLlibTestSparkContext {
 
   val m = 4
   val n = 3

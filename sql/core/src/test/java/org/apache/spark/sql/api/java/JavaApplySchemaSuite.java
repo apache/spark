@@ -118,7 +118,7 @@ public class JavaApplySchemaSuite implements Serializable {
         "\"bigInteger\":92233720368547758069, \"double\":1.7976931348623157E305, " +
         "\"boolean\":false, \"null\":null}"));
     List<StructField> fields = new ArrayList<StructField>(7);
-    fields.add(DataType.createStructField("bigInteger", DataType.DecimalType, true));
+    fields.add(DataType.createStructField("bigInteger", new DecimalType(), true));
     fields.add(DataType.createStructField("boolean", DataType.BooleanType, true));
     fields.add(DataType.createStructField("double", DataType.DoubleType, true));
     fields.add(DataType.createStructField("integer", DataType.IntegerType, true));

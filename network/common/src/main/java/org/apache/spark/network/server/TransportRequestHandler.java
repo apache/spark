@@ -86,6 +86,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
     for (long streamId : streamIds) {
       streamManager.connectionTerminated(streamId);
     }
+    rpcHandler.connectionTerminated(reverseClient);
   }
 
   @Override
