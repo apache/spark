@@ -99,7 +99,7 @@ sealed trait Vector extends Serializable {
     if (p == 1) {
       var sum = 0.0
       var i = 0
-      while(i < size) {
+      while (i < size) {
         sum += math.abs(values(i))
         i += 1
       }
@@ -107,7 +107,7 @@ sealed trait Vector extends Serializable {
     } else if (p == 2) {
       var sum = 0.0
       var i = 0
-      while(i < size) {
+      while (i < size) {
         sum += values(i) * values(i)
         i += 1
       }
@@ -117,7 +117,7 @@ sealed trait Vector extends Serializable {
       var i = 0
       while (i < size) {
         val value = math.abs(values(i))
-        if(value > max) max = value
+        if (value > max) max = value
         i += 1
       }
       max
