@@ -34,6 +34,8 @@ private[spark] trait SchedulerBackend {
     throw new UnsupportedOperationException
   def isReady(): Boolean = true
 
+  def freeSlotAvail(numPendingTask: Int): Boolean = false
+
   /**
    * Get an application ID associated with the job.
    *

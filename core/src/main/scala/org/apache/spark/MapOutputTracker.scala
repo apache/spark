@@ -189,6 +189,76 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
+  def getUpdatedStatus(shuffleId: Int, reduceId: Int): Array[(BlockManagerId, Long)] = {
+    val statuses = mapStatuses.get(shuffleId).orNull
+    if (statuses == null) {
+      logInfo("Don't have map outputs for shuffle " + shuffleId + ", fetching them")
+      var fetchedStatuses: Array[MapStatus] = null
+      fetching.synchronized {
+        if (fetching.contains(shuffleId)) {
+          // Someone else is fetching it; wait for them to be done
+          while (fetching.contains(shuffleId)) {
+            try {
+              fetching.wait()
+            } catch {
+              case e: InterruptedException =>
+            }
+          }
+        }
+
+        // Either while we waited the fetch happened successfully, or
+        // someone fetched it in between the get and the fetching.synchronized.
+        fetchedStatuses = mapStatuses.get(shuffleId).orNull
+        if (fetchedStatuses == null) {
+          // We have to do the fetch, get others to wait for us.
+          fetching += shuffleId
+        }
+      }
+
+      if (fetchedStatuses == null) {
+        // We won the race to fetch the output locs; do so
+        logInfo("Doing the fetch; tracker actor = " + trackerActor)
+        // This try-finally prevents hangs due to timeouts:
+        try {
+          val fetchedBytes =
+            askTracker(GetMapOutputStatuses(shuffleId)).asInstanceOf[Array[Byte]]
+          fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes)
+          logInfo("Got the output locations")
+        } finally {
+          fetching.synchronized {
+            fetching -= shuffleId
+            fetching.notifyAll()
+          }
+        }
+      }
+      if (fetchedStatuses != null) {
+        var isMapFinished: Boolean = true
+        fetchedStatuses.synchronized {
+          val statuses: Array[(BlockManagerId, Long)] = fetchedStatuses.map {
+            status =>
+              if (status == null) {
+                isMapFinished = false
+                (null)
+              } else {
+                (status.location, status.getSizeForBlock(reduceId))
+              }
+          }
+          if (isMapFinished) {
+            mapStatuses.put(shuffleId, fetchedStatuses)
+          }
+          statuses
+        }
+      } else {
+        throw new MetadataFetchFailedException(
+          shuffleId, reduceId, "Missing all output locations for shuffle " + shuffleId)
+      }
+    } else {
+      statuses.synchronized {
+        return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, statuses)
+      }
+    }
+  }
+
   /** Called to get current epoch number. */
   def getEpoch: Long = {
     epochLock.synchronized {
