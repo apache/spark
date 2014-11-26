@@ -415,7 +415,7 @@ class Airflow(BaseView):
         if dttm:
             dttm = dateutil.parser.parse(dttm)
         else:
-            dttm = dag.latest_execution_date
+            dttm = dag.latest_execution_date or datetime.now().date()
 
         form = DateTimeForm(data={'execution_date': dttm})
 
