@@ -111,10 +111,11 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
   override def eval(input: Row): Any =
     if(right.eval(input) == 0) {
       null
-    } else
+    } else {
       dataType match {
-      case _: FractionalType => f2(input, left, right, _.div(_, _))
-      case _: IntegralType => i2(input, left , right, _.quot(_, _))
+        case _: FractionalType => f2(input, left, right, _.div(_, _))
+        case _: IntegralType => i2(input, left , right, _.quot(_, _))
+      }
     }
 
 }
