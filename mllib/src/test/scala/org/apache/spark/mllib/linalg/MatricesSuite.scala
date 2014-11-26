@@ -132,7 +132,7 @@ class MatricesSuite extends FunSuite {
     assert(deMat1.toArray === deMat2.toArray)
   }
 
-  test("horzCat, vertCat, eye, speye") {
+  test("horzcat, vertcat, eye, speye") {
     val m = 3
     val n = 2
     val values = Array(1.0, 2.0, 4.0, 5.0)
@@ -147,10 +147,10 @@ class MatricesSuite extends FunSuite {
     val deMat3 = Matrices.eye(2)
     val spMat3 = Matrices.speye(2)
 
-    val spHorz = Matrices.horzCat(Seq(spMat1, spMat2))
-    val deHorz1 = Matrices.horzCat(Seq(deMat1, deMat2))
-    val deHorz2 = Matrices.horzCat(Seq(spMat1, deMat2))
-    val deHorz3 = Matrices.horzCat(Seq(deMat1, spMat2))
+    val spHorz = Matrices.horzcat(Array(spMat1, spMat2))
+    val deHorz1 = Matrices.horzcat(Array(deMat1, deMat2))
+    val deHorz2 = Matrices.horzcat(Array(spMat1, deMat2))
+    val deHorz3 = Matrices.horzcat(Array(deMat1, spMat2))
 
     assert(deHorz1.numRows === 3)
     assert(deHorz2.numRows === 3)
@@ -179,17 +179,17 @@ class MatricesSuite extends FunSuite {
     assert(deHorz1(1, 4) === 0.0)
 
     intercept[IllegalArgumentException] {
-      Matrices.horzCat(Seq(spMat1, spMat3))
+      Matrices.horzcat(Array(spMat1, spMat3))
     }
 
     intercept[IllegalArgumentException] {
-      Matrices.horzCat(Seq(deMat1, spMat3))
+      Matrices.horzcat(Array(deMat1, spMat3))
     }
 
-    val spVert = Matrices.vertCat(Seq(spMat1, spMat3))
-    val deVert1 = Matrices.vertCat(Seq(deMat1, deMat3))
-    val deVert2 = Matrices.vertCat(Seq(spMat1, deMat3))
-    val deVert3 = Matrices.vertCat(Seq(deMat1, spMat3))
+    val spVert = Matrices.vertcat(Array(spMat1, spMat3))
+    val deVert1 = Matrices.vertcat(Array(deMat1, deMat3))
+    val deVert2 = Matrices.vertcat(Array(spMat1, deMat3))
+    val deVert3 = Matrices.vertcat(Array(deMat1, spMat3))
 
     assert(deVert1.numRows === 5)
     assert(deVert2.numRows === 5)
@@ -214,11 +214,11 @@ class MatricesSuite extends FunSuite {
     assert(deVert1(4, 1) === 1.0)
 
     intercept[IllegalArgumentException] {
-      Matrices.vertCat(Seq(spMat1, spMat2))
+      Matrices.vertcat(Array(spMat1, spMat2))
     }
 
     intercept[IllegalArgumentException] {
-      Matrices.vertCat(Seq(deMat1, spMat2))
+      Matrices.vertcat(Array(deMat1, spMat2))
     }
   }
 }

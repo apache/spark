@@ -363,7 +363,6 @@ object SparseMatrix {
     var i = 0
     var nnz = 0
     var lastCol = -1
-
     raw.foreach { v =>
       val r = i % numRows
       val c = (i - r) / numRows
@@ -378,7 +377,10 @@ object SparseMatrix {
       }
       i += 1
     }
-    sCols.append(sparseA.length)
+    while (numCols > lastCol){
+      sCols.append(sparseA.length)
+      lastCol += 1
+    }
     new SparseMatrix(numRows, numCols, sCols.toArray, sRows.toArray, sparseA.toArray)
   }
 
@@ -399,11 +401,11 @@ object SparseMatrix {
       s"0.0 < d < 1.0. Currently, density: $density")
     val rand = new XORShiftRandom(seed)
     val length = numRows * numCols
-    val rawA = Array.fill(length)(0.0)
+    val rawA = new Array[Double](length)
     var nnz = 0
     for (i <- 0 until length) {
       val p = rand.nextDouble()
-      if (p < density) {
+      if (p <= density) {
         rawA.update(i, rand.nextDouble())
         nnz += 1
       }
@@ -439,11 +441,11 @@ object SparseMatrix {
       s"0.0 < d < 1.0. Currently, density: $density")
     val rand = new XORShiftRandom(seed)
     val length = numRows * numCols
-    val rawA = Array.fill(length)(0.0)
+    val rawA = new Array[Double](length)
     var nnz = 0
     for (i <- 0 until length) {
       val p = rand.nextDouble()
-      if (p < density) {
+      if (p <= density) {
         rawA.update(i, rand.nextGaussian())
         nnz += 1
       }
@@ -476,7 +478,7 @@ object SparseMatrix {
         val values = sVec.values
         var i = 0
         var lastCol = -1
-        val colPtrs = new ArrayBuffer[Int](n)
+        val colPtrs = new ArrayBuffer[Int](n + 1)
         rows.foreach { r =>
           while (r != lastCol) {
             colPtrs.append(i)
@@ -484,13 +486,16 @@ object SparseMatrix {
           }
           i += 1
         }
-        colPtrs.append(n)
+        while (n > lastCol) {
+          colPtrs.append(i)
+          lastCol += 1
+        }
         new SparseMatrix(n, n, colPtrs.toArray, rows, values)
       case dVec: DenseVector =>
         val values = dVec.values
         var i = 0
         var nnz = 0
-        val sVals = values.filter( v => v != 0.0)
+        val sVals = values.filter(v => v != 0.0)
         var lastCol = -1
         val colPtrs = new ArrayBuffer[Int](n + 1)
         val sRows = new ArrayBuffer[Int](sVals.length)
@@ -687,10 +692,10 @@ object Matrices {
    * Horizontally concatenate a sequence of matrices. The returned matrix will be in the format
    * the matrices are supplied in. Supplying a mix of dense and sparse matrices will result in
    * a dense matrix.
-   * @param matrices sequence of matrices
+   * @param matrices array of matrices
    * @return a single `Matrix` composed of the matrices that were horizontally concatenated
    */
-  private[mllib] def horzCat(matrices: Seq[Matrix]): Matrix = {
+  def horzcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.size == 1) {
       return matrices(0)
     }
@@ -744,7 +749,7 @@ object Matrices {
    * @param matrices sequence of matrices
    * @return a single `Matrix` composed of the matrices that were horizontally concatenated
    */
-  private[mllib] def vertCat(matrices: Seq[Matrix]): Matrix = {
+  def vertcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.size == 1) {
       return matrices(0)
     }
