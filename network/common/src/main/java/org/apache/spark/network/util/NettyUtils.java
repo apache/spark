@@ -109,9 +109,9 @@ public class NettyUtils {
 
   /**
    * Create a pooled ByteBuf allocator but disables the thread-local cache. Thread-local caches
-   * are disabled because the ByteBufs are allocated by the event loop thread, but released by the
-   * executor thread rather than the event loop thread. Those thread-local caches actually delay
-   * the recycling of buffers, leading to larger memory usage.
+   * are disabled for TransportClients because the ByteBufs are allocated by the event loop thread,
+   * but released by the executor thread rather than the event loop thread. Those thread-local
+   * caches actually delay the recycling of buffers, leading to larger memory usage.
    */
   public static PooledByteBufAllocator createPooledByteBufAllocator(
       boolean allowDirectBufs,
