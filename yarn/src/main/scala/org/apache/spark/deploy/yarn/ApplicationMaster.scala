@@ -333,8 +333,10 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       sparkContextRef.synchronized {
         var count = 0
         val waitTime = 10000L
-        val numTries = sparkConf.getInt("spark.yarn.applicationMaster.waitTries", 10)
-        while (sparkContextRef.get() == null && count < numTries && !finished) {
+        val totalWaitTime = sparkConf.getInt("spark.yarn.applicationMaster.waitTime", 100000)
+        val deadline = System.currentTimeMillis() + totalWaitTime
+
+        while (sparkContextRef.get() == null && System.currentTimeMillis < deadline && !finished) {
           logInfo("Waiting for spark context initialization ... " + count)
           count = count + 1
           sparkContextRef.wait(waitTime)
@@ -343,7 +345,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         val sparkContext = sparkContextRef.get()
         if (sparkContext == null) {
           logError(("SparkContext did not initialize after waiting for %d ms. Please check earlier"
-            + " log output for errors. Failing the application.").format(numTries * waitTime))
+            + " log output for errors. Failing the application.").format(totalWaitTime))
         }
         sparkContext
       }
@@ -357,13 +359,13 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     val hostport = args.userArgs(0)
     val (driverHost, driverPort) = Utils.parseHostPort(hostport)
 
-    // spark driver should already be up since it launched us, but we don't want to
+    // Spark driver should already be up since it launched us, but we don't want to
     // wait forever, so wait 100 seconds max to match the cluster mode setting.
-    // Leave this config unpublished for now. SPARK-3779 to investigating changing
-    // this config to be time based.
-    val numTries = sparkConf.getInt("spark.yarn.applicationMaster.waitTries", 1000)
+    val waitTime = 100
+    val totalWaitTime = sparkConf.getInt("spark.yarn.applicationMaster.waitTime", 100000)
+    val deadline = System.currentTimeMillis + totalWaitTime
 
-    while (!driverUp && !finished && count < numTries) {
+    while (!driverUp && !finished && System.currentTimeMillis < deadline + waitTime) {
       try {
         count = count + 1
         val socket = new Socket(driverHost, driverPort)
@@ -374,7 +376,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         case e: Exception =>
           logError("Failed to connect to driver at %s:%s, retrying ...".
             format(driverHost, driverPort))
-          Thread.sleep(100)
+          Thread.sleep(waitTime)
       }
     }
 
