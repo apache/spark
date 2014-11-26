@@ -69,11 +69,9 @@ class HomeView(AdminIndexView):
     """
     @expose("/")
     def index(self):
-        md = "".join(
-            open(getconf().get('core', 'AIRFLOW_HOME') + '/README.md', 'r').readlines())
-        content = Markup(markdown.markdown(md))
-        return self.render('admin/index.html', content=content)
-admin = Admin(app, name="Airflow", index_view=HomeView(name='Home'))
+        dags = sorted(dagbag.dags.values(), key=lambda dag: dag.dag_id)
+        return self.render('admin/dags.html', dags=dags)
+admin = Admin(app, name="Airflow", index_view=HomeView(name='DAGs'))
 
 
 class Airflow(BaseView):
@@ -491,46 +489,6 @@ class ModelViewOnly(ModelView):
     column_display_pk = True
 
 
-def filepath_formatter(view, context, model, name):
-    url = url_for('airflow.code', dag_id=model.dag_id)
-    short_fp = model.filepath.replace(getconf().get('core', 'BASE_FOLDER') + '/dags/', '')
-    link = Markup('<a href="{url}">{short_fp}</a>'.format(**locals()))
-    return link
-
-
-def dag_formatter(view, context, model, name):
-    url = url_for('airflow.tree', dag_id=model.dag_id, num_runs=25)
-    link = Markup('<a href="{url}">{model.dag_id}</a>'.format(**locals()))
-    return link
-
-
-class DagModelView(ModelViewOnly):
-    column_formatters = {
-        'dag_id': dag_formatter,
-        'filepath': filepath_formatter,
-    }
-    column_list = ('dag_id', 'task_count', 'filepath')
-mv = DagModelView(models.DAG, session, name="DAGs", endpoint="dags")
-admin.add_view(mv)
-
-
-def dag_link(view, context, model, name):
-    return model
-
-
-class DagModelView(ModelViewOnly):
-    column_formatters = {
-        'dag_id': dag_link,
-    }
-
-
-class TaskModelView(ModelViewOnly):
-    column_filters = ('dag_id', 'owner', 'start_date', 'end_date')
-    column_formatters = {
-        'dag': dag_formatter,
-    }
-
-
 class TaskInstanceModelView(ModelViewOnly):
     column_filters = ('dag_id', 'task_id', 'state', 'execution_date')
     column_list = (
@@ -579,7 +537,7 @@ class ReloadTaskView(BaseView):
     def index(self):
         logging.info("Reloading the dags")
         dagbag.collect_dags()
-        return redirect(url_for('dags.index_view'))
+        return redirect(url_for('index'))
 admin.add_view(ReloadTaskView(name='Reload DAGs', category="Admin"))
 
 if __name__ == "__main__":
