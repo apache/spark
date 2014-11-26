@@ -5,6 +5,7 @@ from datetime import datetime
 # Setting some default operator parameters
 default_args = {
     'owner': 'max',
+    'start_date': datetime(2014, 10, 20),
     'mysql_dbid': 'local_mysql',
 }
 

@@ -964,6 +964,7 @@ class DAG(Base):
         utils.validate_key(dag_id)
         self.dag_id = dag_id
         self.executor = executor
+        self.start_date = start_date
         self.end_date = end_date or datetime.now()
         self.parallelism = parallelism
         self.schedule_interval = schedule_interval
@@ -1116,6 +1117,11 @@ class DAG(Base):
             get_downstream(t)
 
     def add_task(self, task):
+        if not self.start_date and not task.start_date:
+            raise Exception("Task is missing the start_date parameter")
+        if not task.start_date:
+            task.start_date = self.start_date
+
         if task.task_id in [t.task_id for t in self.tasks]:
             raise Exception("Task already added")
         else:

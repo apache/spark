@@ -11,7 +11,7 @@ default_args = {
                 }
 
 # Initializing a directed acyclic graph
-dag = DAG(dag_id='simple', executor=LocalExecutor())
+dag = DAG(dag_id='simple', executor=LocalExecutor(), start_date=datetime(2014, 10, 10))
 
 # MySQL Operator
 sql = "TRUNCATE TABLE tmp;"
