@@ -707,17 +707,18 @@ setMethod("minimum",
             reduce(rdd, min)
           })
 
-#' Applies a function to all elements in an RDD, and force it evaluated.
+#' Applies a function to all elements in an RDD, and force evaluation.
 #'
 #' @param rdd The RDD to apply the function
 #' @param func The function to be applied.
+#' @return invisible NULL.
 #' @export
 #' @rdname foreach
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
-#' foreach(rdd, print)
+#' foreach(rdd, function(x) { save(x, file=...) })
 #'}
 setGeneric("foreach", function(rdd, func) { standardGeneric("foreach") })
 
@@ -733,17 +734,18 @@ setMethod("foreach",
             invisible(collect(mapPartitions(rdd, partition.func)))
           })
 
-#' Applies a function to each partition in an RDD, and force it evaluated.
+#' Applies a function to each partition in an RDD, and force evaluation.
 #'
 #' @param rdd The RDD to apply the function
 #' @param func The function to be applied to partitions.
+#' @return invisible NULL.
 #' @export
 #' @rdname foreach
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
-#' foreachPartition(rdd, function(part) { lapply(part, print); NULL })
+#' foreachPartition(rdd, function(part) { save(part, file=...); NULL })
 #'}
 setGeneric("foreachPartition", 
            function(rdd, func) { standardGeneric("foreachPartition") })
