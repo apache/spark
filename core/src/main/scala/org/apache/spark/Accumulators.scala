@@ -254,9 +254,10 @@ private object Accumulators {
   val localAccums = Map[Thread, Map[Long, Accumulable[_, _]]]()
   var lastId: Long = 0
 
-  private val nextAccumID = new AtomicLong(0)
-
-  def newId(): Long = nextAccumID.getAndIncrement
+  def newId(): Long = synchronized {
+    lastId += 1
+    lastId
+  }
 
   def register(a: Accumulable[_, _], original: Boolean): Unit = synchronized {
     if (original) {
