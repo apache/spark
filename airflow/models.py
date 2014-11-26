@@ -53,6 +53,9 @@ class DagBag(object):
         Given a path to a python module, this method imports the module and
         look for dag objects whithin it.
         """
+        if not os.path.isfile(filepath):
+            logging.error("File not found: " + filepath)
+            return
         mod_name, file_ext = os.path.splitext(os.path.split(filepath)[-1])
         dttm = datetime.fromtimestamp(os.path.getmtime(filepath))
 
