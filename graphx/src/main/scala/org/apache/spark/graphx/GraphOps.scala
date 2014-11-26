@@ -129,15 +129,15 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
             ctx.sendToSrc(Array((ctx.dstId, ctx.dstAttr)))
             ctx.sendToDst(Array((ctx.srcId, ctx.srcAttr)))
           },
-          (a, b) => a ++ b, TripletFields.SrcDstOnly)
+          (a, b) => a ++ b, TripletFields.All)
       case EdgeDirection.In =>
         graph.aggregateMessages[Array[(VertexId,VD)]](
           ctx => ctx.sendToDst(Array((ctx.srcId, ctx.srcAttr))),
-          (a, b) => a ++ b, TripletFields.SrcOnly)
+          (a, b) => a ++ b, TripletFields.Src)
       case EdgeDirection.Out =>
         graph.aggregateMessages[Array[(VertexId,VD)]](
           ctx => ctx.sendToSrc(Array((ctx.dstId, ctx.dstAttr))),
-          (a, b) => a ++ b, TripletFields.DstOnly)
+          (a, b) => a ++ b, TripletFields.Dst)
       case EdgeDirection.Both =>
         throw new SparkException("collectEdges does not support EdgeDirection.Both. Use" +
           "EdgeDirection.Either instead.")
