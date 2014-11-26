@@ -78,7 +78,9 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
     }
 
   protected lazy val options: Parser[Map[String, String]] =
-    "(" ~> repsep(pair, ",") <~ ")" ^^ { case s: Seq[(String, String)] => s.toMap }
+    "(" ~> repsep(pair, ",") <~ ")" ^^ {
+      case s: Seq[(String, String)]=> s.map(t => (t._1.toLowerCase, t._2)).toMap
+    }
 
   protected lazy val className: Parser[String] = repsep(ident, ".") ^^ { case s => s.mkString(".")}
 
