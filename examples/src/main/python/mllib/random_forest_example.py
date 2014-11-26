@@ -29,6 +29,7 @@ from pyspark.context import SparkContext
 from pyspark.mllib.tree import RandomForest
 from pyspark.mllib.util import MLUtils
 
+
 def testClassification(trainingData, testData):
     # Train a RandomForest model.
     #  Empty categoricalFeaturesInfo indicates all features are continuous.
@@ -43,10 +44,11 @@ def testClassification(trainingData, testData):
     predictions = model.predict(testData.map(lambda x: x.features))
     labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
     testErr = labelsAndPredictions.filter(lambda (v, p): v != p).count()\
-              / float(testData.count())
+        / float(testData.count())
     print('Test Error = ' + str(testErr))
     print('Learned classification forest model:')
     print(model.toDebugString())
+
 
 def testRegression(trainingData, testData):
     # Train a RandomForest model.
@@ -61,7 +63,7 @@ def testRegression(trainingData, testData):
     predictions = model.predict(testData.map(lambda x: x.features))
     labelsAndPredictions = testData.map(lambda lp: lp.label).zip(predictions)
     testMSE = labelsAndPredictions.map(lambda (v, p): (v - p) * (v - p)).sum()\
-              / float(testData.count())
+        / float(testData.count())
     print('Test Mean Squared Error = ' + str(testMSE))
     print('Learned regression forest model:')
     print(model.toDebugString())
