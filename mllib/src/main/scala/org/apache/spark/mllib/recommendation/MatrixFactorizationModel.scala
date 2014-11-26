@@ -22,6 +22,7 @@ import java.lang.{Integer => JavaInteger}
 import org.jblas.DoubleMatrix
 
 import org.apache.spark.Logging
+import org.apache.spark.SparkContext._
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
