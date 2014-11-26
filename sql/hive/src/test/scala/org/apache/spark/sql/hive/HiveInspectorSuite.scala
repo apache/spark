@@ -19,13 +19,12 @@ package org.apache.spark.sql.hive
 
 import java.sql.Date
 import java.util
-import java.util.TimeZone
 
 import org.apache.hadoop.hive.serde2.io.DoubleWritable
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.FunSuite
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, StructObjectInspector, ObjectInspectorFactory}
@@ -34,18 +33,7 @@ import org.apache.hadoop.io.LongWritable
 
 import org.apache.spark.sql.catalyst.expressions.{Literal, Row}
 
-class HiveInspectorSuite extends FunSuite with HiveInspectors with BeforeAndAfterAll {
-  private val originalTimeZone = TimeZone.getDefault
-
-  override def beforeAll() {
-    // Timezone is fixed to GMT
-    TimeZone.setDefault(TimeZone.getTimeZone("GMT"))
-  }
-
-  override def afterAll() {
-    TimeZone.setDefault(originalTimeZone)
-  }
-
+class HiveInspectorSuite extends FunSuite with HiveInspectors {
   test("Test wrap SettableStructObjectInspector") {
     val udaf = new UDAFPercentile.PercentileLongEvaluator()
     udaf.init()
@@ -84,7 +72,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors with BeforeAndAfte
     Literal(0.asInstanceOf[Float]) ::
     Literal(0.asInstanceOf[Double]) ::
     Literal("0") ::
-    Literal(new Date(0)) ::
+    Literal(new Date(2014, 9, 23)) ::
     Literal(Decimal(BigDecimal(123.123))) ::
     Literal(new java.sql.Timestamp(123123)) ::
     Literal(Array[Byte](1,2,3)) ::
