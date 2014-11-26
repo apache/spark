@@ -20,8 +20,8 @@ package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
-import scala.deprecated
 import scala.collection.mutable.HashMap
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
@@ -802,10 +802,21 @@ abstract class DStream[T: ClassTag] (
   }
 }
 
-private[streaming] object DStream {
+object DStream {
+
+  // `toPairDStreamFunctions` was in SparkContext before 1.3 and users had to
+  // `import StreamingContext._` to enable it. Now we move it here to make the compiler find
+  // it automatically. However, we still keep the old function in StreamingContext for backward
+  // compatibility and forward to the following function directly.
+
+  implicit def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
+      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null):
+    PairDStreamFunctions[K, V] = {
+    new PairDStreamFunctions[K, V](stream)
+  }
 
   /** Get the creation site of a DStream from the stack trace of when the DStream is created. */
-  def getCreationSite(): CallSite = {
+  private[streaming] def getCreationSite(): CallSite = {
     val SPARK_CLASS_REGEX = """^org\.apache\.spark""".r
     val SPARK_STREAMING_TESTCLASS_REGEX = """^org\.apache\.spark\.streaming\.test""".r
     val SPARK_EXAMPLES_CLASS_REGEX = """^org\.apache\.spark\.examples""".r

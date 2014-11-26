@@ -815,6 +815,6 @@ object JavaPairDStream {
 
   def scalaToJavaLong[K: ClassTag](dstream: JavaPairDStream[K, Long])
   : JavaPairDStream[K, JLong] = {
-    StreamingContext.toPairDStreamFunctions(dstream.dstream).mapValues(new JLong(_))
+    DStream.toPairDStreamFunctions(dstream.dstream).mapValues(new JLong(_))
   }
 }
