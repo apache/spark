@@ -60,7 +60,8 @@ object LogLoss extends Loss {
   override def computeError(model: TreeEnsembleModel, data: RDD[LabeledPoint]): Double = {
     data.map { case point =>
       val prediction = model.predict(point.features)
-      2.0 * math.log(1 + math.exp(-2.0 * point.label * prediction))
+      // Use log1p since it is more stable than explicitly writing log(1 + exp()).
+      2.0 * math.log1p(math.exp(-2.0 * point.label * prediction))
     }.mean()
   }
 }
