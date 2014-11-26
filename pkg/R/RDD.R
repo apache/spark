@@ -1484,4 +1484,50 @@ setMethod("join",
             joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
           })
 
+#' For each key k in several RDDs, return a resulting RDD that
+#' whose values are a list of values for the key in all RDDs.
+#'
+#' @param ... Several RDDs.
+#' @param numPartitions Number of partitions to create.
+#' @return a new RDD containing all pairs of elements with values in a list
+#' in all RDDs.
+#' @rdname cogroup
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
+#' rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
+#' cogroup(rdd1, rdd2, numPartitions = 2L) 
+#' # list(list(1, list(1, list(2, 3))), list(2, list(list(4), list()))
+#'}
+setGeneric("cogroup", 
+           function(..., numPartitions) { standardGeneric("cogroup") },
+           signature = "...")
 
+#' @rdname cogroup
+#' @aliases cogroup,RDD-method
+setMethod("cogroup",
+          "RDD",
+          function(..., numPartitions) {
+            rdds <- list(...)
+            rddsLen <- length(rdds)
+            for (i in 1:rddsLen) {
+              rdds[[i]] <- lapply(rdds[[i]], 
+                                  function(x) { list(x[[1]], list(i, x[[2]])) })
+              getJRDD(rdds[[i]])  # Capture the closure.
+            }
+            union.rdd <- Reduce(unionRDD, rdds)
+            group.func <- function(vlist) {
+              res <- list()
+              length(res) <- rddsLen
+              for (i in 1:rddsLen) {
+                tmp <- Filter(function(x) { x[[1]] == i }, vlist)
+                tmp <- lapply(tmp, function(x) { x[[2]] })
+                res[[i]] <- tmp
+              }
+              res
+            }
+            cogroup.rdd <- mapValues(groupByKey(union.rdd, numPartitions), 
+                                     group.func)
+          })
