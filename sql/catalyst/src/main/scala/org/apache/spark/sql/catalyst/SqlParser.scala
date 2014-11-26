@@ -85,6 +85,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val ON = Keyword("ON")
   protected val OR = Keyword("OR")
   protected val ORDER = Keyword("ORDER")
+  protected val SORT = Keyword("SORT")
   protected val OUTER = Keyword("OUTER")
   protected val OVERWRITE = Keyword("OVERWRITE")
   protected val REGEXP = Keyword("REGEXP")
@@ -140,7 +141,7 @@ class SqlParser extends AbstractSparkSQLParser {
       (WHERE  ~> expression).? ~
       (GROUP  ~  BY ~> rep1sep(expression, ",")).? ~
       (HAVING ~> expression).? ~
-      (ORDER  ~  BY ~> ordering).? ~
+      sortType.? ~
       (LIMIT  ~> expression).? ^^ {
         case d ~ p ~ r ~ f ~ g ~ h ~ o ~ l  =>
           val base = r.getOrElse(NoRelation)
@@ -150,7 +151,7 @@ class SqlParser extends AbstractSparkSQLParser {
             .getOrElse(Project(assignAliases(p), withFilter))
           val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
           val withHaving = h.map(Filter(_, withDistinct)).getOrElse(withDistinct)
-          val withOrder = o.map(Sort(_, withHaving)).getOrElse(withHaving)
+          val withOrder = o.map(_(withHaving)).getOrElse(withHaving)
           val withLimit = l.map(Limit(_, withOrder)).getOrElse(withOrder)
           withLimit
       }
@@ -200,6 +201,11 @@ class SqlParser extends AbstractSparkSQLParser {
     | LEFT  ~ OUTER.? ^^^ LeftOuter
     | RIGHT ~ OUTER.? ^^^ RightOuter
     | FULL  ~ OUTER.? ^^^ FullOuter
+    )
+
+  protected lazy val sortType: Parser[LogicalPlan => LogicalPlan] =
+    ( ORDER ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, l) }
+    | SORT ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => SortPartitions(o, l) }
     )
 
   protected lazy val ordering: Parser[Seq[SortOrder]] =

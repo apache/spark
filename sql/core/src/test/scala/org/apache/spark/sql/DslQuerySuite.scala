@@ -120,6 +120,24 @@ class DslQuerySuite extends QueryTest {
       mapData.collect().sortBy(_.data(1)).reverse.toSeq)
   }
 
+  test("sorting #2") {
+    checkAnswer(
+      testData2.sortBy('a.asc, 'b.asc),
+      Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)))
+
+    checkAnswer(
+      testData2.sortBy('a.asc, 'b.desc),
+      Seq((1,2), (1,1), (2,2), (2,1), (3,2), (3,1)))
+
+    checkAnswer(
+      testData2.sortBy('a.desc, 'b.desc),
+      Seq((3,2), (3,1), (2,2), (2,1), (1,2), (1,1)))
+
+    checkAnswer(
+      testData2.sortBy('a.desc, 'b.asc),
+      Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
+  }
+
   test("limit") {
     checkAnswer(
       testData.limit(10),
