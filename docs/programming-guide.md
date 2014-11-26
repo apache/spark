@@ -1228,11 +1228,6 @@ interface to accumulate data where the resulting type is not the same as the ele
 a list by collecting together elements), and the `SparkContext.accumulableCollection` method for accumulating
 common Scala collection types.
 
-<b>Only when the accumulator operation is executed within an 
-action</b>, Spark guarantees that the operation will only be applied when the task is successfully finished for 
-the first time, i.e. the restarted task will not update the value. In transformations, users should be aware of that 
-the accumulator value would be updated as long as the task is executed.
-
 </div>
 
 <div data-lang="java"  markdown="1">
@@ -1310,6 +1305,12 @@ vecAccum = sc.accumulator(Vector(...), VectorAccumulatorParam())
 </div>
 
 </div>
+
+For accumulator updates performed inside <b>actions only</b>, Spark guarantees that each task's update to the accumulator 
+will only be applied once, i.e. restarted tasks will not update the value. In transformations, users should be aware 
+of that each task's update may be applied more than once if tasks or job stages are re-executed.
+
+
 
 # Deploying to a Cluster
 

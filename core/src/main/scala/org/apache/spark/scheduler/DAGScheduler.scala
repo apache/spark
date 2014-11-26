@@ -21,7 +21,7 @@ import java.io.NotSerializableException
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack, ListBuffer}
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -900,7 +900,8 @@ class DAGScheduler(
     }
   }
 
-  private def updateAccumulator(event: CompletionEvent): Unit = {
+  /** Merge updates from a task to our local accumulator values */
+  private def updateAccumulators(event: CompletionEvent): Unit = {
     val task = event.task
     val stage = stageIdToStage(task.stageId)
     if (event.accumUpdates != null) {
@@ -975,7 +976,7 @@ class DAGScheduler(
             stage.resultOfJob match {
               case Some(job) =>
                 if (!job.finished(rt.outputId)) {
-                  updateAccumulator(event)
+                  updateAccumulators(event)
                   job.finished(rt.outputId) = true
                   job.numFinished += 1
                   // If the whole job has finished, remove it
@@ -1000,7 +1001,7 @@ class DAGScheduler(
             }
 
           case smt: ShuffleMapTask =>
-            updateAccumulator(event)
+            updateAccumulators(event)
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)

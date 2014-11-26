@@ -252,11 +252,10 @@ private object Accumulators {
   // TODO: Use soft references? => need to make readObject work properly then
   val originals = Map[Long, Accumulable[_, _]]()
   val localAccums = Map[Thread, Map[Long, Accumulable[_, _]]]()
-  var lastId: Long = 0
 
   private val nextAccumID = new AtomicLong(0)
 
-  def newId: Long = nextAccumID.getAndIncrement
+  def newId(): Long = nextAccumID.getAndIncrement
 
   def register(a: Accumulable[_, _], original: Boolean): Unit = synchronized {
     if (original) {
