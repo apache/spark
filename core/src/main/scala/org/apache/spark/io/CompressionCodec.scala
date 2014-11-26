@@ -18,6 +18,7 @@
 package org.apache.spark.io
 
 import java.io.{InputStream, OutputStream}
+import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 import net.jpountz.lz4.{LZ4BlockInputStream, LZ4BlockOutputStream}
@@ -48,6 +49,7 @@ trait CompressionCodec {
 private[spark] object CompressionCodec {
 
   private val shortCompressionCodecNames = Map(
+    "gzip" -> classOf[GzipCompressionCodec].getName,
     "lz4" -> classOf[LZ4CompressionCodec].getName,
     "lzf" -> classOf[LZFCompressionCodec].getName,
     "snappy" -> classOf[SnappyCompressionCodec].getName)
@@ -65,6 +67,27 @@ private[spark] object CompressionCodec {
 
   val DEFAULT_COMPRESSION_CODEC = "snappy"
   val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
+}
+
+
+/**
+ * :: DeveloperApi ::
+ * Gzip implementation of [[org.apache.spark.io.CompressionCodec]].
+ * Block size can be configured by `spark.io.compression.gzip.block.size`.
+ *
+ * Note: The wire protocol for this codec is not guaranteed to be compatible across versions
+ *       of Spark. This is intended for use as an internal compression utility within a single Spark
+ *       application.
+ */
+@DeveloperApi
+class GzipCompressionCodec(conf: SparkConf) extends CompressionCodec {
+
+  override def compressedOutputStream(s: OutputStream): OutputStream = {
+    val blockSize = conf.getInt("spark.io.compression.gzip.block.size", 32768)
+    new GZIPOutputStream(s, blockSize)
+  }
+
+  override def compressedInputStream(s: InputStream): InputStream = new GZIPInputStream(s)
 }
 
 

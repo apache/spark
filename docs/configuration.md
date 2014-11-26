@@ -474,9 +474,11 @@ Apart from these, the following properties are also available, and may be useful
   <td>snappy</td>
   <td>
     The codec used to compress internal data such as RDD partitions, broadcast variables and
-    shuffle outputs. By default, Spark provides three codecs: <code>lz4</code>, <code>lzf</code>,
-    and <code>snappy</code>. You can also use fully qualified class names to specify the codec, 
+    shuffle outputs. By default, Spark provides three codecs: <code>gzip</code>, <code>lz4</code>,
+    <code>lzf</code>, and <code>snappy</code>. You can also use fully qualified class names
+    to specify the codec, 
     e.g. 
+    <code>org.apache.spark.io.GzipCompresssionCodec</code>,    
     <code>org.apache.spark.io.LZ4CompressionCodec</code>,    
     <code>org.apache.spark.io.LZFCompressionCodec</code>,
     and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
@@ -496,6 +498,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Block size (in bytes) used in LZ4 compression, in the case when LZ4 compression codec
     is used. Lowering this block size will also lower shuffle memory usage when LZ4 is used.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.io.compression.gzip.block.size</code></td>
+  <td>32768</td>
+  <td>
+    Block size (in bytes) used in Gzip compression, in the case when Gzip compression codec
+    is used. Lowering this block size will also lower shuffle memory usage when Gzip is used.
   </td>
 </tr>
 <tr>
