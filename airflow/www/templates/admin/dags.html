@@ -1,0 +1,42 @@
+{% extends "admin/master.html" %}
+
+{% block title %}Airflow - DAGs{% endblock %}
+
+{% block head_css %}
+{{ super() }}
+{% endblock %}
+
+{% block body %}
+  <h2>DAGs</h2>
+
+    <table class="table table-striped table-bordered">
+        <tr>
+            <th>DAG</th>
+            <th>Filepath</th>
+            <th>Owner</th>
+            <th>Task Count</th>
+        </tr>
+        {% for dag in dags %}
+            <tr>
+                <td>
+                    <a href="{{ url_for('airflow.tree', dag_id=dag.dag_id) }}">
+                        {{ dag.dag_id }}
+                    </a>
+                </td>
+                <td>
+                    <a href="{{ url_for('airflow.code', dag_id=dag.dag_id) }}">
+                        {{ dag.filepath }}
+                    </a>
+                </td>
+                <td>{{ dag.owner }}</td>
+                <td>{{ dag.tasks|length }}</td>
+            </tr>
+        {% endfor %}
+    </table>
+{% endblock %}
+
+{% block tail %}
+  {{ super() }}
+  <script>
+  </script>
+{% endblock %}
