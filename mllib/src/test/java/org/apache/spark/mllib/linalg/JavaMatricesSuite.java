@@ -21,25 +21,34 @@ import static org.junit.Assert.*;
 import org.junit.Test;
 
 import java.io.Serializable;
+import java.util.Random;
 
 public class JavaMatricesSuite implements Serializable {
 
     @Test
     public void randMatrixConstruction() {
-        Matrix r = Matrices.rand(3, 4, 24);
-        DenseMatrix dr = DenseMatrix.rand(3, 4, 24);
+        Random rng = new Random(24);
+        Matrix r = Matrices.rand(3, 4, rng);
+        rng.setSeed(24);
+        DenseMatrix dr = DenseMatrix.rand(3, 4, rng);
         assertArrayEquals(r.toArray(), dr.toArray(), 0.0);
 
-        Matrix rn = Matrices.randn(3, 4, 24);
-        DenseMatrix drn = DenseMatrix.randn(3, 4, 24);
+        rng.setSeed(24);
+        Matrix rn = Matrices.randn(3, 4, rng);
+        rng.setSeed(24);
+        DenseMatrix drn = DenseMatrix.randn(3, 4, rng);
         assertArrayEquals(rn.toArray(), drn.toArray(), 0.0);
 
-        Matrix s = Matrices.sprand(3, 4, 0.5, 24);
-        SparseMatrix sr = SparseMatrix.sprand(3, 4, 0.5, 24);
+        rng.setSeed(24);
+        Matrix s = Matrices.sprand(3, 4, 0.5, rng);
+        rng.setSeed(24);
+        SparseMatrix sr = SparseMatrix.sprand(3, 4, 0.5, rng);
         assertArrayEquals(s.toArray(), sr.toArray(), 0.0);
 
-        Matrix sn = Matrices.sprandn(3, 4, 0.5, 24);
-        SparseMatrix srn = SparseMatrix.sprandn(3, 4, 0.5, 24);
+        rng.setSeed(24);
+        Matrix sn = Matrices.sprandn(3, 4, 0.5, rng);
+        rng.setSeed(24);
+        SparseMatrix srn = SparseMatrix.sprandn(3, 4, 0.5, rng);
         assertArrayEquals(sn.toArray(), srn.toArray(), 0.0);
     }
 
@@ -95,8 +104,10 @@ public class JavaMatricesSuite implements Serializable {
         int m = 3;
         int n = 2;
 
-        SparseMatrix spMat1 = SparseMatrix.sprand(m, n, 0.5, 42);
-        DenseMatrix deMat1 = DenseMatrix.rand(m, n, 42);
+        Random rng = new Random(42);
+        SparseMatrix spMat1 = SparseMatrix.sprand(m, n, 0.5, rng);
+        rng.setSeed(42);
+        DenseMatrix deMat1 = DenseMatrix.rand(m, n, rng);
         Matrix deMat2 = Matrices.eye(3);
         Matrix spMat2 = Matrices.speye(3);
         Matrix deMat3 = Matrices.eye(2);

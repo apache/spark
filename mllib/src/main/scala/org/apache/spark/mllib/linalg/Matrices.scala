@@ -19,9 +19,6 @@ package org.apache.spark.mllib.linalg
 
 import breeze.linalg.{Matrix => BM, DenseMatrix => BDM, CSCMatrix => BSM}
 
-import org.apache.spark.util.random.XORShiftRandom
-import org.apache.spark.util.Utils
-
 import java.util.{Random, Arrays}
 import scala.collection.mutable.ArrayBuffer
 
