@@ -58,7 +58,13 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
               </h4> ++
               appTable
             } else {
-              <h4>No Completed Applications Found</h4>
+              <h4>No completed applications found!</h4> ++
+              <p>Did you specify the correct logging directory?
+                Please verify your setting of <span style="font-style:italic">
+                spark.history.fs.logDirectory</span> and whether you have the permissions to
+                access it.<br /> It is also possible that your application did not run to
+                completion or did not stop the SparkContext.
+              </p>
             }
           }
         </div>
