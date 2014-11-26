@@ -28,7 +28,7 @@ from threading import Thread
 import warnings
 import heapq
 import bisect
-from random import Random
+import random
 from math import sqrt, log, isinf, isnan
 
 from pyspark.accumulators import PStatsParam
@@ -38,7 +38,7 @@ from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_full_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
-from pyspark.rddsampler import RDDSampler, RDDStratifiedSampler
+from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
@@ -310,17 +310,43 @@ class RDD(object):
 
     def sample(self, withReplacement, fraction, seed=None):
         """
-        Return a sampled subset of this RDD (relies on numpy and falls back
-        on default random generator if numpy is unavailable).
+        Return a sampled subset of this RDD.
+
+        >>> rdd = sc.parallelize(range(100), 4)
+        >>> rdd.sample(False, 0.1, 81).count()
+        10
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
+    def randomSplit(self, weights, seed=None):
+        """
+        Randomly splits this RDD with the provided weights.
+
+        :param weights: weights for splits, will be normalized if they don't sum to 1
+        :param seed: random seed
+        :return: split RDDs in a list
+
+        >>> rdd = sc.parallelize(range(5), 1)
+        >>> rdd1, rdd2 = rdd.randomSplit([2, 3], 17)
+        >>> rdd1.collect()
+        [1, 3]
+        >>> rdd2.collect()
+        [0, 2, 4]
+        """
+        s = float(sum(weights))
+        cweights = [0.0]
+        for w in weights:
+            cweights.append(cweights[-1] + w / s)
+        if seed is None:
+            seed = random.randint(0, 2 ** 32 - 1)
+        return [self.mapPartitionsWithIndex(RDDRangeSampler(lb, ub, seed).func, True)
+                for lb, ub in zip(cweights, cweights[1:])]
+
     # this is ported from scala/spark/RDD.scala
     def takeSample(self, withReplacement, num, seed=None):
         """
-        Return a fixed-size sampled subset of this RDD (currently requires
-        numpy).
+        Return a fixed-size sampled subset of this RDD.
 
         >>> rdd = sc.parallelize(range(0, 10))
         >>> len(rdd.takeSample(True, 20, 1))
@@ -341,7 +367,7 @@ class RDD(object):
         if initialCount == 0:
             return []
 
-        rand = Random(seed)
+        rand = random.Random(seed)
 
         if (not withReplacement) and num >= initialCount:
             # shuffle current RDD and return

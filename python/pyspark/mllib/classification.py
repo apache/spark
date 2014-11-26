@@ -20,48 +20,98 @@ from math import exp
 import numpy
 from numpy import array
 
+from pyspark import RDD
 from pyspark.mllib.common import callMLlibFunc
 from pyspark.mllib.linalg import SparseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint, LinearModel, _regression_train_wrapper
 
 
-__all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'SVMModel',
-           'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes']
+__all__ = ['LogisticRegressionModel', 'LogisticRegressionWithSGD', 'LogisticRegressionWithLBFGS',
+           'SVMModel', 'SVMWithSGD', 'NaiveBayesModel', 'NaiveBayes']
 
 
-class LogisticRegressionModel(LinearModel):
+class LinearBinaryClassificationModel(LinearModel):
+    """
+    Represents a linear binary classification model that predicts to whether an
+    example is positive (1.0) or negative (0.0).
+    """
+    def __init__(self, weights, intercept):
+        super(LinearBinaryClassificationModel, self).__init__(weights, intercept)
+        self._threshold = None
+
+    def setThreshold(self, value):
+        """
+        :: Experimental ::
+
+        Sets the threshold that separates positive predictions from negative
+        predictions. An example with prediction score greater than or equal
+        to this threshold is identified as an positive, and negative otherwise.
+        """
+        self._threshold = value
+
+    def clearThreshold(self):
+        """
+        :: Experimental ::
+
+        Clears the threshold so that `predict` will output raw prediction scores.
+        """
+        self._threshold = None
+
+    def predict(self, test):
+        """
+        Predict values for a single data point or an RDD of points using
+        the model trained.
+        """
+        raise NotImplementedError
+
+
+class LogisticRegressionModel(LinearBinaryClassificationModel):
 
     """A linear binary classification model derived from logistic regression.
 
     >>> data = [
-    ...     LabeledPoint(0.0, [0.0]),
-    ...     LabeledPoint(1.0, [1.0]),
-    ...     LabeledPoint(1.0, [2.0]),
-    ...     LabeledPoint(1.0, [3.0])
+    ...     LabeledPoint(0.0, [0.0, 1.0]),
+    ...     LabeledPoint(1.0, [1.0, 0.0]),
     ... ]
     >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(data))
-    >>> lrm.predict(array([1.0])) > 0
-    True
-    >>> lrm.predict(array([0.0])) <= 0
-    True
+    >>> lrm.predict([1.0, 0.0])
+    1
+    >>> lrm.predict([0.0, 1.0])
+    0
+    >>> lrm.predict(sc.parallelize([[1.0, 0.0], [0.0, 1.0]])).collect()
+    [1, 0]
+    >>> lrm.clearThreshold()
+    >>> lrm.predict([0.0, 1.0])
+    0.123...
+
     >>> sparse_data = [
     ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
     ...     LabeledPoint(1.0, SparseVector(2, {1: 1.0})),
-    ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
+    ...     LabeledPoint(0.0, SparseVector(2, {0: 1.0})),
     ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
     ... ]
     >>> lrm = LogisticRegressionWithSGD.train(sc.parallelize(sparse_data))
-    >>> lrm.predict(array([0.0, 1.0])) > 0
-    True
-    >>> lrm.predict(array([0.0, 0.0])) <= 0
-    True
-    >>> lrm.predict(SparseVector(2, {1: 1.0})) > 0
-    True
-    >>> lrm.predict(SparseVector(2, {1: 0.0})) <= 0
-    True
+    >>> lrm.predict(array([0.0, 1.0]))
+    1
+    >>> lrm.predict(array([1.0, 0.0]))
+    0
+    >>> lrm.predict(SparseVector(2, {1: 1.0}))
+    1
+    >>> lrm.predict(SparseVector(2, {0: 1.0}))
+    0
     """
+    def __init__(self, weights, intercept):
+        super(LogisticRegressionModel, self).__init__(weights, intercept)
+        self._threshold = 0.5
 
     def predict(self, x):
+        """
+        Predict values for a single data point or an RDD of points using
+        the model trained.
+        """
+        if isinstance(x, RDD):
+            return x.map(lambda v: self.predict(v))
+
         x = _convert_to_vector(x)
         margin = self.weights.dot(x) + self._intercept
         if margin > 0:
@@ -69,7 +119,10 @@ class LogisticRegressionModel(LinearModel):
         else:
             exp_margin = exp(margin)
             prob = exp_margin / (1 + exp_margin)
-        return 1 if prob > 0.5 else 0
+        if self._threshold is None:
+            return prob
+        else:
+            return 1 if prob > self._threshold else 0
 
 
 class LogisticRegressionWithSGD(object):
@@ -98,7 +151,7 @@ class LogisticRegressionWithSGD(object):
 
                                      (default: "l2")
 
-        @param intercept:         Boolean parameter which indicates the use
+        :param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).
@@ -111,7 +164,56 @@ class LogisticRegressionWithSGD(object):
         return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
 
 
-class SVMModel(LinearModel):
+class LogisticRegressionWithLBFGS(object):
+
+    @classmethod
+    def train(cls, data, iterations=100, initialWeights=None, regParam=0.01, regType="l2",
+              intercept=False, corrections=10, tolerance=1e-4):
+        """
+        Train a logistic regression model on the given data.
+
+        :param data:           The training data, an RDD of LabeledPoint.
+        :param iterations:     The number of iterations (default: 100).
+        :param initialWeights: The initial weights (default: None).
+        :param regParam:       The regularizer parameter (default: 0.01).
+        :param regType:        The type of regularizer used for training
+                               our model.
+
+                               :Allowed values:
+                                 - "l1" for using L1 regularization
+                                 - "l2" for using L2 regularization
+                                 - None for no regularization
+
+                                 (default: "l2")
+
+        :param intercept:      Boolean parameter which indicates the use
+                               or not of the augmented representation for
+                               training data (i.e. whether bias features
+                               are activated or not).
+        :param corrections:    The number of corrections used in the LBFGS
+                               update (default: 10).
+        :param tolerance:      The convergence tolerance of iterations for
+                               L-BFGS (default: 1e-4).
+
+        >>> data = [
+        ...     LabeledPoint(0.0, [0.0, 1.0]),
+        ...     LabeledPoint(1.0, [1.0, 0.0]),
+        ... ]
+        >>> lrm = LogisticRegressionWithLBFGS.train(sc.parallelize(data))
+        >>> lrm.predict([1.0, 0.0])
+        1
+        >>> lrm.predict([0.0, 1.0])
+        0
+        """
+        def train(rdd, i):
+            return callMLlibFunc("trainLogisticRegressionModelWithLBFGS", rdd, int(iterations), i,
+                                 float(regParam), str(regType), bool(intercept), int(corrections),
+                                 float(tolerance))
+
+        return _regression_train_wrapper(train, LogisticRegressionModel, data, initialWeights)
+
+
+class SVMModel(LinearBinaryClassificationModel):
 
     """A support vector machine.
 
@@ -122,8 +224,14 @@ class SVMModel(LinearModel):
     ...     LabeledPoint(1.0, [3.0])
     ... ]
     >>> svm = SVMWithSGD.train(sc.parallelize(data))
-    >>> svm.predict(array([1.0])) > 0
-    True
+    >>> svm.predict([1.0])
+    1
+    >>> svm.predict(sc.parallelize([[1.0]])).collect()
+    [1]
+    >>> svm.clearThreshold()
+    >>> svm.predict(array([1.0]))
+    1.25...
+
     >>> sparse_data = [
     ...     LabeledPoint(0.0, SparseVector(2, {0: -1.0})),
     ...     LabeledPoint(1.0, SparseVector(2, {1: 1.0})),
@@ -131,16 +239,29 @@ class SVMModel(LinearModel):
     ...     LabeledPoint(1.0, SparseVector(2, {1: 2.0}))
     ... ]
     >>> svm = SVMWithSGD.train(sc.parallelize(sparse_data))
-    >>> svm.predict(SparseVector(2, {1: 1.0})) > 0
-    True
-    >>> svm.predict(SparseVector(2, {0: -1.0})) <= 0
-    True
+    >>> svm.predict(SparseVector(2, {1: 1.0}))
+    1
+    >>> svm.predict(SparseVector(2, {0: -1.0}))
+    0
     """
+    def __init__(self, weights, intercept):
+        super(SVMModel, self).__init__(weights, intercept)
+        self._threshold = 0.0
 
     def predict(self, x):
+        """
+        Predict values for a single data point or an RDD of points using
+        the model trained.
+        """
+        if isinstance(x, RDD):
+            return x.map(lambda v: self.predict(v))
+
         x = _convert_to_vector(x)
         margin = self.weights.dot(x) + self.intercept
-        return 1 if margin >= 0 else 0
+        if self._threshold is None:
+            return margin
+        else:
+            return 1 if margin > self._threshold else 0
 
 
 class SVMWithSGD(object):
@@ -169,7 +290,7 @@ class SVMWithSGD(object):
 
                                      (default: "l2")
 
-        @param intercept:         Boolean parameter which indicates the use
+        :param intercept:         Boolean parameter which indicates the use
                                   or not of the augmented representation for
                                   training data (i.e. whether bias features
                                   are activated or not).
@@ -201,6 +322,8 @@ class NaiveBayesModel(object):
     0.0
     >>> model.predict(array([1.0, 0.0]))
     1.0
+    >>> model.predict(sc.parallelize([[1.0, 0.0]])).collect()
+    [1.0]
     >>> sparse_data = [
     ...     LabeledPoint(0.0, SparseVector(2, {1: 0.0})),
     ...     LabeledPoint(0.0, SparseVector(2, {1: 1.0})),
@@ -219,7 +342,9 @@ class NaiveBayesModel(object):
         self.theta = theta
 
     def predict(self, x):
-        """Return the most likely class for a data vector x"""
+        """Return the most likely class for a data vector or an RDD of vectors"""
+        if isinstance(x, RDD):
+            return x.map(lambda v: self.predict(v))
         x = _convert_to_vector(x)
         return self.labels[numpy.argmax(self.pi + x.dot(self.theta.transpose()))]
 
@@ -250,7 +375,8 @@ class NaiveBayes(object):
 def _test():
     import doctest
     from pyspark import SparkContext
-    globs = globals().copy()
+    import pyspark.mllib.classification
+    globs = pyspark.mllib.classification.__dict__.copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()

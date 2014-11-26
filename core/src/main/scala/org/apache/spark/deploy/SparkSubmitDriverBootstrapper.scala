@@ -129,6 +129,16 @@ private[spark] object SparkSubmitDriverBootstrapper {
 
     val process = builder.start()
 
+    // If we kill an app while it's running, its sub-process should be killed too.
+    Runtime.getRuntime().addShutdownHook(new Thread() {
+      override def run() = {
+        if (process != null) {
+          process.destroy()
+          process.waitFor()
+        }
+      }
+    })
+
     // Redirect stdout and stderr from the child JVM
     val stdoutThread = new RedirectThread(process.getInputStream, System.out, "redirect stdout")
     val stderrThread = new RedirectThread(process.getErrorStream, System.err, "redirect stderr")
@@ -139,14 +149,15 @@ private[spark] object SparkSubmitDriverBootstrapper {
     // subprocess there already reads directly from our stdin, so we should avoid spawning a
     // thread that contends with the subprocess in reading from System.in.
     val isWindows = Utils.isWindows
-    val isPySparkShell = sys.env.contains("PYSPARK_SHELL")
+    val isSubprocess = sys.env.contains("IS_SUBPROCESS")
     if (!isWindows) {
       val stdinThread = new RedirectThread(System.in, process.getOutputStream, "redirect stdin")
       stdinThread.start()
-      // For the PySpark shell, Spark submit itself runs as a python subprocess, and so this JVM
-      // should terminate on broken pipe, which signals that the parent process has exited. In
-      // Windows, the termination logic for the PySpark shell is handled in java_gateway.py
-      if (isPySparkShell) {
+      // Spark submit (JVM) may run as a subprocess, and so this JVM should terminate on
+      // broken pipe, signaling that the parent process has exited. This is the case if the
+      // application is launched directly from python, as in the PySpark shell. In Windows,
+      // the termination logic is handled in java_gateway.py
+      if (isSubprocess) {
         stdinThread.join()
         process.destroy()
       }

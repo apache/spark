@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.json.JsonRDD.{enforceCorrectType, compatibleType}
 import org.apache.spark.sql.{Row, SQLConf, QueryTest}
+import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
@@ -778,5 +779,126 @@ class JsonSuite extends QueryTest {
       Seq(null, null, Seq(Seq(null), Seq(Seq("2"))), null) ::
       Seq(null, null, null, Seq(Seq(null, Seq(1, 2, 3)))) :: Nil
     )
+  }
+
+  test("SPARK-4228 SchemaRDD to JSON")
+  {
+    val schema1 = StructType(
+      StructField("f1", IntegerType, false) ::
+      StructField("f2", StringType, false) ::
+      StructField("f3", BooleanType, false) ::
+      StructField("f4", ArrayType(StringType), nullable = true) ::
+      StructField("f5", IntegerType, true) :: Nil)
+
+    val rowRDD1 = unparsedStrings.map { r =>
+      val values = r.split(",").map(_.trim)
+      val v5 = try values(3).toInt catch {
+        case _: NumberFormatException => null
+      }
+      Row(values(0).toInt, values(1), values(2).toBoolean, r.split(",").toList, v5)
+    }
+
+    val schemaRDD1 = applySchema(rowRDD1, schema1)
+    schemaRDD1.registerTempTable("applySchema1")
+    val schemaRDD2 = schemaRDD1.toSchemaRDD
+    val result = schemaRDD2.toJSON.collect()
+    assert(result(0) == "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
+    assert(result(3) == "{\"f1\":4,\"f2\":\"D4\",\"f3\":true,\"f4\":[\"4\",\" D4\",\" true\",\" 2147483644\"],\"f5\":2147483644}")
+
+    val schema2 = StructType(
+      StructField("f1", StructType(
+        StructField("f11", IntegerType, false) ::
+        StructField("f12", BooleanType, false) :: Nil), false) ::
+      StructField("f2", MapType(StringType, IntegerType, true), false) :: Nil)
+
+    val rowRDD2 = unparsedStrings.map { r =>
+      val values = r.split(",").map(_.trim)
+      val v4 = try values(3).toInt catch {
+        case _: NumberFormatException => null
+      }
+      Row(Row(values(0).toInt, values(2).toBoolean), Map(values(1) -> v4))
+    }
+
+    val schemaRDD3 = applySchema(rowRDD2, schema2)
+    schemaRDD3.registerTempTable("applySchema2")
+    val schemaRDD4 = schemaRDD3.toSchemaRDD
+    val result2 = schemaRDD4.toJSON.collect()
+
+    assert(result2(1) == "{\"f1\":{\"f11\":2,\"f12\":false},\"f2\":{\"B2\":null}}")
+    assert(result2(3) == "{\"f1\":{\"f11\":4,\"f12\":true},\"f2\":{\"D4\":2147483644}}")
+
+    val jsonSchemaRDD = jsonRDD(primitiveFieldAndType)
+    val primTable = jsonRDD(jsonSchemaRDD.toJSON)
+    primTable.registerTempTable("primativeTable")
+    checkAnswer(
+        sql("select * from primativeTable"),
+        (BigDecimal("92233720368547758070"),
+        true,
+        1.7976931348623157E308,
+        10,
+        21474836470L,
+        "this is a simple string.") :: Nil
+      )
+
+    val complexJsonSchemaRDD = jsonRDD(complexFieldAndType1)
+    val compTable = jsonRDD(complexJsonSchemaRDD.toJSON)
+    compTable.registerTempTable("complexTable")
+    // Access elements of a primitive array.
+    checkAnswer(
+      sql("select arrayOfString[0], arrayOfString[1], arrayOfString[2] from complexTable"),
+      ("str1", "str2", null) :: Nil
+    )
+
+    // Access an array of null values.
+    checkAnswer(
+      sql("select arrayOfNull from complexTable"),
+      Seq(Seq(null, null, null, null)) :: Nil
+    )
+
+    // Access elements of a BigInteger array (we use DecimalType internally).
+    checkAnswer(
+      sql("select arrayOfBigInteger[0], arrayOfBigInteger[1], arrayOfBigInteger[2] from complexTable"),
+      (BigDecimal("922337203685477580700"), BigDecimal("-922337203685477580800"), null) :: Nil
+    )
+
+    // Access elements of an array of arrays.
+    checkAnswer(
+      sql("select arrayOfArray1[0], arrayOfArray1[1] from complexTable"),
+      (Seq("1", "2", "3"), Seq("str1", "str2")) :: Nil
+    )
+
+    // Access elements of an array of arrays.
+    checkAnswer(
+      sql("select arrayOfArray2[0], arrayOfArray2[1] from complexTable"),
+      (Seq(1.0, 2.0, 3.0), Seq(1.1, 2.1, 3.1)) :: Nil
+    )
+
+    // Access elements of an array inside a filed with the type of ArrayType(ArrayType).
+    checkAnswer(
+      sql("select arrayOfArray1[1][1], arrayOfArray2[1][1] from complexTable"),
+      ("str2", 2.1) :: Nil
+    )
+
+    // Access a struct and fields inside of it.
+    checkAnswer(
+      sql("select struct, struct.field1, struct.field2 from complexTable"),
+      Row(
+        Row(true, BigDecimal("92233720368547758070")),
+        true,
+        BigDecimal("92233720368547758070")) :: Nil
+    )
+
+    // Access an array field of a struct.
+    checkAnswer(
+      sql("select structWithArrayFields.field1, structWithArrayFields.field2 from complexTable"),
+      (Seq(4, 5, 6), Seq("str1", "str2")) :: Nil
+    )
+
+    // Access elements of an array field of a struct.
+    checkAnswer(
+      sql("select structWithArrayFields.field1[1], structWithArrayFields.field2[3] from complexTable"),
+      (5, null) :: Nil
+    )
+
   }
 }

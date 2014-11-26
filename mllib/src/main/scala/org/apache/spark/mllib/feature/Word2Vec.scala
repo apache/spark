@@ -461,4 +461,11 @@ class Word2VecModel private[mllib] (
       .tail
       .toArray
   }
+  
+  /**
+   * Returns a map of words to their vector representations.
+   */
+  def getVectors: Map[String, Array[Float]] = {
+    model
+  }
 }
