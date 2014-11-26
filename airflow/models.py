@@ -990,6 +990,10 @@ class DAG(Base):
         return os.path.dirname(self.full_filepath)
 
     @property
+    def owner(self):
+        return ", ".join(list(set([t.owner for t in self.tasks])))
+
+    @property
     def latest_execution_date(self):
         TI = TaskInstance
         session = settings.Session()

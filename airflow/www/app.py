@@ -70,7 +70,7 @@ class HomeView(AdminIndexView):
     @expose("/")
     def index(self):
         dags = sorted(dagbag.dags.values(), key=lambda dag: dag.dag_id)
-        return self.render('admin/dags.html', dags=dags)
+        return self.render('airflow/dags.html', dags=dags)
 admin = Admin(app, name="Airflow", index_view=HomeView(name='DAGs'))
 
 
@@ -81,7 +81,7 @@ class Airflow(BaseView):
 
     @expose('/')
     def index(self):
-        return self.render('admin/dags.html')
+        return self.render('airflow/dags.html')
 
     @expose('/query')
     def query(self):
@@ -107,7 +107,7 @@ class Airflow(BaseView):
         form = QueryForm(request.form, data=data)
         session.commit()
         session.close()
-        return self.render('admin/query.html', form=form, results=results)
+        return self.render('airflow/query.html', form=form, results=results)
 
     @expose('/code')
     def code(self):
@@ -118,7 +118,7 @@ class Airflow(BaseView):
         html_code = highlight(
             code, PythonLexer(), HtmlFormatter(noclasses=True))
         return self.render(
-            'admin/code.html', html_code=html_code, dag=dag, title=title)
+            'airflow/code.html', html_code=html_code, dag=dag, title=title)
 
     @expose('/log')
     def log(self):
@@ -139,7 +139,7 @@ class Airflow(BaseView):
         html_code = log
 
         return self.render(
-            'admin/code.html', html_code=html_code, dag=dag, title=title)
+            'airflow/code.html', html_code=html_code, dag=dag, title=title)
 
     @expose('/task')
     def task(self):
@@ -184,7 +184,7 @@ class Airflow(BaseView):
                 )
 
         return self.render(
-            'admin/task.html',
+            'airflow/task.html',
             attributes=attributes,
             special_attrs_rendered=special_attrs_rendered,
             dag=dag, title=title)
@@ -283,7 +283,7 @@ class Airflow(BaseView):
         data = json.dumps(data, indent=4, default=utils.json_ser)
 
         return self.render(
-            'admin/tree.html',
+            'airflow/tree.html',
             dag=dag, data=data)
 
     @expose('/graph')
@@ -334,7 +334,7 @@ class Airflow(BaseView):
         session.close()
 
         return self.render(
-            'admin/graph.html',
+            'airflow/graph.html',
             dag=dag,
             form=form,
             execution_date=dttm.isoformat(),
@@ -368,7 +368,7 @@ class Airflow(BaseView):
         session.close()
 
         return self.render(
-            'admin/chart.html',
+            'airflow/chart.html',
             dag=dag,
             data=all_data,
             height="500px",
@@ -398,7 +398,7 @@ class Airflow(BaseView):
         session.close()
 
         return self.render(
-            'admin/chart.html',
+            'airflow/chart.html',
             dag=dag,
             data=all_data,
             height="500px",
@@ -462,7 +462,7 @@ class Airflow(BaseView):
             }]
         }
         return self.render(
-            'admin/gantt.html',
+            'airflow/gantt.html',
             dag=dag,
             execution_date=dttm.isoformat(),
             form=form,
