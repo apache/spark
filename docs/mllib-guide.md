@@ -62,6 +62,30 @@ To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 
 
 # Migration Guide
 
+## From 1.1 to 1.2
+
+The only API changes in MLlib v1.2 are in
+[`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree),
+which continues to be an experimental API in MLlib 1.2:
+
+1. *(Breaking change)* The Scala API for classification takes a named argument specifying the number
+of classes.  In MLlib v1.1, this argument was called `numClasses` in Python and
+`numClassesForClassification` in Scala.  In MLlib v1.2, the names are both set to `numClasses`.
+This `numClasses` parameter is specified either via
+[`Strategy`](api/scala/index.html#org.apache.spark.mllib.tree.configuration.Strategy)
+or via [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree)
+static `trainClassifier` and `trainRegressor` methods.
+
+2. *(Breaking change)* The API for
+[`Node`](api/scala/index.html#org.apache.spark.mllib.tree.model.Node) has changed.
+This should generally not affect user code, unless the user manually constructs decision trees
+(instead of using the `trainClassifier` or `trainRegressor` methods).
+The tree `Node` now includes more information, including the probability of the predicted label
+(for classification).
+
+Examples in the Spark distribution and examples in the
+[Decision Trees Guide](mllib-decision-tree.html#examples) have been updated accordingly.
+
 ## From 1.0 to 1.1
 
 The only API changes in MLlib v1.1 are in

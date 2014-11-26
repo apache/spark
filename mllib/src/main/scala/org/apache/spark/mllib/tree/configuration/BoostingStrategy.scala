@@ -85,7 +85,7 @@ object BoostingStrategy {
       case "Regression" =>
         new BoostingStrategy(treeStrategy, SquaredError)
       case _ =>
-        throw new IllegalArgumentException(s"$algo is not supported by the boosting.")
+        throw new IllegalArgumentException(s"$algo is not supported by boosting.")
     }
   }
 }
