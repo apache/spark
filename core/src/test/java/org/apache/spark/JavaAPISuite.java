@@ -18,13 +18,18 @@
 package org.apache.spark;
 
 import java.io.*;
-import java.nio.channels.FileChannel;
-import java.nio.ByteBuffer;
 import java.net.URI;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.*;
 import java.util.concurrent.*;
 
-import org.apache.spark.input.PortableDataStream;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -51,8 +56,10 @@ import org.junit.Test;
 import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.executor.TaskMetrics;
+import org.apache.spark.input.PortableDataStream;
 import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
+import org.apache.spark.rdd.JdbcRDD;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.util.StatCounter;
 
@@ -1508,4 +1515,77 @@ public class JavaAPISuite implements Serializable {
         conf.get("spark.kryo.classesToRegister"));
   }
 
+
+  private void setUpJdbc() throws Exception {
+    Class.forName("org.apache.derby.jdbc.EmbeddedDriver");
+    Connection connection =
+      DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb;create=true");
+
+    try {
+      Statement create = connection.createStatement();
+      create.execute(
+        "CREATE TABLE FOO(" +
+        "ID INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1)," +
+        "DATA INTEGER)");
+      create.close();
+
+      PreparedStatement insert = connection.prepareStatement("INSERT INTO FOO(DATA) VALUES(?)");
+      for (int i = 1; i <= 100; i++) {
+        insert.setInt(i, i * 2);
+        insert.executeUpdate();
+      }
+    } catch (SQLException e) {
+      // If table doesn't exist...
+      if (e.getSQLState().compareTo("X0Y32") != 0) {
+        throw e;
+      }
+    } finally {
+      connection.close();
+    }
+  }
+
+  private void tearDownJdbc() throws SQLException {
+    try {
+      DriverManager.getConnection("jdbc:derby:;shutdown=true");
+    } catch(SQLException e) {
+      if (e.getSQLState().compareTo("XJ015") != 0) {
+        throw e;
+      }
+    }
+  }
+
+  @Test
+  public void testJavaJdbcRDD() throws Exception {
+    setUpJdbc();
+
+    try {
+      JavaRDD<Integer> rdd = JdbcRDD.create(
+        sc,
+        new JdbcRDD.ConnectionFactory() {
+          @Override
+          public Connection getConnection() throws SQLException {
+            return DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb");
+          }
+        },
+        "SELECT DATA FROM FOO WHERE ? <= ID AND ID <= ?",
+        1, 100, 3,
+        new Function<ResultSet, Integer>() {
+          @Override
+          public Integer call(ResultSet r) throws Exception {
+            return r.getInt(1);
+          }
+        }
+      ).cache();
+
+      Assert.assertEquals(rdd.count(), 100);
+      Assert.assertEquals(rdd.reduce(new Function2<Integer, Integer, Integer>() {
+        @Override
+        public Integer call(Integer i1, Integer i2) {
+          return i1 + i2;
+        }
+      }), Integer.valueOf(10100));
+    } finally {
+      tearDownJdbc();
+    }
+  }
 }
