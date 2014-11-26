@@ -31,7 +31,8 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt
     val requestedFirst = (requestedPage - 1) * pageSize
-    val requestedIncomplete = Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
+    val requestedIncomplete =
+      Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
 
     val allApps = parent.getApplicationList().filter( app =>
       (!requestedIncomplete && !app.incomplete) || (requestedIncomplete && app.incomplete)
@@ -101,7 +102,13 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
             }
           }
           <a href={makePageLink(actualPage, !requestedIncomplete)}>
-            {if (requestedIncomplete) {"Back to completed applications"} else {"Show incompleted applications"}}
+            {
+              if (requestedIncomplete) {
+                "Back to completed applications"
+              } else {
+                "Show incompleted applications"
+              }
+            }
           </a>
         </div>
       </div>
@@ -125,7 +132,8 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     val uiAddress = HistoryServer.UI_PATH_PREFIX + s"/${info.id}"
     val startTime = UIUtils.formatDate(info.startTime)
     val endTime = if(info.endTime != -1) UIUtils.formatDate(info.endTime) else "-"
-    val duration = if(info.endTime != -1) UIUtils.formatDuration(info.endTime - info.startTime) else "-"
+    val duration =
+      if(info.endTime != -1) UIUtils.formatDuration(info.endTime - info.startTime) else "-"
     val lastUpdated = UIUtils.formatDate(info.lastUpdated)
     <tr>
       <td><a href={uiAddress}>{info.id}</a></td>
