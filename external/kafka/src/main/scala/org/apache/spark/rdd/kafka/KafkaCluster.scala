@@ -169,7 +169,12 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
         needed.foreach { tp =>
           respMap.get(tp).foreach { errAndOffsets =>
             if (errAndOffsets.error == ErrorMapping.NoError) {
-              result += tp -> errAndOffsets.offsets
+              if (errAndOffsets.offsets.nonEmpty) {
+                result += tp -> errAndOffsets.offsets
+              } else {
+                errs.append(new Exception(
+                  s"Empty offsets for ${tp}, is ${before} before log beginning?"))
+              }
             } else {
               errs.append(ErrorMapping.exceptionFor(errAndOffsets.error))
             }
