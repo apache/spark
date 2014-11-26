@@ -134,9 +134,12 @@ if __name__ == "__main__":
                                          categoricalFeaturesInfo=categoricalFeaturesInfo)
     # Print learned tree and stats.
     print "Trained DecisionTree for classification:"
-    print "  Model numNodes: %d\n" % model.numNodes()
-    print "  Model depth: %d\n" % model.depth()
-    print "  Training accuracy: %g\n" % getAccuracy(model, reindexedData)
-    print model
+    print "  Model numNodes: %d" % model.numNodes()
+    print "  Model depth: %d" % model.depth()
+    print "  Training accuracy: %g" % getAccuracy(model, reindexedData)
+    if model.numNodes() < 20:
+        print model.toDebugString()
+    else:
+        print model
 
     sc.stop()
