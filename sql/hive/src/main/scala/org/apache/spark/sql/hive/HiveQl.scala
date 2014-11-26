@@ -516,7 +516,7 @@ private[hive] object HiveQl {
 
       // Return one query for each insert clause.
       val queries = insertClauses.map { case Token("TOK_INSERT", singleInsert) =>
-        var (
+        val (
             intoClause ::
             destClause ::
             selectClause ::
@@ -550,8 +550,7 @@ private[hive] object HiveQl {
             singleInsert)
         }
 
-        initWindow
-        checkWindowDef(windowClause)
+        initWindowDef(windowClause)
 
         val relations = nodeToRelation(fromClause)
         val withWhere = whereClause.map { whereNode =>
@@ -615,16 +614,14 @@ private[hive] object HiveQl {
           // Not a transformation so must be either project or aggregation.
           val selectExpressions = nameExpressions(select.getChildren.flatMap(selExprNodeToExpr))
 
-          checkWindowPartitions match {
-            case Some(partition) =>
-              windowToPlan(partition, selectExpressions, withLateralView)
-            case None =>
-              groupByClause match {
-                case Some(groupBy) =>
-                  Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withLateralView)
-                case None =>
-                  Project(selectExpressions, withLateralView)
-              }
+          //not support both window and group by yet
+          groupByClause match {
+            case Some(groupBy) =>
+              Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withLateralView)
+            case None => {
+              val withWindowView = windowToPlan(selectExpressions, withLateralView)
+              Project(selectExpressions, withWindowView)
+            }
           }
         }
 
@@ -876,20 +873,15 @@ private[hive] object HiveQl {
   }
 
   // store the window def of current sql
-  // use thread id as key to avoid mistake when muti sqls parse at the same time
-  protected val windowDefMap = new ConcurrentHashMap[Long,Map[String, Seq[ASTNode]]]()
+  // use thread id as key to avoid mistake when multi-sqls parse at the same time
+  protected val windowDefMap = new ConcurrentHashMap[Long, Map[String, Seq[ASTNode]]]()
 
-  // store the window spec of current sql
-  // use thread id as key to avoid mistake when muti sqls parse at the same time
-  protected val windowPartitionsMap = new ConcurrentHashMap[Long, ArrayBuffer[Node]]()
+  // store the window spec number of current sql
+  protected val windowNoMap = new ConcurrentHashMap[Long, Int]()
 
-  protected def initWindow() = {
-    windowDefMap.put(Thread.currentThread().getId, Map[String, Seq[ASTNode]]())
-    windowPartitionsMap.put(Thread.currentThread().getId, new ArrayBuffer[Node]())
-  }
-  protected def checkWindowDef(windowClause: Option[Node]) = {
+  protected def initWindowDef(windowClause: Option[Node]) = {
 
-    var winDefs = windowDefMap.get(Thread.currentThread().getId)
+    var winDefs = Map[String, Seq[ASTNode]]()
 
     windowClause match {
       case Some(window) => window.getChildren.foreach {
@@ -901,8 +893,15 @@ private[hive] object HiveQl {
     }
 
     windowDefMap.put(Thread.currentThread().getId, winDefs)
+    windowNoMap.put(Thread.currentThread().getId, 0)
   }
 
+  protected def nextWindowNo: Int = {
+    var no = windowNoMap.get(Thread.currentThread().getId)
+    no += 1
+    windowNoMap.put(Thread.currentThread().getId, no)
+    no
+  }
   protected def translateWindowSpec(windowSpec: Seq[ASTNode]): Seq[ASTNode]= {
 
     windowSpec match {
@@ -928,97 +927,59 @@ private[hive] object HiveQl {
       alias, sys.error("no window def for " + alias))
   }
 
-  protected def addWindowPartitions(partition: Node) = {
+  protected def windowToPlan(selectExpressions: Seq[NamedExpression],
+    withLateralView: LogicalPlan): LogicalPlan = {
 
-    var winPartitions = windowPartitionsMap.get(Thread.currentThread().getId)
-    winPartitions += partition
-    windowPartitionsMap.put(Thread.currentThread().getId, winPartitions)
-  }
+    val windowAttributes = new ArrayBuffer[WindowAttribute]
+    val attrExpressions = new ArrayBuffer[NamedExpression]
+    selectExpressions.foreach { sel =>
+      sel.collect {
+        case win: WindowAttribute => windowAttributes += win
+        case attr: UnresolvedAttribute => attrExpressions += attr
+      }
+    }
 
-  protected def getWindowPartitions(): Seq[Node]= {
-    windowPartitionsMap.get(Thread.currentThread().getId).toSeq
-  }
+    // Multi-step of WindowFunction will be needed,
+    // if there're multi-windowAttributes with different window partitions,
+    var currentPlan = withLateralView
+    while (!windowAttributes.isEmpty) {
 
-  protected def checkWindowPartitions(): Option[Seq[ASTNode]] = {
+      var currentPartition: WindowPartition = null
+      val computeExpressions = new ArrayBuffer[WindowAttribute]
+      val otherExpressions = attrExpressions.clone()
 
-    val partitionUnits = new ArrayBuffer[Seq[ASTNode]]()
+      windowAttributes.foreach(expr => {
+        val windowPartition = expr.windowSpec.windowPartition
 
-    getWindowPartitions.map {
-      case Token("TOK_PARTITIONINGSPEC", partition)  => Some(partition)
-      case _ => None
-    }.foreach {
-      case Some(partition) => {
-        if (partitionUnits.isEmpty) partitionUnits += partition
-        else {
-          // only add different window partitions
-          try {
-            partition zip partitionUnits.head foreach {
-              case (l,r) => l checkEquals r
-            }
-          } catch {
-            case re: RuntimeException => partitionUnits += partition
-          }
+        if (currentPartition == null) {
+          computeExpressions += expr
+          currentPartition = windowPartition
+        } else if (currentPartition == windowPartition) {
+          computeExpressions += expr
         }
-      }
-      case None => // do nothing
-    }
+      })
 
-    // check whether all window partitions are same, we just support same window partition now
-    if (partitionUnits.size == 0 && getWindowPartitions.size > 0) {
-      Some(Seq())
-    } else if (partitionUnits.size == 1) {
-      Some(partitionUnits.head)
-    } else if (partitionUnits.size > 1) {
-      throw new NotImplementedError(s"not support muti different window specs now." +
-        " use subQuery instead.")
-    } else {
-      None
+      val partitionExpr = currentPartition.partitionBy
+      val sortExpr = currentPartition.sortBy
+
+      val withWindowPartition =
+        if (partitionExpr.size > 0) {
+          if (sortExpr.size > 0) SortPartitions(sortExpr, Repartition(partitionExpr, currentPlan))
+          else Repartition(partitionExpr, currentPlan)
+        } else {
+          if (sortExpr.size > 0) Sort(sortExpr, currentPlan)
+          else currentPlan
+        }
+
+      currentPlan = WindowFunction(partitionExpr, computeExpressions.toSeq, otherExpressions, withWindowPartition)
+      attrExpressions ++= computeExpressions.map(_.toAttribute)
+      windowAttributes --= computeExpressions
+
     }
+    currentPlan
   }
 
-  protected def windowToPlan(partitionClause: Seq[ASTNode],
-    selectExpressions: Seq[NamedExpression], withLateralView: LogicalPlan): LogicalPlan = {
-
-    val (orderByClause :: sortByClause :: distributeByClause :: clusterByClause :: Nil) =
-      getClauses(
-        Seq(
-          "TOK_ORDERBY",
-          "TOK_SORTBY",
-          "TOK_DISTRIBUTEBY",
-          "TOK_CLUSTERBY"),
-        partitionClause)
-
-    val partitionExpr = (distributeByClause orElse clusterByClause) match {
-      case Some(partitionBy) => partitionBy.getChildren.map(nodeToExpr)
-      case None => Seq()
-    }
-
-    val withWindowPartition =
-      (orderByClause, sortByClause, distributeByClause, clusterByClause) match {
-        case (Some(totalOrdering), None, None, None) =>
-          Sort(totalOrdering.getChildren.map(nodeToSortOrder), withLateralView)
-        case (None, Some(perPartitionOrdering), None, None) =>
-          SortPartitions(perPartitionOrdering.getChildren.map(nodeToSortOrder), withLateralView)
-        case (None, None, Some(partitionExprs), None) =>
-          Repartition(partitionExprs.getChildren.map(nodeToExpr), withLateralView)
-        case (None, Some(perPartitionOrdering), Some(partitionExprs), None) =>
-          SortPartitions(perPartitionOrdering.getChildren.map(nodeToSortOrder),
-            Repartition(partitionExprs.getChildren.map(nodeToExpr), withLateralView))
-        case (Some(perPartitionOrdering), None, Some(partitionExprs), None) =>
-          SortPartitions(perPartitionOrdering.getChildren.map(nodeToSortOrder),
-            Repartition(partitionExprs.getChildren.map(nodeToExpr), withLateralView))
-        case (None, None, None, Some(clusterExprs)) =>
-          SortPartitions(clusterExprs.getChildren.map(nodeToExpr).map(SortOrder(_, Ascending)),
-            Repartition(clusterExprs.getChildren.map(nodeToExpr), withLateralView))
-        case (None, None, None, None) => withLateralView
-        case _ => sys.error("Unsupported set of ordering / distribution clauses.")
-      }
-
-    WindowFunction(partitionExpr, selectExpressions, withWindowPartition)
-
-  }
-
-  protected def checkWindowSpec(windowSpec: Seq[ASTNode]): WindowFrame = {
+  protected def checkWindowSpec(windowSpec: Seq[ASTNode]): WindowSpec = {
 
     val (partitionClause :: rowsFrame :: valueFrame :: Nil) = getClauses(
       Seq(
@@ -1027,12 +988,33 @@ private[hive] object HiveQl {
         "TOK_WINDOWVALUES"),
       translateWindowSpec(windowSpec))
 
-    partitionClause match {
-      case Some(partition) => addWindowPartitions(partition)
-      case None => addWindowPartitions(null)
+    val wp = partitionClause match {
+      case Some(partition) => {
+        val (orderByClause :: sortByClause :: distributeByClause :: clusterByClause :: Nil) =
+          getClauses(
+            Seq(
+              "TOK_ORDERBY",
+              "TOK_SORTBY",
+              "TOK_DISTRIBUTEBY",
+              "TOK_CLUSTERBY"),
+            partition.getChildren.toIndexedSeq.asInstanceOf[Seq[ASTNode]])
+
+        val partitionExpr = (distributeByClause orElse clusterByClause) match {
+          case Some(partitionBy) => partitionBy.getChildren.map(nodeToExpr)
+          case None => Seq()
+        }
+
+        val sortByExpr = (orderByClause orElse sortByClause) match {
+          case Some(sortBy) => sortBy.getChildren.map(nodeToSortOrder)
+          case None => Seq()
+        }
+        WindowPartition(partitionExpr, sortByExpr)
+      }
+      case None => WindowPartition(Seq(), Seq())
     }
 
-    (rowsFrame orElse valueFrame)match {
+
+    (rowsFrame orElse valueFrame) match {
       case Some(frame) => {
         val rangeSeq = frame.getChildren.toIndexedSeq
 
@@ -1057,14 +1039,14 @@ private[hive] object HiveQl {
           } else 0
 
           if (rowsFrame.isDefined) {
-            WindowFrame("ROWS_FRAME", preceding, following)
+            WindowSpec(wp, WindowFrame("ROWS_FRAME", preceding, following))
           } else {
-            WindowFrame("VALUE_FRAME", preceding, following)
+            WindowSpec(wp, WindowFrame("VALUE_FRAME", preceding, following))
           }
           
-        } else null
+        } else WindowSpec(wp, null)
       }
-      case None => null
+      case None => WindowSpec(wp, null)
     }
   }
 
@@ -1261,13 +1243,15 @@ private[hive] object HiveQl {
 
     /* UDFs - Must be last otherwise will preempt built in functions */
     case Token("TOK_FUNCTION", Token(name, Nil) :: args) => {
-      val exprs = new ArrayBuffer[Expression]
-      var windowFrame: WindowFrame = null
+      val exprs = new ArrayBuffer[Node]
+      var windowSpec: WindowSpec = null
       args.foreach {
-          case Token("TOK_WINDOWSPEC", winSpec) => windowFrame = checkWindowSpec(winSpec)
-          case a: ASTNode => exprs += nodeToExpr(a)
+          case Token("TOK_WINDOWSPEC", winSpec) => windowSpec = checkWindowSpec(winSpec)
+          case a: ASTNode => exprs += a
       }
-      UnresolvedFunction(name, exprs, windowFrame)
+      if (windowSpec == null) UnresolvedFunction(name, exprs.map(nodeToExpr))
+      else WindowAttribute(UnresolvedFunction(name, exprs.map(nodeToExpr)),
+        s"w_" + nextWindowNo, windowSpec)()
     }
 
     case Token("TOK_FUNCTIONSTAR", Token(name, Nil) :: args) =>

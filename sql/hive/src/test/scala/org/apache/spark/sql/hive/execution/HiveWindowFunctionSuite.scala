@@ -52,7 +52,7 @@ class HiveWindowFunctionSuite extends HiveComparisonTest {
   createQueryTest("1.testWindowing",
     """
       |SELECT p_mfgr, p_name, p_size,
-      |row_number() over(DISTRIBUTE BY p_mfgr SORT BY p_name) AS r,
+      |row_number() OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS r,
       |sum(p_retailprice) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name rows BETWEEN
       |unbounded preceding AND current row) AS s1
       |FROM part
@@ -61,15 +61,15 @@ class HiveWindowFunctionSuite extends HiveComparisonTest {
   createQueryTest("4.testCount",
     """
       |SELECT p_mfgr, p_name,
-      |count(p_size) over(DISTRIBUTE BY p_mfgr SORT BY p_name) AS cd
+      |count(p_size) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS cd
       |FROM part
     """.stripMargin, false)
 
   createQueryTest("5.testCountWithWindowingUDAF",
     """
       |SELECT p_mfgr, p_name,
-      |row_number() over(DISTRIBUTE BY p_mfgr SORT BY p_name) AS r,
-      |count(p_size) over(DISTRIBUTE BY p_mfgr SORT BY p_name) AS cd,
+      |row_number() OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS r,
+      |count(p_size) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS cd,
       |p_retailprice, sum(p_retailprice) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name rows
       |BETWEEN unbounded preceding AND current row) AS s1,
       |p_size
@@ -80,8 +80,8 @@ class HiveWindowFunctionSuite extends HiveComparisonTest {
     """
       |SELECT sub1.r, sub1.cd, sub1.s1
       |FROM (SELECT p_mfgr, p_name,
-      |row_number() over(DISTRIBUTE BY p_mfgr SORT BY p_name) AS r,
-      |count(p_size) over(DISTRIBUTE BY p_mfgr SORT BY p_name) AS cd,
+      |row_number() OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS r,
+      |count(p_size) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS cd,
       |p_retailprice, sum(p_retailprice) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name rows
       |BETWEEN unbounded preceding AND current row) AS s1,
       |p_size
@@ -91,14 +91,14 @@ class HiveWindowFunctionSuite extends HiveComparisonTest {
   createQueryTest("8.testMixedCaseAlias",
     """
       |SELECT p_mfgr, p_name, p_size,
-      |row_number() over(DISTRIBUTE BY p_mfgr SORT BY p_name, p_size desc) AS R
+      |row_number() OVER (DISTRIBUTE BY p_mfgr SORT BY p_name, p_size desc) AS R
       |FROM part
     """.stripMargin, false)
 
   createQueryTest("9.testHavingWithWindowingNoGBY",
     """
       |SELECT p_mfgr, p_name, p_size,
-      |row_number() over(DISTRIBUTE BY p_mfgr SORT BY p_name) AS r,
+      |row_number() OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS r,
       |sum(p_retailprice) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name rows BETWEEN
       |unbounded preceding AND current row)  AS s1
       |FROM part
@@ -119,7 +119,7 @@ class HiveWindowFunctionSuite extends HiveComparisonTest {
   createQueryTest("12.testFirstLastWithWhere",
     """
       |SELECT  p_mfgr,p_name, p_size,
-      |row_number() over(DISTRIBUTE BY p_mfgr SORT BY p_name) AS r,
+      |row_number() OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS r,
       |sum(p_size) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name rows BETWEEN
       |current row AND current row) AS s2,
       |first_value(p_size) OVER w1 AS f,
@@ -143,9 +143,35 @@ class HiveWindowFunctionSuite extends HiveComparisonTest {
   createQueryTest("14.testNoSortClause",
     """
       |SELECT  p_mfgr,p_name, p_size,
-      |row_number() over(DISTRIBUTE BY p_mfgr SORT BY p_name) AS r
+      |row_number() OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS r
       |FROM part
       |window w1 AS (DISTRIBUTE BY p_mfgr SORT BY p_name rows BETWEEN 2 preceding AND 2 following)
+    """.stripMargin, false)
+
+  createQueryTest("15.testExpressions",
+    """
+      |SELECT  p_mfgr,p_name, p_size,
+      |ntile(3) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS nt,
+      |count(p_size) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS ca,
+      |avg(p_size) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS avg,
+      |stddev(p_size) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS st,
+      |first_value(p_size % 5) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS fv,
+      |last_value(p_size) OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS lv,
+      |first_value(p_size) OVER w1  AS fvW1
+      |FROM part
+      |window w1 as
+      |(DISTRIBUTE BY p_mfgr SORT BY p_mfgr, p_name rows BETWEEN 2 preceding AND 2 following)
+    """.stripMargin, false)
+
+  createQueryTest("16.testMultipleWindows",
+    """
+      |SELECT  p_mfgr,p_name, p_size,
+      |sum(p_size) OVER (DISTRIBUTE BY p_mfgr SORT BY p_size
+      |range BETWEEN 5 preceding AND current row) AS s2,
+      |first_value(p_size) OVER w1  AS fv1
+      |FROM part
+      |window w1 AS (DISTRIBUTE BY p_mfgr SORT BY p_mfgr, p_name
+      |rows BETWEEN 2 preceding AND 2 following)
     """.stripMargin, false)
 
   createQueryTest("18.testUDAFs",
@@ -174,6 +200,17 @@ class HiveWindowFunctionSuite extends HiveComparisonTest {
       |2 preceding AND 2 following)
     """.stripMargin, false)
 
+  createQueryTest("21.testDISTs",
+    """
+      |SELECT  p_mfgr,p_name, p_size,
+      |histogram_numeric(p_retailprice, 5) OVER w1 AS hist,
+      |percentile(p_partkey, 0.5) OVER w1 AS per,
+      |row_number() OVER (DISTRIBUTE BY p_mfgr SORT BY p_name) AS rn
+      |FROM part
+      |window w1 AS (DISTRIBUTE BY p_mfgr SORT BY p_mfgr, p_name
+      |rows BETWEEN 2 preceding AND 2 following)
+    """.stripMargin, false)
+
   createQueryTest("27.testMultipleRangeWindows",
     """
       |SELECT  p_mfgr,p_name, p_size,
@@ -200,6 +237,16 @@ class HiveWindowFunctionSuite extends HiveComparisonTest {
       |FROM part
       |window w1 AS (PARTITION BY p_mfgr  ORDER BY p_name  rows BETWEEN
       |2 preceding AND 2 following)
+    """.stripMargin, false)
+
+  createQueryTest("30.testDefaultPartitioningSpecRules",
+    """
+      |SELECT p_mfgr, p_name, p_size,
+      |sum(p_size) OVER w1 AS s,
+      |sum(p_size) OVER w2 AS s2
+      |FROM part
+      |window w1 AS (DISTRIBUTE BY p_mfgr SORT BY p_name rows BETWEEN 2 preceding AND 2 following),
+      |       w2 AS (PARTITION BY p_mfgr ORDER BY p_name)
     """.stripMargin, false)
 
   createQueryTest("31.testWindowCrossReference",
@@ -259,6 +306,17 @@ class HiveWindowFunctionSuite extends HiveComparisonTest {
       |2 preceding AND 2 following)
     """.stripMargin, false)
 
+  createQueryTest("38.testPartitioningVariousForms2",
+    """
+      |SELECT p_mfgr, p_name, p_size,
+      |sum(p_retailprice) OVER (PARTITION BY p_mfgr, p_name ORDER BY p_mfgr, p_name 
+      |rows BETWEEN unbounded preceding AND current row) AS s1,
+      |min(p_retailprice) OVER (DISTRIBUTE BY p_mfgr, p_name SORT BY p_mfgr, p_name 
+      |rows BETWEEN unbounded preceding AND current row) AS s2,
+      |max(p_retailprice) OVER (PARTITION BY p_mfgr, p_name ORDER BY p_name) AS s3
+      |FROM part
+    """.stripMargin, false)
+  
   createQueryTest("39.testUDFOnOrderCols",
     """
       |SELECT p_mfgr, p_type, substr(p_type, 2) AS short_ptype,
@@ -300,15 +358,9 @@ class HiveWindowFunctionSuite extends HiveComparisonTest {
   createQueryTest("44.testOverNoPartitionSingleAggregate",
     """
       |SELECT p_name, p_retailprice,
-      |round(avg(p_retailprice) over(),2)
+      |round(avg(p_retailprice) OVER (),2)
       |FROM part
       |ORDER BY p_name
     """.stripMargin, false)
-
-  createQueryTest("ntile",
-    """
-      |SELECT p_name, ntile(4) OVER (PARTITION BY p_mfgr ORDER BY p_size) FROM part
-    """.stripMargin, false)
-
 
 }

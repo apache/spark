@@ -58,6 +58,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       ImplicitGenerate ::
       StarExpansion ::
       ResolveFunctions ::
+      WindowAttributes ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
       TrimGroupingAliases ::
@@ -216,16 +217,30 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan =>
         q transformExpressions {
-          case u @ UnresolvedFunction(name, children, windowFrame) if u.childrenResolved => {
-            val function = registry.lookupFunction(name, children)
-            if (windowFrame != null) function match {
-              case agg: AggregateExpression =>
-                function.asInstanceOf[AggregateExpression].windowFrame = windowFrame
-              case _ => logError(s"function " + name + " does not support window frame")
-            }
-            function
-          }
+          case u @ UnresolvedFunction(name, children) if u.childrenResolved =>
+            registry.lookupFunction(name, children)
+        }
+    }
+  }
 
+  /**
+   * translate WindowAttribute in SelectExpression to attribute
+   */
+  object WindowAttributes extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case q: WindowFunction =>
+        q transformExpressions {
+          case u @ WindowAttribute(children, name, windowSpec)
+            // set window spec in AggregateExpression for execution and GlobalAggregates check
+            if (children.isInstanceOf[AggregateExpression]) => {
+              children.asInstanceOf[AggregateExpression].windowSpec = windowSpec
+              u
+            }
+        }
+      case q: LogicalPlan =>
+        q transformExpressions {
+          // translate WindowAttribute in SelectExpression to attribute
+          case u @ WindowAttribute(children, name, windowSpec) => u.toAttribute
         }
     }
   }
@@ -241,7 +256,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
 
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
       exprs.foreach(_.foreach {
-        case agg: AggregateExpression => return true
+        case agg: AggregateExpression if (agg.windowSpec == null) => return true
         case _ =>
       })
       false
