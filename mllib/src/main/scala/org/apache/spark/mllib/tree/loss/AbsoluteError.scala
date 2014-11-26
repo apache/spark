@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.tree.loss
 
+import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel
@@ -24,11 +25,11 @@ import org.apache.spark.rdd.RDD
 
 /**
  * :: DeveloperApi ::
- * Class for absolute error loss calculation (for regression).
- *
- * The absolute (L1) error is defined as:
- *  |y - F(x)|
- * where y is the label and F(x) is the model prediction for features x.
+ * Class for least absolute error loss calculation.
+ * The features x and the corresponding label y is predicted using the function F.
+ * For each instance:
+ * Loss: |y - F|
+ * Negative gradient: sign(y - F)
  */
 @DeveloperApi
 object AbsoluteError extends Loss {
@@ -36,8 +37,7 @@ object AbsoluteError extends Loss {
   /**
    * Method to calculate the gradients for the gradient boosting calculation for least
    * absolute error calculation.
-   * The gradient with respect to F(x) is: sign(F(x) - y)
-   * @param model Ensemble model
+   * @param model Model of the weak learner
    * @param point Instance of the training dataset
    * @return Loss gradient
    */
@@ -48,17 +48,19 @@ object AbsoluteError extends Loss {
   }
 
   /**
-   * Method to calculate loss of the base learner for the gradient boosting calculation.
+   * Method to calculate error of the base learner for the gradient boosting calculation.
    * Note: This method is not used by the gradient boosting algorithm but is useful for debugging
    * purposes.
-   * @param model Ensemble model
+   * @param model Model of the weak learner.
    * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @return  Mean absolute error of model on data
+   * @return
    */
   override def computeError(model: TreeEnsembleModel, data: RDD[LabeledPoint]): Double = {
-    data.map { y =>
+    val sumOfAbsolutes = data.map { y =>
       val err = model.predict(y.features) - y.label
       math.abs(err)
-    }.mean()
+    }.sum()
+    sumOfAbsolutes / data.count()
   }
+
 }
