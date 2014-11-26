@@ -106,8 +106,7 @@ def reindexClassLabels(data):
 
 def usage():
     print >> sys.stderr, \
-        "Usage: decision_tree_runner [libsvm format data filepath]\n" + \
-        " Note: This only supports binary classification."
+        "Usage: decision_tree_runner [libsvm format data filepath]"
     exit(1)
 
 
@@ -127,10 +126,11 @@ if __name__ == "__main__":
 
     # Re-index class labels if needed.
     (reindexedData, origToNewLabels) = reindexClassLabels(points)
+    numClasses = len(origToNewLabels)
 
     # Train a classifier.
     categoricalFeaturesInfo = {}  # no categorical features
-    model = DecisionTree.trainClassifier(reindexedData, numClasses=2,
+    model = DecisionTree.trainClassifier(reindexedData, numClasses=numClasses,
                                          categoricalFeaturesInfo=categoricalFeaturesInfo)
     # Print learned tree and stats.
     print "Trained DecisionTree for classification:"

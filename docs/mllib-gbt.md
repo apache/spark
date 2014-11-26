@@ -59,7 +59,7 @@ Notation: $N$ = number of instances. $y_i$ = label of instance $i$.  $x_i$ = fea
     <tr>
       <td>Squared Error</td>
 	  <td>Regression</td>
-	  <td>$\sum_{i=1}^{N} \frac{1}{2} (y_i - F(x_i))^2$</td><td>Also called L2 loss.  Default loss for regression tasks.</td>
+	  <td>$\sum_{i=1}^{N} (y_i - F(x_i))^2$</td><td>Also called L2 loss.  Default loss for regression tasks.</td>
     </tr>
     <tr>
       <td>Absolute Error</td>
@@ -84,6 +84,8 @@ We omit some decision tree parameters since those are covered in the [decision t
 
 
 ## Examples
+
+GBTs currently have APIs in Scala and Java.  Examples in both languages are shown below.
 
 ### Classification
 

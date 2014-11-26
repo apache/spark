@@ -19,8 +19,8 @@ MLlib supports decision trees for binary and multiclass classification and for r
 using both continuous and categorical features. The implementation partitions data by rows,
 allowing distributed training with millions of instances.
 
-Ensembles of trees are described in [random forests](mllib-random-forest.html) and
-[gradient-boosted trees](mllib-gbt.html).
+Ensembles of trees are described in the [Random Forest guide](mllib-random-forest.html) and
+[Gradient-Boosted Trees guide](mllib-gbt.html).
 
 ## Basic algorithm
 
