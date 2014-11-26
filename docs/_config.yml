@@ -13,7 +13,7 @@ include:
 
 # These allow the documentation to be updated with newer releases
 # of Spark, Scala, and Mesos.
-SPARK_VERSION: 1.2.0-SNAPSHOT
+SPARK_VERSION: 1.2.0
 SPARK_VERSION_SHORT: 1.2.0
 SCALA_BINARY_VERSION: "2.10"
 SCALA_VERSION: "2.10.4"
