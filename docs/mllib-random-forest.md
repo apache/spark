@@ -309,7 +309,7 @@ Double testMSE =
     public Double call(Double a, Double b) {
       return a + b;
     }
-  }) / data.count();
+  }) / testData.count();
 System.out.println("Test Mean Squared Error: " + testMSE);
 System.out.println("Learned regression forest model:\n" + model.toDebugString());
 {% endhighlight %}
