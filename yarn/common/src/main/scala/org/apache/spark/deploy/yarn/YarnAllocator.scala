@@ -301,6 +301,7 @@ private[yarn] abstract class YarnAllocator(
 
         val executorMemoryOverhead = (executorMemory + memoryOverhead)
         assert(container.getResource.getMemory >= executorMemoryOverhead)
+        removeContainerRequest()
 
         if (numExecutorsRunningNow > maxExecutors) {
           logInfo("""Ignoring container %s at host %s, since we already have the required number of
@@ -505,6 +506,9 @@ private[yarn] abstract class YarnAllocator(
 
   /** Called to release a previously allocated container. */
   protected def releaseContainer(container: Container): Unit
+
+  /** Called to remove container request. */
+  protected def removeContainerRequest(): Unit
 
   /**
    * Defines the interface for an allocate response from the RM. This is needed since the alpha
