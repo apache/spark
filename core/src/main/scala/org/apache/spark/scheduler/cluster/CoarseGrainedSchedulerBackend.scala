@@ -127,7 +127,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
         makeOffers()
 
       case KillTask(taskId, executorId, interruptThread) =>
-        executorDataMap(executorId).executorActor ! KillTask(taskId, executorId, interruptThread)
+        executorDataMap.get(executorId) match {
+          case Some(executorInfo) =>
+            executorInfo.executorActor ! KillTask(taskId, executorId, interruptThread)
+          case None =>
+            // Ignoring the task kill since the executor is not registered.
+            logWarning(s"Ignored task kill $taskId $executorId"
+              + " for unknown executor $sender with ID $executorId")
+        }
 
       case StopDriver =>
         sender ! true
