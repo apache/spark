@@ -17,10 +17,12 @@
 
 package org.apache.spark.mllib.fim
 
-import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.broadcast._
+import org.apache.spark.rdd.RDD
+import org.apache.spark.{Logging, SparkContext}
+
+import scala.collection.mutable.{ArrayBuffer, Map}
 
 /**
  * calculate frequent item set using FPGrowth algorithm with dada set and minSupport
@@ -47,18 +49,15 @@ class FPGrowth extends Logging with Serializable {
     val minCount = minSuport * count
     logDebug("minSuppot count:" + minSuport)
 
-    //one times scan data db to get L1
+    // one times scan data db to get L1
     val L1 = FPGStepOne(RDD, minCount)
     logDebug("L1 length:" + L1.length)
     logDebug("L1:" + L1)
 
-    //two times scan data db to get Ln
+    // two times scan data db to get Ln
     val Ln = FPGStepTwo(sc, RDD, minCount, L1)
-    //add L1 and Ln to get fim
-    val fim = L1 ++ Ln
-
-    return fim
-
+    // add L1 and Ln to get fim, and return it
+    L1 ++ Ln
   }
 
   /**
@@ -90,10 +89,8 @@ class FPGrowth extends Logging with Serializable {
                  RDD: RDD[Array[String]],
                  minCount: Double,
                  L1: Array[(String, Int)]): Array[(String, Int)] = {
-    //broadcast L1
+    // broadcast L1
     val bdL1 = sc.broadcast(L1)
-    //val bdL1List = bdL1.value
-
     RDD.flatMap(line => L12LineMap(line, bdL1))
       .groupByKey()
       .flatMap(line => FPTree(line, minCount))
@@ -117,16 +114,13 @@ class FPGrowth extends Logging with Serializable {
     // broadcast value
     val bdL1List = bdL1.value
     // the result variable
-    var lineArrayBuffer = collection.mutable.ArrayBuffer[(String, Int)]()
+    var lineArrayBuffer = ArrayBuffer[(String, Int)]()
 
     for (item <- line) {
-
       val opt = bdL1List.find(_._1.equals(item))
-
       if (opt != None) {
         lineArrayBuffer ++= opt
       }
-
     }
 
     // sort array
@@ -135,15 +129,14 @@ class FPGrowth extends Logging with Serializable {
       .sortWith(_._2 > _._2)
       .toArray
 
-
-    var arrArrayBuffer = collection.mutable.ArrayBuffer[(String, Array[String])]()
+    var arrArrayBuffer = ArrayBuffer[(String, Array[String])]()
 
     /**
      * give (a,4) (b 3),(c,3),after
      * b，（(a,4)
      * c，（(a,4) (b 3)）
      */
-    var arrBuffer = collection.mutable.ArrayBuffer[String]()
+    var arrBuffer = ArrayBuffer[String]()
     for (item <- lineArray) {
       val arr = lineArray.take(lineArray.indexOf(item))
 
@@ -151,16 +144,13 @@ class FPGrowth extends Logging with Serializable {
 
       if (arr.length > 0) {
         for (tempArr <- arr) {
-          //remain key
           arrBuffer += tempArr._1
         }
         arrArrayBuffer += ((item._1, arrBuffer.toArray))
       }
 
     }
-
-    return arrArrayBuffer.toArray
-
+    arrArrayBuffer.toArray
   }
 
   /**
@@ -175,8 +165,8 @@ class FPGrowth extends Logging with Serializable {
     // the set of construction CPFTree
     val value = line._2
 
-    val _lineBuffer = collection.mutable.ArrayBuffer[(String, Int)]()
-    val map = scala.collection.mutable.Map[String, Int]()
+    val resultBuffer = ArrayBuffer[(String, Int)]()
+    val map = Map[String, Int]()
     // tree step
     var k = 1
     // loop the data set while k>0
@@ -215,7 +205,7 @@ class FPGrowth extends Logging with Serializable {
 
         if (lineTemp.size != 0) {
           line = lineTemp.toArray.array
-          _lineBuffer ++= line
+          resultBuffer ++= line
         }
 
       }
@@ -229,9 +219,7 @@ class FPGrowth extends Logging with Serializable {
       }
 
     }
-
-    return _lineBuffer.toArray
-
+    resultBuffer.toArray
   }
 
 }

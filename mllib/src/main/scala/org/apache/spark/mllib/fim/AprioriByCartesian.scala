@@ -91,14 +91,14 @@ object AprioriByCartesian extends Logging with Serializable {
               minSupport: Double,
               sc: SparkContext): Array[(Set[String], Int)] = {
 
-    //dataSet length
+    // dataSet length
     val dataSetLen: Long = input.count()
-    //the count line for minSupport
+    // the count line for minSupport
     val minCount = minSupport * dataSetLen
     // This algorithm finds frequent item set, so convert each element of RDD to set
     val dataSet = input.map(_.toSet)
 
-    //definite L collection that using save all of frequent item set
+    // definite L collection that using save all of frequent item set
     val L = collection.mutable.ArrayBuffer[RDD[(Set[String], Int)]]()
 
     val L1: RDD[(Set[String], Int)] = aprioriStepOne(dataSet, minCount)
@@ -121,7 +121,7 @@ object AprioriByCartesian extends Logging with Serializable {
         k = k + 1
         L += Lk
       }
-      //return all result in L
+      // return all result in L
       val retArr = collection.mutable.ArrayBuffer[(Set[String], Int)]()
       for (l <- L) {
         retArr.appendAll(l.collect())

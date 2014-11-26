@@ -36,13 +36,13 @@ object AprioriByBroadcast extends Logging with Serializable {
    * @return single item in data Set
    */
   def createC1(dataSet: RDD[Array[String]]): Array[Array[String]] = {
-    //get all distinct item in the RDD
+    // get all distinct item in the RDD
     val itemCollection = dataSet.flatMap(line => line).distinct().collect()
 
-    //define new array which item is an array form
+    // define new array which item is an array form
     val itemArrCollection = collection.mutable.ArrayBuffer[Array[String]]()
 
-    //change the itemsCollection into itemArrCollection
+    // change the itemsCollection into itemArrCollection
     for (item <- itemCollection) {
       itemArrCollection += Array[String](item)
     }
@@ -62,10 +62,8 @@ object AprioriByBroadcast extends Logging with Serializable {
             Ck: Array[Array[String]],
             minCount: Double,
             sc: SparkContext): Array[(Array[String], Int)] = {
-    //broadcast Ck
+    // broadcast Ck
     val broadcastCk = sc.broadcast(Ck)
-    //val broadcastCkList: Array[Array[String]] = broadcastCk.value
-
     val Lk = dataSet.flatMap(line => containCk(line, broadcastCk))
       .filter(_.length > 0)
       .map(v => (v, 1))
@@ -122,7 +120,7 @@ object AprioriByBroadcast extends Logging with Serializable {
     val LkLen = Lk.length
     val CkBuffer = collection.mutable.ArrayBuffer[Array[String]]()
 
-    //get Ck from Lk
+    // get Ck from Lk
     for (i <- 0 to LkLen - 1)
       for (j <- i + 1 to LkLen - 1) {
         // get Lk：k-2 before k-2 item
@@ -183,16 +181,16 @@ object AprioriByBroadcast extends Logging with Serializable {
               minSupport: Double,
               sc: SparkContext): Array[(Set[String], Int)] = {
 
-    //dataSet length
+    // dataSet length
     val dataSetLen: Long = dataSet.count()
-    //the count line for minSupport
+    // the count line for minSupport
     val minCount = minSupport * dataSetLen
 
-    //definite L collection that using save all of frequent item set
+    // definite L collection that using save all of frequent item set
     val L = collection.mutable.ArrayBuffer[Array[(Array[String], Int)]]()
     val FIS = collection.mutable.ArrayBuffer[(Set[String], Int)]()
 
-    //call aprioriStepOne method to get L1
+    // call aprioriStepOne method to get L1
     val L1: Array[(Array[String], Int)] = aprioriStepOne(dataSet, minCount)
     logDebug("L1 length:" + L1.length)
     logDebug("L1:" + L1)
@@ -210,11 +208,11 @@ object AprioriByBroadcast extends Logging with Serializable {
       // do the loop while the k > 0 and L length > 1
       while ((k > 0) && L(k - 2).length > 1) {
 
-        //call createCk method to get Ck
+        // call createCk method to get Ck
         val Ck: Array[Array[String]] = aprioriGen(L(k - 2), k)
 
         if (Ck != null) {
-          //call createLk method to get Lk
+          // call createLk method to get Lk
           val Lk: Array[(Array[String], Int)] =
             scanD(
               dataSet,
