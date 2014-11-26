@@ -17,11 +17,11 @@
 
 package org.apache.spark.mllib.recommendation
 
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.rdd.RDD
 import org.scalatest.FunSuite
-import org.apache.spark.mllib.util.TestingUtils._
 
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.rdd.RDD
 
 class MatrixFactorizationModelSuite extends FunSuite with MLlibTestSparkContext {
 
