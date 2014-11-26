@@ -33,7 +33,7 @@ import org.apache.hadoop.mapred.{InputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
+import org.apache.spark.AccumulatorParam._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
@@ -42,6 +42,9 @@ import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
  * [[org.apache.spark.api.java.JavaRDD]]s and works with Java collections instead of Scala ones.
+ *
+ * Only one SparkContext may be active per JVM.  You must `stop()` the active SparkContext before
+ * creating a new one.  This limitation may eventually be removed; see SPARK-2243 for more details.
  */
 class JavaSparkContext(val sc: SparkContext)
   extends JavaSparkContextVarargsWorkaround with Closeable {

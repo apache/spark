@@ -196,7 +196,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Seq(Seq("1")))
   }
 
-  test("sorting") {
+  def sortTest() = {
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC"),
       Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)))
@@ -236,6 +236,20 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT * FROM mapData ORDER BY data[1] DESC"),
       mapData.collect().sortBy(_.data(1)).reverse.toSeq)
+  }
+
+  test("sorting") {
+    val before = externalSortEnabled
+    setConf(SQLConf.EXTERNAL_SORT, "false")
+    sortTest()
+    setConf(SQLConf.EXTERNAL_SORT, before.toString)
+  }
+
+  test("external sorting") {
+    val before = externalSortEnabled
+    setConf(SQLConf.EXTERNAL_SORT, "true")
+    sortTest()
+    setConf(SQLConf.EXTERNAL_SORT, before.toString)
   }
 
   test("limit") {
@@ -958,5 +972,24 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     jsonRDD(sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
     checkAnswer(sql("SELECT a.b + 1 FROM data GROUP BY a.b + 1"), 2)
     dropTempTable("data")
+  }
+
+  test("SPARK-4432 Fix attribute reference resolution error when using ORDER BY") {
+    checkAnswer(
+      sql("SELECT a + b FROM testData2 ORDER BY a"),
+      Seq(2, 3, 3 ,4 ,4 ,5).map(Seq(_))
+    )
+  }
+
+  test("Supporting relational operator '<=>' in Spark SQL") {
+    val nullCheckData1 = TestData(1,"1") :: TestData(2,null) :: Nil
+    val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
+    rdd1.registerTempTable("nulldata1")
+    val nullCheckData2 = TestData(1,"1") :: TestData(2,null) :: Nil
+    val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
+    rdd2.registerTempTable("nulldata2")
+    checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
+      "nulldata2 on nulldata1.value <=> nulldata2.value"),
+        (1 to 2).map(i => Seq(i)))
   }
 }

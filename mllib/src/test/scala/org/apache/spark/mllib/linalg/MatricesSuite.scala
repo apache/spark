@@ -17,7 +17,11 @@
 
 package org.apache.spark.mllib.linalg
 
+import java.util.Random
+
+import org.mockito.Mockito.when
 import org.scalatest.FunSuite
+import org.scalatest.mock.MockitoSugar._
 
 class MatricesSuite extends FunSuite {
   test("dense matrix construction") {
@@ -220,5 +224,51 @@ class MatricesSuite extends FunSuite {
     intercept[IllegalArgumentException] {
       Matrices.vertcat(Array(deMat1, spMat2))
     }
+  }
+
+  test("zeros") {
+    val mat = Matrices.zeros(2, 3).asInstanceOf[DenseMatrix]
+    assert(mat.numRows === 2)
+    assert(mat.numCols === 3)
+    assert(mat.values.forall(_ == 0.0))
+  }
+
+  test("ones") {
+    val mat = Matrices.ones(2, 3).asInstanceOf[DenseMatrix]
+    assert(mat.numRows === 2)
+    assert(mat.numCols === 3)
+    assert(mat.values.forall(_ == 1.0))
+  }
+
+  test("eye") {
+    val mat = Matrices.eye(2).asInstanceOf[DenseMatrix]
+    assert(mat.numCols === 2)
+    assert(mat.numCols === 2)
+    assert(mat.values.toSeq === Seq(1.0, 0.0, 0.0, 1.0))
+  }
+
+  test("rand") {
+    val rng = mock[Random]
+    when(rng.nextDouble()).thenReturn(1.0, 2.0, 3.0, 4.0)
+    val mat = Matrices.rand(2, 2, rng).asInstanceOf[DenseMatrix]
+    assert(mat.numRows === 2)
+    assert(mat.numCols === 2)
+    assert(mat.values.toSeq === Seq(1.0, 2.0, 3.0, 4.0))
+  }
+
+  test("randn") {
+    val rng = mock[Random]
+    when(rng.nextGaussian()).thenReturn(1.0, 2.0, 3.0, 4.0)
+    val mat = Matrices.randn(2, 2, rng).asInstanceOf[DenseMatrix]
+    assert(mat.numRows === 2)
+    assert(mat.numCols === 2)
+    assert(mat.values.toSeq === Seq(1.0, 2.0, 3.0, 4.0))
+  }
+
+  test("diag") {
+    val mat = Matrices.diag(Vectors.dense(1.0, 2.0)).asInstanceOf[DenseMatrix]
+    assert(mat.numRows === 2)
+    assert(mat.numCols === 2)
+    assert(mat.values.toSeq === Seq(1.0, 0.0, 0.0, 2.0))
   }
 }

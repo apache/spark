@@ -22,7 +22,7 @@ import breeze.linalg.{Matrix => BM, DenseMatrix => BDM, CSCMatrix => BSM}
 import org.apache.spark.util.random.XORShiftRandom
 import org.apache.spark.util.Utils
 
-import java.util.Arrays
+import java.util.{Random, Arrays}
 import scala.collection.mutable.ArrayBuffer
 
 /**
@@ -69,14 +69,14 @@ sealed trait Matrix extends Serializable {
   }
 
   /** Convenience method for `Matrix`^T^-`DenseMatrix` multiplication. */
-  def transposeMultiply(y: DenseMatrix): DenseMatrix = {
+  private[mllib] def transposeMultiply(y: DenseMatrix): DenseMatrix = {
     val C: DenseMatrix = Matrices.zeros(numCols, y.numCols).asInstanceOf[DenseMatrix]
     BLAS.gemm(true, false, 1.0, this, y, 0.0, C)
     C
   }
 
   /** Convenience method for `Matrix`^T^-`DenseVector` multiplication. */
-  def transposeMultiply(y: DenseVector): DenseVector = {
+  private[mllib] def transposeMultiply(y: DenseVector): DenseVector = {
     val output = new DenseVector(new Array[Double](numCols))
     BLAS.gemv(true, 1.0, this, y, 0.0, output)
     output
@@ -189,44 +189,22 @@ object DenseMatrix {
    * Generate a `DenseMatrix` consisting of i.i.d. uniform random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
-   * @param seed the seed seed for the random number generator
+   * @param rng a random number generator
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
    */
-  def rand(numRows: Int, numCols: Int, seed: Long): DenseMatrix = {
-    val rand = new XORShiftRandom(seed)
-    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rand.nextDouble()))
-  }
-
-  /**
-   * Generate a `DenseMatrix` consisting of i.i.d. uniform random numbers.
-   * @param numRows number of rows of the matrix
-   * @param numCols number of columns of the matrix
-   * @return `DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
-   */
-  def rand(numRows: Int, numCols: Int): DenseMatrix = {
-    rand(numRows, numCols, Utils.random.nextLong())
+  def rand(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
+    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextDouble()))
   }
 
   /**
    * Generate a `DenseMatrix` consisting of i.i.d. gaussian random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
-   * @param seed the seed seed for the random number generator
+   * @param rng a random number generator
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
    */
-  def randn(numRows: Int, numCols: Int, seed: Long): DenseMatrix = {
-    val rand = new XORShiftRandom(seed)
-    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rand.nextGaussian()))
-  }
-
-  /**
-   * Generate a `DenseMatrix` consisting of i.i.d. gaussian random numbers.
-   * @param numRows number of rows of the matrix
-   * @param numCols number of columns of the matrix
-   * @return `DenseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
-   */
-  def randn(numRows: Int, numCols: Int): DenseMatrix = {
-    randn(numRows, numCols, Utils.random.nextLong())
+  def randn(numRows: Int, numCols: Int, rng: Random): DenseMatrix = {
+    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextGaussian()))
   }
 
   /**
@@ -389,64 +367,19 @@ object SparseMatrix {
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
-   * @param seed the seed for the random generator
+   * @param rng a random number generator
    * @return `SparseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
    */
-  def sprand(
-      numRows: Int,
-      numCols: Int,
-      density: Double,
-      seed: Long): SparseMatrix = {
+  def sprand(numRows: Int, numCols: Int, density: Double, rng: Random): SparseMatrix = {
     require(density > 0.0 && density < 1.0, "density must be a double in the range " +
       s"0.0 < d < 1.0. Currently, density: $density")
-    val rand = new XORShiftRandom(seed)
     val length = numRows * numCols
     val rawA = new Array[Double](length)
     var nnz = 0
     for (i <- 0 until length) {
-      val p = rand.nextDouble()
+      val p = rng.nextDouble()
       if (p <= density) {
-        rawA.update(i, rand.nextDouble())
-        nnz += 1
-      }
-    }
-    genRand(numRows, numCols, rawA, nnz)
-  }
-
-  /**
-   * Generate a `SparseMatrix` consisting of i.i.d. uniform random numbers.
-   * @param numRows number of rows of the matrix
-   * @param numCols number of columns of the matrix
-   * @param density the desired density for the matrix
-   * @return `SparseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
-   */
-  def sprand(numRows: Int, numCols: Int, density: Double): SparseMatrix = {
-    sprand(numRows, numCols, density, Utils.random.nextLong())
-  }
-
-  /**
-   * Generate a `SparseMatrix` consisting of i.i.d. gaussian random numbers.
-   * @param numRows number of rows of the matrix
-   * @param numCols number of columns of the matrix
-   * @param density the desired density for the matrix
-   * @param seed the seed for the random generator
-   * @return `SparseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
-   */
-  def sprandn(
-      numRows: Int,
-      numCols: Int,
-      density: Double,
-      seed: Long): SparseMatrix = {
-    require(density > 0.0 && density < 1.0, "density must be a double in the range " +
-      s"0.0 < d < 1.0. Currently, density: $density")
-    val rand = new XORShiftRandom(seed)
-    val length = numRows * numCols
-    val rawA = new Array[Double](length)
-    var nnz = 0
-    for (i <- 0 until length) {
-      val p = rand.nextDouble()
-      if (p <= density) {
-        rawA.update(i, rand.nextGaussian())
+        rawA.update(i, rng.nextDouble())
         nnz += 1
       }
     }
@@ -458,10 +391,23 @@ object SparseMatrix {
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
+   * @param rng a random number generator
    * @return `SparseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
    */
-  def sprandn(numRows: Int, numCols: Int, density: Double): SparseMatrix = {
-    sprandn(numRows, numCols, density, Utils.random.nextLong())
+  def sprandn(numRows: Int, numCols: Int, density: Double, rng: Random): SparseMatrix = {
+    require(density > 0.0 && density < 1.0, "density must be a double in the range " +
+      s"0.0 < d < 1.0. Currently, density: $density")
+    val length = numRows * numCols
+    val rawA = new Array[Double](length)
+    var nnz = 0
+    for (i <- 0 until length) {
+      val p = rng.nextDouble()
+      if (p <= density) {
+        rawA.update(i, rng.nextGaussian())
+        nnz += 1
+      }
+    }
+    genRand(numRows, numCols, rawA, nnz)
   }
 
   /**
@@ -606,79 +552,43 @@ object Matrices {
    * Generate a dense `Matrix` consisting of i.i.d. uniform random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
-   * @param seed the seed for the random generator
+   * @param rng a random number generator
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
    */
-  def rand(numRows: Int, numCols: Int, seed: Long): Matrix =
-    DenseMatrix.rand(numRows, numCols, seed)
-
-  /**
-   * Generate a `DenseMatrix` consisting of i.i.d. uniform random numbers.
-   * @param numRows number of rows of the matrix
-   * @param numCols number of columns of the matrix
-   * @return `DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
-   */
-  def rand(numRows: Int, numCols: Int): Matrix = DenseMatrix.rand(numRows, numCols)
+  def rand(numRows: Int, numCols: Int, rng: Random): Matrix =
+    DenseMatrix.rand(numRows, numCols, rng)
 
   /**
    * Generate a `SparseMatrix` consisting of i.i.d. gaussian random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
-   * @param seed the seed for the random generator
+   * @param rng a random number generator
    * @return `Matrix` with size `numRows` x `numCols` and values in U(0, 1)
    */
-  def sprand(numRows: Int, numCols: Int, density: Double, seed: Long): Matrix =
-    SparseMatrix.sprand(numRows, numCols, density, seed)
-
-  /**
-   * Generate a `SparseMatrix` consisting of i.i.d. gaussian random numbers.
-   * @param numRows number of rows of the matrix
-   * @param numCols number of columns of the matrix
-   * @param density the desired density for the matrix
-   * @return `Matrix` with size `numRows` x `numCols` and values in U(0, 1)
-   */
-  def sprand(numRows: Int, numCols: Int, density: Double): Matrix =
-    SparseMatrix.sprand(numRows, numCols, density)
+  def sprand(numRows: Int, numCols: Int, density: Double, rng: Random): Matrix =
+    SparseMatrix.sprand(numRows, numCols, density, rng)
 
   /**
    * Generate a `DenseMatrix` consisting of i.i.d. gaussian random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
-   * @param seed the seed for the random generator
+   * @param rng a random number generator
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
    */
-  def randn(numRows: Int, numCols: Int, seed: Long): Matrix =
-    DenseMatrix.randn(numRows, numCols, seed)
-
-  /**
-   * Generate a `DenseMatrix` consisting of i.i.d. gaussian random numbers.
-   * @param numRows number of rows of the matrix
-   * @param numCols number of columns of the matrix
-   * @return `DenseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
-   */
-  def randn(numRows: Int, numCols: Int): Matrix = DenseMatrix.randn(numRows, numCols)
+  def randn(numRows: Int, numCols: Int, rng: Random): Matrix =
+    DenseMatrix.randn(numRows, numCols, rng)
 
   /**
    * Generate a `SparseMatrix` consisting of i.i.d. gaussian random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
-   * @param seed the seed for the random generator
+   * @param rng a random number generator
    * @return `Matrix` with size `numRows` x `numCols` and values in N(0, 1)
    */
-  def sprandn(numRows: Int, numCols: Int, density: Double, seed: Long): Matrix =
-    SparseMatrix.sprandn(numRows, numCols, density, seed)
-
-  /**
-   * Generate a `SparseMatrix` consisting of i.i.d. gaussian random numbers.
-   * @param numRows number of rows of the matrix
-   * @param numCols number of columns of the matrix
-   * @param density the desired density for the matrix
-   * @return `Matrix` with size `numRows` x `numCols` and values in N(0, 1)
-   */
-  def sprandn(numRows: Int, numCols: Int, density: Double): Matrix =
-    SparseMatrix.sprandn(numRows, numCols, density)
+  def sprandn(numRows: Int, numCols: Int, density: Double, rng: Random): Matrix =
+    SparseMatrix.sprandn(numRows, numCols, density, rng)
 
   /**
    * Generate a diagonal matrix in `DenseMatrix` format from the supplied values.
