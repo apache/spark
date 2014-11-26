@@ -201,18 +201,24 @@ private[hive] object SparkSQLCLIDriver {
     var currentPrompt = promptWithCurrentDB
     var line = reader.readLine(currentPrompt + "> ")
 
+    var cmd = ""
+    var isCmdEnded: Boolean = false
+    var commentStack = new scala.collection.mutable.Stack[String]
+
     while (line != null) {
       if (prefix.nonEmpty) {
         prefix += '\n'
       }
 
-      if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
-        line = prefix + line
-        ret = cli.processLine(line, true)
-        prefix = ""
+      val filterRet = cli.filterComment(line, commentStack, cmd)
+      cmd = filterRet._1
+      isCmdEnded = filterRet._2
+      commentStack = filterRet._3
+      if (isCmdEnded) {
+        ret = cli.processLine(cmd, true)
+        cmd = ""
         currentPrompt = promptWithCurrentDB
       } else {
-        prefix = prefix + line
         currentPrompt = continuedPromptWithDBSpaces
       }
 
@@ -323,6 +329,268 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       }
       ret
     }
+  }
+
+  /**
+   * return a commultive string without single line comment (begin with "#" or "--") and
+   * multi line comments (quoted in "/* */") through a filter function.
+   * this can be used for comment support in command input.
+   * three comment styles supported:
+   * 1. From a '#' character to the end of the line.
+   * 2. From a '--' sequence to the end of the line
+   * 3. From a /* sequence to the following */ sequence, as in the C programming language.
+   * This syntax allows a comment to extend over multiple lines because the beginning
+   * and closing sequences need not be on the same line.
+   * @param line line string inputed from console
+   * @param _commentStack a stack to store the current elements that should be considered
+   * while filtering comments, like ', ", or the begin flag of multi line comments
+   * @param _cmd string value before apply filterComment function
+   * @return string value after apply filterComment function
+   */
+  def filterComment(line: String,
+                    _commentStack: scala.collection.mutable.Stack[String],
+                    _cmd: String): (String, Boolean, scala.collection.mutable.Stack[String]) = {
+    var isCmdEnded = false
+    var cmd = _cmd
+    var commentStack = _commentStack
+
+    // define some regexes for match
+    val SINGLE_LINE_COMMENT_DASH_REGEX = """(.*?)--(.*)""".r
+    val SINGLE_LINE_COMMENT_POUND_REGEX = """(.*?)#(.*)""".r
+    val MULTI_LINE_COMMENT_START_REGEX = """(.*?)/\*(.*)""".r
+    val MULTI_LINE_COMMENT_END_REGEX = """(.*?)\*/(.*)""".r
+    val SINGLE_QUOTATION_MARK_REGEX = """(.*?)'(.*)""".r
+    val DOUBLE_QUOTATION_MARK_REGEX = """(.*?)"(.*)""".r
+    val CMD_END_REGEX = """(.*?);(.*)""".r
+
+    val regexes = scala.collection.immutable.HashMap(
+      "SINGLE_LINE_COMMENT_DASH"->SINGLE_LINE_COMMENT_DASH_REGEX,
+      "SINGLE_LINE_COMMENT_POUND"->SINGLE_LINE_COMMENT_POUND_REGEX,
+      "MULTI_LINE_COMMENT_START"->MULTI_LINE_COMMENT_START_REGEX,
+      "MULTI_LINE_COMMENT_END"->MULTI_LINE_COMMENT_END_REGEX,
+      "SINGLE_QUOTATION_MARK"->SINGLE_QUOTATION_MARK_REGEX,
+      "DOUBLE_QUOTATION_MARK"->DOUBLE_QUOTATION_MARK_REGEX,
+      "CMD_END"->CMD_END_REGEX
+    )
+
+    // to get the first match in the line
+    var filterMatchRegex: scala.util.matching.Regex = null
+    var filterMatchIdx = -1
+    var filterMatchType = ""
+
+    for(r<-regexes){
+      if(r._2.findFirstMatchIn(line) != None){
+        val matchPositonIdx=r._2.findFirstMatchIn(line).get.group(1).length
+        if (matchPositonIdx < filterMatchIdx || filterMatchIdx == -1) {
+          filterMatchType = r._1
+          filterMatchRegex = r._2
+          filterMatchIdx = matchPositonIdx
+        }
+      }
+    }
+
+    // process the comments one by one based on head eliment in commentStack and first match regex.
+    val head = commentStack.headOption.getOrElse(null)
+    var filterRet: (String, Boolean, scala.collection.mutable.Stack[String]) = null
+    if (filterMatchRegex != null) {
+      val part1 = filterMatchRegex.findFirstMatchIn(line).get.group(1)
+      val part2 = filterMatchRegex.findFirstMatchIn(line).get.group(2)
+      if (head == null) {
+        filterMatchType match {
+          case "CMD_END" =>
+            cmd += part1 + ";"
+            isCmdEnded = true
+            cmd = cmd.replaceAll( """\n+\s*\n*""", "\n").trim
+          case "SINGLE_QUOTATION_MARK" =>
+            commentStack.push(filterMatchType)
+            cmd += part1 + "'"
+            if (part2 != null && part2.trim.nonEmpty) {
+              filterRet = filterComment(part2, commentStack, cmd)
+              cmd = filterRet._1
+              isCmdEnded = filterRet._2
+              commentStack = filterRet._3
+            }
+          case "DOUBLE_QUOTATION_MARK" =>
+            commentStack.push(filterMatchType)
+            cmd += part1 + "\""
+            if (part2 != null && part2.trim.nonEmpty) {
+              filterRet = filterComment(part2, commentStack, cmd)
+              cmd = filterRet._1
+              isCmdEnded = filterRet._2
+              commentStack = filterRet._3
+            }
+          case "SINGLE_LINE_COMMENT_DASH" =>
+            cmd += part1
+          case "SINGLE_LINE_COMMENT_POUND" =>
+            cmd += part1
+          case "MULTI_LINE_COMMENT_START" =>
+            commentStack.push(filterMatchType)
+            cmd += part1
+            if (part2 != null && part2.trim.nonEmpty) {
+              filterRet = filterComment(part2, commentStack, cmd)
+              cmd = filterRet._1
+              isCmdEnded = filterRet._2
+              commentStack = filterRet._3
+            }
+          case "MULTI_LINE_COMMENT_END" =>
+            throw new Exception("found no matched multi line comment start marker for */.")
+          case _ =>
+        }
+      } else {
+        head match {
+          case "SINGLE_QUOTATION_MARK" => {
+            filterMatchType match {
+              case "CMD_END" =>
+                cmd += part1 + ";"
+                if (part2 != null && part2.trim.nonEmpty) {
+                  filterRet = filterComment(part2, commentStack, cmd)
+                  cmd = filterRet._1
+                  isCmdEnded = filterRet._2
+                  commentStack = filterRet._3
+                }
+              case "SINGLE_QUOTATION_MARK" =>
+                cmd += part1 + "'"
+                commentStack.pop()
+                if (part2 != null && part2.trim.nonEmpty) {
+                  filterRet = filterComment(part2, commentStack, cmd)
+                  cmd = filterRet._1
+                  isCmdEnded = filterRet._2
+                  commentStack = filterRet._3
+                }
+              case "DOUBLE_QUOTATION_MARK" =>
+                cmd += part1 + "\""
+                commentStack.push(filterMatchType)
+                if (part2 != null && part2.trim.nonEmpty) {
+                  filterRet = filterComment(part2, commentStack, cmd)
+                  cmd = filterRet._1
+                  isCmdEnded = filterRet._2
+                  commentStack = filterRet._3
+                }
+              case "SINGLE_LINE_COMMENT_DASH" =>
+                cmd += part1 + " -- "
+                if (part2 != null && part2.trim.nonEmpty) {
+                  filterRet = filterComment(part2, commentStack, cmd)
+                  cmd = filterRet._1
+                  isCmdEnded = filterRet._2
+                  commentStack = filterRet._3
+                }
+              case "SINGLE_LINE_COMMENT_POUND" =>
+                cmd += part1 + " # "
+                if (part2 != null && part2.trim.nonEmpty) {
+                  filterRet = filterComment(part2, commentStack, cmd)
+                  cmd = filterRet._1
+                  isCmdEnded = filterRet._2
+                  commentStack = filterRet._3
+                }
+              case "MULTI_LINE_COMMENT_START" =>
+                cmd += part1 + " /* "
+                if (part2 != null && part2.trim.nonEmpty) {
+                  filterRet = filterComment(part2, commentStack, cmd)
+                  cmd = filterRet._1
+                  isCmdEnded = filterRet._2
+                  commentStack = filterRet._3
+                }
+              case "MULTI_LINE_COMMENT_END" =>
+                cmd += part1 + " */ "
+                if (part2 != null && part2.trim.nonEmpty) {
+                  filterRet = filterComment(part2, commentStack, cmd)
+                  cmd = filterRet._1
+                  isCmdEnded = filterRet._2
+                  commentStack = filterRet._3
+                }
+            }
+          }
+          case "DOUBLE_QUOTATION_MARK" => {
+            filterMatchType match {
+              case "CMD_END" =>
+                cmd += part1 + ";"
+                if (part2 != null && part2.trim.nonEmpty) {
+                  filterRet = filterComment(part2, commentStack, cmd)
+                  cmd = filterRet._1
+                  isCmdEnded = filterRet._2
+                  commentStack = filterRet._3
+                }
+              case "SINGLE_QUOTATION_MARK" =>
+                cmd += part1 + "'"
+                commentStack.push(filterMatchType)
+                if (part2 != null && part2.trim.nonEmpty) {
+                  filterRet = filterComment(part2, commentStack, cmd)
+                  cmd = filterRet._1
+                  isCmdEnded = filterRet._2
+                  commentStack = filterRet._3
+                }
+              case "DOUBLE_QUOTATION_MARK" =>
+                cmd += part1 + "\""
+                commentStack.pop
+                if (part2 != null && part2.trim.nonEmpty) {
+                  filterRet = filterComment(part2, commentStack, cmd)
+                  cmd = filterRet._1
+                  isCmdEnded = filterRet._2
+                  commentStack = filterRet._3
+                }
+              case "SINGLE_LINE_COMMENT_DASH" =>
+                cmd += part1
+                if (part2 != null && part2.trim.nonEmpty) {
+                  filterRet = filterComment(part2, commentStack, cmd)
+                  cmd = filterRet._1
+                  isCmdEnded = filterRet._2
+                  commentStack = filterRet._3
+                }
+              case "SINGLE_LINE_COMMENT_POUND" =>
+                cmd += part1
+                if (part2 != null && part2.trim.nonEmpty) {
+                  filterRet = filterComment(part2, commentStack, cmd)
+                  cmd = filterRet._1
+                  isCmdEnded = filterRet._2
+                  commentStack = filterRet._3
+                }
+              case "MULTI_LINE_COMMENT_START" =>
+                cmd += part1
+                if (part2 != null && part2.trim.nonEmpty) {
+                  filterRet = filterComment(part2, commentStack, cmd)
+                  cmd = filterRet._1
+                  isCmdEnded = filterRet._2
+                  commentStack = filterRet._3
+                }
+              case "MULTI_LINE_COMMENT_END" =>
+                cmd += part1
+                if (part2 != null && part2.trim.nonEmpty) {
+                  filterRet = filterComment(part2, commentStack, cmd)
+                  cmd = filterRet._1
+                  isCmdEnded = filterRet._2
+                  commentStack = filterRet._3
+                }
+            }
+          }
+          case "MULTI_LINE_COMMENT_START" => {
+            filterMatchType match {
+              case "MULTI_LINE_COMMENT_END" =>
+                commentStack.pop()
+              case _ =>
+            }
+            if (part2 != null && part2.trim.nonEmpty) {
+              filterRet = filterComment(part2, commentStack, cmd)
+              cmd = filterRet._1
+              isCmdEnded = filterRet._2
+              commentStack = filterRet._3
+            }
+          }
+        }
+      }
+    } else {
+      if (head == null) {
+        cmd += line
+      } else {
+        head match {
+          case "SINGLE_QUOTATION_MARK" =>
+            cmd += line
+          case "DOUBLE_QUOTATION_MARK" =>
+            cmd += line
+          case _ =>
+        }
+      }
+    }
+    (cmd, isCmdEnded, commentStack)
   }
 }
 

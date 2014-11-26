@@ -122,4 +122,37 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
   test("Single command with -e") {
     runCliWithin(1.minute, Seq("-e", "SHOW TABLES;"))("" -> "OK")
   }
+
+  test("Test single line commond support using --"){
+    runCliWithin(1.minute, Seq("-e", "SHOW TABLES;--test single line commond support;"))("" -> "OK")
+  }
+
+  test("Test single line commond support using #"){
+    runCliWithin(1.minute, Seq("-e", "SHOW TABLES;#test single line commond support"))("" -> "OK")
+  }
+
+  test("Test single line commond support using -- and #"){
+    runCliWithin(1.minute, Seq("-e", "SHOW TABLES;#test single line commond support --test2"))("" -> "OK")
+  }
+
+  test("Test multi line commond support using /* */") {
+    val dataFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+    runCliWithin(3.minute)(
+      "CREATE TABLE hive_test(key INT, val STRING);/* create a test table named hive_test;*/"
+        -> "OK",
+      s"""LOAD DATA LOCAL INPATH '$dataFilePath' /* local datafilepath 'data/files/small_kv.txt',
+         | and you can change it as you like */
+         | OVERWRITE INTO TABLE hive_test;
+       """.stripMargin
+        -> "OK",
+      """SELECT COUNT(*) /* test comment support using various stypes
+        | -- single line comment mark quotated in multi line comment
+        | quotation marks (" and ') quotated in multi line comment */ # hope that it enhanced the input
+        |FROM hive_test;""".stripMargin
+        -> "5",
+      "DROP TABLE hive_test;"
+        -> "Time taken: "
+    )
+  }
 }
