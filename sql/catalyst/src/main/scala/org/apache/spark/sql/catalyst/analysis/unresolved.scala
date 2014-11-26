@@ -63,8 +63,7 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   override def toString: String = s"'$name"
 }
 
-case class UnresolvedFunction(name: String, children: Seq[Expression],
-  windowFrame: WindowFrame = null) extends Expression {
+case class UnresolvedFunction(name: String, children: Seq[Expression]) extends Expression {
   override def dataType = throw new UnresolvedException(this, "dataType")
   override def foldable = throw new UnresolvedException(this, "foldable")
   override def nullable = throw new UnresolvedException(this, "nullable")

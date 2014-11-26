@@ -27,7 +27,7 @@ import org.apache.spark.util.collection.OpenHashSet
 abstract class AggregateExpression extends Expression with Serializable {
   self: Product =>
 
-  var windowFrame: WindowFrame = null
+  var windowSpec: WindowSpec = null
   /**
    * Creates a new instance that can be used to compute this aggregate expression for a group
    * of input rows/
@@ -35,7 +35,7 @@ abstract class AggregateExpression extends Expression with Serializable {
   def newInstance(): AggregateFunction
 
   override def canEqual(other: Any): Boolean = other match {
-    case that: AggregateExpression => this.windowFrame == that.windowFrame
+    case that: AggregateExpression => this.windowSpec == that.windowSpec
     case _ => false
   }
 
@@ -46,8 +46,6 @@ abstract class AggregateExpression extends Expression with Serializable {
   override def eval(input: Row = null): EvaluatedType =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 }
-
-case class WindowFrame(frameType:String, preceding: Int, following: Int)
 
 /**
  * Represents an aggregation that has been rewritten to be performed in two steps.

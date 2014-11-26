@@ -41,13 +41,15 @@ import org.apache.spark.sql.catalyst.plans.logical.SortPartitions
  * Groups input data by `partitionExpressions` and computes the `computeExpressions` for each
  * group.
  * @param partitionExpressions expressions that are evaluated to determine partition.
- * @param functionExpressions expressions that are computed for each partition.
+ * @param windowAttributes windowAttributes that are computed now for each partition.
+ * @param otherExpressions otherExpressions that are expressions except windowAttributes.
  * @param child the input data source.
  */
 @DeveloperApi
 case class WindowFunction(
   partitionExpressions: Seq[Expression],
-  functionExpressions: Seq[NamedExpression],
+  windowAttributes: Seq[WindowAttribute],
+  otherExpressions: Seq[NamedExpression],
   child: SparkPlan)
   extends UnaryNode {
 
@@ -62,43 +64,31 @@ case class WindowFunction(
   // out child's output attributes statically here.
   private[this] val childOutput = child.output
 
-  override def output = functionExpressions.map(_.toAttribute)
+  private[this] val computeExpressions =
+    windowAttributes.map(_.child.asInstanceOf[AggregateExpression])
 
-  /** A list of functions that need to be computed for each partition. */
-  private[this] val computeExpressions = new ArrayBuffer[AggregateExpression]
+  override def output = (windowAttributes ++ otherExpressions).map(_.toAttribute)
 
-  private[this] val otherExpressions = new ArrayBuffer[NamedExpression]
-
-  functionExpressions.foreach { sel =>
-    sel.collect {
-      case func: AggregateExpression => computeExpressions += func
-      case other: NamedExpression if (!other.isInstanceOf[Alias]) => otherExpressions += other
-    }
-  }
-
-  private[this] val functionAttributes = computeExpressions.map { func =>
+  private[this] val computeAttributes = computeExpressions.map { func =>
     func -> AttributeReference(s"funcResult:$func", func.dataType, func.nullable)()}
 
+  private[this] val otherAttributes = otherExpressions.map(_.toAttribute)
+
   /** The schema of the result of all evaluations */
-  private[this] val resultAttributes =
-    otherExpressions.map(_.toAttribute) ++ functionAttributes.map(_._2)
+  private[this] val resultAttributes = otherAttributes ++ computeAttributes.map(_._2)
 
   private[this] val resultMap =
-    (otherExpressions.map { other => other -> other.toAttribute } ++ functionAttributes
+    (otherExpressions.map { other => other -> other.toAttribute } ++ computeAttributes
     ).toMap
 
-
-  private[this] val resultExpressions = functionExpressions.map { sel =>
+  private[this] val resultExpressions = (windowAttributes ++ otherExpressions).map { sel =>
     sel.transform {
       case e: Expression if resultMap.contains(e) => resultMap(e)
     }
   }
 
   private[this] val sortExpressions =
-    if (child.isInstanceOf[SortPartitions]) {
-      child.asInstanceOf[SortPartitions].sortExpressions
-    }
-    else if (child.isInstanceOf[Sort]) {
+    if (child.isInstanceOf[Sort]) {
       child.asInstanceOf[Sort].sortOrder
     }
     else null
@@ -109,7 +99,7 @@ case class WindowFunction(
     var i = 0
     while (i < computeExpressions.length) {
       val baseExpr = BindReferences.bindReference(computeExpressions(i), childOutput)
-      baseExpr.windowFrame = computeExpressions(i).windowFrame
+      baseExpr.windowSpec = computeExpressions(i).windowSpec
       buffer(i) = baseExpr.newInstance()
       i += 1
     }
@@ -123,7 +113,8 @@ case class WindowFunction(
     while (i < aggrFunctions.length) {
       val aggrFunction = aggrFunctions(i)
       val base = aggrFunction.base
-      if (base.windowFrame == null) {
+      val windowSpec = base.windowSpec
+      if (windowSpec.windowFrame == null) {
         if (sortExpressions != null) {
           if (aggrFunction.dataType.isInstanceOf[ArrayType]) {
             rows.foreach(aggrFunction.update)
@@ -144,7 +135,9 @@ case class WindowFunction(
 
       } else {
         functionResults(i) =
-          if (base.windowFrame.frameType == "ROWS_FRAME") rowsWindowFunction(base, rows).iterator
+          if (windowSpec.windowFrame.frameType == "ROWS_FRAME") {
+            rowsWindowFunction(base, rows).iterator
+          }
           else valueWindowFunction(base, rows).iterator
       }
       i += 1
@@ -159,7 +152,7 @@ case class WindowFunction(
     var rowIndex = 0
     while (rowIndex < rows.size) {
 
-      val windowFrame = base.windowFrame
+      val windowFrame = base.windowSpec.windowFrame
       var start =
         if (windowFrame.preceding == Int.MaxValue) 0
         else rowIndex - windowFrame.preceding
@@ -185,7 +178,7 @@ case class WindowFunction(
   private[this] def valueWindowFunction(base: AggregateExpression,
     rows: CompactBuffer[Row]): CompactBuffer[Any] = {
 
-    val windowFrame = base.windowFrame
+    val windowFrame = base.windowSpec.windowFrame
 
     // rande only support 1 order
     val sortExpression = BindReferences.bindReference(sortExpressions.head, childOutput)
@@ -271,7 +264,7 @@ case class WindowFunction(
 
         val resultProjection = new InterpretedProjection(resultExpressions, resultAttributes)
 
-        val otherProjection = new InterpretedMutableProjection(otherExpressions, childOutput)
+        val otherProjection = new InterpretedMutableProjection(otherAttributes, childOutput)
         val joinedRow = new JoinedRow
 
         val rows = new CompactBuffer[Row]()
@@ -321,7 +314,7 @@ case class WindowFunction(
           private[this] var currentRowIndex: Int = -1
 
           val resultProjection = new InterpretedProjection(resultExpressions, resultAttributes)
-          val otherProjection = new InterpretedMutableProjection(otherExpressions, childOutput)
+          val otherProjection = new InterpretedMutableProjection(otherAttributes, childOutput)
           val joinedRow = new JoinedRow
 
           override final def hasNext: Boolean =
