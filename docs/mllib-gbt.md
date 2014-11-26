@@ -69,18 +69,18 @@ Notation: $N$ = number of instances. $y_i$ = label of instance $i$.  $x_i$ = fea
   </tbody>
 </table>
 
-## Usage guide
+## Usage tips
 
 We include a few guidelines for using GBTs by discussing the various parameters.
 We omit some decision tree parameters since those are covered in the [decision tree guide](mllib-decision-tree.html).
 
-* **loss**: See the section above for information on losses and their applicability to tasks (classification vs. regression).  Different losses can give significantly different results, depending on the dataset.
+* **`loss`**: See the section above for information on losses and their applicability to tasks (classification vs. regression).  Different losses can give significantly different results, depending on the dataset.
 
-* **numIterations**: This sets the number of trees in the ensemble.  Each iteration produces one tree.  Increasing this number makes the model more expressive, improving training data accuracy.  However, test-time accuracy may suffer if this is too large.
+* **`numIterations`**: This sets the number of trees in the ensemble.  Each iteration produces one tree.  Increasing this number makes the model more expressive, improving training data accuracy.  However, test-time accuracy may suffer if this is too large.
 
-* **learningRate**: This parameter should not need to be tuned.  If the algorithm behavior seems unstable, decreasing this value may improve stability.
+* **`learningRate`**: This parameter should not need to be tuned.  If the algorithm behavior seems unstable, decreasing this value may improve stability.
 
-* **algo**: The algorithm or task (classification vs. regression) is set using the tree [Strategy] parameter.
+* **`algo`**: The algorithm or task (classification vs. regression) is set using the tree [Strategy] parameter.
 
 
 ## Examples
