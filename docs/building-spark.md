@@ -124,6 +124,12 @@ Scala 2.11 support in Spark is experimental and does not support a few features.
 Specifically, Spark's external Kafka library and JDBC component are not yet
 supported in Scala 2.11 builds.
 
+# Building External Connectors
+Spark's external connectors such as Flume integration can be enabled with the `-Pexternal-projects` flag.
+    mvn -Pexternal-projects -DskipTests clean package
+
+Scala 2.11 support in Spark is experimental and does not support a few features.
+
 # Spark Tests in Maven
 
 Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin). 

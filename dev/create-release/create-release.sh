@@ -94,13 +94,13 @@ if [[ ! "$@" =~ --package-only ]]; then
   rm -rf $SPARK_REPO
 
   mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-    -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
+    -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl -Pexternal-projects \
     clean install
 
   ./dev/change-version-to-2.11.sh
   
   mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-    -Dscala-2.11 -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
+    -Dscala-2.11 -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl -Pexternal-projects \
     clean install
 
   ./dev/change-version-to-2.10.sh
