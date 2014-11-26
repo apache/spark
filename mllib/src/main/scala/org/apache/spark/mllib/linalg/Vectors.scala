@@ -85,13 +85,6 @@ sealed trait Vector extends Serializable {
    *          with type `Double`.
    */
   private[spark] def foreachActive(f: (Int, Double) => Unit)
-
-  /**
-   * Returns the p-norm of this vector.
-   * @param p norm.
-   * @return norm in L^p^ space.
-   */
-  private[spark] def norm(p: Double): Double
 }
 
 /**
@@ -269,9 +262,21 @@ object Vectors {
     }
   }
 
-  private[linalg] def norm(p: Double, values: Array[Double]): Double = {
+  /**
+   * Returns the p-norm of this vector.
+   * @param vector input vector.
+   * @param p norm.
+   * @return norm in L^p^ space.
+   */
+  private[spark] def norm(vector: Vector, p: Double): Double = {
     require(p >= 1.0)
+    val values = vector match {
+      case dv: DenseVector => dv.values
+      case sv: SparseVector => sv.values
+      case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
+    }
     val size = values.size
+
     if (p == 1) {
       var sum = 0.0
       var i = 0
@@ -339,8 +344,6 @@ class DenseVector(val values: Array[Double]) extends Vector {
       i += 1
     }
   }
-
-  private[spark] override def norm(p: Double): Double = Vectors.norm(p, values)
 }
 
 /**
@@ -389,6 +392,4 @@ class SparseVector(
       i += 1
     }
   }
-
-  private[spark] override def norm(p: Double): Double = Vectors.norm(p, values)
 }

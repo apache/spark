@@ -124,7 +124,7 @@ class KMeans private (
     }
 
     // Compute squared norms and cache them.
-    val norms = data.map(_.norm(2.0))
+    val norms = data.map(Vectors.norm(_, 2.0))
     norms.persist()
     val breezeData = data.map(_.toBreeze).zip(norms).map { case (v, norm) =>
       new BreezeVectorWithNorm(v, norm)
@@ -424,7 +424,7 @@ object KMeans {
 private[clustering]
 class BreezeVectorWithNorm(val vector: BV[Double], val norm: Double) extends Serializable {
 
-  def this(vector: BV[Double]) = this(vector, Vectors.fromBreeze(vector).norm(2.0))
+  def this(vector: BV[Double]) = this(vector, Vectors.norm(Vectors.fromBreeze(vector), 2.0))
 
   def this(array: Array[Double]) = this(new BDV[Double](array))
 

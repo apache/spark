@@ -203,18 +203,22 @@ class VectorsSuite extends FunSuite {
     val dv = Vectors.dense(0.0, -1.2, 3.1, 0.0, -4.5, 1.9)
     val sv = Vectors.sparse(6, Seq((1, -1.2), (2, 3.1), (3, 0.0), (4, -4.5), (5, 1.9)))
 
-    assert(dv.norm(1.0) ~== dv.toArray.foldLeft(0.0)((a, v) => a + math.abs(v)) relTol 1E-8)
-    assert(sv.norm(1.0) ~== sv.toArray.foldLeft(0.0)((a, v) => a + math.abs(v)) relTol 1E-8)
+    assert(Vectors.norm(dv, 1.0) ~== dv.toArray.foldLeft(0.0)((a, v) =>
+      a + math.abs(v)) relTol 1E-8)
+    assert(Vectors.norm(sv, 1.0) ~== sv.toArray.foldLeft(0.0)((a, v) =>
+      a + math.abs(v)) relTol 1E-8)
 
-    assert(dv.norm(2.0) ~== math.sqrt(dv.toArray.foldLeft(0.0)((a, v) => a + v * v)) relTol 1E-8)
-    assert(sv.norm(2.0) ~== math.sqrt(sv.toArray.foldLeft(0.0)((a, v) => a + v * v)) relTol 1E-8)
+    assert(Vectors.norm(dv, 2.0) ~== math.sqrt(dv.toArray.foldLeft(0.0)((a, v) =>
+      a + v * v)) relTol 1E-8)
+    assert(Vectors.norm(sv, 2.0) ~== math.sqrt(sv.toArray.foldLeft(0.0)((a, v) =>
+      a + v * v)) relTol 1E-8)
 
-    assert(dv.norm(Double.PositiveInfinity) ~== dv.toArray.map(math.abs).max relTol 1E-8)
-    assert(sv.norm(Double.PositiveInfinity) ~== sv.toArray.map(math.abs).max relTol 1E-8)
+    assert(Vectors.norm(dv, Double.PositiveInfinity) ~== dv.toArray.map(math.abs).max relTol 1E-8)
+    assert(Vectors.norm(sv, Double.PositiveInfinity) ~== sv.toArray.map(math.abs).max relTol 1E-8)
 
-    assert(dv.norm(3.7) ~== math.pow(dv.toArray.foldLeft(0.0)((a, v) =>
+    assert(Vectors.norm(dv, 3.7) ~== math.pow(dv.toArray.foldLeft(0.0)((a, v) =>
       a + math.pow(math.abs(v), 3.7)), 1.0 / 3.7) relTol 1E-8)
-    assert(sv.norm(3.7) ~== math.pow(dv.toArray.foldLeft(0.0)((a, v) =>
+    assert(Vectors.norm(sv, 3.7) ~== math.pow(dv.toArray.foldLeft(0.0)((a, v) =>
       a + math.pow(math.abs(v), 3.7)), 1.0 / 3.7) relTol 1E-8)
   }
 }
