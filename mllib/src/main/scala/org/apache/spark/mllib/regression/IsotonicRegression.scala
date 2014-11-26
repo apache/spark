@@ -49,33 +49,82 @@ class IsotonicRegressionModel(
 
   //take the highest of elements smaller than our feature or weight with lowest feature
   override def predict(testData: Vector): Double =
-    (predictions.head +: predictions.filter(y => y.features.toArray.head <= testData.toArray.head)).last.label
+    (predictions.head +:
+      predictions.filter(y => y.features.toArray.head <= testData.toArray.head)).last.label
 }
 
+/**
+ * Base representing algorithm for isotonic regression
+ */
 trait IsotonicRegressionAlgorithm
   extends Serializable {
 
-  protected def createModel(weights: Seq[LabeledPoint], monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel
-  def run(input: RDD[LabeledPoint], monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel
-  def run(input: RDD[LabeledPoint], initialWeights: Vector, monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel
+  protected def createModel(
+      weights: Seq[LabeledPoint],
+      monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel
+
+  /**
+   * Run algorithm to obtain isotonic regression model
+   * @param input data
+   * @param monotonicityConstraint ascending or descenting
+   * @return model
+   */
+  def run(
+      input: RDD[LabeledPoint],
+      monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel
+
+  /**
+   * Run algorithm to obtain isotonic regression model
+   * @param input data
+   * @param initialWeights weights
+   * @param monotonicityConstraint asc or desc
+   * @return
+   */
+  def run(
+      input: RDD[LabeledPoint],
+      initialWeights: Vector,
+      monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel
 }
 
 class PoolAdjacentViolators extends IsotonicRegressionAlgorithm {
 
-  override def run(input: RDD[LabeledPoint], monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel =
-    createModel(parallelPoolAdjacentViolators(input, monotonicityConstraint), monotonicityConstraint)
+  override def run(
+      input: RDD[LabeledPoint],
+      monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel = {
+    createModel(
+      parallelPoolAdjacentViolators(input, monotonicityConstraint),
+      monotonicityConstraint)
+  }
 
-  override def run(input: RDD[LabeledPoint], initialWeights: Vector, monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel = ???
+  override def run(
+      input: RDD[LabeledPoint],
+      initialWeights: Vector,
+      monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel = {
+    ???
+  }
 
-  override protected def createModel(weights: Seq[LabeledPoint], monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel =
+  override protected def createModel(
+      weights: Seq[LabeledPoint],
+      monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel = {
     new IsotonicRegressionModel(weights, monotonicityConstraint)
+  }
 
-  //Performs a pool adjacent violators algorithm (PAVA)
-  //Uses approach with single processing of data where violators in previously processed
-  //data created by pooling are fixed immediatelly.
-  //Uses optimization of discovering monotonicity violating sequences
-  //Method in situ mutates input array
-  private def poolAdjacentViolators(in: Array[LabeledPoint], monotonicityConstraint: MonotonicityConstraint): Array[LabeledPoint] = {
+
+
+  /**
+   * Performs a pool adjacent violators algorithm (PAVA)
+   * Uses approach with single processing of data where violators in previously processed
+   * data created by pooling are fixed immediatelly.
+   * Uses optimization of discovering monotonicity violating sequences
+   * Method in situ mutates input array
+   *
+   * @param in input data
+   * @param monotonicityConstraint asc or desc
+   * @return result
+   */
+  private def poolAdjacentViolators(
+      in: Array[LabeledPoint],
+      monotonicityConstraint: MonotonicityConstraint): Array[LabeledPoint] = {
 
     //Pools sub array within given bounds assigning weighted average value to all elements
     def pool(in: Array[LabeledPoint], start: Int, end: Int): Unit = {
@@ -117,10 +166,22 @@ class PoolAdjacentViolators extends IsotonicRegressionAlgorithm {
     in
   }
 
-  private def parallelPoolAdjacentViolators(testData: RDD[LabeledPoint], monotonicityConstraint: MonotonicityConstraint): Seq[LabeledPoint] = {
+  /**
+   * Performs parallel pool adjacent violators algorithm
+   * Calls PAVA on each partition and then again on the result
+   *
+   * @param testData input
+   * @param monotonicityConstraint asc or desc
+   * @return result
+   */
+  private def parallelPoolAdjacentViolators(
+      testData: RDD[LabeledPoint],
+      monotonicityConstraint: MonotonicityConstraint): Seq[LabeledPoint] = {
+
     poolAdjacentViolators(
       testData
         .sortBy(_.features.toArray.head)
+        .cache()
         .mapPartitions(it => poolAdjacentViolators(it.toArray, monotonicityConstraint).toIterator)
         .collect(), monotonicityConstraint)
   }
@@ -163,106 +224,3 @@ object IsotonicRegression {
     new PoolAdjacentViolators().run(input, monotonicityConstraint)
   }
 }
-
-/*def functionalOption(in: Array[LabeledPoint], monotonicityConstraint: MonotonicityConstraint): Array[LabeledPoint] = {
-     def pool2(in: Array[LabeledPoint]): Array[LabeledPoint] =
-       in.map(p => LabeledPoint(in.map(_.label).sum / in.length, p.features))
-
-     def iterate(checked: Array[LabeledPoint], remaining: Array[LabeledPoint], monotonicityConstraint: MonotonicityConstraint): Array[LabeledPoint] = {
-       if(remaining.size < 2) {
-         checked ++ remaining
-       } else {
-         val newRemaining = if(remaining.size == 2) Array[LabeledPoint]() else remaining.slice(2, remaining.length)
-
-         if(!monotonicityConstraint.holds(remaining.head, remaining.tail.head)) {
-           iterate(checked ++ pool2(remaining.slice(0, 2)), newRemaining, monotonicityConstraint)
-         } else {
-           iterate(checked ++ remaining.slice(0, 2), newRemaining, monotonicityConstraint)
-         }
-       }
-     }
-
-     iterate(Array(), in, monotonicityConstraint)
-   }
-
-
-   functionalOption(in, monotonicityConstraint)*/
-
-/*def option1(in: Array[LabeledPoint], monotonicityConstraint: MonotonicityConstraint) = {
-      def findMonotonicityViolators(in: Array[LabeledPoint], start: Int, monotonicityConstraint: MonotonicityConstraint): Unit = {
-        var j = start
-
-        while (j >= 1 && !monotonicityConstraint.holds(in(j - 1), in(j))) {
-          pool(in, j - 1, start + 1)
-          j = j - 1
-        }
-      }
-
-      for (i <- 0 to in.length - 1) {
-        findMonotonicityViolators(in, i, monotonicityConstraint)
-      }
-
-      in
-    }*/
-
-/*
-def pool(in: Array[LabeledPoint], start: Int, end: Int): Unit = {
-val subArraySum = in.slice(start, end).map(_.label).sum
-val subArrayLength = math.abs(start - end)
-
-for(i <- start to end - 1) {
-in(i) = LabeledPoint(subArraySum / subArrayLength, in(i).features)
-}
-}*/
-
-
-
-/*
-OPTION 2
-def pool(in: Array[LabeledPoint], range: Range): Unit = {
-      val subArray = in.slice(range.start, range.end + 1)
-
-      val subArraySum = subArray.map(_.label).sum
-      val subArrayLength = subArray.length
-
-      for(i <- range.start to range.end) {
-        in(i) = LabeledPoint(subArraySum / subArrayLength, in(i).features)
-      }
-    }
-
-    def poolExtendedViolators(in: Array[LabeledPoint], range: Range, monotonicityConstraint: MonotonicityConstraint): Unit = {
-      var extendedRange = Range(range.start, range.end)
-
-      while (extendedRange.start >= 0 && !monotonicityConstraint.holds(in(extendedRange.start), in(extendedRange.start + 1))) {
-        pool(in, Range(extendedRange.start, extendedRange.end))
-        extendedRange = Range(extendedRange.start - 1, extendedRange.end)
-      }
-    }
-
-    def findViolatingSequence(in: Array[LabeledPoint], start: Int, monotonicityConstraint: MonotonicityConstraint): Option[Range] = {
-      var j = start
-
-      while(j < in.length - 1 && !monotonicityConstraint.holds(in(start), in(j + 1))) {
-        j = j + 1
-      }
-
-      if(j == start) {
-        None
-      } else {
-        Some(Range(start, j))
-      }
-    }
-
-    var i = 0;
-
-    while(i < in.length) {
-      findViolatingSequence(in, i, monotonicityConstraint).fold[Unit]({
-        i = i + 1
-      })(r => {
-        poolExtendedViolators(in, r, monotonicityConstraint)
-        i = r.end
-      })
-    }
-
-    in
- */

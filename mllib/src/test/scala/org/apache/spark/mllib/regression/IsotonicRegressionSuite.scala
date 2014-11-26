@@ -31,7 +31,6 @@ class IsotonicRegressionSuite
   def generateDataPoints(labels: Double*): Seq[LabeledPoint] =
     labels.zip((1 to labels.size)).map(point => LabeledPoint(point._1, Vectors.dense(point._2)))
 
-
   test("increasing isotonic regression") {
     val testRDD = sc.parallelize(generateDataPoints(1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12, 14, 15, 17, 16, 17, 18, 19, 20)).cache()
 
@@ -75,6 +74,33 @@ class IsotonicRegressionSuite
     val model = alg.run(testRDD, Isotonic)
 
     model.predictions should be(generateDataPoints(3, 3, 3, 3, 3))
+  }
+
+  test("isotonic regression with last element violating monotonicity") {
+    val testRDD = sc.parallelize(generateDataPoints(1, 2, 3, 4, 2)).cache()
+
+    val alg = new PoolAdjacentViolators
+    val model = alg.run(testRDD, Isotonic)
+
+    model.predictions should be(generateDataPoints(1, 2, 3, 3, 3))
+  }
+
+  test("isotonic regression with first element violating monotonicity") {
+    val testRDD = sc.parallelize(generateDataPoints(4, 2, 3, 4, 5)).cache()
+
+    val alg = new PoolAdjacentViolators
+    val model = alg.run(testRDD, Isotonic)
+
+    model.predictions should be(generateDataPoints(3, 3, 3, 4, 5))
+  }
+
+  test("isotonic regression with unordered input") {
+    val testRDD = sc.parallelize(List[LabeledPoint]()).cache()
+
+    val alg = new PoolAdjacentViolators
+    val model = alg.run(testRDD, Isotonic)
+
+    model.predictions should be(List())
   }
 
   test("isotonic regression prediction") {
