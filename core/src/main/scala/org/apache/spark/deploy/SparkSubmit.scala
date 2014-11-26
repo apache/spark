@@ -142,6 +142,8 @@ object SparkSubmit {
         printErrorAndExit("Cluster deploy mode is currently not supported for python applications.")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
+      case (_, CLUSTER) if isSql(args.mainClass) =>
+        printErrorAndExit("Cluster deploy mode is not applicable to Spark SQLs.")
       case _ =>
     }
 
@@ -386,6 +388,13 @@ object SparkSubmit {
    */
   private[spark] def isShell(primaryResource: String): Boolean = {
     primaryResource == SPARK_SHELL || primaryResource == PYSPARK_SHELL
+  }
+
+  /**
+   * Return whether the given main class represents a sql shell.
+   */
+  private[spark] def isSql(mainClass: String): Boolean = {
+    mainClass == "org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
   }
 
   /**
