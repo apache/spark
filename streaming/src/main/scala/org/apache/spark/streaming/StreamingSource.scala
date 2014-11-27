@@ -80,12 +80,6 @@ private[streaming] class StreamingSource(ssc: StreamingContext) extends Source {
     _.lastCompletedBatch.flatMap(_.processingEndTime).getOrElse(-1L), -1L)
 
   // Gauge for last received batch records and total received batch records.
-  private var totalReceivedBatchRecords: Long = 0L
-  def getTotalReceivedBatchRecords(listener: StreamingJobProgressListener): Long = {
-    totalReceivedBatchRecords += listener.lastReceivedBatchRecords.values.sum
-    totalReceivedBatchRecords
-  }
-
   registerGauge("lastReceivedBatchRecords", _.lastReceivedBatchRecords.values.sum, 0L)
-  registerGauge("totalReceivedBatchRecords", getTotalReceivedBatchRecords, 0L)
+  registerGauge("totalReceivedBatchRecords", _.numTotalReceivedBatchRecords, 0L)
 }
