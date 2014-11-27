@@ -189,7 +189,7 @@ case class WindowFunction(
       case DoubleType => Literal(windowFrame.preceding.toDouble)
       case FloatType => Literal(windowFrame.preceding.toFloat)
       case ShortType => Literal(windowFrame.preceding.toShort)
-      case DecimalType => Literal(BigDecimal(windowFrame.preceding))
+      case DecimalType() => Literal(BigDecimal(windowFrame.preceding))
       case _=> throw new Exception(s"not support dataType ")
     }
     val following = sortExpression.child.dataType match {
@@ -198,7 +198,7 @@ case class WindowFunction(
       case DoubleType => Literal(windowFrame.following.toDouble)
       case FloatType => Literal(windowFrame.following.toFloat)
       case ShortType => Literal(windowFrame.following.toShort)
-      case DecimalType => Literal(BigDecimal(windowFrame.following))
+      case DecimalType() => Literal(BigDecimal(windowFrame.following))
       case _=> throw new Exception(s"not support dataType ")
     }
 
