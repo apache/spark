@@ -108,15 +108,15 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 
   override def nullable = true
 
-  override def eval(input: Row): Any =
-    if(right.eval(input) == 0) {
-      null
-    } else {
-      dataType match {
-        case _: FractionalType => f2(input, left, right, _.div(_, _))
-        case _: IntegralType => i2(input, left , right, _.quot(_, _))
-      }
+  override def eval(input: Row): Any = {
+    val evalE2 = right.eval(input)
+    dataType match {
+      case _ if evalE2 == null => null
+      case _ if evalE2 == 0 => null
+      case ft: FractionalType => f1(input, left, _.div(_, evalE2.asInstanceOf[ft.JvmType]))
+      case it: IntegralType => i1(input, left, _.quot(_, evalE2.asInstanceOf[it.JvmType]))
     }
+  }
 
 }
 
