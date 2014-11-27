@@ -43,7 +43,7 @@ public class JavaJdbcRDDSuite implements Serializable {
 
     Class.forName("org.apache.derby.jdbc.EmbeddedDriver");
     Connection connection =
-      DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb;create=true");
+      DriverManager.getConnection("jdbc:derby:target/JavaJdbcRDDSuiteDb;create=true");
 
     try {
       Statement create = connection.createStatement();
@@ -72,9 +72,11 @@ public class JavaJdbcRDDSuite implements Serializable {
   @After
   public void tearDown() throws SQLException {
     try {
-      DriverManager.getConnection("jdbc:derby:;shutdown=true");
+      DriverManager.getConnection("jdbc:derby:target/JavaJdbcRDDSuiteDb;shutdown=true");
     } catch(SQLException e) {
-      if (e.getSQLState().compareTo("XJ015") != 0) {
+      // Throw if not normal single database shutdown
+      // https://db.apache.org/derby/docs/10.2/ref/rrefexcept71493.html
+      if (e.getSQLState().compareTo("08006") != 0) {
         throw e;
       }
     }
@@ -90,7 +92,7 @@ public class JavaJdbcRDDSuite implements Serializable {
       new JdbcRDD.ConnectionFactory() {
         @Override
         public Connection getConnection() throws SQLException {
-          return DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb");
+          return DriverManager.getConnection("jdbc:derby:target/JavaJdbcRDDSuiteDb");
         }
       },
       "SELECT DATA FROM FOO WHERE ? <= ID AND ID <= ?",
