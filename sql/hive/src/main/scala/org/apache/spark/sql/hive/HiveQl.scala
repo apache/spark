@@ -971,8 +971,9 @@ private[hive] object HiveQl {
           else currentPlan
         }
 
-      currentPlan = WindowFunction(partitionExpr, computeExpressions.toSeq, otherExpressions, withWindowPartition)
-      attrExpressions ++= computeExpressions.map(_.toAttribute)
+      currentPlan = WindowFunction(
+        partitionExpr, computeExpressions.toSeq, otherExpressions, withWindowPartition)
+      attrExpressions ++= computeExpressions
       windowAttributes --= computeExpressions
 
     }
