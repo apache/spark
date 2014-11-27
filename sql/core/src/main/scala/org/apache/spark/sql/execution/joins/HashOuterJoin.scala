@@ -199,8 +199,6 @@ case class HashOuterJoin(
       val leftHashTable = buildHashTable(leftIter, newProjection(leftKeys, left.output))
       // Build HashMap for current partition in right relation
       val rightHashTable = buildHashTable(rightIter, newProjection(rightKeys, right.output))
-      val boundCondition =
-        condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
       joinType match {
         case LeftOuter => leftHashTable.keysIterator.flatMap { key =>
           leftOuterIterator(key, leftHashTable.getOrElse(key, EMPTY_LIST),
