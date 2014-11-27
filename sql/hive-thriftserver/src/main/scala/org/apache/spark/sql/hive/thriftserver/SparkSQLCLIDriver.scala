@@ -329,19 +329,19 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
   }
 
   /**
-   * return a commultive string without single line comment (begin with "#" or "--") and
-   * multi line comments (quoted in "/* */") through a filter function.
-   * this can be used for **comment support** in command input.
-   * ######three comment styles supported:
+   * Filter Comments in inputed line and return a commultive string without any comments.
+   * This can be used for **comment support**.
+   * Three comment styles supported:
    * 1. From a '#' character to the end of the line.
    * 2. From a '--' sequence to the end of the line
    * 3. From a /* sequence to the following */ sequence, as in the C programming language.
    * This syntax allows a comment to extend over multiple lines because the beginning
    * and closing sequences need not be on the same line.
-   * @param line line string inputed from console
-   * @param filterCommentResult a case class that encapsulates the result of filterComment
+   * @param line string inputed from console
+   * @param filterCommentResult the case class that encapsulates the result of filterComment
    * for making code more concise
-   * @return a case class representing result after filter comments, including (cmd, isCmdEnded, commentStack)
+   * @return  the case class representing result after filter comments,
+   * including (cmd, isCmdEnded, commentStack)
    */
   def filterComment(line: String,
                     filterCommentResult: FilterCommentResult
@@ -352,107 +352,94 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
     if (line == null || line.trim.isEmpty) return filterCommentResult
 
     // define some regexes for match
-    val SINGLE_LINE_COMMENT_DASH_REGEX = """(.*?)--(.*)""".r
-    val SINGLE_LINE_COMMENT_POUND_REGEX = """(.*?)#(.*)""".r
-    val MULTI_LINE_COMMENT_START_REGEX = """(.*?)/\*(.*)""".r
-    val MULTI_LINE_COMMENT_END_REGEX = """(.*?)\*/(.*)""".r
-    val SINGLE_QUOTATION_MARK_REGEX = """(.*?)'(.*)""".r
-    val DOUBLE_QUOTATION_MARK_REGEX = """(.*?)"(.*)""".r
-    val CMD_END_REGEX = """(.*?);(.*)""".r
-
-    val markerMap = scala.collection.immutable.HashMap(
-      "SINGLE_LINE_COMMENT_DASH" ->(SINGLE_LINE_COMMENT_DASH_REGEX, " -- "),
-      "SINGLE_LINE_COMMENT_POUND" ->(SINGLE_LINE_COMMENT_POUND_REGEX, " # "),
-      "MULTI_LINE_COMMENT_START" ->(MULTI_LINE_COMMENT_START_REGEX, " /* "),
-      "MULTI_LINE_COMMENT_END" ->(MULTI_LINE_COMMENT_END_REGEX, " */ "),
-      "SINGLE_QUOTATION_MARK" ->(SINGLE_QUOTATION_MARK_REGEX, "'"),
-      "DOUBLE_QUOTATION_MARK" ->(DOUBLE_QUOTATION_MARK_REGEX, "\""),
-      "CMD_END" ->(CMD_END_REGEX, ";")
+    val commentMarkSeq = scala.collection.immutable.Seq(
+      CommentMark("SINGLE_LINE_COMMENT_DASH", " -- ", """(.*?)--(.*)""".r),
+      CommentMark("SINGLE_LINE_COMMENT_POUND", " # ", """(.*?)#(.*)""".r),
+      CommentMark("MULTI_LINE_COMMENT_START", " /* ", """(.*?)/\*(.*)""".r),
+      CommentMark("MULTI_LINE_COMMENT_END", " */ ", """(.*?)\*/(.*)""".r),
+      CommentMark("SINGLE_QUOTATION_MARK", "'", """(.*?)'(.*)""".r),
+      CommentMark("DOUBLE_QUOTATION_MARK", "\"", """(.*?)"(.*)""".r),
+      CommentMark("CMD_END_MARK", ";", """(.*?);(.*)""".r)
     )
 
+    val commentMarkMap = (for (c <- commentMarkSeq) yield (c.name -> c)).toMap
+
     // to get the first match in the line
+    var filterMatchName = ""
     var filterMatchRegex: scala.util.matching.Regex = null
     var filterMatchIdx = -1
-    var filterMatchType = ""
 
-    markerMap.foreach(x => {
-      val findFirstMatch = x._2._1.findFirstMatchIn(line)
+    commentMarkSeq.foreach(commentMark => {
+      val findFirstMatch = commentMark.regex.findFirstMatchIn(line)
       if (findFirstMatch != None) {
         val matchPositonIdx = findFirstMatch.get.group(1).length
         if (matchPositonIdx < filterMatchIdx || filterMatchIdx == -1) {
-          filterMatchType = x._1
-          filterMatchRegex = x._2._1
+          filterMatchName = commentMark.name
+          filterMatchRegex = commentMark.regex
           filterMatchIdx = matchPositonIdx
         }
       }
     })
 
-    // process the comments one by one based on head eliment in commentStack and first match regex.
-    val head = filterCommentResult.commentStack.headOption.getOrElse(null)
+    // process the comments one by one based on head eliment in commentStack and
+    // first match regex.
+    val currentCommentMark = filterCommentResult.commentStack.headOption.getOrElse(null)
 
     if (filterMatchRegex != null) {
       val filterMatch = filterMatchRegex.findFirstMatchIn(line)
       val Array(part1, part2) = filterMatch.get.subgroups.toArray
 
-      if (head == null) {
-        filterMatchType match {
-          case "CMD_END" =>
-            filterCommentResult.cmd += part1 + ";"
+      if (currentCommentMark == null) {
+        filterMatchName match {
+          case "CMD_END_MARK" =>
+            filterCommentResult.cmd += part1 + commentMarkMap(filterMatchName).marker
             filterCommentResult.isCmdEnded = true
-            filterCommentResult.cmd = filterCommentResult.cmd.replaceAll( """\n+\s*\n*""", "\n").trim
+            filterCommentResult.cmd = filterCommentResult.cmd.
+              replaceAll( """\n+\s*\n*""", "\n").trim
           case "SINGLE_QUOTATION_MARK" | "DOUBLE_QUOTATION_MARK" =>
-            filterCommentResult.commentStack.push(filterMatchType)
-            filterCommentResult.cmd += part1 + markerMap(filterMatchType)._2
+            filterCommentResult.commentStack.push(filterMatchName)
+            filterCommentResult.cmd += part1 + commentMarkMap(filterMatchName).marker
             filterComment(part2, filterCommentResult)
           case "SINGLE_LINE_COMMENT_DASH" | "SINGLE_LINE_COMMENT_POUND" =>
             filterCommentResult.cmd += part1
           case "MULTI_LINE_COMMENT_START" =>
-            filterCommentResult.commentStack.push(filterMatchType)
+            filterCommentResult.commentStack.push(filterMatchName)
             filterCommentResult.cmd += part1
             filterComment(part2, filterCommentResult)
           case "MULTI_LINE_COMMENT_END" =>
-            throw new Exception("found no matched multi line comment start marker for */.")
+            println(
+              """WARN: found "*/", but not found matched multi line comment start marker "/*".
+                |Reset your input.
+              """.stripMargin)
+            return FilterCommentResult("", false, new scala.collection.mutable.Stack[String])
           case _ =>
         }
 
       } else {
-        head match {
-          case "SINGLE_QUOTATION_MARK" => {
-            if (filterMatchType == "SINGLE_QUOTATION_MARK") {
-              filterCommentResult.cmd += part1 + "'"
-              filterCommentResult.commentStack.pop()
-            } else if (filterMatchType == "DOUBLE_QUOTATION_MARK") {
-              filterCommentResult.cmd += part1 + "\""
-              filterCommentResult.commentStack.push(filterMatchType)
-            } else {
-              filterCommentResult.cmd += part1 + markerMap(filterMatchType)._2
-            }
-            filterComment(part2, filterCommentResult)
-          }
-          case "DOUBLE_QUOTATION_MARK" => {
-            if (filterMatchType == "SINGLE_QUOTATION_MARK") {
-              filterCommentResult.cmd += part1 + "'"
-              filterCommentResult.commentStack.push(filterMatchType)
-            } else if (filterMatchType == "DOUBLE_QUOTATION_MARK") {
-              filterCommentResult.cmd += part1 + "\""
+        currentCommentMark match {
+          case "SINGLE_QUOTATION_MARK" | "DOUBLE_QUOTATION_MARK" => {
+            filterCommentResult.cmd += part1 + commentMarkMap(filterMatchName).marker
+            if (filterMatchName == currentCommentMark) {
               filterCommentResult.commentStack.pop()
             } else {
-              filterCommentResult.cmd += part1 + markerMap(filterMatchType)._2
+              filterCommentResult.commentStack.push(filterMatchName)
             }
             filterComment(part2, filterCommentResult)
           }
           case "MULTI_LINE_COMMENT_START" => {
-            if (filterMatchType == "MULTI_LINE_COMMENT_END") filterCommentResult.commentStack.pop()
+            if (filterMatchName == "MULTI_LINE_COMMENT_END")
+              filterCommentResult.commentStack.pop()
             filterComment(part2, filterCommentResult)
           }
         }
       }
     } else {
-      // filterMatchRegex == null
-      if (head == null) {
+      // filterMatchRegex == null (not found match mark in the line)
+      if (currentCommentMark == null) {
         filterCommentResult.cmd += line
       } else {
-        if (head == "SINGLE_QUOTATION_MARK" || head == "DOUBLE_QUOTATION_MARK") {
+        if (currentCommentMark == "SINGLE_QUOTATION_MARK"
+          || currentCommentMark == "DOUBLE_QUOTATION_MARK") {
           filterCommentResult.cmd += line
         }
       }
@@ -462,12 +449,21 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 }
 
 /**
- * using for encapsulating the result of filterComment.
- * @param cmd a commulative string for generating a cmd from multi inputs
- * @param isCmdEnded  whether the cmd is ended.
- * @param commentStack  a stack that acts as a context, stores the current elements that should be considered
- *                      while filtering comments, like ', ", or the begin flag of multi line comments
+ * Represents result of filterComment.
+ * @param cmd The commulative string for generating one cmd from multi inputs
+ * @param isCmdEnded  Whether the cmd is ended.
+ * @param commentStack  the context used in filterComment, stores elements that should
+ *                      be considered while filtering comments, like ', ", or the begin
+ *                      flag of multi line comments
  */
 case class FilterCommentResult(var cmd: String,
                                var isCmdEnded: Boolean,
                                var commentStack: scala.collection.mutable.Stack[String])
+
+/**
+ * Represents comment mark.
+ * @param name the name of comment mark
+ * @param marker the marker of comment mark
+ * @param regex the regular expression of comment mark
+ */
+case class CommentMark(name: String, marker: String, regex: scala.util.matching.Regex)
