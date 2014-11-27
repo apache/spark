@@ -189,7 +189,7 @@
     <repository>
       <id>mqtt-repo</id>
       <name>MQTT Repository</name>
-      <url>https://repo.eclipse.org/content/repositories/paho</url>
+      <url>https://repo.eclipse.org/content/repositories/paho-releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
