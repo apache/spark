@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.util.Metadata
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
   def newExprId = ExprId(curId.getAndIncrement())
+  def unapply(expr: NamedExpression): Option[(String, DataType)] = Some(expr.name, expr.dataType)
 }
 
 /**

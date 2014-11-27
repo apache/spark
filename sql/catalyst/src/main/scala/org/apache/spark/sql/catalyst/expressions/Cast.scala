@@ -32,11 +32,15 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   override def nullable = (child.dataType, dataType) match {
     case (StringType, _: NumericType) => true
     case (StringType, TimestampType)  => true
+    case (DoubleType, TimestampType)  => true
+    case (FloatType, TimestampType)   => true
     case (StringType, DateType)       => true
     case (_: NumericType, DateType)   => true
     case (BooleanType, DateType)      => true
     case (DateType, _: NumericType)   => true
     case (DateType, BooleanType)      => true
+    case (DoubleType, _: DecimalType) => true
+    case (FloatType, _: DecimalType)  => true
     case (_, DecimalType.Fixed(_, _)) => true  // TODO: not all upcasts here can really give null
     case _                            => child.nullable
   }
@@ -115,10 +119,18 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
       buildCast[Decimal](_, d => decimalToTimestamp(d))
     // TimestampWritable.doubleToTimestamp
     case DoubleType =>
-      buildCast[Double](_, d => decimalToTimestamp(Decimal(d)))
+      buildCast[Double](_, d => try {
+        decimalToTimestamp(Decimal(d))
+      } catch {
+        case _: NumberFormatException => null
+      })
     // TimestampWritable.floatToTimestamp
     case FloatType =>
-      buildCast[Float](_, f => decimalToTimestamp(Decimal(f)))
+      buildCast[Float](_, f => try {
+        decimalToTimestamp(Decimal(f))
+      } catch {
+        case _: NumberFormatException => null
+      })
   }
 
   private[this]  def decimalToTimestamp(d: Decimal) = {
@@ -290,7 +302,11 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case LongType =>
       b => changePrecision(Decimal(b.asInstanceOf[Long]), target)
     case x: NumericType =>  // All other numeric types can be represented precisely as Doubles
-      b => changePrecision(Decimal(x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)), target)
+      b => try {
+        changePrecision(Decimal(x.numeric.asInstanceOf[Numeric[Any]].toDouble(b)), target)
+      } catch {
+        case _: NumberFormatException => null
+      }
   }
 
   // DoubleConverter
