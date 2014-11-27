@@ -143,7 +143,7 @@ object SparkSubmit {
       case (_, CLUSTER) if isShell(args.primaryResource) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
       case (_, CLUSTER) if isSqlShell(args.mainClass) =>
-        printErrorAndExit("Cluster deploy mode is not applicable to Spark Sql shells.")
+        printErrorAndExit("Cluster deploy mode is not applicable to Spark Sql shell.")
       case _ =>
     }
 
