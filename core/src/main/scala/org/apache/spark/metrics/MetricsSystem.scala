@@ -108,13 +108,18 @@ private[spark] class MetricsSystem private (
    *         application, executor/driver and metric source.
    */
   def buildRegistryName(source: Source): String = {
+    val clusterId = conf.getOption("spark.metrics.clustername").getOrElse("")
     val appId = conf.getOption("spark.app.id")
     val executorId = conf.getOption("spark.executor.id")
     val defaultName = MetricRegistry.name(source.sourceName)
 
     if (instance == "driver" || instance == "executor") {
       if (appId.isDefined && executorId.isDefined) {
-        MetricRegistry.name(appId.get, executorId.get, source.sourceName)
+        if(clusterId == "") {
+          MetricRegistry.name(appId.get, executorId.get, source.sourceName)
+        }else{
+          MetricRegistry.name(clusterId, appId.get, executorId.get, source.sourceName)
+        }
       } else {
         // Only Driver and Executor are set spark.app.id and spark.executor.id.
         // For instance, Master and Worker are not related to a specific application.
