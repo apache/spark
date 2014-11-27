@@ -44,7 +44,7 @@
     <dependency>
       <groupId>org.eclipse.paho</groupId>
       <artifactId>mqtt-client</artifactId>
-       <version>0.4.0</version>
+       <version>0.4.1-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
