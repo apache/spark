@@ -72,13 +72,12 @@ object LinearRegression {
         .action((x, c) => c.copy(input = x))
       note(
         """
-        |For example, the following command runs this app on a synthetic dataset:
-        |
-        | bin/spark-submit --class org.apache.spark.examples.mllib.LinearRegression \
-        |  examples/target/scala-*/spark-examples-*.jar \
-        |  data/mllib/sample_linear_regression_data.txt
-      """.
-          stripMargin)
+          |For example, the following command runs this app on a synthetic dataset:
+          |
+          | bin/spark-submit --class org.apache.spark.examples.mllib.LinearRegression \
+          |  examples/target/scala-*/spark-examples-*.jar \
+          |  data/mllib/sample_linear_regression_data.txt
+        """.stripMargin)
     }
 
     parser.parse(args, defaultParams).map { params =>
