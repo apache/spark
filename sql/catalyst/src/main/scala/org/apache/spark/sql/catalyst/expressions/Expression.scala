@@ -175,7 +175,7 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * Evaluation helper function for 2 Integral children expressions. Those expressions are
    * supposed to be in the same data type, and also the return type.
-   * if the expression result is null, the evaluation result should be null.
+   * Either one of the expressions result is null, the evaluation result should be null.
    */
   @inline
   protected final def i2(
@@ -210,7 +210,7 @@ abstract class Expression extends TreeNode[Expression] {
 
   /**
    * Evaluation helper function for 1 Integral children expression.
-   * Either one of the expressions result is null, the evaluation result should be null.
+   * if the expression result is null, the evaluation result should be null.
    */
   @inline
   protected final def i1(i: Row, e1: Expression, f: ((Integral[Any], Any) => Any)): Any  = {
