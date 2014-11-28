@@ -22,6 +22,11 @@ import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.linalg.Vectors
 import org.scalatest.FunSuite
 import org.apache.spark.mllib.export.pmml.KMeansPMMLModelExport
+import org.apache.spark.mllib.util.LinearDataGenerator
+import org.apache.spark.mllib.regression.LinearRegressionModel
+import org.apache.spark.mllib.export.pmml.GeneralizedLinearPMMLModelExport
+import org.apache.spark.mllib.regression.LassoModel
+import org.apache.spark.mllib.regression.RidgeRegressionModel
 
 class ModelExportFactorySuite extends FunSuite{
 
@@ -41,6 +46,33 @@ class ModelExportFactorySuite extends FunSuite{
     //assert
     assert(modelExport.isInstanceOf[KMeansPMMLModelExport])
    
+   }
+   
+   test("ModelExportFactory create GeneralizedLinearPMMLModelExport when passing a"
+       +"LinearRegressionModel, RidgeRegressionModel or LassoModel") {
+    
+    //arrange
+    val linearInput = LinearDataGenerator.generateLinearInput(
+      3.0, Array(10.0, 10.0), 1, 17)
+    val linearRegressionModel = new LinearRegressionModel(linearInput(0).features, linearInput(0).label);
+    val ridgeRegressionModel = new RidgeRegressionModel(linearInput(0).features, linearInput(0).label);
+    val lassoModel = new LassoModel(linearInput(0).features, linearInput(0).label);
+    
+    //act
+    val linearModelExport = ModelExportFactory.createModelExport(linearRegressionModel, ModelExportType.PMML)         
+    //assert
+    assert(linearModelExport.isInstanceOf[GeneralizedLinearPMMLModelExport])
+
+    //act
+    val ridgeModelExport = ModelExportFactory.createModelExport(ridgeRegressionModel, ModelExportType.PMML)         
+    //assert
+    assert(ridgeModelExport.isInstanceOf[GeneralizedLinearPMMLModelExport])
+    
+    //act
+    val lassoModelExport = ModelExportFactory.createModelExport(lassoModel, ModelExportType.PMML)         
+    //assert
+    assert(lassoModelExport.isInstanceOf[GeneralizedLinearPMMLModelExport])
+    
    }
    
    test("ModelExportFactory throw IllegalArgumentException when passing an unsupported model") {

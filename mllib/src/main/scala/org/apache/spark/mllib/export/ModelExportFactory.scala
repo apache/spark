@@ -20,6 +20,10 @@ package org.apache.spark.mllib.export
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.export.pmml.KMeansPMMLModelExport
 import org.apache.spark.mllib.export.ModelExportType._
+import org.apache.spark.mllib.regression.LinearRegressionModel
+import org.apache.spark.mllib.export.pmml.GeneralizedLinearPMMLModelExport
+import org.apache.spark.mllib.regression.RidgeRegressionModel
+import org.apache.spark.mllib.regression.LassoModel
 
 private[mllib] object ModelExportFactory {
   
@@ -31,7 +35,14 @@ private[mllib] object ModelExportFactory {
   def createModelExport(model: Any, exportType: ModelExportType): ModelExport = {
     return exportType match{
       case PMML => model match{
-        case kmeans: KMeansModel => new KMeansPMMLModelExport(kmeans)
+        case kmeans: KMeansModel => 
+          new KMeansPMMLModelExport(kmeans)
+        case linearRegression: LinearRegressionModel => 
+          new GeneralizedLinearPMMLModelExport(linearRegression, "linear regression")
+        case ridgeRegression: RidgeRegressionModel => 
+          new GeneralizedLinearPMMLModelExport(ridgeRegression, "ridge regression")
+        case lassoRegression: LassoModel => 
+          new GeneralizedLinearPMMLModelExport(lassoRegression, "lasso regression")
         case _ => 
           throw new IllegalArgumentException("Export not supported for model: " + model.getClass)
       }

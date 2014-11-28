@@ -35,70 +35,57 @@ import org.dmg.pmml.MiningFunctionType
 import org.dmg.pmml.MiningSchema
 import org.dmg.pmml.OpType
 import org.dmg.pmml.SquaredEuclidean
-
 import org.apache.spark.mllib.clustering.KMeansModel
+import org.apache.spark.mllib.regression.LinearRegressionModel
+import org.apache.spark.mllib.regression.GeneralizedLinearModel
+import org.dmg.pmml.RegressionModel
+import org.dmg.pmml.RegressionTable
+import org.dmg.pmml.NumericPredictor
 
 /**
- * PMML Model Export for KMeansModel class
+ * PMML Model Export for GeneralizedLinear abstract class
  */
-private[mllib] class KMeansPMMLModelExport(model : KMeansModel) extends PMMLModelExport{
+private[mllib] class GeneralizedLinearPMMLModelExport(
+    model : GeneralizedLinearModel, 
+    description : String) 
+  extends PMMLModelExport{
 
   /**
-   * Export the input KMeansModel model to PMML format
+   * Export the input GeneralizedLinearModel model to PMML format
    */
-  populateKMeansPMML(model)
+  populateGeneralizedLinearPMML(model)
   
-  private def populateKMeansPMML(model : KMeansModel): Unit = {
-    
-     pmml.getHeader().setDescription("k-means clustering") 
+  private def populateGeneralizedLinearPMML(model : GeneralizedLinearModel): Unit = {
+
+     pmml.getHeader().setDescription(description) 
      
-     if(model.clusterCenters.length > 0){
+     if(model.weights.size > 0){
        
-       val clusterCenter = model.clusterCenters(0)
-       
-       val fields = new Array[FieldName](clusterCenter.size)
+       val fields = new Array[FieldName](model.weights.size)
        
        val dataDictionary = new DataDictionary()
        
        val miningSchema = new MiningSchema()
        
-       val comparisonMeasure = new ComparisonMeasure()
-            .withKind(Kind.DISTANCE)
-            .withMeasure(new SquaredEuclidean()
-       )
+       val regressionTable = new RegressionTable(model.intercept)
        
-       val clusteringModel = new ClusteringModel(miningSchema, comparisonMeasure, 
-        MiningFunctionType.CLUSTERING, ModelClass.CENTER_BASED, model.clusterCenters.length)
-        .withModelName("k-means")
-       
-       for ( i <- 0 until clusterCenter.size) {
+       val regressionModel = new RegressionModel(miningSchema,MiningFunctionType.REGRESSION)
+        .withModelName(description).withRegressionTables(regressionTable)
+        
+       for ( i <- 0 until model.weights.size) {
          fields(i) = FieldName.create("field_" + i)
          dataDictionary
             .withDataFields(new DataField(fields(i), OpType.CONTINUOUS, DataType.DOUBLE))
          miningSchema
             .withMiningFields(new MiningField(fields(i))
             .withUsageType(FieldUsageType.ACTIVE))
-         clusteringModel.withClusteringFields(
-             new ClusteringField(fields(i)).withCompareFunction(CompareFunctionType.ABS_DIFF)
-         )     
+         regressionTable.withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))   
        }
        
        dataDictionary.withNumberOfFields((dataDictionary.getDataFields()).size())
        
-       for ( i <- 0 until model.clusterCenters.size ) {
-         val cluster = new Cluster()
-            .withName("cluster_" + i)
-            .withArray(new org.dmg.pmml.Array()
-            .withType(Type.REAL)
-            .withN(clusterCenter.size)
-            .withValue(model.clusterCenters(i).toArray.mkString(" ")))
-            // we don't have the size of the single cluster but only the centroids (withValue)
-            // .withSize(value)
-         clusteringModel.withClusters(cluster)
-       }
-       
        pmml.setDataDictionary(dataDictionary)
-       pmml.withModels(clusteringModel)
+       pmml.withModels(regressionModel)
        
      }
  
