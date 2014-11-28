@@ -992,17 +992,4 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       "nulldata2 on nulldata1.value <=> nulldata2.value"),
         (1 to 2).map(i => Seq(i)))
   }
-
-  test("Supporting Coalesce function in Spark SQL") {
-    val nullCheckData1 = TestData(1,"1") :: TestData(2,null) :: Nil
-    val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
-    rdd1.registerTempTable("nulldata1")
-    val nullCheckData2 = TestData(1,"1") :: TestData(2,"2") :: Nil
-    val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
-    rdd2.registerTempTable("nulldata2")
-
-    checkAnswer(sql("SELECT Coalesce(nulldata2.value,nulldata1.value) FROM nulldata1 join " +
-      "nulldata2 on nulldata1.key = nulldata2.key"),
-        (1 to 2).map(i => Seq(i.toString)))
-  }
 }

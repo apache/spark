@@ -51,7 +51,6 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val CACHE = Keyword("CACHE")
   protected val CASE = Keyword("CASE")
   protected val CAST = Keyword("CAST")
-  protected val COALESCE = Keyword("COALESCE")
   protected val COUNT = Keyword("COUNT")
   protected val DECIMAL = Keyword("DECIMAL")
   protected val DESC = Keyword("DESC")
@@ -306,7 +305,6 @@ class SqlParser extends AbstractSparkSQLParser {
       { case s ~ p ~ l => Substring(s, p, l) }
     | SQRT  ~ "(" ~> expression <~ ")" ^^ { case exp => Sqrt(exp) }
     | ABS   ~ "(" ~> expression <~ ")" ^^ { case exp => Abs(exp) }
-    | COALESCE   ~ "(" ~> repsep(expression, ",") <~ ")" ^^ { case exps => Coalesce(exps) }
     | ident ~ ("(" ~> repsep(expression, ",")) <~ ")" ^^
       { case udfName ~ exprs => UnresolvedFunction(udfName, exprs) }
     )
