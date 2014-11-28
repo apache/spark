@@ -98,11 +98,6 @@
     <module>sql/core</module>
     <module>sql/hive</module>
     <module>assembly</module>
-    <module>external/twitter</module>
-    <module>external/flume</module>
-    <module>external/flume-sink</module>
-    <module>external/mqtt</module>
-    <module>external/zeromq</module>
     <module>examples</module>
     <module>repl</module>
   </modules>
@@ -1199,6 +1194,18 @@
           <scope>compile</scope>
         </dependency>
       </dependencies>
+    </profile>
+
+    <!-- External projects are not built in less this flag is enabled. -->
+    <profile>
+      <id>external-projects</id>
+      <modules>
+        <module>external/twitter</module>
+        <module>external/flume</module>
+        <module>external/flume-sink</module>
+        <module>external/mqtt</module>
+        <module>external/zeromq</module>
+      </modules>
     </profile>
 
     <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
