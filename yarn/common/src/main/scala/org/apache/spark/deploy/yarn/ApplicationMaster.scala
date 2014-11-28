@@ -60,7 +60,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
   @volatile private var finished = false
-  @volatile private var finalStatus = FinalApplicationStatus.UNDEFINED
+  @volatile private var finalStatus = FinalApplicationStatus.SUCCEEDED
   @volatile private var finalMsg: String = ""
   @volatile private var userClassThread: Thread = _
 
@@ -106,10 +106,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
 
           if (!finished) {
-            // this shouldn't ever happen, but if it does assume weird failure
-            finish(FinalApplicationStatus.FAILED,
+            // This happens when the user application calls System.exit(). We have the choice
+            // of either failing of succeeding at this point. We report success to avoid
+            // retrying applications that have succeeded (System.exit(0)), which means that
+            // applications that explicitly exit with a non-zero status will also show up as
+            // succeeded in the RM UI.
+            finish(finalStatus,
               ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
-              "shutdown hook called without cleanly finishing")
+              "Shutdown hook called before final status was reported.")
           }
 
           if (!unregistered) {
@@ -164,17 +168,18 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   final def finish(status: FinalApplicationStatus, code: Int, msg: String = null) = synchronized {
     if (!finished) {
+      val inShutdown = Utils.inShutdown()
       logInfo(s"Final app status: ${status}, exitCode: ${code}" +
         Option(msg).map(msg => s", (reason: $msg)").getOrElse(""))
       exitCode = code
       finalStatus = status
       finalMsg = msg
       finished = true
-      if (Thread.currentThread() != reporterThread && reporterThread != null) {
+      if (!inShutdown && Thread.currentThread() != reporterThread && reporterThread != null) {
         logDebug("shutting down reporter thread")
         reporterThread.interrupt()
       }
-      if (Thread.currentThread() != userClassThread && userClassThread != null) {
+      if (!inShutdown && Thread.currentThread() != userClassThread && userClassThread != null) {
         logDebug("shutting down user thread")
         userClassThread.interrupt()
       }
@@ -214,7 +219,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
-    setupSystemSecurityManager()
     userClassThread = startUserClass()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has
@@ -399,42 +403,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       params.foreach { case (k, v) => System.setProperty(s"spark.$amFilter.param.$k", v) }
     } else {
       actor ! AddWebUIFilter(amFilter, params.toMap, proxyBase)
-    }
-  }
-
-  /**
-   * This system security manager applies to the entire process.
-   * It's main purpose is to handle the case if the user code does a System.exit.
-   * This allows us to catch that and properly set the YARN application status and
-   * cleanup if needed.
-   */
-  private def setupSystemSecurityManager(): Unit = {
-    try {
-      var stopped = false
-      System.setSecurityManager(new java.lang.SecurityManager() {
-        override def checkExit(paramInt: Int) {
-          if (!stopped) {
-            logInfo("In securityManager checkExit, exit code: " + paramInt)
-            if (paramInt == 0) {
-              finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
-            } else {
-              finish(FinalApplicationStatus.FAILED,
-                paramInt,
-                "User class exited with non-zero exit code")
-            }
-            stopped = true
-          }
-        }
-        // required for the checkExit to work properly
-        override def checkPermission(perm: java.security.Permission): Unit = {}
-      })
-    }
-    catch {
-      case e: SecurityException =>
-        finish(FinalApplicationStatus.FAILED,
-          ApplicationMaster.EXIT_SECURITY,
-          "Error in setSecurityManager")
-        logError("Error in setSecurityManager:", e)
     }
   }
 
