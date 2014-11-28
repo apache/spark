@@ -37,10 +37,11 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.plans.logical.SetCommand
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
-import org.apache.spark.sql.{SchemaRDD, Row => SparkRow}
+import org.apache.spark.sql.{Row => SparkRow, SQLConf, SchemaRDD}
 
 /**
  * A compatibility layer for interacting with Hive version 0.13.1.
@@ -83,8 +84,18 @@ private[hive] class SparkExecuteStatementOperation(
     try {
       result = hiveContext.sql(cmd)
       logDebug(result.queryExecution.toString())
+      result.queryExecution.logical match {
+        case SetCommand(Some((SQLConf.THRIFTSERVER_POOL, Some(value)))) =>
+          sessionToActivePool(parentSession) = value
+          logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
+        case _ =>
+      }
+
       val groupId = round(random * 1000000).toString
       hiveContext.sparkContext.setJobGroup(groupId, statement)
+      sessionToActivePool.get(parentSession).foreach { pool =>
+        hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
+      }
       iter = {
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
@@ -143,7 +154,6 @@ private[hive] class SparkExecuteStatementOperation(
   def getNextRowSet(order: FetchOrientation, maxRowsL: Long): RowSet = {
     validateDefaultFetchOrientation(order)
     assertState(OperationState.FINISHED)
-    setHasResultSet(true)
     val resultRowSet: RowSet = RowSetFactory.create(getResultSetSchema, getProtocolVersion)
     if (!iter.hasNext) {
       resultRowSet
