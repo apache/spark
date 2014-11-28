@@ -497,8 +497,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
     override def receive = {
       case x: DisassociatedEvent =>
-        logInfo(s"Driver terminated or disconnected! Shutting down. $x")
+//        logInfo(s"Driver terminated or disconnected! Shutting down. $x")
         finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_SUCCESS)
+        throw new SparkException(s"Driver terminated or disconnected! Shutting down. $x")
 
       case x: AddWebUIFilter =>
         logInfo(s"Add WebUI Filter. $x")
@@ -525,7 +526,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         if (0 == status) {
           finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
         } else {
-          finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_SUCCESS)
+          finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_EXCEPTION_USER_CLASS)
+          throw new SparkException("Received error exit code from driver.")
         }
     }
   }
