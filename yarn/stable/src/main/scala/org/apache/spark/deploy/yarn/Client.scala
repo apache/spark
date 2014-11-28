@@ -46,7 +46,10 @@ private[spark] class Client(
   val yarnClient = YarnClient.createYarnClient
   val yarnConf = new YarnConfiguration(hadoopConf)
 
+  var appId: ApplicationId = _
   def stop(): Unit = yarnClient.stop()
+
+  def killApplication: Unit = yarnClient.killApplication(appId)
 
   /* ------------------------------------------------------------------------------------- *
    | The following methods have much in common in the stable and alpha versions of Client, |
@@ -71,7 +74,7 @@ private[spark] class Client(
     // Get a new application from our RM
     val newApp = yarnClient.createApplication()
     val newAppResponse = newApp.getNewApplicationResponse()
-    val appId = newAppResponse.getApplicationId()
+    appId = newAppResponse.getApplicationId()
 
     // Verify whether the cluster has enough resources for our AM
     verifyClusterResources(newAppResponse)

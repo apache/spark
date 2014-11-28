@@ -72,6 +72,7 @@ private[spark] abstract class YarnSchedulerBackend(
   def stopExecutorLauncher(): Unit = {
     yarnSchedulerActor ! StopExecutorLauncher
   }
+
   /**
    * Add filters to the SparkUI.
    */
