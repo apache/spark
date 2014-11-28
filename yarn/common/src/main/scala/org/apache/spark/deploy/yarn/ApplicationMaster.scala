@@ -519,6 +519,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           case None => logWarning("Container allocator is not ready to kill executors yet.")
         }
         sender ! true
+
+      case SendAmExitStatus(status) =>
+        logInfo(s"Received exit code $status from driver.")
+        if (0 == status) {
+          finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+        } else {
+          finish(FinalApplicationStatus.FAILED, status)
+        }
     }
   }
 

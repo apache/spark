@@ -92,6 +92,38 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 
   /**
+   * This system security manager applies to the entire process.
+   * It's main purpose is to handle the case if the user code does a System.exit.
+   * This allows us to catch that and properly set the YARN application status and
+   * cleanup if needed.
+   */
+  private def setupSystemSecurityManager(amActor: ActorRef): Unit = {
+    try {
+      System.setSecurityManager(new java.lang.SecurityManager() {
+        override def checkExit(paramInt: Int) {
+          logInfo("In securityManager checkExit, exit code: " + paramInt)
+          if (paramInt == 0) {
+            logInfo("In securityManager checkExit, exit code: " + paramInt)
+            amActor ! SendAmExitStatus(0)
+          } else {
+            logInfo("In securityManager checkExit, exit code: " + paramInt)
+            amActor ! SendAmExitStatus(1)
+          }
+        }
+
+        // required for the checkExit to work properly
+        override def checkPermission(perm: java.security.Permission): Unit = {}
+      }
+      )
+    }
+    catch {
+      case e: SecurityException =>
+        amActor ! SendAmExitStatus(1)
+        logError("Error in setSecurityManager:", e)
+    }
+  }
+
+  /**
    * An actor that communicates with the ApplicationMaster.
    */
   private class YarnSchedulerActor extends Actor {
@@ -105,6 +137,7 @@ private[spark] abstract class YarnSchedulerBackend(
     override def receive = {
       case RegisterClusterManager =>
         logInfo(s"ApplicationMaster registered as $sender")
+        setupSystemSecurityManager(sender)
         amActor = Some(sender)
 
       case r: RequestExecutors =>
