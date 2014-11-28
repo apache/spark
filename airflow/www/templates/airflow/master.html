@@ -9,3 +9,9 @@
 {% block body%}
 {% endblock %}
 
+{% block brand %}
+<span class="brand" style="padding:5px 10px">
+    <img src="{{ url_for("static", filename="pin_30.png") }}">
+    <span style="font-size:20px;">AirFlow</span>
+</span>
+{% endblock %}
