@@ -70,8 +70,7 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 
   def stopExecutorLauncher(): Unit = {
-    AkkaUtils.askWithReply[Boolean](
-      StopExecutorLauncher, yarnSchedulerActor, askTimeout)
+    yarnSchedulerActor ! StopExecutorLauncher
   }
   /**
    * Add filters to the SparkUI.
