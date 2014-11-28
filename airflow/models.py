@@ -982,8 +982,8 @@ class DAG(Base):
 
     @property
     def filepath(self):
-        return self.full_filepath.replace(
-                  getconf().get('core', 'AIRFLOW_HOME') + '/', '')
+        base = getconf().get('core', 'DAGS_FOLDER')
+        return self.full_filepath.replace(base + '/', '')
 
     @property
     def folder(self):
