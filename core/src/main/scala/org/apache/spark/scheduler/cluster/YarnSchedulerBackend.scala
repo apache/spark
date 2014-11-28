@@ -103,10 +103,8 @@ private[spark] abstract class YarnSchedulerBackend(
         override def checkExit(paramInt: Int) {
           logInfo("In securityManager checkExit, exit code: " + paramInt)
           if (paramInt == 0) {
-            logInfo("In securityManager checkExit, exit code: " + paramInt)
             amActor ! SendAmExitStatus(0)
           } else {
-            logInfo("In securityManager checkExit, exit code: " + paramInt)
             amActor ! SendAmExitStatus(1)
           }
         }

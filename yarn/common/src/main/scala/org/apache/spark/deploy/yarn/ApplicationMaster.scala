@@ -525,7 +525,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         if (0 == status) {
           finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
         } else {
-          finish(FinalApplicationStatus.FAILED, status)
+          finish(FinalApplicationStatus.FAILED, ApplicationMaster.EXIT_SUCCESS)
         }
     }
   }
