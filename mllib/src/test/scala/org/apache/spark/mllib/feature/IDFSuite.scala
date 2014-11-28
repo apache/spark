@@ -17,12 +17,10 @@
 
 package org.apache.spark.mllib.feature
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.scalatest.FunSuite
 
 class IDFSuite extends FunSuite with MLlibTestSparkContext {
 
@@ -41,6 +39,8 @@ class IDFSuite extends FunSuite with MLlibTestSparkContext {
       math.log((m + 1.0) / (x + 1.0))
     })
     assert(model.idf ~== expected absTol 1e-12)
+
+    // Transforms a RDD
     val tfidf = model.transform(termFrequencies).cache().zipWithIndex().map(_.swap).collectAsMap()
     assert(tfidf.size === 3)
     val tfidf0 = tfidf(0L).asInstanceOf[SparseVector]
@@ -53,6 +53,19 @@ class IDFSuite extends FunSuite with MLlibTestSparkContext {
     val tfidf2 = tfidf(2L).asInstanceOf[SparseVector]
     assert(tfidf2.indices === Array(1))
     assert(tfidf2.values(0) ~== (1.0 * expected(1)) absTol 1e-12)
+
+    // Transforms local vectors
+    val localTfidf = localTermFrequencies.map(model.transform(_))
+    val localTfidf0 = localTfidf(0).asInstanceOf[SparseVector]
+    assert(localTfidf0.indices === Array(1, 3))
+    assert(Vectors.dense(localTfidf0.values) ~==
+        Vectors.dense(1.0 * expected(1), 2.0 * expected(3)) absTol 1e-12)
+    val localTfidf1 = localTfidf(1).asInstanceOf[DenseVector]
+    assert(Vectors.dense(localTfidf1.values) ~==
+        Vectors.dense(0.0, 1.0 * expected(1), 2.0 * expected(2), 3.0 * expected(3)) absTol 1e-12)
+    val localTfidf2 = localTfidf(2).asInstanceOf[SparseVector]
+    assert(localTfidf2.indices === Array(1))
+    assert(localTfidf2.values(0) ~== (1.0 * expected(1)) absTol 1e-12)
   }
 
   test("idf minimum document frequency filtering") {
@@ -74,6 +87,8 @@ class IDFSuite extends FunSuite with MLlibTestSparkContext {
       }
     })
     assert(model.idf ~== expected absTol 1e-12)
+
+    // Transforms a RDD
     val tfidf = model.transform(termFrequencies).cache().zipWithIndex().map(_.swap).collectAsMap()
     assert(tfidf.size === 3)
     val tfidf0 = tfidf(0L).asInstanceOf[SparseVector]
@@ -86,6 +101,19 @@ class IDFSuite extends FunSuite with MLlibTestSparkContext {
     val tfidf2 = tfidf(2L).asInstanceOf[SparseVector]
     assert(tfidf2.indices === Array(1))
     assert(tfidf2.values(0) ~== (1.0 * expected(1)) absTol 1e-12)
+
+    // Transforms local vectors
+    val localTfidf = localTermFrequencies.map(model.transform(_))
+    val localTfidf0 = localTfidf(0).asInstanceOf[SparseVector]
+    assert(localTfidf0.indices === Array(1, 3))
+    assert(Vectors.dense(localTfidf0.values) ~==
+        Vectors.dense(1.0 * expected(1), 2.0 * expected(3)) absTol 1e-12)
+    val localTfidf1 = localTfidf(1).asInstanceOf[DenseVector]
+    assert(Vectors.dense(localTfidf1.values) ~==
+        Vectors.dense(0.0, 1.0 * expected(1), 2.0 * expected(2), 3.0 * expected(3)) absTol 1e-12)
+    val localTfidf2 = localTfidf(2).asInstanceOf[SparseVector]
+    assert(localTfidf2.indices === Array(1))
+    assert(localTfidf2.values(0) ~== (1.0 * expected(1)) absTol 1e-12)
   }
 
 }
