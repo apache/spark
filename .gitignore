@@ -1,4 +1,5 @@
 *.pyc
+.ipynb*
 docs/_*
 airflow.db
 build

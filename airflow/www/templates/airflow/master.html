@@ -3,7 +3,7 @@
 {% block head_css %}
   {{ super() }}
   <link rel="icon" type="image/png"
-    href="{{ url_for("static", filename="favicon.ico") }}">
+    href="{{ url_for("static", filename="pin_30.png") }}">
 {% endblock %}
 
 {% block body%}
@@ -11,7 +11,7 @@
 
 {% block brand %}
 <span class="brand" style="padding:5px 10px">
-    <img src="{{ url_for("static", filename="pin_30.png") }}">
+    <img src="{{ url_for("static", filename="pin_100.png") }}" width="30">
     <span style="font-size:20px;">AirFlow</span>
 </span>
 {% endblock %}
