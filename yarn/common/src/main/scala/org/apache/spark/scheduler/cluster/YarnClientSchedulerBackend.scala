@@ -56,6 +56,7 @@ private[spark] class YarnClientSchedulerBackend(
     client = new Client(args, conf)
     logInfo(s"am.max-attempts is ${client.yarnConf.get("yarn.resourcemanager.am.max-attempts")}")
     client.yarnConf.set("yarn.resourcemanager.am.max-attempts", "1")
+    logInfo(s"am.max-attempts is ${client.yarnConf.get("yarn.resourcemanager.am.max-attempts")}")
     appId = client.submitApplication()
     waitForApplication()
     asyncMonitorApplication()
