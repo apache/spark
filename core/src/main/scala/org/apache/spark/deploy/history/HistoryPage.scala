@@ -34,9 +34,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     val requestedIncomplete =
       Option(request.getParameter("showIncomplete")).getOrElse("false").toBoolean
 
-    val allApps = parent.getApplicationList().filter( app =>
-      (!requestedIncomplete && !app.incomplete) || (requestedIncomplete && app.incomplete)
-    )
+    val allApps = parent.getApplicationList().filter(_.incomplete == requestedIncomplete)
     val actualFirst = if (requestedFirst < allApps.size) requestedFirst else 0
     val apps = allApps.slice(actualFirst, Math.min(actualFirst + pageSize, allApps.size))
 
@@ -106,7 +104,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
               if (requestedIncomplete) {
                 "Back to completed applications"
               } else {
-                "Show incompleted applications"
+                "Show incomplete applications"
               }
             }
           </a>
