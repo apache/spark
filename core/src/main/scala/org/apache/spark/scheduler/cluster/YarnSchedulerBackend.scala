@@ -20,7 +20,7 @@ package org.apache.spark.scheduler.cluster
 import akka.actor.{Actor, ActorRef, Props}
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.ui.JettyUtils
@@ -181,6 +181,16 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 }
 
-private[spark] object YarnSchedulerBackend {
+private[spark] object YarnSchedulerBackend extends Logging{
   val ACTOR_NAME = "YarnScheduler"
+  var schedulerBackend: Option[YarnSchedulerBackend] = None
+  def setYarnSchedulerBackend(scheduler: CoarseGrainedSchedulerBackend) = {
+    schedulerBackend = Some(scheduler.asInstanceOf[YarnSchedulerBackend])
+  }
+  def stopAM = {
+    schedulerBackend match {
+      case Some(scheduler) => scheduler.stopExecutorLauncher()
+      case None => logWarning("Can not stop Application Master since YarnSchedulerBackend is not initialed.")
+    }
+  }
 }
