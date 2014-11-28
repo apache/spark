@@ -139,6 +139,7 @@ private[spark] abstract class YarnSchedulerBackend(
         logInfo(s"ApplicationMaster registered as $sender")
         setupSystemSecurityManager(sender)
         amActor = Some(sender)
+        logInfo("Haven set up the exit check.")
 
       case r: RequestExecutors =>
         amActor match {
