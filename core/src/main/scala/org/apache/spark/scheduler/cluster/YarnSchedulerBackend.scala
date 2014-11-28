@@ -190,7 +190,8 @@ private[spark] object YarnSchedulerBackend extends Logging{
   def stopAM = {
     schedulerBackend match {
       case Some(scheduler) => scheduler.stopExecutorLauncher()
-      case None => logWarning("Can not stop Application Master since YarnSchedulerBackend is not initialed.")
+      case None => logWarning("Can not stop Application Master " +
+        "since YarnSchedulerBackend is not initialed.")
     }
   }
 }
