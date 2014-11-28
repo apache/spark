@@ -73,6 +73,9 @@ private[spark] object CoarseGrainedClusterMessages {
   // Send the exit status to the ExecutorLauncher in yarn-client mode, 0: SUCCEEDED and 1: FAILED
   case class SendAmExitStatus(status: Int) extends CoarseGrainedClusterMessage
 
+  // Stop the ExecutorLauncher in yarn client mode
+  case object StopExecutorLauncher extends CoarseGrainedClusterMessage
+
   // Messages exchanged between the driver and the cluster manager for executor allocation
   // In Yarn mode, these are exchanged between the driver and the AM
 

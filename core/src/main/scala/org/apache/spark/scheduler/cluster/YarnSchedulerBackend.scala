@@ -69,6 +69,10 @@ private[spark] abstract class YarnSchedulerBackend(
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
   }
 
+  def stopExecutorLauncher(): Unit = {
+    AkkaUtils.askWithReply[Boolean](
+      StopExecutorLauncher, yarnSchedulerActor, askTimeout)
+  }
   /**
    * Add filters to the SparkUI.
    */
@@ -160,6 +164,14 @@ private[spark] abstract class YarnSchedulerBackend(
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)
         sender ! true
+
+      case StopExecutorLauncher =>
+        amActor match {
+          case Some(actor) =>
+            actor ! SendAmExitStatus(0)
+          case None =>
+            logWarning("Attempted to stop executorLauncher before the AM has registered!")
+        }
 
       case d: DisassociatedEvent =>
         if (amActor.isDefined && sender == amActor.get) {
