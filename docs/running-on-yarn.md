@@ -30,7 +30,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 </tr>
 <tr>
   <td><code>spark.yarn.submit.file.replication</code></td>
-  <td>3</td>
+  <td>The default HDFS replication (usually 3)</td>
   <td>
     HDFS replication level for the files uploaded into HDFS for the application. These include things like the Spark jar, the app jar, and any distributed cache files/archives.
   </td>
@@ -43,10 +43,31 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.user.classpath.first</code></td>
+  <td>false</td>
+  <td>
+    Set to true to make the users app.jar in first order. It is normally last in case conflicts with spark jars.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.scheduler.heartbeat.interval-ms</code></td>
   <td>5000</td>
   <td>
     The interval in ms in which the Spark application master heartbeats into the YARN ResourceManager.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.scheduler.reporterThread.maxFailures</code></td>
+  <td>5</td>
+  <td>
+    The number of failures in a row until the Spark application master gives up heartbeating into the YARN ResourceManager.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.report.interval</code></td>
+  <td>1000</td>
+  <td>
+    The interval in ms in which the YARN client monitors the application status after submits it to the YARN ResourceManager.
   </td>
 </tr>
 <tr>
@@ -89,6 +110,13 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>driverMemory * 0.07, with minimum of 384 </td>
   <td>
     The amount of off heap memory (in megabytes) to be allocated per driver. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the container size (typically 6-10%).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.queue</code></td>
+  <td>default</td>
+  <td>
+    The YARN queue name which the application is being submitted.
   </td>
 </tr>
 <tr>
