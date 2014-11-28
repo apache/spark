@@ -935,7 +935,8 @@ private[hive] object HiveQl {
     selectExpressions.foreach { sel =>
       sel.collect {
         case win: WindowAttribute => windowAttributes += win
-        case attr: UnresolvedAttribute => attrExpressions += attr
+        case attr: UnresolvedAttribute =>
+          if (!attrExpressions.contains(attr)) attrExpressions += attr
       }
     }
 
@@ -970,6 +971,11 @@ private[hive] object HiveQl {
           if (sortExpr.size > 0) Sort(sortExpr, currentPlan)
           else currentPlan
         }
+
+      (partitionExpr ++ sortExpr.map(_.child)).collect {
+        case attr: UnresolvedAttribute =>
+          if (!otherExpressions.contains(attr)) otherExpressions += attr
+      }
 
       currentPlan = WindowFunction(
         partitionExpr, computeExpressions.toSeq, otherExpressions, withWindowPartition)
