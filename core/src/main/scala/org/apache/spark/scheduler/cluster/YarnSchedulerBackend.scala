@@ -69,8 +69,14 @@ private[spark] abstract class YarnSchedulerBackend(
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
   }
 
+  // Make sure stopExecutorLauncher message only sent once
+  var isStopExecutorLauncher: Boolean = false
+
   def stopExecutorLauncher(): Unit = {
-    yarnSchedulerActor ! StopExecutorLauncher
+    if (!isStopExecutorLauncher) {
+      isStopExecutorLauncher = true
+      yarnSchedulerActor ! StopExecutorLauncher
+    }
   }
 
   /**
@@ -141,7 +147,6 @@ private[spark] abstract class YarnSchedulerBackend(
         logInfo(s"ApplicationMaster registered as $sender")
         setupSystemSecurityManager(sender)
         amActor = Some(sender)
-        logInfo("Haven set up the exit check.")
 
       case r: RequestExecutors =>
         amActor match {
@@ -184,9 +189,14 @@ private[spark] abstract class YarnSchedulerBackend(
 private[spark] object YarnSchedulerBackend extends Logging{
   val ACTOR_NAME = "YarnScheduler"
   var schedulerBackend: Option[YarnSchedulerBackend] = None
+
+  // we need gain the schedulerBackend handle in the constructor of SC,
+  // so that we can use it to stop the ExecutorLauncher after executing user code
   def setYarnSchedulerBackend(scheduler: CoarseGrainedSchedulerBackend) = {
     schedulerBackend = Some(scheduler.asInstanceOf[YarnSchedulerBackend])
   }
+
+  // only called in SparkSubmit
   def stopAM = {
     schedulerBackend match {
       case Some(scheduler) => scheduler.stopExecutorLauncher()
