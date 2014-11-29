@@ -193,22 +193,12 @@ class Airflow(BaseView):
             special_attrs_rendered=special_attrs_rendered,
             dag=dag, title=title)
 
-    @expose('/tree')
-    def tree(self):
-        dag_id = request.args.get('dag_id')
+    @expose('/action')
+    def action(self):
         action = request.args.get('action')
+        dag_id = request.args.get('dag_id')
+        origin = request.args.get('origin')
         dag = dagbag.dags[dag_id]
-
-        base_date = request.args.get('base_date')
-        if not base_date:
-            base_date = datetime.now()
-        else:
-            base_date = dateutil.parser.parse(base_date)
-
-        num_runs = request.args.get('num_runs')
-        num_runs = int(num_runs) if num_runs else 25
-        from_date = (base_date-(num_runs * dag.schedule_interval)).date()
-        from_date = datetime.combine(from_date, datetime.min.time())
 
         if action == 'clear':
             task_id = request.args.get('task_id')
@@ -234,7 +224,24 @@ class Airflow(BaseView):
                 downstream=downstream)
 
             flash("{0} task instances have been cleared".format(count))
-            return redirect(url_for('airflow.tree', dag_id=dag_id))
+            #return redirect(url_for('airflow.tree', dag_id=dag_id))
+            return redirect(origin)
+
+    @expose('/tree')
+    def tree(self):
+        dag_id = request.args.get('dag_id')
+        dag = dagbag.dags[dag_id]
+
+        base_date = request.args.get('base_date')
+        if not base_date:
+            base_date = datetime.now()
+        else:
+            base_date = dateutil.parser.parse(base_date)
+
+        num_runs = request.args.get('num_runs')
+        num_runs = int(num_runs) if num_runs else 25
+        from_date = (base_date-(num_runs * dag.schedule_interval)).date()
+        from_date = datetime.combine(from_date, datetime.min.time())
 
         dates = utils.date_range(
             from_date, base_date, dag.schedule_interval)
