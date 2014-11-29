@@ -186,10 +186,3 @@ run() {
     "${sbt_commands[@]}" \
     "${residual_args[@]}"
 }
-
-runAlternateBoot() {
-  local bootpropsfile="$1"
-  shift
-  addJava "-Dsbt.boot.properties=$bootpropsfile"
-  run $@
-}
