@@ -17,8 +17,6 @@
 
 package org.apache.spark.api.java
 
-import java.util.Comparator
-
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -30,7 +28,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
-  extends JavaRDDLike[T, JavaRDD[T]] {
+  extends AbstractJavaRDD[T, JavaRDD[T]] {
 
   override def wrapRDD(rdd: RDD[T]): JavaRDD[T] = JavaRDD.fromRDD(rdd)
 

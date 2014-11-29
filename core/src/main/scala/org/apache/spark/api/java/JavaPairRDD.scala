@@ -44,7 +44,7 @@ import org.apache.spark.util.Utils
 
 class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
                        (implicit val kClassTag: ClassTag[K], implicit val vClassTag: ClassTag[V])
-  extends JavaRDDLike[(K, V), JavaPairRDD[K, V]] {
+  extends AbstractJavaRDD[(K, V), JavaPairRDD[K, V]] {
 
   override def wrapRDD(rdd: RDD[(K, V)]): JavaPairRDD[K, V] = JavaPairRDD.fromRDD(rdd)
 
@@ -206,13 +206,6 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def intersection(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.intersection(other.rdd))
-
-
-  // first() has to be overridden here so that the generated method has the signature
-  // 'public scala.Tuple2 first()'; if the trait's definition is used,
-  // then the method has the signature 'public java.lang.Object first()',
-  // causing NoSuchMethodErrors at runtime.
-  override def first(): (K, V) = rdd.first()
 
   // Pair RDD functions
 
