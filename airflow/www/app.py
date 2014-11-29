@@ -533,7 +533,8 @@ admin.add_view(mv)
 class LogModelView(ModelViewOnly):
     column_default_sort = ('dttm', True)
     column_filters = ('dag_id', 'task_id', 'execution_date')
-mv = LogModelView(models.Log, session, name="Logs", category="Admin")
+mv = LogModelView(
+    models.Log, session, name="Logs", category="Admin")
 admin.add_view(mv)
 
 class ReloadTaskView(BaseView):

@@ -13,6 +13,7 @@ class State(object):
     RUNNING = "running"
     SUCCESS = "success"
     UP_FOR_RETRY = "up_for_retry"
+    QUEUED = "queued"
 
     @classmethod
     def color(cls, state):

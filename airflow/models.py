@@ -4,15 +4,11 @@ import imp
 import jinja2
 import logging
 import os
-import sys, traceback
 import pickle
 import re
 from time import sleep
 
-from sqlalchemy import (
-    Column, Integer, String, DateTime, Text,
-    ForeignKey, func
-)
+from sqlalchemy import Column, Integer, String, DateTime, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.serializer import loads, dumps
 from sqlalchemy.dialects.mysql import LONGTEXT
@@ -70,6 +66,7 @@ class DagBag(object):
                 m = imp.load_source(mod_name, filepath)
             except:
                 logging.error("Failed to import: " + filepath)
+                self.file_last_changed[filepath] = dttm
                 # logging.error("Exception: " + str(sys.exc_info()))
                 # traceback.print_exc(file=sys.stdout)
                 return
@@ -224,8 +221,8 @@ class TaskInstance(Base):
         ignore_dependencies = "-i" if ignore_dependencies else ""
         force = "--force" if force else ""
         subdir = ""
-        if not pickle and self.task.dag and self.task.dag.filepath:
-            subdir = "-sd {0}".format(self.task.dag.filepath)
+        if not pickle and self.task.dag and self.task.dag.full_filepath:
+            subdir = "-sd {0}".format(self.task.dag.full_filepath)
         return (
             "airflow run "
             "{self.dag_id} {self.task_id} {iso} "
@@ -462,6 +459,7 @@ class TaskInstance(Base):
                         )
                     task_copy.execute(self.execution_date)
             except Exception as e:
+                session = settings.Session()
                 self.end_date = datetime.now()
                 self.set_duration()
                 session.add(Log(State.FAILED, self))
@@ -474,6 +472,7 @@ class TaskInstance(Base):
                 logging.error(str(e))
                 raise e
 
+            session = settings.Session()
             self.end_date = datetime.now()
             self.set_duration()
             self.state = State.SUCCESS

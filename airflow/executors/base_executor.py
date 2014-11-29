@@ -21,7 +21,7 @@ class BaseExecutor(object):
         """
         if key not in self.commands or self.commands[key] in State.runnable():
             logging.info("Adding to queue: " + command)
-            self.commands[key] = State.RUNNING
+            self.commands[key] = State.QUEUED
             self.execute_async(key, command)
 
     def change_state(self, key, state):
