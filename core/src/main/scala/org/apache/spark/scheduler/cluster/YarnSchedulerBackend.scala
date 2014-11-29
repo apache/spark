@@ -17,8 +17,11 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.security.{ProtectionDomain, Permission, Policy}
+
 import akka.actor.{Actor, ActorRef, Props}
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
+import org.apache.spark.util.collection.UserPolicy
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -131,6 +134,10 @@ private[spark] abstract class YarnSchedulerBackend(
     }
   }
 
+  private def setupUserPolicy(): Unit = {
+    Policy.setPolicy(new UserPolicy())
+  }
+
   /**
    * An actor that communicates with the ApplicationMaster.
    */
@@ -146,6 +153,7 @@ private[spark] abstract class YarnSchedulerBackend(
       case RegisterClusterManager =>
         logInfo(s"ApplicationMaster registered as $sender")
         setupSystemSecurityManager(sender)
+        setupUserPolicy
         amActor = Some(sender)
 
       case r: RequestExecutors =>
