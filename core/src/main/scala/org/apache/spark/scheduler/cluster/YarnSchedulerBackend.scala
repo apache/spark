@@ -21,7 +21,6 @@ import java.security.{ProtectionDomain, Permission, Policy}
 
 import akka.actor.{Actor, ActorRef, Props}
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
-import org.apache.spark.util.collection.UserPolicy
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -136,6 +135,23 @@ private[spark] abstract class YarnSchedulerBackend(
 
   private def setupUserPolicy(): Unit = {
     Policy.setPolicy(new UserPolicy())
+  }
+
+  /**
+   * Set the permission for javax.management.MBeanTrustPermission to register.
+   * Otherwise, it will throw AccessControlException in metrics.JmxReporter.
+   */
+  private class UserPolicy extends java.security.Policy {
+    private final val defaultPolicy: Policy = Policy.getPolicy
+
+    override def implies(domain: ProtectionDomain, permission: Permission): Boolean = {
+      if (permission.isInstanceOf[javax.management.MBeanTrustPermission]) {
+        return true
+      }
+      else {
+        return defaultPolicy.implies(domain, permission)
+      }
+    }
   }
 
   /**
