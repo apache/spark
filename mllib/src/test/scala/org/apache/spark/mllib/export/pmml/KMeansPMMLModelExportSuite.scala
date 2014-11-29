@@ -17,13 +17,13 @@
 
 package org.apache.spark.mllib.export.pmml
 
-import scala.annotation.varargs
+import org.dmg.pmml.ClusteringModel
+import org.scalatest.FunSuite
+
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.export.ModelExportFactory
 import org.apache.spark.mllib.export.ModelExportType
 import org.apache.spark.mllib.linalg.Vectors
-import org.scalatest.FunSuite
-import org.dmg.pmml.ClusteringModel
 
 class KMeansPMMLModelExportSuite extends FunSuite{
 

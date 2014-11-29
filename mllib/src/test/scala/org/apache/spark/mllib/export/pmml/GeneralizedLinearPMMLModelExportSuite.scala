@@ -17,15 +17,15 @@
 
 package org.apache.spark.mllib.export.pmml
 
-import org.apache.spark.annotation.DeveloperApi
+import org.dmg.pmml.RegressionModel
+import org.scalatest.FunSuite
+
 import org.apache.spark.mllib.export.ModelExportFactory
 import org.apache.spark.mllib.export.ModelExportType
 import org.apache.spark.mllib.regression.LassoModel
 import org.apache.spark.mllib.regression.LinearRegressionModel
 import org.apache.spark.mllib.regression.RidgeRegressionModel
 import org.apache.spark.mllib.util.LinearDataGenerator
-import org.scalatest.FunSuite
-import org.dmg.pmml.RegressionModel
 
 class GeneralizedLinearPMMLModelExportSuite extends FunSuite{
 

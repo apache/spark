@@ -18,12 +18,13 @@
 package org.apache.spark.mllib.export
 
 import org.apache.spark.mllib.clustering.KMeansModel
-import org.apache.spark.mllib.export.pmml.KMeansPMMLModelExport
-import org.apache.spark.mllib.export.ModelExportType._
-import org.apache.spark.mllib.regression.LinearRegressionModel
+import org.apache.spark.mllib.export.ModelExportType.ModelExportType
+import org.apache.spark.mllib.export.ModelExportType.PMML
 import org.apache.spark.mllib.export.pmml.GeneralizedLinearPMMLModelExport
-import org.apache.spark.mllib.regression.RidgeRegressionModel
+import org.apache.spark.mllib.export.pmml.KMeansPMMLModelExport
 import org.apache.spark.mllib.regression.LassoModel
+import org.apache.spark.mllib.regression.LinearRegressionModel
+import org.apache.spark.mllib.regression.RidgeRegressionModel
 
 private[mllib] object ModelExportFactory {
   

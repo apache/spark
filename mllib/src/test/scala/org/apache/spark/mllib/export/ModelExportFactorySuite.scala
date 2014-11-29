@@ -17,16 +17,16 @@
 
 package org.apache.spark.mllib.export
 
-import scala.annotation.varargs
+import org.scalatest.FunSuite
+
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.linalg.Vectors
-import org.scalatest.FunSuite
-import org.apache.spark.mllib.export.pmml.KMeansPMMLModelExport
-import org.apache.spark.mllib.util.LinearDataGenerator
-import org.apache.spark.mllib.regression.LinearRegressionModel
-import org.apache.spark.mllib.export.pmml.GeneralizedLinearPMMLModelExport
 import org.apache.spark.mllib.regression.LassoModel
+import org.apache.spark.mllib.regression.LinearRegressionModel
 import org.apache.spark.mllib.regression.RidgeRegressionModel
+import org.apache.spark.mllib.util.LinearDataGenerator
+import org.apache.spark.mllib.export.pmml.GeneralizedLinearPMMLModelExport
+import org.apache.spark.mllib.export.pmml.KMeansPMMLModelExport
 
 class ModelExportFactorySuite extends FunSuite{
 

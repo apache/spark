@@ -17,14 +17,6 @@
 
 package org.apache.spark.mllib.export.pmml
 
-import org.dmg.pmml.Array.Type
-import org.dmg.pmml.Cluster
-import org.dmg.pmml.ClusteringField
-import org.dmg.pmml.ClusteringModel
-import org.dmg.pmml.ClusteringModel.ModelClass
-import org.dmg.pmml.CompareFunctionType
-import org.dmg.pmml.ComparisonMeasure
-import org.dmg.pmml.ComparisonMeasure.Kind
 import org.dmg.pmml.DataDictionary
 import org.dmg.pmml.DataField
 import org.dmg.pmml.DataType
@@ -33,14 +25,12 @@ import org.dmg.pmml.FieldUsageType
 import org.dmg.pmml.MiningField
 import org.dmg.pmml.MiningFunctionType
 import org.dmg.pmml.MiningSchema
+import org.dmg.pmml.NumericPredictor
 import org.dmg.pmml.OpType
-import org.dmg.pmml.SquaredEuclidean
-import org.apache.spark.mllib.clustering.KMeansModel
-import org.apache.spark.mllib.regression.LinearRegressionModel
-import org.apache.spark.mllib.regression.GeneralizedLinearModel
 import org.dmg.pmml.RegressionModel
 import org.dmg.pmml.RegressionTable
-import org.dmg.pmml.NumericPredictor
+
+import org.apache.spark.mllib.regression.GeneralizedLinearModel
 
 /**
  * PMML Model Export for GeneralizedLinear abstract class
