@@ -1,3 +1,5 @@
+set hive.fetch.task.conversion=more;
+
 --HIVE-2608 Do not require AS a,b,c part in LATERAL VIEW
 EXPLAIN SELECT myTab.* from src LATERAL VIEW explode(map('key1', 100, 'key2', 200)) myTab limit 2;
 SELECT myTab.* from src LATERAL VIEW explode(map('key1', 100, 'key2', 200)) myTab limit 2;

@@ -104,7 +104,7 @@ for %%d in ("%FWDIR%assembly\target\scala-%SCALA_VERSION%\spark-assembly*hadoop*
 )
 if "%FOUND_JAR%"=="0" (
   echo Failed to find Spark assembly JAR.
-  echo You need to build Spark with sbt\sbt assembly before running this program.
+  echo You need to build Spark before running this program.
   goto exit
 )
 :skip_build_test

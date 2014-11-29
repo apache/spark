@@ -41,10 +41,26 @@ case class Time(private val millis: Long) {
 
   def - (that: Duration): Time = new Time(millis - that.milliseconds)
 
+  // Java-friendlier versions of the above.
+
+  def less(that: Time): Boolean = this < that
+
+  def lessEq(that: Time): Boolean = this <= that
+
+  def greater(that: Time): Boolean = this > that
+
+  def greaterEq(that: Time): Boolean = this >= that
+
+  def plus(that: Duration): Time = this + that
+
+  def minus(that: Time): Duration = this - that
+
+  def minus(that: Duration): Time = this - that
+
+
   def floor(that: Duration): Time = {
     val t = that.milliseconds
-    val m = math.floor(this.millis / t).toLong
-    new Time(m * t)
+    new Time((this.millis / t) * t)
   }
 
   def isMultipleOf(that: Duration): Boolean =

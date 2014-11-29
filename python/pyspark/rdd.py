@@ -15,7 +15,6 @@
 # limitations under the License.
 #
 
-from base64 import standard_b64encode as b64enc
 import copy
 from collections import defaultdict
 from itertools import chain, ifilter, imap
@@ -29,16 +28,17 @@ from threading import Thread
 import warnings
 import heapq
 import bisect
-from random import Random
+import random
 from math import sqrt, log, isinf, isnan
 
+from pyspark.accumulators import PStatsParam
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
     PickleSerializer, pack_long, AutoBatchedSerializer
 from pyspark.join import python_join, python_left_outer_join, \
-    python_right_outer_join, python_cogroup
+    python_right_outer_join, python_full_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
-from pyspark.rddsampler import RDDSampler, RDDStratifiedSampler
+from pyspark.rddsampler import RDDSampler, RDDRangeSampler, RDDStratifiedSampler
 from pyspark.storagelevel import StorageLevel
 from pyspark.resultiterable import ResultIterable
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
@@ -120,7 +120,7 @@ class RDD(object):
     operated on in parallel.
     """
 
-    def __init__(self, jrdd, ctx, jrdd_deserializer):
+    def __init__(self, jrdd, ctx, jrdd_deserializer=AutoBatchedSerializer(PickleSerializer())):
         self._jrdd = jrdd
         self.is_cached = False
         self.is_checkpointed = False
@@ -129,12 +129,8 @@ class RDD(object):
         self._id = jrdd.id()
         self._partitionFunc = None
 
-    def _toPickleSerialization(self):
-        if (self._jrdd_deserializer == PickleSerializer() or
-                self._jrdd_deserializer == BatchedSerializer(PickleSerializer())):
-            return self
-        else:
-            return self._reserialize(BatchedSerializer(PickleSerializer(), 10))
+    def _pickled(self):
+        return self._reserialize(AutoBatchedSerializer(PickleSerializer()))
 
     def id(self):
         """
@@ -314,20 +310,43 @@ class RDD(object):
 
     def sample(self, withReplacement, fraction, seed=None):
         """
-        Return a sampled subset of this RDD (relies on numpy and falls back
-        on default random generator if numpy is unavailable).
+        Return a sampled subset of this RDD.
 
-        >>> sc.parallelize(range(0, 100)).sample(False, 0.1, 2).collect() #doctest: +SKIP
-        [2, 3, 20, 21, 24, 41, 42, 66, 67, 89, 90, 98]
+        >>> rdd = sc.parallelize(range(100), 4)
+        >>> rdd.sample(False, 0.1, 81).count()
+        10
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
+    def randomSplit(self, weights, seed=None):
+        """
+        Randomly splits this RDD with the provided weights.
+
+        :param weights: weights for splits, will be normalized if they don't sum to 1
+        :param seed: random seed
+        :return: split RDDs in a list
+
+        >>> rdd = sc.parallelize(range(5), 1)
+        >>> rdd1, rdd2 = rdd.randomSplit([2, 3], 17)
+        >>> rdd1.collect()
+        [1, 3]
+        >>> rdd2.collect()
+        [0, 2, 4]
+        """
+        s = float(sum(weights))
+        cweights = [0.0]
+        for w in weights:
+            cweights.append(cweights[-1] + w / s)
+        if seed is None:
+            seed = random.randint(0, 2 ** 32 - 1)
+        return [self.mapPartitionsWithIndex(RDDRangeSampler(lb, ub, seed).func, True)
+                for lb, ub in zip(cweights, cweights[1:])]
+
     # this is ported from scala/spark/RDD.scala
     def takeSample(self, withReplacement, num, seed=None):
         """
-        Return a fixed-size sampled subset of this RDD (currently requires
-        numpy).
+        Return a fixed-size sampled subset of this RDD.
 
         >>> rdd = sc.parallelize(range(0, 10))
         >>> len(rdd.takeSample(True, 20, 1))
@@ -348,7 +367,7 @@ class RDD(object):
         if initialCount == 0:
             return []
 
-        rand = Random(seed)
+        rand = random.Random(seed)
 
         if (not withReplacement) and num >= initialCount:
             # shuffle current RDD and return
@@ -449,12 +468,11 @@ class RDD(object):
 
     def _reserialize(self, serializer=None):
         serializer = serializer or self.ctx.serializer
-        if self._jrdd_deserializer == serializer:
-            return self
-        else:
-            converted = self.map(lambda x: x, preservesPartitioning=True)
-            converted._jrdd_deserializer = serializer
-            return converted
+        if self._jrdd_deserializer != serializer:
+            if not isinstance(self, PipelinedRDD):
+                self = self.map(lambda x: x, preservesPartitioning=True)
+            self._jrdd_deserializer = serializer
+        return self
 
     def __add__(self, other):
         """
@@ -529,6 +547,8 @@ class RDD(object):
         # the key-space into bins such that the bins have roughly the same
         # number of (key, value) pairs falling into them
         rddSize = self.count()
+        if not rddSize:
+            return self  # empty RDD
         maxSampleSize = numPartitions * 20.0  # constant from Spark's RangePartitioner
         fraction = min(maxSampleSize / max(rddSize, 1), 1.0)
         samples = self.sample(False, fraction, 1).map(lambda (k, v): k).collect()
@@ -752,7 +772,7 @@ class RDD(object):
         """
         Find the maximum item in this RDD.
 
-        @param key: A function used to generate key for comparing
+        :param key: A function used to generate key for comparing
 
         >>> rdd = sc.parallelize([1.0, 5.0, 43.0, 10.0])
         >>> rdd.max()
@@ -768,7 +788,7 @@ class RDD(object):
         """
         Find the minimum item in this RDD.
 
-        @param key: A function used to generate key for comparing
+        :param key: A function used to generate key for comparing
 
         >>> rdd = sc.parallelize([2.0, 5.0, 43.0, 10.0])
         >>> rdd.min()
@@ -1070,10 +1090,13 @@ class RDD(object):
                 # If we didn't find any rows after the previous iteration,
                 # quadruple and retry.  Otherwise, interpolate the number of
                 # partitions we need to try, but overestimate it by 50%.
+                # We also cap the estimation in the end.
                 if len(items) == 0:
                     numPartsToTry = partsScanned * 4
                 else:
-                    numPartsToTry = int(1.5 * num * partsScanned / len(items))
+                    # the first paramter of max is >=1 whenever partsScanned >= 2
+                    numPartsToTry = int(1.5 * num * partsScanned / len(items)) - partsScanned
+                    numPartsToTry = min(max(numPartsToTry, 1), partsScanned * 4)
 
             left = num - len(items)
 
@@ -1115,14 +1138,13 @@ class RDD(object):
         converted for output using either user specified converters or, by default,
         L{org.apache.spark.api.python.JavaToWritableConverter}.
 
-        @param conf: Hadoop job configuration, passed in as a dict
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
+        :param conf: Hadoop job configuration, passed in as a dict
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
-        pickledRDD = self._toPickleSerialization()
-        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
-        self.ctx._jvm.PythonRDD.saveAsHadoopDataset(pickledRDD._jrdd, batched, jconf,
+        pickledRDD = self._pickled()
+        self.ctx._jvm.PythonRDD.saveAsHadoopDataset(pickledRDD._jrdd, True, jconf,
                                                     keyConverter, valueConverter, True)
 
     def saveAsNewAPIHadoopFile(self, path, outputFormatClass, keyClass=None, valueClass=None,
@@ -1135,21 +1157,20 @@ class RDD(object):
         C{conf} is applied on top of the base Hadoop conf associated with the SparkContext
         of this RDD to create a merged Hadoop MapReduce job configuration for saving the data.
 
-        @param path: path to Hadoop file
-        @param outputFormatClass: fully qualified classname of Hadoop OutputFormat
+        :param path: path to Hadoop file
+        :param outputFormatClass: fully qualified classname of Hadoop OutputFormat
                (e.g. "org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat")
-        @param keyClass: fully qualified classname of key Writable class
+        :param keyClass: fully qualified classname of key Writable class
                (e.g. "org.apache.hadoop.io.IntWritable", None by default)
-        @param valueClass: fully qualified classname of value Writable class
+        :param valueClass: fully qualified classname of value Writable class
                (e.g. "org.apache.hadoop.io.Text", None by default)
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
-        @param conf: Hadoop job configuration, passed in as a dict (None by default)
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
+        :param conf: Hadoop job configuration, passed in as a dict (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
-        pickledRDD = self._toPickleSerialization()
-        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
-        self.ctx._jvm.PythonRDD.saveAsNewAPIHadoopFile(pickledRDD._jrdd, batched, path,
+        pickledRDD = self._pickled()
+        self.ctx._jvm.PythonRDD.saveAsNewAPIHadoopFile(pickledRDD._jrdd, True, path,
                                                        outputFormatClass,
                                                        keyClass, valueClass,
                                                        keyConverter, valueConverter, jconf)
@@ -1161,14 +1182,13 @@ class RDD(object):
         converted for output using either user specified converters or, by default,
         L{org.apache.spark.api.python.JavaToWritableConverter}.
 
-        @param conf: Hadoop job configuration, passed in as a dict
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
+        :param conf: Hadoop job configuration, passed in as a dict
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
-        pickledRDD = self._toPickleSerialization()
-        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
-        self.ctx._jvm.PythonRDD.saveAsHadoopDataset(pickledRDD._jrdd, batched, jconf,
+        pickledRDD = self._pickled()
+        self.ctx._jvm.PythonRDD.saveAsHadoopDataset(pickledRDD._jrdd, True, jconf,
                                                     keyConverter, valueConverter, False)
 
     def saveAsHadoopFile(self, path, outputFormatClass, keyClass=None, valueClass=None,
@@ -1182,22 +1202,21 @@ class RDD(object):
         C{conf} is applied on top of the base Hadoop conf associated with the SparkContext
         of this RDD to create a merged Hadoop MapReduce job configuration for saving the data.
 
-        @param path: path to Hadoop file
-        @param outputFormatClass: fully qualified classname of Hadoop OutputFormat
+        :param path: path to Hadoop file
+        :param outputFormatClass: fully qualified classname of Hadoop OutputFormat
                (e.g. "org.apache.hadoop.mapred.SequenceFileOutputFormat")
-        @param keyClass: fully qualified classname of key Writable class
+        :param keyClass: fully qualified classname of key Writable class
                (e.g. "org.apache.hadoop.io.IntWritable", None by default)
-        @param valueClass: fully qualified classname of value Writable class
+        :param valueClass: fully qualified classname of value Writable class
                (e.g. "org.apache.hadoop.io.Text", None by default)
-        @param keyConverter: (None by default)
-        @param valueConverter: (None by default)
-        @param conf: (None by default)
-        @param compressionCodecClass: (None by default)
+        :param keyConverter: (None by default)
+        :param valueConverter: (None by default)
+        :param conf: (None by default)
+        :param compressionCodecClass: (None by default)
         """
         jconf = self.ctx._dictToJavaMap(conf)
-        pickledRDD = self._toPickleSerialization()
-        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
-        self.ctx._jvm.PythonRDD.saveAsHadoopFile(pickledRDD._jrdd, batched, path,
+        pickledRDD = self._pickled()
+        self.ctx._jvm.PythonRDD.saveAsHadoopFile(pickledRDD._jrdd, True, path,
                                                  outputFormatClass,
                                                  keyClass, valueClass,
                                                  keyConverter, valueConverter,
@@ -1208,15 +1227,15 @@ class RDD(object):
         Output a Python RDD of key-value pairs (of form C{RDD[(K, V)]}) to any Hadoop file
         system, using the L{org.apache.hadoop.io.Writable} types that we convert from the
         RDD's key and value types. The mechanism is as follows:
+
             1. Pyrolite is used to convert pickled Python RDD into RDD of Java objects.
             2. Keys and values of this Java RDD are converted to Writables and written out.
 
-        @param path: path to sequence file
-        @param compressionCodecClass: (None by default)
+        :param path: path to sequence file
+        :param compressionCodecClass: (None by default)
         """
-        pickledRDD = self._toPickleSerialization()
-        batched = isinstance(pickledRDD._jrdd_deserializer, BatchedSerializer)
-        self.ctx._jvm.PythonRDD.saveAsSequenceFile(pickledRDD._jrdd, batched,
+        pickledRDD = self._pickled()
+        self.ctx._jvm.PythonRDD.saveAsSequenceFile(pickledRDD._jrdd, True,
                                                    path, compressionCodecClass)
 
     def saveAsPickleFile(self, path, batchSize=10):
@@ -1231,8 +1250,11 @@ class RDD(object):
         >>> sorted(sc.pickleFile(tmpFile.name, 5).collect())
         [1, 2, 'rdd', 'spark']
         """
-        self._reserialize(BatchedSerializer(PickleSerializer(),
-                                            batchSize))._jrdd.saveAsObjectFile(path)
+        if batchSize == 0:
+            ser = AutoBatchedSerializer(PickleSerializer())
+        else:
+            ser = BatchedSerializer(PickleSerializer(), batchSize)
+        self._reserialize(ser)._jrdd.saveAsObjectFile(path)
 
     def saveAsTextFile(self, path):
         """
@@ -1375,7 +1397,7 @@ class RDD(object):
 
         For each element (k, v) in C{self}, the resulting RDD will either
         contain all pairs (k, (v, w)) for w in C{other}, or the pair
-        (k, (v, None)) if no elements in other have key k.
+        (k, (v, None)) if no elements in C{other} have key k.
 
         Hash-partitions the resulting RDD into the given number of partitions.
 
@@ -1402,6 +1424,27 @@ class RDD(object):
         [('a', (2, 1)), ('b', (None, 4))]
         """
         return python_right_outer_join(self, other, numPartitions)
+
+    def fullOuterJoin(self, other, numPartitions=None):
+        """
+        Perform a right outer join of C{self} and C{other}.
+
+        For each element (k, v) in C{self}, the resulting RDD will either
+        contain all pairs (k, (v, w)) for w in C{other}, or the pair
+        (k, (v, None)) if no elements in C{other} have key k.
+
+        Similarly, for each element (k, w) in C{other}, the resulting RDD will
+        either contain all pairs (k, (v, w)) for v in C{self}, or the pair
+        (k, (None, w)) if no elements in C{self} have key k.
+
+        Hash-partitions the resulting RDD into the given number of partitions.
+
+        >>> x = sc.parallelize([("a", 1), ("b", 4)])
+        >>> y = sc.parallelize([("a", 2), ("c", 8)])
+        >>> sorted(x.fullOuterJoin(y).collect())
+        [('a', (1, 2)), ('b', (4, None)), ('c', (None, 8))]
+        """
+        return python_full_outer_join(self, other, numPartitions)
 
     # TODO: add option to control map-side combining
     # portable_hash is used as default, because builtin hash of None is different
@@ -1752,13 +1795,10 @@ class RDD(object):
         >>> x.zip(y).collect()
         [(0, 1000), (1, 1001), (2, 1002), (3, 1003), (4, 1004)]
         """
-        if self.getNumPartitions() != other.getNumPartitions():
-            raise ValueError("Can only zip with RDD which has the same number of partitions")
-
         def get_batch_size(ser):
             if isinstance(ser, BatchedSerializer):
                 return ser.batchSize
-            return 0
+            return 1
 
         def batch_as(rdd, batchSize):
             ser = rdd._jrdd_deserializer
@@ -1768,12 +1808,16 @@ class RDD(object):
 
         my_batch = get_batch_size(self._jrdd_deserializer)
         other_batch = get_batch_size(other._jrdd_deserializer)
-        if my_batch != other_batch:
-            # use the greatest batchSize to batch the other one.
-            if my_batch > other_batch:
-                other = batch_as(other, my_batch)
-            else:
-                self = batch_as(self, other_batch)
+        # use the smallest batchSize for both of them
+        batchSize = min(my_batch, other_batch)
+        if batchSize <= 0:
+            # auto batched or unlimited
+            batchSize = 100
+        other = batch_as(other, batchSize)
+        self = batch_as(self, batchSize)
+
+        if self.getNumPartitions() != other.getNumPartitions():
+            raise ValueError("Can only zip with RDD which has the same number of partitions")
 
         # There will be an Exception in JVM if there are different number
         # of items in each partitions.
@@ -1842,11 +1886,11 @@ class RDD(object):
         Assign a name to this RDD.
 
         >>> rdd1 = sc.parallelize([1,2])
-        >>> rdd1.setName('RDD1')
-        >>> rdd1.name()
+        >>> rdd1.setName('RDD1').name()
         'RDD1'
         """
         self._jrdd.setName(name)
+        return self
 
     def toDebugString(self):
         """
@@ -1912,25 +1956,14 @@ class RDD(object):
 
         return values.collect()
 
-    def _is_pickled(self):
-        """ Return this RDD is serialized by Pickle or not. """
-        der = self._jrdd_deserializer
-        if isinstance(der, PickleSerializer):
-            return True
-        if isinstance(der, BatchedSerializer) and isinstance(der.serializer, PickleSerializer):
-            return True
-        return False
-
     def _to_java_object_rdd(self):
         """ Return an JavaRDD of Object by unpickling
 
         It will convert each Python object into Java object by Pyrolite, whenever the
         RDD is serialized in batch or not.
         """
-        rdd = self._reserialize(AutoBatchedSerializer(PickleSerializer())) \
-            if not self._is_pickled() else self
-        is_batch = isinstance(rdd._jrdd_deserializer, BatchedSerializer)
-        return self.ctx._jvm.PythonRDD.pythonToJava(rdd._jrdd, is_batch)
+        rdd = self._pickled()
+        return self.ctx._jvm.SerDeUtil.pythonToJava(rdd._jrdd, True)
 
     def countApprox(self, timeout, confidence=0.95):
         """
@@ -1987,7 +2020,7 @@ class RDD(object):
         of The Art Cardinality Estimation Algorithm", available
         <a href="http://dx.doi.org/10.1145/2452376.2452456">here</a>.
 
-        @param relativeSD Relative accuracy. Smaller values create
+        :param relativeSD: Relative accuracy. Smaller values create
                            counters that require more space.
                            It must be greater than 0.000017.
 
@@ -2052,6 +2085,12 @@ class PipelinedRDD(RDD):
         self._jrdd_deserializer = self.ctx.serializer
         self._bypass_serializer = False
         self._partitionFunc = prev._partitionFunc if self.preservesPartitioning else None
+        self._broadcast = None
+
+    def __del__(self):
+        if self._broadcast:
+            self._broadcast.unpersist()
+            self._broadcast = None
 
     @property
     def _jrdd(self):
@@ -2059,14 +2098,16 @@ class PipelinedRDD(RDD):
             return self._jrdd_val
         if self._bypass_serializer:
             self._jrdd_deserializer = NoOpSerializer()
-        command = (self.func, self._prev_jrdd_deserializer,
+        enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
+        profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
+        command = (self.func, profileStats, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
         # the serialized command will be compressed by broadcast
         ser = CloudPickleSerializer()
         pickled_command = ser.dumps(command)
-        if pickled_command > (1 << 20):  # 1M
-            broadcast = self.ctx.broadcast(pickled_command)
-            pickled_command = ser.dumps(broadcast)
+        if len(pickled_command) > (1 << 20):  # 1M
+            self._broadcast = self.ctx.broadcast(pickled_command)
+            pickled_command = ser.dumps(self._broadcast)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
             self.ctx._gateway._gateway_client)
@@ -2081,6 +2122,10 @@ class PipelinedRDD(RDD):
                                              self.ctx.pythonExec,
                                              broadcast_vars, self.ctx._javaAccumulator)
         self._jrdd_val = python_rdd.asJavaRDD()
+
+        if enable_profile:
+            self._id = self._jrdd_val.id()
+            self.ctx._add_profile(self._id, profileStats)
         return self._jrdd_val
 
     def id(self):
@@ -2098,7 +2143,7 @@ def _test():
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    globs['sc'] = SparkContext('local[4]', 'PythonTest')
     (failure_count, test_count) = doctest.testmod(
         globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()

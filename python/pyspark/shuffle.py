@@ -25,7 +25,7 @@ import itertools
 import random
 
 import pyspark.heapq3 as heapq
-from pyspark.serializers import BatchedSerializer, PickleSerializer
+from pyspark.serializers import AutoBatchedSerializer, PickleSerializer
 
 try:
     import psutil
@@ -213,8 +213,7 @@ class ExternalMerger(Merger):
         Merger.__init__(self, aggregator)
         self.memory_limit = memory_limit
         # default serializer is only used for tests
-        self.serializer = serializer or \
-            BatchedSerializer(PickleSerializer(), 1024)
+        self.serializer = serializer or AutoBatchedSerializer(PickleSerializer())
         self.localdirs = localdirs or _get_local_dirs(str(id(self)))
         # number of partitions when spill data into disks
         self.partitions = partitions
@@ -396,7 +395,6 @@ class ExternalMerger(Merger):
                 for v in self.data.iteritems():
                     yield v
                 self.data.clear()
-                gc.collect()
 
                 # remove the merged partition
                 for j in range(self.spills):
@@ -428,7 +426,7 @@ class ExternalMerger(Merger):
             subdirs = [os.path.join(d, "parts", str(i))
                        for d in self.localdirs]
             m = ExternalMerger(self.agg, self.memory_limit, self.serializer,
-                               subdirs, self.scale * self.partitions)
+                               subdirs, self.scale * self.partitions, self.partitions)
             m.pdata = [{} for _ in range(self.partitions)]
             limit = self._next_limit()
 
@@ -471,7 +469,7 @@ class ExternalSorter(object):
     def __init__(self, memory_limit, serializer=None):
         self.memory_limit = memory_limit
         self.local_dirs = _get_local_dirs("sort")
-        self.serializer = serializer or BatchedSerializer(PickleSerializer(), 1024)
+        self.serializer = serializer or AutoBatchedSerializer(PickleSerializer())
 
     def _get_path(self, n):
         """ Choose one directory for spill by number n """
@@ -480,13 +478,21 @@ class ExternalSorter(object):
             os.makedirs(d)
         return os.path.join(d, str(n))
 
+    def _next_limit(self):
+        """
+        Return the next memory limit. If the memory is not released
+        after spilling, it will dump the data only when the used memory
+        starts to increase.
+        """
+        return max(self.memory_limit, get_used_memory() * 1.05)
+
     def sorted(self, iterator, key=None, reverse=False):
         """
         Sort the elements in iterator, do external sort when the memory
         goes above the limit.
         """
         global MemoryBytesSpilled, DiskBytesSpilled
-        batch = 10
+        batch, limit = 100, self._next_limit()
         chunks, current_chunk = [], []
         iterator = iter(iterator)
         while True:
@@ -506,6 +512,7 @@ class ExternalSorter(object):
                 chunks.append(self.serializer.load_stream(open(path)))
                 current_chunk = []
                 gc.collect()
+                limit = self._next_limit()
                 MemoryBytesSpilled += (used_memory - get_used_memory()) << 20
                 DiskBytesSpilled += os.path.getsize(path)
 

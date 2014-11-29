@@ -36,6 +36,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 object MultivariateSummarizer {
 
   case class Params(input: String = "data/mllib/sample_linear_regression_data.txt")
+    extends AbstractParams[Params]
 
   def main(args: Array[String]) {
 

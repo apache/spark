@@ -79,5 +79,7 @@ object LogQuery {
       .reduceByKey((a, b) => a.merge(b))
       .collect().foreach{
         case (user, query) => println("%s\t%s".format(user, query))}
+
+    sc.stop()
   }
 }

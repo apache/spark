@@ -10,7 +10,7 @@ ALTER TABLE test_orc SET SERDEPROPERTIES ('orc.row.index.stride' = '1000');
 -- to last index stride are the same (there's only two index strides)
 
 CREATE TABLE src_null(a STRING) STORED AS TEXTFILE;
-LOAD DATA LOCAL INPATH '../data/files/nulls.txt' INTO TABLE src_null;
+LOAD DATA LOCAL INPATH '../../data/files/nulls.txt' INTO TABLE src_null;
 
 INSERT OVERWRITE TABLE test_orc SELECT a FROM src_null;
 

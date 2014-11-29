@@ -18,7 +18,6 @@
 package org.apache.spark.streaming
 
 import org.apache.spark.Logging
-import org.apache.spark.streaming.util.MasterFailureTest
 import org.apache.spark.util.Utils
 
 import java.io.File

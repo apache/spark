@@ -4,7 +4,7 @@ DROP TABLE alter_rename_partition;
 SHOW TABLES;
 
 create table alter_rename_partition_src ( col1 string ) stored as textfile ;
-load data local inpath '../data/files/test.dat' overwrite into table alter_rename_partition_src ;
+load data local inpath '../../data/files/test.dat' overwrite into table alter_rename_partition_src ;
 
 create table alter_rename_partition ( col1 string ) partitioned by (pcol1 string , pcol2 string) stored as sequencefile;
 
@@ -28,7 +28,7 @@ USE alter_rename_partition_db;
 SHOW TABLES;
 
 CREATE TABLE alter_rename_partition_src (col1 STRING) STORED AS TEXTFILE ;
-LOAD DATA LOCAL INPATH '../data/files/test.dat' OVERWRITE INTO TABLE alter_rename_partition_src ;
+LOAD DATA LOCAL INPATH '../../data/files/test.dat' OVERWRITE INTO TABLE alter_rename_partition_src ;
 
 CREATE TABLE alter_rename_partition (col1 STRING) PARTITIONED BY (pcol1 STRING, pcol2 STRING) STORED AS SEQUENCEFILE;
 

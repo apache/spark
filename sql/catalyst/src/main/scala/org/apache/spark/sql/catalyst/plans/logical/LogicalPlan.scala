@@ -22,28 +22,28 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.catalyst.trees
+
+/**
+ * Estimates of various statistics.  The default estimation logic simply lazily multiplies the
+ * corresponding statistic produced by the children.  To override this behavior, override
+ * `statistics` and assign it an overriden version of `Statistics`.
+ *
+ * '''NOTE''': concrete and/or overriden versions of statistics fields should pay attention to the
+ * performance of the implementations.  The reason is that estimations might get triggered in
+ * performance-critical processes, such as query plan planning.
+ *
+ * @param sizeInBytes Physical size in bytes. For leaf operators this defaults to 1, otherwise it
+ *                    defaults to the product of children's `sizeInBytes`.
+ */
+private[sql] case class Statistics(sizeInBytes: BigInt)
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   self: Product =>
 
-  /**
-   * Estimates of various statistics.  The default estimation logic simply lazily multiplies the
-   * corresponding statistic produced by the children.  To override this behavior, override
-   * `statistics` and assign it an overriden version of `Statistics`.
-   *
-   * '''NOTE''': concrete and/or overriden versions of statistics fields should pay attention to the
-   * performance of the implementations.  The reason is that estimations might get triggered in
-   * performance-critical processes, such as query plan planning.
-   *
-   * @param sizeInBytes Physical size in bytes. For leaf operators this defaults to 1, otherwise it
-   *                    defaults to the product of children's `sizeInBytes`.
-   */
-  case class Statistics(
-    sizeInBytes: BigInt
-  )
-  lazy val statistics: Statistics = {
+  def statistics: Statistics = {
     if (children.size == 0) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
     }
@@ -51,12 +51,6 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
     Statistics(
       sizeInBytes = children.map(_.statistics).map(_.sizeInBytes).product)
   }
-
-  /**
-   * Returns the set of attributes that this node takes as
-   * input from its children.
-   */
-  lazy val inputSet: AttributeSet = AttributeSet(children.flatMap(_.output))
 
   /**
    * Returns true if this expression and all its children have been resolved to a specific schema
@@ -67,10 +61,53 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   lazy val resolved: Boolean = !expressions.exists(!_.resolved) && childrenResolved
 
+  override protected def statePrefix = if (!resolved) "'" else super.statePrefix
+
   /**
    * Returns true if all its children of this query plan have been resolved.
    */
   def childrenResolved: Boolean = !children.exists(!_.resolved)
+
+  /**
+   * Returns true when the given logical plan will return the same results as this logical plan.
+   *
+   * Since its likely undecideable to generally determine if two given plans will produce the same
+   * results, it is okay for this function to return false, even if the results are actually
+   * the same.  Such behavior will not affect correctness, only the application of performance
+   * enhancements like caching.  However, it is not acceptable to return true if the results could
+   * possibly be different.
+   *
+   * By default this function performs a modified version of equality that is tolerant of cosmetic
+   * differences like attribute naming and or expression id differences.  Logical operators that
+   * can do better should override this function.
+   */
+  def sameResult(plan: LogicalPlan): Boolean = {
+    plan.getClass == this.getClass &&
+    plan.children.size == children.size && {
+      logDebug(s"[${cleanArgs.mkString(", ")}] == [${plan.cleanArgs.mkString(", ")}]")
+      cleanArgs == plan.cleanArgs
+    } &&
+    (plan.children, children).zipped.forall(_ sameResult _)
+  }
+
+  /** Args that have cleaned such that differences in expression id should not affect equality */
+  protected lazy val cleanArgs: Seq[Any] = {
+    val input = children.flatMap(_.output)
+    productIterator.map {
+      // Children are checked using sameResult above.
+      case tn: TreeNode[_] if children contains tn => null
+      case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
+      case s: Option[_] => s.map {
+        case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
+        case other => other
+      }
+      case s: Seq[_] => s.map {
+        case e: Expression => BindReferences.bindReference(e, input, allowFailures = true)
+        case other => other
+      }
+      case other => other
+    }.toSeq
+  }
 
   /**
    * Optionally resolves the given string to a [[NamedExpression]] using the input from all child

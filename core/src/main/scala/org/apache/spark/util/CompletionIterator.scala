@@ -25,10 +25,13 @@ private[spark]
 // scalastyle:off
 abstract class CompletionIterator[ +A, +I <: Iterator[A]](sub: I) extends Iterator[A] {
 // scalastyle:on
+
+  private[this] var completed = false
   def next() = sub.next()
   def hasNext = {
     val r = sub.hasNext
-    if (!r) {
+    if (!r && !completed) {
+      completed = true
       completion()
     }
     r

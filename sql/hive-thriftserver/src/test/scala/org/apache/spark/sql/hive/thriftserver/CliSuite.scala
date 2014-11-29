@@ -18,14 +18,12 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration._
-import scala.concurrent.{Await, Future, Promise}
-import scala.sys.process.{Process, ProcessLogger}
-
 import java.io._
-import java.util.concurrent.atomic.AtomicInteger
+
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Promise}
+import scala.sys.process.{Process, ProcessLogger}
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
@@ -53,17 +51,19 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
 
-    // AtomicInteger is needed because stderr and stdout of the forked process are handled in
-    // different threads.
-    val next = new AtomicInteger(0)
+    var next = 0
     val foundAllExpectedAnswers = Promise.apply[Unit]()
     val queryStream = new ByteArrayInputStream(queries.mkString("\n").getBytes)
     val buffer = new ArrayBuffer[String]()
+    val lock = new Object
 
-    def captureOutput(source: String)(line: String) {
+    def captureOutput(source: String)(line: String): Unit = lock.synchronized {
       buffer += s"$source> $line"
-      if (line.contains(expectedAnswers(next.get()))) {
-        if (next.incrementAndGet() == expectedAnswers.size) {
+      // If we haven't found all expected answers and another expected answer comes up...
+      if (next < expectedAnswers.size && line.startsWith(expectedAnswers(next))) {
+        next += 1
+        // If all expected answers have been found...
+        if (next == expectedAnswers.size) {
           foundAllExpectedAnswers.trySuccess(())
         }
       }
@@ -72,11 +72,6 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
     // Searching expected output line from both stdout and stderr of the CLI process
     val process = (Process(command) #< queryStream).run(
       ProcessLogger(captureOutput("stdout"), captureOutput("stderr")))
-
-    Future {
-      val exitValue = process.exitValue()
-      logInfo(s"Spark SQL CLI process exit value: $exitValue")
-    }
 
     try {
       Await.result(foundAllExpectedAnswers.future, timeout)
@@ -88,14 +83,15 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
            |=======================
            |Spark SQL CLI command line: ${command.mkString(" ")}
            |
-           |Executed query ${next.get()} "${queries(next.get())}",
-           |But failed to capture expected output "${expectedAnswers(next.get())}" within $timeout.
+           |Executed query $next "${queries(next)}",
+           |But failed to capture expected output "${expectedAnswers(next)}" within $timeout.
            |
            |${buffer.mkString("\n")}
            |===========================
            |End CliSuite failure output
            |===========================
          """.stripMargin, cause)
+      throw cause
     } finally {
       warehousePath.delete()
       metastorePath.delete()
@@ -107,7 +103,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
 
-    runCliWithin(1.minute)(
+    runCliWithin(3.minute)(
       "CREATE TABLE hive_test(key INT, val STRING);"
         -> "OK",
       "SHOW TABLES;"
@@ -118,7 +114,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
         -> "Time taken: ",
       "SELECT COUNT(*) FROM hive_test;"
         -> "5",
-      "DROP TABLE hive_test"
+      "DROP TABLE hive_test;"
         -> "Time taken: "
     )
   }

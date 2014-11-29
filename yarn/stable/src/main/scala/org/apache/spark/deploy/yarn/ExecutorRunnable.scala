@@ -36,6 +36,7 @@ import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{Apps, ConverterUtils, Records}
 
 import org.apache.spark.{SecurityManager, SparkConf, Logging}
+import org.apache.spark.network.util.JavaUtils
 
 
 class ExecutorRunnable(
@@ -47,6 +48,7 @@ class ExecutorRunnable(
     hostname: String,
     executorMemory: Int,
     executorCores: Int,
+    appId: String,
     securityMgr: SecurityManager)
   extends Runnable with ExecutorRunnableUtil with Logging {
 
@@ -80,13 +82,29 @@ class ExecutorRunnable(
     ctx.setTokens(ByteBuffer.wrap(dob.getData()))
 
     val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores,
-      localResources)
+      appId, localResources)
 
     logInfo(s"Setting up executor with environment: $env")
     logInfo("Setting up executor with commands: " + commands)
     ctx.setCommands(commands)
 
     ctx.setApplicationACLs(YarnSparkHadoopUtil.getApplicationAclsForYarn(securityMgr))
+
+    // If external shuffle service is enabled, register with the Yarn shuffle service already
+    // started on the NodeManager and, if authentication is enabled, provide it with our secret
+    // key for fetching shuffle files later
+    if (sparkConf.getBoolean("spark.shuffle.service.enabled", false)) {
+      val secretString = securityMgr.getSecretKey()
+      val secretBytes =
+        if (secretString != null) {
+          // This conversion must match how the YarnShuffleService decodes our secret
+          JavaUtils.stringToBytes(secretString)
+        } else {
+          // Authentication is not enabled, so just provide dummy metadata
+          ByteBuffer.allocate(0)
+        }
+      ctx.setServiceData(Map[String, ByteBuffer]("spark_shuffle" -> secretBytes))
+    }
 
     // Send the start request to the ContainerManager
     nmClient.startContainer(container, ctx)

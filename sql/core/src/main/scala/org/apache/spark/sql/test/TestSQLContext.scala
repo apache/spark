@@ -22,7 +22,11 @@ import org.apache.spark.sql.{SQLConf, SQLContext}
 
 /** A SQLContext that can be used for local testing. */
 object TestSQLContext
-  extends SQLContext(new SparkContext("local[2]", "TestSQLContext", new SparkConf())) {
+  extends SQLContext(
+    new SparkContext(
+      "local[2]",
+      "TestSQLContext",
+      new SparkConf().set("spark.sql.testkey", "true"))) {
 
   /** Fewer partitions to speed up testing. */
   override private[spark] def numShufflePartitions: Int =

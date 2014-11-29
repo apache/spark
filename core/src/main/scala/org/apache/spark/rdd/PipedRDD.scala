@@ -131,7 +131,6 @@ private[spark] class PipedRDD[T: ClassTag](
     // Start a thread to feed the process input from our parent's iterator
     new Thread("stdin writer for " + command) {
       override def run() {
-        SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
 
         // input the pipe context firstly

@@ -247,7 +247,7 @@ val modelL1 = svmAlg.run(training)
 All of MLlib's methods use Java-friendly types, so you can import and call them there the same
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
-calling `.rdd()` on your `JavaRDD` object. A standalone application example
+calling `.rdd()` on your `JavaRDD` object. A self-contained application example
 that is equivalent to the provided example in Scala is given bellow:
 
 {% highlight java %}
@@ -323,9 +323,9 @@ svmAlg.optimizer()
 final SVMModel modelL1 = svmAlg.run(training.rdd());
 {% endhighlight %}
 
-In order to run the above standalone application, follow the instructions
-provided in the [Standalone
-Applications](quick-start.html#standalone-applications) section of the Spark
+In order to run the above application, follow the instructions
+provided in the [Self-Contained
+Applications](quick-start.html#self-contained-applications) section of the Spark
 quick-start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.
 </div>
@@ -396,7 +396,7 @@ val data = sc.textFile("data/mllib/ridge-data/lpsa.data")
 val parsedData = data.map { line =>
   val parts = line.split(',')
   LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))
-}
+}.cache()
 
 // Building the model
 val numIterations = 100
@@ -455,6 +455,7 @@ public class LinearRegression {
         }
       }
     );
+    parsedData.cache();
 
     // Building the model
     int numIterations = 100;
@@ -470,7 +471,7 @@ public class LinearRegression {
         }
       }
     );
-    JavaRDD<Object> MSE = new JavaDoubleRDD(valuesAndPreds.map(
+    double MSE = new JavaDoubleRDD(valuesAndPreds.map(
       new Function<Tuple2<Double, Double>, Object>() {
         public Object call(Tuple2<Double, Double> pair) {
           return Math.pow(pair._1() - pair._2(), 2.0);
@@ -481,12 +482,6 @@ public class LinearRegression {
   }
 }
 {% endhighlight %}
-
-In order to run the above standalone application, follow the instructions
-provided in the [Standalone
-Applications](quick-start.html#standalone-applications) section of the Spark
-quick-start guide. Be sure to also include *spark-mllib* to your build file as
-a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
@@ -517,6 +512,12 @@ print("Mean Squared Error = " + str(MSE))
 {% endhighlight %}
 </div>
 </div>
+
+In order to run the above application, follow the instructions
+provided in the [Self-Contained Applications](quick-start.html#self-contained-applications)
+section of the Spark
+quick-start guide. Be sure to also include *spark-mllib* to your build file as
+a dependency.
 
 ## Streaming linear regression
 
@@ -553,8 +554,8 @@ but in practice you will likely want to use unlabeled vectors for test data.
 
 {% highlight scala %}
 
-val trainingData = ssc.textFileStream('/training/data/dir').map(LabeledPoint.parse)
-val testData = ssc.textFileStream('/testing/data/dir').map(LabeledPoint.parse)
+val trainingData = ssc.textFileStream("/training/data/dir").map(LabeledPoint.parse).cache()
+val testData = ssc.textFileStream("/testing/data/dir").map(LabeledPoint.parse)
 
 {% endhighlight %}
 

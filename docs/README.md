@@ -25,8 +25,7 @@ installing via the Ruby Gem dependency manager. Since the exact HTML output
 varies between versions of Jekyll and its dependencies, we list specific versions here
 in some cases:
 
-    $ sudo gem install jekyll -v 1.4.3
-    $ sudo gem uninstall kramdown -v 1.4.1
+    $ sudo gem install jekyll
     $ sudo gem install jekyll-redirect-from
 
 Execute `jekyll` from the `docs/` directory. Compiling the site with Jekyll will create a directory
@@ -44,7 +43,7 @@ You can modify the default Jekyll build as follows:
 ## Pygments
 
 We also use pygments (http://pygments.org) for syntax highlighting in documentation markdown pages,
-so you will also need to install that (it requires Python) by running `sudo easy_install Pygments`.
+so you will also need to install that (it requires Python) by running `sudo pip install Pygments`.
 
 To mark a block of code in your markdown to be syntax highlighted by jekyll during the compile
 phase, use the following sytax:
@@ -54,19 +53,24 @@ phase, use the following sytax:
     // supported languages too.
     {% endhighlight %}
 
-## API Docs (Scaladoc and Epydoc)
+## Sphinx
+
+We use Sphinx to generate Python API docs, so you will need to install it by running
+`sudo pip install sphinx`.
+
+## API Docs (Scaladoc and Sphinx)
 
 You can build just the Spark scaladoc by running `sbt/sbt doc` from the SPARK_PROJECT_ROOT directory.
 
-Similarly, you can build just the PySpark epydoc by running `epydoc --config epydoc.conf` from the
-SPARK_PROJECT_ROOT/pyspark directory. Documentation is only generated for classes that are listed as
+Similarly, you can build just the PySpark docs by running `make html` from the
+SPARK_PROJECT_ROOT/python/docs directory. Documentation is only generated for classes that are listed as
 public in `__init__.py`.
 
 When you run `jekyll` in the `docs` directory, it will also copy over the scaladoc for the various
 Spark subprojects into the `docs` directory (and then also into the `_site` directory). We use a
 jekyll plugin to run `sbt/sbt doc` before building the site so if you haven't run it (recently) it
 may take some time as it generates all of the scaladoc.  The jekyll plugin also generates the
-PySpark docs using [epydoc](http://epydoc.sourceforge.net/).
+PySpark docs [Sphinx](http://sphinx-doc.org/).
 
 NOTE: To skip the step of building and copying over the Scala and Python API docs, run `SKIP_API=1
 jekyll`.

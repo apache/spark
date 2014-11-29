@@ -27,6 +27,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -117,6 +118,12 @@ class KMeans private (
    * performance, because this is an iterative algorithm.
    */
   def run(data: RDD[Vector]): KMeansModel = {
+
+    if (data.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data is not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
+    }
+
     // Compute squared norms and cache them.
     val norms = data.map(v => breezeNorm(v.toBreeze, 2.0))
     norms.persist()
@@ -125,6 +132,12 @@ class KMeans private (
     }
     val model = runBreeze(breezeData)
     norms.unpersist()
+
+    // Warn at the end of the run as well, for increased visibility.
+    if (data.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data was not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
+    }
     model
   }
 
