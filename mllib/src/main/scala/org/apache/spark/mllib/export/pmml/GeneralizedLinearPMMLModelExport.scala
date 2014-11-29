@@ -72,6 +72,16 @@ private[mllib] class GeneralizedLinearPMMLModelExport(
          regressionTable.withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))   
        }
        
+       //for completeness add target field
+       val targetField = FieldName.create("target");
+       dataDictionary
+        .withDataFields(
+            new DataField(targetField, OpType.CONTINUOUS, DataType.DOUBLE)
+        )
+        miningSchema
+         .withMiningFields(new MiningField(targetField)
+         .withUsageType(FieldUsageType.TARGET))
+       
        dataDictionary.withNumberOfFields((dataDictionary.getDataFields()).size())
        
        pmml.setDataDictionary(dataDictionary)

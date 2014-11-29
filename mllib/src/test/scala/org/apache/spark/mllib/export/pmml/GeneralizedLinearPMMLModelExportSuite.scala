@@ -45,7 +45,7 @@ class GeneralizedLinearPMMLModelExportSuite extends FunSuite{
     var pmml = linearModelExport.asInstanceOf[PMMLModelExport].getPmml()
     assert(pmml.getHeader().getDescription() === "linear regression")
     //check that the number of fields match the weights size
-    assert(pmml.getDataDictionary().getNumberOfFields() === linearRegressionModel.weights.size)
+    assert(pmml.getDataDictionary().getNumberOfFields() === linearRegressionModel.weights.size + 1)
     //this verify that there is a model attached to the pmml object and the model is a regression one
     //it also verifies that the pmml model has a regression table with the same number of predictors of the model weights
     assert(pmml.getModels().get(0).asInstanceOf[RegressionModel]
@@ -58,7 +58,7 @@ class GeneralizedLinearPMMLModelExportSuite extends FunSuite{
     pmml = ridgeModelExport.asInstanceOf[PMMLModelExport].getPmml()
     assert(pmml.getHeader().getDescription() === "ridge regression")
     //check that the number of fields match the weights size
-    assert(pmml.getDataDictionary().getNumberOfFields() === ridgeRegressionModel.weights.size)
+    assert(pmml.getDataDictionary().getNumberOfFields() === ridgeRegressionModel.weights.size + 1)
     //this verify that there is a model attached to the pmml object and the model is a regression one
     //it also verifies that the pmml model has a regression table with the same number of predictors of the model weights
     assert(pmml.getModels().get(0).asInstanceOf[RegressionModel]
@@ -71,7 +71,7 @@ class GeneralizedLinearPMMLModelExportSuite extends FunSuite{
     pmml = lassoModelExport.asInstanceOf[PMMLModelExport].getPmml()
     assert(pmml.getHeader().getDescription() === "lasso regression")
     //check that the number of fields match the weights size
-    assert(pmml.getDataDictionary().getNumberOfFields() === lassoModel.weights.size)
+    assert(pmml.getDataDictionary().getNumberOfFields() === lassoModel.weights.size + 1)
     //this verify that there is a model attached to the pmml object and the model is a regression one
     //it also verifies that the pmml model has a regression table with the same number of predictors of the model weights
     assert(pmml.getModels().get(0).asInstanceOf[RegressionModel]
