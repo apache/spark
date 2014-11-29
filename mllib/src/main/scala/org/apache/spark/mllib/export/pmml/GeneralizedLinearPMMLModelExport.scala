@@ -72,7 +72,7 @@ private[mllib] class GeneralizedLinearPMMLModelExport(
          regressionTable.withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))   
        }
        
-       //for completeness add target field
+       // for completeness add target field
        val targetField = FieldName.create("target");
        dataDictionary
         .withDataFields(
