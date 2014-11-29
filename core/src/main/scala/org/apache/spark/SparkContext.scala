@@ -46,7 +46,7 @@ import org.apache.spark.input.{StreamInputFormat, PortableDataStream, WholeTextF
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.{YarnSchedulerBackend, CoarseGrainedSchedulerBackend, SparkDeploySchedulerBackend, SimrSchedulerBackend}
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SparkDeploySchedulerBackend, SimrSchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
@@ -1947,7 +1947,6 @@ object SparkContext extends Logging {
         }
 
         scheduler.initialize(backend)
-        YarnSchedulerBackend.setYarnSchedulerBackend(backend)
         (backend, scheduler)
 
       case mesosUrl @ MESOS_REGEX(_) =>

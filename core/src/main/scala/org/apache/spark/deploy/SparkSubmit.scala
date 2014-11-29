@@ -21,8 +21,6 @@ import java.io.{File, PrintStream}
 import java.lang.reflect.{Modifier, InvocationTargetException}
 import java.net.URL
 
-import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
-
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.spark.executor.ExecutorURLClassLoader
@@ -57,8 +55,6 @@ object SparkSubmit {
   private val PYSPARK_SHELL = "pyspark-shell"
 
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
-
-  private var isYarnClientMode: Boolean = false
 
   // Exposed for testing
   private[spark] var exitFn: () => Unit = () => System.exit(-1)
@@ -222,7 +218,6 @@ object SparkSubmit {
     // In client mode, launch the application main class directly
     // In addition, add the main application jar and any added jars (if any) to the classpath
     if (deployMode == CLIENT) {
-      isYarnClientMode = true
       childMainClass = args.mainClass
       if (isUserJar(args.primaryResource)) {
         childClasspath += args.primaryResource
@@ -361,15 +356,14 @@ object SparkSubmit {
     }
     try {
       mainMethod.invoke(null, childArgs.toArray)
-      if (isYarnClientMode) {
-        YarnSchedulerBackend.stopAM
-      }
     } catch {
       case e: InvocationTargetException => e.getCause match {
         case cause: Throwable => throw cause
         case null => throw e
       }
     }
+
+    System.exit(0)
   }
 
   private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {

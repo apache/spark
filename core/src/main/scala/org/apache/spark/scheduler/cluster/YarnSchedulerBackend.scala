@@ -212,20 +212,4 @@ private[spark] abstract class YarnSchedulerBackend(
 
 private[spark] object YarnSchedulerBackend extends Logging{
   val ACTOR_NAME = "YarnScheduler"
-  var schedulerBackend: Option[YarnSchedulerBackend] = None
-
-  // we need gain the schedulerBackend handle in the constructor of SC,
-  // so that we can use it to stop the ExecutorLauncher after executing user code
-  def setYarnSchedulerBackend(scheduler: CoarseGrainedSchedulerBackend) = {
-    schedulerBackend = Some(scheduler.asInstanceOf[YarnSchedulerBackend])
-  }
-
-  // only called in SparkSubmit
-  def stopAM = {
-    schedulerBackend match {
-      case Some(scheduler) => scheduler.stopExecutorLauncher()
-      case None => logWarning("Can not stop Application Master " +
-        "since YarnSchedulerBackend is not initialed.")
-    }
-  }
 }
