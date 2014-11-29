@@ -85,6 +85,17 @@ private[spark] class Stage(
     }
   }
 
+  def missingParents: List[Stage] = {
+    parents.filterNot(_.isAvailable)
+  }
+
+  /**
+   * Returns true if one of this stage's ancestors is `otherStage`.
+   */
+  def dependsOn(otherStage: Stage): Boolean = {
+    parents.exists(_.rdd == otherStage.rdd)
+  }
+
   def addOutputLoc(partition: Int, status: MapStatus) {
     val prevList = outputLocs(partition)
     outputLocs(partition) = status :: prevList
