@@ -1,10 +1,10 @@
 
 CREATE TABLE tstparttbl(KEY STRING, VALUE STRING) PARTITIONED BY(ds string) STORED AS TEXTFILE;
-LOAD DATA LOCAL INPATH '../data/files/kv1.txt' INTO TABLE tstparttbl PARTITION (ds='2009-04-09');
+LOAD DATA LOCAL INPATH '../../data/files/kv1.txt' INTO TABLE tstparttbl PARTITION (ds='2009-04-09');
 
 
 CREATE TABLE tstparttbl2(KEY STRING, VALUE STRING) PARTITIONED BY(ds string) STORED AS TEXTFILE;
-LOAD DATA LOCAL INPATH '../data/files/kv1.txt' INTO TABLE tstparttbl2 PARTITION (ds='2009-04-09');
+LOAD DATA LOCAL INPATH '../../data/files/kv1.txt' INTO TABLE tstparttbl2 PARTITION (ds='2009-04-09');
 
 explain
 select u.* from

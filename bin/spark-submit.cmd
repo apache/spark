@@ -17,52 +17,7 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
-rem NOTE: Any changes in this file must be reflected in SparkSubmitDriverBootstrapper.scala!
+rem This is the entry point for running Spark submit. To avoid polluting the
+rem environment, it just launches a new cmd to do the real work.
 
-set SPARK_HOME=%~dp0..
-set ORIG_ARGS=%*
-
-rem Reset the values of all variables used
-set SPARK_SUBMIT_DEPLOY_MODE=client
-set SPARK_SUBMIT_PROPERTIES_FILE=%SPARK_HOME%\conf\spark-defaults.conf
-set SPARK_SUBMIT_DRIVER_MEMORY=
-set SPARK_SUBMIT_LIBRARY_PATH=
-set SPARK_SUBMIT_CLASSPATH=
-set SPARK_SUBMIT_OPTS=
-set SPARK_SUBMIT_BOOTSTRAP_DRIVER=
-
-:loop
-if [%1] == [] goto continue
-  if [%1] == [--deploy-mode] (
-    set SPARK_SUBMIT_DEPLOY_MODE=%2
-  ) else if [%1] == [--properties-file] (
-    set SPARK_SUBMIT_PROPERTIES_FILE=%2
-  ) else if [%1] == [--driver-memory] (
-    set SPARK_SUBMIT_DRIVER_MEMORY=%2
-  ) else if [%1] == [--driver-library-path] (
-    set SPARK_SUBMIT_LIBRARY_PATH=%2
-  ) else if [%1] == [--driver-class-path] (
-    set SPARK_SUBMIT_CLASSPATH=%2
-  ) else if [%1] == [--driver-java-options] (
-    set SPARK_SUBMIT_OPTS=%2
-  )
-  shift
-goto loop
-:continue
-
-rem For client mode, the driver will be launched in the same JVM that launches
-rem SparkSubmit, so we may need to read the properties file for any extra class
-rem paths, library paths, java options and memory early on. Otherwise, it will
-rem be too late by the time the driver JVM has started.
-
-if [%SPARK_SUBMIT_DEPLOY_MODE%] == [client] (
-  if exist %SPARK_SUBMIT_PROPERTIES_FILE% (
-    rem Parse the properties file only if the special configs exist
-    for /f %%i in ('findstr /r /c:"^[\t ]*spark.driver.memory" /c:"^[\t ]*spark.driver.extra" ^
-      %SPARK_SUBMIT_PROPERTIES_FILE%') do (
-      set SPARK_SUBMIT_BOOTSTRAP_DRIVER=1
-    )
-  )
-)
-
-cmd /V /E /C %SPARK_HOME%\bin\spark-class.cmd org.apache.spark.deploy.SparkSubmit %ORIG_ARGS%
+cmd /V /E /C %~dp0spark-submit2.cmd %*

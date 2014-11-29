@@ -114,11 +114,13 @@ case class InsertIntoTable(
   }
 }
 
-case class CreateTableAsSelect(
+case class CreateTableAsSelect[T](
     databaseName: Option[String],
     tableName: String,
-    child: LogicalPlan) extends UnaryNode {
-  override def output = child.output
+    child: LogicalPlan,
+    allowExisting: Boolean,
+    desc: Option[T] = None) extends UnaryNode {
+  override def output = Seq.empty[Attribute]
   override lazy val resolved = (databaseName != None && childrenResolved)
 }
 
@@ -137,11 +139,6 @@ case class Aggregate(
     aggregateExpressions: Seq[NamedExpression],
     child: LogicalPlan)
   extends UnaryNode {
-
-  /** The set of all AttributeReferences required for this aggregation. */
-  def references =
-    AttributeSet(
-      groupingExpressions.flatMap(_.references) ++ aggregateExpressions.flatMap(_.references))
 
   override def output = aggregateExpressions.map(_.toAttribute)
 }

@@ -31,10 +31,15 @@ import tempfile
 import time
 import zipfile
 import random
-from platform import python_implementation
+import threading
+import hashlib
 
 if sys.version_info[:2] <= (2, 6):
-    import unittest2 as unittest
+    try:
+        import unittest2 as unittest
+    except ImportError:
+        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
+        sys.exit(1)
 else:
     import unittest
 
@@ -43,9 +48,10 @@ from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
-    CloudPickleSerializer
+    CloudPickleSerializer, CompressedSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
-from pyspark.sql import SQLContext, IntegerType, Row
+from pyspark.sql import SQLContext, IntegerType, Row, ArrayType, StructType, StructField, \
+    UserDefinedType, DoubleType
 from pyspark import shuffle
 
 _have_scipy = False
@@ -67,10 +73,10 @@ except:
 SPARK_HOME = os.environ["SPARK_HOME"]
 
 
-class TestMerger(unittest.TestCase):
+class MergerTests(unittest.TestCase):
 
     def setUp(self):
-        self.N = 1 << 16
+        self.N = 1 << 14
         self.l = [i for i in xrange(self.N)]
         self.data = zip(self.l, self.l)
         self.agg = Aggregator(lambda x: [x],
@@ -115,7 +121,7 @@ class TestMerger(unittest.TestCase):
                          sum(xrange(self.N)) * 3)
 
     def test_huge_dataset(self):
-        m = ExternalMerger(self.agg, 10)
+        m = ExternalMerger(self.agg, 10, partitions=3)
         m.mergeCombiners(map(lambda (k, v): (k, [str(v)]), self.data * 10))
         self.assertTrue(m.spills >= 1)
         self.assertEqual(sum(len(v) for k, v in m._recursive_merged_items(0)),
@@ -123,7 +129,7 @@ class TestMerger(unittest.TestCase):
         m._cleanup()
 
 
-class TestSorter(unittest.TestCase):
+class SorterTests(unittest.TestCase):
     def test_in_memory_sort(self):
         l = range(1024)
         random.shuffle(l)
@@ -231,29 +237,49 @@ class SerializationTestCase(unittest.TestCase):
         self.assertTrue("exit" in foo.func_code.co_names)
         ser.dumps(foo)
 
+    def test_compressed_serializer(self):
+        ser = CompressedSerializer(PickleSerializer())
+        from StringIO import StringIO
+        io = StringIO()
+        ser.dump_stream(["abc", u"123", range(5)], io)
+        io.seek(0)
+        self.assertEqual(["abc", u"123", range(5)], list(ser.load_stream(io)))
+        ser.dump_stream(range(1000), io)
+        io.seek(0)
+        self.assertEqual(["abc", u"123", range(5)] + range(1000), list(ser.load_stream(io)))
+
 
 class PySparkTestCase(unittest.TestCase):
 
     def setUp(self):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
-        self.sc = SparkContext('local[4]', class_name, batchSize=2)
+        self.sc = SparkContext('local[4]', class_name)
 
     def tearDown(self):
         self.sc.stop()
         sys.path = self._old_sys_path
 
 
-class TestCheckpoint(PySparkTestCase):
+class ReusedPySparkTestCase(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.sc = SparkContext('local[4]', cls.__name__)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.sc.stop()
+
+
+class CheckpointTests(ReusedPySparkTestCase):
 
     def setUp(self):
-        PySparkTestCase.setUp(self)
         self.checkpointDir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(self.checkpointDir.name)
         self.sc.setCheckpointDir(self.checkpointDir.name)
 
     def tearDown(self):
-        PySparkTestCase.tearDown(self)
         shutil.rmtree(self.checkpointDir.name)
 
     def test_basic_checkpointing(self):
@@ -288,7 +314,7 @@ class TestCheckpoint(PySparkTestCase):
         self.assertEquals([1, 2, 3, 4], recovered.collect())
 
 
-class TestAddFile(PySparkTestCase):
+class AddFileTests(PySparkTestCase):
 
     def test_add_py_file(self):
         # To ensure that we're actually testing addPyFile's effects, check that
@@ -354,7 +380,7 @@ class TestAddFile(PySparkTestCase):
         self.assertEqual(["My Server"], self.sc.parallelize(range(1)).map(func).collect())
 
 
-class TestRDDFunctions(PySparkTestCase):
+class RDDTests(ReusedPySparkTestCase):
 
     def test_id(self):
         rdd = self.sc.parallelize(range(10))
@@ -364,12 +390,6 @@ class TestRDDFunctions(PySparkTestCase):
         id2 = rdd2.id()
         self.assertEqual(id + 1, id2)
         self.assertEqual(id2, rdd2.id())
-
-    def test_failed_sparkcontext_creation(self):
-        # Regression test for SPARK-1550
-        self.sc.stop()
-        self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
-        self.sc = SparkContext("local")
 
     def test_save_as_textfile_with_unicode(self):
         # Regression test for SPARK-970
@@ -426,7 +446,13 @@ class TestRDDFunctions(PySparkTestCase):
         os.unlink(tempFile.name)
         self.assertRaises(Exception, lambda: filtered_data.count())
 
-    def testAggregateByKey(self):
+    def test_sampling_default_seed(self):
+        # Test for SPARK-3995 (default seed setting)
+        data = self.sc.parallelize(range(1000), 1)
+        subset = data.takeSample(False, 10)
+        self.assertEqual(len(subset), 10)
+
+    def test_aggregate_by_key(self):
         data = self.sc.parallelize([(1, 1), (1, 1), (3, 2), (5, 1), (5, 3)], 2)
 
         def seqOp(x, y):
@@ -463,6 +489,32 @@ class TestRDDFunctions(PySparkTestCase):
         bdata = self.sc.broadcast(data)  # 270MB
         m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         self.assertEquals(N, m)
+
+    def test_multiple_broadcasts(self):
+        N = 1 << 21
+        b1 = self.sc.broadcast(set(range(N)))  # multiple blocks in JVM
+        r = range(1 << 15)
+        random.shuffle(r)
+        s = str(r)
+        checksum = hashlib.md5(s).hexdigest()
+        b2 = self.sc.broadcast(s)
+        r = list(set(self.sc.parallelize(range(10), 10).map(
+            lambda x: (len(b1.value), hashlib.md5(b2.value).hexdigest())).collect()))
+        self.assertEqual(1, len(r))
+        size, csum = r[0]
+        self.assertEqual(N, size)
+        self.assertEqual(checksum, csum)
+
+        random.shuffle(r)
+        s = str(r)
+        checksum = hashlib.md5(s).hexdigest()
+        b2 = self.sc.broadcast(s)
+        r = list(set(self.sc.parallelize(range(10), 10).map(
+            lambda x: (len(b1.value), hashlib.md5(b2.value).hexdigest())).collect()))
+        self.assertEqual(1, len(r))
+        size, csum = r[0]
+        self.assertEqual(N, size)
+        self.assertEqual(checksum, csum)
 
     def test_large_closure(self):
         N = 1000000
@@ -635,14 +687,32 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEquals(result.getNumPartitions(), 5)
         self.assertEquals(result.count(), 3)
 
+    def test_sort_on_empty_rdd(self):
+        self.assertEqual([], self.sc.parallelize(zip([], [])).sortByKey().collect())
 
-class TestProfiler(PySparkTestCase):
+    def test_sample(self):
+        rdd = self.sc.parallelize(range(0, 100), 4)
+        wo = rdd.sample(False, 0.1, 2).collect()
+        wo_dup = rdd.sample(False, 0.1, 2).collect()
+        self.assertSetEqual(set(wo), set(wo_dup))
+        wr = rdd.sample(True, 0.2, 5).collect()
+        wr_dup = rdd.sample(True, 0.2, 5).collect()
+        self.assertSetEqual(set(wr), set(wr_dup))
+        wo_s10 = rdd.sample(False, 0.3, 10).collect()
+        wo_s20 = rdd.sample(False, 0.3, 20).collect()
+        self.assertNotEqual(set(wo_s10), set(wo_s20))
+        wr_s11 = rdd.sample(True, 0.4, 11).collect()
+        wr_s21 = rdd.sample(True, 0.4, 21).collect()
+        self.assertNotEqual(set(wr_s11), set(wr_s21))
+
+
+class ProfilerTests(PySparkTestCase):
 
     def setUp(self):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
         conf = SparkConf().set("spark.python.profile", "true")
-        self.sc = SparkContext('local[4]', class_name, batchSize=2, conf=conf)
+        self.sc = SparkContext('local[4]', class_name, conf=conf)
 
     def test_profiler(self):
 
@@ -666,16 +736,88 @@ class TestProfiler(PySparkTestCase):
         self.assertTrue("rdd_%d.pstats" % id in os.listdir(d))
 
 
-class TestSQL(PySparkTestCase):
+class ExamplePointUDT(UserDefinedType):
+    """
+    User-defined type (UDT) for ExamplePoint.
+    """
+
+    @classmethod
+    def sqlType(self):
+        return ArrayType(DoubleType(), False)
+
+    @classmethod
+    def module(cls):
+        return 'pyspark.tests'
+
+    @classmethod
+    def scalaUDT(cls):
+        return 'org.apache.spark.sql.test.ExamplePointUDT'
+
+    def serialize(self, obj):
+        return [obj.x, obj.y]
+
+    def deserialize(self, datum):
+        return ExamplePoint(datum[0], datum[1])
+
+
+class ExamplePoint:
+    """
+    An example class to demonstrate UDT in Scala, Java, and Python.
+    """
+
+    __UDT__ = ExamplePointUDT()
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __repr__(self):
+        return "ExamplePoint(%s,%s)" % (self.x, self.y)
+
+    def __str__(self):
+        return "(%s,%s)" % (self.x, self.y)
+
+    def __eq__(self, other):
+        return isinstance(other, ExamplePoint) and \
+            other.x == self.x and other.y == self.y
+
+
+class SQLTests(ReusedPySparkTestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(cls.tempdir.name)
+
+    @classmethod
+    def tearDownClass(cls):
+        ReusedPySparkTestCase.tearDownClass()
+        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 
     def setUp(self):
-        PySparkTestCase.setUp(self)
         self.sqlCtx = SQLContext(self.sc)
 
     def test_udf(self):
         self.sqlCtx.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
         [row] = self.sqlCtx.sql("SELECT twoArgs('test', 1)").collect()
         self.assertEqual(row[0], 5)
+
+    def test_udf2(self):
+        self.sqlCtx.registerFunction("strlen", lambda string: len(string), IntegerType())
+        self.sqlCtx.inferSchema(self.sc.parallelize([Row(a="test")])).registerTempTable("test")
+        [res] = self.sqlCtx.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
+        self.assertEqual(4, res[0])
+
+    def test_udf_with_array_type(self):
+        d = [Row(l=range(3), d={"key": range(5)})]
+        rdd = self.sc.parallelize(d)
+        srdd = self.sqlCtx.inferSchema(rdd).registerTempTable("test")
+        self.sqlCtx.registerFunction("copylist", lambda l: list(l), ArrayType(IntegerType()))
+        self.sqlCtx.registerFunction("maplen", lambda d: len(d), IntegerType())
+        [(l1, l2)] = self.sqlCtx.sql("select copylist(l), maplen(d) from test").collect()
+        self.assertEqual(range(3), l1)
+        self.assertEqual(1, l2)
 
     def test_broadcast_in_udf(self):
         bar = {"a": "aa", "b": "bb", "c": "abc"}
@@ -753,28 +895,82 @@ class TestSQL(PySparkTestCase):
         self.assertEqual(1.0, row.c)
         self.assertEqual("2", row.d)
 
+    def test_infer_schema(self):
+        d = [Row(l=[], d={}),
+             Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")}, s="")]
+        rdd = self.sc.parallelize(d)
+        srdd = self.sqlCtx.inferSchema(rdd)
+        self.assertEqual([], srdd.map(lambda r: r.l).first())
+        self.assertEqual([None, ""], srdd.map(lambda r: r.s).collect())
+        srdd.registerTempTable("test")
+        result = self.sqlCtx.sql("SELECT l[0].a from test where d['key'].d = '2'")
+        self.assertEqual(1, result.first()[0])
 
-class TestIO(PySparkTestCase):
+        srdd2 = self.sqlCtx.inferSchema(rdd, 1.0)
+        self.assertEqual(srdd.schema(), srdd2.schema())
+        self.assertEqual({}, srdd2.map(lambda r: r.d).first())
+        self.assertEqual([None, ""], srdd2.map(lambda r: r.s).collect())
+        srdd2.registerTempTable("test2")
+        result = self.sqlCtx.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
+        self.assertEqual(1, result.first()[0])
 
-    def test_stdout_redirection(self):
-        import subprocess
+    def test_convert_row_to_dict(self):
+        row = Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})
+        self.assertEqual(1, row.asDict()['l'][0].a)
+        rdd = self.sc.parallelize([row])
+        srdd = self.sqlCtx.inferSchema(rdd)
+        srdd.registerTempTable("test")
+        row = self.sqlCtx.sql("select l, d from test").first()
+        self.assertEqual(1, row.asDict()["l"][0].a)
+        self.assertEqual(1.0, row.asDict()['d']['key'].c)
 
-        def func(x):
-            subprocess.check_call('ls', shell=True)
-        self.sc.parallelize([1]).foreach(func)
+    def test_infer_schema_with_udt(self):
+        from pyspark.tests import ExamplePoint, ExamplePointUDT
+        row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
+        rdd = self.sc.parallelize([row])
+        srdd = self.sqlCtx.inferSchema(rdd)
+        schema = srdd.schema()
+        field = [f for f in schema.fields if f.name == "point"][0]
+        self.assertEqual(type(field.dataType), ExamplePointUDT)
+        srdd.registerTempTable("labeled_point")
+        point = self.sqlCtx.sql("SELECT point FROM labeled_point").first().point
+        self.assertEqual(point, ExamplePoint(1.0, 2.0))
+
+    def test_apply_schema_with_udt(self):
+        from pyspark.tests import ExamplePoint, ExamplePointUDT
+        row = (1.0, ExamplePoint(1.0, 2.0))
+        rdd = self.sc.parallelize([row])
+        schema = StructType([StructField("label", DoubleType(), False),
+                             StructField("point", ExamplePointUDT(), False)])
+        srdd = self.sqlCtx.applySchema(rdd, schema)
+        point = srdd.first().point
+        self.assertEquals(point, ExamplePoint(1.0, 2.0))
+
+    def test_parquet_with_udt(self):
+        from pyspark.tests import ExamplePoint
+        row = Row(label=1.0, point=ExamplePoint(1.0, 2.0))
+        rdd = self.sc.parallelize([row])
+        srdd0 = self.sqlCtx.inferSchema(rdd)
+        output_dir = os.path.join(self.tempdir.name, "labeled_point")
+        srdd0.saveAsParquetFile(output_dir)
+        srdd1 = self.sqlCtx.parquetFile(output_dir)
+        point = srdd1.first().point
+        self.assertEquals(point, ExamplePoint(1.0, 2.0))
 
 
-class TestInputFormat(PySparkTestCase):
+class InputFormatTests(ReusedPySparkTestCase):
 
-    def setUp(self):
-        PySparkTestCase.setUp(self)
-        self.tempdir = tempfile.NamedTemporaryFile(delete=False)
-        os.unlink(self.tempdir.name)
-        self.sc._jvm.WriteInputFormatTestDataGenerator.generateData(self.tempdir.name, self.sc._jsc)
+    @classmethod
+    def setUpClass(cls):
+        ReusedPySparkTestCase.setUpClass()
+        cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
+        os.unlink(cls.tempdir.name)
+        cls.sc._jvm.WriteInputFormatTestDataGenerator.generateData(cls.tempdir.name, cls.sc._jsc)
 
-    def tearDown(self):
-        PySparkTestCase.tearDown(self)
-        shutil.rmtree(self.tempdir.name)
+    @classmethod
+    def tearDownClass(cls):
+        ReusedPySparkTestCase.tearDownClass()
+        shutil.rmtree(cls.tempdir.name)
 
     def test_sequencefiles(self):
         basepath = self.tempdir.name
@@ -858,16 +1054,19 @@ class TestInputFormat(PySparkTestCase):
         clazz = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfclass/",
                                             "org.apache.hadoop.io.Text",
                                             "org.apache.spark.api.python.TestWritable").collect())
-        ec = (u'1',
-              {u'__class__': u'org.apache.spark.api.python.TestWritable',
-               u'double': 54.0, u'int': 123, u'str': u'test1'})
-        self.assertEqual(clazz[0], ec)
+        cname = u'org.apache.spark.api.python.TestWritable'
+        ec = [(u'1', {u'__class__': cname, u'double': 1.0, u'int': 1, u'str': u'test1'}),
+              (u'2', {u'__class__': cname, u'double': 2.3, u'int': 2, u'str': u'test2'}),
+              (u'3', {u'__class__': cname, u'double': 3.1, u'int': 3, u'str': u'test3'}),
+              (u'4', {u'__class__': cname, u'double': 4.2, u'int': 4, u'str': u'test4'}),
+              (u'5', {u'__class__': cname, u'double': 5.5, u'int': 5, u'str': u'test56'})]
+        self.assertEqual(clazz, ec)
 
         unbatched_clazz = sorted(self.sc.sequenceFile(basepath + "/sftestdata/sfclass/",
                                                       "org.apache.hadoop.io.Text",
                                                       "org.apache.spark.api.python.TestWritable",
-                                                      batchSize=1).collect())
-        self.assertEqual(unbatched_clazz[0], ec)
+                                                      ).collect())
+        self.assertEqual(unbatched_clazz, ec)
 
     def test_oldhadoop(self):
         basepath = self.tempdir.name
@@ -953,16 +1152,33 @@ class TestInputFormat(PySparkTestCase):
               (u'\x03', [2.0])]
         self.assertEqual(maps, em)
 
+    def test_binary_files(self):
+        path = os.path.join(self.tempdir.name, "binaryfiles")
+        os.mkdir(path)
+        data = "short binary data"
+        with open(os.path.join(path, "part-0000"), 'w') as f:
+            f.write(data)
+        [(p, d)] = self.sc.binaryFiles(path).collect()
+        self.assertTrue(p.endswith("part-0000"))
+        self.assertEqual(d, data)
 
-class TestOutputFormat(PySparkTestCase):
+    def test_binary_records(self):
+        path = os.path.join(self.tempdir.name, "binaryrecords")
+        os.mkdir(path)
+        with open(os.path.join(path, "part-0000"), 'w') as f:
+            for i in range(100):
+                f.write('%04d' % i)
+        result = self.sc.binaryRecords(path, 4).map(int).collect()
+        self.assertEqual(range(100), result)
+
+
+class OutputFormatTests(ReusedPySparkTestCase):
 
     def setUp(self):
-        PySparkTestCase.setUp(self)
         self.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(self.tempdir.name)
 
     def tearDown(self):
-        PySparkTestCase.tearDown(self)
         shutil.rmtree(self.tempdir.name, ignore_errors=True)
 
     def test_sequencefiles(self):
@@ -1189,51 +1405,6 @@ class TestOutputFormat(PySparkTestCase):
         result5 = sorted(self.sc.sequenceFile(basepath + "/reserialize/newdataset").collect())
         self.assertEqual(result5, data)
 
-    def test_unbatched_save_and_read(self):
-        basepath = self.tempdir.name
-        ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
-        self.sc.parallelize(ei, len(ei)).saveAsSequenceFile(
-            basepath + "/unbatched/")
-
-        unbatched_sequence = sorted(self.sc.sequenceFile(
-            basepath + "/unbatched/",
-            batchSize=1).collect())
-        self.assertEqual(unbatched_sequence, ei)
-
-        unbatched_hadoopFile = sorted(self.sc.hadoopFile(
-            basepath + "/unbatched/",
-            "org.apache.hadoop.mapred.SequenceFileInputFormat",
-            "org.apache.hadoop.io.IntWritable",
-            "org.apache.hadoop.io.Text",
-            batchSize=1).collect())
-        self.assertEqual(unbatched_hadoopFile, ei)
-
-        unbatched_newAPIHadoopFile = sorted(self.sc.newAPIHadoopFile(
-            basepath + "/unbatched/",
-            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
-            "org.apache.hadoop.io.IntWritable",
-            "org.apache.hadoop.io.Text",
-            batchSize=1).collect())
-        self.assertEqual(unbatched_newAPIHadoopFile, ei)
-
-        oldconf = {"mapred.input.dir": basepath + "/unbatched/"}
-        unbatched_hadoopRDD = sorted(self.sc.hadoopRDD(
-            "org.apache.hadoop.mapred.SequenceFileInputFormat",
-            "org.apache.hadoop.io.IntWritable",
-            "org.apache.hadoop.io.Text",
-            conf=oldconf,
-            batchSize=1).collect())
-        self.assertEqual(unbatched_hadoopRDD, ei)
-
-        newconf = {"mapred.input.dir": basepath + "/unbatched/"}
-        unbatched_newAPIHadoopRDD = sorted(self.sc.newAPIHadoopRDD(
-            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
-            "org.apache.hadoop.io.IntWritable",
-            "org.apache.hadoop.io.Text",
-            conf=newconf,
-            batchSize=1).collect())
-        self.assertEqual(unbatched_newAPIHadoopRDD, ei)
-
     def test_malformed_RDD(self):
         basepath = self.tempdir.name
         # non-batch-serialized RDD[[(K, V)]] should be rejected
@@ -1243,8 +1414,7 @@ class TestOutputFormat(PySparkTestCase):
             basepath + "/malformed/sequence"))
 
 
-class TestDaemon(unittest.TestCase):
-
+class DaemonTests(unittest.TestCase):
     def connect(self, port):
         from socket import socket, AF_INET, SOCK_STREAM
         sock = socket(AF_INET, SOCK_STREAM)
@@ -1290,7 +1460,7 @@ class TestDaemon(unittest.TestCase):
         self.do_termination_test(lambda daemon: os.kill(daemon.pid, SIGTERM))
 
 
-class TestWorker(PySparkTestCase):
+class WorkerTests(PySparkTestCase):
 
     def test_cancel_task(self):
         temp = tempfile.NamedTemporaryFile(delete=True)
@@ -1342,11 +1512,6 @@ class TestWorker(PySparkTestCase):
         rdd = self.sc.parallelize(range(100), 1)
         self.assertEqual(100, rdd.map(str).count())
 
-    def test_fd_leak(self):
-        N = 1100  # fd limit is 1024 by default
-        rdd = self.sc.parallelize(range(N), N)
-        self.assertEquals(N, rdd.count())
-
     def test_after_exception(self):
         def raise_exception(_):
             raise Exception()
@@ -1378,8 +1543,25 @@ class TestWorker(PySparkTestCase):
         self.assertEqual(sum(range(100)), acc2.value)
         self.assertEqual(sum(range(100)), acc1.value)
 
+    def test_reuse_worker_after_take(self):
+        rdd = self.sc.parallelize(range(100000), 1)
+        self.assertEqual(0, rdd.first())
 
-class TestSparkSubmit(unittest.TestCase):
+        def count():
+            try:
+                rdd.count()
+            except Exception:
+                pass
+
+        t = threading.Thread(target=count)
+        t.daemon = True
+        t.start()
+        t.join(5)
+        self.assertTrue(not t.isAlive())
+        self.assertEqual(100000, rdd.count())
+
+
+class SparkSubmitTests(unittest.TestCase):
 
     def setUp(self):
         self.programDir = tempfile.mkdtemp()
@@ -1492,6 +1674,8 @@ class TestSparkSubmit(unittest.TestCase):
             |sc = SparkContext()
             |print sc.parallelize([1, 2, 3]).map(foo).collect()
             """)
+        # this will fail if you have different spark.executor.memory
+        # in conf/spark-defaults.conf
         proc = subprocess.Popen(
             [self.sparkSubmit, "--master", "local-cluster[1,1,512]", script],
             stdout=subprocess.PIPE)
@@ -1500,7 +1684,11 @@ class TestSparkSubmit(unittest.TestCase):
         self.assertIn("[2, 4, 6]", out)
 
 
-class ContextStopTests(unittest.TestCase):
+class ContextTests(unittest.TestCase):
+
+    def test_failed_sparkcontext_creation(self):
+        # Regression test for SPARK-1550
+        self.assertRaises(Exception, lambda: SparkContext("an-invalid-master-name"))
 
     def test_stop(self):
         sc = SparkContext()

@@ -29,7 +29,7 @@ import org.scalatest.{BeforeAndAfterAll, FunSuite, Matchers}
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
 
-import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
@@ -123,19 +123,27 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     val main = YarnClusterDriver.getClass.getName().stripSuffix("$")
     var result = File.createTempFile("result", null, tempDir)
 
-    // The Client object will call System.exit() after the job is done, and we don't want
-    // that because it messes up the scalatest monitoring. So replicate some of what main()
-    // does here.
     val args = Array("--class", main,
       "--jar", "file:" + fakeSparkJar.getAbsolutePath(),
       "--arg", "yarn-cluster",
       "--arg", result.getAbsolutePath(),
       "--num-executors", "1")
-    val sparkConf = new SparkConf()
-    val yarnConf = SparkHadoopUtil.get.newConfiguration(sparkConf)
-    val clientArgs = new ClientArguments(args, sparkConf)
-    new Client(clientArgs, yarnConf, sparkConf).run()
+    Client.main(args)
     checkResult(result)
+  }
+
+  test("run Spark in yarn-cluster mode unsuccessfully") {
+    val main = YarnClusterDriver.getClass.getName().stripSuffix("$")
+
+    // Use only one argument so the driver will fail
+    val args = Array("--class", main,
+      "--jar", "file:" + fakeSparkJar.getAbsolutePath(),
+      "--arg", "yarn-cluster",
+      "--num-executors", "1")
+    val exception = intercept[SparkException] {
+      Client.main(args)
+    }
+    assert(Utils.exceptionString(exception).contains("Application finished with failed status"))
   }
 
   /**

@@ -3,7 +3,7 @@
 
 
 create table temp_null(a int) stored as textfile;
-load data local inpath '../data/files/test.dat' overwrite into table temp_null;
+load data local inpath '../../data/files/test.dat' overwrite into table temp_null;
 
 select null, null from temp_null;
 
@@ -15,8 +15,8 @@ create table tt_b(a int, b string) row format serde "org.apache.hadoop.hive.serd
 insert overwrite table tt_b select null, null from temp_null;
 select * from tt_b;
 
-insert overwrite directory "../build/ql/test/data/warehouse/null_columns.out" select null, null from temp_null;
-dfs -cat ../build/ql/test/data/warehouse/null_columns.out/*;
+insert overwrite directory "target/warehouse/null_columns.out" select null, null from temp_null;
+dfs -cat ${system:test.warehouse.dir}/null_columns.out/*;
 
 
 create table temp_null2 (key string, value string) partitioned by (ds string);

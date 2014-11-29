@@ -108,10 +108,12 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
       serverSocket = new ServerSocket(0, 1, InetAddress.getByAddress(Array(127, 0, 0, 1)))
 
       // Create and start the worker
-      val pb = new ProcessBuilder(Seq(pythonExec, "-u", "-m", "pyspark.worker"))
+      val pb = new ProcessBuilder(Seq(pythonExec, "-m", "pyspark.worker"))
       val workerEnv = pb.environment()
       workerEnv.putAll(envVars)
       workerEnv.put("PYTHONPATH", pythonPath)
+      // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
+      workerEnv.put("PYTHONUNBUFFERED", "YES")
       val worker = pb.start()
 
       // Redirect worker stdout and stderr
@@ -149,10 +151,12 @@ private[spark] class PythonWorkerFactory(pythonExec: String, envVars: Map[String
 
       try {
         // Create and start the daemon
-        val pb = new ProcessBuilder(Seq(pythonExec, "-u", "-m", "pyspark.daemon"))
+        val pb = new ProcessBuilder(Seq(pythonExec, "-m", "pyspark.daemon"))
         val workerEnv = pb.environment()
         workerEnv.putAll(envVars)
         workerEnv.put("PYTHONPATH", pythonPath)
+        // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
+        workerEnv.put("PYTHONUNBUFFERED", "YES")
         daemon = pb.start()
 
         val in = new DataInputStream(daemon.getInputStream)

@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.api.java
 
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
+
 import scala.annotation.varargs
 import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}
 import scala.collection.JavaConversions
 import scala.math.BigDecimal
 
+import org.apache.spark.api.java.JavaUtils.mapAsSerializableJavaMap
 import org.apache.spark.sql.catalyst.expressions.{Row => ScalaRow}
 
 /**
@@ -105,6 +108,8 @@ class Row(private[spark] val row: ScalaRow) extends Serializable {
   }
 
   override def hashCode(): Int = row.hashCode()
+
+  override def toString: String = row.toString
 }
 
 object Row {
@@ -114,7 +119,7 @@ object Row {
     // they are actually accessed.
     case row: ScalaRow => new Row(row)
     case map: scala.collection.Map[_, _] =>
-      JavaConversions.mapAsJavaMap(
+      mapAsSerializableJavaMap(
         map.map {
           case (key, value) => (toJavaValue(key), toJavaValue(value))
         }

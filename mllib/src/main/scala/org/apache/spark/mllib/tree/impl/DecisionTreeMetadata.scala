@@ -19,6 +19,7 @@ package org.apache.spark.mllib.tree.impl
 
 import scala.collection.mutable
 
+import org.apache.spark.Logging
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
@@ -75,6 +76,17 @@ private[tree] class DecisionTreeMetadata(
     numBins(featureIndex) - 1
   }
 
+
+  /**
+   * Set number of splits for a continuous feature.
+   * For a continuous feature, number of bins is number of splits plus 1.
+   */
+  def setNumSplits(featureIndex: Int, numSplits: Int) {
+    require(isContinuous(featureIndex),
+      s"Only number of bin for a continuous feature can be set.")
+    numBins(featureIndex) = numSplits + 1
+  }
+
   /**
    * Indicates if feature subsampling is being used.
    */
@@ -82,7 +94,7 @@ private[tree] class DecisionTreeMetadata(
 
 }
 
-private[tree] object DecisionTreeMetadata {
+private[tree] object DecisionTreeMetadata extends Logging {
 
   /**
    * Construct a [[DecisionTreeMetadata]] instance for this dataset and parameters.
@@ -103,6 +115,10 @@ private[tree] object DecisionTreeMetadata {
     }
 
     val maxPossibleBins = math.min(strategy.maxBins, numExamples).toInt
+    if (maxPossibleBins < strategy.maxBins) {
+      logWarning(s"DecisionTree reducing maxBins from ${strategy.maxBins} to $maxPossibleBins" +
+        s" (= number of training instances)")
+    }
 
     // We check the number of bins here against maxPossibleBins.
     // This needs to be checked here instead of in Strategy since maxPossibleBins can be modified

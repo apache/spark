@@ -138,7 +138,6 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     }
     jobSet.handleJobStart(job)
     logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
-    SparkEnv.set(ssc.env)
   }
 
   private def handleJobCompletion(job: Job) {

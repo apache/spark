@@ -1,7 +1,7 @@
 create table tab_int(a int);
 
 -- insert some data
-LOAD DATA LOCAL INPATH "../data/files/int.txt" INTO TABLE tab_int;
+LOAD DATA LOCAL INPATH "../../data/files/int.txt" INTO TABLE tab_int;
 
 select count(*) from tab_int;
 

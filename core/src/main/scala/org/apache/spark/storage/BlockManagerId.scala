@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.util.concurrent.ConcurrentHashMap
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
@@ -59,15 +60,15 @@ class BlockManagerId private (
 
   def port: Int = port_
 
-  def isDriver: Boolean = (executorId == "<driver>")
+  def isDriver: Boolean = { executorId == SparkContext.DRIVER_IDENTIFIER }
 
-  override def writeExternal(out: ObjectOutput) {
+  override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     out.writeUTF(executorId_)
     out.writeUTF(host_)
     out.writeInt(port_)
   }
 
-  override def readExternal(in: ObjectInput) {
+  override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     executorId_ = in.readUTF()
     host_ = in.readUTF()
     port_ = in.readInt()

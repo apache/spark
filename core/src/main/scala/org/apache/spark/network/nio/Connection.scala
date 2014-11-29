@@ -20,11 +20,15 @@ package org.apache.spark.network.nio
 import java.net._
 import java.nio._
 import java.nio.channels._
+import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.LinkedList
 
-import org.apache.spark._
-
+import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.util.control.NonFatal
+
+import org.apache.spark._
+import org.apache.spark.network.sasl.{SparkSaslClient, SparkSaslServer}
 
 private[nio]
 abstract class Connection(val channel: SocketChannel, val selector: Selector,
@@ -51,7 +55,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
 
   @volatile private var closed = false
   var onCloseCallback: Connection => Unit = null
-  var onExceptionCallback: (Connection, Exception) => Unit = null
+  val onExceptionCallbacks = new ConcurrentLinkedQueue[(Connection, Throwable) => Unit]
   var onKeyInterestChangeCallback: (Connection, Int) => Unit = null
 
   val remoteAddress = getRemoteAddress()
@@ -130,20 +134,24 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
     onCloseCallback = callback
   }
 
-  def onException(callback: (Connection, Exception) => Unit) {
-    onExceptionCallback = callback
+  def onException(callback: (Connection, Throwable) => Unit) {
+    onExceptionCallbacks.add(callback)
   }
 
   def onKeyInterestChange(callback: (Connection, Int) => Unit) {
     onKeyInterestChangeCallback = callback
   }
 
-  def callOnExceptionCallback(e: Exception) {
-    if (onExceptionCallback != null) {
-      onExceptionCallback(this, e)
-    } else {
-      logError("Error in connection to " + getRemoteConnectionManagerId() +
-        " and OnExceptionCallback not registered", e)
+  def callOnExceptionCallbacks(e: Throwable) {
+    onExceptionCallbacks foreach {
+      callback =>
+        try {
+          callback(this, e)
+        } catch {
+          case NonFatal(e) => {
+            logWarning("Ignored error in onExceptionCallback", e)
+          }
+        }
     }
   }
 
@@ -323,7 +331,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
     } catch {
       case e: Exception => {
         logError("Error connecting to " + address, e)
-        callOnExceptionCallback(e)
+        callOnExceptionCallbacks(e)
       }
     }
   }
@@ -348,7 +356,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
     } catch {
       case e: Exception => {
         logWarning("Error finishing connection to " + address, e)
-        callOnExceptionCallback(e)
+        callOnExceptionCallbacks(e)
       }
     }
     true
@@ -393,7 +401,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
     } catch {
       case e: Exception => {
         logWarning("Error writing in connection to " + getRemoteConnectionManagerId(), e)
-        callOnExceptionCallback(e)
+        callOnExceptionCallbacks(e)
         close()
         return false
       }
@@ -420,7 +428,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
       case e: Exception =>
         logError("Exception while reading SendingConnection to " + getRemoteConnectionManagerId(),
           e)
-        callOnExceptionCallback(e)
+        callOnExceptionCallbacks(e)
         close()
     }
 
@@ -577,7 +585,7 @@ private[spark] class ReceivingConnection(
     } catch {
       case e: Exception => {
         logWarning("Error reading from connection to " + getRemoteConnectionManagerId(), e)
-        callOnExceptionCallback(e)
+        callOnExceptionCallbacks(e)
         close()
         return false
       }

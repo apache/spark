@@ -92,6 +92,9 @@ private[sql] class FloatColumnAccessor(buffer: ByteBuffer)
 private[sql] class StringColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, STRING)
 
+private[sql] class DateColumnAccessor(buffer: ByteBuffer)
+  extends NativeColumnAccessor(buffer, DATE)
+
 private[sql] class TimestampColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, TIMESTAMP)
 
@@ -118,6 +121,7 @@ private[sql] object ColumnAccessor {
       case BYTE.typeId      => new ByteColumnAccessor(dup)
       case SHORT.typeId     => new ShortColumnAccessor(dup)
       case STRING.typeId    => new StringColumnAccessor(dup)
+      case DATE.typeId      => new DateColumnAccessor(dup)
       case TIMESTAMP.typeId => new TimestampColumnAccessor(dup)
       case BINARY.typeId    => new BinaryColumnAccessor(dup)
       case GENERIC.typeId   => new GenericColumnAccessor(dup)

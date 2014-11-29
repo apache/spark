@@ -117,6 +117,8 @@ The first thing a Spark program must do is to create a [SparkContext](api/scala/
 how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object
 that contains information about your application.
 
+Only one SparkContext may be active per JVM.  You must `stop()` the active SparkContext before creating a new one.
+
 {% highlight scala %}
 val conf = new SparkConf().setAppName(appName).setMaster(master)
 new SparkContext(conf)
@@ -211,17 +213,17 @@ For a complete list of options, run `pyspark --help`. Behind the scenes,
 
 It is also possible to launch the PySpark shell in [IPython](http://ipython.org), the
 enhanced Python interpreter. PySpark works with IPython 1.0.0 and later. To
-use IPython, set the `PYSPARK_PYTHON` variable to `ipython` when running `bin/pyspark`:
+use IPython, set the `PYSPARK_DRIVER_PYTHON` variable to `ipython` when running `bin/pyspark`:
 
 {% highlight bash %}
-$ PYSPARK_PYTHON=ipython ./bin/pyspark
+$ PYSPARK_DRIVER_PYTHON=ipython ./bin/pyspark
 {% endhighlight %}
 
-You can customize the `ipython` command by setting `PYSPARK_PYTHON_OPTS`. For example, to launch
+You can customize the `ipython` command by setting `PYSPARK_DRIVER_PYTHON_OPTS`. For example, to launch
 the [IPython Notebook](http://ipython.org/notebook.html) with PyLab plot support:
 
 {% highlight bash %}
-$ PYSPARK_PYTHON=ipython PYSPARK_PYTHON_OPTS="notebook --pylab inline" ./bin/pyspark
+$ PYSPARK_DRIVER_PYTHON=ipython PYSPARK_DRIVER_PYTHON_OPTS="notebook --pylab inline" ./bin/pyspark
 {% endhighlight %}
 
 </div>
@@ -1131,7 +1133,7 @@ method. The code below shows this:
 
 {% highlight scala %}
 scala> val broadcastVar = sc.broadcast(Array(1, 2, 3))
-broadcastVar: spark.Broadcast[Array[Int]] = spark.Broadcast(b5c40191-a864-4c7d-b9bf-d87e1a4e787c)
+broadcastVar: org.apache.spark.broadcast.Broadcast[Array[Int]] = Broadcast(0)
 
 scala> broadcastVar.value
 res0: Array[Int] = Array(1, 2, 3)
@@ -1303,6 +1305,12 @@ vecAccum = sc.accumulator(Vector(...), VectorAccumulatorParam())
 </div>
 
 </div>
+
+For accumulator updates performed inside <b>actions only</b>, Spark guarantees that each task's update to the accumulator 
+will only be applied once, i.e. restarted tasks will not update the value. In transformations, users should be aware 
+of that each task's update may be applied more than once if tasks or job stages are re-executed.
+
+
 
 # Deploying to a Cluster
 

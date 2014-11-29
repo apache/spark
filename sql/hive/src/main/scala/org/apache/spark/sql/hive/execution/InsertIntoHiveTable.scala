@@ -17,14 +17,16 @@
 
 package org.apache.spark.sql.hive.execution
 
+import java.util
+
 import scala.collection.JavaConversions._
 
-import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
+import org.apache.hadoop.hive.common.`type`.HiveVarchar
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.hadoop.hive.ql.metadata.Hive
-import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
+import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.{Context, ErrorMsg}
 import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
@@ -35,8 +37,11 @@ import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.execution.{Command, SparkPlan, UnaryNode}
 import org.apache.spark.sql.hive._
+import org.apache.spark.sql.hive.{ ShimFileSinkDesc => FileSinkDesc}
+import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.{SerializableWritable, SparkException, TaskContext}
 
 /**
@@ -49,7 +54,7 @@ case class InsertIntoHiveTable(
     child: SparkPlan,
     overwrite: Boolean)
     (@transient sc: HiveContext)
-  extends UnaryNode with Command {
+  extends UnaryNode with Command with HiveInspectors {
 
   @transient lazy val outputClass = newSerializer(table.tableDesc).getSerializedClass
   @transient private lazy val hiveContext = new Context(sc.hiveconf)
@@ -65,45 +70,12 @@ case class InsertIntoHiveTable(
 
   def output = child.output
 
-  /**
-   * Wraps with Hive types based on object inspector.
-   * TODO: Consolidate all hive OI/data interface code.
-   */
-  protected def wrap(a: (Any, ObjectInspector)): Any = a match {
-    case (s: String, oi: JavaHiveVarcharObjectInspector) =>
-      new HiveVarchar(s, s.size)
-
-    case (bd: BigDecimal, oi: JavaHiveDecimalObjectInspector) =>
-      new HiveDecimal(bd.underlying())
-
-    case (row: Row, oi: StandardStructObjectInspector) =>
-      val struct = oi.create()
-      row.zip(oi.getAllStructFieldRefs: Seq[StructField]).foreach {
-        case (data, field) =>
-          oi.setStructFieldData(struct, field, wrap(data, field.getFieldObjectInspector))
-      }
-      struct
-
-    case (s: Seq[_], oi: ListObjectInspector) =>
-      val wrappedSeq = s.map(wrap(_, oi.getListElementObjectInspector))
-      seqAsJavaList(wrappedSeq)
-
-    case (m: Map[_, _], oi: MapObjectInspector) =>
-      val keyOi = oi.getMapKeyObjectInspector
-      val valueOi = oi.getMapValueObjectInspector
-      val wrappedMap = m.map { case (key, value) => wrap(key, keyOi) -> wrap(value, valueOi) }
-      mapAsJavaMap(wrappedMap)
-
-    case (obj, _) =>
-      obj
-  }
-
   def saveAsHiveFile(
       rdd: RDD[Row],
       valueClass: Class[_],
       fileSinkConf: FileSinkDesc,
       conf: SerializableWritable[JobConf],
-      writerContainer: SparkHiveWriterContainer) {
+      writerContainer: SparkHiveWriterContainer): Unit = {
     assert(valueClass != null, "Output value class not set")
     conf.value.setOutputValueClass(valueClass)
 
@@ -122,7 +94,7 @@ case class InsertIntoHiveTable(
     writerContainer.commitJob()
 
     // Note that this function is executed on executor side
-    def writeToFile(context: TaskContext, iterator: Iterator[Row]) {
+    def writeToFile(context: TaskContext, iterator: Iterator[Row]): Unit = {
       val serializer = newSerializer(fileSinkConf.getTableInfo)
       val standardOI = ObjectInspectorUtils
         .getStandardObjectInspector(
@@ -131,6 +103,7 @@ case class InsertIntoHiveTable(
         .asInstanceOf[StructObjectInspector]
 
       val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector).toArray
+      val wrappers = fieldOIs.map(wrapperFor)
       val outputData = new Array[Any](fieldOIs.length)
 
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
@@ -141,13 +114,13 @@ case class InsertIntoHiveTable(
       iterator.foreach { row =>
         var i = 0
         while (i < fieldOIs.length) {
-          // TODO (lian) avoid per row dynamic dispatching and pattern matching cost in `wrap`
-          outputData(i) = wrap(row(i), fieldOIs(i))
+          outputData(i) = if (row.isNullAt(i)) null else wrappers(i)(row(i))
           i += 1
         }
 
-        val writer = writerContainer.getLocalFileWriter(row)
-        writer.write(serializer.serialize(outputData, standardOI))
+        writerContainer
+          .getLocalFileWriter(row)
+          .write(serializer.serialize(outputData, standardOI))
       }
 
       writerContainer.close()
@@ -166,7 +139,7 @@ case class InsertIntoHiveTable(
     // instances within the closure, since Serializer is not serializable while TableDesc is.
     val tableDesc = table.tableDesc
     val tableLocation = table.hiveQlTable.getDataLocation
-    val tmpLocation = hiveContext.getExternalTmpFileURI(tableLocation)
+    val tmpLocation = HiveShim.getExternalTmpPath(hiveContext, tableLocation)
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
     val isCompressed = sc.hiveconf.getBoolean(
       ConfVars.COMPRESSRESULT.varname, ConfVars.COMPRESSRESULT.defaultBoolVal)
@@ -207,7 +180,7 @@ case class InsertIntoHiveTable(
 
       // Report error if any static partition appears after a dynamic partition
       val isDynamic = partitionColumnNames.map(partitionSpec(_).isEmpty)
-      isDynamic.init.zip(isDynamic.tail).find(_ == (true, false)).foreach { _ =>
+      if (isDynamic.init.zip(isDynamic.tail).contains((true, false))) {
         throw new SparkException(ErrorMsg.PARTITION_DYN_STA_ORDER.getMsg)
       }
     }
@@ -232,6 +205,13 @@ case class InsertIntoHiveTable(
     // holdDDLTime will be true when TOK_HOLD_DDLTIME presents in the query as a hint.
     val holdDDLTime = false
     if (partition.nonEmpty) {
+
+      // loadPartition call orders directories created on the iteration order of the this map
+      val orderedPartitionSpec = new util.LinkedHashMap[String,String]()
+      table.hiveQlTable.getPartCols().foreach{
+        entry=>
+          orderedPartitionSpec.put(entry.getName,partitionSpec.get(entry.getName).getOrElse(""))
+      }
       val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols, partitionSpec)
       db.validatePartitionNameCharacters(partVals)
       // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
@@ -243,7 +223,7 @@ case class InsertIntoHiveTable(
         db.loadDynamicPartitions(
           outputPath,
           qualifiedTableName,
-          partitionSpec,
+          orderedPartitionSpec,
           overwrite,
           numDynamicPartitions,
           holdDDLTime,
@@ -253,7 +233,7 @@ case class InsertIntoHiveTable(
         db.loadPartition(
           outputPath,
           qualifiedTableName,
-          partitionSpec,
+          orderedPartitionSpec,
           overwrite,
           holdDDLTime,
           inheritTableSpecs,

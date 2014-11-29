@@ -45,6 +45,7 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
 
   private var amClient: AMRMClient[ContainerRequest] = _
   private var uiHistoryAddress: String = _
+  private var registered: Boolean = false
 
   override def register(
       conf: YarnConfiguration,
@@ -59,13 +60,19 @@ private class YarnRMClientImpl(args: ApplicationMasterArguments) extends YarnRMC
     this.uiHistoryAddress = uiHistoryAddress
 
     logInfo("Registering the ApplicationMaster")
-    amClient.registerApplicationMaster(Utils.localHostName(), 0, uiAddress)
+    synchronized {
+      amClient.registerApplicationMaster(Utils.localHostName(), 0, uiAddress)
+      registered = true
+    }
     new YarnAllocationHandler(conf, sparkConf, amClient, getAttemptId(), args,
       preferredNodeLocations, securityMgr)
   }
 
-  override def shutdown(status: FinalApplicationStatus, diagnostics: String = "") =
-    amClient.unregisterApplicationMaster(status, diagnostics, uiHistoryAddress)
+  override def unregister(status: FinalApplicationStatus, diagnostics: String = "") = synchronized {
+    if (registered) {
+      amClient.unregisterApplicationMaster(status, diagnostics, uiHistoryAddress)
+    }
+  }
 
   override def getAttemptId() = {
     val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())

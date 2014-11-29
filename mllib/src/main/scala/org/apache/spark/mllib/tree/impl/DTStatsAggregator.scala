@@ -65,12 +65,6 @@ private[tree] class DTStatsAggregator(
   }
 
   /**
-   * Indicator for each feature of whether that feature is an unordered feature.
-   * TODO: Is Array[Boolean] any faster?
-   */
-  def isUnordered(featureIndex: Int): Boolean = metadata.isUnordered(featureIndex)
-
-  /**
    * Total number of elements stored in this aggregator
    */
   private val allStatsSize: Int = featureOffsets.last
@@ -128,21 +122,13 @@ private[tree] class DTStatsAggregator(
    * Pre-compute feature offset for use with [[featureUpdate]].
    * For ordered features only.
    */
-  def getFeatureOffset(featureIndex: Int): Int = {
-    require(!isUnordered(featureIndex),
-      s"DTStatsAggregator.getFeatureOffset is for ordered features only, but was called" +
-        s" for unordered feature $featureIndex.")
-    featureOffsets(featureIndex)
-  }
+  def getFeatureOffset(featureIndex: Int): Int = featureOffsets(featureIndex)
 
   /**
    * Pre-compute feature offset for use with [[featureUpdate]].
    * For unordered features only.
    */
   def getLeftRightFeatureOffsets(featureIndex: Int): (Int, Int) = {
-    require(isUnordered(featureIndex),
-      s"DTStatsAggregator.getLeftRightFeatureOffsets is for unordered features only," +
-        s" but was called for ordered feature $featureIndex.")
     val baseOffset = featureOffsets(featureIndex)
     (baseOffset, baseOffset + (numBins(featureIndex) >> 1) * statsSize)
   }
