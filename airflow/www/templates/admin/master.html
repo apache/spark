@@ -1,0 +1,17 @@
+{% extends "admin/base.html" %}
+
+{% block head_css %}
+  {{ super() }}
+  <link rel="icon" type="image/png"
+    href="{{ url_for("static", filename="pin_30.png") }}">
+{% endblock %}
+
+{% block body%}
+{% endblock %}
+
+{% block brand %}
+<span class="brand" style="padding:5px 10px">
+    <img src="{{ url_for("static", filename="pin_100.png") }}" width="30">
+    <span style="font-size:20px;">AirFlow</span>
+</span>
+{% endblock %}
