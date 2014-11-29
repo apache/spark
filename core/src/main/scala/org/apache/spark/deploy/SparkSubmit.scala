@@ -345,6 +345,11 @@ object SparkSubmit {
         System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
     }
 
+    // SPARK-4170
+    if (classOf[scala.App].isAssignableFrom(mainClass)) {
+      printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
+    }
+
     val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
     if (!Modifier.isStatic(mainMethod.getModifiers)) {
       throw new IllegalStateException("The main method in the given main class must be static")
