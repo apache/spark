@@ -1025,7 +1025,7 @@ class DAG(Base):
             self.get_task(downstream_task_id))
 
     def get_task_instances(self, start_date=None, end_date=None):
-        session = settings.Session(expire_on_commit=False)
+        session = settings.Session()
         TI = TaskInstance
         if not start_date:
             start_date = (datetime.today()-timedelta(30)).date()
@@ -1038,6 +1038,7 @@ class DAG(Base):
             TI.execution_date <= end_date,
         ).all()
         session.commit()
+        session.expunge_all()
         session.close()
         return tis
 
