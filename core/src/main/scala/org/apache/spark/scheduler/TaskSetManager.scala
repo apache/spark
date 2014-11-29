@@ -27,8 +27,9 @@ import scala.math.{min, max}
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
+
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.{Clock, SystemClock, Utils, SerializationHelper}
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
@@ -458,7 +459,19 @@ private[spark] class TaskSetManager(
           val startTime = clock.getTime()
           // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
           // we assume the task can be serialized without exceptions.
-          logDebug(taskDebugString(task, sched.sc.addedFiles, sched.sc.addedJars))
+
+          // Check if serialization debugging is enabled
+          // TODO After acceptance, documentation for this option should be added to ScalaDoc
+          val printRdd : Boolean = sched.sc.getConf.getOption("spark.serializer.debug")
+            .getOrElse("false").equals("true")
+          
+          // If enabled, print out the added JARs and files (as part of the context) to help 
+          // identify unserializable components
+          if(printRdd)
+          {
+            logDebug(SerializationHelper.taskDebugString(task, sched.sc.addedFiles, 
+              sched.sc.addedJars))
+          }
 
           val serializedTask = Task.serializeWithDependencies(
             task, sched.sc.addedFiles, sched.sc.addedJars, ser)
@@ -485,29 +498,6 @@ private[spark] class TaskSetManager(
       }
     }
     None
-  }
-
-   /**
-   * Provide a string representation of the task and its dependencies (in terms of added files and
-    * jars that must
-   * be shipped with the task) for debugging purposes.
-   * @param task - The task to serialize
-   * @param addedFiles - The file dependencies
-   * @param addedJars - The JAR dependencies
-   * @return String - The task and dependencies as a string
-   */
-  private def taskDebugString(task : Task[_], addedFiles : HashMap[String,Long], 
-                              addedJars : HashMap[String,Long]): String ={
-     val taskStr = "[" + task.toString + "] \n"
-     val strPrefix = s"--  "
-     val nl = s"\n"
-     val fileTitle = s"File dependencies:$nl"
-     val jarTitle = s"Jar dependencies:$nl"
-
-     val fileStr = addedFiles.keys.map(file => s"$strPrefix $file").reduce(_ + nl + _) + nl
-     val jarStr = addedJars.keys.map(jar => s"$strPrefix $jar").reduce(_ + nl + _) + nl
-
-     s"$taskStr $nl $fileTitle $fileStr $jarTitle $jarStr"
   }
 
   private def maybeFinishTaskSet() {
