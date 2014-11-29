@@ -119,6 +119,14 @@ private[spark] class DiskBlockObjectWriter(
     * only call it every N writes */
   private var writesSinceMetricsUpdate = 0
 
+  /**
+   * In hash shuffle, if some keys are empty it will not create the shuffle file.
+   * But in shuffle fetch, it also will fetch this file and cause FileNotFoundException.
+   * So call the 'open' function in constructor to touch a empty file avoiding this problem.
+   * It seems only the hash shuffle manager can only be benefit from this modify.
+   */
+  open()
+
   override def open(): BlockObjectWriter = {
     fos = new FileOutputStream(file, true)
     ts = new TimeTrackingOutputStream(fos)
