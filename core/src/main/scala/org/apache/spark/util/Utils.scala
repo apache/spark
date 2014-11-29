@@ -263,7 +263,7 @@ private[spark] object Utils extends Logging {
         if (dir.exists() || !dir.mkdirs()) {
           dir = null
         }
-      } catch { case e: IOException => ; }
+      } catch { case e: SecurityException => dir = null; }
     }
 
     registerShutdownDeleteDir(dir)
