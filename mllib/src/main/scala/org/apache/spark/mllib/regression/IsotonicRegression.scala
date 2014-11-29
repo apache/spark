@@ -17,22 +17,33 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.regression.MonotonicityConstraint.Enum.MonotonicityConstraint
 import org.apache.spark.rdd.RDD
 
-sealed trait MonotonicityConstraint {
-  def holds(current: LabeledPoint, next: LabeledPoint): Boolean
-}
+object MonotonicityConstraint {
 
-case object Isotonic extends MonotonicityConstraint {
-  override def holds(current: LabeledPoint, next: LabeledPoint): Boolean = {
-    current.label <= next.label
+  object Enum {
+
+    sealed trait MonotonicityConstraint {
+      private[regression] def holds(current: WeightedLabeledPoint, next: WeightedLabeledPoint): Boolean
+    }
+
+    case object Isotonic extends MonotonicityConstraint {
+      override def holds(current: WeightedLabeledPoint, next: WeightedLabeledPoint): Boolean = {
+        current.label <= next.label
+      }
+    }
+
+    case object Antitonic extends MonotonicityConstraint {
+      override def holds(current: WeightedLabeledPoint, next: WeightedLabeledPoint): Boolean = {
+        current.label >= next.label
+      }
+    }
   }
-}
-case object Antitonic extends MonotonicityConstraint {
-  override def holds(current: LabeledPoint, next: LabeledPoint): Boolean = {
-    current.label >= next.label
-  }
+
+  val Isotonic = Enum.Isotonic
+  val Antitonic = Enum.Antitonic
 }
 
 /**
@@ -41,9 +52,10 @@ case object Antitonic extends MonotonicityConstraint {
  * @param predictions Weights computed for every feature.
  */
 class IsotonicRegressionModel(
-    val predictions: Seq[LabeledPoint],
+    val predictions: Seq[WeightedLabeledPoint],
     val monotonicityConstraint: MonotonicityConstraint)
   extends RegressionModel {
+
   override def predict(testData: RDD[Vector]): RDD[Double] =
     testData.map(predict)
 
@@ -60,7 +72,7 @@ trait IsotonicRegressionAlgorithm
   extends Serializable {
 
   protected def createModel(
-      weights: Seq[LabeledPoint],
+      weights: Seq[WeightedLabeledPoint],
       monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel
 
   /**
@@ -70,46 +82,46 @@ trait IsotonicRegressionAlgorithm
    * @return model
    */
   def run(
-      input: RDD[LabeledPoint],
+      input: RDD[WeightedLabeledPoint],
       monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel
 
   /**
    * Run algorithm to obtain isotonic regression model
    * @param input data
-   * @param initialWeights weights
    * @param monotonicityConstraint asc or desc
+   * @param weights weights
    * @return
    */
   def run(
-      input: RDD[LabeledPoint],
-      initialWeights: Vector,
-      monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel
+      input: RDD[WeightedLabeledPoint],
+      monotonicityConstraint: MonotonicityConstraint,
+      weights: Vector): IsotonicRegressionModel
 }
 
 class PoolAdjacentViolators extends IsotonicRegressionAlgorithm {
 
   override def run(
-      input: RDD[LabeledPoint],
+      input: RDD[WeightedLabeledPoint],
       monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel = {
     createModel(
-      parallelPoolAdjacentViolators(input, monotonicityConstraint),
+      parallelPoolAdjacentViolators(input, monotonicityConstraint, Vectors.dense(Array(0d))),
       monotonicityConstraint)
   }
 
   override def run(
-      input: RDD[LabeledPoint],
-      initialWeights: Vector,
-      monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel = {
-    ???
+      input: RDD[WeightedLabeledPoint],
+      monotonicityConstraint: MonotonicityConstraint,
+      weights: Vector): IsotonicRegressionModel = {
+    createModel(
+      parallelPoolAdjacentViolators(input, monotonicityConstraint, weights),
+      monotonicityConstraint)
   }
 
   override protected def createModel(
-      weights: Seq[LabeledPoint],
+      predictions: Seq[WeightedLabeledPoint],
       monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel = {
-    new IsotonicRegressionModel(weights, monotonicityConstraint)
+    new IsotonicRegressionModel(predictions, monotonicityConstraint)
   }
-
-
 
   /**
    * Performs a pool adjacent violators algorithm (PAVA)
@@ -123,18 +135,18 @@ class PoolAdjacentViolators extends IsotonicRegressionAlgorithm {
    * @return result
    */
   private def poolAdjacentViolators(
-      in: Array[LabeledPoint],
-      monotonicityConstraint: MonotonicityConstraint): Array[LabeledPoint] = {
+      in: Array[WeightedLabeledPoint],
+      monotonicityConstraint: MonotonicityConstraint): Array[WeightedLabeledPoint] = {
 
     //Pools sub array within given bounds assigning weighted average value to all elements
-    def pool(in: Array[LabeledPoint], start: Int, end: Int): Unit = {
+    def pool(in: Array[WeightedLabeledPoint], start: Int, end: Int): Unit = {
       val poolSubArray = in.slice(start, end + 1)
 
-      val weightedSum = poolSubArray.map(_.label).sum
-      val weight = poolSubArray.length
+      val weightedSum = poolSubArray.map(lp => lp.label * lp.weight).sum
+      val weight = poolSubArray.map(_.weight).sum
 
       for(i <- start to end) {
-        in(i) = LabeledPoint(weightedSum / weight, in(i).features)
+        in(i) = WeightedLabeledPoint(weightedSum / weight, in(i).features, in(i).weight)
       }
     }
 
@@ -175,8 +187,9 @@ class PoolAdjacentViolators extends IsotonicRegressionAlgorithm {
    * @return result
    */
   private def parallelPoolAdjacentViolators(
-      testData: RDD[LabeledPoint],
-      monotonicityConstraint: MonotonicityConstraint): Seq[LabeledPoint] = {
+      testData: RDD[WeightedLabeledPoint],
+      monotonicityConstraint: MonotonicityConstraint,
+      weights: Vector): Seq[WeightedLabeledPoint] = {
 
     poolAdjacentViolators(
       testData
@@ -200,14 +213,14 @@ object IsotonicRegression {
    *
    * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
    *              matrix A as well as the corresponding right hand side label y
-   * @param initialWeights Initial set of weights to be used. Array should be equal in size to
+   * @param weights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
    */
   def train(
-      input: RDD[LabeledPoint],
-      initialWeights: Vector,
-      monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel = {
-    new PoolAdjacentViolators().run(input, initialWeights, monotonicityConstraint)
+      input: RDD[WeightedLabeledPoint],
+      monotonicityConstraint: MonotonicityConstraint,
+      weights: Vector): IsotonicRegressionModel = {
+    new PoolAdjacentViolators().run(input, monotonicityConstraint, weights)
   }
 
   /**
@@ -219,7 +232,7 @@ object IsotonicRegression {
    *              matrix A as well as the corresponding right hand side label y
    */
   def train(
-      input: RDD[LabeledPoint],
+      input: RDD[WeightedLabeledPoint],
       monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel = {
     new PoolAdjacentViolators().run(input, monotonicityConstraint)
   }
