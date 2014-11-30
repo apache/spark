@@ -43,6 +43,8 @@ def backfill(args):
 
 def run(args):
 
+    settings.pessimistic_connection_handling()
+
     # Setting up logging
     directory = getconf().get('core', 'BASE_LOG_FOLDER') + \
         "/{args.dag_id}/{args.task_id}".format(args=args)
@@ -145,6 +147,7 @@ def webserver(args):
 
 
 def master(args):
+    settings.pessimistic_connection_handling()
 
     # Sleep time (seconds) between master runs
     MASTER_SLEEP_INTERVAL = 60
