@@ -85,8 +85,11 @@ another.
      specified version of Spark. The `<version>` can be a version number
      (e.g. "0.7.3") or a specific git hash. By default, a recent
      version will be used.
--    `--spark-git-repo=<repository url>` enables you to run your development version on EC2 cluster. You need to set `--spark-version`
-     as git commit hash such as 317e114 not original release version number. By default, this repository is set [apache mirror](https://github.com/apache/spark).
+-    `--spark-git-repo=<repository url>` enables you to run your 
+     development version on EC2 cluster. You need to set 
+     `--spark-version` as git commit hash such as 317e114 not 
+     original release version number. By default, this repository is 
+     set [apache mirror](https://github.com/apache/spark).
 -    If one of your launches fails due to e.g. not having the right
 permissions on your private key file, you can run `launch` with the
 `--resume` option to restart the setup process on an existing cluster.
