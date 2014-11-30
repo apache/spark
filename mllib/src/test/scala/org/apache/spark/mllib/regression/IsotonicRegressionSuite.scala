@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.regression.MonotonicityConstraint.Enum.{Antitonic, Isotonic}
+import org.apache.spark.mllib.regression.MonotonicityConstraint.MonotonicityConstraint.{Antitonic, Isotonic}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.scalatest.{Matchers, FunSuite}
 import WeightedLabeledPointConversions._

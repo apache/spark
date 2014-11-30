@@ -25,17 +25,21 @@ import scala.beans.BeanInfo
 object WeightedLabeledPointConversions {
   implicit def labeledPointToWeightedLabeledPoint(
       labeledPoint: LabeledPoint): WeightedLabeledPoint = {
-    WeightedLabeledPoint(labeledPoint.label, labeledPoint.features, 1)
+    WeightedLabeledPoint(labeledPoint.label, labeledPoint.features)
   }
 
   implicit def labeledPointRDDToWeightedLabeledPointRDD(
       rdd: RDD[LabeledPoint]): RDD[WeightedLabeledPoint] = {
-    rdd.map(lp => WeightedLabeledPoint(lp.label, lp.features, 1))
+    rdd.map(lp => WeightedLabeledPoint(lp.label, lp.features))
   }
 }
 
 /**
- * Labeled point with weight
+ * Class that represents the features and labels of a data point with associated weight
+ *
+ * @param label Label for this data point.
+ * @param features List of features for this data point.
+ * @param weight Weight of the data point. Defaults to 1.
  */
 @BeanInfo
-case class WeightedLabeledPoint(label: Double, features: Vector, weight: Double)
+case class WeightedLabeledPoint(label: Double, features: Vector, weight: Double = 1)
