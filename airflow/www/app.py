@@ -502,6 +502,7 @@ class ModelViewOnly(ModelView):
     can_delete = False
     column_display_pk = True
 
+
 def log_link(v, c, m, p):
     url = url_for(
         'airflow.log',
@@ -511,13 +512,33 @@ def log_link(v, c, m, p):
     return Markup(
         '<a href="{url}"><i class="icon-book"></i></a>'.format(**locals()))
 
+
+def task_link(v, c, m, p):
+    url = url_for(
+        'airflow.task',
+        dag_id=m.dag_id,
+        task_id=m.task_id)
+    return Markup(
+        '<a href="{url}">{m.task_id}</a>'.format(**locals()))
+
+def dag_link(v, c, m, p):
+    url = url_for(
+        'airflow.tree',
+        dag_id=m.dag_id)
+    return Markup(
+        '<a href="{url}">{m.dag_id}</a>'.format(**locals()))
+
+def duration_f(v, c, m, p):
+    return timedelta(seconds=m.duration)
+
 class TaskInstanceModelView(ModelViewOnly):
     column_filters = ('dag_id', 'task_id', 'state', 'execution_date')
-    column_formatters = dict(log=log_link)
+    column_formatters = dict(
+        log=log_link, task_id=task_link, dag_id=dag_link, duration=duration_f)
     column_searchable_list = ('dag_id', 'task_id', 'state')
     column_list = (
-        'state', 'dag_id', 'task_id', 'execution_date',
-        'start_date', 'end_date', 'duration', 'log')
+        'dag_id', 'task_id', 'execution_date',
+        'start_date', 'end_date', 'duration', 'state', 'log')
     can_delete = True
 mv = TaskInstanceModelView(
     models.TaskInstance, session, name="Task Instances", category="Admin")
