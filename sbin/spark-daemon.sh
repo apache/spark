@@ -115,6 +115,7 @@ fi
 # some variables
 log="$SPARK_LOG_DIR/spark-$SPARK_IDENT_STRING-$command-$instance-$HOSTNAME.out"
 pid="$SPARK_PID_DIR/spark-$SPARK_IDENT_STRING-$command-$instance.pid"
+SPARK_STOP_TIMEOUT=${SPARK_STOP_TIMEOUT:-5}
 
 # Set default scheduling priority
 if [ "$SPARK_NICENESS" = "" ]; then
@@ -164,9 +165,15 @@ case $option in
   (stop)
 
     if [ -f $pid ]; then
-      if kill -0 `cat $pid` > /dev/null 2>&1; then
+      TARGET_PID=`cat $pid`
+      if kill -0 $TARGET_PID > /dev/null 2>&1; then
         echo stopping $command
-        kill `cat $pid`
+        kill $TARGET_PID
+        sleep $SPARK_STOP_TIMEOUT
+        if kill -0 $TARGET_PID > /dev/null 2>&1; then
+          echo "$command did not stop gracefully after $SPARK_STOP_TIMEOUT seconds: killing with kill -9"
+          kill -9 $TARGET_PID
+        fi
       else
         echo no $command to stop
       fi
