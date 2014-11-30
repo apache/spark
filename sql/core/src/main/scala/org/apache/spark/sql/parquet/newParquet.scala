@@ -39,7 +39,7 @@ import scala.collection.JavaConversions._
 
 /**
  * Allows creation of parquet based tables using the syntax
- * `CREATE TABLE ... USING org.apache.spark.sql.parquet`.  Currently the only option required
+ * `CREATE TEMPORARY TABLE ... USING org.apache.spark.sql.parquet`.  Currently the only option required
  * is `path`, which should be the location of a collection of, optionally partitioned,
  * parquet files.
  */
