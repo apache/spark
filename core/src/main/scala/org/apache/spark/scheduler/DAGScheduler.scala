@@ -896,6 +896,7 @@ class DAGScheduler(
     
     try {
       // For ShuffleMapTask, serialize and broadcast (rdd, shuffleDep). 
+      // For ResultTask, serialize and broadcast (rdd, func).
       
       // Before serialization print out the RDD and its references.
       if(debugSerialization)
@@ -903,18 +904,16 @@ class DAGScheduler(
         logDebug(getDependencyTrace(stage.rdd))
         logDebug(getSerializationTrace(stage.rdd))
       }
-      
-      // For ResultTask, serialize and broadcast (rdd, func). 
+       
       val taskBinaryBytes: Array[Byte] =
         if (stage.isShuffleMap) {
           closureSerializer.serialize((stage.rdd, stage.shuffleDep.get) : AnyRef).array()
         } else {
           closureSerializer.serialize((stage.rdd, stage.resultOfJob.get.func) : AnyRef).array()
         }
-
       taskBinary = sc.broadcast(taskBinaryBytes)
     } catch {
-      // In the case of a failure during serialization, abort the stage. 
+      // In the case of a failure during serialization, abort the stage.
       case e: NotSerializableException =>
         abortStage(stage, "Task not serializable: " + e.toString)
         runningStages -= stage
@@ -922,7 +921,6 @@ class DAGScheduler(
       case NonFatal(e) =>
         abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
         runningStages -= stage
-        
         return
     }
 
@@ -955,7 +953,6 @@ class DAGScheduler(
         {
           logDebug(SerializationHelper.taskDebugString(tasks.head, sc.addedFiles, sc.addedJars))
         }
-        
         closureSerializer.serialize(tasks.head)
       } catch {
         case e: NotSerializableException =>

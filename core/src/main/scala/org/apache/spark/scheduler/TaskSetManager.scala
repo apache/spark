@@ -27,7 +27,6 @@ import scala.math.{min, max}
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
-
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.{Clock, SystemClock, Utils, SerializationHelper}
 

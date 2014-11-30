@@ -666,7 +666,6 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
 
     assertDataStructuresEmpty
   }
-  
   /**
    * Makes sure that failures of stage used by multiple jobs are correctly handled.
    *
