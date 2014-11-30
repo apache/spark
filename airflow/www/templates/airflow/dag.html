@@ -152,7 +152,8 @@
         "&upstream=" + $('#btn_upstream').hasClass('active') +
         "&downstream=" + $('#btn_downstream').hasClass('active') +
         "&execution_date=" + execution_date +
-        "&origin=" + window.location;
+        "&origin=" + encodeURIComponent(window.location);
+      
       window.location = url;
     });
 
