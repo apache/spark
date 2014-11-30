@@ -23,6 +23,7 @@ import java.util.{Locale, Date}
 import scala.xml.Node
 
 import org.apache.spark.Logging
+import org.apache.spark.SparkContext
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
@@ -206,7 +207,7 @@ private[spark] object UIUtils extends Logging {
         </div>
         <div id="footer">
           <div class="container-fluid">
-            <p class="muted credit">Spark {org.apache.spark.SPARK_VERSION}</p>
+            <p class="muted credit">Spark {SparkContext.SPARK_VERSION}</p>
           </div>
         </div>
       </body>
@@ -237,7 +238,7 @@ private[spark] object UIUtils extends Logging {
         </div>
         <div id="footer">
           <div class="container-fluid">
-            <p class="muted credit">Spark {org.apache.spark.SPARK_VERSION}</p>
+            <p class="muted credit">Spark {SparkContext.SPARK_VERSION}</p>
           </div>
         </div>
       </body>
