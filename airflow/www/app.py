@@ -5,6 +5,7 @@ import logging
 
 from flask import Flask, url_for, Markup, Blueprint, redirect, flash
 from flask.ext.admin import Admin, BaseView, expose, AdminIndexView
+from flask.ext.admin import base
 from flask.ext.admin.contrib.sqla import ModelView
 from flask import request
 from wtforms import Form, DateTimeField, SelectField, TextField, TextAreaField
@@ -193,22 +194,12 @@ class Airflow(BaseView):
             special_attrs_rendered=special_attrs_rendered,
             dag=dag, title=title)
 
-    @expose('/tree')
-    def tree(self):
-        dag_id = request.args.get('dag_id')
+    @expose('/action')
+    def action(self):
         action = request.args.get('action')
+        dag_id = request.args.get('dag_id')
+        origin = request.args.get('origin')
         dag = dagbag.dags[dag_id]
-
-        base_date = request.args.get('base_date')
-        if not base_date:
-            base_date = datetime.now()
-        else:
-            base_date = dateutil.parser.parse(base_date)
-
-        num_runs = request.args.get('num_runs')
-        num_runs = int(num_runs) if num_runs else 25
-        from_date = (base_date-(num_runs * dag.schedule_interval)).date()
-        from_date = datetime.combine(from_date, datetime.min.time())
 
         if action == 'clear':
             task_id = request.args.get('task_id')
@@ -234,12 +225,29 @@ class Airflow(BaseView):
                 downstream=downstream)
 
             flash("{0} task instances have been cleared".format(count))
-            return redirect(url_for('airflow.tree', dag_id=dag_id))
+            return redirect(origin)
+
+    @expose('/tree')
+    def tree(self):
+        dag_id = request.args.get('dag_id')
+        dag = dagbag.dags[dag_id]
+        session = settings.Session()
+
+        base_date = request.args.get('base_date')
+        if not base_date:
+            base_date = datetime.now()
+        else:
+            base_date = dateutil.parser.parse(base_date)
+
+        num_runs = request.args.get('num_runs')
+        num_runs = int(num_runs) if num_runs else 25
+        from_date = (base_date-(num_runs * dag.schedule_interval)).date()
+        from_date = datetime.combine(from_date, datetime.min.time())
 
         dates = utils.date_range(
             from_date, base_date, dag.schedule_interval)
         task_instances = {}
-        for ti in dag.get_task_instances(from_date):
+        for ti in dag.get_task_instances(session, from_date):
             task_instances[(ti.task_id, ti.execution_date)] = ti
 
         expanded = []
@@ -285,6 +293,8 @@ class Airflow(BaseView):
             data = recurse_nodes(dag.roots[0])
 
         data = json.dumps(data, indent=4, default=utils.json_ser)
+        session.commit()
+        session.close()
 
         return self.render(
             'airflow/tree.html',
@@ -328,7 +338,7 @@ class Airflow(BaseView):
 
         task_instances = {
             ti.task_id: utils.alchemy_to_dict(ti)
-            for ti in dag.get_task_instances(dttm, dttm)
+            for ti in dag.get_task_instances(session, dttm, dttm)
         }
         tasks = {
             t.task_id: utils.alchemy_to_dict(t)
@@ -359,7 +369,7 @@ class Airflow(BaseView):
         all_data = []
         for task in dag.tasks:
             data = []
-            for ti in task.get_task_instances(from_date):
+            for ti in task.get_task_instances(session, from_date):
                 if ti.end_date:
                     data.append([
                         ti.execution_date.isoformat(),
@@ -389,7 +399,7 @@ class Airflow(BaseView):
         all_data = []
         for task in dag.tasks:
             data = []
-            for ti in task.get_task_instances(from_date):
+            for ti in task.get_task_instances(session, from_date):
                 if ti.end_date:
                     data.append([
                         ti.execution_date.isoformat(), (
@@ -423,7 +433,7 @@ class Airflow(BaseView):
 
         form = DateTimeForm(data={'execution_date': dttm})
 
-        tis = dag.get_task_instances(dttm, dttm)
+        tis = dag.get_task_instances(session, dttm, dttm)
         tis = sorted(tis, key=lambda ti: ti.start_date)
         tasks = []
         data = []
@@ -492,21 +502,31 @@ class ModelViewOnly(ModelView):
     can_delete = False
     column_display_pk = True
 
+def log_link(v, c, m, p):
+    url = url_for(
+        'airflow.log',
+        dag_id=m.dag_id,
+        task_id=m.task_id,
+        execution_date=m.execution_date)
+    return Markup(
+        '<a href="{url}"><i class="icon-book"></i></a>'.format(**locals()))
 
 class TaskInstanceModelView(ModelViewOnly):
     column_filters = ('dag_id', 'task_id', 'state', 'execution_date')
+    column_formatters = dict(log=log_link)
+    column_searchable_list = ('dag_id', 'task_id', 'state')
     column_list = (
         'state', 'dag_id', 'task_id', 'execution_date',
-        'start_date', 'end_date', 'duration')
+        'start_date', 'end_date', 'duration', 'log')
     can_delete = True
 mv = TaskInstanceModelView(
-    models.TaskInstance, session, name="Task Instances", category="Objects")
+    models.TaskInstance, session, name="Task Instances", category="Admin")
 admin.add_view(mv)
 
 
 class JobModelView(ModelViewOnly):
     column_default_sort = ('start_date', True)
-mv = JobModelView(models.BaseJob, session, name="Jobs", category="Objects")
+mv = JobModelView(models.BaseJob, session, name="Jobs", category="Admin")
 admin.add_view(mv)
 
 
@@ -533,6 +553,7 @@ admin.add_view(mv)
 class LogModelView(ModelViewOnly):
     column_default_sort = ('dttm', True)
     column_filters = ('dag_id', 'task_id', 'execution_date')
+
 mv = LogModelView(
     models.Log, session, name="Logs", category="Admin")
 admin.add_view(mv)
@@ -548,3 +569,14 @@ admin.add_view(ReloadTaskView(name='Reload DAGs', category="Admin"))
 if __name__ == "__main__":
     logging.info("Starting the web server.")
     app.run(debug=True)
+
+admin.add_link(
+    base.MenuLink(
+        category='Docs',
+        name='@readthedocs.org',
+        url='http://airflow.readthedocs.org/en/latest/'))
+admin.add_link(
+    base.MenuLink(
+        category='Docs',
+        name='Github',
+        url='https://github.com/mistercrunch/Airflow'))

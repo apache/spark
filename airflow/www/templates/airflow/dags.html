@@ -15,6 +15,7 @@
             <th>Filepath</th>
             <th>Owner</th>
             <th>Task Count</th>
+            <th>Activity</th>
         </tr>
         {% for dag in dags %}
             <tr>
@@ -30,6 +31,11 @@
                 </td>
                 <td>{{ dag.owner }}</td>
                 <td>{{ dag.tasks|length }}</td>
+                <td>
+                    <a href="/admin/logview/?sort=1&desc=1&flt1_dag_id_equals={{ dag.dag_id }}">
+                        <i class="icon-list"></i>
+                    </a>
+                </td>
             </tr>
         {% endfor %}
     </table>
