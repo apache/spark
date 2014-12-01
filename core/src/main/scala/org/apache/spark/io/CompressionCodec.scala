@@ -48,6 +48,7 @@ trait CompressionCodec {
 private[spark] object CompressionCodec {
 
   private val shortCompressionCodecNames = Map(
+    "none" -> classOf[NoOpCompressionCodec].getName,
     "lz4" -> classOf[LZ4CompressionCodec].getName,
     "lzf" -> classOf[LZFCompressionCodec].getName,
     "snappy" -> classOf[SnappyCompressionCodec].getName)
@@ -67,6 +68,18 @@ private[spark] object CompressionCodec {
   val ALL_COMPRESSION_CODECS = shortCompressionCodecNames.values.toSeq
 }
 
+
+/**
+ * :: DeveloperApi ::
+ * no-op implementation of [[org.apache.spark.io.CompressionCodec]].
+ */
+@DeveloperApi
+class NoOpCompressionCodec(conf: SparkConf) extends CompressionCodec {
+
+  override def compressedOutputStream(s: OutputStream): OutputStream = s
+
+  override def compressedInputStream(s: InputStream): InputStream = s
+}
 
 /**
  * :: DeveloperApi ::
