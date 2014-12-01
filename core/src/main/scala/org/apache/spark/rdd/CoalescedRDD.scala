@@ -25,6 +25,7 @@ import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.spark._
+import org.apache.spark.util.Utils
 
 /**
  * Class that captures a coalesced RDD by essentially keeping track of parent partitions
@@ -42,15 +43,15 @@ private[spark] case class CoalescedRDDPartition(
   var parents: Seq[Partition] = parentsIndices.map(rdd.partitions(_))
 
   @throws(classOf[IOException])
-  private def writeObject(oos: ObjectOutputStream) {
+  private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     // Update the reference to parent partition at the time of task serialization
     parents = parentsIndices.map(rdd.partitions(_))
     oos.defaultWriteObject()
   }
 
   /**
-   * Computes how many of the parents partitions have getPreferredLocation
-   * as one of their preferredLocations
+   * Computes the fraction of the parents' partitions containing preferredLocation within
+   * their getPreferredLocs.
    * @return locality of this coalesced partition between 0 and 1
    */
   def localFraction: Double = {

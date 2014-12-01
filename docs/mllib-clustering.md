@@ -34,11 +34,11 @@ a given dataset, the algorithm returns the best clustering result).
 * *initializationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged. 
 
-## Examples
+### Examples
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-Following code snippets can be executed in `spark-shell`.
+The following code snippets can be executed in `spark-shell`.
 
 In the following example after loading and parsing data, we use the
 [`KMeans`](api/scala/index.html#org.apache.spark.mllib.clustering.KMeans) object to cluster the data
@@ -52,7 +52,7 @@ import org.apache.spark.mllib.linalg.Vectors
 
 // Load and parse the data
 val data = sc.textFile("data/mllib/kmeans_data.txt")
-val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble)))
+val parsedData = data.map(s => Vectors.dense(s.split(' ').map(_.toDouble))).cache()
 
 // Cluster the data into two classes using KMeans
 val numClusters = 2
@@ -69,11 +69,54 @@ println("Within Set Sum of Squared Errors = " + WSSSE)
 All of MLlib's methods use Java-friendly types, so you can import and call them there the same
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
-calling `.rdd()` on your `JavaRDD` object.
+calling `.rdd()` on your `JavaRDD` object. A self-contained application example
+that is equivalent to the provided example in Scala is given below:
+
+{% highlight java %}
+import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.clustering.KMeans;
+import org.apache.spark.mllib.clustering.KMeansModel;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.SparkConf;
+
+public class KMeansExample {
+  public static void main(String[] args) {
+    SparkConf conf = new SparkConf().setAppName("K-means Example");
+    JavaSparkContext sc = new JavaSparkContext(conf);
+
+    // Load and parse data
+    String path = "data/mllib/kmeans_data.txt";
+    JavaRDD<String> data = sc.textFile(path);
+    JavaRDD<Vector> parsedData = data.map(
+      new Function<String, Vector>() {
+        public Vector call(String s) {
+          String[] sarray = s.split(" ");
+          double[] values = new double[sarray.length];
+          for (int i = 0; i < sarray.length; i++)
+            values[i] = Double.parseDouble(sarray[i]);
+          return Vectors.dense(values);
+        }
+      }
+    );
+    parsedData.cache();
+
+    // Cluster the data into two classes using KMeans
+    int numClusters = 2;
+    int numIterations = 20;
+    KMeansModel clusters = KMeans.train(parsedData.rdd(), numClusters, numIterations);
+
+    // Evaluate clustering by computing Within Set Sum of Squared Errors
+    double WSSSE = clusters.computeCost(parsedData.rdd());
+    System.out.println("Within Set Sum of Squared Errors = " + WSSSE);
+  }
+}
+{% endhighlight %}
 </div>
 
 <div data-lang="python" markdown="1">
-Following examples can be tested in the PySpark shell.
+The following examples can be tested in the PySpark shell.
 
 In the following example after loading and parsing data, we use the KMeans object to cluster the
 data into two clusters. The number of desired clusters is passed to the algorithm. We then compute
@@ -101,6 +144,106 @@ def error(point):
 WSSSE = parsedData.map(lambda point: error(point)).reduce(lambda x, y: x + y)
 print("Within Set Sum of Squared Error = " + str(WSSSE))
 {% endhighlight %}
+</div>
+
+</div>
+
+In order to run the above application, follow the instructions
+provided in the [Self-Contained Applications](quick-start.html#self-contained-applications)
+section of the Spark
+Quick Start guide. Be sure to also include *spark-mllib* to your build file as
+a dependency.
+
+## Streaming clustering
+
+When data arrive in a stream, we may want to estimate clusters dynamically, 
+updating them as new data arrive. MLlib provides support for streaming k-means clustering, 
+with parameters to control the decay (or "forgetfulness") of the estimates. The algorithm 
+uses a generalization of the mini-batch k-means update rule. For each batch of data, we assign 
+all points to their nearest cluster, compute new cluster centers, then update each cluster using:
+
+`\begin{equation}
+    c_{t+1} = \frac{c_tn_t\alpha + x_tm_t}{n_t\alpha+m_t}
+\end{equation}`
+`\begin{equation}
+    n_{t+1} = n_t + m_t  
+\end{equation}`
+
+Where `$c_t$` is the previous center for the cluster, `$n_t$` is the number of points assigned 
+to the cluster thus far, `$x_t$` is the new cluster center from the current batch, and `$m_t$` 
+is the number of points added to the cluster in the current batch. The decay factor `$\alpha$` 
+can be used to ignore the past: with `$\alpha$=1` all data will be used from the beginning; 
+with `$\alpha$=0` only the most recent data will be used. This is analogous to an 
+exponentially-weighted moving average. 
+
+The decay can be specified using a `halfLife` parameter, which determines the 
+correct decay factor `a` such that, for data acquired
+at time `t`, its contribution by time `t + halfLife` will have dropped to 0.5.
+The unit of time can be specified either as `batches` or `points` and the update rule
+will be adjusted accordingly.
+
+### Examples
+
+This example shows how to estimate clusters on streaming data.
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+
+First we import the neccessary classes.
+
+{% highlight scala %}
+
+import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.clustering.StreamingKMeans
+
+{% endhighlight %}
+
+Then we make an input stream of vectors for training, as well as a stream of labeled data 
+points for testing. We assume a StreamingContext `ssc` has been created, see 
+[Spark Streaming Programming Guide](streaming-programming-guide.html#initializing) for more info.  
+
+{% highlight scala %}
+
+val trainingData = ssc.textFileStream("/training/data/dir").map(Vectors.parse)
+val testData = ssc.textFileStream("/testing/data/dir").map(LabeledPoint.parse)
+
+{% endhighlight %}
+
+We create a model with random clusters and specify the number of clusters to find
+
+{% highlight scala %}
+
+val numDimensions = 3
+val numClusters = 2
+val model = new StreamingKMeans()
+  .setK(numClusters)
+  .setDecayFactor(1.0)
+  .setRandomCenters(numDimensions, 0.0)
+
+{% endhighlight %}
+
+Now register the streams for training and testing and start the job, printing 
+the predicted cluster assignments on new data points as they arrive.
+
+{% highlight scala %}
+
+model.trainOn(trainingData)
+model.predictOnValues(testData).print()
+
+ssc.start()
+ssc.awaitTermination()
+ 
+{% endhighlight %}
+
+As you add new text files with data the cluster centers will update. Each training 
+point should be formatted as `[x1, x2, x3]`, and each test data point
+should be formatted as `(y, [x1, x2, x3])`, where `y` is some useful label or identifier 
+(e.g. a true category assignment). Anytime a text file is placed in `/training/data/dir` 
+the model will update. Anytime a text file is placed in `/testing/data/dir` 
+you will see predictions. With new data, the cluster centers will change!
+
 </div>
 
 </div>

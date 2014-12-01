@@ -19,18 +19,31 @@ package org.apache.spark.sql.hive.api.java
 
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.api.java.{JavaSQLContext, JavaSchemaRDD}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.hive.{HiveContext, HiveQl}
 
 /**
  * The entry point for executing Spark SQL queries from a Java program.
  */
-class JavaHiveContext(sparkContext: JavaSparkContext) extends JavaSQLContext(sparkContext) {
+class JavaHiveContext(sqlContext: SQLContext) extends JavaSQLContext(sqlContext) {
 
-  override val sqlContext = new HiveContext(sparkContext)
+  def this(sparkContext: JavaSparkContext) = this(new HiveContext(sparkContext))
+
+  override def sql(sqlText: String): JavaSchemaRDD = {
+    // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
+    if (sqlContext.dialect == "sql") {
+      super.sql(sqlText)
+    } else if (sqlContext.dialect == "hiveql") {
+      new JavaSchemaRDD(sqlContext, HiveQl.parseSql(sqlText))
+    }  else {
+      sys.error(s"Unsupported SQL dialect: ${sqlContext.dialect}.  Try 'sql' or 'hiveql'")
+    }
+  }
 
   /**
-    * Executes a query expressed in HiveQL, returning the result as a JavaSchemaRDD.
+    * DEPRECATED: Use sql(...) Instead
     */
+  @Deprecated
   def hql(hqlQuery: String): JavaSchemaRDD =
     new JavaSchemaRDD(sqlContext, HiveQl.parseSql(hqlQuery))
 }

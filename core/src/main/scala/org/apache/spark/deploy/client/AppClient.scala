@@ -30,7 +30,7 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.util.{Utils, AkkaUtils}
+import org.apache.spark.util.{ActorLogReceive, Utils, AkkaUtils}
 
 /**
  * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
@@ -56,7 +56,7 @@ private[spark] class AppClient(
   var registered = false
   var activeMasterUrl: String = null
 
-  class ClientActor extends Actor with Logging {
+  class ClientActor extends Actor with ActorLogReceive with Logging {
     var master: ActorSelection = null
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
     var alreadyDead = false  // To avoid calling listener.dead() multiple times
@@ -119,7 +119,7 @@ private[spark] class AppClient(
         .contains(remoteUrl.hostPort)
     }
 
-    override def receive = {
+    override def receiveWithLogging = {
       case RegisteredApplication(appId_, masterUrl) =>
         appId = appId_
         registered = true
@@ -154,7 +154,7 @@ private[spark] class AppClient(
         logWarning(s"Connection to $address failed; waiting for master to reconnect...")
         markDisconnected()
 
-      case AssociationErrorEvent(cause, _, address, _) if isPossibleMaster(address) =>
+      case AssociationErrorEvent(cause, _, address, _, _) if isPossibleMaster(address) =>
         logWarning(s"Could not connect to $address: $cause")
 
       case StopAppClient =>

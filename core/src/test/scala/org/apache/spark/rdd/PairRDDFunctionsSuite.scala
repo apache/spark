@@ -17,17 +17,22 @@
 
 package org.apache.spark.rdd
 
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashSet
+import org.apache.hadoop.fs.FileSystem
+import org.apache.hadoop.mapred._
+import org.apache.hadoop.util.Progressable
+
+import scala.collection.mutable.{ArrayBuffer, HashSet}
 import scala.util.Random
 
-import org.scalatest.FunSuite
-import com.google.common.io.Files
-import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.conf.{Configuration, Configurable}
-
-import org.apache.spark.SparkContext._
+import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter => NewOutputCommitter,
+OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
+TaskAttemptContext => NewTaskAttempContext}
 import org.apache.spark.{Partitioner, SharedSparkContext}
+import org.apache.spark.SparkContext._
+import org.apache.spark.util.Utils
+
+import org.scalatest.FunSuite
 
 class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   test("aggregateByKey") {
@@ -81,6 +86,85 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     assert(valuesFor1.toList.sorted === List(1, 2, 3))
     val valuesFor2 = groups.find(_._1 == 2).get._2
     assert(valuesFor2.toList.sorted === List(1))
+  }
+
+  test("sampleByKey") {
+
+    val defaultSeed = 1L
+
+    // vary RDD size
+    for (n <- List(100, 1000, 1000000)) {
+      val data = sc.parallelize(1 to n, 2)
+      val fractionPositive = 0.3
+      val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+      val samplingRate = 0.1
+      StratifiedAuxiliary.testSample(stratifiedData, samplingRate, defaultSeed, n)
+    }
+
+    // vary fractionPositive
+    for (fractionPositive <- List(0.1, 0.3, 0.5, 0.7, 0.9)) {
+      val n = 100
+      val data = sc.parallelize(1 to n, 2)
+      val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+      val samplingRate = 0.1
+      StratifiedAuxiliary.testSample(stratifiedData, samplingRate, defaultSeed, n)
+    }
+
+    // Use the same data for the rest of the tests
+    val fractionPositive = 0.3
+    val n = 100
+    val data = sc.parallelize(1 to n, 2)
+    val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+
+    // vary seed
+    for (seed <- defaultSeed to defaultSeed + 5L) {
+      val samplingRate = 0.1
+      StratifiedAuxiliary.testSample(stratifiedData, samplingRate, seed, n)
+    }
+
+    // vary sampling rate
+    for (samplingRate <- List(0.01, 0.05, 0.1, 0.5)) {
+      StratifiedAuxiliary.testSample(stratifiedData, samplingRate, defaultSeed, n)
+    }
+  }
+
+  test("sampleByKeyExact") {
+    val defaultSeed = 1L
+
+    // vary RDD size
+    for (n <- List(100, 1000, 1000000)) {
+      val data = sc.parallelize(1 to n, 2)
+      val fractionPositive = 0.3
+      val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+      val samplingRate = 0.1
+      StratifiedAuxiliary.testSampleExact(stratifiedData, samplingRate, defaultSeed, n)
+    }
+
+    // vary fractionPositive
+    for (fractionPositive <- List(0.1, 0.3, 0.5, 0.7, 0.9)) {
+      val n = 100
+      val data = sc.parallelize(1 to n, 2)
+      val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+      val samplingRate = 0.1
+      StratifiedAuxiliary.testSampleExact(stratifiedData, samplingRate, defaultSeed, n)
+    }
+
+    // Use the same data for the rest of the tests
+    val fractionPositive = 0.3
+    val n = 100
+    val data = sc.parallelize(1 to n, 2)
+    val stratifiedData = data.keyBy(StratifiedAuxiliary.stratifier(fractionPositive))
+
+    // vary seed
+    for (seed <- defaultSeed to defaultSeed + 5L) {
+      val samplingRate = 0.1
+      StratifiedAuxiliary.testSampleExact(stratifiedData, samplingRate, seed, n)
+    }
+
+    // vary sampling rate
+    for (samplingRate <- List(0.01, 0.05, 0.1, 0.5)) {
+      StratifiedAuxiliary.testSampleExact(stratifiedData, samplingRate, defaultSeed, n)
+    }
   }
 
   test("reduceByKey") {
@@ -215,6 +299,21 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     ))
   }
 
+  test("fullOuterJoin") {
+    val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
+    val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))
+    val joined = rdd1.fullOuterJoin(rdd2).collect()
+    assert(joined.size === 6)
+    assert(joined.toSet === Set(
+      (1, (Some(1), Some('x'))),
+      (1, (Some(2), Some('x'))),
+      (2, (Some(1), Some('y'))),
+      (2, (Some(1), Some('z'))),
+      (3, (Some(1), None)),
+      (4, (None, Some('w')))
+    ))
+  }
+
   test("join with no matches") {
     val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
     val rdd2 = sc.parallelize(Array((4, 'x'), (5, 'y'), (5, 'z'), (6, 'w')))
@@ -283,14 +382,16 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   }
 
   test("zero-partition RDD") {
-    val emptyDir = Files.createTempDir()
-    emptyDir.deleteOnExit()
-    val file = sc.textFile(emptyDir.getAbsolutePath)
-    assert(file.partitions.size == 0)
-    assert(file.collect().toList === Nil)
-    // Test that a shuffle on the file works, because this used to be a bug
-    assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
-    emptyDir.delete()
+    val emptyDir = Utils.createTempDir()
+    try {
+      val file = sc.textFile(emptyDir.getAbsolutePath)
+      assert(file.partitions.isEmpty)
+      assert(file.collect().toList === Nil)
+      // Test that a shuffle on the file works, because this used to be a bug
+      assert(file.map(line => (line, 1)).reduceByKey(_ + _).collect().toList === Nil)
+    } finally {
+      Utils.deleteRecursively(emptyDir)
+    }
   }
 
   test("keys and values") {
@@ -388,7 +489,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     val pairs = sc.parallelize(Array((new Integer(1), new Integer(1))))
 
     // No error, non-configurable formats still work
-    pairs.saveAsNewAPIHadoopFile[FakeFormat]("ignored")
+    pairs.saveAsNewAPIHadoopFile[NewFakeFormat]("ignored")
 
     /*
       Check that configurable formats get configured:
@@ -397,6 +498,17 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       Assertion is in ConfigTestFormat.getRecordWriter.
      */
     pairs.saveAsNewAPIHadoopFile[ConfigTestFormat]("ignored")
+  }
+
+  test("saveAsHadoopFile should respect configured output committers") {
+    val pairs = sc.parallelize(Array((new Integer(1), new Integer(1))))
+    val conf = new JobConf()
+    conf.setOutputCommitter(classOf[FakeOutputCommitter])
+
+    FakeOutputCommitter.ran = false
+    pairs.saveAsHadoopFile("ignored", pairs.keyClass, pairs.valueClass, classOf[FakeOutputFormat], conf)
+
+    assert(FakeOutputCommitter.ran, "OutputCommitter was never called")
   }
 
   test("lookup") {
@@ -440,6 +552,98 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     intercept[IllegalArgumentException] {shuffled.lookup(-1)}
   }
 
+  private object StratifiedAuxiliary {
+    def stratifier (fractionPositive: Double) = {
+      (x: Int) => if (x % 10 < (10 * fractionPositive).toInt) "1" else "0"
+    }
+
+    def checkSize(exact: Boolean,
+        withReplacement: Boolean,
+        expected: Long,
+        actual: Long,
+        p: Double): Boolean = {
+      if (exact) {
+        return expected == actual
+      }
+      val stdev = if (withReplacement) math.sqrt(expected) else math.sqrt(expected * p * (1 - p))
+      // Very forgiving margin since we're dealing with very small sample sizes most of the time
+      math.abs(actual - expected) <= 6 * stdev
+    }
+
+    def testSampleExact(stratifiedData: RDD[(String, Int)],
+        samplingRate: Double,
+        seed: Long,
+        n: Long) = {
+      testBernoulli(stratifiedData, true, samplingRate, seed, n)
+      testPoisson(stratifiedData, true, samplingRate, seed, n)
+    }
+
+    def testSample(stratifiedData: RDD[(String, Int)],
+        samplingRate: Double,
+        seed: Long,
+        n: Long) = {
+      testBernoulli(stratifiedData, false, samplingRate, seed, n)
+      testPoisson(stratifiedData, false, samplingRate, seed, n)
+    }
+
+    // Without replacement validation
+    def testBernoulli(stratifiedData: RDD[(String, Int)],
+        exact: Boolean,
+        samplingRate: Double,
+        seed: Long,
+        n: Long) = {
+      val expectedSampleSize = stratifiedData.countByKey()
+        .mapValues(count => math.ceil(count * samplingRate).toInt)
+      val fractions = Map("1" -> samplingRate, "0" -> samplingRate)
+      val sample = if (exact) {
+        stratifiedData.sampleByKeyExact(false, fractions, seed)
+      } else {
+        stratifiedData.sampleByKey(false, fractions, seed)
+      }
+      val sampleCounts = sample.countByKey()
+      val takeSample = sample.collect()
+      sampleCounts.foreach { case(k, v) =>
+        assert(checkSize(exact, false, expectedSampleSize(k), v, samplingRate)) }
+      assert(takeSample.size === takeSample.toSet.size)
+      takeSample.foreach { x => assert(1 <= x._2 && x._2 <= n, s"elements not in [1, $n]") }
+    }
+
+    // With replacement validation
+    def testPoisson(stratifiedData: RDD[(String, Int)],
+        exact: Boolean,
+        samplingRate: Double,
+        seed: Long,
+        n: Long) = {
+      val expectedSampleSize = stratifiedData.countByKey().mapValues(count =>
+        math.ceil(count * samplingRate).toInt)
+      val fractions = Map("1" -> samplingRate, "0" -> samplingRate)
+      val sample = if (exact) {
+        stratifiedData.sampleByKeyExact(true, fractions, seed)
+      } else {
+        stratifiedData.sampleByKey(true, fractions, seed)
+      }
+      val sampleCounts = sample.countByKey()
+      val takeSample = sample.collect()
+      sampleCounts.foreach { case (k, v) =>
+        assert(checkSize(exact, true, expectedSampleSize(k), v, samplingRate))
+      }
+      val groupedByKey = takeSample.groupBy(_._1)
+      for ((key, v) <- groupedByKey) {
+        if (expectedSampleSize(key) >= 100 && samplingRate >= 0.1) {
+          // sample large enough for there to be repeats with high likelihood
+          assert(v.toSet.size < expectedSampleSize(key))
+        } else {
+          if (exact) {
+            assert(v.toSet.size <= expectedSampleSize(key))
+          } else {
+            assert(checkSize(false, true, expectedSampleSize(key), v.toSet.size, samplingRate))
+          }
+        }
+      }
+      takeSample.foreach(x => assert(1 <= x._2 && x._2 <= n, s"elements not in [1, $n]"))
+    }
+  }
+
 }
 
 /*
@@ -450,40 +654,86 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   and the test will therefore throw InstantiationException when saveAsNewAPIHadoopFile
   tries to instantiate them with Class.newInstance.
  */
-class FakeWriter extends RecordWriter[Integer, Integer] {
 
-  def close(p1: TaskAttemptContext) = ()
+/*
+ * Original Hadoop API
+ */
+class FakeWriter extends RecordWriter[Integer, Integer] {
+  override def write(key: Integer, value: Integer): Unit = ()
+
+  override def close(reporter: Reporter): Unit = ()
+}
+
+class FakeOutputCommitter() extends OutputCommitter() {
+  override def setupJob(jobContext: JobContext): Unit = ()
+
+  override def needsTaskCommit(taskContext: TaskAttemptContext): Boolean = true
+
+  override def setupTask(taskContext: TaskAttemptContext): Unit = ()
+
+  override def commitTask(taskContext: TaskAttemptContext): Unit = {
+    FakeOutputCommitter.ran = true
+    ()
+  }
+
+  override def abortTask(taskContext: TaskAttemptContext): Unit = ()
+}
+
+/*
+ * Used to communicate state between the test harness and the OutputCommitter.
+ */
+object FakeOutputCommitter {
+  var ran = false
+}
+
+class FakeOutputFormat() extends OutputFormat[Integer, Integer]() {
+  override def getRecordWriter(
+      ignored: FileSystem,
+      job: JobConf, name: String,
+      progress: Progressable): RecordWriter[Integer, Integer] = {
+    new FakeWriter()
+  }
+
+  override def checkOutputSpecs(ignored: FileSystem, job: JobConf): Unit = ()
+}
+
+/*
+ * New-style Hadoop API
+ */
+class NewFakeWriter extends NewRecordWriter[Integer, Integer] {
+
+  def close(p1: NewTaskAttempContext) = ()
 
   def write(p1: Integer, p2: Integer) = ()
 
 }
 
-class FakeCommitter extends OutputCommitter {
-  def setupJob(p1: JobContext) = ()
+class NewFakeCommitter extends NewOutputCommitter {
+  def setupJob(p1: NewJobContext) = ()
 
-  def needsTaskCommit(p1: TaskAttemptContext): Boolean = false
+  def needsTaskCommit(p1: NewTaskAttempContext): Boolean = false
 
-  def setupTask(p1: TaskAttemptContext) = ()
+  def setupTask(p1: NewTaskAttempContext) = ()
 
-  def commitTask(p1: TaskAttemptContext) = ()
+  def commitTask(p1: NewTaskAttempContext) = ()
 
-  def abortTask(p1: TaskAttemptContext) = ()
+  def abortTask(p1: NewTaskAttempContext) = ()
 }
 
-class FakeFormat() extends OutputFormat[Integer, Integer]() {
+class NewFakeFormat() extends NewOutputFormat[Integer, Integer]() {
 
-  def checkOutputSpecs(p1: JobContext)  = ()
+  def checkOutputSpecs(p1: NewJobContext)  = ()
 
-  def getRecordWriter(p1: TaskAttemptContext): RecordWriter[Integer, Integer] = {
-    new FakeWriter()
+  def getRecordWriter(p1: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
+    new NewFakeWriter()
   }
 
-  def getOutputCommitter(p1: TaskAttemptContext): OutputCommitter = {
-    new FakeCommitter()
+  def getOutputCommitter(p1: NewTaskAttempContext): NewOutputCommitter = {
+    new NewFakeCommitter()
   }
 }
 
-class ConfigTestFormat() extends FakeFormat() with Configurable {
+class ConfigTestFormat() extends NewFakeFormat() with Configurable {
 
   var setConfCalled = false
   def setConf(p1: Configuration) = {
@@ -493,7 +743,7 @@ class ConfigTestFormat() extends FakeFormat() with Configurable {
 
   def getConf: Configuration = null
 
-  override def getRecordWriter(p1: TaskAttemptContext): RecordWriter[Integer, Integer] = {
+  override def getRecordWriter(p1: NewTaskAttempContext): NewRecordWriter[Integer, Integer] = {
     assert(setConfCalled, "setConf was never called")
     super.getRecordWriter(p1)
   }

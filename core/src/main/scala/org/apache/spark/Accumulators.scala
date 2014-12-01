@@ -18,12 +18,14 @@
 package org.apache.spark
 
 import java.io.{ObjectInputStream, Serializable}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.generic.Growable
 import scala.collection.mutable.Map
 import scala.reflect.ClassTag
 
 import org.apache.spark.serializer.JavaSerializer
+import org.apache.spark.util.Utils
 
 /**
  * A data type that can be accumulated, ie has an commutative and associative "add" operation,
@@ -36,15 +38,21 @@ import org.apache.spark.serializer.JavaSerializer
  *
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `R` and `T`
+ * @param name human-readable name for use in Spark's web UI
  * @tparam R the full accumulated data (result type)
  * @tparam T partial data that can be added in
  */
 class Accumulable[R, T] (
     @transient initialValue: R,
-    param: AccumulableParam[R, T])
+    param: AccumulableParam[R, T],
+    val name: Option[String])
   extends Serializable {
 
-  val id = Accumulators.newId
+  def this(@transient initialValue: R, param: AccumulableParam[R, T]) =
+    this(initialValue, param, None)
+
+  val id: Long = Accumulators.newId
+
   @transient private var value_ = initialValue // Current value on master
   val zero = param.zero(initialValue)  // Zero value to be passed to workers
   private var deserialized = false
@@ -120,7 +128,7 @@ class Accumulable[R, T] (
   }
 
   // Called by Java when deserializing an object
-  private def readObject(in: ObjectInputStream) {
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     value_ = zero
     deserialized = true
@@ -219,8 +227,11 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  * @param param helper object defining how to add elements of type `T`
  * @tparam T result type
  */
-class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T])
-  extends Accumulable[T,T](initialValue, param)
+class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], name: Option[String])
+    extends Accumulable[T,T](initialValue, param, name) {
+
+  def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None)
+}
 
 /**
  * A simpler version of [[org.apache.spark.AccumulableParam]] where the only data type you can add
@@ -235,6 +246,36 @@ trait AccumulatorParam[T] extends AccumulableParam[T, T] {
   }
 }
 
+object AccumulatorParam {
+
+  // The following implicit objects were in SparkContext before 1.2 and users had to
+  // `import SparkContext._` to enable them. Now we move them here to make the compiler find
+  // them automatically. However, as there are duplicate codes in SparkContext for backward
+  // compatibility, please update them accordingly if you modify the following implicit objects.
+
+  implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
+    def addInPlace(t1: Double, t2: Double): Double = t1 + t2
+    def zero(initialValue: Double) = 0.0
+  }
+
+  implicit object IntAccumulatorParam extends AccumulatorParam[Int] {
+    def addInPlace(t1: Int, t2: Int): Int = t1 + t2
+    def zero(initialValue: Int) = 0
+  }
+
+  implicit object LongAccumulatorParam extends AccumulatorParam[Long] {
+    def addInPlace(t1: Long, t2: Long) = t1 + t2
+    def zero(initialValue: Long) = 0L
+  }
+
+  implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
+    def addInPlace(t1: Float, t2: Float) = t1 + t2
+    def zero(initialValue: Float) = 0f
+  }
+
+  // TODO: Add AccumulatorParams for other types, e.g. lists and strings
+}
+
 // TODO: The multi-thread support in accumulators is kind of lame; check
 // if there's a more intuitive way of doing it right
 private object Accumulators {
@@ -243,7 +284,7 @@ private object Accumulators {
   val localAccums = Map[Thread, Map[Long, Accumulable[_, _]]]()
   var lastId: Long = 0
 
-  def newId: Long = synchronized {
+  def newId(): Long = synchronized {
     lastId += 1
     lastId
   }
@@ -281,4 +322,7 @@ private object Accumulators {
       }
     }
   }
+
+  def stringifyPartialValue(partialValue: Any) = "%s".format(partialValue)
+  def stringifyValue(value: Any) = "%s".format(value)
 }

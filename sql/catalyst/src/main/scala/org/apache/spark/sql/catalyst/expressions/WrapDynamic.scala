@@ -21,13 +21,19 @@ import scala.language.dynamics
 
 import org.apache.spark.sql.catalyst.types.DataType
 
+/**
+ * The data type representing [[DynamicRow]] values.
+ */
 case object DynamicType extends DataType
 
+/**
+ * Wrap a [[Row]] as a [[DynamicRow]].
+ */
 case class WrapDynamic(children: Seq[Attribute]) extends Expression {
   type EvaluatedType = DynamicRow
 
   def nullable = false
-  def references = children.toSet
+
   def dataType = DynamicType
 
   override def eval(input: Row): DynamicRow = input match {
@@ -37,6 +43,11 @@ case class WrapDynamic(children: Seq[Attribute]) extends Expression {
   }
 }
 
+/**
+ * DynamicRows use scala's Dynamic trait to emulate an ORM of in a dynamically typed language.
+ * Since the type of the column is not known at compile time, all attributes are converted to
+ * strings before being passed to the function.
+ */
 class DynamicRow(val schema: Seq[Attribute], values: Array[Any])
   extends GenericRow(values) with Dynamic {
 

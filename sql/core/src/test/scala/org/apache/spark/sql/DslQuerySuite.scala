@@ -19,13 +19,13 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.test._
 
 /* Implicits */
-import TestSQLContext._
+import org.apache.spark.sql.catalyst.dsl._
+import org.apache.spark.sql.test.TestSQLContext._
 
 class DslQuerySuite extends QueryTest {
-  import TestData._
+  import org.apache.spark.sql.TestData._
 
   test("table scan") {
     checkAnswer(
@@ -33,17 +33,23 @@ class DslQuerySuite extends QueryTest {
       testData.collect().toSeq)
   }
 
+  test("repartition") {
+    checkAnswer(
+      testData.select('key).repartition(10).select('key),
+      testData.select('key).collect().toSeq)
+  }
+
   test("agg") {
     checkAnswer(
-      testData2.groupBy('a)('a, Sum('b)),
+      testData2.groupBy('a)('a, sum('b)),
       Seq((1,3),(2,3),(3,3))
     )
     checkAnswer(
-      testData2.groupBy('a)('a, Sum('b) as 'totB).aggregate(Sum('totB)),
+      testData2.groupBy('a)('a, sum('b) as 'totB).aggregate(sum('totB)),
       9
     )
     checkAnswer(
-      testData2.aggregate(Sum('b)),
+      testData2.aggregate(sum('b)),
       9
     )
   }
@@ -98,19 +104,19 @@ class DslQuerySuite extends QueryTest {
       Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
 
     checkAnswer(
-      arrayData.orderBy(GetItem('data, 0).asc),
+      arrayData.orderBy('data.getItem(0).asc),
       arrayData.collect().sortBy(_.data(0)).toSeq)
 
     checkAnswer(
-      arrayData.orderBy(GetItem('data, 0).desc),
+      arrayData.orderBy('data.getItem(0).desc),
       arrayData.collect().sortBy(_.data(0)).reverse.toSeq)
 
     checkAnswer(
-      mapData.orderBy(GetItem('data, 1).asc),
+      mapData.orderBy('data.getItem(1).asc),
       mapData.collect().sortBy(_.data(1)).toSeq)
 
     checkAnswer(
-      mapData.orderBy(GetItem('data, 1).desc),
+      mapData.orderBy('data.getItem(1).desc),
       mapData.collect().sortBy(_.data(1)).reverse.toSeq)
   }
 
@@ -128,24 +134,80 @@ class DslQuerySuite extends QueryTest {
       mapData.take(1).toSeq)
   }
 
+  test("SPARK-3395 limit distinct") {
+    val filtered = TestData.testData2
+      .distinct()
+      .orderBy(SortOrder('a, Ascending), SortOrder('b, Ascending))
+      .limit(1)
+      .registerTempTable("onerow")
+    checkAnswer(
+      sql("select * from onerow inner join testData2 on onerow.a = testData2.a"),
+      (1, 1, 1, 1) ::
+      (1, 1, 1, 2) :: Nil)
+  }
+
+  test("SPARK-3858 generator qualifiers are discarded") {
+    checkAnswer(
+      arrayData.as('ad)
+        .generate(Explode("data" :: Nil, 'data), alias = Some("ex"))
+        .select("ex.data".attr),
+      Seq(1, 2, 3, 2, 3, 4).map(Seq(_)))
+  }
+
   test("average") {
     checkAnswer(
-      testData2.groupBy()(avg('a)),
+      testData2.aggregate(avg('a)),
       2.0)
+
+    checkAnswer(
+      testData2.aggregate(avg('a), sumDistinct('a)), // non-partial
+      (2.0, 6.0) :: Nil)
+
+    checkAnswer(
+      decimalData.aggregate(avg('a)),
+      BigDecimal(2.0))
+    checkAnswer(
+      decimalData.aggregate(avg('a), sumDistinct('a)), // non-partial
+      (BigDecimal(2.0), BigDecimal(6)) :: Nil)
+
+    checkAnswer(
+      decimalData.aggregate(avg('a cast DecimalType(10, 2))),
+      BigDecimal(2.0))
+    checkAnswer(
+      decimalData.aggregate(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))), // non-partial
+      (BigDecimal(2.0), BigDecimal(6)) :: Nil)
   }
 
   test("null average") {
     checkAnswer(
-      testData3.groupBy()(avg('b)),
+      testData3.aggregate(avg('b)),
       2.0)
 
     checkAnswer(
-      testData3.groupBy()(avg('b), countDistinct('b)),
+      testData3.aggregate(avg('b), countDistinct('b)),
       (2.0, 1) :: Nil)
+
+    checkAnswer(
+      testData3.aggregate(avg('b), sumDistinct('b)), // non-partial
+      (2.0, 2.0) :: Nil)
+  }
+
+  test("zero average") {
+    checkAnswer(
+      emptyTableData.aggregate(avg('a)),
+      null)
+
+    checkAnswer(
+      emptyTableData.aggregate(avg('a), sumDistinct('b)), // non-partial
+      (null, null) :: Nil)
   }
 
   test("count") {
     assert(testData2.count() === testData2.map(_ => 1).count())
+
+    checkAnswer(
+      testData2.aggregate(count('a), sumDistinct('a)), // non-partial
+      (6, 6.0) :: Nil)
   }
 
   test("null count") {
@@ -160,13 +222,34 @@ class DslQuerySuite extends QueryTest {
     )
 
     checkAnswer(
-      testData3.groupBy()(count('a), count('b), count(1), countDistinct('a), countDistinct('b)),
+      testData3.aggregate(count('a), count('b), count(1), countDistinct('a), countDistinct('b)),
       (2, 1, 2, 2, 1) :: Nil
+    )
+
+    checkAnswer(
+      testData3.aggregate(count('b), countDistinct('b), sumDistinct('b)), // non-partial
+      (1, 1, 2) :: Nil
     )
   }
 
   test("zero count") {
     assert(emptyTableData.count() === 0)
+
+    checkAnswer(
+      emptyTableData.aggregate(count('a), sumDistinct('a)), // non-partial
+      (0, null) :: Nil)
+  }
+
+  test("zero sum") {
+    checkAnswer(
+      emptyTableData.aggregate(sum('a)),
+      null)
+  }
+
+  test("zero sum distinct") {
+    checkAnswer(
+      emptyTableData.aggregate(sumDistinct('a)),
+      null)
   }
 
   test("except") {
@@ -188,5 +271,15 @@ class DslQuerySuite extends QueryTest {
       (3, "c") ::
       (4, "d") :: Nil)
     checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
+  }
+
+  test("udf") {
+    val foo = (a: Int, b: String) => a.toString + b
+
+    checkAnswer(
+      // SELECT *, foo(key, value) FROM testData
+      testData.select(Star(None), foo.call('key, 'value)).limit(3),
+      (1, "1", "11") :: (2, "2", "22") :: (3, "3", "33") :: Nil
+    )
   }
 }

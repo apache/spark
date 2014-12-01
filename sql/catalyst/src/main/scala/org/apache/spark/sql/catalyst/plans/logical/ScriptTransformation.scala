@@ -30,6 +30,4 @@ case class ScriptTransformation(
     input: Seq[Expression],
     script: String,
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
-  def references = input.flatMap(_.references).toSet
-}
+    child: LogicalPlan) extends UnaryNode

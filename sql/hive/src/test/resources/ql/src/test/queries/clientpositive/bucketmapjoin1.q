@@ -25,16 +25,16 @@ select /*+mapjoin(a)*/ a.key, a.value, b.value
 from srcbucket_mapjoin_part a join srcbucket_mapjoin_part_2 b
 on a.key=b.key where b.ds="2008-04-08";
 
-load data local inpath '../data/files/srcbucket20.txt' INTO TABLE srcbucket_mapjoin;
-load data local inpath '../data/files/srcbucket21.txt' INTO TABLE srcbucket_mapjoin;
+load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE srcbucket_mapjoin;
+load data local inpath '../../data/files/srcbucket21.txt' INTO TABLE srcbucket_mapjoin;
 
-load data local inpath '../data/files/srcbucket20.txt' INTO TABLE srcbucket_mapjoin_part partition(ds='2008-04-08');
-load data local inpath '../data/files/srcbucket21.txt' INTO TABLE srcbucket_mapjoin_part partition(ds='2008-04-08');
-load data local inpath '../data/files/srcbucket22.txt' INTO TABLE srcbucket_mapjoin_part partition(ds='2008-04-08');
-load data local inpath '../data/files/srcbucket23.txt' INTO TABLE srcbucket_mapjoin_part partition(ds='2008-04-08');
+load data local inpath '../../data/files/srcbucket20.txt' INTO TABLE srcbucket_mapjoin_part partition(ds='2008-04-08');
+load data local inpath '../../data/files/srcbucket21.txt' INTO TABLE srcbucket_mapjoin_part partition(ds='2008-04-08');
+load data local inpath '../../data/files/srcbucket22.txt' INTO TABLE srcbucket_mapjoin_part partition(ds='2008-04-08');
+load data local inpath '../../data/files/srcbucket23.txt' INTO TABLE srcbucket_mapjoin_part partition(ds='2008-04-08');
 
-load data local inpath '../data/files/srcbucket22.txt' INTO TABLE srcbucket_mapjoin_part_2 partition(ds='2008-04-08');
-load data local inpath '../data/files/srcbucket23.txt' INTO TABLE srcbucket_mapjoin_part_2 partition(ds='2008-04-08');
+load data local inpath '../../data/files/srcbucket22.txt' INTO TABLE srcbucket_mapjoin_part_2 partition(ds='2008-04-08');
+load data local inpath '../../data/files/srcbucket23.txt' INTO TABLE srcbucket_mapjoin_part_2 partition(ds='2008-04-08');
 
 create table bucketmapjoin_hash_result_1 (key bigint , value1 bigint, value2 bigint);
 create table bucketmapjoin_hash_result_2 (key bigint , value1 bigint, value2 bigint);

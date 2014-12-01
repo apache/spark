@@ -1,1 +1,0 @@
-array_contains(array, value) - Returns TRUE if the array contains value.

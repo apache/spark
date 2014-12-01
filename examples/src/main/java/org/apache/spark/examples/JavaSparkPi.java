@@ -31,7 +31,6 @@ import java.util.List;
  * Usage: JavaSparkPi [slices]
  */
 public final class JavaSparkPi {
-  
 
   public static void main(String[] args) throws Exception {
     SparkConf sparkConf = new SparkConf().setAppName("JavaSparkPi");
@@ -61,5 +60,7 @@ public final class JavaSparkPi {
     });
 
     System.out.println("Pi is roughly " + 4.0 * count / n);
+
+    jsc.stop();
   }
 }

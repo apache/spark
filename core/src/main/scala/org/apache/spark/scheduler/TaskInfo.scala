@@ -17,6 +17,8 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.ListBuffer
+
 import org.apache.spark.annotation.DeveloperApi
 
 /**
@@ -40,6 +42,13 @@ class TaskInfo(
    * IndirectTaskResult and later fetching the result from the block manager).
    */
   var gettingResultTime: Long = 0
+
+  /**
+   * Intermediate updates to accumulables during this task. Note that it is valid for the same
+   * accumulable to be updated multiple times in a single task or for two accumulables with the
+   * same name but different IDs to exist in a task.
+   */
+  val accumulables = ListBuffer[AccumulableInfo]()
 
   /**
    * The time when the task has completed successfully (including the time to remotely fetch

@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
+import org.apache.spark.sql.test.TestSQLContext
 
 import parquet.example.data.{GroupWriter, Group}
 import parquet.example.data.simple.SimpleGroup
@@ -91,6 +92,12 @@ private[sql] object ParquetTestData {
       required int64 mylong;
       required float myfloat;
       required double mydouble;
+      optional boolean myoptboolean;
+      optional int32 myoptint;
+      optional binary myoptstring (UTF8);
+      optional int64 myoptlong;
+      optional float myoptfloat;
+      optional double myoptdouble;
       }
     """
 
@@ -103,7 +110,7 @@ private[sql] object ParquetTestData {
   val testDir = Utils.createTempDir()
   val testFilterDir = Utils.createTempDir()
 
-  lazy val testData = new ParquetRelation(testDir.toURI.toString)
+  lazy val testData = new ParquetRelation(testDir.toURI.toString, None, TestSQLContext)
 
   val testNestedSchema1 =
     // based on blogpost example, source:
@@ -202,8 +209,10 @@ private[sql] object ParquetTestData {
   val testNestedDir3 = Utils.createTempDir()
   val testNestedDir4 = Utils.createTempDir()
 
-  lazy val testNestedData1 = new ParquetRelation(testNestedDir1.toURI.toString)
-  lazy val testNestedData2 = new ParquetRelation(testNestedDir2.toURI.toString)
+  lazy val testNestedData1 =
+    new ParquetRelation(testNestedDir1.toURI.toString, None, TestSQLContext)
+  lazy val testNestedData2 =
+    new ParquetRelation(testNestedDir2.toURI.toString, None, TestSQLContext)
 
   def writeFile() = {
     testDir.delete()
@@ -252,6 +261,19 @@ private[sql] object ParquetTestData {
       record.add(3, i.toLong)
       record.add(4, i.toFloat + 0.5f)
       record.add(5, i.toDouble + 0.5d)
+      if (i % 2 == 0) {
+        if (i % 3 == 0) {
+          record.add(6, true)
+        } else {
+          record.add(6, false)
+        }
+        record.add(7, i)
+        record.add(8, i.toString)
+        record.add(9, i.toLong)
+        record.add(10, i.toFloat + 0.5f)
+        record.add(11, i.toDouble + 0.5d)
+      }
+ 
       writer.write(record)
     }
     writer.close()

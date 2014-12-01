@@ -13,7 +13,7 @@ CREATE TABLE part(
     p_comment STRING
 );
 
-LOAD DATA LOCAL INPATH '../data/files/part_tiny.txt' overwrite into table part;
+LOAD DATA LOCAL INPATH '../../data/files/part_tiny.txt' overwrite into table part;
 
 drop table over10k;
 
@@ -27,12 +27,12 @@ create table over10k(
            bo boolean,
            s string,
 	   ts timestamp, 
-           dec decimal,  
+           dec decimal(4,2),  
            bin binary)
        row format delimited
        fields terminated by '|';
 
-load data local inpath '../data/files/over10k' into table over10k;
+load data local inpath '../../data/files/over10k' into table over10k;
 
 select p_mfgr, p_retailprice, p_size,
 round(sum(p_retailprice) over w1 , 2) = round(sum(lag(p_retailprice,1,0.0)) over w1 + last_value(p_retailprice) over w1 , 2), 

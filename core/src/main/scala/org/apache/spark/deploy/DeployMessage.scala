@@ -71,6 +71,8 @@ private[deploy] object DeployMessages {
 
   case class RegisterWorkerFailed(message: String) extends DeployMessage
 
+  case class ReconnectWorker(masterUrl: String) extends DeployMessage
+
   case class KillExecutor(masterUrl: String, appId: String, execId: Int) extends DeployMessage
 
   case class LaunchExecutor(
@@ -89,6 +91,8 @@ private[deploy] object DeployMessages {
   // Worker internal
 
   case object WorkDirCleanup      // Sent to Worker actor periodically for cleaning up app folders
+
+  case object ReregisterWithMaster // used when a worker attempts to reconnect to a master
 
   // AppClient to Master
 

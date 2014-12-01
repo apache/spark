@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.sql.{SQLConf, execution}
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.execution
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.planner._
 
@@ -39,22 +40,60 @@ class PlannerSuite extends FunSuite {
 
   test("count is partially aggregated") {
     val query = testData.groupBy('value)(Count('key)).queryExecution.analyzed
-    val planned = PartialAggregation(query).head
-    val aggregations = planned.collect { case a: Aggregate => a }
+    val planned = HashAggregation(query).head
+    val aggregations = planned.collect { case n if n.nodeName contains "Aggregate" => n }
 
     assert(aggregations.size === 2)
   }
 
-  test("count distinct is not partially aggregated") {
+  test("count distinct is partially aggregated") {
     val query = testData.groupBy('value)(CountDistinct('key :: Nil)).queryExecution.analyzed
-    val planned = PartialAggregation(query)
-    assert(planned.isEmpty)
+    val planned = HashAggregation(query)
+    assert(planned.nonEmpty)
   }
 
-  test("mixed aggregates are not partially aggregated") {
+  test("mixed aggregates are partially aggregated") {
     val query =
       testData.groupBy('value)(Count('value), CountDistinct('key :: Nil)).queryExecution.analyzed
-    val planned = PartialAggregation(query)
-    assert(planned.isEmpty)
+    val planned = HashAggregation(query)
+    assert(planned.nonEmpty)
+  }
+
+  test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
+    val origThreshold = autoBroadcastJoinThreshold
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 81920.toString)
+
+    // Using a threshold that is definitely larger than the small testing table (b) below
+    val a = testData.as('a)
+    val b = testData.limit(3).as('b)
+    val planned = a.join(b, Inner, Some("a.key".attr === "b.key".attr)).queryExecution.executedPlan
+
+    val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
+    val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }
+
+    assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
+    assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
+
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold.toString)
+  }
+
+  test("InMemoryRelation statistics propagation") {
+    val origThreshold = autoBroadcastJoinThreshold
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 81920.toString)
+
+    testData.limit(3).registerTempTable("tiny")
+    sql("CACHE TABLE tiny")
+
+    val a = testData.as('a)
+    val b = table("tiny").as('b)
+    val planned = a.join(b, Inner, Some("a.key".attr === "b.key".attr)).queryExecution.executedPlan
+
+    val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
+    val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }
+
+    assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
+    assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
+
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold.toString)
   }
 }

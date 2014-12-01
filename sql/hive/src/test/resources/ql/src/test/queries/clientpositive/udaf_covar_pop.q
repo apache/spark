@@ -2,7 +2,7 @@ DROP TABLE covar_tab;
 CREATE TABLE covar_tab (a INT, b INT, c INT)
 ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t'
 STORED AS TEXTFILE;
-LOAD DATA LOCAL INPATH '../data/files/covar_tab.txt' OVERWRITE
+LOAD DATA LOCAL INPATH '../../data/files/covar_tab.txt' OVERWRITE
 INTO TABLE covar_tab;
 
 DESCRIBE FUNCTION covar_pop;

@@ -23,7 +23,7 @@ package org.apache.spark.scheduler
  */
 private[spark] class JobWaiter[T](
     dagScheduler: DAGScheduler,
-    jobId: Int,
+    val jobId: Int,
     totalTasks: Int,
     resultHandler: (Int, T) => Unit)
   extends JobListener {

@@ -39,11 +39,8 @@ import org.apache.spark.streaming.receiver.Receiver
 
 import org.jboss.netty.channel.ChannelPipelineFactory
 import org.jboss.netty.channel.Channels
-import org.jboss.netty.channel.ChannelPipeline
-import org.jboss.netty.channel.ChannelFactory
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory
 import org.jboss.netty.handler.codec.compression._
-import org.jboss.netty.handler.execution.ExecutionHandler
 
 private[streaming]
 class FlumeInputDStream[T: ClassTag](
@@ -69,7 +66,7 @@ class SparkFlumeEvent() extends Externalizable {
   var event : AvroFlumeEvent = new AvroFlumeEvent()
 
   /* De-serialize from bytes. */
-  def readExternal(in: ObjectInput) {
+  def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     val bodyLength = in.readInt()
     val bodyBuff = new Array[Byte](bodyLength)
     in.readFully(bodyBuff)
@@ -96,7 +93,7 @@ class SparkFlumeEvent() extends Externalizable {
   }
 
   /* Serialize to bytes. */
-  def writeExternal(out: ObjectOutput) {
+  def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     val body = event.getBody.array()
     out.writeInt(body.length)
     out.write(body)

@@ -39,7 +39,8 @@ case class Generate(
     child: SparkPlan)
   extends UnaryNode {
 
-  protected def generatorOutput: Seq[Attribute] = {
+  // This must be a val since the generator output expr ids are not preserved by serialization.
+  protected val generatorOutput: Seq[Attribute] = {
     if (join && outer) {
       generator.output.map(_.withNullability(true))
     } else {
@@ -47,8 +48,11 @@ case class Generate(
     }
   }
 
-  override def output =
+  // This must be a val since the generator output expr ids are not preserved by serialization.
+  override val output =
     if (join) child.output ++ generatorOutput else generatorOutput
+
+  val boundGenerator = BindReferences.bindReference(generator, child.output)
 
   override def execute() = {
     if (join) {
@@ -56,14 +60,14 @@ case class Generate(
         val nullValues = Seq.fill(generator.output.size)(Literal(null))
         // Used to produce rows with no matches when outer = true.
         val outerProjection =
-          new Projection(child.output ++ nullValues, child.output)
+          newProjection(child.output ++ nullValues, child.output)
 
         val joinProjection =
-          new Projection(child.output ++ generator.output, child.output ++ generator.output)
+          newProjection(child.output ++ generatorOutput, child.output ++ generatorOutput)
         val joinedRow = new JoinedRow
 
         iter.flatMap {row =>
-          val outputRows = generator.eval(row)
+          val outputRows = boundGenerator.eval(row)
           if (outer && outputRows.isEmpty) {
             outerProjection(row) :: Nil
           } else {
@@ -72,7 +76,7 @@ case class Generate(
         }
       }
     } else {
-      child.execute().mapPartitions(iter => iter.flatMap(row => generator.eval(row)))
+      child.execute().mapPartitions(iter => iter.flatMap(row => boundGenerator.eval(row)))
     }
   }
 }

@@ -3,32 +3,32 @@
 # When creating new tests for Spark SQL Hive, the HADOOP_CLASSPATH must contain the hive jars so
 # that we can run Hive to generate the golden answer.  This is not required for normal development
 # or testing.
-for i in $HIVE_HOME/lib/*
-do HADOOP_CLASSPATH=$HADOOP_CLASSPATH:$i
+for i in "$HIVE_HOME"/lib/*
+do HADOOP_CLASSPATH="$HADOOP_CLASSPATH:$i"
 done
 export HADOOP_CLASSPATH
 
 realpath () {
 (
-  TARGET_FILE=$1
+  TARGET_FILE="$1"
 
-  cd $(dirname $TARGET_FILE)
-  TARGET_FILE=$(basename $TARGET_FILE)
+  cd "$(dirname "$TARGET_FILE")"
+  TARGET_FILE="$(basename "$TARGET_FILE")"
 
   COUNT=0
   while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
   do
-      TARGET_FILE=$(readlink $TARGET_FILE)
-      cd $(dirname $TARGET_FILE)
-      TARGET_FILE=$(basename $TARGET_FILE)
+      TARGET_FILE="$(readlink "$TARGET_FILE")"
+      cd $(dirname "$TARGET_FILE")
+      TARGET_FILE="$(basename $TARGET_FILE)"
       COUNT=$(($COUNT + 1))
   done
 
-  echo $(pwd -P)/$TARGET_FILE
+  echo "$(pwd -P)/"$TARGET_FILE""
 )
 }
 
-. $(dirname $(realpath $0))/sbt-launch-lib.bash
+. "$(dirname "$(realpath "$0")")"/sbt-launch-lib.bash
 
 
 declare -r noshare_opts="-Dsbt.global.base=project/.sbtboot -Dsbt.boot.directory=project/.boot -Dsbt.ivy.home=project/.ivy"

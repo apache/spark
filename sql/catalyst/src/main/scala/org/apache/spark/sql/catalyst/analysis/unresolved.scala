@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.{errors, trees}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.BaseRelation
+import org.apache.spark.sql.catalyst.plans.logical.LeafNode
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
 /**
@@ -36,7 +36,7 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
 case class UnresolvedRelation(
     databaseName: Option[String],
     tableName: String,
-    alias: Option[String] = None) extends BaseRelation {
+    alias: Option[String] = None) extends LeafNode {
   override def output = Nil
   override lazy val resolved = false
 }
@@ -54,6 +54,7 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   override def newInstance = this
   override def withNullability(newNullability: Boolean) = this
   override def withQualifiers(newQualifiers: Seq[String]) = this
+  override def withName(newName: String) = UnresolvedAttribute(name)
 
   // Unresolved attributes are transient at compile time and don't get evaluated during execution.
   override def eval(input: Row = null): EvaluatedType =
@@ -66,7 +67,6 @@ case class UnresolvedFunction(name: String, children: Seq[Expression]) extends E
   override def dataType = throw new UnresolvedException(this, "dataType")
   override def foldable = throw new UnresolvedException(this, "foldable")
   override def nullable = throw new UnresolvedException(this, "nullable")
-  override def references = children.flatMap(_.references).toSet
   override lazy val resolved = false
 
   // Unresolved functions are transient at compile time and don't get evaluated during execution.
@@ -88,7 +88,7 @@ case class Star(
     mapFunction: Attribute => Expression = identity[Attribute])
   extends Attribute with trees.LeafNode[Expression] {
 
-  override def name = throw new UnresolvedException(this, "exprId")
+  override def name = throw new UnresolvedException(this, "name")
   override def exprId = throw new UnresolvedException(this, "exprId")
   override def dataType = throw new UnresolvedException(this, "dataType")
   override def nullable = throw new UnresolvedException(this, "nullable")
@@ -98,13 +98,14 @@ case class Star(
   override def newInstance = this
   override def withNullability(newNullability: Boolean) = this
   override def withQualifiers(newQualifiers: Seq[String]) = this
+  override def withName(newName: String) = this
 
-  def expand(input: Seq[Attribute]): Seq[NamedExpression] = {
+  def expand(input: Seq[Attribute], resolver: Resolver): Seq[NamedExpression] = {
     val expandedAttributes: Seq[Attribute] = table match {
       // If there is no table specified, use all input attributes.
       case None => input
       // If there is a table, pick out attributes that are part of this table.
-      case Some(t) => input.filter(_.qualifiers contains t)
+      case Some(t) => input.filter(_.qualifiers.filter(resolver(_, t)).nonEmpty)
     }
     val mappedAttributes = expandedAttributes.map(mapFunction).zip(input).map {
       case (n: NamedExpression, _) => n

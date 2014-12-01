@@ -31,7 +31,6 @@ case object Descending extends SortDirection
 case class SortOrder(child: Expression, direction: SortDirection) extends Expression 
     with trees.UnaryNode[Expression] {
 
-  override def references = child.references
   override def dataType = child.dataType
   override def nullable = child.nullable
 

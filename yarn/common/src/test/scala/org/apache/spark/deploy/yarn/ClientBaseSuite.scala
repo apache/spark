@@ -20,25 +20,25 @@ package org.apache.spark.deploy.yarn
 import java.io.File
 import java.net.URI
 
-import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.MRJobConfig
-import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
-import org.apache.hadoop.yarn.api.protocolrecords.GetNewApplicationResponse
-import org.apache.hadoop.yarn.api.records.ContainerLaunchContext
+import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Matchers._
 import org.mockito.Mockito._
+
+
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ HashMap => MutableHashMap }
+import scala.reflect.ClassTag
 import scala.util.Try
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkException, SparkConf}
 import org.apache.spark.util.Utils
 
 class ClientBaseSuite extends FunSuite with Matchers {
@@ -87,7 +87,7 @@ class ClientBaseSuite extends FunSuite with Matchers {
     val env = new MutableHashMap[String, String]()
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
 
-    ClientBase.populateClasspath(args, conf, sparkConf, env, None)
+    ClientBase.populateClasspath(args, conf, sparkConf, env)
 
     val cp = env("CLASSPATH").split(File.pathSeparator)
     s"$SPARK,$USER,$ADDED".split(",").foreach({ entry =>
@@ -111,10 +111,10 @@ class ClientBaseSuite extends FunSuite with Matchers {
     val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
 
     val client = spy(new DummyClient(args, conf, sparkConf, yarnConf))
-    doReturn(new Path("/")).when(client).copyRemoteFile(any(classOf[Path]),
+    doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
       any(classOf[Path]), anyShort(), anyBoolean())
 
-    var tempDir = Files.createTempDir();
+    val tempDir = Utils.createTempDir()
     try {
       client.prepareLocalResources(tempDir.getAbsolutePath())
       sparkConf.getOption(ClientBase.CONF_SPARK_USER_JAR) should be (Some(USER))
@@ -138,6 +138,57 @@ class ClientBaseSuite extends FunSuite with Matchers {
     }
   }
 
+  test("check access nns empty") {
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.yarn.access.namenodes", "")
+    val nns = ClientBase.getNameNodesToAccess(sparkConf)
+    nns should be(Set())
+  }
+
+  test("check access nns unset") {
+    val sparkConf = new SparkConf()
+    val nns = ClientBase.getNameNodesToAccess(sparkConf)
+    nns should be(Set())
+  }
+
+  test("check access nns") {
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032")
+    val nns = ClientBase.getNameNodesToAccess(sparkConf)
+    nns should be(Set(new Path("hdfs://nn1:8032")))
+  }
+
+  test("check access nns space") {
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032, ")
+    val nns = ClientBase.getNameNodesToAccess(sparkConf)
+    nns should be(Set(new Path("hdfs://nn1:8032")))
+  }
+
+  test("check access two nns") {
+    val sparkConf = new SparkConf()
+    sparkConf.set("spark.yarn.access.namenodes", "hdfs://nn1:8032,hdfs://nn2:8032")
+    val nns = ClientBase.getNameNodesToAccess(sparkConf)
+    nns should be(Set(new Path("hdfs://nn1:8032"), new Path("hdfs://nn2:8032")))
+  }
+
+  test("check token renewer") {
+    val hadoopConf = new Configuration()
+    hadoopConf.set("yarn.resourcemanager.address", "myrm:8033")
+    hadoopConf.set("yarn.resourcemanager.principal", "yarn/myrm:8032@SPARKTEST.COM")
+    val renewer = ClientBase.getTokenRenewer(hadoopConf)
+    renewer should be ("yarn/myrm:8032@SPARKTEST.COM")
+  }
+
+  test("check token renewer default") {
+    val hadoopConf = new Configuration()
+    val caught =
+      intercept[SparkException] {
+        ClientBase.getTokenRenewer(hadoopConf)
+      }
+    assert(caught.getMessage === "Can't get Master Kerberos principal for use as renewer")
+  }
+
   object Fixtures {
 
     val knownDefYarnAppCP: Seq[String] =
@@ -147,9 +198,10 @@ class ClientBaseSuite extends FunSuite with Matchers {
 
 
     val knownDefMRAppCP: Seq[String] =
-      getFieldValue[String, Seq[String]](classOf[MRJobConfig],
-                                         "DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH",
-                                         Seq[String]())(a => a.split(","))
+      getFieldValue2[String, Array[String], Seq[String]](
+        classOf[MRJobConfig],
+        "DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH",
+        Seq[String]())(a => a.split(","))(a => a.toSeq)
 
     val knownYARNAppCP = Some(Seq("/known/yarn/path"))
 
@@ -179,18 +231,26 @@ class ClientBaseSuite extends FunSuite with Matchers {
   def getFieldValue[A, B](clazz: Class[_], field: String, defaults: => B)(mapTo: A => B): B =
     Try(clazz.getField(field)).map(_.get(null).asInstanceOf[A]).toOption.map(mapTo).getOrElse(defaults)
 
+  def getFieldValue2[A: ClassTag, A1: ClassTag, B](
+        clazz: Class[_],
+        field: String,
+        defaults: => B)(mapTo:  A => B)(mapTo1: A1 => B) : B = {
+    Try(clazz.getField(field)).map(_.get(null)).map {
+      case v: A => mapTo(v)
+      case v1: A1 => mapTo1(v1)
+      case _ => defaults
+    }.toOption.getOrElse(defaults)
+  }
+
   private class DummyClient(
       val args: ClientArguments,
-      val conf: Configuration,
+      val hadoopConf: Configuration,
       val sparkConf: SparkConf,
       val yarnConf: YarnConfiguration) extends ClientBase {
-
-    override def calculateAMMemory(newApp: GetNewApplicationResponse): Int =
-      throw new UnsupportedOperationException()
-
-    override def setupSecurityToken(amContainer: ContainerLaunchContext): Unit =
-      throw new UnsupportedOperationException()
-
+    override def setupSecurityToken(amContainer: ContainerLaunchContext): Unit = ???
+    override def submitApplication(): ApplicationId = ???
+    override def getApplicationReport(appId: ApplicationId): ApplicationReport = ???
+    override def getClientToken(report: ApplicationReport): String = ???
   }
 
 }

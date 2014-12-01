@@ -1,3 +1,4 @@
+set hive.fetch.task.conversion=more;
 
 -- Cast from varchar to other data types
 select

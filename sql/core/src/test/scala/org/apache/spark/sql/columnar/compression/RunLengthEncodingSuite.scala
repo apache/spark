@@ -19,12 +19,13 @@ package org.apache.spark.sql.columnar.compression
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 
 class RunLengthEncodingSuite extends FunSuite {
-  testRunLengthEncoding(new BooleanColumnStats, BOOLEAN)
+  testRunLengthEncoding(new NoopColumnStats, BOOLEAN)
   testRunLengthEncoding(new ByteColumnStats,    BYTE)
   testRunLengthEncoding(new ShortColumnStats,   SHORT)
   testRunLengthEncoding(new IntColumnStats,     INT)
@@ -32,7 +33,7 @@ class RunLengthEncodingSuite extends FunSuite {
   testRunLengthEncoding(new StringColumnStats,  STRING)
 
   def testRunLengthEncoding[T <: NativeType](
-      columnStats: NativeColumnStats[T],
+      columnStats: ColumnStats,
       columnType: NativeColumnType[T]) {
 
     val typeName = columnType.getClass.getSimpleName.stripSuffix("$")
@@ -57,7 +58,7 @@ class RunLengthEncodingSuite extends FunSuite {
       // Compression scheme ID + compressed contents
       val compressedSize = 4 + inputRuns.map { case (index, _) =>
         // 4 extra bytes each run for run length
-        columnType.actualSize(values(index)) + 4
+        columnType.actualSize(rows(index), 0) + 4
       }.sum
 
       // 4 extra bytes for compression scheme type ID
@@ -80,11 +81,15 @@ class RunLengthEncodingSuite extends FunSuite {
       buffer.rewind().position(headerSize + 4)
 
       val decoder = RunLengthEncoding.decoder(buffer, columnType)
+      val mutableRow = new GenericMutableRow(1)
 
       if (inputSeq.nonEmpty) {
         inputSeq.foreach { i =>
           assert(decoder.hasNext)
-          assertResult(values(i), "Wrong decoded value")(decoder.next())
+          assertResult(values(i), "Wrong decoded value") {
+            decoder.next(mutableRow, 0)
+            columnType.getField(mutableRow, 0)
+          }
         }
       }
 

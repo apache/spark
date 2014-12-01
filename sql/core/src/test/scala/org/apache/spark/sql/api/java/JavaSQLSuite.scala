@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.api.java
 
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
+
 import scala.beans.BeanProperty
 
 import org.scalatest.FunSuite
@@ -45,6 +47,9 @@ class AllTypesBean extends Serializable {
   @BeanProperty var shortField: java.lang.Short = _
   @BeanProperty var byteField: java.lang.Byte = _
   @BeanProperty var booleanField: java.lang.Boolean = _
+  @BeanProperty var dateField: java.sql.Date = _
+  @BeanProperty var timestampField: java.sql.Timestamp = _
+  @BeanProperty var bigDecimalField: java.math.BigDecimal = _
 }
 
 class JavaSQLSuite extends FunSuite {
@@ -59,7 +64,7 @@ class JavaSQLSuite extends FunSuite {
     val rdd = javaCtx.parallelize(person :: Nil)
     val schemaRDD = javaSqlCtx.applySchema(rdd, classOf[PersonBean])
 
-    schemaRDD.registerAsTable("people")
+    schemaRDD.registerTempTable("people")
     javaSqlCtx.sql("SELECT * FROM people").collect()
   }
 
@@ -73,19 +78,46 @@ class JavaSQLSuite extends FunSuite {
     bean.setShortField(0.toShort)
     bean.setByteField(0.toByte)
     bean.setBooleanField(false)
+    bean.setDateField(java.sql.Date.valueOf("2014-10-10"))
+    bean.setTimestampField(java.sql.Timestamp.valueOf("2014-10-10 00:00:00.0"))
+    bean.setBigDecimalField(new java.math.BigDecimal(0))
 
     val rdd = javaCtx.parallelize(bean :: Nil)
     val schemaRDD = javaSqlCtx.applySchema(rdd, classOf[AllTypesBean])
-    schemaRDD.registerAsTable("allTypes")
+    schemaRDD.registerTempTable("allTypes")
 
     assert(
       javaSqlCtx.sql(
         """
           |SELECT stringField, intField, longField, floatField, doubleField, shortField, byteField,
-          |       booleanField
+          |       booleanField, dateField, timestampField, bigDecimalField
           |FROM allTypes
         """.stripMargin).collect.head.row ===
-      Seq("", 0, 0L, 0F, 0.0, 0.toShort, 0.toByte, false))
+      Seq("", 0, 0L, 0F, 0.0, 0.toShort, 0.toByte, false, java.sql.Date.valueOf("2014-10-10"),
+        java.sql.Timestamp.valueOf("2014-10-10 00:00:00.0"), scala.math.BigDecimal(0)))
+  }
+
+  test("decimal types in JavaBeans") {
+    val bean = new AllTypesBean
+    bean.setStringField("")
+    bean.setIntField(0)
+    bean.setLongField(0)
+    bean.setFloatField(0.0F)
+    bean.setDoubleField(0.0)
+    bean.setShortField(0.toShort)
+    bean.setByteField(0.toByte)
+    bean.setBooleanField(false)
+    bean.setDateField(java.sql.Date.valueOf("2014-10-10"))
+    bean.setTimestampField(java.sql.Timestamp.valueOf("2014-10-10 00:00:00.0"))
+    bean.setBigDecimalField(new java.math.BigDecimal(0))
+
+    val rdd = javaCtx.parallelize(bean :: Nil)
+    val schemaRDD = javaSqlCtx.applySchema(rdd, classOf[AllTypesBean])
+    schemaRDD.registerTempTable("decimalTypes")
+
+    assert(javaSqlCtx.sql(
+      "select bigDecimalField + bigDecimalField from decimalTypes"
+    ).collect.head.row === Seq(scala.math.BigDecimal(0)))
   }
 
   test("all types null in JavaBeans") {
@@ -98,19 +130,22 @@ class JavaSQLSuite extends FunSuite {
     bean.setShortField(null)
     bean.setByteField(null)
     bean.setBooleanField(null)
+    bean.setDateField(null)
+    bean.setTimestampField(null)
+    bean.setBigDecimalField(null)
 
     val rdd = javaCtx.parallelize(bean :: Nil)
     val schemaRDD = javaSqlCtx.applySchema(rdd, classOf[AllTypesBean])
-    schemaRDD.registerAsTable("allTypes")
+    schemaRDD.registerTempTable("allTypes")
 
     assert(
       javaSqlCtx.sql(
         """
           |SELECT stringField, intField, longField, floatField, doubleField, shortField, byteField,
-          |       booleanField
+          |       booleanField, dateField, timestampField, bigDecimalField
           |FROM allTypes
         """.stripMargin).collect.head.row ===
-        Seq.fill(8)(null))
+        Seq.fill(11)(null))
   }
 
   test("loads JSON datasets") {
@@ -127,7 +162,7 @@ class JavaSQLSuite extends FunSuite {
 
     var schemaRDD = javaSqlCtx.jsonRDD(rdd)
 
-    schemaRDD.registerAsTable("jsonTable1")
+    schemaRDD.registerTempTable("jsonTable1")
 
     assert(
       javaSqlCtx.sql("select * from jsonTable1").collect.head.row ===
@@ -144,7 +179,7 @@ class JavaSQLSuite extends FunSuite {
     rdd.saveAsTextFile(path)
     schemaRDD = javaSqlCtx.jsonFile(path)
 
-    schemaRDD.registerAsTable("jsonTable2")
+    schemaRDD.registerTempTable("jsonTable2")
 
     assert(
       javaSqlCtx.sql("select * from jsonTable2").collect.head.row ===
