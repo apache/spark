@@ -60,7 +60,7 @@ private[spark] class TaskSetManager(
    * this temporarily prevents a task from re-launching on an executor where
    * it just failed.
    */
-  private val EXECUTOR_TASK_BLACKLIST_TIMEOUT =
+  private val TASK_BLACKLIST_TIMEOUT =
     conf.getLong("spark.scheduler.executorTaskBlacklistTime", 0L)
 
   // Quantile of tasks at which to start speculation
@@ -254,7 +254,7 @@ private[spark] class TaskSetManager(
     while (indexOffset > 0) {
       indexOffset -= 1
       val index = list(indexOffset)
-      if (!executorIsBlacklisted(host, index)) {
+      if (!hostIsBlacklisted(host, index)) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
         if (copiesRunning(index) == 0 && !successful(index)) {
@@ -271,15 +271,15 @@ private[spark] class TaskSetManager(
   }
 
   /**
-   * Is this re-execution of a failed task on an executor it already failed in before
-   * EXECUTOR_TASK_BLACKLIST_TIMEOUT has elapsed ?
+   * Is this re-execution of a failed task on an host it already failed in before
+   * TASK_BLACKLIST_TIMEOUT has elapsed ?
    */
-  private def executorIsBlacklisted(host: String, taskId: Int): Boolean = {
+  private def hostIsBlacklisted(host: String, taskId: Int): Boolean = {
     if (failedHosts.contains(taskId)) {
       val hosts = failedHosts.get(taskId).get
 
       return hosts.contains(host) &&
-        clock.getTime() - hosts.get(host).get < EXECUTOR_TASK_BLACKLIST_TIMEOUT
+        clock.getTime() - hosts.get(host).get < TASK_BLACKLIST_TIMEOUT
     }
 
     false
@@ -296,7 +296,7 @@ private[spark] class TaskSetManager(
     speculatableTasks.retain(index => !successful(index)) // Remove finished tasks from set
 
     def canRunOnHost(index: Int): Boolean =
-      !hasAttemptOnHost(index, host) && !executorIsBlacklisted(host, index)
+      !hasAttemptOnHost(index, host) && !hostIsBlacklisted(host, index)
 
     if (!speculatableTasks.isEmpty) {
       // Check for process-local tasks; note that tasks can be process-local
