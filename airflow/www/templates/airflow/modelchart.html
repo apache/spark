@@ -1,0 +1,25 @@
+{% extends "airflow/master.html" %}
+{% block title %}Chart{% endblock %}
+
+{% block tail %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='highcharts.js') }}"></script>
+    <script src="/ck/static/chartkick.js"></script>
+    <div class="container">
+        <h2>{{ chart.label }}</h2>
+        {% if chart.chart_type == "area_chart" %}
+            {% area_chart data with height=height library=chart_options%}
+        {% elif chart.chart_type == "line_chart" %}
+            {% line_chart data with height=height library=chart_options%}
+        {% elif chart.chart_type == "bar_chart" %}
+            {% bar_chart data with height=height library=chart_options%}
+        {% elif chart.chart_type == "column_chart" %}
+            {% column_chart data with height=height library=chart_options%}
+        {% endif %}
+        {% if chart.show_datatable %}
+            <h4>Data</h4>
+            {{ table }}
+        {% endif %}
+        {{ sql }}
+    </div>
+{% endblock %}

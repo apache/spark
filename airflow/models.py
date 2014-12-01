@@ -8,10 +8,14 @@ import pickle
 import re
 from time import sleep
 
-from sqlalchemy import Column, Integer, String, DateTime, func
+from sqlalchemy import (
+        Column, Integer, String, DateTime, Text, Boolean, ForeignKey)
+from sqlalchemy import func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.serializer import loads, dumps
 from sqlalchemy.dialects.mysql import LONGTEXT
+from sqlalchemy.orm import relationship
+
 from airflow.executors import DEFAULT_EXECUTOR
 from airflow.configuration import getconf
 from airflow import settings
@@ -145,6 +149,9 @@ class DatabaseConnection(Base):
             return hooks.HiveHook(hive_dbid=self.db_id)
         elif self.db_type == 'presto':
             return hooks.PrestoHook(presto_dbid=self.db_id)
+
+    def __repr__(self):
+        return self.db_id
 
 
 class DagPickle(Base):
@@ -1156,3 +1163,19 @@ class DAG(Base):
         job.end_date = datetime.now()
         session.merge(job)
         session.commit()
+
+
+class Chart(Base):
+    __tablename__ = "chart"
+
+    id = Column(Integer, primary_key=True)
+
+    label = Column(String(200))
+    db_id = Column(String(ID_LEN), ForeignKey('db_connection.db_id'))
+    chart_type = Column(String(100), default="line_chart")
+    sql = Column(Text, default="SELECT series, x, y FROM table")
+    show_datatable = Column(Boolean)
+    height = Column(Integer, default=600)
+    default_params = Column(String(5000), default="{}")
+    db = relationship("DatabaseConnection")
+
