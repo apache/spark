@@ -40,8 +40,8 @@ object SerializationState extends Enumeration {
  * problems in the DAGScheduler and the TaskSetManager. See SPARK-3694.
  */
 object SerializationHelper {
-  type SerializedRdd = Either[String,ByteBuffer]
-    
+  type SerializedRdd = Either[String, ByteBuffer]
+
   /**
    * Helper function to check whether an RDD is serializable.
    *
@@ -59,47 +59,46 @@ object SerializationHelper {
    * @param rdd - Rdd to attempt to serialize
    * @return SerializedRdd - If serialization is successful, return the serialized bytes, else 
    *                         return a String, which clarifies why things failed. 
-   *                          
-   *           
+   *
+   *
    */
-  def tryToSerialize(closureSerializer : SerializerInstance, 
-                     rdd : RDD[_]) : SerializedRdd = {
+  def tryToSerialize(closureSerializer: SerializerInstance,
+                     rdd: RDD[_]): SerializedRdd = {
     val result: SerializedRdd = try {
       Right(closureSerializer.serialize(rdd: AnyRef))
     } catch {
-      case e: NotSerializableException =>
-        Left(handleFailure(closureSerializer, rdd))
+      case e: NotSerializableException => Left(handleFailure(closureSerializer, rdd))
 
-      case NonFatal(e) =>
-        Left(handleFailure(closureSerializer, rdd))
-    }  
-    
+      case NonFatal(e) => Left(handleFailure(closureSerializer, rdd))
+    }
+
     result
   }
-  
+
   /**
    * Helper function to separate an un-serializable parent rdd from un-serializable dependencies 
    * @param closureSerializer - An instance of a serializer (single-threaded) that will be used
    * @param rdd - Rdd to attempt to serialize
    * @return String - Return a String (SerializationFailure), which clarifies why the serialization 
-   *                  failed.
+   *                 failed.
    */
-  def handleFailure(closureSerializer : SerializerInstance, 
-                    rdd: RDD[_]): String ={
-    try {
-      rdd.dependencies.foreach(dep => closureSerializer.serialize(dep : AnyRef))
-
-      // By default, return a failure since we still failed to serialize the parent RDD
-      // Now, however, we know that the dependencies are serializable
+  def handleFailure(closureSerializer: SerializerInstance,
+                    rdd: RDD[_]): String = {
+    if (rdd.dependencies.nonEmpty) {
+      try {
+        rdd.dependencies.foreach(dep => closureSerializer.serialize(dep: AnyRef))
+        
+        //By default return a parent failure since we know that the parent already failed
+        SerializationState.Failed
+      } catch {
+        // If instead, however, the dependencies ALSO fail to serialize then the subsequent stage
+        // of evaluation will help identify which of the dependencies has failed 
+        case e: NotSerializableException => SerializationState.FailedDeps
+        case NonFatal(e) => SerializationState.FailedDeps
+      }
+    }
+    else {
       SerializationState.Failed
-    } catch {
-      // If instead, however, the dependencies ALSO fail to serialize then the subsequent stage
-      // of evaluation will help identify which of the dependencies has failed 
-      case e: NotSerializableException =>
-        SerializationState.FailedDeps
-
-      case NonFatal(e) =>
-        SerializationState.FailedDeps
     }
   }
 
@@ -111,9 +110,9 @@ object SerializationHelper {
    * @param addedJars - The JAR dependencies
    * @return String - The task and dependencies as a string
    */
-  def taskDebugString(task : Task[_], 
-                              addedFiles : HashMap[String,Long],
-                              addedJars : HashMap[String,Long]): String ={
+  def taskDebugString(task: Task[_],
+                      addedFiles: HashMap[String, Long],
+                      addedJars: HashMap[String, Long]): String = {
     val taskStr = "[" + task.toString + "] \n"
     val strPrefix = s"--  "
     val nl = s"\n"

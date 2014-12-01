@@ -247,7 +247,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     runEvent(JobCancelled(jobId))
   }
   
-  test("Serialization trace for unserializable task") {
+  test("Serialization trace for un-serializable task") {
     val unserializableRdd = new MyRDD(sc, 1, Nil) {
       class UnserializableClass
       val unserializable = new UnserializableClass
@@ -259,7 +259,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     assert(trace(0).isLeft) //Failed to serialize
   }
 
-  test("Serialization trace for unserializable task with serializable dependencies") {
+  test("Serialization trace for un-serializable task with serializable dependencies") {
     // The trace should show which nested dependency is unserializable
 
     val baseRdd = new MyRDD(sc, 1, Nil)
@@ -271,18 +271,18 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
 
     val trace : Array[SerializedRdd] = scheduler.tryToSerialize(finalRdd)
     
+    // Generate results array as (Success/Failure (Boolean) , ResultString (String))
     val results = Array((false, SerializationState.Failed),
       (true, SerializationState.Success),
       (true, SerializationState.Success))
     
-    val zipped : Array[(SerializedRdd,Int)] = scheduler.tryToSerialize(finalRdd).zipWithIndex
+    val zipped : Array[(SerializedRdd, Int)] = scheduler.tryToSerialize(finalRdd).zipWithIndex
     zipped.map({
-       case (serializationState : SerializedRdd, idx : Int) => {
+       case (serializationState : SerializedRdd, idx : Int) => 
          serializationState match {
            case Right(r) => assert(results(idx)._1) //Success
            case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
          }
-       }
     })
   }
 
@@ -297,18 +297,18 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     val midRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
     val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(midRdd)))
 
-    val results = Array((false, SerializationState.Success),
-      (true, SerializationState.FailedDeps),
-      (true, SerializationState.Failed))
+    // Generate results array as (Success/Failure (Boolean) , ResultString (String))
+    val results = Array((false, SerializationState.FailedDeps),
+      (false, SerializationState.FailedDeps),
+      (false, SerializationState.Failed))
 
-    val zipped : Array[(SerializedRdd,Int)] = scheduler.tryToSerialize(finalRdd).zipWithIndex
+    val zipped : Array[(SerializedRdd, Int)] = scheduler.tryToSerialize(finalRdd).zipWithIndex
     zipped.map({
-      case (serializationState : SerializedRdd, idx : Int) => {
+      case (serializationState : SerializedRdd, idx : Int) =>
         serializationState match {
           case Right(r) => assert(results(idx)._1) //Success
           case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
         }
-      }
     })
     
   }
@@ -322,18 +322,19 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       val unserializable = new UnserializableClass
     }
     val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(midRdd)))
+
+    // Generate results array as (Success/Failure (Boolean) , ResultString (String))
     val results = Array((false, SerializationState.FailedDeps),
-      (true, SerializationState.Failed),
+      (false, SerializationState.Failed),
       (true, SerializationState.Success))
 
-    val zipped : Array[(SerializedRdd,Int)] = scheduler.tryToSerialize(finalRdd).zipWithIndex
+    val zipped : Array[(SerializedRdd, Int)] = scheduler.tryToSerialize(finalRdd).zipWithIndex
     zipped.map({
-      case (serializationState : SerializedRdd, idx : Int) => {
+      case (serializationState : SerializedRdd, idx : Int) =>
         serializationState match {
           case Right(r) => assert(results(idx)._1) //Success
           case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
         }
-      }
     })
   }
 
