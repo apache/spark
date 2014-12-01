@@ -1057,6 +1057,7 @@ Spark SQL supports the vast majority of Hive features, such as:
   * `STRING`
   * `BINARY`
   * `TIMESTAMP`
+  * `DATE`
   * `ARRAY<>`
   * `MAP<>`
   * `STRUCT<>`
@@ -1157,6 +1158,7 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
 * Datetime type
     - `TimestampType`: Represents values comprising values of fields year, month, day,
     hour, minute, and second.
+    - `DateType`: Represents values comprising values of fields year, month, day.
 * Complex types
     - `ArrayType(elementType, containsNull)`: Represents values comprising a sequence of
     elements with the type of `elementType`. `containsNull` is used to indicate if
@@ -1262,6 +1264,13 @@ import  org.apache.spark.sql._
   <td> java.sql.Timestamp </td>
   <td>
   TimestampType
+  </td>
+</tr>
+<tr>
+  <td> <b>DateType</b> </td>
+  <td> java.sql.Date </td>
+  <td>
+  DateType
   </td>
 </tr>
 <tr>
@@ -1388,6 +1397,13 @@ please use factory methods provided in
   <td> java.sql.Timestamp </td>
   <td>
   DataType.TimestampType
+  </td>
+</tr>
+<tr>
+  <td> <b>DateType</b> </td>
+  <td> java.sql.Date </td>
+  <td>
+  DataType.DateType
   </td>
 </tr>
 <tr>
@@ -1535,6 +1551,13 @@ from pyspark.sql import *
   <td> datetime.datetime </td>
   <td>
   TimestampType()
+  </td>
+</tr>
+<tr>
+  <td> <b>DateType</b> </td>
+  <td> datetime.date </td>
+  <td>
+  DateType()
   </td>
 </tr>
 <tr>
