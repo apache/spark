@@ -19,7 +19,7 @@ class BaseExecutor(object):
     def queue_command(self, key, command):
         """
         """
-        if key not in self.commands or self.commands[key] in State.runnable():
+        if key not in self.commands or self.commands[key] != State.QUEUED:
             logging.info("Adding to queue: " + command)
             self.commands[key] = State.QUEUED
             self.execute_async(key, command)
