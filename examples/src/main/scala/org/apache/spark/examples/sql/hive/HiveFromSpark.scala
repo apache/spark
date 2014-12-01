@@ -28,9 +28,10 @@ object HiveFromSpark {
     val sparkConf = new SparkConf().setAppName("HiveFromSpark")
     val sc = new SparkContext(sparkConf)
 
-    // A local hive context creates an instance of the Hive Metastore in process, storing 
-    // the warehouse data in the current directory.  This location can be overridden by
-    // specifying a second parameter to the constructor.
+    // A hive context adds support for finding tables in the MetaStore and writing queries
+    // using HiveQL. Users who do not have an existing Hive deployment can still create a
+    // HiveContext. When not configured by the hive-site.xml, the context automatically
+    // creates metastore_db and warehouse in the current directory.
     val hiveContext = new HiveContext(sc)
     import hiveContext._
 
