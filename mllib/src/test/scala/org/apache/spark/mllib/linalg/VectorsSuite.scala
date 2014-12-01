@@ -218,7 +218,7 @@ class VectorsSuite extends FunSuite {
 
     assert(Vectors.norm(dv, 3.7) ~== math.pow(dv.toArray.foldLeft(0.0)((a, v) =>
       a + math.pow(math.abs(v), 3.7)), 1.0 / 3.7) relTol 1E-8)
-    assert(Vectors.norm(sv, 3.7) ~== math.pow(dv.toArray.foldLeft(0.0)((a, v) =>
+    assert(Vectors.norm(sv, 3.7) ~== math.pow(sv.toArray.foldLeft(0.0)((a, v) =>
       a + math.pow(math.abs(v), 3.7)), 1.0 / 3.7) relTol 1E-8)
   }
 }
