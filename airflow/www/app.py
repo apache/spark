@@ -14,6 +14,8 @@ from pygments import highlight
 from pygments.lexers import PythonLexer, SqlLexer, BashLexer
 from pygments.formatters import HtmlFormatter
 
+import jinja2
+
 
 import markdown
 import chartkick
@@ -113,6 +115,51 @@ class Airflow(BaseView):
         session.commit()
         session.close()
         return self.render('airflow/query.html', form=form, results=results)
+
+    @expose('/chart')
+    def chart(self):
+        session = settings.Session()
+        chart_id = request.args.get('chart_id')
+        chart = session.query(models.Chart).filter_by(id=chart_id).all()[0]
+        db = session.query(
+            models.DatabaseConnection).filter_by(db_id=chart.db_id).all()[0]
+        session.expunge_all()
+
+        all_data = {}
+        hook = db.get_hook()
+        jt = jinja2.Template(chart.sql)
+        try:
+            args = eval(chart.default_params)
+        except:
+            args = {}
+        request_dict = {k:request.args.get(k) for k in request.args}
+        args.update(request_dict)
+        sql = jt.render(**args)
+        df = hook.get_pandas_df(sql)
+
+        for i, (series, x, y) in df.iterrows():
+            if series not in all_data:
+                all_data[series] = []
+            all_data[series].append([x.isoformat(), float(y)])
+        all_data = [
+                {'name': series, 'data': sorted(data, key=lambda r: r[0])}
+            for series, data in all_data.items()
+        ]
+        height = "{}px".format(chart.height)
+
+        table = None
+        if chart.show_datatable:
+            table = df.to_html(classes='table table-striped table-bordered')
+
+        response = self.render(
+            'airflow/modelchart.html',
+            chart=chart, data=all_data, table=Markup(table),
+            chart_options={},
+            height=height,
+            sql=sql)
+        session.commit()
+        session.close()
+        return response
 
     @expose('/code')
     def code(self):
@@ -602,3 +649,24 @@ admin.add_link(
         category='Docs',
         name='Github',
         url='https://github.com/mistercrunch/Airflow'))
+
+
+def chart_link(v, c, m, p):
+    url = url_for('airflow.chart', chart_id=m.id)
+    return Markup("<a href='{url}'>{m.label}</a>".format(**locals()))
+
+class ChartModelView(ModelView):
+    column_list = ('label', 'db_id', 'chart_type', 'show_datatable', )
+    column_formatters = dict(label=chart_link)
+    form_choices = {
+        'chart_type': [
+            ('line_chart', 'Line Chart'),
+            ('bar_chart', 'Bar Chart'),
+            ('column_chart', 'Column Chart'),
+            ('area_chart', 'Area Chart'),
+        ]
+    }
+mv = ChartModelView(
+    models.Chart, session,
+    name="Charts", category="Admin")
+admin.add_view(mv)
