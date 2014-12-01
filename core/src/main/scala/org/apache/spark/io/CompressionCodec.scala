@@ -45,7 +45,7 @@ trait CompressionCodec {
   def compressedInputStream(s: InputStream): InputStream
 }
 
-private[spark] object CompressionCodec extends Logging {
+private[spark] object CompressionCodec {
 
   private val configKey = "spark.io.compression.codec"
   private val shortCompressionCodecNames = Map(
