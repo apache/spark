@@ -529,7 +529,8 @@ def dag_link(v, c, m, p):
         '<a href="{url}">{m.dag_id}</a>'.format(**locals()))
 
 def duration_f(v, c, m, p):
-    return timedelta(seconds=m.duration)
+    if m.end_date:
+        return timedelta(seconds=m.duration)
 
 class TaskInstanceModelView(ModelViewOnly):
     column_filters = ('dag_id', 'task_id', 'state', 'execution_date')
