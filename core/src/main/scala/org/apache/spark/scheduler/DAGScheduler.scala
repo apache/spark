@@ -842,7 +842,7 @@ class DAGScheduler(
     
     val it = results.iterator
     while(it.hasNext){
-      trace += it.next().fold(l => l, r=> SerializationState.Success) + "\n"
+      trace += rdd.name + ": " + it.next().fold(l => l, r=> SerializationState.Success) + "\n"
     }
     trace
   }

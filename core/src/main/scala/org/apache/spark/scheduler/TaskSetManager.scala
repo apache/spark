@@ -460,7 +460,8 @@ private[spark] class TaskSetManager(
           // we assume the task can be serialized without exceptions.
 
           // Check if serialization debugging is enabled
-          val debugSerialization: Boolean = sched.sc.getConf.getBoolean("spark.serializer.debug", false)
+          val debugSerialization: Boolean = sched.sc.getConf.
+            getBoolean("spark.serializer.debug", false)
           
           // If enabled, print out the added JARs and files (as part of the context)
           if(debugSerialization) {

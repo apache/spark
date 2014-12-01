@@ -88,7 +88,7 @@ object SerializationHelper {
       try {
         rdd.dependencies.foreach(dep => closureSerializer.serialize(dep: AnyRef))
         
-        //By default return a parent failure since we know that the parent already failed
+        // By default return a parent failure since we know that the parent already failed
         SerializationState.Failed
       } catch {
         // If instead, however, the dependencies ALSO fail to serialize then the subsequent stage
