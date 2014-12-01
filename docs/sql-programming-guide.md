@@ -892,7 +892,6 @@ export HIVE_SERVER2_THRIFT_BIND_HOST=<listening-host>
 ./sbin/start-thriftserver.sh \
   --master <master-uri> \
   ...
-```
 {% endhighlight %}
 
 or system properties:
@@ -903,7 +902,6 @@ or system properties:
   --hiveconf hive.server2.thrift.bind.host=<listening-host> \
   --master <master-uri>
   ...
-```
 {% endhighlight %}
 
 Now you can use beeline to test the Thrift JDBC server:
