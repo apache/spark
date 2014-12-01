@@ -276,13 +276,11 @@ private[spark] class TaskSetManager(
    */
   private def hostIsBlacklisted(host: String, taskId: Int): Boolean = {
     if (failedHostsPerTask.contains(taskId)) {
-      val hosts = failedHostsPerTask.get(taskId).get
-
-      return hosts.contains(host) &&
-        clock.getTime() - hosts.get(host).get < TASK_BLACKLIST_TIMEOUT
+      val hosts = failedHostsPerTask(taskId)
+      hosts.contains(host) && (clock.getTime() - hosts(host) < TASK_BLACKLIST_TIMEOUT)
+    } else {
+      false
     }
-
-    false
   }
 
   /**
@@ -643,7 +641,7 @@ private[spark] class TaskSetManager(
     }
     // always add to failed executors
     failedHostsPerTask.getOrElseUpdate(index, new HashMap[String, Long]()).
-      put(info.executorId, clock.getTime())
+      put(info.host, clock.getTime())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
     addPendingTask(index)
     if (!isZombie && state != TaskState.KILLED) {
