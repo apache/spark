@@ -33,11 +33,11 @@ class LocalWorker(multiprocessing.Process):
             ).format(**locals())
             try:
                 subprocess.Popen(command, shell=True).wait()
+                state = State.SUCCESS
             except Exception as e:
                 state = State.FAILED
                 logging.error(str(e))
                 # raise e
-            state = State.SUCCESS
             self.result_queue.put((key, state))
             self.task_queue.task_done()
             time.sleep(1)
