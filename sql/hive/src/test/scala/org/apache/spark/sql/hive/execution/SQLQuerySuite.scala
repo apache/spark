@@ -168,4 +168,11 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(sql("SELECT key FROM src WHERE key not between 0 and 10 order by key"), 
         sql("SELECT key FROM src WHERE key between 11 and 500 order by key").collect().toSeq)
   }
+
+ test("Supporting Coalesce function in Spark SQL") {
+   sql("SELECT * FROM src where key=477").registerTempTable("src1")
+   checkAnswer(sql("SELECT COALESCE(src1.key,src.key) FROM src left outer join src1 "
+       +"on src.key=src1.key order by src.key,src1.key"), 
+       sql("SELECT key FROM src order by key").collect().toSeq)
+  }
 }

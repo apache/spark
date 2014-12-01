@@ -219,6 +219,27 @@ trait HiveTypeCoercion {
               if (b.right.dataType == widestType) b.right else Cast(b.right, widestType)
             b.makeCopy(Array(newLeft, newRight))
           }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
+
+          case c @ Coalesce(exps) =>
+          val valueTypes = exps.map (_.dataType)
+          if (valueTypes.distinct.size > 1) {
+            val commonType = valueTypes.reduce { (v1, v2) =>
+              // When a string is found on one side, make the other side a string too.
+              if (v1 == StringType || v2 == StringType) {
+                StringType
+              } else {
+                findTightestCommonType(v1, v2)
+                  .getOrElse(sys.error(
+                   s"Types in Coalesce must be the same or coercible to a common type: $v1 != $v2"))
+              }
+            }
+            val transformedExps = exps.map {value=>
+              if (value.dataType != commonType) Cast(value, commonType) else value
+            }
+            Coalesce(transformedExps)
+          } else {
+            c
+          }
       }
     }
   }
