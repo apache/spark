@@ -1515,16 +1515,21 @@ setMethod("cogroup",
             for (i in 1:rddsLen) {
               rdds[[i]] <- lapply(rdds[[i]], 
                                   function(x) { list(x[[1]], list(i, x[[2]])) })
+              # TODO(hao): As issue [SparkR-142] mentions, the right value of i
+              # will not be captured into UDF if getJRDD is not invoked.
+              # It should be resolved together with that issue.
               getJRDD(rdds[[i]])  # Capture the closure.
             }
             union.rdd <- Reduce(unionRDD, rdds)
             group.func <- function(vlist) {
               res <- list()
               length(res) <- rddsLen
-              for (i in 1:rddsLen) {
-                tmp <- Filter(function(x) { x[[1]] == i }, vlist)
-                tmp <- lapply(tmp, function(x) { x[[2]] })
-                res[[i]] <- tmp
+              for (i in 1:length(res)) {
+                res[[i]] <- list()
+              }
+              for (x in vlist) {
+                i <- x[[1]]
+                res[[i]] <- c(res[[i]], x[[2]])
               }
               res
             }
