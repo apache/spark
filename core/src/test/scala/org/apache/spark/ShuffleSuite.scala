@@ -270,7 +270,6 @@ object ShuffleSuite {
 
   def mergeCombineException(x: Int, y: Int): Int = {
     throw new SparkException("Exception for map-side combine.")
-    x + y
   }
 
   class NonJavaSerializableClass(val value: Int) extends Comparable[NonJavaSerializableClass] {
