@@ -77,8 +77,7 @@ case class OrcTableScan(
 
   override def execute(): RDD[Row] = {
     val sc = sqlContext.sparkContext
-    val job = new Job(sc.hadoopConfiguration)
-
+    val job = new Job(OrcRelation.jobConf) // sc.hadoopConfiguration)
     val conf: Configuration = job.getConfiguration
     relation.path.split(",").foreach { curPath =>
       val qualifiedPath = {
@@ -110,17 +109,15 @@ case class OrcTableScan(
    * @param conf
    */
   def addColumnIds(output: Seq[Attribute], relation: OrcRelation, conf: Configuration) {
-    val fieldIdMap = relation.output.map(_.name).zipWithIndex.toMap
-    val names = output.map(_.name)
-    val ids = output.map { att =>
-      val realName = att.name.toLowerCase(Locale.ENGLISH)
-      fieldIdMap.getOrElse(realName, -1)
-    }.filter(_ >= 0).map(_.asInstanceOf[Integer])
 
+    val ids =
+      output.map(a =>
+        relation.output.indexWhere(_.name == a.name): Integer)
+        .filter(_ >= 0)
+    val names = output.map(_.name)
     assert(ids.size == names.size, "columns id and name length does not match!")
-    if (ids != null && !ids.isEmpty) {
-      HiveShim.appendReadColumns(conf, ids, names)
-    }
+    val sorted = ids.zip(names).sorted
+    HiveShim.appendReadColumns(conf, sorted.map(_._1), sorted.map(_._2))
   }
 }
 
