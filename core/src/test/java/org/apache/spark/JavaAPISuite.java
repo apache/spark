@@ -1381,7 +1381,7 @@ public class JavaAPISuite implements Serializable {
       data.add(new SomeCustomClass());
     }
     JavaRDD<SomeCustomClass> rdd = sc.parallelize(data);
-    SomeCustomClass[] collected = (SomeCustomClass[]) rdd.rdd().retag(SomeCustomClass.class).collect();
+    SomeCustomClass[] collected = rdd.rdd().retag(SomeCustomClass.class).collect();
     Assert.assertEquals(data.size(), collected.length);
   }
 
