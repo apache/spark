@@ -375,7 +375,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val maybeInput = metrics.flatMap(_.inputMetrics)
       val inputSortable = maybeInput.map(_.bytesRead.toString).getOrElse("")
       val inputReadable = maybeInput
-        .map(m => s"${Utils.bytesToString(m.bytesRead)} (${m.readMethod.toString.toLowerCase()})")
+        .map(m => s"${Utils.bytesToString(m.bytesRead)} (${m.readMethod.toString.toLowerCase()}) (${Utils.nanoTimeToString(m.readTime)})")
         .getOrElse("")
 
       val maybeOutput = metrics.flatMap(_.outputMetrics)

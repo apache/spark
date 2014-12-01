@@ -155,7 +155,8 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
     val inputMetrics = taskMetrics.inputMetrics match {
       case Some(metrics) =>
         " READ_METHOD=" + metrics.readMethod.toString +
-        " INPUT_BYTES=" + metrics.bytesRead
+        " INPUT_BYTES=" + metrics.bytesRead +
+        " READ_TIME=" + metrics.readTime
       case None => ""
     }
     val outputMetrics = taskMetrics.outputMetrics match {

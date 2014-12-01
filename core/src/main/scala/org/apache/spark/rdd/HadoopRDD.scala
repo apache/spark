@@ -238,10 +238,13 @@ class HadoopRDD[K, V](
       val value: V = reader.createValue()
 
       var recordsSinceMetricsUpdate = 0
+      var startTime : Long = 0L
 
       override def getNext() = {
         try {
+          startTime = System.nanoTime
           finished = !reader.next(key, value)
+          inputMetrics.readTime += (System.nanoTime - startTime)
         } catch {
           case eof: EOFException =>
             finished = true
