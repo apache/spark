@@ -213,7 +213,7 @@ def master(args):
                         )
                         ti.refresh_from_db()
                         if ti.is_runnable():
-                            logging.debug('Adding to queue: ' + str(ti))
+                            logging.debug('Queuing next run: ' + str(ti))
                             executor.queue_command(ti.key, ti.command())
                 executor.heartbeat()
             session.close()

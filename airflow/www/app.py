@@ -142,10 +142,10 @@ class Airflow(BaseView):
                 all_data[series] = []
             all_data[series].append([x.isoformat(), float(y)])
         all_data = [
-                {'name': series, 'data': sorted(data, key=lambda r: r[0])}
-            for series, data in all_data.items()
+            {'name': series, 'data': sorted(all_data[series], key=lambda r: r[0])}
+            for series in sorted(all_data)
         ]
-        height = "{}px".format(chart.height)
+        height = "{0}px".format(chart.height)
 
         table = None
         if chart.show_datatable:
@@ -652,7 +652,11 @@ admin.add_link(
 
 
 def chart_link(v, c, m, p):
-    url = url_for('airflow.chart', chart_id=m.id)
+    try:
+        default_params = eval(m.default_params)
+    except:
+        default_params = {}
+    url = url_for('airflow.chart', chart_id=m.id, **default_params)
     return Markup("<a href='{url}'>{m.label}</a>".format(**locals()))
 
 class ChartModelView(ModelView):
