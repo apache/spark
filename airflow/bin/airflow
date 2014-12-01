@@ -182,6 +182,7 @@ def master(args):
             )
             latest_ti = qry.all()
             ti_dict = {ti.task_id: ti for ti in latest_ti}
+            session.expunge_all()
             session.commit()
 
             for task in dag.tasks:
