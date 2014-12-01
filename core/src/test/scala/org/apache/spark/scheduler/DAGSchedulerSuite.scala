@@ -31,7 +31,9 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.{SerializationHelper, CallSite}
+import org.apache.spark.util.{SerializationState, SerializationHelper, CallSite}
+import org.apache.spark.util.SerializationHelper.SerializedRdd
+
 import org.apache.spark.executor.TaskMetrics
 
 class BuggyDAGEventProcessActor extends Actor {
@@ -251,15 +253,10 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       val unserializable = new UnserializableClass
     }
     
-    val trace = scheduler.getSerializationTrace(unserializableRdd)
+    val trace : Array[SerializedRdd] = scheduler.tryToSerialize(unserializableRdd)
 
-    val splitS = trace.split(":")
-    val depth = splitS(1).trim()
-    val status = splitS(2).trim()
-    val rddName = splitS(3).trim()
-    
-    assert(rddName.equals("DAGSchedulerSuiteRDD 0"))
-    assert(status.equals(SerializationHelper.Failed))
+    assert(trace.length == 1)
+    assert(trace(0).isLeft) //Failed to serialize
   }
 
   test("Serialization trace for unserializable task with serializable dependencies") {
@@ -271,23 +268,22 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       class UnserializableClass
       val unserializable = new UnserializableClass
     }
+
+    val trace : Array[SerializedRdd] = scheduler.tryToSerialize(finalRdd)
     
-    val result = Array(SerializationHelper.Failed,
-      SerializationHelper.Serialized,
-      SerializationHelper.Serialized)
+    val results = Array((false, SerializationState.Failed),
+      (true, SerializationState.Success),
+      (true, SerializationState.Success))
     
-    val trace = scheduler.getSerializationTrace(finalRdd)
-    val splitRdds = trace.split("\n")
-
-    var x = 0
-    for(x <- 1 until splitRdds.length){
-      val splitS = splitRdds(x).split(":")
-      val status = splitS(1).trim()
-      
-      assert(status.equals(result(x-1)))
-
-    }
-
+    val zipped : Array[(SerializedRdd,Int)] = scheduler.tryToSerialize(finalRdd).zipWithIndex
+    zipped.map({
+       case (serializationState : SerializedRdd, idx : Int) => {
+         serializationState match {
+           case Right(r) => assert(results(idx)._1) //Success
+           case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
+         }
+       }
+    })
   }
 
   test("Serialization trace for serializable task and nested unserializable dependency") {
@@ -300,22 +296,20 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       
     val midRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
     val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(midRdd)))
-    val result = Array(SerializationHelper.Serialized,
-      SerializationHelper.FailedDeps,
-      SerializationHelper.Failed)
 
-    val trace = scheduler.getSerializationTrace(finalRdd)
-    val splitRdds = trace.split("\n")
-    
-    var x = 0
-    
-    for(x <- 1 until splitRdds.length){
-      val splitS = splitRdds(x).split(":")
-      val status = splitS(1).trim()
-      
-      assert(status.equals(result(x-1)))
-      
-    }
+    val results = Array((false, SerializationState.Success),
+      (true, SerializationState.FailedDeps),
+      (true, SerializationState.Failed))
+
+    val zipped : Array[(SerializedRdd,Int)] = scheduler.tryToSerialize(finalRdd).zipWithIndex
+    zipped.map({
+      case (serializationState : SerializedRdd, idx : Int) => {
+        serializationState match {
+          case Right(r) => assert(results(idx)._1) //Success
+          case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
+        }
+      }
+    })
     
   }
   
@@ -328,21 +322,19 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       val unserializable = new UnserializableClass
     }
     val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(midRdd)))
-    val result = Array(SerializationHelper.FailedDeps,
-      SerializationHelper.Failed,
-      SerializationHelper.Serialized)
+    val results = Array((false, SerializationState.FailedDeps),
+      (true, SerializationState.Failed),
+      (true, SerializationState.Success))
 
-    val trace = scheduler.getSerializationTrace(finalRdd)
-    val splitRdds = trace.split("\n")
-
-    var x = 0
-    for(x <- 1 until splitRdds.length){
-      val splitS = splitRdds(x).split(":")
-      val status = splitS(1).trim()
-      assert(status.equals(result(x-1)))
-
-    }
-
+    val zipped : Array[(SerializedRdd,Int)] = scheduler.tryToSerialize(finalRdd).zipWithIndex
+    zipped.map({
+      case (serializationState : SerializedRdd, idx : Int) => {
+        serializationState match {
+          case Right(r) => assert(results(idx)._1) //Success
+          case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
+        }
+      }
+    })
   }
 
   test("Serialization trace for serializable task and nested dependencies") {
@@ -354,21 +346,10 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     val midRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
     val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(midRdd)))
 
-    val trace = scheduler.getSerializationTrace(finalRdd)
-    val splitRdds = trace.split("\n")
-
-    var x = 0
-    for(x <- 1 until splitRdds.length){
-      val splitS = splitRdds(x).split(":")
-      val status = splitS(1).trim()
-
-      if(!status.equals(SerializationHelper.Serialized))
-        throw new Exception(trace + "\n" +">"+status+":"+SerializationHelper.Serialized+"<")
-
-      assert(status.equals(SerializationHelper.Serialized))
-
-    }
-
+    val zipped : Array[(SerializedRdd,Int)] = scheduler.tryToSerialize(finalRdd).zipWithIndex
+    zipped.map({
+      case (serializationState : SerializedRdd, idx : Int) => assert(serializationState.isRight)
+    })
   }
 
 

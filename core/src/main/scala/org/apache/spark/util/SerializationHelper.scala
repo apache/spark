@@ -15,28 +15,33 @@
  * limitations under the License.
  */
 
-// Created by Ilya Ganelin
 package org.apache.spark.util
 
 import java.io.NotSerializableException
-
-import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.Task
-import org.apache.spark.serializer.{SerializerInstance, Serializer}
+import java.nio.ByteBuffer
 
 import scala.collection.mutable.HashMap
 import scala.util.control.NonFatal
+
+import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.Task
+import org.apache.spark.serializer.SerializerInstance
+
+object SerializationState extends Enumeration {
+  // Define vars to standardize debugging output
+  type SerializationState = String
+  var Failed = "Failed to serialize parent."
+  var FailedDeps = "Failed to serialize dependencies."
+  val Success = "Success"
+}
 
 /**
  * This class is designed to encapsulate some utilities to facilitate debugging serialization 
  * problems in the DAGScheduler and the TaskSetManager. See SPARK-3694.
  */
 object SerializationHelper {
-    // Define vars to standardize debugging output 
-    var Failed = "Failed to serialize"
-    var FailedDeps = "Failed to serialize dependencies"
-    var Serialized = "Serialized"
-
+  type SerializedRdd = Either[String,ByteBuffer]
+    
   /**
    * Helper function to check whether an RDD is serializable.
    *
@@ -52,53 +57,50 @@ object SerializationHelper {
    *
    * @param closureSerializer - An instance of a serializer (single-threaded) that will be used
    * @param rdd - Rdd to attempt to serialize
-   * @return - An output string qualifying success or failure.
+   * @return SerializedRdd - If serialization is successful, return the serialized bytes, else 
+   *                         return a String, which clarifies why things failed. 
+   *                          
+   *           
    */
-  def isSerializable(closureSerializer : SerializerInstance, rdd : RDD[_]) : String = {
-    try {
-      closureSerializer.serialize(rdd: AnyRef)
-      Serialized + ": " + rdd.toString
-    }
-    catch {
+  def tryToSerialize(closureSerializer : SerializerInstance, 
+                     rdd : RDD[_]) : SerializedRdd = {
+    val result: SerializedRdd = try {
+      Right(closureSerializer.serialize(rdd: AnyRef))
+    } catch {
       case e: NotSerializableException =>
-        handleFailure(closureSerializer, rdd)
+        Left(handleFailure(closureSerializer, rdd))
 
       case NonFatal(e) =>
-        handleFailure(closureSerializer, rdd)
+        Left(handleFailure(closureSerializer, rdd))
     }  
+    
+    result
   }
   
   /**
-   * Helper function to seperate an un-serialiable parent rdd from un-serializable dependencies 
+   * Helper function to separate an un-serializable parent rdd from un-serializable dependencies 
    * @param closureSerializer - An instance of a serializer (single-threaded) that will be used
    * @param rdd - Rdd to attempt to serialize
-   * @return - An output string qualifying success or failure.
+   * @return String - Return a String (SerializationFailure), which clarifies why the serialization 
+   *                  failed.
    */
   def handleFailure(closureSerializer : SerializerInstance, 
-                                         rdd: RDD[_]): String ={
-    if(rdd.dependencies.length > 0){
-      try{
-        rdd.dependencies.foreach(dep => closureSerializer.serialize(dep : AnyRef))
+                    rdd: RDD[_]): String ={
+    try {
+      rdd.dependencies.foreach(dep => closureSerializer.serialize(dep : AnyRef))
 
-        // By default, return a failure since we still failed to serialize the parent RDD
-        // Now, however, we know that the dependencies are serializable
-        Failed + ": " + rdd.toString
-      }
-      catch {
-        // If instead, however, the dependencies ALSO fail to serialize then the subsequent stage
-        // of evaluation will help identify which of the dependencies has failed 
-        case e: NotSerializableException =>
-          FailedDeps + ": " + rdd.toString
+      // By default, return a failure since we still failed to serialize the parent RDD
+      // Now, however, we know that the dependencies are serializable
+      SerializationState.Failed
+    } catch {
+      // If instead, however, the dependencies ALSO fail to serialize then the subsequent stage
+      // of evaluation will help identify which of the dependencies has failed 
+      case e: NotSerializableException =>
+        SerializationState.FailedDeps
 
-        case NonFatal(e) =>
-          FailedDeps + ": " + rdd.toString
-      }
-
+      case NonFatal(e) =>
+        SerializationState.FailedDeps
     }
-    else{
-      Failed + ": " + rdd.toString
-    }
-
   }
 
   /**

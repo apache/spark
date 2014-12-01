@@ -28,7 +28,7 @@ import scala.math.{min, max}
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.util.{Clock, SystemClock, Utils, SerializationHelper}
+import org.apache.spark.util.{Clock, SerializationHelper, SystemClock, Utils}
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
@@ -460,14 +460,10 @@ private[spark] class TaskSetManager(
           // we assume the task can be serialized without exceptions.
 
           // Check if serialization debugging is enabled
-          // TODO After acceptance, documentation for this option should be added to ScalaDoc
-          val printRdd : Boolean = sched.sc.getConf.getOption("spark.serializer.debug")
-            .getOrElse("false").equals("true")
+          val debugSerialization: Boolean = sched.sc.getConf.getBoolean("spark.serializer.debug", false)
           
-          // If enabled, print out the added JARs and files (as part of the context) to help 
-          // identify unserializable components
-          if(printRdd)
-          {
+          // If enabled, print out the added JARs and files (as part of the context)
+          if(debugSerialization) {
             logDebug(SerializationHelper.taskDebugString(task, sched.sc.addedFiles, 
               sched.sc.addedJars))
           }
