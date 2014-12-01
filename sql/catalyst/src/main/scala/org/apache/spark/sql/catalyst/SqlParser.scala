@@ -277,7 +277,8 @@ class SqlParser extends AbstractSparkSQLParser {
     | SUM   ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => SumDistinct(exp) }
     | COUNT ~  "(" ~> "*"                    <~ ")" ^^ { case _ => Count(Literal(1)) }
     | COUNT ~  "(" ~> expression             <~ ")" ^^ { case exp => Count(exp) }
-    | COUNT ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => CountDistinct(exp :: Nil) }
+    | COUNT ~> "(" ~> DISTINCT ~> repsep(expression, ",") <~ ")" ^^
+      { case exps => CountDistinct(exps) }
     | APPROXIMATE ~ COUNT ~ "(" ~ DISTINCT ~> expression <~ ")" ^^
       { case exp => ApproxCountDistinct(exp) }
     | APPROXIMATE ~> "(" ~> floatLit ~ ")" ~ COUNT ~ "(" ~ DISTINCT ~ expression <~ ")" ^^
