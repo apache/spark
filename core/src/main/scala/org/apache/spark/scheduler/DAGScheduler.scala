@@ -449,7 +449,6 @@ class DAGScheduler(
               }
               // data structures based on StageId
               stageIdToStage -= stageId
-
               logDebug("After removal of stage %d, remaining stages = %d"
                 .format(stageId, stageIdToStage.size))
             }
@@ -902,6 +901,34 @@ class DAGScheduler(
     }
   }
 
+  /** Merge updates from a task to our local accumulator values */
+  private def updateAccumulators(event: CompletionEvent): Unit = {
+    val task = event.task
+    val stage = stageIdToStage(task.stageId)
+    if (event.accumUpdates != null) {
+      try {
+        Accumulators.add(event.accumUpdates)
+        event.accumUpdates.foreach { case (id, partialValue) =>
+          val acc = Accumulators.originals(id).asInstanceOf[Accumulable[Any, Any]]
+          // To avoid UI cruft, ignore cases where value wasn't updated
+          if (acc.name.isDefined && partialValue != acc.zero) {
+            val name = acc.name.get
+            val stringPartialValue = Accumulators.stringifyPartialValue(partialValue)
+            val stringValue = Accumulators.stringifyValue(acc.value)
+            stage.latestInfo.accumulables(id) = AccumulableInfo(id, name, stringValue)
+            event.taskInfo.accumulables +=
+              AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
+          }
+        }
+      } catch {
+        // If we see an exception during accumulator update, just log the
+        // error and move on.
+        case e: Exception =>
+          logError(s"Failed to update accumulators for $task", e)
+      }
+    }
+  }
+
   /**
    * Responds to a task finishing. This is called inside the event loop so it assumes that it can
    * modify the scheduler's internal state. Use taskEnded() to post a task end event from outside.
@@ -942,27 +969,6 @@ class DAGScheduler(
     }
     event.reason match {
       case Success =>
-        if (event.accumUpdates != null) {
-          try {
-            Accumulators.add(event.accumUpdates)
-            event.accumUpdates.foreach { case (id, partialValue) =>
-              val acc = Accumulators.originals(id).asInstanceOf[Accumulable[Any, Any]]
-              // To avoid UI cruft, ignore cases where value wasn't updated
-              if (acc.name.isDefined && partialValue != acc.zero) {
-                val name = acc.name.get
-                val stringPartialValue = Accumulators.stringifyPartialValue(partialValue)
-                val stringValue = Accumulators.stringifyValue(acc.value)
-                stage.latestInfo.accumulables(id) = AccumulableInfo(id, name, stringValue)
-                event.taskInfo.accumulables +=
-                  AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
-              }
-            }
-          } catch {
-            // If we see an exception during accumulator update, just log the error and move on.
-            case e: Exception =>
-              logError(s"Failed to update accumulators for $task", e)
-          }
-        }
         listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
           event.reason, event.taskInfo, event.taskMetrics))
         stage.pendingTasks -= task
@@ -971,6 +977,7 @@ class DAGScheduler(
             stage.resultOfJob match {
               case Some(job) =>
                 if (!job.finished(rt.outputId)) {
+                  updateAccumulators(event)
                   job.finished(rt.outputId) = true
                   job.numFinished += 1
                   // If the whole job has finished, remove it
@@ -995,6 +1002,7 @@ class DAGScheduler(
             }
 
           case smt: ShuffleMapTask =>
+            updateAccumulators(event)
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
@@ -1083,7 +1091,6 @@ class DAGScheduler(
         }
         failedStages += failedStage
         failedStages += mapStage
-
         // Mark the map whose fetch failed as broken in the map stage
         if (mapId != -1) {
           mapStage.removeOutputLoc(mapId, bmAddress)

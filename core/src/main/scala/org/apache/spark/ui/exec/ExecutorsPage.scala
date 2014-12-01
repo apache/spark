@@ -57,7 +57,7 @@ private[ui] class ExecutorsPage(
     val execInfoSorted = execInfo.sortBy(_.id)
 
     val execTable =
-      <table class={UIUtils.TABLE_CLASS}>
+      <table class={UIUtils.TABLE_CLASS_STRIPED}>
         <thead>
           <th>Executor ID</th>
           <th>Address</th>

@@ -15,16 +15,18 @@
  * limitations under the License.
  */
 
-/* Adds background colors to stripe table rows. This is necessary (instead of using css or the
- * table striping provided by bootstrap) to appropriately stripe tables with hidden rows. */
-function stripeTables() {
-    $("table.table-striped-custom").each(function() {
-        $(this).find("tr:not(:hidden)").each(function (index) {
-           if (index % 2 == 1) {
-             $(this).css("background-color", "#f9f9f9");
-           } else {
-             $(this).css("background-color", "#ffffff");
-           }
-        });
+/* Adds background colors to stripe table rows in the summary table (on the stage page). This is
+ * necessary (instead of using css or the table striping provided by bootstrap) because the summary
+ * table has hidden rows.
+ *
+ * An ID selector (rather than a class selector) is used to ensure this runs quickly even on pages
+ * with thousands of task rows (ID selectors are much faster than class selectors). */
+function stripeSummaryTable() {
+    $("#task-summary-table").find("tr:not(:hidden)").each(function (index) {
+       if (index % 2 == 1) {
+         $(this).css("background-color", "#f9f9f9");
+       } else {
+         $(this).css("background-color", "#ffffff");
+       }
     });
 }

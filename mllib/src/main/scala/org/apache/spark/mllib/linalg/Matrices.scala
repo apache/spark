@@ -17,11 +17,9 @@
 
 package org.apache.spark.mllib.linalg
 
-import java.util.Arrays
+import java.util.{Random, Arrays}
 
 import breeze.linalg.{Matrix => BM, DenseMatrix => BDM, CSCMatrix => BSM}
-
-import org.apache.spark.util.random.XORShiftRandom
 
 /**
  * Trait for a local matrix.
@@ -67,14 +65,14 @@ sealed trait Matrix extends Serializable {
   }
 
   /** Convenience method for `Matrix`^T^-`DenseMatrix` multiplication. */
-  def transposeMultiply(y: DenseMatrix): DenseMatrix = {
+  private[mllib] def transposeMultiply(y: DenseMatrix): DenseMatrix = {
     val C: DenseMatrix = Matrices.zeros(numCols, y.numCols).asInstanceOf[DenseMatrix]
     BLAS.gemm(true, false, 1.0, this, y, 0.0, C)
     C
   }
 
   /** Convenience method for `Matrix`^T^-`DenseVector` multiplication. */
-  def transposeMultiply(y: DenseVector): DenseVector = {
+  private[mllib] def transposeMultiply(y: DenseVector): DenseVector = {
     val output = new DenseVector(new Array[Double](numCols))
     BLAS.gemv(true, 1.0, this, y, 0.0, output)
     output
@@ -291,22 +289,22 @@ object Matrices {
    * Generate a `DenseMatrix` consisting of i.i.d. uniform random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
+   * @param rng a random number generator
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
    */
-  def rand(numRows: Int, numCols: Int): Matrix = {
-    val rand = new XORShiftRandom
-    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rand.nextDouble()))
+  def rand(numRows: Int, numCols: Int, rng: Random): Matrix = {
+    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextDouble()))
   }
 
   /**
    * Generate a `DenseMatrix` consisting of i.i.d. gaussian random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
+   * @param rng a random number generator
    * @return `DenseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
    */
-  def randn(numRows: Int, numCols: Int): Matrix = {
-    val rand = new XORShiftRandom
-    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rand.nextGaussian()))
+  def randn(numRows: Int, numCols: Int, rng: Random): Matrix = {
+    new DenseMatrix(numRows, numCols, Array.fill(numRows * numCols)(rng.nextGaussian()))
   }
 
   /**
