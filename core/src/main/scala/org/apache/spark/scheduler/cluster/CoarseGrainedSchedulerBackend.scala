@@ -46,6 +46,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 {
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
+  // Total number of executors that are currently registered
   var totalRegisteredExecutors = new AtomicInteger(0)
   val conf = scheduler.sc.conf
   private val timeout = AkkaUtils.askTimeout(conf)
@@ -126,7 +127,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
         makeOffers()
 
       case KillTask(taskId, executorId, interruptThread) =>
-        executorDataMap(executorId).executorActor ! KillTask(taskId, executorId, interruptThread)
+        executorDataMap.get(executorId) match {
+          case Some(executorInfo) =>
+            executorInfo.executorActor ! KillTask(taskId, executorId, interruptThread)
+          case None =>
+            // Ignoring the task kill since the executor is not registered.
+            logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
+        }
 
       case StopDriver =>
         sender ! true
@@ -204,6 +211,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
             executorsPendingToRemove -= executorId
           }
           totalCoreCount.addAndGet(-executorInfo.totalCores)
+          totalRegisteredExecutors.addAndGet(-1)
           scheduler.executorLost(executorId, SlaveLost(reason))
         case None => logError(s"Asked to remove non-existent executor $executorId")
       }

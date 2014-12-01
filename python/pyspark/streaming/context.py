@@ -142,8 +142,8 @@ class StreamingContext(object):
         recreated from the checkpoint data. If the data does not exist, then the provided setupFunc
         will be used to create a JavaStreamingContext.
 
-        @param checkpointPath Checkpoint directory used in an earlier JavaStreamingContext program
-        @param setupFunc      Function to create a new JavaStreamingContext and setup DStreams
+        @param checkpointPath: Checkpoint directory used in an earlier JavaStreamingContext program
+        @param setupFunc:      Function to create a new JavaStreamingContext and setup DStreams
         """
         # TODO: support checkpoint in HDFS
         if not os.path.exists(checkpointPath) or not os.listdir(checkpointPath):

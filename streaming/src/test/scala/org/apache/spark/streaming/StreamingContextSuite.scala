@@ -336,16 +336,20 @@ package object testPackage extends Assertions {
 
       // Verify creation site of generated RDDs
       var rddGenerated = false
-      var rddCreationSiteCorrect = true
+      var rddCreationSiteCorrect = false
+      var foreachCallSiteCorrect = false
 
       inputStream.foreachRDD { rdd =>
         rddCreationSiteCorrect = rdd.creationSite == creationSite
+        foreachCallSiteCorrect =
+          rdd.sparkContext.getCallSite().shortForm.contains("StreamingContextSuite")
         rddGenerated = true
       }
       ssc.start()
 
       eventually(timeout(10000 millis), interval(10 millis)) {
         assert(rddGenerated && rddCreationSiteCorrect, "RDD creation site was not correct")
+        assert(rddGenerated && foreachCallSiteCorrect, "Call site in foreachRDD was not correct")
       }
     } finally {
       ssc.stop()

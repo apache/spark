@@ -31,6 +31,13 @@ import org.apache.spark.sql.execution.SparkPlan
  */
 private[sql] object DataSourceStrategy extends Strategy {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: CatalystScan)) =>
+      pruneFilterProjectRaw(
+        l,
+        projectList,
+        filters,
+        (a, f) => t.buildScan(a, f)) :: Nil
+
     case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: PrunedFilteredScan)) =>
       pruneFilterProject(
         l,
@@ -51,19 +58,35 @@ private[sql] object DataSourceStrategy extends Strategy {
     case _ => Nil
   }
 
+  // Based on Public API.
   protected def pruneFilterProject(
-    relation: LogicalRelation,
-    projectList: Seq[NamedExpression],
-    filterPredicates: Seq[Expression],
-    scanBuilder: (Array[String], Array[Filter]) => RDD[Row]) = {
+      relation: LogicalRelation,
+      projectList: Seq[NamedExpression],
+      filterPredicates: Seq[Expression],
+      scanBuilder: (Array[String], Array[Filter]) => RDD[Row]) = {
+    pruneFilterProjectRaw(
+      relation,
+      projectList,
+      filterPredicates,
+      (requestedColumns, pushedFilters) => {
+        scanBuilder(requestedColumns.map(_.name).toArray, selectFilters(pushedFilters).toArray)
+      })
+  }
+
+  // Based on Catalyst expressions.
+  protected def pruneFilterProjectRaw(
+      relation: LogicalRelation,
+      projectList: Seq[NamedExpression],
+      filterPredicates: Seq[Expression],
+      scanBuilder: (Seq[Attribute], Seq[Expression]) => RDD[Row]) = {
 
     val projectSet = AttributeSet(projectList.flatMap(_.references))
     val filterSet = AttributeSet(filterPredicates.flatMap(_.references))
     val filterCondition = filterPredicates.reduceLeftOption(And)
 
-    val pushedFilters = selectFilters(filterPredicates.map { _ transform {
+    val pushedFilters = filterPredicates.map { _ transform {
       case a: AttributeReference => relation.attributeMap(a) // Match original case of attributes.
-    }}).toArray
+    }}
 
     if (projectList.map(_.toAttribute) == projectList &&
         projectSet.size == projectList.size &&
@@ -74,8 +97,6 @@ private[sql] object DataSourceStrategy extends Strategy {
       val requestedColumns =
         projectList.asInstanceOf[Seq[Attribute]] // Safe due to if above.
           .map(relation.attributeMap)            // Match original case of attributes.
-          .map(_.name)
-          .toArray
 
       val scan =
         execution.PhysicalRDD(
@@ -84,14 +105,14 @@ private[sql] object DataSourceStrategy extends Strategy {
       filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
     } else {
       val requestedColumns = (projectSet ++ filterSet).map(relation.attributeMap).toSeq
-      val columnNames = requestedColumns.map(_.name).toArray
 
-      val scan = execution.PhysicalRDD(requestedColumns, scanBuilder(columnNames, pushedFilters))
+      val scan =
+        execution.PhysicalRDD(requestedColumns, scanBuilder(requestedColumns, pushedFilters))
       execution.Project(projectList, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
     }
   }
 
-  protected def selectFilters(filters: Seq[Expression]): Seq[Filter] = filters.collect {
+  protected[sql] def selectFilters(filters: Seq[Expression]): Seq[Filter] = filters.collect {
     case expressions.EqualTo(a: Attribute, Literal(v, _)) => EqualTo(a.name, v)
     case expressions.EqualTo(Literal(v, _), a: Attribute) => EqualTo(a.name, v)
 

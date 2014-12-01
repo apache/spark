@@ -84,6 +84,12 @@ object DataType {
         ("nullable", JBool(nullable)),
         ("type", dataType: JValue)) =>
       StructField(name, parseDataType(dataType), nullable, Metadata.fromJObject(metadata))
+    // Support reading schema when 'metadata' is missing.
+    case JSortedObject(
+        ("name", JString(name)),
+        ("nullable", JBool(nullable)),
+        ("type", dataType: JValue)) =>
+      StructField(name, parseDataType(dataType), nullable)
   }
 
   @deprecated("Use DataType.fromJson instead", "1.2.0")
