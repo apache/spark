@@ -935,9 +935,9 @@ for details.
     This always shuffles all data over the network. </td>
 </tr>
 <tr>
-  <td> <code>repartitionAndSortWithinPartitions</code>(<i>partitioner</i>) </td>
+  <td> <b>repartitionAndSortWithinPartitions</b>(<i>partitioner</i>) </td>
   <td> Repartition the RDD according to the given partitioner and, within each resulting partition,
-  sort records by their keys. This is more efficient than calling <b>repartition</b> and then sorting within 
+  sort records by their keys. This is more efficient than calling <code>repartition</code> and then sorting within 
   each partition because it can push the sorting down into the shuffle machinery. </td>
 </tr>
 </table>
