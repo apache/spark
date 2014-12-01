@@ -41,7 +41,8 @@ object IsotonicDataGenerator {
    */
   def generateIsotonicInput(labels: Double*): Seq[WeightedLabeledPoint] = {
     labels.zip(1 to labels.size)
-      .map(point => labeledPointToWeightedLabeledPoint(LabeledPoint(point._1, Vectors.dense(point._2))))
+      .map(point => labeledPointToWeightedLabeledPoint(
+        LabeledPoint(point._1, Vectors.dense(point._2))))
   }
 
   /**
@@ -50,7 +51,9 @@ object IsotonicDataGenerator {
    * @param weights list of weights for the data points
    * @return sequence of data points
    */
-  def generateWeightedIsotonicInput(labels: Seq[Double], weights: Seq[Double]): Seq[WeightedLabeledPoint] = {
+  def generateWeightedIsotonicInput(
+      labels: Seq[Double],
+      weights: Seq[Double]): Seq[WeightedLabeledPoint] = {
     labels.zip(1 to labels.size).zip(weights)
       .map(point => WeightedLabeledPoint(point._1._1, Vectors.dense(point._1._2), point._2))
   }

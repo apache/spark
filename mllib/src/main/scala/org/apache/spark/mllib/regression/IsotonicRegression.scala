@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.MonotonicityConstraint.MonotonicityConstraint.{Isotonic, MonotonicityConstraint}
+import org.apache.spark.mllib.regression.MonotonicityConstraint.MonotonicityConstraint._
 import org.apache.spark.rdd.RDD
 
 /**
@@ -31,7 +31,9 @@ object MonotonicityConstraint {
   object MonotonicityConstraint {
 
     sealed trait MonotonicityConstraint {
-      private[regression] def holds(current: WeightedLabeledPoint, next: WeightedLabeledPoint): Boolean
+      private[regression] def holds(
+        current: WeightedLabeledPoint,
+        next: WeightedLabeledPoint): Boolean
     }
 
     /**
@@ -72,7 +74,7 @@ class IsotonicRegressionModel(
     testData.map(predict)
 
   override def predict(testData: Vector): Double = {
-    //take the highest of data points smaller than our feature or data point with lowest feature
+    // Take the highest of data points smaller than our feature or data point with lowest feature
     (predictions.head +:
       predictions.filter(y => y.features.toArray.head <= testData.toArray.head)).last.label
   }
@@ -87,7 +89,8 @@ trait IsotonicRegressionAlgorithm
   /**
    * Creates isotonic regression model with given parameters
    *
-   * @param predictions labels estimated using isotonic regression algorithm. Used for predictions on new data points.
+   * @param predictions labels estimated using isotonic regression algorithm.
+   *                    Used for predictions on new data points.
    * @param monotonicityConstraint isotonic or antitonic
    * @return isotonic regression model
    */
@@ -142,7 +145,7 @@ class PoolAdjacentViolators private [mllib]
       in: Array[WeightedLabeledPoint],
       monotonicityConstraint: MonotonicityConstraint): Array[WeightedLabeledPoint] = {
 
-    //Pools sub array within given bounds assigning weighted average value to all elements
+    // Pools sub array within given bounds assigning weighted average value to all elements
     def pool(in: Array[WeightedLabeledPoint], start: Int, end: Int): Unit = {
       val poolSubArray = in.slice(start, end + 1)
 
@@ -159,17 +162,17 @@ class PoolAdjacentViolators private [mllib]
     while(i < in.length) {
       var j = i
 
-      //find monotonicity violating sequence, if any
+      // Find monotonicity violating sequence, if any
       while(j < in.length - 1 && !monotonicityConstraint.holds(in(j), in(j + 1))) {
         j = j + 1
       }
 
-      //if monotonicity was not violated, move to next data point
+      // If monotonicity was not violated, move to next data point
       if(i == j) {
         i = i + 1
       } else {
-        //otherwise pool the violating sequence
-        //and check if pooling caused monotonicity violation in previously processed points
+        // Otherwise pool the violating sequence
+        // And check if pooling caused monotonicity violation in previously processed points
         while (i >= 0 && !monotonicityConstraint.holds(in(i), in(i + 1))) {
           pool(in, i, j)
           i = i - 1
@@ -214,10 +217,11 @@ object IsotonicRegression {
    * Label is the dependent y value
    * Weight of the data point is the number of measurements. Default is 1
    *
-   * @param input RDD of (label, array of features, weight). Each point describes a row of the data
-   *   matrix A as well as the corresponding right hand side label y
-   *   and weight as number of measurements
-   * @param monotonicityConstraint
+   * @param input RDD of (label, array of features, weight).
+   *              Each point describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
+   *              and weight as number of measurements
+   * @param monotonicityConstraint Isotonic (increasing) or Antitonic (decreasing) sequence
    */
   def train(
       input: RDD[WeightedLabeledPoint],
