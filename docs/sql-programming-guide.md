@@ -1002,7 +1002,7 @@ Several caching related features are not supported yet:
 ## Compatibility with Apache Hive
 
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.  Currently Spark
-SQL is based on Hive 0.12.0.
+SQL is based on Hive 0.12.0 and 0.13.1.
 
 #### Deploying in Existing Hive Warehouses
 
@@ -1041,6 +1041,7 @@ Spark SQL supports the vast majority of Hive features, such as:
 * Sampling
 * Explain
 * Partitioned tables
+* View
 * All Hive DDL Functions, including:
   * `CREATE TABLE`
   * `CREATE TABLE AS SELECT`
