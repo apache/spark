@@ -115,7 +115,7 @@ The recursive tree construction is stopped at a node when one of the following c
 ## Usage tips
 
 We include a few guidelines for using decision trees by discussing the various parameters.
-There are many parameters, put in order here with the most imporant first.  New users should mainly consider the "Problem specification parameters" section below and the `maxDepth` parameter.
+The parameters are listed below roughly in order of descending importance.  New users should mainly consider the "Problem specification parameters" section and the `maxDepth` parameter.
 
 ### Problem specification parameters
 
@@ -127,15 +127,15 @@ They should be specified and do not require tuning.
 * **`numClasses`**: Number of classes (for `Classification` only)
 
 * **`categoricalFeaturesInfo`**: Specifies which features are categorical and how many categorical values each of those features can take.  This is given as a map from feature indices to feature arity (number of categories).  Any features not in this map are treated as continuous.
-  * E.g., `Map(1 -> 2, 4 -> 10)` specifies that feature `1` is binary (taking values `0` or `1`) and that feature `4` has 10 categories (values `{0, 1, ..., 9}`).  Note that feature indices are 0-based: features `1` and `4` are the 2nd and 5th elements of an instance's feature vector.
+  * E.g., `Map(0 -> 2, 4 -> 10)` specifies that feature `0` is binary (taking values `0` or `1`) and that feature `4` has 10 categories (values `{0, 1, ..., 9}`).  Note that feature indices are 0-based: features `0` and `4` are the 1st and 5th elements of an instance's feature vector.
   * Note that you do not have to specify `categoricalFeaturesInfo`.  The algorithm will still run and may get reasonable results.  However, performance should be better if categorical features are properly designated.
 
 ### Stopping criteria
 
 These parameters determine when the tree stops building (adding new nodes).
-These parameters may be tuned.  Be careful to validate on held-out test data when tuning in order to avoid overfitting.
+When tuning these parameters, be careful to validate on held-out test data to avoid overfitting.
 
-* **`maxDepth`**: Maximum depth of a tree.  Deeper trees are more expressive (potentially allowing higher accuracy), but deeper trees are also more costly to train and are more likely to overfit.
+* **`maxDepth`**: Maximum depth of a tree.  Deeper trees are more expressive (potentially allowing higher accuracy), but they are also more costly to train and are more likely to overfit.
 
 * **`minInstancesPerNode`**: For a node to be split further, each of its children must receive at least this number of training instances.  This is commonly used with [Random Forests](mllib-random-forest.html) since those are often trained deeper than individual trees.
 

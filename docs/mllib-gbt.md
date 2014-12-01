@@ -24,9 +24,9 @@ MLlib implements GBTs using the existing [decision tree](mllib-decision-tree.htm
 ## Basic algorithm
 
 Gradient boosting iteratively trains a sequence of decision trees.
-On each iteration, the algorithm uses the current ensemble to predict the label of each training instance and then compares the prediction with the true label.  The dataset is re-labeled to put more weight on training instances with poor predictions.  Thus, in the next iteration, the decision tree will help correct for previous mistakes.
+On each iteration, the algorithm uses the current ensemble to predict the label of each training instance and then compares the prediction with the true label.  The dataset is re-labeled to put more emphasis on training instances with poor predictions.  Thus, in the next iteration, the decision tree will help correct for previous mistakes.
 
-The specific weight mechanism is defined by a loss function (discussed below).  With each iteration, GBTs further reduce this loss function on the training data.
+The specific mechanism for re-labeling instances is defined by a loss function (discussed below).  With each iteration, GBTs further reduce this loss function on the training data.
 
 ### Comparison with Random Forests
 
@@ -37,7 +37,7 @@ Both GBTs and [Random Forests](mllib-random-forest.html) are algorithms for lear
    * On the other hand, it is often reasonable to use smaller trees with GBTs than with Random Forests, and training smaller trees takes less time.
  * Random Forests can be less prone to overfitting.  Training more trees in a Random Forest reduces the likelihood of overfitting, but training more trees with GBTs increases the likelihood of overfitting.
 
-In short, both algorithms can be effective.  GBTs may be more useful if test time prediction speed is important.  Random Forests are arguably more successful in industry.
+In short, both algorithms can be effective, and the choice should be based on the particular dataset.
 
 ### Losses
 
