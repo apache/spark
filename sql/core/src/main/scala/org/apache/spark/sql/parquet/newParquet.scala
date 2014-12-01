@@ -49,7 +49,7 @@ class DefaultSource extends RelationProvider {
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     val path =
-      parameters.getOrElse("path", sys.error("'path' must be specifed for parquet tables."))
+      parameters.getOrElse("path", sys.error("'path' must be specified for parquet tables."))
 
     ParquetRelation2(path)(sqlContext)
   }
