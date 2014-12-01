@@ -303,9 +303,8 @@ case class InsertIntoParquetTable(
           val row = iter.next()
           writer.write(null, row)
         }
-      }
-      finally {
-        writer.close(hadoopContext)
+      } finally {
+          writer.close(hadoopContext)
       }
       committer.commitTask(hadoopContext)
       return 1
