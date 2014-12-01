@@ -43,8 +43,6 @@ trait CompressionCodec {
   def compressedOutputStream(s: OutputStream): OutputStream
 
   def compressedInputStream(s: InputStream): InputStream
-
-  def isAvailable() : Boolean = true
 }
 
 private[spark] object CompressionCodec extends Logging {
@@ -67,9 +65,9 @@ private[spark] object CompressionCodec extends Logging {
       Some(ctor.newInstance(conf).asInstanceOf[CompressionCodec])
     } catch {
       case e: ClassNotFoundException => None
+      case e: IllegalArgumentException => None
     }
-    codec.filter(_.isAvailable())
-      .getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] is not available. " +
+    codec.getOrElse(throw new IllegalArgumentException(s"Codec [$codecName] is not available. " +
       s"Consider setting $configKey=$FALLBACK_COMPRESSION_CODEC"))
   }
 
@@ -131,19 +129,16 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 @DeveloperApi
 class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
+  try {
+    Snappy.getNativeLibraryVersion
+  } catch {
+    case e: Error => throw new IllegalArgumentException
+  }
+
   override def compressedOutputStream(s: OutputStream): OutputStream = {
     val blockSize = conf.getInt("spark.io.compression.snappy.block.size", 32768)
     new SnappyOutputStream(s, blockSize)
   }
 
   override def compressedInputStream(s: InputStream): InputStream = new SnappyInputStream(s)
-
-  override def isAvailable() = {
-    try {
-      Snappy.getNativeLibraryVersion
-      true
-    } catch {
-      case e: Error => false
-    }
-  }
 }
