@@ -86,33 +86,18 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
       if (hive.convertMetastoreParquet &&
         relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet")) {
-
-        val (path, partitionAttributes) = if (relation.hiveQlTable.isPartitioned) {
-          val partLocs = partitions.map(_.getLocation).mkString(",")
-          val partAttrs = table.getPartCols.map { f =>
-            val hivePartKey = relation
-              .partitionKeys
-              .find(_.name.toLowerCase == f.getName.toLowerCase)
-              .get
-
-            AttributeReference(
-              f.getName,
-              HiveMetastoreTypes.toDataType(f.getType),
-              nullable = true)(
-                exprId = hivePartKey.exprId,
-                qualifiers = Seq(alias.getOrElse(tableName)))
-          }
-          (partLocs, partAttrs)
+        val path = if (relation.hiveQlTable.isPartitioned) {
+          partitions.map(_.getLocation).mkString(",")
         } else {
-          (relation.hiveQlTable.getDataLocation.toString, Nil)
+          relation.hiveQlTable.getDataLocation.toString
         }
 
         ParquetRelation(
           path,
           Some(hive.sparkContext.hadoopConfiguration),
           hive,
-          partitionAttributes,
-          Some(relation.output))
+          relation.partitionKeys,
+          Some(relation.attributes))
       } else {
         relation
       }

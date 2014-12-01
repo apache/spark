@@ -30,7 +30,6 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import scala.collection.JavaConversions._
 
 /**
  * Relation that consists of data stored in a Parquet columnar format.
@@ -49,7 +48,7 @@ private[sql] case class ParquetRelation(
     @transient conf: Option[Configuration],
     @transient sqlContext: SQLContext,
     partitioningAttributes: Seq[Attribute] = Nil,
-    inheritedAttributes: Option[Seq[Attribute]] = None)
+    metastoreAttributes: Option[Seq[Attribute]] = None)
   extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
@@ -63,26 +62,22 @@ private[sql] case class ParquetRelation(
 
   /** Attributes */
   override val output = {
-    inheritedAttributes.map { hiveAttributes =>
-      // Hive is case insensitive, have to restore case information here.
-      val parquetFieldNames = parquetSchema.getFields.map(_.getName).toSet
-      hiveAttributes.map { a =>
-        parquetFieldNames
-          .find(_.toLowerCase == a.name.toLowerCase)
-          .map(a.withName)
-          .getOrElse(a)
-      }
+    // All non-partitioning attributes from Parquet metadata
+    val parquetAttributes = ParquetTypesConverter
+      .readSchemaFromFile(new Path(path.split(",").head), conf, sqlContext.isParquetBinaryAsString)
+      .filter(a => partitioningAttributes.find(_.name == a.name).isEmpty)
+    // Parquet is case sensitive while Hive is not, have to restore case information for non-
+    // partitioning keys here.
+    val attributes = metastoreAttributes.map { attrs =>
+      (attrs, parquetAttributes.map(_.name)).zipped.map(_ withName _)
     }.getOrElse {
-      partitioningAttributes ++
-        ParquetTypesConverter.readSchemaFromFile(
-          new Path(path.split(",").head),
-          conf,
-          sqlContext.isParquetBinaryAsString)
+      parquetAttributes
     }
+    partitioningAttributes ++ attributes
   }
 
   override def newInstance() = ParquetRelation(
-    path, conf, sqlContext, partitioningAttributes, inheritedAttributes).asInstanceOf[this.type]
+    path, conf, sqlContext, partitioningAttributes, metastoreAttributes).asInstanceOf[this.type]
 
   // Equals must also take into account the output attributes so that we can distinguish between
   // different instances of the same relation,
