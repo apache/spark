@@ -18,12 +18,8 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.evaluation.ClassificationEvaluator
+import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.ml._
-import org.apache.spark.ml.impl.estimator.{HasDefaultEvaluator, PredictionModel, Predictor,
-  PredictorParams}
-import org.apache.spark.rdd.RDD
 
 @AlphaComponent
 private[classification] trait ClassifierParams extends PredictorParams
@@ -33,10 +29,9 @@ private[classification] trait ClassifierParams extends PredictorParams
  */
 abstract class Classifier[Learner <: Classifier[Learner, M], M <: ClassificationModel[M]]
   extends Predictor[Learner, M]
-  with ClassifierParams
-  with HasDefaultEvaluator {
+  with ClassifierParams {
 
-  override def defaultEvaluator: Evaluator = new ClassificationEvaluator
+  // TODO: defaultEvaluator (follow-up PR)
 }
 
 
@@ -60,14 +55,6 @@ private[ml] abstract class ClassificationModel[M <: ClassificationModel[M]]
    */
   def predictRaw(features: Vector): Vector
 
-  /**
-   * Compute this model's accuracy on the given dataset.
-   */
-  def accuracy(dataset: RDD[LabeledPoint]): Double = {
-    // TODO: Handle instance weights.
-    val predictionsAndLabels = dataset.map(lp => predict(lp.features))
-      .zip(dataset.map(_.label))
-    ClassificationEvaluator.computeMetric(predictionsAndLabels, "accuracy")
-  }
+  // TODO: accuracy(dataset: RDD[LabeledPoint]): Double (follow-up PR)
 
 }

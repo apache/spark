@@ -22,7 +22,6 @@ import com.github.fommil.netlib.F2jBLAS
 import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
-import org.apache.spark.ml.impl.estimator.HasDefaultEvaluator
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.DataFrame
@@ -71,18 +70,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     transformSchema(dataset.schema, paramMap, logging = true)
     val sqlCtx = dataset.sqlContext
     val est = map(estimator)
-    val eval = if (map.contains(evaluator)) {
-      map(evaluator)
-    } else {
-      est match {
-        case e: HasDefaultEvaluator =>
-          e.defaultEvaluator
-        case _ =>
-          throw new IllegalArgumentException("CrossValidator could not find an evaluator to use." +
-            s" The estimator $est does not have a defaultEvaluator, so you must specify the" +
-            s" evaluator parameter for CrossValidator.")
-      }
-    }
+    val eval = map(evaluator)
     val epm = map(estimatorParamMaps)
     val numModels = epm.size
     val metrics = new Array[Double](epm.size)

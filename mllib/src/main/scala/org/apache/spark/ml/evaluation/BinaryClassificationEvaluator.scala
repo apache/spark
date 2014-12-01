@@ -21,7 +21,6 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.types.DoubleType
 
@@ -57,16 +56,8 @@ class BinaryClassificationEvaluator extends Evaluator with Params
       .map { case Row(score: Double, label: Double) =>
         (score, label)
       }
-    BinaryClassificationEvaluator.computeMetric(scoreAndLabels, map(metricName))
-  }
-
-}
-
-private[ml] object BinaryClassificationEvaluator {
-
-  def computeMetric(scoreAndLabels: RDD[(Double, Double)], metricName: String): Double = {
     val metrics = new BinaryClassificationMetrics(scoreAndLabels)
-    val metric = metricName match {
+    val metric = map(metricName) match {
       case "areaUnderROC" =>
         metrics.areaUnderROC()
       case "areaUnderPR" =>
@@ -77,5 +68,4 @@ private[ml] object BinaryClassificationEvaluator {
     metrics.unpersist()
     metric
   }
-
 }

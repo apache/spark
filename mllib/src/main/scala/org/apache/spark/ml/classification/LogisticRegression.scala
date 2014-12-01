@@ -58,8 +58,6 @@ private[classification] trait LogisticRegressionParams extends ClassifierParams
 class LogisticRegression extends Classifier[LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams {
 
-  // TODO: Extend IterativeEstimator
-
   setRegParam(0.1)
   setMaxIter(100)
   setThreshold(0.5)
