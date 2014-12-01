@@ -17,10 +17,9 @@
 
 package org.apache.spark.graphx.impl
 
-import scala.reflect.ClassTag
-import scala.util.Sorting
+import org.apache.spark.util.collection.{SortDataFormat, Sorter, PrimitiveVector}
 
-import org.apache.spark.util.collection._
+import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
