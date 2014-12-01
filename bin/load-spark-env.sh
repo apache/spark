@@ -27,12 +27,17 @@ if [ -z "$SPARK_ENV_LOADED" ]; then
   # Returns the parent of the directory this script lives in.
   parent_dir="$(cd "`dirname "$0"`"/..; pwd)"
 
-  user_conf_dir="${SPARK_CONF_DIR:-"$parent_dir"/conf}"
+  # SPARK-4616
+  # Check if an environment file was passed in through `spark-submit` else provide a healthy default
+  # - note: we cannot use SPARK_CONF_DIR here as it could be set within the `spark-env.sh` file
+  #         so rather check specifically for the `spark-env.sh` file in a default location if one
+  #         wasn't provided
+  environment_file="${SPARK_SUBMIT_ENVIRONMENT_FILE:-"$parent_dir/conf/spark-env.sh"}"
 
-  if [ -f "${user_conf_dir}/spark-env.sh" ]; then
+  if [ -f "${environment_file}" ]; then
     # Promote all variable declarations to environment (exported) variables
     set -a
-    . "${user_conf_dir}/spark-env.sh"
+    . "${environment_file}"
     set +a
   fi
 fi
@@ -43,7 +48,7 @@ if [ -z "$SPARK_SCALA_VERSION" ]; then
 
     ASSEMBLY_DIR2="$FWDIR/assembly/target/scala-2.11"
     ASSEMBLY_DIR1="$FWDIR/assembly/target/scala-2.10"
-    
+
     if [[ -d "$ASSEMBLY_DIR2" && -d "$ASSEMBLY_DIR1" ]]; then
         echo -e "Presence of build for both scala versions(SCALA 2.10 and SCALA 2.11) detected." 1>&2
         echo -e 'Either clean one of them or, export SPARK_SCALA_VERSION=2.11 in spark-env.sh.' 1>&2
@@ -54,5 +59,5 @@ if [ -z "$SPARK_SCALA_VERSION" ]; then
         export SPARK_SCALA_VERSION="2.11"
     else
         export SPARK_SCALA_VERSION="2.10"
-    fi        
+    fi
 fi
