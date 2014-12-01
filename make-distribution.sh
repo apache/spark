@@ -59,7 +59,7 @@ while (( "$#" )); do
       exit_with_usage
       ;;
     --with-hive)
-      echo "Error: '--with-hive' is no longer supported, use Maven option -Phive"
+      echo "Error: '--with-hive' is no longer supported, use Maven options -Phive and -Phive-thriftserver"
       exit_with_usage
       ;;
     --skip-java-test)
@@ -119,7 +119,7 @@ VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "
 SPARK_HADOOP_VERSION=$(mvn help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
     | grep -v "INFO"\
     | tail -n 1)
-SPARK_HIVE=$(mvn help:evaluate -Dexpression=project.activeProfiles $@ 2>/dev/null\
+SPARK_HIVE=$(mvn help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ 2>/dev/null\
     | grep -v "INFO"\
     | fgrep --count "<id>hive</id>";\
     # Reset exit status to 0, otherwise the script stops here if the last grep finds nothing\
@@ -181,6 +181,9 @@ echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DI
 # Copy jars
 cp "$FWDIR"/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
 cp "$FWDIR"/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
+# This will fail if the -Pyarn profile is not provided
+# In this case, silence the error and ignore the return code of this command
+cp "$FWDIR"/network/yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/lib/" &> /dev/null || :
 
 # Copy example sources (needed for python and SQL)
 mkdir -p "$DISTDIR/examples/src/main"
@@ -197,6 +200,9 @@ cp "$FWDIR/NOTICE" "$DISTDIR"
 if [ -e "$FWDIR"/CHANGES.txt ]; then
   cp "$FWDIR/CHANGES.txt" "$DISTDIR"
 fi
+
+# Copy data files
+cp -r "$FWDIR/data" "$DISTDIR"
 
 # Copy other things
 mkdir "$DISTDIR"/conf

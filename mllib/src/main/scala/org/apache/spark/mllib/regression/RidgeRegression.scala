@@ -68,9 +68,9 @@ class RidgeRegressionWithSGD private (
 
   /**
    * Construct a RidgeRegression object with default parameters: {stepSize: 1.0, numIterations: 100,
-   * regParam: 1.0, miniBatchFraction: 1.0}.
+   * regParam: 0.01, miniBatchFraction: 1.0}.
    */
-  def this() = this(1.0, 100, 1.0, 1.0)
+  def this() = this(1.0, 100, 0.01, 1.0)
 
   override protected def createModel(weights: Vector, intercept: Double) = {
     new RidgeRegressionModel(weights, intercept)
@@ -143,7 +143,7 @@ object RidgeRegressionWithSGD {
       numIterations: Int,
       stepSize: Double,
       regParam: Double): RidgeRegressionModel = {
-    train(input, numIterations, stepSize, regParam, 1.0)
+    train(input, numIterations, stepSize, regParam, 0.01)
   }
 
   /**
@@ -158,6 +158,6 @@ object RidgeRegressionWithSGD {
   def train(
       input: RDD[LabeledPoint],
       numIterations: Int): RidgeRegressionModel = {
-    train(input, numIterations, 1.0, 1.0, 1.0)
+    train(input, numIterations, 1.0, 0.01, 1.0)
   }
 }

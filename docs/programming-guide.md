@@ -117,6 +117,8 @@ The first thing a Spark program must do is to create a [SparkContext](api/scala/
 how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object
 that contains information about your application.
 
+Only one SparkContext may be active per JVM.  You must `stop()` the active SparkContext before creating a new one.
+
 {% highlight scala %}
 val conf = new SparkConf().setAppName(appName).setMaster(master)
 new SparkContext(conf)
@@ -1131,7 +1133,7 @@ method. The code below shows this:
 
 {% highlight scala %}
 scala> val broadcastVar = sc.broadcast(Array(1, 2, 3))
-broadcastVar: spark.Broadcast[Array[Int]] = spark.Broadcast(b5c40191-a864-4c7d-b9bf-d87e1a4e787c)
+broadcastVar: org.apache.spark.broadcast.Broadcast[Array[Int]] = Broadcast(0)
 
 scala> broadcastVar.value
 res0: Array[Int] = Array(1, 2, 3)
@@ -1175,7 +1177,7 @@ Accumulators are variables that are only "added" to through an associative opera
 therefore be efficiently supported in parallel. They can be used to implement counters (as in
 MapReduce) or sums. Spark natively supports accumulators of numeric types, and programmers
 can add support for new types. If accumulators are created with a name, they will be
-displayed in Spark's UI. This can can be useful for understanding the progress of 
+displayed in Spark's UI. This can be useful for understanding the progress of 
 running stages (NOTE: this is not yet supported in Python).
 
 An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks
@@ -1303,6 +1305,12 @@ vecAccum = sc.accumulator(Vector(...), VectorAccumulatorParam())
 </div>
 
 </div>
+
+For accumulator updates performed inside <b>actions only</b>, Spark guarantees that each task's update to the accumulator 
+will only be applied once, i.e. restarted tasks will not update the value. In transformations, users should be aware 
+of that each task's update may be applied more than once if tasks or job stages are re-executed.
+
+
 
 # Deploying to a Cluster
 

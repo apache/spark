@@ -17,11 +17,19 @@
 
 package org.apache.spark.streaming.mqtt
 
-import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
+import org.scalatest.FunSuite
+
+import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
-class MQTTStreamSuite extends TestSuiteBase {
+class MQTTStreamSuite extends FunSuite {
+
+  val batchDuration = Seconds(1)
+
+  private val master: String = "local[2]"
+
+  private val framework: String = this.getClass.getSimpleName
 
   test("mqtt input stream") {
     val ssc = new StreamingContext(master, framework, batchDuration)

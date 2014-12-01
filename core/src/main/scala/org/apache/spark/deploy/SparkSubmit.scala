@@ -142,6 +142,8 @@ object SparkSubmit {
         printErrorAndExit("Cluster deploy mode is currently not supported for python applications.")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
+      case (_, CLUSTER) if isSqlShell(args.mainClass) =>
+        printErrorAndExit("Cluster deploy mode is not applicable to Spark SQL shell.")
       case _ =>
     }
 
@@ -340,9 +342,14 @@ object SparkSubmit {
         e.printStackTrace(printStream)
         if (childMainClass.contains("thriftserver")) {
           println(s"Failed to load main class $childMainClass.")
-          println("You need to build Spark with -Phive.")
+          println("You need to build Spark with -Phive and -Phive-thriftserver.")
         }
         System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
+    }
+
+    // SPARK-4170
+    if (classOf[scala.App].isAssignableFrom(mainClass)) {
+      printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
     }
 
     val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
@@ -386,6 +393,13 @@ object SparkSubmit {
    */
   private[spark] def isShell(primaryResource: String): Boolean = {
     primaryResource == SPARK_SHELL || primaryResource == PYSPARK_SHELL
+  }
+
+  /**
+   * Return whether the given main class represents a sql shell.
+   */
+  private[spark] def isSqlShell(mainClass: String): Boolean = {
+    mainClass == "org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
   }
 
   /**

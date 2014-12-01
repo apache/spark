@@ -43,7 +43,7 @@ You can modify the default Jekyll build as follows:
 ## Pygments
 
 We also use pygments (http://pygments.org) for syntax highlighting in documentation markdown pages,
-so you will also need to install that (it requires Python) by running `sudo easy_install Pygments`.
+so you will also need to install that (it requires Python) by running `sudo pip install Pygments`.
 
 To mark a block of code in your markdown to be syntax highlighted by jekyll during the compile
 phase, use the following sytax:
@@ -52,6 +52,11 @@ phase, use the following sytax:
     // Your scala code goes here, you can replace scala with many other
     // supported languages too.
     {% endhighlight %}
+
+## Sphinx
+
+We use Sphinx to generate Python API docs, so you will need to install it by running
+`sudo pip install sphinx`.
 
 ## API Docs (Scaladoc and Sphinx)
 

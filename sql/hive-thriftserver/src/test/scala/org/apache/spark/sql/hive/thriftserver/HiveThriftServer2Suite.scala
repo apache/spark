@@ -19,9 +19,10 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.File
 import java.net.ServerSocket
-import java.sql.{DriverManager, Statement}
+import java.sql.{Date, DriverManager, Statement}
 import java.util.concurrent.TimeoutException
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
@@ -50,6 +51,15 @@ import org.apache.spark.sql.hive.HiveShim
  */
 class HiveThriftServer2Suite extends FunSuite with Logging {
   Class.forName(classOf[HiveDriver].getCanonicalName)
+
+  object TestData {
+    def getTestDataFilePath(name: String) = {
+      Thread.currentThread().getContextClassLoader.getResource(s"data/files/$name")
+    }
+
+    val smallKv = getTestDataFilePath("small_kv.txt")
+    val smallKvWithNull = getTestDataFilePath("small_kv_with_null.txt")
+  }
 
   def randomListeningPort =  {
     // Let the system to choose a random available port to avoid collision with other parallel
@@ -145,12 +155,8 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
       }
     }
 
-    val env = Seq(
-      // Resets SPARK_TESTING to avoid loading Log4J configurations in testing class paths
-      "SPARK_TESTING" -> "0",
-      // Prevents loading classes out of the assembly jar. Otherwise Utils.sparkVersion can't read
-      // proper version information from the jar manifest.
-      "SPARK_PREPEND_CLASSES" -> "")
+    // Resets SPARK_TESTING to avoid loading Log4J configurations in testing class paths
+    val env = Seq("SPARK_TESTING" -> "0")
 
     Process(command, None, env: _*).run(ProcessLogger(
       captureThriftServerOutput("stdout"),
@@ -194,15 +200,12 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
 
   test("Test JDBC query execution") {
     withJdbcStatement() { statement =>
-      val dataFilePath =
-        Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
-
-      val queries =
-        s"""SET spark.sql.shuffle.partitions=3;
-           |CREATE TABLE test(key INT, val STRING);
-           |LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE test;
-           |CACHE TABLE test;
-         """.stripMargin.split(";").map(_.trim).filter(_.nonEmpty)
+      val queries = Seq(
+        "SET spark.sql.shuffle.partitions=3",
+        "DROP TABLE IF EXISTS test",
+        "CREATE TABLE test(key INT, val STRING)",
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test",
+        "CACHE TABLE test")
 
       queries.foreach(statement.execute)
 
@@ -216,14 +219,10 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
 
   test("SPARK-3004 regression: result set containing NULL") {
     withJdbcStatement() { statement =>
-      val dataFilePath =
-        Thread.currentThread().getContextClassLoader.getResource(
-          "data/files/small_kv_with_null.txt")
-
       val queries = Seq(
         "DROP TABLE IF EXISTS test_null",
         "CREATE TABLE test_null(key INT, val STRING)",
-        s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE test_null")
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKvWithNull}' OVERWRITE INTO TABLE test_null")
 
       queries.foreach(statement.execute)
 
@@ -270,13 +269,10 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
 
   test("SPARK-4292 regression: result set iterator issue") {
     withJdbcStatement() { statement =>
-      val dataFilePath =
-        Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
-
       val queries = Seq(
         "DROP TABLE IF EXISTS test_4292",
         "CREATE TABLE test_4292(key INT, val STRING)",
-        s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE test_4292")
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_4292")
 
       queries.foreach(statement.execute)
 
@@ -284,10 +280,52 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
 
       Seq(238, 86, 311, 27, 165).foreach { key =>
         resultSet.next()
-        assert(resultSet.getInt(1) == key)
+        assert(resultSet.getInt(1) === key)
       }
 
       statement.executeQuery("DROP TABLE IF EXISTS test_4292")
+    }
+  }
+
+  test("SPARK-4309 regression: Date type support") {
+    withJdbcStatement() { statement =>
+      val queries = Seq(
+        "DROP TABLE IF EXISTS test_date",
+        "CREATE TABLE test_date(key INT, value STRING)",
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_date")
+
+      queries.foreach(statement.execute)
+
+      assertResult(Date.valueOf("2011-01-01")) {
+        val resultSet = statement.executeQuery(
+          "SELECT CAST('2011-01-01' as date) FROM test_date LIMIT 1")
+        resultSet.next()
+        resultSet.getDate(1)
+      }
+    }
+  }
+
+  test("SPARK-4407 regression: Complex type support") {
+    withJdbcStatement() { statement =>
+      val queries = Seq(
+        "DROP TABLE IF EXISTS test_map",
+        "CREATE TABLE test_map(key INT, value STRING)",
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map")
+
+      queries.foreach(statement.execute)
+
+      assertResult("""{238:"val_238"}""") {
+        val resultSet = statement.executeQuery("SELECT MAP(key, value) FROM test_map LIMIT 1")
+        resultSet.next()
+        resultSet.getString(1)
+      }
+
+      assertResult("""["238","val_238"]""") {
+        val resultSet = statement.executeQuery(
+          "SELECT ARRAY(CAST(key AS STRING), value) FROM test_map LIMIT 1")
+        resultSet.next()
+        resultSet.getString(1)
+      }
     }
   }
 }

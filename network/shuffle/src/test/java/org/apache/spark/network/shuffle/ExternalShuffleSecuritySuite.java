@@ -42,7 +42,7 @@ public class ExternalShuffleSecuritySuite {
 
   @Before
   public void beforeEach() {
-    RpcHandler handler = new SaslRpcHandler(new ExternalShuffleBlockHandler(),
+    RpcHandler handler = new SaslRpcHandler(new ExternalShuffleBlockHandler(conf),
       new TestSecretKeyHolder("my-app-id", "secret"));
     TransportContext context = new TransportContext(conf, handler);
     this.server = context.createServer();
