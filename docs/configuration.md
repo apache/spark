@@ -224,6 +224,7 @@ Apart from these, the following properties are also available, and may be useful
     (Experimental) Whether to give user-added jars precedence over Spark's own jars when
     loading classes in Executors. This feature can be used to mitigate conflicts between
     Spark's dependencies and user dependencies. It is currently an experimental feature.
+    (Currently, this setting does not work for YARN, see <a href="https://issues.apache.org/jira/browse/SPARK-2996">SPARK-2996</a> for more details).
   </td>
 </tr>
 <tr>

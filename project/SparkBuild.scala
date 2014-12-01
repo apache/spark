@@ -136,7 +136,12 @@ object SparkBuild extends PomBuild {
     },
     publishMavenStyle in MavenCompile := true,
     publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
-    publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
+    publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn,
+
+    javacOptions in (Compile, doc) ++= {
+      val Array(major, minor, _) = System.getProperty("java.version").split("\\.", 3)
+      if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
+    }
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
