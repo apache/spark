@@ -56,39 +56,14 @@ public class TripletFields implements Serializable {
   public static final TripletFields EdgeOnly = new TripletFields(false, false, true);
 
   /**
-   * Expose only the source field and not the edge or destination field.
-   */
-  public static final TripletFields SrcOnly = new TripletFields(true, false, false);
-
-  /**
-   * Expose only the destination field and not the edge or source field.
-   */
-  public static final TripletFields DstOnly = new TripletFields(false, true, false);
-
-  /**
-   * Expose the source and destination fields but not the edge field.
-   */
-  public static final TripletFields SrcDstOnly = new TripletFields(true, true, false);
-
-  /**
    * Expose the source and edge fields but not the destination field. (Same as Src)
    */
-  public static final TripletFields SrcAndEdge = new TripletFields(true, false, true);
-
-  /**
-   * Expose the source and edge fields but not the destination field. (Same as SrcAndEdge)
-   */
-  public static final TripletFields Src = SrcAndEdge;
+  public static final TripletFields Src = new TripletFields(true, false, true);
 
   /**
    * Expose the destination and edge fields but not the source field. (Same as Dst)
    */
-  public static final TripletFields DstAndEdge = new TripletFields(false, true, true);
-
-  /**
-   * Expose the destination and edge fields but not the source field. (Same as DstAndEdge)
-   */
-  public static final TripletFields Dst = DstAndEdge;
+  public static final TripletFields Dst = new TripletFields(false, true, true);
 
   /**
    * Expose all the fields (source, edge, and destination).

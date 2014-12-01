@@ -19,7 +19,7 @@ package org.apache.spark.api.python
 
 import java.io._
 import java.net._
-import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
+import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, UUID, Collections}
 
 import org.apache.spark.input.PortableDataStream
 
@@ -47,7 +47,7 @@ private[spark] class PythonRDD(
     pythonIncludes: JList[String],
     preservePartitoning: Boolean,
     pythonExec: String,
-    broadcastVars: JList[Broadcast[Array[Array[Byte]]]],
+    broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]])
   extends RDD[Array[Byte]](parent) {
 
@@ -230,8 +230,7 @@ private[spark] class PythonRDD(
           if (!oldBids.contains(broadcast.id)) {
             // send new broadcast
             dataOut.writeLong(broadcast.id)
-            dataOut.writeLong(broadcast.value.map(_.length.toLong).sum)
-            broadcast.value.foreach(dataOut.write)
+            PythonRDD.writeUTF(broadcast.value.path, dataOut)
             oldBids.add(broadcast.id)
           }
         }
@@ -368,24 +367,8 @@ private[spark] object PythonRDD extends Logging {
     }
   }
 
-  def readBroadcastFromFile(
-      sc: JavaSparkContext,
-      filename: String): Broadcast[Array[Array[Byte]]] = {
-    val size = new File(filename).length()
-    val file = new DataInputStream(new FileInputStream(filename))
-    val blockSize = 1 << 20
-    val n = ((size + blockSize - 1) / blockSize).toInt
-    val obj = new Array[Array[Byte]](n)
-    try {
-      for (i <- 0 until n) {
-        val length = if (i < (n - 1)) blockSize else (size % blockSize).toInt
-        obj(i) = new Array[Byte](length)
-        file.readFully(obj(i))
-      }
-    } finally {
-      file.close()
-    }
-    sc.broadcast(obj)
+  def readBroadcastFromFile(sc: JavaSparkContext, path: String): Broadcast[PythonBroadcast] = {
+    sc.broadcast(new PythonBroadcast(path))
   }
 
   def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream) {
@@ -821,6 +804,52 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
         throw new SparkException("EOF reached before Python server acknowledged")
       }
       null
+    }
+  }
+}
+
+/**
+ * An Wrapper for Python Broadcast, which is written into disk by Python. It also will
+ * write the data into disk after deserialization, then Python can read it from disks.
+ */
+private[spark] class PythonBroadcast(@transient var path: String) extends Serializable {
+
+  /**
+   * Read data from disks, then copy it to `out`
+   */
+  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
+    val in = new FileInputStream(new File(path))
+    try {
+      Utils.copyStream(in, out)
+    } finally {
+      in.close()
+    }
+  }
+
+  /**
+   * Write data into disk, using randomly generated name.
+   */
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
+    val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
+    val file = File.createTempFile("broadcast", "", dir)
+    path = file.getAbsolutePath
+    val out = new FileOutputStream(file)
+    try {
+      Utils.copyStream(in, out)
+    } finally {
+      out.close()
+    }
+  }
+
+  /**
+   * Delete the file once the object is GCed.
+   */
+  override def finalize() {
+    if (!path.isEmpty) {
+      val file = new File(path)
+      if (file.exists()) {
+        file.delete()
+      }
     }
   }
 }

@@ -48,7 +48,7 @@ from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
-    CloudPickleSerializer, SizeLimitedStream, CompressedSerializer, LargeObjectSerializer
+    CloudPickleSerializer, CompressedSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
 from pyspark.sql import SQLContext, IntegerType, Row, ArrayType, StructType, StructField, \
     UserDefinedType, DoubleType
@@ -237,26 +237,16 @@ class SerializationTestCase(unittest.TestCase):
         self.assertTrue("exit" in foo.func_code.co_names)
         ser.dumps(foo)
 
-    def _test_serializer(self, ser):
+    def test_compressed_serializer(self):
+        ser = CompressedSerializer(PickleSerializer())
         from StringIO import StringIO
         io = StringIO()
         ser.dump_stream(["abc", u"123", range(5)], io)
         io.seek(0)
         self.assertEqual(["abc", u"123", range(5)], list(ser.load_stream(io)))
-        size = io.tell()
         ser.dump_stream(range(1000), io)
         io.seek(0)
-        first = SizeLimitedStream(io, size)
-        self.assertEqual(["abc", u"123", range(5)], list(ser.load_stream(first)))
-        self.assertEqual(range(1000), list(ser.load_stream(io)))
-
-    def test_compressed_serializer(self):
-        ser = CompressedSerializer(PickleSerializer())
-        self._test_serializer(ser)
-
-    def test_large_object_serializer(self):
-        ser = LargeObjectSerializer()
-        self._test_serializer(ser)
+        self.assertEqual(["abc", u"123", range(5)] + range(1000), list(ser.load_stream(io)))
 
 
 class PySparkTestCase(unittest.TestCase):
@@ -803,7 +793,7 @@ class SQLTests(ReusedPySparkTestCase):
     @classmethod
     def tearDownClass(cls):
         ReusedPySparkTestCase.tearDownClass()
-        shutil.rmtree(cls.tempdir.name)
+        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 
     def setUp(self):
         self.sqlCtx = SQLContext(self.sc)
@@ -930,8 +920,9 @@ class SQLTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize([row])
         srdd = self.sqlCtx.inferSchema(rdd)
         srdd.registerTempTable("test")
-        row = self.sqlCtx.sql("select l[0].a AS la from test").first()
-        self.assertEqual(1, row.asDict()["la"])
+        row = self.sqlCtx.sql("select l, d from test").first()
+        self.assertEqual(1, row.asDict()["l"][0].a)
+        self.assertEqual(1.0, row.asDict()['d']['key'].c)
 
     def test_infer_schema_with_udt(self):
         from pyspark.tests import ExamplePoint, ExamplePointUDT

@@ -31,18 +31,20 @@ import org.apache.spark.storage.StorageLevel
 
 /**
  * :: Experimental ::
- * A class that implements Stochastic Gradient Boosting for regression and binary classification.
+ * A class that implements
+ * [[http://en.wikipedia.org/wiki/Gradient_boosting  Stochastic Gradient Boosting]]
+ * for regression and binary classification.
  *
  * The implementation is based upon:
  *   J.H. Friedman.  "Stochastic Gradient Boosting."  1999.
  *
- * Notes:
- *  - This currently can be run with several loss functions.  However, only SquaredError is
- *    fully supported.  Specifically, the loss function should be used to compute the gradient
- *    (to re-label training instances on each iteration) and to weight weak hypotheses.
- *    Currently, gradients are computed correctly for the available loss functions,
- *    but weak hypothesis weights are not computed correctly for LogLoss or AbsoluteError.
- *    Running with those losses will likely behave reasonably, but lacks the same guarantees.
+ * Notes on Gradient Boosting vs. TreeBoost:
+ *  - This implementation is for Stochastic Gradient Boosting, not for TreeBoost.
+ *  - Both algorithms learn tree ensembles by minimizing loss functions.
+ *  - TreeBoost (Friedman, 1999) additionally modifies the outputs at tree leaf nodes
+ *    based on the loss function, whereas the original gradient boosting method does not.
+ *     - When the loss is SquaredError, these methods give the same result, but they could differ
+ *       for other loss functions.
  *
  * @param boostingStrategy Parameters for the gradient boosting algorithm.
  */

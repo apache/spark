@@ -19,6 +19,8 @@ package org.apache.spark.util
 
 import java.util.Properties
 
+import org.apache.spark.shuffle.MetadataFetchFailedException
+
 import scala.collection.Map
 
 import org.json4s.jackson.JsonMethods._
@@ -116,10 +118,13 @@ class JsonProtocolSuite extends FunSuite {
     // TaskEndReason
     val fetchFailed = FetchFailed(BlockManagerId("With or", "without you", 15), 17, 18, 19,
       "Some exception")
+    val fetchMetadataFailed = new MetadataFetchFailedException(17,
+      19, "metadata Fetch failed exception").toTaskEndReason
     val exceptionFailure = new ExceptionFailure(exception, None)
     testTaskEndReason(Success)
     testTaskEndReason(Resubmitted)
     testTaskEndReason(fetchFailed)
+    testTaskEndReason(fetchMetadataFailed)
     testTaskEndReason(exceptionFailure)
     testTaskEndReason(TaskResultLost)
     testTaskEndReason(TaskKilled)
@@ -431,9 +436,13 @@ class JsonProtocolSuite extends FunSuite {
   }
 
   private def assertEquals(bm1: BlockManagerId, bm2: BlockManagerId) {
-    assert(bm1.executorId === bm2.executorId)
-    assert(bm1.host === bm2.host)
-    assert(bm1.port === bm2.port)
+    if (bm1 == null || bm2 == null) {
+      assert(bm1 === bm2)
+    } else {
+      assert(bm1.executorId === bm2.executorId)
+      assert(bm1.host === bm2.host)
+      assert(bm1.port === bm2.port)
+    }
   }
 
   private def assertEquals(result1: JobResult, result2: JobResult) {

@@ -1306,6 +1306,12 @@ vecAccum = sc.accumulator(Vector(...), VectorAccumulatorParam())
 
 </div>
 
+For accumulator updates performed inside <b>actions only</b>, Spark guarantees that each task's update to the accumulator 
+will only be applied once, i.e. restarted tasks will not update the value. In transformations, users should be aware 
+of that each task's update may be applied more than once if tasks or job stages are re-executed.
+
+
+
 # Deploying to a Cluster
 
 The [application submission guide](submitting-applications.html) describes how to submit applications to a cluster.
