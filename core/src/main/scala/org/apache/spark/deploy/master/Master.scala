@@ -30,6 +30,7 @@ import scala.util.Random
 import akka.actor._
 import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
+import akka.serialization.Serialization
 import akka.serialization.SerializationExtension
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
@@ -132,15 +133,18 @@ private[spark] class Master(
     val (persistenceEngine_, leaderElectionAgent_) = RECOVERY_MODE match {
       case "ZOOKEEPER" =>
         logInfo("Persisting recovery state to ZooKeeper")
-        val zkFactory = new ZooKeeperRecoveryModeFactory(conf)
+        val zkFactory =
+          new ZooKeeperRecoveryModeFactory(conf, SerializationExtension(context.system))
         (zkFactory.createPersistenceEngine(), zkFactory.createLeaderElectionAgent(this))
       case "FILESYSTEM" =>
-        val fsFactory = new FileSystemRecoveryModeFactory(conf)
+        val fsFactory =
+          new FileSystemRecoveryModeFactory(conf, SerializationExtension(context.system))
         (fsFactory.createPersistenceEngine(), fsFactory.createLeaderElectionAgent(this))
       case "CUSTOM" =>
         val clazz = Class.forName(conf.get("spark.deploy.recoveryMode.factory"))
-        val factory = clazz.getConstructor(conf.getClass)
-          .newInstance(conf).asInstanceOf[StandaloneRecoveryModeFactory]
+        val factory = clazz.getConstructor(conf.getClass, Serialization.getClass)
+          .newInstance(conf, SerializationExtension(context.system))
+          .asInstanceOf[StandaloneRecoveryModeFactory]
         (factory.createPersistenceEngine(), factory.createLeaderElectionAgent(this))
       case _ =>
         (new BlackHolePersistenceEngine(), new MonarchyLeaderAgent(this))

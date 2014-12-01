@@ -27,6 +27,7 @@ object HiveFromSpark {
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setAppName("HiveFromSpark")
     val sc = new SparkContext(sparkConf)
+    val path = s"${System.getenv("SPARK_HOME")}/examples/src/main/resources/kv1.txt"
 
     // A local hive context creates an instance of the Hive Metastore in process, storing 
     // the warehouse data in the current directory.  This location can be overridden by
@@ -35,7 +36,7 @@ object HiveFromSpark {
     import hiveContext._
 
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    sql("LOAD DATA LOCAL INPATH 'src/main/resources/kv1.txt' INTO TABLE src")
+    sql(s"LOAD DATA LOCAL INPATH '$path' INTO TABLE src")
 
     // Queries are expressed in HiveQL
     println("Result of 'SELECT *': ")

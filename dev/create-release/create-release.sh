@@ -197,6 +197,7 @@ make_binary_release "hadoop2.3" "-Phadoop-2.3 -Phive -Phive-thriftserver -Pyarn"
 make_binary_release "hadoop2.4" "-Phadoop-2.4 -Phive -Phive-thriftserver -Pyarn" &
 make_binary_release "mapr3" "-Pmapr3 -Phive -Phive-thriftserver" &
 make_binary_release "mapr4" "-Pmapr4 -Pyarn -Phive -Phive-thriftserver" &
+make_binary_release "hadoop2.4-without-hive" "-Phadoop-2.4 -Pyarn" &
 wait
 
 # Copy data
