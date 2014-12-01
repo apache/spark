@@ -1039,7 +1039,8 @@ private[spark] object Utils extends Logging {
       // When running under some profilers, the current stack trace might contain some bogus
       // frames. This is intended to ensure that we don't crash in these situations by
       // ignoring any frames that we can't examine.
-      if (ste != null && ste.getMethodName != null && !ste.getMethodName.contains("getStackTrace")) {
+      if (ste != null && ste.getMethodName != null
+        && !ste.getMethodName.contains("getStackTrace")) {
         if (insideSpark) {
           if (skipClass(ste.getClassName)) {
             lastSparkMethod = if (ste.getMethodName == "<init>") {
