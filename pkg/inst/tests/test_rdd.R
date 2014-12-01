@@ -89,7 +89,7 @@ test_that("several transformations on RDD (a benchmark on PipelinedRDD)", {
   collect(rdd2)
 })
 
-test_that("PipelinedRDD support actions: cache(), unpersist(), checkpoint()", {
+test_that("PipelinedRDD support actions: cache(), persist(), unpersist(), checkpoint()", {
   # RDD
   rdd2 <- rdd
   # PipelinedRDD
@@ -100,6 +100,14 @@ test_that("PipelinedRDD support actions: cache(), unpersist(), checkpoint()", {
             })
 
   cache(rdd2)
+  expect_true(rdd2@env$isCached)
+  rdd2 <- lapply(rdd2, function(x) x)
+  expect_false(rdd2@env$isCached)
+
+  unpersist(rdd2)
+  expect_false(rdd2@env$isCached)
+
+  persist(rdd2, "MEMORY_AND_DISK")
   expect_true(rdd2@env$isCached)
   rdd2 <- lapply(rdd2, function(x) x)
   expect_false(rdd2@env$isCached)

@@ -173,6 +173,55 @@ setMethod("cache",
             rdd
           })
 
+#' Persist an RDD
+#'
+#' Persist this RDD with the specified storage level.
+#'
+#' @param rdd The RDD to persist
+#' @param newLevel The new storage level to be assigned
+#' @rdname persist
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10, 2L)
+#' persist(rdd, "MEMORY_AND_DISK")
+#'}
+setGeneric("persist", function(rdd, newLevel) { standardGeneric("persist") })
+
+#' @rdname persist
+#' @aliases persist,RDD-method
+setMethod("persist",
+          signature(rdd = "RDD", newLevel = "character"),
+          function(rdd, newLevel = c("DISK_ONLY",
+                                     "DISK_ONLY_2",
+                                     "MEMORY_AND_DISK",
+                                     "MEMORY_AND_DISK_2",
+                                     "MEMORY_AND_DISK_SER",
+                                     "MEMORY_AND_DISK_SER_2",
+                                     "MEMORY_ONLY",
+                                     "MEMORY_ONLY_2",
+                                     "MEMORY_ONLY_SER",
+                                     "MEMORY_ONLY_SER_2",
+                                     "OFF_HEAP")) {
+            match.arg(newLevel)
+            storageLevel <- switch(newLevel,
+              "DISK_ONLY" = J("org.apache.spark.storage.StorageLevel")$DISK_ONLY(),
+              "DISK_ONLY_2" = J("org.apache.spark.storage.StorageLevel")$DISK_ONLY_2(),
+              "MEMORY_AND_DISK" = J("org.apache.spark.storage.StorageLevel")$MEMORY_AND_DISK(),
+              "MEMORY_AND_DISK_2" = J("org.apache.spark.storage.StorageLevel")$MEMORY_AND_DISK_2(),
+              "MEMORY_AND_DISK_SER" = J("org.apache.spark.storage.StorageLevel")$MEMORY_AND_DISK_SER(),
+              "MEMORY_AND_DISK_SER_2" = J("org.apache.spark.storage.StorageLevel")$MEMORY_AND_DISK_SER_2(),
+              "MEMORY_ONLY" = J("org.apache.spark.storage.StorageLevel")$MEMORY_ONLY(),
+              "MEMORY_ONLY_2" = J("org.apache.spark.storage.StorageLevel")$MEMORY_ONLY_2(),
+              "MEMORY_ONLY_SER" = J("org.apache.spark.storage.StorageLevel")$MEMORY_ONLY_SER(),
+              "MEMORY_ONLY_SER_2" = J("org.apache.spark.storage.StorageLevel")$MEMORY_ONLY_SER_2(),
+              "OFF_HEAP" = J("org.apache.spark.storage.StorageLevel")$OFF_HEAP())
+            
+            .jcall(getJRDD(rdd), "Lorg/apache/spark/api/java/JavaRDD;", "persist", storageLevel)
+            rdd@env$isCached <- TRUE
+            rdd
+          })
 
 #' Unpersist an RDD
 #'
