@@ -80,7 +80,7 @@ private[spark] class TaskSetManager(
   val successful = new Array[Boolean](numTasks)
   private val numFailures = new Array[Int](numTasks)
   // key is taskId, value is a Map of host to when it failed
-  private val failedHosts = new HashMap[Int, HashMap[String, Long]]()
+  private val failedHostsPerTask = new HashMap[Int, HashMap[String, Long]]()
 
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
   var tasksSuccessful = 0
@@ -275,8 +275,8 @@ private[spark] class TaskSetManager(
    * TASK_BLACKLIST_TIMEOUT has elapsed ?
    */
   private def hostIsBlacklisted(host: String, taskId: Int): Boolean = {
-    if (failedHosts.contains(taskId)) {
-      val hosts = failedHosts.get(taskId).get
+    if (failedHostsPerTask.contains(taskId)) {
+      val hosts = failedHostsPerTask.get(taskId).get
 
       return hosts.contains(host) &&
         clock.getTime() - hosts.get(host).get < TASK_BLACKLIST_TIMEOUT
@@ -569,7 +569,7 @@ private[spark] class TaskSetManager(
       logInfo("Ignoring task-finished event for " + info.id + " in stage " + taskSet.id +
         " because task " + index + " has already completed successfully")
     }
-    failedHosts.remove(index)
+    failedHostsPerTask.remove(index)
     maybeFinishTaskSet()
   }
 
@@ -642,7 +642,7 @@ private[spark] class TaskSetManager(
         logError("Unknown TaskEndReason: " + e)
     }
     // always add to failed executors
-    failedHosts.getOrElseUpdate(index, new HashMap[String, Long]()).
+    failedHostsPerTask.getOrElseUpdate(index, new HashMap[String, Long]()).
       put(info.executorId, clock.getTime())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
     addPendingTask(index)
