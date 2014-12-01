@@ -28,9 +28,9 @@ import parquet.schema.MessageType
 
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
-import org.apache.spark.sql.catalyst.types.StructType
+import scala.collection.JavaConversions._
 
 /**
  * Relation that consists of data stored in a Parquet columnar format.
@@ -49,7 +49,7 @@ private[sql] case class ParquetRelation(
     @transient conf: Option[Configuration],
     @transient sqlContext: SQLContext,
     partitioningAttributes: Seq[Attribute] = Nil,
-    inheritedOutput: Option[Seq[Attribute]] = None)
+    inheritedAttributes: Option[Seq[Attribute]] = None)
   extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
@@ -57,21 +57,32 @@ private[sql] case class ParquetRelation(
   /** Schema derived from ParquetFile */
   def parquetSchema: MessageType =
     ParquetTypesConverter
-      .readMetaData(new Path(path), conf)
+      .readMetaData(new Path(path.split(",").head), conf)
       .getFileMetaData
       .getSchema
 
   /** Attributes */
-  override val output = inheritedOutput.getOrElse {
-    partitioningAttributes ++
-      ParquetTypesConverter.readSchemaFromFile(
-        new Path(path.split(",").head),
-        conf,
-        sqlContext.isParquetBinaryAsString)
+  override val output = {
+    inheritedAttributes.map { hiveAttributes =>
+      // Hive is case insensitive, have to restore case information here.
+      val parquetFieldNames = parquetSchema.getFields.map(_.getName).toSet
+      hiveAttributes.map { a =>
+        parquetFieldNames
+          .find(_.toLowerCase == a.name.toLowerCase)
+          .map(a.withName)
+          .getOrElse(a)
+      }
+    }.getOrElse {
+      partitioningAttributes ++
+        ParquetTypesConverter.readSchemaFromFile(
+          new Path(path.split(",").head),
+          conf,
+          sqlContext.isParquetBinaryAsString)
+    }
   }
 
   override def newInstance() = ParquetRelation(
-    path, conf, sqlContext, partitioningAttributes, inheritedOutput).asInstanceOf[this.type]
+    path, conf, sqlContext, partitioningAttributes, inheritedAttributes).asInstanceOf[this.type]
 
   // Equals must also take into account the output attributes so that we can distinguish between
   // different instances of the same relation,
