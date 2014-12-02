@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import dateutil.parser
 import json
 import logging
@@ -174,8 +174,7 @@ class Airflow(BaseView):
             for i, (series, x, y) in df.iterrows():
                 if series not in all_data:
                     all_data[series] = []
-                print(type(x))
-                if type(x) in (datetime, Timestamp) :
+                if type(x) in (datetime, Timestamp, date) :
                     x = x.isoformat()
                 all_data[series].append([x, float(y)])
             all_data = [{
