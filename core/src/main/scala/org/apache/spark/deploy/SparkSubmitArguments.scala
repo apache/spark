@@ -125,7 +125,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && primaryResource != null) {
       try {
-        val jar = new JarFile(new URI(primaryResource).getPath)
+        val uri = new URI(primaryResource)
+        val jar = new JarFile(uri.getPath)
         // Note that this might still return null if no main-class is set; we catch that later
         mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
       } catch {
