@@ -130,6 +130,7 @@ private[spark] object AkkaUtils extends Logging {
       throw new IllegalArgumentException("spark.akka.remote.netty.tcp.maximum-frame-size " +
           "should not be greater than " + Int.MaxValue + "B")
     }
+    ret
   }
 
   /** Space reserved for extra data in an Akka message besides serialized task or task result. */
