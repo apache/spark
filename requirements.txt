@@ -9,7 +9,7 @@ ipython[all]
 jinja2
 markdown
 mysql-python
-#pandas
+pandas
 pygments
 python-dateutil
 sphinx
