@@ -419,9 +419,6 @@ object HiveContext {
     case (decimal: BigDecimal, DecimalType()) =>
       HiveShim.createDecimal(decimal.underlying()).toString
     case (other, tpe) if primitiveTypes contains tpe => other.toString
-    case (a, b) => println(a.getClass); println(b.getClass);
-      println(a.toString + " " + b.toString);
-      a.toString + " " + b.toString;
   }
 
   /** Hive outputs fields of structs slightly differently than top level attributes. */
