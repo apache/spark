@@ -1025,6 +1025,7 @@ private[hive] object HiveQl {
     case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
     case Token(OR(), left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
     case Token(NOT(), child :: Nil) => Not(nodeToExpr(child))
+    case Token("!", child :: Nil) => Not(nodeToExpr(child))
 
     /* Case statements */
     case Token("TOK_FUNCTION", Token(WHEN(), Nil) :: branches) =>
