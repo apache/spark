@@ -71,6 +71,10 @@ class VertexRDDImpl[VD] private[graphx] (
     this
   }
 
+  override def checkpoint() = {
+    partitionsRDD.checkpoint()
+  }
+    
   /** The number of vertices in the RDD. */
   override def count(): Long = {
     partitionsRDD.map(_.size).reduce(_ + _)
