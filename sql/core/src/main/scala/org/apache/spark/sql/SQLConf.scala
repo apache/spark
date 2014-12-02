@@ -36,6 +36,7 @@ private[spark] object SQLConf {
   val PARQUET_CACHE_METADATA = "spark.sql.parquet.cacheMetadata"
   val PARQUET_COMPRESSION = "spark.sql.parquet.compression.codec"
   val COLUMN_NAME_OF_CORRUPT_RECORD = "spark.sql.columnNameOfCorruptRecord"
+  val BROADCAST_TIMEOUT = "spark.sql.broadcastTimeout"
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
@@ -134,6 +135,12 @@ private[sql] trait SQLConf {
 
   private[spark] def columnNameOfCorruptRecord: String =
     getConf(COLUMN_NAME_OF_CORRUPT_RECORD, "_corrupt_record")
+
+  /**
+   * Timeout in seconds for the broadcast wait time in hash join
+   */
+  private[spark] def broadcastTimeout: Int =
+    getConf(BROADCAST_TIMEOUT, (5 * 60).toString).toInt
 
   /** ********************** SQLConf functionality methods ************ */
 

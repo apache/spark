@@ -43,7 +43,7 @@ case class BroadcastHashJoin(
   extends BinaryNode with HashJoin {
 
   val timeout = {
-    val timeoutValue = sqlContext.getConf("spark.sql.hash.join.timeout", "-1").toInt
+    val timeoutValue = sqlContext.broadcastTimeout
     if (timeoutValue < 0) {
       Duration.Inf
     } else {
