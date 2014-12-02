@@ -131,8 +131,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
       } catch {
         case e: Exception =>
-          SparkSubmit.printErrorAndExit("Cannot main: " + primaryResource)
-          //SparkSubmit.printErrorAndExit("Cannot load main class from JAR: " + primaryResource)
+          SparkSubmit.printErrorAndExit("Cannot load main class from JAR: " + primaryResource)
           return
       }
     }
