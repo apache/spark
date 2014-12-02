@@ -770,8 +770,8 @@ private[spark] class Master(
     appId
   }
 
-  /** Check for, and remove, and dead applications */
-  def timeOutDeadApplications() {
+  /** Check for, and remove, any dead applications */
+  def timeOutDeadApplications(): Unit = {
     val currentTime = System.currentTimeMillis()
     // Copy the applications into an array so we don't modify the hashset while iterating through it
     val toRemove =
@@ -784,7 +784,7 @@ private[spark] class Master(
   }
 
   /** Check for, and remove, any timed-out workers */
-  def timeOutDeadWorkers() {
+  def timeOutDeadWorkers(): Unit = {
     // Copy the workers into an array so we don't modify the hashset while iterating through it
     val currentTime = System.currentTimeMillis()
     val toRemove = workers.filter(_.lastHeartbeat < currentTime - WORKER_TIMEOUT).toArray
