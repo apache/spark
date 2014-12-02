@@ -50,7 +50,7 @@ private[spark] class SortShuffleWriter[K, V, C](
   /** Write a bunch of records to this task's output */
   override def write(records: Iterator[_ <: Product2[K, V]]): Unit = {
     if (dep.mapSideCombine) {
-      if (!dep.aggregator.isDefined) {
+      if (dep.aggregator.isEmpty) {
         throw new IllegalStateException("Aggregator is empty for map-side combine")
       }
       sorter = new ExternalSorter[K, V, C](

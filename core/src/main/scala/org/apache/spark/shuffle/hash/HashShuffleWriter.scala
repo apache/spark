@@ -56,7 +56,7 @@ private[spark] class HashShuffleWriter[K, V](
       } else {
         records
       }
-    } else if (dep.aggregator.isEmpty && dep.mapSideCombine) {
+    } else if (dep.mapSideCombine) {
       throw new IllegalStateException("Aggregator is empty for map-side combine")
     } else {
       records
