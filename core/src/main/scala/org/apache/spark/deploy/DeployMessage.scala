@@ -146,6 +146,12 @@ private[deploy] object DeployMessages {
 
   case object StopAppClient
 
+  /**
+    * Message sent from the heartbeat timer thread to trigger the sending of a heartbeat to the
+    * Master. This is necessary for proper thread-safety
+    */
+  case object TriggerHeartbeat
+
   // Master to Worker & AppClient
 
   case class MasterChanged(masterUrl: String, masterWebUiUrl: String)
