@@ -42,6 +42,21 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Literal(1) + Literal(1), 2)
   }
 
+  test("unary BitwiseNOT") {
+    checkEvaluation(BitwiseNot(1), -2)
+    assert(BitwiseNot(1).dataType === IntegerType)
+    assert(BitwiseNot(1).eval(EmptyRow).isInstanceOf[Int])
+    checkEvaluation(BitwiseNot(1.toLong), -2.toLong)
+    assert(BitwiseNot(1.toLong).dataType === LongType)
+    assert(BitwiseNot(1.toLong).eval(EmptyRow).isInstanceOf[Long])
+    checkEvaluation(BitwiseNot(1.toShort), -2.toShort)
+    assert(BitwiseNot(1.toShort).dataType === ShortType)
+    assert(BitwiseNot(1.toShort).eval(EmptyRow).isInstanceOf[Short])
+    checkEvaluation(BitwiseNot(1.toByte), -2.toByte)
+    assert(BitwiseNot(1.toByte).dataType === ByteType)
+    assert(BitwiseNot(1.toByte).eval(EmptyRow).isInstanceOf[Byte])
+  }
+
   /**
    * Checks for three-valued-logic.  Based on:
    * http://en.wikipedia.org/wiki/Null_(SQL)#Comparisons_with_NULL_and_the_three-valued_logic_.283VL.29
