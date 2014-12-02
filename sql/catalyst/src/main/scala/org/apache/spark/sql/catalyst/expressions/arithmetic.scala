@@ -184,8 +184,8 @@ case class BitwiseNot(child: Expression) extends UnaryExpression {
       null
     } else {
       dataType match {
-        case ByteType => ~evalE.asInstanceOf[Byte]
-        case ShortType => ~evalE.asInstanceOf[Short]
+        case ByteType => (~evalE.asInstanceOf[Byte]).toByte
+        case ShortType => (~evalE.asInstanceOf[Short]).toShort
         case IntegerType => ~evalE.asInstanceOf[Int]
         case LongType => ~evalE.asInstanceOf[Long]
         case other => sys.error(s"Unsupported bitwise ~ operation on $other")
