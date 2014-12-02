@@ -359,7 +359,9 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       case Add(e1, e2) =>      (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 + $eval2" }
       case Subtract(e1, e2) => (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 - $eval2" }
       case Multiply(e1, e2) => (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 * $eval2" }
-      case Divide(e1, e2) =>   (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 / $eval2" }
+      case Divide(e1, e2) =>   (e1, e2) evaluate {
+        case (eval1, eval2) => q"if ($eval2 == 0) null else $eval1 / $eval2"
+      }
 
       case IsNotNull(e) =>
         val eval = expressionEvaluator(e)
