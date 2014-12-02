@@ -82,6 +82,11 @@ public abstract class DataType {
    */
   public static final ShortType ShortType = new ShortType();
 
+	/**
+	 * Gets the NullType object.
+	 */
+	public static final NullType NullType = new NullType();
+
   /**
    * Gets the NullType object.
    */
