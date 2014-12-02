@@ -416,6 +416,8 @@ object HiveContext {
     case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
     case (decimal: Decimal, DecimalType()) =>  // Hive strips trailing zeros so use its toString
       HiveShim.createDecimal(decimal.toBigDecimal.underlying()).toString
+    case (decimal: BigDecimal, DecimalType()) =>
+      HiveShim.createDecimal(decimal.underlying()).toString
     case (other, tpe) if primitiveTypes contains tpe => other.toString
     case (a, b) => println(a.getClass); println(b.getClass);
       println(a.toString + " " + b.toString);
