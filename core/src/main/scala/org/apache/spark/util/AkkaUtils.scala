@@ -63,8 +63,8 @@ private[spark] object AkkaUtils extends Logging {
       conf: SparkConf,
       securityManager: SecurityManager): (ActorSystem, Int) = {
 
-    val akkaLogLifecycleEvents = conf.getBoolean("spark.akka.remote.log-remote-lifecycle-events", false)
-    if (!akkaLogLifecycleEvents) {
+    val akkaLogLifecycleEvents = conf.get("spark.akka.remote.log-remote-lifecycle-events", "off")
+    if (akkaLogLifecycleEvents == "on") {
       // As a workaround for Akka issue #3787, we coerce the "EndpointWriter" log to be silent.
       // See: https://www.assembla.com/spaces/akka/tickets/3787#/
       Option(Logger.getLogger("akka.remote.EndpointWriter")).map(l => l.setLevel(Level.FATAL))
