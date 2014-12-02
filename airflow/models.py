@@ -216,15 +216,16 @@ class TaskInstance(Base):
             mark_success=False,
             ignore_dependencies=False,
             force=False,
-            pickle=None):
+            pickle_id=None):
         """
         Returns a command that can be executed anywhere where airflow is
         installed. This command is part of the message sent to executors by
         the orchestrator.
         """
+
         iso = self.execution_date.isoformat()
         mark_success = "--mark_success" if mark_success else ""
-        pickle = "--pickle {0}".format(pickle.id) if pickle else ""
+        pickle = "--pickle {0}".format(pickle_id) if pickle_id else ""
         ignore_dependencies = "-i" if ignore_dependencies else ""
         force = "--force" if force else ""
         subdir = ""
@@ -595,6 +596,7 @@ class BackfillJob(BaseJob):
         executor.start()
         session.add(pickle)
         session.commit()
+        pickle_id = pickle.id
 
         # Build a list of all intances to run
         tasks_to_run = {}
@@ -634,7 +636,7 @@ class BackfillJob(BaseJob):
                     executor.queue_command(
                         key=ti.key, command=ti.command(
                             mark_success=mark_success,
-                            pickle=pickle)
+                            pickle_id=pickle_id)
                     )
                     ti.state = State.RUNNING
                     running.append(key)
@@ -1157,6 +1159,7 @@ class DAG(Base):
         session = settings.Session()
         job = BackfillJob(executor=self.executor)
         session.add(job)
+        session.expunge_all()
         session.commit()
         job.run(self, start_date, end_date, mark_success)
         job.state = State.SUCCESS

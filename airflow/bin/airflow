@@ -66,8 +66,8 @@ def run(args):
         task = dag.get_task(task_id=args.task_id)
     else:
         session = settings.Session()
-        dag_pickle, = session.query(
-            DagPickle).filter(DagPickle.id == args.pickle).all()
+        dag_pickle = session.query(
+            DagPickle).filter(DagPickle.id == args.pickle).all()[0]
         dag = dag_pickle.get_object()
         task = dag.get_task(task_id=args.task_id)
 
