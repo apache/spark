@@ -24,7 +24,6 @@ import scala.reflect.ClassTag
 import org.scalatest.FunSuite
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
 import org.apache.spark.util.Utils
 
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
@@ -97,7 +96,6 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   }
 
   test("partitioner aware union") {
-    import SparkContext._
     def makeRDDWithPartitioner(seq: Seq[Int]) = {
       sc.makeRDD(seq, 1)
         .map(x => (x, null))
