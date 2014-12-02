@@ -46,6 +46,8 @@ private[spark] object SQLConf {
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
 
+  val CASE_SENSITIVE = "spark.sql.caseSensitive"
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -147,6 +149,12 @@ private[sql] trait SQLConf {
 
   private[spark] def columnNameOfCorruptRecord: String =
     getConf(COLUMN_NAME_OF_CORRUPT_RECORD, "_corrupt_record")
+
+  /**
+   * When set to true, analyzer is case sensitive
+   */
+  private[spark] def caseSensitive: Boolean =
+    getConf(CASE_SENSITIVE, "true").toBoolean
 
   /** ********************** SQLConf functionality methods ************ */
 
