@@ -823,7 +823,10 @@ private[hive] object HiveQl {
            Token("TOK_DIR",
              Token("TOK_TMP_FILE", Nil) :: Nil) :: Nil) =>
       query
-
+    case Token(destinationToken(),
+           Token("TOK_DIR", dir) :: Nil) =>
+      query
+      
     case Token(destinationToken(),
            Token("TOK_TAB",
               tableArgs) :: Nil) =>
