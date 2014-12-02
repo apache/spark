@@ -50,6 +50,8 @@ private[sql] object ParquetFilters {
         (n: String, v: Any) => FilterApi.eq(floatColumn(n), v.asInstanceOf[java.lang.Float])
       case DoubleType =>
         (n: String, v: Any) => FilterApi.eq(doubleColumn(n), v.asInstanceOf[java.lang.Double])
+
+      // Binary.fromString and Binary.fromByteArray don't accept null values
       case StringType =>
         (n: String, v: Any) => FilterApi.eq(
           binaryColumn(n),

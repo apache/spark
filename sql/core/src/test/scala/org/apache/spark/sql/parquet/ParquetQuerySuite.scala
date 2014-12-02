@@ -85,8 +85,8 @@ case class NumericData(i: Int, d: Double)
 class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   TestData // Load test data tables.
 
-  var testRDD: SchemaRDD = null
-  var originalParquetFilterPushdownEnabled = TestSQLContext.parquetFilterPushDown
+  private var testRDD: SchemaRDD = null
+  private val originalParquetFilterPushdownEnabled = TestSQLContext.parquetFilterPushDown
 
   override def beforeAll() {
     ParquetTestData.writeFile()
@@ -1043,6 +1043,10 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       Literal(null) >= 'a.int
     )
 
-    predicates.foreach(p => assert(ParquetFilters.createFilter(p).isEmpty))
+    predicates.foreach { p =>
+      assert(
+        ParquetFilters.createFilter(p).isEmpty,
+        "Comparison predicate with null shouldn't be pushed down")
+    }
   }
 }
