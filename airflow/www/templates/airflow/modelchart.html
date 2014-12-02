@@ -6,7 +6,7 @@
     <script src="{{ url_for('static', filename='highcharts.js') }}"></script>
     <script src="/ck/static/chartkick.js"></script>
     <div class="container">
-        <h2>{{ chart.label }}</h2>
+        <h2>{{ label }}</h2>
         {% if chart.chart_type == "area_chart" %}
             {% area_chart data with height=height library=chart_options%}
         {% elif chart.chart_type == "line_chart" %}
@@ -20,6 +20,8 @@
             <h4>Data</h4>
             {{ table }}
         {% endif %}
-        {{ sql }}
+
+        <h4>SQL</h4>
+        <pre><code>{{ sql }}</code></pre>
     </div>
 {% endblock %}

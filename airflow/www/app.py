@@ -127,14 +127,14 @@ class Airflow(BaseView):
 
         all_data = {}
         hook = db.get_hook()
-        jt = jinja2.Template(chart.sql)
         try:
             args = eval(chart.default_params)
         except:
             args = {}
         request_dict = {k:request.args.get(k) for k in request.args}
         args.update(request_dict)
-        sql = jt.render(**args)
+        sql = jinja2.Template(chart.sql).render(**args)
+        label = jinja2.Template(chart.label).render(**args)
         df = hook.get_pandas_df(sql)
 
         for i, (series, x, y) in df.iterrows():
@@ -142,10 +142,10 @@ class Airflow(BaseView):
                 all_data[series] = []
             all_data[series].append([x.isoformat(), float(y)])
         all_data = [
-                {'name': series, 'data': sorted(data, key=lambda r: r[0])}
-            for series, data in all_data.items()
+            {'name': series, 'data': sorted(all_data[series], key=lambda r: r[0])}
+            for series in sorted(all_data)
         ]
-        height = "{}px".format(chart.height)
+        height = "{0}px".format(chart.height)
 
         table = None
         if chart.show_datatable:
@@ -156,7 +156,7 @@ class Airflow(BaseView):
             chart=chart, data=all_data, table=Markup(table),
             chart_options={},
             height=height,
-            sql=sql)
+            sql=sql, label=label)
         session.commit()
         session.close()
         return response
@@ -652,7 +652,11 @@ admin.add_link(
 
 
 def chart_link(v, c, m, p):
-    url = url_for('airflow.chart', chart_id=m.id)
+    try:
+        default_params = eval(m.default_params)
+    except:
+        default_params = {}
+    url = url_for('airflow.chart', chart_id=m.id, **default_params)
     return Markup("<a href='{url}'>{m.label}</a>".format(**locals()))
 
 class ChartModelView(ModelView):
