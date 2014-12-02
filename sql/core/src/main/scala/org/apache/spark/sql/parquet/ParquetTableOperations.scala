@@ -304,7 +304,7 @@ case class InsertIntoParquetTable(
           writer.write(null, row)
         }
       } finally {
-          writer.close(hadoopContext)
+        writer.close(hadoopContext)
       }
       committer.commitTask(hadoopContext)
       return 1
