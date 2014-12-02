@@ -310,7 +310,7 @@ private[spark] class Master(
         case Some(exec) => {
           val appInfo = idToApp(appId)
           exec.state = state
-          if (state == ExecutorState.RUNNING) { appInfo.resetRetryCount() }
+          if (state == ExecutorState.RUNNING) { appInfo.failureDetector.onExecutorRunning(execId) }
           exec.application.driver ! ExecutorUpdated(execId, state, message, exitStatus)
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
@@ -321,15 +321,14 @@ private[spark] class Master(
             val normalExit = exitStatus == Some(0)
             // Only retry certain number of times so we don't go into an infinite loop.
             if (!normalExit) {
-              if (appInfo.incrementRetryCount() < ApplicationState.MAX_NUM_RETRY) {
-                schedule()
+              appInfo.failureDetector.onFailedExecutorExit(execId)
+              val someExecutorIsRunning =
+                appInfo.executors.values.exists(_.state == ExecutorState.RUNNING)
+              if (appInfo.failureDetector.isFailed(someExecutorIsRunning)) {
+                logError(s"Removing failed application ${appInfo.desc.name} with ID ${appInfo.id}")
+                removeApplication(appInfo, ApplicationState.FAILED)
               } else {
-                val execs = appInfo.executors.values
-                if (!execs.exists(_.state == ExecutorState.RUNNING)) {
-                  logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
-                    s"${appInfo.retryCount} times; removing it")
-                  removeApplication(appInfo, ApplicationState.FAILED)
-                }
+                schedule()
               }
             }
           }

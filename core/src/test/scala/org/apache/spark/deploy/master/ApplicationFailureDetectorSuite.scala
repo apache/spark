@@ -1,0 +1,74 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.deploy.master
+
+import org.scalatest.{FunSuite, Matchers}
+
+
+class ApplicationFailureDetectorSuite extends FunSuite with Matchers {
+
+  test("initially, the application should not be failed") {
+    val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
+    assert(!failureDetector.isFailed(someExecutorIsRunning = false))
+  }
+
+  test("normal operation (no executor failures)") {
+    val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
+    for (execId <- 1 to 100) {
+      failureDetector.onExecutorRunning(execId)
+      assert(!failureDetector.isFailed(someExecutorIsRunning = true))
+    }
+    assert(!failureDetector.isFailed(someExecutorIsRunning = false))
+  }
+
+  test("some executor failures") {
+    val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
+    for (execId <- 1 to 100) {
+      failureDetector.onExecutorRunning(execId)
+      assert(!failureDetector.isFailed(someExecutorIsRunning = true))
+      if (execId % 2 == 0) {
+        failureDetector.onFailedExecutorExit(execId)
+        assert(!failureDetector.isFailed(someExecutorIsRunning = true))
+      }
+    }
+    assert(!failureDetector.isFailed(someExecutorIsRunning = false))
+  }
+
+  test("every executor fails after launch") {
+    val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
+    var failed: Boolean = false
+    for (execId <- 1 to 100) {
+      failureDetector.onExecutorRunning(execId)
+      if (failureDetector.isFailed(someExecutorIsRunning = true)) {
+        failed = true
+      }
+      failureDetector.onFailedExecutorExit(execId)
+      if (failureDetector.isFailed(someExecutorIsRunning = false)) {
+        failed = true
+      }
+    }
+    assert(failed, "Expected the application to be marked as failed")
+  }
+
+  test("(rare) execution for which the current logic actually fails the application") {
+    val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
+    (1 to 20).foreach(execId => failureDetector.onExecutorRunning(execId))
+    (1 to 11).foreach(execId => failureDetector.onFailedExecutorExit(execId))
+    assert(failureDetector.isFailed(someExecutorIsRunning = false))
+  }
+}

@@ -46,6 +46,8 @@ private[spark] class ApplicationInfo(
 
   @transient private var nextExecutorId: Int = _
 
+  val failureDetector = new ApplicationFailureDetector(desc.name, id)
+
   init()
 
   private def readObject(in: java.io.ObjectInputStream): Unit = Utils.tryOrIOException {
@@ -93,17 +95,6 @@ private[spark] class ApplicationInfo(
   private val myMaxCores = desc.maxCores.getOrElse(defaultCores)
 
   def coresLeft: Int = myMaxCores - coresGranted
-
-  private var _retryCount = 0
-
-  def retryCount = _retryCount
-
-  def incrementRetryCount() = {
-    _retryCount += 1
-    _retryCount
-  }
-
-  def resetRetryCount() = _retryCount = 0
 
   def markFinished(endState: ApplicationState.Value) {
     state = endState
