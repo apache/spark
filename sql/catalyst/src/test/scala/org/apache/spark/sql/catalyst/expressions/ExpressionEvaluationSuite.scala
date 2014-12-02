@@ -149,6 +149,21 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))) && In(Literal(2), Seq(Literal(1), Literal(2))), true)
   }
 
+  test("Divide") {
+    checkEvaluation(Divide(Literal(2), Literal(1)), 2)
+    checkEvaluation(Divide(Literal(1.0), Literal(2.0)), 0.5)
+    checkEvaluation(Divide(Literal(1), Literal(2)), 0)
+    checkEvaluation(Divide(Literal(1), Literal(0)), null)
+    checkEvaluation(Divide(Literal(1.0), Literal(0.0)), null)
+    checkEvaluation(Divide(Literal(0.0), Literal(0.0)), null)
+    checkEvaluation(Divide(Literal(0), Literal(null, IntegerType)), null)
+    checkEvaluation(Divide(Literal(1), Literal(null, IntegerType)), null)
+    checkEvaluation(Divide(Literal(null, IntegerType), Literal(0)), null)
+    checkEvaluation(Divide(Literal(null, DoubleType), Literal(0.0)), null)
+    checkEvaluation(Divide(Literal(null, IntegerType), Literal(1)), null)
+    checkEvaluation(Divide(Literal(null, IntegerType), Literal(null, IntegerType)), null)
+  }
+
   test("INSET") {
     val hS = HashSet[Any]() + 1 + 2
     val nS = HashSet[Any]() + 1 + 2 + null
