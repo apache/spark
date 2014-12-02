@@ -155,4 +155,12 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
         -> "Time taken: "
     )
   }
+
+  test("Test input multi sql commonds as a whole at one time"){
+    runCliWithin(1.minute, Seq("-e",
+      """
+        |SHOW DATABASES;/*test multi sql commonds in one line */ SHOW
+        |TABLES; --end
+      """.stripMargin))("" -> "OK")
+  }
 }

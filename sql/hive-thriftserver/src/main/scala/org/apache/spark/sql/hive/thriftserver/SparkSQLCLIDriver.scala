@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import scala.collection.JavaConversions._
-
 import java.io._
 import java.util.{ArrayList => JArrayList}
 
@@ -27,19 +25,17 @@ import org.apache.commons.lang.StringUtils
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
-import org.apache.hadoop.hive.common.LogUtils.LogInitializationException
-import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils, LogUtils}
+import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.processors.{SetProcessor, CommandProcessor, CommandProcessorFactory}
+import org.apache.hadoop.hive.ql.processors.{CommandProcessor, SetProcessor}
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.shims.ShimLoader
-import org.apache.thrift.transport.TSocket
-
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.HiveShim
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServerShim
+import org.apache.thrift.transport.TSocket
+
+import scala.collection.JavaConversions._
 
 private[hive] object SparkSQLCLIDriver {
   private var prompt = "spark-sql"
@@ -201,7 +197,8 @@ private[hive] object SparkSQLCLIDriver {
     var currentPrompt = promptWithCurrentDB
     var line = reader.readLine(currentPrompt + "> ")
 
-    val filterCommentResult = FilterCommentResult("", false, new scala.collection.mutable.Stack[String])
+    val filterCommentResult = FilterCommentResult("", false,
+      new scala.collection.mutable.Stack[String])
 
     while (line != null) {
       if (prefix.nonEmpty) {
@@ -393,9 +390,12 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
         filterMatchName match {
           case "CMD_END_MARK" =>
             filterCommentResult.cmd += part1 + commentMarkMap(filterMatchName).marker
-            filterCommentResult.isCmdEnded = true
-            filterCommentResult.cmd = filterCommentResult.cmd.
-              replaceAll( """\n+\s*\n*""", "\n").trim
+            filterComment(part2, filterCommentResult)
+            if (filterCommentResult.cmd.trim.endsWith(";")) {
+              filterCommentResult.isCmdEnded = true
+              filterCommentResult.cmd = filterCommentResult.cmd.
+                replaceAll( """\n+\s*\n*""", "\n").trim
+            }
           case "SINGLE_QUOTATION_MARK" | "DOUBLE_QUOTATION_MARK" =>
             filterCommentResult.commentStack.push(filterMatchName)
             filterCommentResult.cmd += part1 + commentMarkMap(filterMatchName).marker
@@ -417,7 +417,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
       } else {
         currentCommentMark match {
-          case "SINGLE_QUOTATION_MARK" | "DOUBLE_QUOTATION_MARK" => {
+          case "SINGLE_QUOTATION_MARK" | "DOUBLE_QUOTATION_MARK" =>
             filterCommentResult.cmd += part1 + commentMarkMap(filterMatchName).marker
             if (filterMatchName == currentCommentMark) {
               filterCommentResult.commentStack.pop()
@@ -425,12 +425,9 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
               filterCommentResult.commentStack.push(filterMatchName)
             }
             filterComment(part2, filterCommentResult)
-          }
-          case "MULTI_LINE_COMMENT_START" => {
-            if (filterMatchName == "MULTI_LINE_COMMENT_END")
-              filterCommentResult.commentStack.pop()
+          case "MULTI_LINE_COMMENT_START" =>
+            if (filterMatchName == "MULTI_LINE_COMMENT_END") filterCommentResult.commentStack.pop()
             filterComment(part2, filterCommentResult)
-          }
         }
       }
     } else {
