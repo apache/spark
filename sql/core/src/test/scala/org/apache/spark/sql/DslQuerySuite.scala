@@ -19,7 +19,6 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types.NullType
 
 /* Implicits */
 import org.apache.spark.sql.catalyst.dsl._
@@ -296,7 +295,7 @@ class DslQuerySuite extends QueryTest {
     )
 
     checkAnswer(
-      testData.select(sqrt(Literal(null, NullType))),
+      testData.select(sqrt(Literal(null))),
       (1 to 100).map(_ => Seq(null))
     )
   }
@@ -313,7 +312,7 @@ class DslQuerySuite extends QueryTest {
     )
 
     checkAnswer(
-      testData.select(abs(Literal(null, NullType))),
+      testData.select(abs(Literal(null))),
       (1 to 100).map(_ => Seq(null))
     )
   }
@@ -330,7 +329,7 @@ class DslQuerySuite extends QueryTest {
     )
 
     checkAnswer(
-      testData.select(upper(Literal(null, NullType))),
+      testData.select(upper(Literal(null))),
       (1 to 100).map(n => Seq(null))
     )
   }
@@ -347,7 +346,7 @@ class DslQuerySuite extends QueryTest {
     )
 
     checkAnswer(
-      testData.select(lower(Literal(null, NullType))),
+      testData.select(lower(Literal(null))),
       (1 to 100).map(n => Seq(null))
     )
   }
