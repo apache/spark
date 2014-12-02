@@ -27,13 +27,19 @@ import org.apache.spark.Logging
  *
  * Thread-safety: this class is not thread-safe because it is only intended to be called
  * from the Master actor.
+ *
+ * @param appName the application name
+ * @param appId the application id
+ * @param consecutiveExecutorFailuresThreshold the minimum number of consecutive executor
+ *        failures that must occur before an application can be marked as failed
  */
 private[master] class ApplicationFailureDetector(
     appName: String,
-    appId: String)
+    appId: String,
+    consecutiveExecutorFailuresThreshold: Int)
   extends Logging with Serializable {
 
-  private val MAX_CONSECUTIVE_FAILURES = 10
+  require(consecutiveExecutorFailuresThreshold > 0)
 
   private var consecutiveExecutorFailures = 0
 
@@ -65,10 +71,17 @@ private[master] class ApplicationFailureDetector(
    * @return true if the application has failed, false otherwise.
    */
   def isFailed: Boolean = {
-    if (consecutiveExecutorFailures >= MAX_CONSECUTIVE_FAILURES && !hasRegisteredExecutors) {
-      logError(s"Application $appName with ID $appId is failed because it has no executors and " +
-        s"there were $consecutiveExecutorFailures consecutive executor failures")
-      true
+    if (consecutiveExecutorFailures >= consecutiveExecutorFailuresThreshold) {
+      if (!hasRegisteredExecutors) {
+        logError(s"Application $appName with ID $appId is failed because it has no executors and " +
+          s"there were $consecutiveExecutorFailures consecutive executor failures")
+        true
+      } else {
+        logWarning(s"$consecutiveExecutorFailures consecutive executor failures occurred for " +
+          s"application $appName with ID $appId, but not failing it because it reports that it" +
+          s" has at least one registered executor.")
+        false
+      }
     } else {
       false
     }

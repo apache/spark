@@ -47,7 +47,8 @@ private[spark] class ApplicationInfo(
 
   @transient private var nextExecutorId: Int = _
 
-  val failureDetector = new ApplicationFailureDetector(desc.name, id)
+  val failureDetector =
+    new ApplicationFailureDetector(desc.name, id, desc.consecutiveExecutorFailuresThreshold)
 
   init()
 

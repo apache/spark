@@ -19,16 +19,15 @@ package org.apache.spark.deploy.master
 
 import org.scalatest.{FunSuite, Matchers}
 
-
 class ApplicationFailureDetectorSuite extends FunSuite with Matchers {
 
   test("initially, the application should not be failed") {
-    val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
+    val failureDetector = new ApplicationFailureDetector("testApp", "testAppId", 10)
     assert(!failureDetector.isFailed)
   }
 
   test("normal operation (no executor failures)") {
-    val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
+    val failureDetector = new ApplicationFailureDetector("testApp", "testAppId", 10)
     for (execId <- 1 to 100) {
       failureDetector.updateExecutorStatus(hasRegisteredExecutors = true)
       assert(!failureDetector.isFailed)
@@ -37,7 +36,7 @@ class ApplicationFailureDetectorSuite extends FunSuite with Matchers {
   }
 
   test("every other executor launch fails") {
-    val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
+    val failureDetector = new ApplicationFailureDetector("testApp", "testAppId", 10)
     for (execId <- 1 to 100) {
       failureDetector.updateExecutorStatus(hasRegisteredExecutors = true)
       assert(!failureDetector.isFailed)
@@ -50,7 +49,7 @@ class ApplicationFailureDetectorSuite extends FunSuite with Matchers {
   }
 
   test("every executor fails after launch") {
-    val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
+    val failureDetector = new ApplicationFailureDetector("testApp", "testAppId", 10)
     var failed: Boolean = false
     for (execId <- 1 to 100) {
       failureDetector.updateExecutorStatus(hasRegisteredExecutors = false)

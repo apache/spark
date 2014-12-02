@@ -89,7 +89,7 @@ class JsonProtocolSuite extends FunSuite {
 
   def createAppDesc(): ApplicationDescription = {
     val cmd = new Command("mainClass", List("arg1", "arg2"), Map(), Seq(), Seq(), Seq())
-    new ApplicationDescription("name", Some(4), 1234, cmd, "appUiUrl", 10000)
+    new ApplicationDescription("name", Some(4), 1234, cmd, "appUiUrl", 10000, 10)
   }
 
   def createAppInfo() : ApplicationInfo = {

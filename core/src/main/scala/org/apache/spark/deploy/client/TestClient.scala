@@ -50,7 +50,7 @@ private[spark] object TestClient {
       conf = conf, securityManager = new SecurityManager(conf))
     val desc = new ApplicationDescription("TestClient", Some(1), 512,
       Command("spark.deploy.client.TestExecutor", Seq(), Map(), Seq(), Seq(), Seq()), "ignored",
-      10000)
+      10000, 10)
     val listener = new TestListener
     val client = new AppClient(actorSystem, Array(url), desc, listener, new SparkConf)
     client.start()
