@@ -1381,8 +1381,13 @@ setMethod("unionRDD",
 
 #' Join two RDDs
 #'
-#' @param rdd1 An RDD.
-#' @param rdd2 An RDD.
+#' This function joins two RDDs where every element is of the form list(K, V).
+#' The key types of the two RDDs should be the same.
+#'
+#' @param rdd1 An RDD to be joined. Should be an RDD where each element is
+#'             list(K, V).
+#' @param rdd2 An RDD to be joined. Should be an RDD where each element is
+#'             list(K, V).
 #' @param numPartitions Number of partitions to create.
 #' @return a new RDD containing all pairs of elements with matching keys in
 #'         two input RDDs.
@@ -1406,17 +1411,29 @@ setMethod("join",
             rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
             
             doJoin <- function(v) {
-              t1 <- Filter(function(x) { x[[1]] == 1L }, v)
-              t1 <- lapply(t1, function(x) { x[[2]] })
-              t2 <- Filter(function(x) { x[[1]] == 2L }, v)
-              t2 <- lapply(t2, function(x) { x[[2]] })
+              t1 <- vector("list", length(v))
+              t2 <- vector("list", length(v))
+              index1 <- 1
+              index2 <- 1
+              for (x in v) {
+                if (x[[1]] == 1L) {
+                  t1[[index1]] <- x[[2]]
+                  index1 <- index1 + 1
+                } else {
+                  t2[[index2]] <- x[[2]]
+                  index2 <- index2 + 1
+                }
+              }
+              length(t1) <- index1 - 1
+              length(t2) <- index2 - 1
+
               result <- list()
               length(result) <- length(t1) * length(t2)
-              index <- 1L
+              index <- 1
               for (i in t1) {
                 for (j in t2) {
                   result[[index]] <- list(i, j)
-                  index <- index + 1L
+                  index <- index + 1
                 }
               }
               result
@@ -1427,8 +1444,13 @@ setMethod("join",
 
 #' Left outer join two RDDs
 #'
-#' @param rdd1 An RDD.
-#' @param rdd2 An RDD.
+#' This function left-outer-joins two RDDs where every element is of the form list(K, V).
+#' The key types of the two RDDs should be the same.
+#'
+#' @param rdd1 An RDD to be joined. Should be an RDD where each element is
+#'             list(K, V).
+#' @param rdd2 An RDD to be joined. Should be an RDD where each element is
+#'             list(K, V).
 #' @param numPartitions Number of partitions to create.
 #' @return For each element (k, v) in rdd1, the resulting RDD will either contain 
 #'         all pairs (k, (v, w)) for (k, w) in rdd2, or the pair (k, (v, NULL)) 
@@ -1453,20 +1475,34 @@ setMethod("leftOuterJoin",
             rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
             
             doJoin <- function(v) {
-              t1 <- Filter(function(x) { x[[1]] == 1L }, v)
-              t1 <- lapply(t1, function(x) { x[[2]] })
-              t2 <- Filter(function(x) { x[[1]] == 2L }, v)
-              t2 <- lapply(t2, function(x) { x[[2]] })
-              if (length(t2) == 0) {
-                t2 <- list(NULL)
+              t1 <- vector("list", length(v))
+              t2 <- vector("list", length(v))
+              index1 <- 1
+              index2 <- 1
+              for (x in v) {
+                if (x[[1]] == 1L) {
+                  t1[[index1]] <- x[[2]]
+                  index1 <- index1 + 1
+                } else {
+                  t2[[index2]] <- x[[2]]
+                  index2 <- index2 + 1
+                }
               }
+              length(t1) <- index1 - 1
+              len2 <- index2 - 1
+              if (len2 == 0) {
+                t2 <- list(NULL)
+              } else {
+                length(t2) <- len2
+              }
+
               result <- list()
               length(result) <- length(t1) * length(t2)
-              index <- 1L
+              index <- 1
               for (i in t1) {
                 for (j in t2) {
                   result[[index]] <- list(i, j)
-                  index <- index + 1L
+                  index <- index + 1
                 }
               }
               result
@@ -1477,8 +1513,13 @@ setMethod("leftOuterJoin",
 
 #' Right outer join two RDDs
 #'
-#' @param rdd1 An RDD.
-#' @param rdd2 An RDD.
+#' This function right-outer-joins two RDDs where every element is of the form list(K, V).
+#' The key types of the two RDDs should be the same.
+#'
+#' @param rdd1 An RDD to be joined. Should be an RDD where each element is
+#'             list(K, V).
+#' @param rdd2 An RDD to be joined. Should be an RDD where each element is
+#'             list(K, V).
 #' @param numPartitions Number of partitions to create.
 #' @return For each element (k, w) in rdd2, the resulting RDD will either contain
 #'         all pairs (k, (v, w)) for (k, v) in rdd1, or the pair (k, (NULL, w))
@@ -1503,20 +1544,34 @@ setMethod("rightOuterJoin",
             rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
             
             doJoin <- function(v) {
-              t1 <- Filter(function(x) { x[[1]] == 1L }, v)
-              t1 <- lapply(t1, function(x) { x[[2]] })
-              if (length(t1) == 0) {
-                t1 <- list(NULL)
+              t1 <- vector("list", length(v))
+              t2 <- vector("list", length(v))
+              index1 <- 1
+              index2 <- 1
+              for (x in v) {
+                if (x[[1]] == 1L) {
+                  t1[[index1]] <- x[[2]]
+                  index1 <- index1 + 1
+                } else {
+                  t2[[index2]] <- x[[2]]
+                  index2 <- index2 + 1
+                }
               }
-              t2 <- Filter(function(x) { x[[1]] == 2L }, v)
-              t2 <- lapply(t2, function(x) { x[[2]] })
+              len1 <- index1 - 1
+              if (len1 == 0) {
+                t1 <- list(NULL)
+              } else {
+                length(t1) <- len1
+              }
+              length(t2) <- index2 - 1
+              
               result <- list()
               length(result) <- length(t1) * length(t2)
-              index <- 1L
+              index <- 1
               for (i in t1) {
                 for (j in t2) {
                   result[[index]] <- list(i, j)
-                  index <- index + 1L
+                  index <- index + 1
                 }
               }
               result

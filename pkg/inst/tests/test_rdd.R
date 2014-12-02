@@ -260,6 +260,16 @@ test_that("join() on pairwise RDDs", {
   rdd2 <- parallelize(sc, list(list("a",2), list("a",3)))
   actual <- collect(join(rdd1, rdd2, 2L))
   expect_equal(actual, list(list("a", list(1, 2)), list("a", list(1, 3))))
+
+  rdd1 <- parallelize(sc, list(list(1,1), list(2,2)))
+  rdd2 <- parallelize(sc, list(list(3,3), list(4,4)))
+  actual <- collect(join(rdd1, rdd2, 2L))
+  expect_equal(actual, list())
+
+  rdd1 <- parallelize(sc, list(list("a",1), list("b",2)))
+  rdd2 <- parallelize(sc, list(list("c",3), list("d",4)))
+  actual <- collect(join(rdd1, rdd2, 2L))
+  expect_equal(actual, list())
 })
 
 test_that("leftOuterJoin() on pairwise RDDs", {
@@ -272,6 +282,16 @@ test_that("leftOuterJoin() on pairwise RDDs", {
   rdd2 <- parallelize(sc, list(list("a",2), list("a",3)))
   actual <- collect(leftOuterJoin(rdd1, rdd2, 2L))
   expect_equal(actual, list(list("b", list(4, NULL)), list("a", list(1, 2)), list("a", list(1, 3))))
+
+  rdd1 <- parallelize(sc, list(list(1,1), list(2,2)))
+  rdd2 <- parallelize(sc, list(list(3,3), list(4,4)))
+  actual <- collect(leftOuterJoin(rdd1, rdd2, 2L))
+  expect_equal(actual, list(list(1, list(1, NULL)), list(2, list(2, NULL))))
+
+  rdd1 <- parallelize(sc, list(list("a",1), list("b",2)))
+  rdd2 <- parallelize(sc, list(list("c",3), list("d",4)))
+  actual <- collect(leftOuterJoin(rdd1, rdd2, 2L))
+  expect_equal(actual, list(list("b", list(2, NULL)), list("a", list(1, NULL))))
 })
 
 test_that("rightOuterJoin() on pairwise RDDs", {
@@ -284,5 +304,15 @@ test_that("rightOuterJoin() on pairwise RDDs", {
   rdd2 <- parallelize(sc, list(list("a",1), list("b",4)))
   actual <- collect(rightOuterJoin(rdd1, rdd2, 2L))
   expect_equal(actual, list(list("b", list(NULL, 4)), list("a", list(2, 1)), list("a", list(3, 1))))
+
+  rdd1 <- parallelize(sc, list(list(1,1), list(2,2)))
+  rdd2 <- parallelize(sc, list(list(3,3), list(4,4)))
+  actual <- collect(rightOuterJoin(rdd1, rdd2, 2L))
+  expect_equal(actual, list(list(3, list(NULL, 3)), list(4, list(NULL, 4))))
+
+  rdd1 <- parallelize(sc, list(list("a",1), list("b",2)))
+  rdd2 <- parallelize(sc, list(list("c",3), list("d",4)))
+  actual <- collect(rightOuterJoin(rdd1, rdd2, 2L))
+  expect_equal(actual, list(list("d", list(NULL, 4)), list("c", list(NULL, 3))))
 })
 

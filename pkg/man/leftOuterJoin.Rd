@@ -11,9 +11,11 @@ leftOuterJoin(rdd1, rdd2, numPartitions)
 \S4method{leftOuterJoin}{RDD,RDD,integer}(rdd1, rdd2, numPartitions)
 }
 \arguments{
-\item{rdd1}{An RDD.}
+\item{rdd1}{An RDD to be joined. Should be an RDD where each element is
+list(K, V).}
 
-\item{rdd2}{An RDD.}
+\item{rdd2}{An RDD to be joined. Should be an RDD where each element is
+list(K, V).}
 
 \item{numPartitions}{Number of partitions to create.}
 }
@@ -23,7 +25,8 @@ For each element (k, v) in rdd1, the resulting RDD will either contain
         if no elements in rdd2 have key k.
 }
 \description{
-Left outer join two RDDs
+This function left-outer-joins two RDDs where every element is of the form list(K, V).
+The key types of the two RDDs should be the same.
 }
 \examples{
 \dontrun{
