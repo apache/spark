@@ -145,7 +145,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     checkDataType(dataTypes.map(toWritableInspector).map(inspectorToDataType), dataTypes)
   }
 
-  test("wrap / unwrap #1") {
+  test("wrap / unwrap null, constant null and writables") {
     val writableOIs = dataTypes.map(toWritableInspector)
     val nullRow = data.map(d => null)
 
@@ -173,7 +173,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     })
   }
 
-  test("wrap / unwrap #2") {
+  test("wrap / unwrap primitive writable object inspector") {
     val writableOIs = dataTypes.map(toWritableInspector)
 
     checkValues(row, row.zip(writableOIs).map {
@@ -181,7 +181,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     })
   }
 
-  test("wrap / unwrap #3") {
+  test("wrap / unwrap primitive java object inspector") {
     val ois = dataTypes.map(toInspector)
 
     checkValues(row, row.zip(ois).map {
@@ -189,7 +189,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     })
   }
 
-  test("wrap / unwrap #4") {
+  test("wrap / unwrap Struct Type") {
     val dt = StructType(dataTypes.zipWithIndex.map {
       case (t, idx) => StructField(s"c_$idx", t)
     })
@@ -198,7 +198,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     checkValues(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
   }
 
-  test("wrap / unwrap #5") {
+  test("wrap / unwrap Array Type") {
     val dt = ArrayType(dataTypes(0))
 
     val d = row(0) :: row(0) :: Nil
@@ -208,7 +208,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     checkValues(d, unwrap(wrap(null, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
   }
 
-  test("wrap / unwrap #6") {
+  test("wrap / unwrap Map Type") {
     val dt = MapType(dataTypes(0), dataTypes(1))
 
     val d = Map(row(0) -> row(1))

@@ -224,7 +224,11 @@ private[hive] object HiveShim {
   }
 
   def toCatalystDecimal(hdoi: HiveDecimalObjectInspector, data: Any): Decimal = {
-    Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue())
+    if (hdoi.preferWritable()) {
+      Decimal(hdoi.getPrimitiveWritableObject(data).getHiveDecimal().bigDecimalValue)
+    } else {
+      Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue())
+    }
   }
 }
 
