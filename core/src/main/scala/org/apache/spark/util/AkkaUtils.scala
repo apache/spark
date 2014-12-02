@@ -125,7 +125,11 @@ private[spark] object AkkaUtils extends Logging {
   def maxFrameSizeBytes(conf: SparkConf): Int = {
     val frameSizeStr = conf.get("spark.akka.remote.netty.tcp.maximum-frame-size", "10485760B")
         .replace(" ", "").toLowerCase
-    frameSizeStr.substring(0, frameSizeStr.indexOf("b")).toInt
+    val ret = frameSizeStr.substring(0, frameSizeStr.indexOf("b")).toInt
+    if (ret > Int.MaxValue) {
+      throw new IllegalArgumentException("spark.akka.remote.netty.tcp.maximum-frame-size " +
+          "should not be greater than " + Int.MaxValue + "B")
+    }
   }
 
   /** Space reserved for extra data in an Akka message besides serialized task or task result. */

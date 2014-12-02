@@ -934,6 +934,12 @@ for details.
   <td> Reshuffle the data in the RDD randomly to create either more or fewer partitions and balance it across them.
     This always shuffles all data over the network. </td>
 </tr>
+<tr>
+  <td> <b>repartitionAndSortWithinPartitions</b>(<i>partitioner</i>) </td>
+  <td> Repartition the RDD according to the given partitioner and, within each resulting partition,
+  sort records by their keys. This is more efficient than calling <code>repartition</code> and then sorting within 
+  each partition because it can push the sorting down into the shuffle machinery. </td>
+</tr>
 </table>
 
 ### Actions
