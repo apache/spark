@@ -103,7 +103,7 @@ private[spark] object AkkaUtils extends Logging {
       |akka.remote.log-remote-lifecycle-events = off
       |akka.log-dead-letters = off
       |akka.log-dead-letters-during-shutdown = off
-      """.stripMargin).withFallback(conf.getAkkaConf.toMap[String, String])
+      """.stripMargin).withFallback(ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String]))
 
     val actorSystem = ActorSystem(name, akkaConf)
     val provider = actorSystem.asInstanceOf[ExtendedActorSystem].provider
