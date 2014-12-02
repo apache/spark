@@ -148,20 +148,15 @@ case class Limit(limit: Int, child: SparkPlan)
   }
 
   override def execute() = {
-    val rdd: RDD[_ <: Product2[Boolean, Row]] = if (sortBasedShuffleOn) {
-      child.execute().mapPartitions { iter =>
-        iter.take(limit).map(row => (false, row.copy()))
+    if (sortBasedShuffleOn) {
+      child.execute().map(_.copy).coalesce(1).mapPartitions { iter =>
+        iter.take(limit)
       }
     } else {
-      child.execute().mapPartitions { iter =>
-        val mutablePair = new MutablePair[Boolean, Row]()
-        iter.take(limit).map(row => mutablePair.update(false, row))
+      child.execute().coalesce(1).mapPartitions { iter =>
+        iter.take(limit)
       }
     }
-    val part = new HashPartitioner(1)
-    val shuffled = new ShuffledRDD[Boolean, Row, Row](rdd, part)
-    shuffled.setSerializer(new SparkSqlSerializer(new SparkConf(false)))
-    shuffled.mapPartitions(_.take(limit).map(_._2))
   }
 }
 
