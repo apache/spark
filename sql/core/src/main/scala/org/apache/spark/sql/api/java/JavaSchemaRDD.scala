@@ -42,7 +42,7 @@ import org.apache.spark.storage.StorageLevel
 class JavaSchemaRDD(
      @transient val sqlContext: SQLContext,
      @transient val baseLogicalPlan: LogicalPlan)
-  extends JavaRDDLike[Row, JavaRDD[Row]]
+  extends JavaRDDLike[Row]
   with SchemaRDDLike {
 
   private[sql] val baseSchemaRDD = new SchemaRDD(sqlContext, logicalPlan)
@@ -52,7 +52,7 @@ class JavaSchemaRDD(
 
   override val classTag = scala.reflect.classTag[Row]
 
-  override def wrapRDD(rdd: RDD[Row]): JavaRDD[Row] = JavaRDD.fromRDD(rdd)
+  def wrapRDD(rdd: RDD[Row]): JavaRDD[Row] = JavaRDD.fromRDD(rdd)
 
   val rdd = baseSchemaRDD.map(new Row(_))
 

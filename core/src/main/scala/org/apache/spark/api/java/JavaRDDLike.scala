@@ -38,8 +38,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
-trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
-  def wrapRDD(rdd: RDD[T]): This
+abstract class JavaRDDLike[T] extends Serializable {
 
   implicit val classTag: ClassTag[T]
 
@@ -204,7 +203,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
    * elements (a, b) where a is in `this` and b is in `other`.
    */
-  def cartesian[U](other: JavaRDDLike[U, _]): JavaPairRDD[T, U] =
+  def cartesian[U](other: JavaRDDLike[U]): JavaPairRDD[T, U] =
     JavaPairRDD.fromRDD(rdd.cartesian(other.rdd)(other.classTag))(classTag, other.classTag)
 
   /**
@@ -250,7 +249,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * partitions* and the *same number of elements in each partition* (e.g. one was made through
    * a map on the other).
    */
-  def zip[U](other: JavaRDDLike[U, _]): JavaPairRDD[T, U] = {
+  def zip[U](other: JavaRDDLike[U]): JavaPairRDD[T, U] = {
     JavaPairRDD.fromRDD(rdd.zip(other.rdd)(other.classTag))(classTag, other.classTag)
   }
 
@@ -261,7 +260,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * of elements in each partition.
    */
   def zipPartitions[U, V](
-      other: JavaRDDLike[U, _],
+      other: JavaRDDLike[U],
       f: FlatMapFunction2[java.util.Iterator[T], java.util.Iterator[U], V]): JavaRDD[V] = {
     def fn = (x: Iterator[T], y: Iterator[U]) => asScalaIterator(
       f.call(asJavaIterator(x), asJavaIterator(y)).iterator())

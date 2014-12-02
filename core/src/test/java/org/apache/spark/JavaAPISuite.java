@@ -616,6 +616,20 @@ public class JavaAPISuite implements Serializable {
     Assert.assertArrayEquals(expected_counts, histogram);
   }
 
+  private static class DoubleComparator implements Comparator<Double>, Serializable {
+    public int compare(Double o1, Double o2) {
+      return o1.compareTo(o2);
+    }
+  }
+
+  @Test
+  public void javaDoubleRDDMax() {
+    // Regression test for SPARK-3266
+    JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
+    double max = rdd.max(new DoubleComparator());
+    Assert.assertEquals(4.0, max, 0.001);
+  }
+
   @Test
   public void map() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
