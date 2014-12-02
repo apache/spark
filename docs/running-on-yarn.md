@@ -43,31 +43,10 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.user.classpath.first</code></td>
-  <td>false</td>
-  <td>
-    Set to true to make the users app.jar in first order. It is normally last in case conflicts with spark jars.
-  </td>
-</tr>
-<tr>
   <td><code>spark.yarn.scheduler.heartbeat.interval-ms</code></td>
   <td>5000</td>
   <td>
     The interval in ms in which the Spark application master heartbeats into the YARN ResourceManager.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.yarn.scheduler.reporterThread.maxFailures</code></td>
-  <td>5</td>
-  <td>
-    The number of failures in a row until the Spark application master gives up heartbeating into the YARN ResourceManager.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.yarn.report.interval</code></td>
-  <td>1000</td>
-  <td>
-    The interval in ms in which the YARN client monitors the application status after submits it to the YARN ResourceManager.
   </td>
 </tr>
 <tr>
