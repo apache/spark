@@ -76,5 +76,4 @@ class HiveTableScanSuite extends HiveComparisonTest {
       === Array(Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")),Row(null)))
     TestHive.sql("DROP TABLE timestamp_query_null")
   }
-
 }
