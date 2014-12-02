@@ -873,6 +873,29 @@ private[spark] object Utils extends Logging {
     "%.1f %s".formatLocal(Locale.US, value, unit)
   }
 
+	/**
+	 * Convert a time in nanotime to a human-readable string such as "1.3 h".
+	 */
+	def nanoTimeToString(time: Long): String = {
+	  val HH = 3600L * 1e9
+		val MM =   60L * 1e9
+		val SS =    1L * 1e9
+		val MS =    1L * 1e6
+
+		val (value, unit) = {
+		  if (time >= HH) {
+			  (time.asInstanceOf[Double] / HH, "h")
+			} else if (time >= MM) {
+			  (time.asInstanceOf[Double] / MM, "m")
+			} else if (time >= SS) {
+			  (time.asInstanceOf[Double] / SS, "s")
+			} else {
+			  (time.asInstanceOf[Double] / MS, "ms")
+			}
+		}
+		"%.1f %s".formatLocal(Locale.US, value, unit)
+	}
+
   /**
    * Returns a human-readable string representing a duration such as "35ms"
    */

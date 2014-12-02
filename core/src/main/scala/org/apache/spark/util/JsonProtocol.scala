@@ -284,7 +284,8 @@ private[spark] object JsonProtocol {
 
   def inputMetricsToJson(inputMetrics: InputMetrics): JValue = {
     ("Data Read Method" -> inputMetrics.readMethod.toString) ~
-    ("Bytes Read" -> inputMetrics.bytesRead)
+    ("Bytes Read" -> inputMetrics.bytesRead) ~
+    ("Read Time" -> inputMetrics.readTime)
   }
 
   def outputMetricsToJson(outputMetrics: OutputMetrics): JValue = {
@@ -639,6 +640,7 @@ private[spark] object JsonProtocol {
     val metrics = new InputMetrics(
       DataReadMethod.withName((json \ "Data Read Method").extract[String]))
     metrics.bytesRead = (json \ "Bytes Read").extract[Long]
+    metrics.readTime = (json \ "Read Time").extract[Long]
     metrics
   }
 

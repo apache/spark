@@ -183,6 +183,11 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
    * Total bytes read.
    */
   var bytesRead: Long = 0L
+  
+  /**
+   * Total read data time.
+   */
+  var readTime: Long = 0L
 }
 
 /**

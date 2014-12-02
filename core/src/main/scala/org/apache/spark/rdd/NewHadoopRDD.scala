@@ -139,10 +139,13 @@ class NewHadoopRDD[K, V](
       var havePair = false
       var finished = false
       var recordsSinceMetricsUpdate = 0
+      var startTime: Long = 0L
 
       override def hasNext: Boolean = {
         if (!finished && !havePair) {
+          startTime = System.nanoTime
           finished = !reader.nextKeyValue
+          inputMetrics.readTime += (System.nanoTime - startTime)
           havePair = !finished
         }
         !finished
