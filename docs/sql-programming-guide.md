@@ -612,13 +612,8 @@ Configuration of Parquet can be done using the `setConf` method on SQLContext or
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a SchemaRDD.
 This conversion can be done using one of two methods in a SQLContext:
 
-* `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
+* `jsonFile` - loads data from a directory of text files where each line of the files is a JSON object.
 * `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
-
-Note that the file that is offered as _jsonFile_ is not necessarily a valid JSON file,
-since each line must contain a separate, valid JSON object. In reverse, a valid
-multi-line JSON file will most often fail because the separate lines are not valid
-JSON objects in themselves.
 
 {% highlight scala %}
 // sc is an existing SparkContext.
@@ -626,7 +621,7 @@ val sqlContext = new org.apache.spark.sql.SQLContext(sc)
 
 // A JSON dataset is pointed to by path.
 // The path can be either a single text file or a directory storing text files.
-val path = "examples/src/main/resources/people.json"
+val path = "examples/src/main/resources/people.txt"
 // Create a SchemaRDD from the file(s) pointed to by path
 val people = sqlContext.jsonFile(path)
 
@@ -655,13 +650,8 @@ val anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD)
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a JavaSchemaRDD.
 This conversion can be done using one of two methods in a JavaSQLContext :
 
-* `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
+* `jsonFile` - loads data from a directory of text files where each line of the files is a JSON object.
 * `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
-
-Note that the file that is offered as _jsonFile_ is not necessarily a valid JSON file,
-since each line must contain a separate, valid JSON object. In reverse, a valid
-multi-line JSON file will most often fail because the separate lines are not valid
-JSON objects in themselves.
 
 {% highlight java %}
 // sc is an existing JavaSparkContext.
@@ -669,7 +659,7 @@ JavaSQLContext sqlContext = new org.apache.spark.sql.api.java.JavaSQLContext(sc)
 
 // A JSON dataset is pointed to by path.
 // The path can be either a single text file or a directory storing text files.
-String path = "examples/src/main/resources/people.json";
+String path = "examples/src/main/resources/people.txt";
 // Create a JavaSchemaRDD from the file(s) pointed to by path
 JavaSchemaRDD people = sqlContext.jsonFile(path);
 
@@ -698,13 +688,8 @@ JavaSchemaRDD anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD);
 Spark SQL can automatically infer the schema of a JSON dataset and load it as a SchemaRDD.
 This conversion can be done using one of two methods in a SQLContext:
 
-* `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
+* `jsonFile` - loads data from a directory of text files where each line of the files is a JSON object.
 * `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
-
-Note that the file that is offered as _jsonFile_ is not necessarily a valid JSON file,
-since each line must contain a separate, valid JSON object. In reverse, a valid
-multi-line JSON file will most often fail because the separate lines are not valid
-JSON objects in themselves.
 
 {% highlight python %}
 # sc is an existing SparkContext.
@@ -713,7 +698,7 @@ sqlContext = SQLContext(sc)
 
 # A JSON dataset is pointed to by path.
 # The path can be either a single text file or a directory storing text files.
-path = "examples/src/main/resources/people.json"
+path = "examples/src/main/resources/people.txt"
 # Create a SchemaRDD from the file(s) pointed to by path
 people = sqlContext.jsonFile(path)
 
