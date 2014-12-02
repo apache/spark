@@ -415,7 +415,7 @@ private[spark] class Master(
       // The disconnected client could've been either a worker or an app; remove whichever it was
       logInfo(s"$address got disassociated, removing it.")
       addressToWorker.get(address).foreach(removeWorker)
-      //addressToApp.get(address).foreach(finishApplication)
+      addressToApp.get(address).foreach(finishApplication)
       if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
     }
 
