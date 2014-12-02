@@ -108,8 +108,11 @@ class Airflow(BaseView):
         if db_id_str:
             db = [db for db in dbs if db.db_id == db_id_str][0]
             hook = db.get_hook()
-            results = hook.get_pandas_df(sql).to_html(
-                classes="table table-striped table-bordered model-list")
+            try:
+                results = hook.get_pandas_df(sql).to_html(
+                    classes="table table-striped table-bordered model-list")
+            except Exception as e:
+                flash(str(e), 'error')
 
         form = QueryForm(request.form, data=data)
         session.commit()
@@ -118,9 +121,11 @@ class Airflow(BaseView):
 
     @expose('/chart')
     def chart(self):
+        from pandas.tslib import Timestamp
         session = settings.Session()
         chart_id = request.args.get('chart_id')
         chart = session.query(models.Chart).filter_by(id=chart_id).all()[0]
+        show_sql = chart.show_sql
         db = session.query(
             models.DatabaseConnection).filter_by(db_id=chart.db_id).all()[0]
         session.expunge_all()
@@ -129,33 +134,68 @@ class Airflow(BaseView):
         hook = db.get_hook()
         try:
             args = eval(chart.default_params)
+            if type(args) is not type(dict()):
+                raise Exception('Not a dict')
         except:
             args = {}
+            flash(
+                "Default params is not valid, string has to evaluate as "
+                "a Python dictionary", 'error')
+
         request_dict = {k:request.args.get(k) for k in request.args}
         args.update(request_dict)
         sql = jinja2.Template(chart.sql).render(**args)
         label = jinja2.Template(chart.label).render(**args)
-        df = hook.get_pandas_df(sql)
-
-        for i, (series, x, y) in df.iterrows():
-            if series not in all_data:
-                all_data[series] = []
-            all_data[series].append([x.isoformat(), float(y)])
-        all_data = [
-            {'name': series, 'data': sorted(all_data[series], key=lambda r: r[0])}
-            for series in sorted(all_data)
-        ]
-        height = "{0}px".format(chart.height)
-
+        has_data = False
         table = None
-        if chart.show_datatable:
-            table = df.to_html(classes='table table-striped table-bordered')
+        height = "{0}px".format(chart.height)
+        try:
+            df = hook.get_pandas_df(sql)
+            has_data = len(df)
+        except Exception as e:
+            flash(str(e), 'error')
+            has_data = False
+
+        show_chart = True
+        if not has_data:
+            show_sql = True
+            show_chart = False
+            flash('No data was returned', 'error')
+        elif len(df.columns) < 3:
+            show_sql = True
+            show_chart = False
+            flash(
+                "SQL needs to return at least 3 columns (series, x, y)",
+                'error')
+        else:
+
+
+            # Preparing the data in a format that chartkick likes
+            for i, (series, x, y) in df.iterrows():
+                if series not in all_data:
+                    all_data[series] = []
+                print(type(x))
+                if type(x) in (datetime, Timestamp) :
+                    x = x.isoformat()
+                all_data[series].append([x, float(y)])
+            all_data = [{
+                    'name': series,
+                    'data': sorted(all_data[series], key=lambda r: r[0])
+                }
+                for series in sorted(all_data)
+            ]
+
+            if chart.show_datatable:
+                table = df.to_html(
+                    classes='table table-striped table-bordered')
 
         response = self.render(
             'airflow/modelchart.html',
             chart=chart, data=all_data, table=Markup(table),
             chart_options={},
+            show_chart=show_chart,
             height=height,
+            show_sql=show_sql,
             sql=sql, label=label)
         session.commit()
         session.close()
