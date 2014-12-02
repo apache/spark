@@ -63,24 +63,12 @@ private[spark] object AkkaUtils extends Logging {
       conf: SparkConf,
       securityManager: SecurityManager): (ActorSystem, Int) = {
 
-    val akkaThreads   = conf.getInt("spark.akka.threads", 4)
-    val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
-    val akkaTimeout = conf.getInt("spark.akka.timeout", 100)
-    val akkaFrameSize = maxFrameSizeBytes(conf)
-    val akkaLogLifecycleEvents = conf.getBoolean("spark.akka.logLifecycleEvents", false)
-    val lifecycleEvents = if (akkaLogLifecycleEvents) "on" else "off"
+    val akkaLogLifecycleEvents = conf.getBoolean("spark.akka.remote.log-remote-lifecycle-events", false)
     if (!akkaLogLifecycleEvents) {
       // As a workaround for Akka issue #3787, we coerce the "EndpointWriter" log to be silent.
       // See: https://www.assembla.com/spaces/akka/tickets/3787#/
       Option(Logger.getLogger("akka.remote.EndpointWriter")).map(l => l.setLevel(Level.FATAL))
     }
-
-    val logAkkaConfig = if (conf.getBoolean("spark.akka.logAkkaConfig", false)) "on" else "off"
-
-    val akkaHeartBeatPauses = conf.getInt("spark.akka.heartbeat.pauses", 6000)
-    val akkaFailureDetector =
-      conf.getDouble("spark.akka.failure-detector.threshold", 300.0)
-    val akkaHeartBeatInterval = conf.getInt("spark.akka.heartbeat.interval", 1000)
 
     val secretKey = securityManager.getSecretKey()
     val isAuthOn = securityManager.isAuthenticationEnabled()
@@ -91,8 +79,7 @@ private[spark] object AkkaUtils extends Logging {
     val secureCookie = if (isAuthOn) secretKey else ""
     logDebug("In createActorSystem, requireCookie is: " + requireCookie)
 
-    val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String]).withFallback(
-      ConfigFactory.parseString(
+    val akkaConf = ConfigFactory.parseString(
       s"""
       |akka.daemonic = on
       |akka.loggers = [""akka.event.slf4j.Slf4jLogger""]
@@ -100,23 +87,23 @@ private[spark] object AkkaUtils extends Logging {
       |akka.jvm-exit-on-fatal-error = off
       |akka.remote.require-cookie = "$requireCookie"
       |akka.remote.secure-cookie = "$secureCookie"
-      |akka.remote.transport-failure-detector.heartbeat-interval = $akkaHeartBeatInterval s
-      |akka.remote.transport-failure-detector.acceptable-heartbeat-pause = $akkaHeartBeatPauses s
-      |akka.remote.transport-failure-detector.threshold = $akkaFailureDetector
+      |akka.remote.transport-failure-detector.heartbeat-interval = 1000 s
+      |akka.remote.transport-failure-detector.acceptable-heartbeat-pause = 6000 s
+      |akka.remote.transport-failure-detector.threshold = 300.0
       |akka.actor.provider = "akka.remote.RemoteActorRefProvider"
       |akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
       |akka.remote.netty.tcp.hostname = "$host"
       |akka.remote.netty.tcp.port = $port
       |akka.remote.netty.tcp.tcp-nodelay = on
-      |akka.remote.netty.tcp.connection-timeout = $akkaTimeout s
-      |akka.remote.netty.tcp.maximum-frame-size = ${akkaFrameSize}B
-      |akka.remote.netty.tcp.execution-pool-size = $akkaThreads
-      |akka.actor.default-dispatcher.throughput = $akkaBatchSize
-      |akka.log-config-on-start = $logAkkaConfig
-      |akka.remote.log-remote-lifecycle-events = $lifecycleEvents
-      |akka.log-dead-letters = $lifecycleEvents
-      |akka.log-dead-letters-during-shutdown = $lifecycleEvents
-      """.stripMargin))
+      |akka.remote.netty.tcp.connection-timeout = 100 s
+      |akka.remote.netty.tcp.maximum-frame-size = 10485760B
+      |akka.remote.netty.tcp.execution-pool-size = 4
+      |akka.actor.default-dispatcher.throughput = 15
+      |akka.log-config-on-start = off
+      |akka.remote.log-remote-lifecycle-events = off
+      |akka.log-dead-letters = off
+      |akka.log-dead-letters-during-shutdown = off
+      """.stripMargin).withFallback(conf.getAkkaConf.toMap[String, String])
 
     val actorSystem = ActorSystem(name, akkaConf)
     val provider = actorSystem.asInstanceOf[ExtendedActorSystem].provider
@@ -126,17 +113,19 @@ private[spark] object AkkaUtils extends Logging {
 
   /** Returns the default Spark timeout to use for Akka ask operations. */
   def askTimeout(conf: SparkConf): FiniteDuration = {
-    Duration.create(conf.getLong("spark.akka.askTimeout", 30), "seconds")
+    Duration.create(conf.getLong("spark.internal.akka.askTimeout", 30), "seconds")
   }
 
   /** Returns the default Spark timeout to use for Akka remote actor lookup. */
   def lookupTimeout(conf: SparkConf): FiniteDuration = {
-    Duration.create(conf.getLong("spark.akka.lookupTimeout", 30), "seconds")
+    Duration.create(conf.getLong("spark.internal.akka.lookupTimeout", 30), "seconds")
   }
 
   /** Returns the configured max frame size for Akka messages in bytes. */
   def maxFrameSizeBytes(conf: SparkConf): Int = {
-    conf.getInt("spark.akka.frameSize", 10) * 1024 * 1024
+    val frameSizeStr = conf.get("spark.akka.remote.netty.tcp.maximum-frame-size", "10485760B")
+        .replace(" ", "").toLowerCase
+    frameSizeStr.substring(0, frameSizeStr.indexOf("b")).toInt
   }
 
   /** Space reserved for extra data in an Akka message besides serialized task or task result. */
@@ -144,12 +133,12 @@ private[spark] object AkkaUtils extends Logging {
 
   /** Returns the configured number of times to retry connecting */
   def numRetries(conf: SparkConf): Int = {
-    conf.getInt("spark.akka.num.retries", 3)
+    conf.getInt("spark.internal.akka.num.retries", 3)
   }
 
   /** Returns the configured number of milliseconds to wait on each retry */
   def retryWaitMs(conf: SparkConf): Int = {
-    conf.getInt("spark.akka.retry.wait", 3000)
+    conf.getInt("spark.internal.akka.retry.wait", 3000)
   }
 
   /**

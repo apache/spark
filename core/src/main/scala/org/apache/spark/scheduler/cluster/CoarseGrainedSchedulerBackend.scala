@@ -182,8 +182,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
           scheduler.activeTaskSets.get(taskSetId).foreach { taskSet =>
             try {
               var msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
-                "spark.akka.frameSize (%d bytes) - reserved (%d bytes). Consider increasing " +
-                "spark.akka.frameSize or using broadcast variables for large values."
+                "spark.akka.remote.netty.tcp.maximum-frame-size (%d bytes) - reserved (%d bytes). " +
+                "Consider increasing spark.akka.remote.netty.tcp.maximum-frame-size " +
+                "or using broadcast variables for large values."
               msg = msg.format(task.taskId, task.index, serializedTask.limit, akkaFrameSize,
                 AkkaUtils.reservedSizeBytes)
               taskSet.abort(msg)

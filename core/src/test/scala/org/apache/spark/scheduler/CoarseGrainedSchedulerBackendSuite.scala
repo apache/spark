@@ -26,7 +26,7 @@ class CoarseGrainedSchedulerBackendSuite extends FunSuite with LocalSparkContext
 
   test("serialized task larger than akka frame size") {
     val conf = new SparkConf
-    conf.set("spark.akka.frameSize","1")
+    conf.set("spark.akka.remote.netty.tcp.maximum-frame-size","1048576b")
     conf.set("spark.default.parallelism","1")
     sc = new SparkContext("local-cluster[2 , 1 , 512]", "test", conf)
     val frameSize = AkkaUtils.maxFrameSizeBytes(sc.conf)
