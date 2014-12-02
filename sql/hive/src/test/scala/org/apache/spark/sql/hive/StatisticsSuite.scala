@@ -195,69 +195,49 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("auto converts to broadcast left semi join, by size estimate of a relation") {
-    def mkTest(
-                before: () => Unit,
-                after: () => Unit,
-                query: String,
-                expectedAnswer: Seq[Any],
-                ct: ClassTag[_]) = {
-      before()
-
-      var rdd = sql(query)
-
-      // Assert src has a size smaller than the threshold.
-      val sizes = rdd.queryExecution.analyzed.collect {
-        case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
-      }
-      assert(sizes.size === 2 && sizes(1) <= autoBroadcastJoinThreshold
-        && sizes(0) <= autoBroadcastJoinThreshold,
-        s"query should contain two relations, each of which has size smaller than autoConvertSize")
-
-      // Using `sparkPlan` because for relevant patterns in HashJoin to be
-      // matched, other strategies need to be applied.
-      var bhj = rdd.queryExecution.sparkPlan.collect {
-        case j: BroadcastLeftSemiJoinHash => j
-      }
-      assert(bhj.size === 1,
-        s"actual query plans do not contain broadcast join: ${rdd.queryExecution}")
-
-      checkAnswer(rdd, expectedAnswer) // check correctness of output
-
-      TestHive.settings.synchronized {
-        val tmp = autoBroadcastJoinThreshold
-
-        sql( s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
-        rdd = sql(query)
-        bhj = rdd.queryExecution.sparkPlan.collect {
-          case j: BroadcastLeftSemiJoinHash => j
-        }
-        assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
-
-        val shj = rdd.queryExecution.sparkPlan.collect {
-          case j: LeftSemiJoinHash => j
-        }
-        assert(shj.size === 1,
-          "LeftSemiJoinHash should be planned when BroadcastHashJoin is turned off")
-
-        sql( s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
-      }
-
-      after()
-    }
-
-    /** Tests for MetastoreRelation */
-   val leftSemiJoinQuery =
+    val leftSemiJoinQuery =
       """SELECT * FROM src a
         |left semi JOIN src b ON a.key=86 and a.key = b.key""".stripMargin
-    val Answer =(86, "val_86") ::Nil 
+    val answer = (86, "val_86") :: Nil
 
-    mkTest(
-      () => (),
-      () => (),
-      leftSemiJoinQuery,
-      Answer,
-      implicitly[ClassTag[MetastoreRelation]]
-    )
+    var rdd = sql(leftSemiJoinQuery)
+
+    // Assert src has a size smaller than the threshold.
+    val sizes = rdd.queryExecution.analyzed.collect {
+      case r if implicitly[ClassTag[MetastoreRelation]].runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
+    }
+    assert(sizes.size === 2 && sizes(1) <= autoBroadcastJoinThreshold
+      && sizes(0) <= autoBroadcastJoinThreshold,
+      s"query should contain two relations, each of which has size smaller than autoConvertSize")
+
+    // Using `sparkPlan` because for relevant patterns in HashJoin to be
+    // matched, other strategies need to be applied.
+    var bhj = rdd.queryExecution.sparkPlan.collect {
+      case j: BroadcastLeftSemiJoinHash => j
+    }
+    assert(bhj.size === 1,
+      s"actual query plans do not contain broadcast join: ${rdd.queryExecution}")
+
+    checkAnswer(rdd, answer) // check correctness of output
+
+    TestHive.settings.synchronized {
+      val tmp = autoBroadcastJoinThreshold
+
+      sql( s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
+      rdd = sql(leftSemiJoinQuery)
+      bhj = rdd.queryExecution.sparkPlan.collect {
+        case j: BroadcastLeftSemiJoinHash => j
+      }
+      assert(bhj.isEmpty, "BroadcastHashJoin still planned even though it is switched off")
+
+      val shj = rdd.queryExecution.sparkPlan.collect {
+        case j: LeftSemiJoinHash => j
+      }
+      assert(shj.size === 1,
+        "LeftSemiJoinHash should be planned when BroadcastHashJoin is turned off")
+
+      sql( s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
+    }
 
   }
 }

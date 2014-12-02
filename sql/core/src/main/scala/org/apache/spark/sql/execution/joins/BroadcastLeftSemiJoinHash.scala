@@ -39,7 +39,6 @@ case class BroadcastLeftSemiJoinHash(
   override def output = left.output
 
   override def execute() = {
-
     val buildIter= buildPlan.execute().map(_.copy()).collect().toIterator
     val hashSet = new java.util.HashSet[Row]()
     var currentRow: Row = null
@@ -59,7 +58,6 @@ case class BroadcastLeftSemiJoinHash(
     val broadcastedRelation = sparkContext.broadcast(hashSet)
 
     streamedPlan.execute().mapPartitions { streamIter =>
-
       val joinKeys = streamSideKeyGenerator()
       streamIter.filter(current => {
         !joinKeys(current).anyNull && broadcastedRelation.value.contains(joinKeys.currentValue)
