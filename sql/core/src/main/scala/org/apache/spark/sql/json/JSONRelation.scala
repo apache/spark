@@ -24,9 +24,9 @@ private[sql] class DefaultSource extends RelationProvider {
   /** Returns a new base relation with the given parameters. */
   override def createRelation(
       sqlContext: SQLContext,
-      parameters: Map[String, String]): BaseRelation = {
+      parameters: CaseInsensitiveMap): BaseRelation = {
     val fileName = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
-    val samplingRatio = parameters.get("samplingRatio".toLowerCase).map(_.toDouble).getOrElse(1.0)
+    val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
     JSONRelation(fileName, samplingRatio)(sqlContext)
   }

@@ -24,7 +24,7 @@ import org.apache.spark.sql._
 class FilteredScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
-      parameters: Map[String, String]): BaseRelation = {
+      parameters: CaseInsensitiveMap): BaseRelation = {
     SimpleFilteredScan(parameters("from").toInt, parameters("to").toInt)(sqlContext)
   }
 }

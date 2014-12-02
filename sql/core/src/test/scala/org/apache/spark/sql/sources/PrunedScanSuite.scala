@@ -22,7 +22,7 @@ import org.apache.spark.sql._
 class PrunedScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
-      parameters: Map[String, String]): BaseRelation = {
+      parameters: CaseInsensitiveMap): BaseRelation = {
     SimplePrunedScan(parameters("from").toInt, parameters("to").toInt)(sqlContext)
   }
 }

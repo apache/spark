@@ -24,7 +24,7 @@ class DefaultSource extends SimpleScanSource
 class SimpleScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
-      parameters: Map[String, String]): BaseRelation = {
+      parameters: CaseInsensitiveMap): BaseRelation = {
     SimpleScan(parameters("from").toInt, parameters("to").toInt)(sqlContext)
   }
 }
@@ -47,7 +47,7 @@ class TableScanSuite extends DataSourceTest {
         |CREATE TEMPORARY TABLE oneToTen
         |USING org.apache.spark.sql.sources.SimpleScanSource
         |OPTIONS (
-        |  from '1',
+        |  From '1',
         |  to '10'
         |)
       """.stripMargin)
