@@ -23,6 +23,8 @@ private[spark] class ApplicationDescription(
     val memoryPerSlave: Int,
     val command: Command,
     var appUiUrl: String,
+    val heartbeatInterval: Int,
+    val consecutiveExecutorFailuresThreshold: Int,
     val eventLogDir: Option[String] = None)
   extends Serializable {
 

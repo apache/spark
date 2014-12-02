@@ -101,6 +101,16 @@ private[deploy] object DeployMessages {
 
   case class MasterChangeAcknowledged(appId: String)
 
+  /**
+   * Periodic heartbeat from the app client to the master, used to detect driver death and to
+   * detect drivers that have not obtained any usable executors.
+   *
+   * @param appId the application id.
+   * @param hasRegisteredExecutors true if the app client has at least one registered executor,
+   *                               false otherwise.
+   */
+  case class AppClientHeartbeat(appId: String, hasRegisteredExecutors: Boolean)
+
   // Master to AppClient
 
   case class RegisteredApplication(appId: String, masterUrl: String) extends DeployMessage
@@ -135,6 +145,12 @@ private[deploy] object DeployMessages {
   // Internal message in AppClient
 
   case object StopAppClient
+
+  /**
+    * Message sent from the heartbeat timer thread to trigger the sending of a heartbeat to the
+    * Master. This is necessary for proper thread-safety
+    */
+  case object TriggerHeartbeat
 
   // Master to Worker & AppClient
 

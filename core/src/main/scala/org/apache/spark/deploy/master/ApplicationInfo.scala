@@ -43,8 +43,12 @@ private[spark] class ApplicationInfo(
   @transient var coresGranted: Int = _
   @transient var endTime: Long = _
   @transient var appSource: ApplicationSource = _
+  @transient var lastHeartbeat: Long = _
 
   @transient private var nextExecutorId: Int = _
+
+  val failureDetector =
+    new ApplicationFailureDetector(desc.name, id, desc.consecutiveExecutorFailuresThreshold)
 
   init()
 
@@ -61,6 +65,7 @@ private[spark] class ApplicationInfo(
     appSource = new ApplicationSource(this)
     nextExecutorId = 0
     removedExecutors = new ArrayBuffer[ExecutorInfo]
+    lastHeartbeat = System.currentTimeMillis()
   }
 
   private def newExecutorId(useID: Option[Int] = None): Int = {
@@ -93,17 +98,6 @@ private[spark] class ApplicationInfo(
   private val myMaxCores = desc.maxCores.getOrElse(defaultCores)
 
   def coresLeft: Int = myMaxCores - coresGranted
-
-  private var _retryCount = 0
-
-  def retryCount = _retryCount
-
-  def incrementRetryCount() = {
-    _retryCount += 1
-    _retryCount
-  }
-
-  def resetRetryCount() = _retryCount = 0
 
   def markFinished(endState: ApplicationState.Value) {
     state = endState

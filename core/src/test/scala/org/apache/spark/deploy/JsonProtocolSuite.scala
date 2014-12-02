@@ -89,13 +89,14 @@ class JsonProtocolSuite extends FunSuite {
 
   def createAppDesc(): ApplicationDescription = {
     val cmd = new Command("mainClass", List("arg1", "arg2"), Map(), Seq(), Seq(), Seq())
-    new ApplicationDescription("name", Some(4), 1234, cmd, "appUiUrl")
+    new ApplicationDescription("name", Some(4), 1234, cmd, "appUiUrl", 10000, 10)
   }
 
   def createAppInfo() : ApplicationInfo = {
     val appInfo = new ApplicationInfo(JsonConstants.appInfoStartTime,
       "id", createAppDesc(), JsonConstants.submitDate, null, Int.MaxValue)
     appInfo.endTime = JsonConstants.currTimeInMillis
+    appInfo.lastHeartbeat = JsonConstants.currTimeInMillis
     appInfo
   }
 
@@ -155,9 +156,9 @@ object JsonConstants {
       |{"starttime":3,"id":"id","name":"name",
       |"cores":4,"user":"%s",
       |"memoryperslave":1234,"submitdate":"%s",
-      |"state":"WAITING","duration":%d}
+      |"state":"WAITING","duration":%d,"lastheartbeat":%d}
     """.format(System.getProperty("user.name", "<unknown>"),
-        submitDate.toString, currTimeInMillis - appInfoStartTime).stripMargin
+        submitDate.toString, currTimeInMillis - appInfoStartTime, currTimeInMillis).stripMargin
 
   val workerInfoJsonStr =
     """
@@ -171,7 +172,8 @@ object JsonConstants {
   val appDescJsonStr =
     """
       |{"name":"name","cores":4,"memoryperslave":1234,
-      |"user":"%s","command":"Command(mainClass,List(arg1, arg2),Map(),List(),List(),List())"}
+      |"user":"%s","command":"Command(mainClass,List(arg1, arg2),Map(),List(),List(),List())",
+      |"heartbeatinterval": 10000}
     """.format(System.getProperty("user.name", "<unknown>")).stripMargin
 
   val executorRunnerJsonStr =

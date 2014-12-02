@@ -310,7 +310,6 @@ private[spark] class Master(
         case Some(exec) => {
           val appInfo = idToApp(appId)
           exec.state = state
-          if (state == ExecutorState.RUNNING) { appInfo.resetRetryCount() }
           exec.application.driver ! ExecutorUpdated(execId, state, message, exitStatus)
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
@@ -321,15 +320,12 @@ private[spark] class Master(
             val normalExit = exitStatus == Some(0)
             // Only retry certain number of times so we don't go into an infinite loop.
             if (!normalExit) {
-              if (appInfo.incrementRetryCount() < ApplicationState.MAX_NUM_RETRY) {
-                schedule()
+              appInfo.failureDetector.onFailedExecutorExit(execId)
+              if (appInfo.failureDetector.isFailed) {
+                logError(s"Removing failed application ${appInfo.desc.name} with ID ${appInfo.id}")
+                removeApplication(appInfo, ApplicationState.FAILED)
               } else {
-                val execs = appInfo.executors.values
-                if (!execs.exists(_.state == ExecutorState.RUNNING)) {
-                  logError(s"Application ${appInfo.desc.name} with ID ${appInfo.id} failed " +
-                    s"${appInfo.retryCount} times; removing it")
-                  removeApplication(appInfo, ApplicationState.FAILED)
-                }
+                schedule()
               }
             }
           }
@@ -361,6 +357,18 @@ private[spark] class Master(
             logWarning(s"Got heartbeat from unregistered worker $workerId." +
               " This worker was never registered, so ignoring the heartbeat.")
           }
+      }
+    }
+
+    case AppClientHeartbeat(appId, hasRegisteredExecutors) => {
+      idToApp.get(appId) match {
+        case Some(app) =>
+          app.lastHeartbeat = System.currentTimeMillis()
+          app.failureDetector.updateExecutorStatus(hasRegisteredExecutors)
+          logDebug(s"Got heartbeat from app $appId " +
+            s"(hasRegisteredExecutors = $hasRegisteredExecutors)")
+        case None =>
+          logWarning(s"Got heartbeat from unknown app $appId")
       }
     }
 
@@ -419,6 +427,7 @@ private[spark] class Master(
 
     case CheckForWorkerTimeOut => {
       timeOutDeadWorkers()
+      timeOutDeadApplications()
     }
 
     case RequestWebUIPort => {
@@ -761,8 +770,21 @@ private[spark] class Master(
     appId
   }
 
+  /** Check for, and remove, any dead applications */
+  def timeOutDeadApplications(): Unit = {
+    val currentTime = System.currentTimeMillis()
+    // Copy the applications into an array so we don't modify the hashset while iterating through it
+    val toRemove =
+      apps.filter(app => app.lastHeartbeat < currentTime - app.desc.heartbeatInterval).toArray
+    for (app <- toRemove) {
+      logWarning(s"Removing application ${app.desc.name} (id ${app.id}) because we got no " +
+        s"heartbeat in ${app.desc.heartbeatInterval / 1000.0} seconds")
+      removeApplication(app, ApplicationState.FAILED)
+    }
+  }
+
   /** Check for, and remove, any timed-out workers */
-  def timeOutDeadWorkers() {
+  def timeOutDeadWorkers(): Unit = {
     // Copy the workers into an array so we don't modify the hashset while iterating through it
     val currentTime = System.currentTimeMillis()
     val toRemove = workers.filter(_.lastHeartbeat < currentTime - WORKER_TIMEOUT).toArray
