@@ -992,4 +992,11 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       "nulldata2 on nulldata1.value <=> nulldata2.value"),
         (1 to 2).map(i => Seq(i)))
   }
+
+  test("Multi-column COUNT(DISTINCT ...)") {
+    val data = TestData(1,"val_1") :: TestData(2,"val_2") :: Nil
+    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
+    rdd.registerTempTable("distinctData")
+    checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), 2)
+  }
 }

@@ -34,7 +34,6 @@ import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
-import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.broadcast.Broadcast
@@ -58,8 +57,9 @@ import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, Bernoulli
  * Doubles; and
  * [[org.apache.spark.rdd.SequenceFileRDDFunctions]] contains operations available on RDDs that
  * can be saved as SequenceFiles.
- * These operations are automatically available on any RDD of the right type (e.g. RDD[(Int, Int)]
- * through implicit conversions when you `import org.apache.spark.SparkContext._`.
+ * All operations are automatically available on any RDD of the right type (e.g. RDD[(Int, Int)]
+ * through implicit conversions except `saveAsSequenceFile`. You need to
+ * `import org.apache.spark.SparkContext._` to make `saveAsSequenceFile` work.
  *
  * Internally, each RDD is characterized by five main properties:
  *

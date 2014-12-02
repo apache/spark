@@ -265,7 +265,7 @@ final class ShuffleBlockFetcherIterator(
 
     // Get Local Blocks
     fetchLocalBlocks()
-    logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
+    logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime))
   }
 
   override def hasNext: Boolean = numBlocksProcessed < numBlocksToFetch

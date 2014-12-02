@@ -72,7 +72,7 @@ public class TransportConf {
 
   /**
    * Time (in milliseconds) that we will wait in order to perform a retry after an IOException.
-   * Only relevant if maxIORetries > 0.
+   * Only relevant if maxIORetries &gt; 0.
    */
   public int ioRetryWaitTime() { return conf.getInt("spark.shuffle.io.retryWaitMs", 5000); }
 

@@ -24,7 +24,6 @@ import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.SequenceFileOutputFormat
 
 import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
 
 /**
  * Extra functions available on RDDs of (key, value) pairs to create a Hadoop SequenceFile,

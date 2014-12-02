@@ -201,6 +201,9 @@ if [ -e "$FWDIR"/CHANGES.txt ]; then
   cp "$FWDIR/CHANGES.txt" "$DISTDIR"
 fi
 
+# Copy data files
+cp -r "$FWDIR/data" "$DISTDIR"
+
 # Copy other things
 mkdir "$DISTDIR"/conf
 cp "$FWDIR"/conf/*.template "$DISTDIR"/conf

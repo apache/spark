@@ -39,8 +39,8 @@ import scala.collection.JavaConversions._
 
 /**
  * Allows creation of parquet based tables using the syntax
- * `CREATE TABLE ... USING org.apache.spark.sql.parquet`.  Currently the only option required
- * is `path`, which should be the location of a collection of, optionally partitioned,
+ * `CREATE TEMPORARY TABLE ... USING org.apache.spark.sql.parquet`.  Currently the only option 
+ * required is `path`, which should be the location of a collection of, optionally partitioned,
  * parquet files.
  */
 class DefaultSource extends RelationProvider {
@@ -49,7 +49,7 @@ class DefaultSource extends RelationProvider {
       sqlContext: SQLContext,
       parameters: CaseInsensitiveMap): BaseRelation = {
     val path =
-      parameters.getOrElse("path", sys.error("'path' must be specifed for parquet tables."))
+      parameters.getOrElse("path", sys.error("'path' must be specified for parquet tables."))
 
     ParquetRelation2(path)(sqlContext)
   }

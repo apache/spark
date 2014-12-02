@@ -20,7 +20,6 @@ package org.apache.spark
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
 import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
 import org.apache.spark.serializer.KryoSerializer
@@ -270,7 +269,6 @@ object ShuffleSuite {
 
   def mergeCombineException(x: Int, y: Int): Int = {
     throw new SparkException("Exception for map-side combine.")
-    x + y
   }
 
   class NonJavaSerializableClass(val value: Int) extends Comparable[NonJavaSerializableClass] {

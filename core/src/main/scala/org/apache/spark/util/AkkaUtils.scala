@@ -134,9 +134,16 @@ private[spark] object AkkaUtils extends Logging {
     Duration.create(conf.getLong("spark.akka.lookupTimeout", 30), "seconds")
   }
 
+  private val AKKA_MAX_FRAME_SIZE_IN_MB = Int.MaxValue / 1024 / 1024
+
   /** Returns the configured max frame size for Akka messages in bytes. */
   def maxFrameSizeBytes(conf: SparkConf): Int = {
-    conf.getInt("spark.akka.frameSize", 10) * 1024 * 1024
+    val frameSizeInMB = conf.getInt("spark.akka.frameSize", 10)
+    if (frameSizeInMB > AKKA_MAX_FRAME_SIZE_IN_MB) {
+      throw new IllegalArgumentException("spark.akka.frameSize should not be greater than "
+        + AKKA_MAX_FRAME_SIZE_IN_MB + "MB")
+    }
+    frameSizeInMB * 1024 * 1024
   }
 
   /** Space reserved for extra data in an Akka message besides serialized task or task result. */

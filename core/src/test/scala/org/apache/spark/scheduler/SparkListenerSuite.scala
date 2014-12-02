@@ -25,7 +25,6 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 import org.scalatest.Matchers
 
 import org.apache.spark.{LocalSparkContext, SparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.executor.TaskMetrics
 
 class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
