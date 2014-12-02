@@ -221,6 +221,7 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
 
   /**
    * Puts a list of param pairs (overwrites if the input params exists).
+   * Not usable from Java
    */
   def put(paramPairs: ParamPair[_]*): this.type = {
     paramPairs.foreach { p =>
