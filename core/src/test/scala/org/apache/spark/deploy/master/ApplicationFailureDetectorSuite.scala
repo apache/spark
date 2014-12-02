@@ -24,51 +24,41 @@ class ApplicationFailureDetectorSuite extends FunSuite with Matchers {
 
   test("initially, the application should not be failed") {
     val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
-    assert(!failureDetector.isFailed(someExecutorIsRunning = false))
+    assert(!failureDetector.isFailed)
   }
 
   test("normal operation (no executor failures)") {
     val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
     for (execId <- 1 to 100) {
-      failureDetector.onExecutorRunning(execId)
-      assert(!failureDetector.isFailed(someExecutorIsRunning = true))
+      failureDetector.updateExecutorStatus(_hasRunningExecutors = true)
+      assert(!failureDetector.isFailed)
     }
-    assert(!failureDetector.isFailed(someExecutorIsRunning = false))
+    assert(!failureDetector.isFailed)
   }
 
   test("some executor failures") {
     val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
     for (execId <- 1 to 100) {
-      failureDetector.onExecutorRunning(execId)
-      assert(!failureDetector.isFailed(someExecutorIsRunning = true))
+      failureDetector.updateExecutorStatus(_hasRunningExecutors = true)
+      assert(!failureDetector.isFailed)
       if (execId % 2 == 0) {
         failureDetector.onFailedExecutorExit(execId)
-        assert(!failureDetector.isFailed(someExecutorIsRunning = true))
+        assert(!failureDetector.isFailed)
       }
     }
-    assert(!failureDetector.isFailed(someExecutorIsRunning = false))
+    assert(!failureDetector.isFailed)
   }
 
   test("every executor fails after launch") {
     val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
     var failed: Boolean = false
     for (execId <- 1 to 100) {
-      failureDetector.onExecutorRunning(execId)
-      if (failureDetector.isFailed(someExecutorIsRunning = true)) {
-        failed = true
-      }
+      failureDetector.updateExecutorStatus(_hasRunningExecutors = false)
       failureDetector.onFailedExecutorExit(execId)
-      if (failureDetector.isFailed(someExecutorIsRunning = false)) {
+      if (failureDetector.isFailed) {
         failed = true
       }
     }
     assert(failed, "Expected the application to be marked as failed")
-  }
-
-  test("(rare) execution for which the current logic actually fails the application") {
-    val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
-    (1 to 20).foreach(execId => failureDetector.onExecutorRunning(execId))
-    (1 to 11).foreach(execId => failureDetector.onFailedExecutorExit(execId))
-    assert(failureDetector.isFailed(someExecutorIsRunning = false))
   }
 }

@@ -310,7 +310,6 @@ private[spark] class Master(
         case Some(exec) => {
           val appInfo = idToApp(appId)
           exec.state = state
-          if (state == ExecutorState.RUNNING) { appInfo.failureDetector.onExecutorRunning(execId) }
           exec.application.driver ! ExecutorUpdated(execId, state, message, exitStatus)
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
@@ -322,9 +321,7 @@ private[spark] class Master(
             // Only retry certain number of times so we don't go into an infinite loop.
             if (!normalExit) {
               appInfo.failureDetector.onFailedExecutorExit(execId)
-              val someExecutorIsRunning =
-                appInfo.executors.values.exists(_.state == ExecutorState.RUNNING)
-              if (appInfo.failureDetector.isFailed(someExecutorIsRunning)) {
+              if (appInfo.failureDetector.isFailed) {
                 logError(s"Removing failed application ${appInfo.desc.name} with ID ${appInfo.id}")
                 removeApplication(appInfo, ApplicationState.FAILED)
               } else {
@@ -360,6 +357,17 @@ private[spark] class Master(
             logWarning(s"Got heartbeat from unregistered worker $workerId." +
               " This worker was never registered, so ignoring the heartbeat.")
           }
+      }
+    }
+
+    case AppClientHeartbeat(appId, hasExecutors) => {
+      idToApp.get(appId) match {
+        case Some(app) =>
+          app.lastHeartbeat = System.currentTimeMillis()
+          app.failureDetector.updateExecutorStatus(hasExecutors)
+          logDebug(s"Got heartbeat from app $appId (hasExecutors = $hasExecutors)")
+        case None =>
+          logWarning(s"Got heartbeat from unknown app $appId")
       }
     }
 
@@ -407,7 +415,7 @@ private[spark] class Master(
       // The disconnected client could've been either a worker or an app; remove whichever it was
       logInfo(s"$address got disassociated, removing it.")
       addressToWorker.get(address).foreach(removeWorker)
-      addressToApp.get(address).foreach(finishApplication)
+      //addressToApp.get(address).foreach(finishApplication)
       if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
     }
 
@@ -418,6 +426,7 @@ private[spark] class Master(
 
     case CheckForWorkerTimeOut => {
       timeOutDeadWorkers()
+      timeOutDeadApplications()
     }
 
     case RequestWebUIPort => {
@@ -758,6 +767,19 @@ private[spark] class Master(
     val appId = "app-%s-%04d".format(createDateFormat.format(submitDate), nextAppNumber)
     nextAppNumber += 1
     appId
+  }
+
+  /** Check for, and remove, and dead applications */
+  def timeOutDeadApplications() {
+    val currentTime = System.currentTimeMillis()
+    // Copy the applications into an array so we don't modify the hashset while iterating through it
+    val toRemove =
+      apps.filter(app => app.lastHeartbeat < currentTime - app.desc.heartbeatInterval).toArray
+    for (app <- toRemove) {
+      logWarning(s"Removing application ${app.desc.name} (id ${app.id}) because we got no " +
+        s"heartbeat in ${app.desc.heartbeatInterval / 1000.0} seconds")
+      removeApplication(app, ApplicationState.FAILED)
+    }
   }
 
   /** Check for, and remove, any timed-out workers */

@@ -69,8 +69,9 @@ private[spark] class SparkDeploySchedulerBackend(
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
       args, sc.executorEnvs, classPathEntries, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
+    val heartbeatInterval = conf.getInt("spark.app.heartbeatInterval", 10000)
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      appUIAddress, sc.eventLogDir)
+      appUIAddress, heartbeatInterval, sc.eventLogDir)
 
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()

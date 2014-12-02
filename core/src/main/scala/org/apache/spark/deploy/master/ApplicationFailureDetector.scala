@@ -33,34 +33,41 @@ private[master] class ApplicationFailureDetector(
     appId: String)
   extends Logging with Serializable {
 
-  private val MAX_RETRIES = 10
+  private val MAX_CONSECUTIVE_FAILURES = 10
 
-  private var retryCount = 0
+  private var consecutiveExecutorFailures = 0
 
   /**
-   * Called when an executor enters the RUNNING state.
+   * True if the driver has reported that it has at least one running executor, false otherwise.
    */
-  def onExecutorRunning(execId: Int): Unit = {
-    retryCount = 0
+  private var hasRunningExecutors: Boolean = false
+
+  /**
+   * Called when an application's executor status might have changed.
+   */
+  def updateExecutorStatus(_hasRunningExecutors: Boolean): Unit = {
+    hasRunningExecutors = _hasRunningExecutors
+    if (hasRunningExecutors) {
+      consecutiveExecutorFailures = 0
+    }
   }
 
   /**
    * Called when an executor exits due to a failure.
    */
   def onFailedExecutorExit(execId: Int): Unit = {
-    retryCount += 1
+    consecutiveExecutorFailures += 1
   }
 
   /**
    * Ask the failure detector whether the application should be marked as failed.
    *
-   * @param someExecutorIsRunning true if _some_ executor is in the RUNNING state, false otherwise.
    * @return true if the application has failed, false otherwise.
    */
-  def isFailed(someExecutorIsRunning: Boolean): Boolean = {
-    if (retryCount >= MAX_RETRIES && !someExecutorIsRunning) {
-      logError(s"Application $appName with ID $appId is failed " +
-        s"because executors failed $retryCount times")
+  def isFailed: Boolean = {
+    if (consecutiveExecutorFailures >= MAX_CONSECUTIVE_FAILURES && !hasRunningExecutors) {
+      logError(s"Application $appName with ID $appId is failed because it has no executors and " +
+        s"there were $consecutiveExecutorFailures consecutive executor failures")
       true
     } else {
       false

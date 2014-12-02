@@ -19,6 +19,7 @@ package org.apache.spark.deploy.client
 
 import java.util.concurrent.TimeoutException
 
+import scala.collection.mutable
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
@@ -47,6 +48,8 @@ private[spark] class AppClient(
     conf: SparkConf)
   extends Logging {
 
+  private val heartbeatInterval = appDescription.heartbeatInterval.milliseconds
+
   val REGISTRATION_TIMEOUT = 20.seconds
   val REGISTRATION_RETRIES = 3
 
@@ -56,11 +59,20 @@ private[spark] class AppClient(
   var registered = false
   var activeMasterUrl: String = null
 
+  /**
+   * Tracks the set of executors currently assigned to this application.
+   * All accesses to this object should be synchronized because it's accessed from both the
+   * actor and a heartbeat thread.
+   */
+  private val runningExecutors = mutable.BitSet()
+
   class ClientActor extends Actor with ActorLogReceive with Logging {
-    var master: ActorSelection = null
+    // This variable needs to be volatile because it's read when sending heartbeats to the master.
+    @volatile var master: ActorSelection = null
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
     var alreadyDead = false  // To avoid calling listener.dead() multiple times
     var registrationRetryTimer: Option[Cancellable] = None
+    var heartbeatTimer: Option[Cancellable] = None
 
     override def preStart() {
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
@@ -111,6 +123,20 @@ private[spark] class AppClient(
         case x =>
           throw new SparkException("Invalid spark URL: " + x)
       }
+      import context.dispatcher
+      // Cancel any existing heartbeat timer
+      heartbeatTimer.foreach(_.cancel())
+      // Start a new master heartbeat timer
+      heartbeatTimer = Some(
+        context.system.scheduler.schedule(heartbeatInterval, heartbeatInterval) {
+          if (master != null) {  // guard against race condition while switching masters
+            val hasExecutors = runningExecutors.synchronized {
+              runningExecutors.nonEmpty
+            }
+            master ! AppClientHeartbeat(appId, hasExecutors)
+          }
+        }
+      )
     }
 
     private def isPossibleMaster(remoteUrl: Address) = {
@@ -134,6 +160,9 @@ private[spark] class AppClient(
         val fullId = appId + "/" + id
         logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, hostPort,
           cores))
+        runningExecutors.synchronized {
+          runningExecutors += id
+        }
         listener.executorAdded(fullId, workerId, hostPort, cores, memory)
 
       case ExecutorUpdated(id, state, message, exitStatus) =>
@@ -141,6 +170,9 @@ private[spark] class AppClient(
         val messageText = message.map(s => " (" + s + ")").getOrElse("")
         logInfo("Executor updated: %s is now %s%s".format(fullId, state, messageText))
         if (ExecutorState.isFinished(state)) {
+          runningExecutors.synchronized {
+            runningExecutors -= id
+          }
           listener.executorRemoved(fullId, message.getOrElse(""), exitStatus)
         }
 
@@ -181,6 +213,7 @@ private[spark] class AppClient(
     }
 
     override def postStop() {
+      heartbeatTimer.foreach(_.cancel())
       registrationRetryTimer.foreach(_.cancel())
     }
 

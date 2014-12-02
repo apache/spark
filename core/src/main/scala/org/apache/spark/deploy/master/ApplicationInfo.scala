@@ -43,6 +43,7 @@ private[spark] class ApplicationInfo(
   @transient var coresGranted: Int = _
   @transient var endTime: Long = _
   @transient var appSource: ApplicationSource = _
+  @transient var lastHeartbeat: Long = _
 
   @transient private var nextExecutorId: Int = _
 
@@ -63,6 +64,7 @@ private[spark] class ApplicationInfo(
     appSource = new ApplicationSource(this)
     nextExecutorId = 0
     removedExecutors = new ArrayBuffer[ExecutorInfo]
+    lastHeartbeat = System.currentTimeMillis()
   }
 
   private def newExecutorId(useID: Option[Int] = None): Int = {
