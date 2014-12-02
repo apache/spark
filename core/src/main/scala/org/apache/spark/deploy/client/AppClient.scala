@@ -59,7 +59,7 @@ private[spark] class AppClient(
   var registered = false
   var activeMasterUrl: String = null
 
-  /** Tracks the set of executors currently assigned to this application. */
+  /** Tracks the set of executors currently registered with this application. */
   private val runningExecutors = mutable.BitSet()
 
   class ClientActor extends Actor with ActorLogReceive with Logging {
@@ -147,9 +147,7 @@ private[spark] class AppClient(
         val fullId = appId + "/" + id
         logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, hostPort,
           cores))
-        runningExecutors.synchronized {
-          runningExecutors += id
-        }
+        runningExecutors += id
         listener.executorAdded(fullId, workerId, hostPort, cores, memory)
 
       case ExecutorUpdated(id, state, message, exitStatus) =>
@@ -157,9 +155,7 @@ private[spark] class AppClient(
         val messageText = message.map(s => " (" + s + ")").getOrElse("")
         logInfo("Executor updated: %s is now %s%s".format(fullId, state, messageText))
         if (ExecutorState.isFinished(state)) {
-          runningExecutors.synchronized {
-            runningExecutors -= id
-          }
+          runningExecutors -= id
           listener.executorRemoved(fullId, message.getOrElse(""), exitStatus)
         }
 
