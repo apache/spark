@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.parse.ASTNode
+import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -30,7 +32,7 @@ import org.apache.spark.sql.catalyst.types.StringType
 import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan}
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.hive.orc.{WriteToOrcFile, InsertIntoOrcTable, OrcRelation, OrcTableScan}
+import org.apache.spark.sql.hive.orc._
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.{SQLContext, SchemaRDD, Strategy}
 
@@ -243,8 +245,36 @@ private[hive] trait HiveStrategies {
       case logical.InsertIntoTable(table: OrcRelation, partition, child, overwrite) =>
         InsertIntoOrcTable(table, planLater(child), overwrite) :: Nil
       case PhysicalOperation(projectList, filters, relation: OrcRelation) =>
-        // TODO: need to implement predict push down.
-        val prunePushedDownFilters = identity[Seq[Expression]] _
+        val prunePushedDownFilters = {
+          OrcRelation.jobConf =  sparkContext.hadoopConfiguration
+          if (ORC_FILTER_PUSHDOWN_ENABLED) {
+            val job = new Job(OrcRelation.jobConf)
+            val conf: Configuration = job.getConfiguration
+            logInfo("Orc push down filter enabled:" + filters)
+            (filters: Seq[Expression]) => {
+              val recordFilter = OrcFilters.createFilter(filters)
+              if (recordFilter.isDefined) {
+
+                logInfo("Parsed filters:" + recordFilter)
+                /**
+                 * To test it, we can set follows so that the reader
+                 * will not read whole file if small
+                 * sparkContext.hadoopConfiguration.setInt(
+                 * "mapreduce.input.fileinputformat.split.maxsize", 50)
+                 */
+                conf.set(SARG_PUSHDOWN, toKryo(recordFilter.get))
+                conf.setBoolean("hive.optimize.index.filter", true)
+                OrcRelation.jobConf = conf
+              }
+              // no matter whether it is filtered or not in orc,
+              // we need to do more fine grained filter
+              // in the upper layer, return all of them
+              filters
+            }
+          } else {
+            identity[Seq[Expression]] _
+          }
+        }
         pruneFilterProject(
           projectList,
           filters,

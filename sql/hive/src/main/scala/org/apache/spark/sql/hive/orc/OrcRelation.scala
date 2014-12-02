@@ -94,6 +94,7 @@ private[sql] object OrcRelation {
     }
     path
   }
+  var jobConf: Configuration = _
 }
 
 private[sql] object OrcFileOperator{
