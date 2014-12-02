@@ -777,6 +777,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.network.timeout</code></td>
+  <td>100</td>
+  <td>
+    Default timeout for all network interactions, in seconds. This config will be used in 
+    place of spark.core.connection.ack.wait.timeout, spark.akka.timeout, 
+    spark.storage.blockManagerSlaveTimeoutMs or spark.shuffle.io.connectionTimeout, if they are
+    not configured.  
+  </td>
+</tr>
+<tr>
   <td><code>spark.akka.heartbeat.pauses</code></td>
   <td>6000</td>
   <td>

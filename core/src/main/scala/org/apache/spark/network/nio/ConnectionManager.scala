@@ -81,8 +81,8 @@ private[nio] class ConnectionManager(
   private val ackTimeoutMonitor =
     new HashedWheelTimer(Utils.namedThreadFactory("AckTimeoutMonitor"))
 
-  private val ackTimeout = conf.getInt("spark.core.connection.ack.wait.timeout",
-                           conf.getInt("spark.network.timeout", 100))
+  private val ackTimeout =
+    conf.getInt("spark.core.connection.ack.wait.timeout", conf.getInt("spark.network.timeout", 100))
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
     conf.getInt("spark.core.connection.handler.threads.min", 20),
