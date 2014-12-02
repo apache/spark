@@ -1178,7 +1178,7 @@ class Chart(Base):
     chart_type = Column(String(100), default="line_chart")
     sql = Column(Text, default="SELECT series, x, y FROM table")
     show_datatable = Column(Boolean)
+    show_sql = Column(Boolean, default=True)
     height = Column(Integer, default=600)
     default_params = Column(String(5000), default="{}")
     db = relationship("DatabaseConnection")
-

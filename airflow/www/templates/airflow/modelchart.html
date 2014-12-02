@@ -6,22 +6,26 @@
     <script src="{{ url_for('static', filename='highcharts.js') }}"></script>
     <script src="/ck/static/chartkick.js"></script>
     <div class="container">
-        <h2>{{ label }}</h2>
-        {% if chart.chart_type == "area_chart" %}
-            {% area_chart data with height=height library=chart_options%}
-        {% elif chart.chart_type == "line_chart" %}
-            {% line_chart data with height=height library=chart_options%}
-        {% elif chart.chart_type == "bar_chart" %}
-            {% bar_chart data with height=height library=chart_options%}
-        {% elif chart.chart_type == "column_chart" %}
-            {% column_chart data with height=height library=chart_options%}
-        {% endif %}
-        {% if chart.show_datatable %}
-            <h4>Data</h4>
-            {{ table }}
+        {% if show_chart %}
+            <h2>{{ label }}</h2>
+            {% if chart.chart_type == "area_chart" %}
+                {% area_chart data with height=height library=chart_options%}
+            {% elif chart.chart_type == "line_chart" %}
+                {% line_chart data with height=height library=chart_options%}
+            {% elif chart.chart_type == "bar_chart" %}
+                {% bar_chart data with height=height library=chart_options%}
+            {% elif chart.chart_type == "column_chart" %}
+                {% column_chart data with height=height library=chart_options%}
+            {% endif %}
+            {% if chart.show_datatable %}
+                <h4>Data</h4>
+                {{ table }}
+            {% endif %}
         {% endif %}
 
-        <h4>SQL</h4>
-        <pre><code>{{ sql }}</code></pre>
+        {% if show_sql %}
+            <h4>SQL</h4>
+            <pre><code>{{ sql }}</code></pre>
+        {% endif %}
     </div>
 {% endblock %}
