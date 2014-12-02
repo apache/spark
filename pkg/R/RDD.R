@@ -175,7 +175,9 @@ setMethod("cache",
 
 #' Persist an RDD
 #'
-#' Persist this RDD with the specified storage level.
+#' Persist this RDD with the specified storage level. For details of the
+#' supported storage levels, refer to
+#' http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence.
 #'
 #' @param rdd The RDD to persist
 #' @param newLevel The new storage level to be assigned

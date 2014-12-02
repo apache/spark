@@ -19,7 +19,9 @@ persist(rdd, newLevel)
 \item{newLevel}{The new storage level to be assigned}
 }
 \description{
-Persist this RDD with the specified storage level.
+Persist this RDD with the specified storage level. For details of the
+supported storage levels, refer to
+http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence.
 }
 \examples{
 \dontrun{
