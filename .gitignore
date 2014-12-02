@@ -49,7 +49,7 @@ dependency-reduced-pom.xml
 checkpoint
 derby.log
 dist/
-spark-*-bin.tar.gz
+spark-*-bin-*.tgz
 unit-tests.log
 /lib/
 rat-results.txt
