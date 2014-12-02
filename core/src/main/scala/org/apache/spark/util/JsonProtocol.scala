@@ -688,6 +688,10 @@ private[spark] object JsonProtocol {
   }
 
   def blockManagerIdFromJson(json: JValue): BlockManagerId = {
+    // On metadata fetch fail, block manager ID can be null (SPARK-4471)
+    if (json == JNothing) {
+      return null
+    }
     val executorId = (json \ "Executor ID").extract[String]
     val host = (json \ "Host").extract[String]
     val port = (json \ "Port").extract[Int]
