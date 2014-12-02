@@ -104,10 +104,12 @@ private[deploy] object DeployMessages {
   /**
    * Periodic heartbeat from the app client to the master, used to detect driver death and to
    * detect drivers that have not obtained any usable executors.
+   *
    * @param appId the application id.
-   * @param hasExecutors true if the app client has at least one running executor, false otherwise.
+   * @param hasRegisteredExecutors true if the app client has at least one registered executor,
+   *                               false otherwise.
    */
-  case class AppClientHeartbeat(appId: String, hasExecutors: Boolean)
+  case class AppClientHeartbeat(appId: String, hasRegisteredExecutors: Boolean)
 
   // Master to AppClient
 

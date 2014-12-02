@@ -360,12 +360,13 @@ private[spark] class Master(
       }
     }
 
-    case AppClientHeartbeat(appId, hasExecutors) => {
+    case AppClientHeartbeat(appId, hasRegisteredExecutors) => {
       idToApp.get(appId) match {
         case Some(app) =>
           app.lastHeartbeat = System.currentTimeMillis()
-          app.failureDetector.updateExecutorStatus(hasExecutors)
-          logDebug(s"Got heartbeat from app $appId (hasExecutors = $hasExecutors)")
+          app.failureDetector.updateExecutorStatus(hasRegisteredExecutors)
+          logDebug(s"Got heartbeat from app $appId " +
+            s"(hasRegisteredExecutors = $hasRegisteredExecutors)")
         case None =>
           logWarning(s"Got heartbeat from unknown app $appId")
       }

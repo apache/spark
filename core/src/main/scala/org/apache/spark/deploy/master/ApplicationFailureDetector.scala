@@ -38,16 +38,16 @@ private[master] class ApplicationFailureDetector(
   private var consecutiveExecutorFailures = 0
 
   /**
-   * True if the driver has reported that it has at least one running executor, false otherwise.
+   * True if the driver has reported that it has at least one registered executor, false otherwise.
    */
-  private var hasRunningExecutors: Boolean = false
+  private var hasRegisteredExecutors: Boolean = false
 
   /**
    * Called when an application's executor status might have changed.
    */
-  def updateExecutorStatus(_hasRunningExecutors: Boolean): Unit = {
-    hasRunningExecutors = _hasRunningExecutors
-    if (hasRunningExecutors) {
+  def updateExecutorStatus(hasRegisteredExecutors: Boolean): Unit = {
+    this.hasRegisteredExecutors = hasRegisteredExecutors
+    if (hasRegisteredExecutors) {
       consecutiveExecutorFailures = 0
     }
   }
@@ -65,7 +65,7 @@ private[master] class ApplicationFailureDetector(
    * @return true if the application has failed, false otherwise.
    */
   def isFailed: Boolean = {
-    if (consecutiveExecutorFailures >= MAX_CONSECUTIVE_FAILURES && !hasRunningExecutors) {
+    if (consecutiveExecutorFailures >= MAX_CONSECUTIVE_FAILURES && !hasRegisteredExecutors) {
       logError(s"Application $appName with ID $appId is failed because it has no executors and " +
         s"there were $consecutiveExecutorFailures consecutive executor failures")
       true

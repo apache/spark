@@ -130,10 +130,10 @@ private[spark] class AppClient(
       heartbeatTimer = Some(
         context.system.scheduler.schedule(heartbeatInterval, heartbeatInterval) {
           if (master != null) {  // guard against race condition while switching masters
-            val hasExecutors = runningExecutors.synchronized {
+            val hasRegisteredExecutors = runningExecutors.synchronized {
               runningExecutors.nonEmpty
             }
-            master ! AppClientHeartbeat(appId, hasExecutors)
+            master ! AppClientHeartbeat(appId, hasRegisteredExecutors)
           }
         }
       )

@@ -30,16 +30,16 @@ class ApplicationFailureDetectorSuite extends FunSuite with Matchers {
   test("normal operation (no executor failures)") {
     val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
     for (execId <- 1 to 100) {
-      failureDetector.updateExecutorStatus(_hasRunningExecutors = true)
+      failureDetector.updateExecutorStatus(hasRegisteredExecutors = true)
       assert(!failureDetector.isFailed)
     }
     assert(!failureDetector.isFailed)
   }
 
-  test("some executor failures") {
+  test("every other executor launch fails") {
     val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
     for (execId <- 1 to 100) {
-      failureDetector.updateExecutorStatus(_hasRunningExecutors = true)
+      failureDetector.updateExecutorStatus(hasRegisteredExecutors = true)
       assert(!failureDetector.isFailed)
       if (execId % 2 == 0) {
         failureDetector.onFailedExecutorExit(execId)
@@ -53,7 +53,7 @@ class ApplicationFailureDetectorSuite extends FunSuite with Matchers {
     val failureDetector = new ApplicationFailureDetector("testApp", "testAppId")
     var failed: Boolean = false
     for (execId <- 1 to 100) {
-      failureDetector.updateExecutorStatus(_hasRunningExecutors = false)
+      failureDetector.updateExecutorStatus(hasRegisteredExecutors = false)
       failureDetector.onFailedExecutorExit(execId)
       if (failureDetector.isFailed) {
         failed = true
