@@ -17,6 +17,8 @@
 
 package org.apache.spark.examples.mllib
 
+import scala.language.reflectiveCalls
+
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
