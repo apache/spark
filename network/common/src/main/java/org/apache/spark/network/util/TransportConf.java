@@ -37,7 +37,8 @@ public class TransportConf {
 
   /** Connect timeout in secs. Default 120 secs. */
   public int connectionTimeoutMs() {
-    int timeout = conf.getInt("spark.shuffle.io.connectionTimeout", conf.getInt("spark.network.timeout",100));
+    int timeout = 
+      conf.getInt("spark.shuffle.io.connectionTimeout", conf.getInt("spark.network.timeout",100));
     return timeout * 1000;
   }
 
