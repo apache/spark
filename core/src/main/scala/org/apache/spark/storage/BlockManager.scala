@@ -1010,9 +1010,9 @@ private[spark] class BlockManager(
       info.synchronized {
         // required ? As of now, this will be invoked only for blocks which are ready
         // But in case this changes in future, adding for consistency sake.
-        if (!info.waitForReady()) {
+        if (blockInfo.get(blockId).isEmpty || !info.waitForReady()) {
           // If we get here, the block write failed.
-          logWarning(s"Block $blockId was marked as failure. Nothing to drop")
+          logWarning(s"Block $blockId was marked as failure or already dropped. Nothing to drop")
           return None
         }
 
@@ -1089,15 +1089,17 @@ private[spark] class BlockManager(
     val info = blockInfo.get(blockId).orNull
     if (info != null) {
       info.synchronized {
-        // Removals are idempotent in disk store and memory store. At worst, we get a warning.
-        val removedFromMemory = memoryStore.remove(blockId)
-        val removedFromDisk = diskStore.remove(blockId)
-        val removedFromTachyon = if (tachyonInitialized) tachyonStore.remove(blockId) else false
-        if (!removedFromMemory && !removedFromDisk && !removedFromTachyon) {
-          logWarning(s"Block $blockId could not be removed as it was not found in either " +
-            "the disk, memory, or tachyon store")
+        if (blockInfo.get(blockId).isEmpty) {
+          // Removals are idempotent in disk store and memory store. At worst, we get a warning.
+          val removedFromMemory = memoryStore.remove(blockId)
+          val removedFromDisk = diskStore.remove(blockId)
+          val removedFromTachyon = if (tachyonInitialized) tachyonStore.remove(blockId) else false
+          if (!removedFromMemory && !removedFromDisk && !removedFromTachyon) {
+            logWarning(s"Block $blockId could not be removed as it was not found in either " +
+              "the disk, memory, or tachyon store")
+          }
+          blockInfo.remove(blockId)
         }
-        blockInfo.remove(blockId)
         if (tellMaster && info.tellMaster) {
           val status = getCurrentBlockStatus(blockId, info)
           reportBlockStatus(blockId, info, status)
@@ -1126,12 +1128,14 @@ private[spark] class BlockManager(
       val (id, info, time) = (entry.getKey, entry.getValue.value, entry.getValue.timestamp)
       if (time < cleanupTime && shouldDrop(id)) {
         info.synchronized {
-          val level = info.level
-          if (level.useMemory) { memoryStore.remove(id) }
-          if (level.useDisk) { diskStore.remove(id) }
-          if (level.useOffHeap) { tachyonStore.remove(id) }
-          iterator.remove()
-          logInfo(s"Dropped block $id")
+          if (blockInfo.get(id).isEmpty) {
+            val level = info.level
+            if (level.useMemory) { memoryStore.remove(id) }
+            if (level.useDisk) { diskStore.remove(id) }
+            if (level.useOffHeap) { tachyonStore.remove(id) }
+            iterator.remove()
+            logInfo(s"Dropped block $id")
+          }
         }
         val status = getCurrentBlockStatus(id, info)
         reportBlockStatus(id, info, status)
