@@ -70,6 +70,10 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     this
   }
 
+  override def checkpoint() = {
+    partitionsRDD.checkpoint()
+  }
+    
   /** The number of edges in the RDD. */
   override def count(): Long = {
     partitionsRDD.map(_._2.size.toLong).reduce(_ + _)
