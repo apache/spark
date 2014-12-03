@@ -70,7 +70,7 @@ object RDD {
   }
 
   implicit def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](rdd: RDD[(K, V)])
-    : OrderedRDDFunctions[K, V] = {
+    : OrderedRDDFunctions[K, V, (K, V)] = {
     new OrderedRDDFunctions[K, V, (K, V)](rdd)
   }
 
