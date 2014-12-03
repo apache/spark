@@ -23,6 +23,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -168,15 +169,10 @@ class KMeans private (
 
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations && !activeRuns.isEmpty) {
-      type WeightedPoint = (Array[Double], Long)
-      def mergeContribs(p1: WeightedPoint, p2: WeightedPoint): WeightedPoint = {
-        require(p1._1.size == p2._1.size)
-        var i = 0
-        while(i < p1._1.size) {
-          p1._1(i) += p2._1(i)
-          i += 1
-        }
-        (p1._1, p1._2 + p2._2)
+      type WeightedPoint = (Vector, Long)
+      def mergeContribs(x: WeightedPoint, y: WeightedPoint): WeightedPoint = {
+        axpy(1.0, x._1, y._1)
+        (y._1, x._2 + y._2)
       }
 
       val activeCenters = activeRuns.map(r => centers(r)).toArray
@@ -191,7 +187,7 @@ class KMeans private (
         val k = thisActiveCenters(0).length
         val dims = thisActiveCenters(0)(0).vector.size
 
-        val sums = Array.fill(runs, k)(Array.ofDim[Double](dims))
+        val sums = Array.fill(runs, k)(Vectors.zeros(dims))
         val counts = Array.fill(runs, k)(0L)
 
         points.foreach { point =>
@@ -199,7 +195,7 @@ class KMeans private (
             val (bestCenter, cost) = KMeans.findClosest(thisActiveCenters(i), point)
             costAccums(i) += cost
             val sum = sums(i)(bestCenter)
-            point.vector.foreachActive((index, value) => sum(index) += value)
+            axpy(1.0, point.vector, sum)
             counts(i)(bestCenter) += 1
           }
         }
@@ -217,12 +213,7 @@ class KMeans private (
         while (j < k) {
           val (sum, count) = totalContribs((i, j))
           if (count != 0) {
-            val size = sum.size
-            var i = 0
-            while(i < sum.size) {
-              sum(i) /= count
-              i += 1
-            }
+            scal(1.0 / count, sum)
             val newCenter = new VectorWithNorm(sum)
             if (KMeans.fastSquaredDistance(newCenter, centers(run)(j)) > epsilon * epsilon) {
               changed = true

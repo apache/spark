@@ -311,9 +311,11 @@ object MLUtils {
     } else if (v1.isInstanceOf[SparseVector] || v2.isInstanceOf[SparseVector]) {
       val dotValue = dot(v1, v2)
       sqDist = math.max(sumSquaredNorm - 2.0 * dotValue, 0.0)
-      val precisionBound2 = EPSILON * (sumSquaredNorm + 2.0 * math.abs(dotValue)) / (sqDist + EPSILON)
+      val precisionBound2 = EPSILON * (sumSquaredNorm + 2.0 * math.abs(dotValue)) /
+        (sqDist + EPSILON)
       if (precisionBound2 > precision) {
-        // TODO: breezeSquaredDistance is slow, so we should replace it with our own implementation.
+        // TODO: breezeSquaredDistance is slow,
+        // so we should replace it with our own implementation.
         sqDist = breezeSquaredDistance(v1.toBreeze, v2.toBreeze)
       }
     } else {

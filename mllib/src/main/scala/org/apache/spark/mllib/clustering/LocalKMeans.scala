@@ -21,7 +21,7 @@ import scala.util.Random
 
 import org.apache.spark.Logging
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.linalg.BLAS.axpy
+import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 
 /**
  * An utility object to run K-means locally. This is private to the ML package because it's used
@@ -75,12 +75,12 @@ private[mllib] object LocalKMeans extends Logging {
     while (moved && iteration < maxIterations) {
       moved = false
       val counts = Array.fill(k)(0.0)
-      val sums = Array.fill(k)(Array.ofDim[Double](dimensions))
+      val sums = Array.fill(k)(Vectors.zeros(dimensions))
       var i = 0
       while (i < points.length) {
         val p = points(i)
         val index = KMeans.findClosest(centers, p)._1
-        axpy(weights(i), p.vector, Vectors.dense(sums(index)))
+        axpy(weights(i), p.vector, sums(index))
         counts(index) += weights(i)
         if (index != oldClosest(i)) {
           moved = true
@@ -95,14 +95,7 @@ private[mllib] object LocalKMeans extends Logging {
           // Assign center to a random point
           centers(j) = points(rand.nextInt(points.length)).toDense
         } else {
-          val sum = sums(j)
-          val count = counts(j)
-          val size = sum.size
-          var i = 0
-          while(i < size) {
-            sum(i) /= count
-            i += 1
-          }
+          scal(1.0 / counts(j), sums(j))
           centers(j) = new VectorWithNorm(sums(j))
         }
         j += 1
