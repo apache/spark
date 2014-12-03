@@ -413,6 +413,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("select null from table",
     "SELECT null FROM src LIMIT 1")
 
+  createQueryTest("! boolean logic operator",
+    """
+      |SELECT a FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 2 AS a FROM src LIMIT 1) table
+      |WHERE !(a>1)
+    """.stripMargin)
+
   test("implement identity function using case statement") {
     val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")
       .map { case Row(i: Int) => i }
