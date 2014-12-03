@@ -444,39 +444,44 @@ class Analyzer(catalog: Catalog,
         if(subqueryExprs.size > 0) {
           val subqueryExpr = subqueryExprs.remove(0)
           val firstJoin = createLeftSemiJoin(
-                child, subqueryExpr.exp, subqueryExpr.child, transformedConds)
+                child, subqueryExpr.value, subqueryExpr.subquery, transformedConds)
           subqueryExprs.foldLeft(firstJoin){case(fj, sq) =>
-            createLeftSemiJoin(fj, sq.exp, sq.child)}
+            createLeftSemiJoin(fj, sq.value, sq.subquery)}
         } else {
           filter
         }
     }
 
+    // Create LeftSemi join with parent query to the subquery which is mentioned in 'IN' predicate
+    // And combine the subquery conditions and parent query conditions.
     def createLeftSemiJoin(left: LogicalPlan,
-        expression: Expression, subquery: LogicalPlan,
+        value: Expression, subquery: LogicalPlan,
         parentConds: Expression = null) : LogicalPlan = {
       val (transformedPlan, subqueryConds) = transformAndGetConditions(
-          expression, subquery)
-      // Unify the parent query conditions and subquery conditions and add these as j0in conditions
+          value, subquery)
+      // Unify the parent query conditions and subquery conditions and add these as join conditions
       val unifyConds = if (parentConds != null) And(parentConds, subqueryConds) else subqueryConds
       Join(left, transformedPlan, LeftSemi, Some(unifyConds))
     }
 
-    def transformAndGetConditions(expression: Expression,
-          plan: LogicalPlan): (LogicalPlan, Expression) = {
+    // Transform the subquery LogicalPlan and add the expressions which are used as filters to the 
+    // projection. And also return filter conditions used in subquery.
+    def transformAndGetConditions(value: Expression,
+          subquery: LogicalPlan): (LogicalPlan, Expression) = {
       val expr = new scala.collection.mutable.ArrayBuffer[Expression]()
-      val transformedPlan = plan transform {
-      case project @ Project(projectList, f @ Filter(condition, child)) =>
-         expr += EqualTo(expression, projectList(0).asInstanceOf[Expression])
-         expr += condition
-         val resolvedChild = ResolveRelations(child)
-         // Add the expressions to the projections which are used as filters in subquery
-         val toBeAddedExprs = f.references.filter(
-             a=>resolvedChild.resolve(a.name, resolver) != None && !projectList.contains(a))
-         Project(projectList ++ toBeAddedExprs, child)
-      case project @ Project(projectList, child) =>
-         expr += EqualTo(expression, projectList(0).asInstanceOf[Expression])
-         project
+      val transformedPlan = subquery transform {
+        case project @ Project(projectList, f @ Filter(condition, child)) =>
+          expr += EqualTo(value, projectList(0).asInstanceOf[Expression])
+          expr += condition
+          val resolvedChild = ResolveRelations(child)
+          // Add the expressions to the projections which are used as filters in subquery
+          val toBeAddedExprs = f.references.filter(
+              a=>resolvedChild.resolve(a.name, resolver) != None && !projectList.contains(a))
+          Project(projectList ++ toBeAddedExprs, child)
+        case project @ Project(projectList, child) =>
+          // Take the first projection expression as join condition.
+          expr += EqualTo(value, projectList(0).asInstanceOf[Expression])
+          project
       }
       (transformedPlan, expr.reduce(And(_, _)))
     }
