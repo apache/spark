@@ -376,7 +376,7 @@ private[spark] object BLAS extends Serializable with Logging {
       }
     } else {
       // Scale matrix first if `beta` is not equal to 0.0
-      if (beta != 0.0){
+      if (beta != 0.0) {
         f2jBLAS.dscal(C.values.length, beta, C.values, 1)
       }
       // Perform matrix multiplication and add to C. The rows of A are multiplied by the columns of
@@ -391,7 +391,7 @@ private[spark] object BLAS extends Serializable with Logging {
             var i = Acols(colCounterForA)
             val indEnd = Acols(colCounterForA + 1)
             val Bval = Bvals(Bstart + colCounterForA) * alpha
-            while (i < indEnd){
+            while (i < indEnd) {
               Cvals(Cstart + Arows(i)) += Avals(i) * Bval
               i += 1
             }
@@ -403,11 +403,11 @@ private[spark] object BLAS extends Serializable with Logging {
         while (colCounterForB < nB) {
           var colCounterForA = 0 // The column of A to multiply with the row of B
           val Cstart = colCounterForB * mA
-          while (colCounterForA < kA){
+          while (colCounterForA < kA) {
             var i = Acols(colCounterForA)
             val indEnd = Acols(colCounterForA + 1)
             val Bval = B(colCounterForB, colCounterForA) * alpha
-            while (i < indEnd){
+            while (i < indEnd) {
               Cvals(Cstart + Arows(i)) += Avals(i) * Bval
               i += 1
             }
@@ -506,38 +506,38 @@ private[spark] object BLAS extends Serializable with Logging {
     val xValues = x.values
     val yValues = y.values
 
-    val mA: Int = if(!trans) A.numRows else A.numCols
-    val nA: Int = if(!trans) A.numCols else A.numRows
+    val mA: Int = if (!trans) A.numRows else A.numCols
+    val nA: Int = if (!trans) A.numCols else A.numRows
 
     val Avals = A.values
     val Arows = if (!trans) A.rowIndices else A.colPtrs
     val Acols = if (!trans) A.colPtrs else A.rowIndices
     // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
-    if (trans){
+    if (trans) {
       var rowCounter = 0
-      while (rowCounter < mA){
+      while (rowCounter < mA) {
         var i = Arows(rowCounter)
         val indEnd = Arows(rowCounter + 1)
         var sum = 0.0
-        while(i < indEnd){
+        while (i < indEnd) {
           sum += Avals(i) * xValues(Acols(i))
           i += 1
         }
-        yValues(rowCounter) =  beta * yValues(rowCounter) + sum * alpha
+        yValues(rowCounter) = beta * yValues(rowCounter) + sum * alpha
         rowCounter += 1
       }
     } else {
       // Scale vector first if `beta` is not equal to 0.0
-      if (beta != 0.0){
+      if (beta != 0.0) {
         scal(beta, y)
       }
       // Perform matrix-vector multiplication and add to y
       var colCounterForA = 0
-      while (colCounterForA < nA){
+      while (colCounterForA < nA) {
         var i = Acols(colCounterForA)
         val indEnd = Acols(colCounterForA + 1)
         val xVal = xValues(colCounterForA) * alpha
-        while (i < indEnd){
+        while (i < indEnd) {
           val rowIndex = Arows(i)
           yValues(rowIndex) += Avals(i) * xVal
           i += 1
