@@ -363,7 +363,7 @@ public class LBFGSExample {
 </div>
 </div>
 
-#### Developer's notes
+## Developer's notes
 
 Since the Hessian is constructed approximately from previous gradient evaluations, 
 the objective function can not be changed during the optimization process. 
