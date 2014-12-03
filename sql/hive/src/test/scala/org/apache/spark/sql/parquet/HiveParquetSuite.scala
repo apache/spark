@@ -106,6 +106,13 @@ class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAft
     compareRDDs(rddOrig, rddCopy, "testsource", ParquetTestData.testSchemaFieldNames)
   }
 
+  test("SPARK-4552: query for empty parquet table get IllegalArgumentException") {
+    sql("CREATE TABLE parquet_test(key INT, value STRING)")
+    val result = sql("select count(*) from parquet_test limit 5").collect
+    assert(result.size == 1)
+    assert(result(0).getLong(0) == 0)
+  }
+
   private def compareRDDs(rddOne: Array[Row], rddTwo: Array[Row], tableName: String, fieldNames: Seq[String]) {
     var counter = 0
     (rddOne, rddTwo).zipped.foreach {

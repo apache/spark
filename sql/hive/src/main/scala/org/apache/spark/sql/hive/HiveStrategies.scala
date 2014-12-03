@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.types.StringType
 import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan}
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
-import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.parquet.{ParquetTypesConverter, ParquetRelation}
 import org.apache.spark.sql.{SQLContext, SchemaRDD, Strategy}
 
 import scala.collection.JavaConversions._
@@ -103,6 +103,14 @@ private[hive] trait HiveStrategies {
         val unresolvedProjection = projectList.map(_ transform {
           case a: AttributeReference => UnresolvedAttribute(a.name)
         })
+
+        val path = relation.hiveQlTable.getPath
+        val conf = hiveContext.sparkContext.hadoopConfiguration
+        val meta = ParquetTypesConverter.readMetaData(path, Some(conf))
+
+        if (meta.isEmpty) {
+          ParquetRelation.createEmpty(path.toString, relation.attributes, true, conf, hiveContext)
+        }
 
         if (relation.hiveQlTable.isPartitioned) {
           val rawPredicate = pruningPredicates.reduceOption(And).getOrElse(Literal(true))

@@ -53,11 +53,12 @@ private[sql] case class ParquetRelation(
   self: Product =>
 
   /** Schema derived from ParquetFile */
-  def parquetSchema: MessageType =
-    ParquetTypesConverter
-      .readMetaData(new Path(path), conf)
-      .getFileMetaData
-      .getSchema
+  def parquetSchema: MessageType = {
+    ParquetTypesConverter.readMetaData(new Path(path), conf)
+      .map(_.getFileMetaData.getSchema)
+      .getOrElse(
+        throw new IllegalArgumentException(s"Could not find Parquet metadata at path $path"))
+  }
 
   /** Attributes */
   override val output =

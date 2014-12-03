@@ -48,7 +48,7 @@ private[parquet] case class ParquetTypeInfo(
   decimalMetadata: Option[DecimalMetadata] = None,
   length: Option[Int] = None)
 
-private[parquet] object ParquetTypesConverter extends Logging {
+private[sql] object ParquetTypesConverter extends Logging {
   def isPrimitiveType(ctype: DataType): Boolean =
     classOf[PrimitiveType] isAssignableFrom ctype.getClass
 
@@ -425,7 +425,9 @@ private[parquet] object ParquetTypesConverter extends Logging {
    * @param configuration The Hadoop configuration to use.
    * @return The `ParquetMetadata` containing among other things the schema.
    */
-  def readMetaData(origPath: Path, configuration: Option[Configuration]): ParquetMetadata = {
+  def readMetaData(
+      origPath: Path,
+      configuration: Option[Configuration]): Option[ParquetMetadata] = {
     if (origPath == null) {
       throw new IllegalArgumentException("Unable to read Parquet metadata: path is null")
     }
@@ -450,13 +452,11 @@ private[parquet] object ParquetTypesConverter extends Logging {
     // all data in a single Parquet file have the same schema, which is normally true.
     children
       // Try any non-"_metadata" file first...
-      .find(_.getPath.getName != ParquetFileWriter.PARQUET_METADATA_FILE)
+      .find(file => file.getPath.getName != ParquetFileWriter.PARQUET_METADATA_FILE && !file.isDir)
       // ... and fallback to "_metadata" if no such file exists (which implies the Parquet file is
       // empty, thus normally the "_metadata" file is expected to be fairly small).
       .orElse(children.find(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE))
       .map(ParquetFileReader.readFooter(conf, _))
-      .getOrElse(
-        throw new IllegalArgumentException(s"Could not find Parquet metadata at path $path"))
   }
 
   /**
@@ -473,15 +473,19 @@ private[parquet] object ParquetTypesConverter extends Logging {
       origPath: Path,
       conf: Option[Configuration],
       isBinaryAsString: Boolean): Seq[Attribute] = {
+    val metaData = readMetaData(origPath, conf)
+    if (metaData.isEmpty) {
+      return Seq.empty
+    }
+
     val keyValueMetadata: java.util.Map[String, String] =
-      readMetaData(origPath, conf)
-        .getFileMetaData
-        .getKeyValueMetaData
+      metaData.map(_.getFileMetaData.getKeyValueMetaData).getOrElse(Map.empty[String, String])
+
     if (keyValueMetadata.get(RowReadSupport.SPARK_METADATA_KEY) != null) {
       convertFromString(keyValueMetadata.get(RowReadSupport.SPARK_METADATA_KEY))
     } else {
       val attributes = convertToAttributes(
-        readMetaData(origPath, conf).getFileMetaData.getSchema, isBinaryAsString)
+        readMetaData(origPath, conf).get.getFileMetaData.getSchema, isBinaryAsString)
       log.info(s"Falling back to schema conversion from Parquet types; result: $attributes")
       attributes
     }
