@@ -138,6 +138,15 @@ vertical scalability issue (the number of training features) when computing the 
 explicitly in Newton's method. As a result, L-BFGS often achieves rapider convergence compared with 
 other first-order optimization. 
 
+### Choosing an Optimization Method
+
+[Linear methods](mllib-linear-methods.html) use optimization internally, and some linear methods in MLlib support both SGD and L-BFGS.
+We give a few guidelines for choosing between methods.
+However, different optimization methods can have different convergence guarantees depending on the properties of the objective function, and we cannot cover the literature here.
+
+* L-BFGS is recommended since it generally converges faster (in fewer iterations) than SGD.
+* SGD can be faster for datasets with a very large number of instances (rows), especially when using a small `miniBatchFraction`.
+
 ## Implementation in MLlib
 
 ### Gradient descent and stochastic gradient descent
