@@ -311,6 +311,7 @@ private object Accumulators {
     for ((id, accum) <- localAccums.getOrElse(Thread.currentThread, Map())) {
       ret(id) = accum.localValue
     }
+    localAccums.remove(Thread.currentThread)
     return ret
   }
 
