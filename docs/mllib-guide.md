@@ -82,6 +82,8 @@ This should generally not affect user code, unless the user manually constructs 
 The tree `Node` now includes more information, including the probability of the predicted label
 (for classification).
 
+3. Printing methods' output has changed.  The `toString` (Scala/Java) and `__repr__` (Python) methods used to print the full model; they now print a summary.  For the full model, use `toDebugString`.
+
 Examples in the Spark distribution and examples in the
 [Decision Trees Guide](mllib-decision-tree.html#examples) have been updated accordingly.
 
