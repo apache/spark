@@ -105,19 +105,29 @@ class Airflow(BaseView):
             'sql': sql,
         }
         results = None
+        has_data = False
+        error = False
         if db_id_str:
             db = [db for db in dbs if db.db_id == db_id_str][0]
             hook = db.get_hook()
             try:
-                results = hook.get_pandas_df(sql).to_html(
+                df = hook.get_pandas_df(sql)
+                has_data = len(df) > 0
+                results = df.to_html(
                     classes="table table-striped table-bordered model-list")
             except Exception as e:
                 flash(str(e), 'error')
+                error = True
+
+        if not has_data and error:
+            flash('No data', 'error')
 
         form = QueryForm(request.form, data=data)
         session.commit()
         session.close()
-        return self.render('airflow/query.html', form=form, results=results)
+        return self.render(
+            'airflow/query.html', form=form,
+            results=results, has_data=has_data)
 
     @expose('/chart')
     def chart(self):
@@ -172,10 +182,13 @@ class Airflow(BaseView):
 
             # Preparing the data in a format that chartkick likes
             for i, (series, x, y) in df.iterrows():
+                series = str(series)
                 if series not in all_data:
                     all_data[series] = []
                 if type(x) in (datetime, Timestamp, date) :
                     x = x.isoformat()
+                else:
+                    x = dateutil.parser.parse(x).isoformat()[:10]
                 all_data[series].append([x, float(y)])
             all_data = [{
                     'name': series,
