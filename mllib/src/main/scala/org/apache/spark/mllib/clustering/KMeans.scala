@@ -170,16 +170,13 @@ class KMeans private (
     while (iteration < maxIterations && !activeRuns.isEmpty) {
       type WeightedPoint = (Array[Double], Long)
       def mergeContribs(p1: WeightedPoint, p2: WeightedPoint): WeightedPoint = {
-        val v1 = p1._1
-        val v2 = p2._1
-        require(v1.size == v2.size)
-        val size = v1.size
+        require(p1._1.size == p2._1.size)
         var i = 0
-        while(i < size) {
-          v1(i) += v2(i)
+        while(i < p1._1.size) {
+          p1._1(i) += p2._1(i)
           i += 1
         }
-        (v1, p1._2 + p2._2)
+        (p1._1, p1._2 + p2._2)
       }
 
       val activeCenters = activeRuns.map(r => centers(r)).toArray
@@ -220,6 +217,7 @@ class KMeans private (
         while (j < k) {
           val (sum, count) = totalContribs((i, j))
           if (count != 0) {
+            val size = sum.size
             var i = 0
             while(i < sum.size) {
               sum(i) /= count
@@ -257,7 +255,7 @@ class KMeans private (
 
     logInfo(s"The cost for the best run is $minCost.")
 
-    new KMeansModel(centers(bestRun).map(c => c.vector))
+    new KMeansModel(centers(bestRun).map(_.vector))
   }
 
   /**

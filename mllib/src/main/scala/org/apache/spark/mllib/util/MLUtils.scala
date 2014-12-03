@@ -20,7 +20,7 @@ package org.apache.spark.mllib.util
 import scala.reflect.ClassTag
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV,
-squaredDistance => breezeSquaredDistance}
+  squaredDistance => breezeSquaredDistance}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
