@@ -44,18 +44,19 @@ class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
   test("fast squared distance") {
     val a = (30 to 0 by -1).map(math.pow(2.0, _)).toArray
     val n = a.length
-    val v1 = new BDV[Double](a)
-    val norm1 = breezeNorm(v1, 2.0)
+    val v1 = Vectors.dense(a)
+    val norm1 = Vectors.norm(v1, 2.0)
     val precision = 1e-6
     for (m <- 0 until n) {
       val indices = (0 to m).toArray
       val values = indices.map(i => a(i))
-      val v2 = new BSV[Double](indices, values, n)
-      val norm2 = breezeNorm(v2, 2.0)
-      val squaredDist = breezeSquaredDistance(v1, v2)
+      val v2 = Vectors.sparse(n, indices, values)
+      val norm2 = Vectors.norm(v2, 2.0)
+      val squaredDist = breezeSquaredDistance(v1.toBreeze, v2.toBreeze)
       val fastSquaredDist1 = fastSquaredDistance(v1, norm1, v2, norm2, precision)
       assert((fastSquaredDist1 - squaredDist) <= precision * squaredDist, s"failed with m = $m")
-      val fastSquaredDist2 = fastSquaredDistance(v1, norm1, v2.toDenseVector, norm2, precision)
+      val fastSquaredDist2 =
+        fastSquaredDistance(v1, norm1, Vectors.dense(v2.toArray), norm2, precision)
       assert((fastSquaredDist2 - squaredDist) <= precision * squaredDist, s"failed with m = $m")
     }
   }
