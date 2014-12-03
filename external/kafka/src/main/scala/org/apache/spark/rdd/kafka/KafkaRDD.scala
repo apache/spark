@@ -62,9 +62,9 @@ class KafkaRDD[
   T <: Decoder[_]: ClassTag,
   R: ClassTag](
     sc: SparkContext,
-    kafkaParams: Map[String, String],
-    fromOffsets: Map[TopicAndPartition, Long],
-    untilOffsets: Map[TopicAndPartition, Long],
+    val kafkaParams: Map[String, String],
+    val fromOffsets: Map[TopicAndPartition, Long],
+    val untilOffsets: Map[TopicAndPartition, Long],
     messageHandler: MessageAndMetadata[K, V] => R
   ) extends RDD[R](sc, Nil) with Logging {
 
