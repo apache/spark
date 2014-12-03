@@ -87,7 +87,7 @@ object CrossValidatorExample {
       .addGrid(lr.regParam, Array(0.1, 0.01))
       .build()
     crossval.setEstimatorParamMaps(paramGrid)
-    crossval.setNumFolds(2)
+    crossval.setNumFolds(2) // Use 3+ in practice
 
     // Run cross-validation, and choose the best set of parameters.
     val cvModel = crossval.fit(training)

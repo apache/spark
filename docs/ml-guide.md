@@ -23,15 +23,15 @@ Spark ML standardizes APIs for machine learning algorithms to make it easier to 
 * **[ML Dataset](ml-guide.html#ml-dataset)**: Spark ML uses the [`SchemaRDD`](api/scala/index.html#org.apache.spark.sql.SchemaRDD) from Spark SQL as a dataset which can hold a variety of data types.
 E.g., a dataset could have different columns storing text, feature vectors, true labels, and predictions.
 
-* **[Transformer](ml-guide.html#transformers)**: A Transformer is an algorithm which can transform one `SchemaRDD` into another `SchemaRDD`.
-E.g., an ML model is a Transformer which transforms an RDD with features into an RDD with predictions.
+* **[`Transformer`](ml-guide.html#transformers)**: A `Transformer` is an algorithm which can transform one `SchemaRDD` into another `SchemaRDD`.
+E.g., an ML model is a `Transformer` which transforms an RDD with features into an RDD with predictions.
 
-* **[Estimator](ml-guide.html#estimators)**: An Estimator is an algorithm which can be fit on a `SchemaRDD` to produce a Transformer.
-E.g., a learning algorithm is an Estimator which trains on a dataset and produces a model.
+* **[`Estimator`](ml-guide.html#estimators)**: An `Estimator` is an algorithm which can be fit on a `SchemaRDD` to produce a `Transformer`.
+E.g., a learning algorithm is an `Estimator` which trains on a dataset and produces a model.
 
-* **[Pipeline](ml-guide.html#pipeline)**: A Pipeline chains multiple Transformers and Estimators together to specify an ML workflow.
+* **[`Pipeline`](ml-guide.html#pipeline)**: A `Pipeline` chains multiple `Transformer`s and `Estimator`s together to specify an ML workflow.
 
-* **[Param](ml-guide.html#param)**: All Transformers and Estimators now share a common API for specifying parameters.
+* **[`Param`](ml-guide.html#param)**: All `Transformer`s and `Estimator`s now share a common API for specifying parameters.
 
 ## ML Dataset
 
@@ -57,8 +57,8 @@ For example:
 
 ### Estimators
 
-An [Estimator](api/scala/index.html#org.apache.spark.ml.Estimator) abstracts the concept of a learning algorithm or any algorithm which fits or trains on data.  Technically, an Estimator implements a method `fit()` which accepts a `SchemaRDD` and produces a `Transformer`.
-For example, a learning algorithm such as `LogisticRegression` is an `Estimator`, and calling `fit()` trains a `LogisticRegressionModel`, which is a Transformer.
+An [`Estimator`](api/scala/index.html#org.apache.spark.ml.Estimator) abstracts the concept of a learning algorithm or any algorithm which fits or trains on data.  Technically, an `Estimator` implements a method `fit()` which accepts a `SchemaRDD` and produces a `Transformer`.
+For example, a learning algorithm such as `LogisticRegression` is an `Estimator`, and calling `fit()` trains a `LogisticRegressionModel`, which is a `Transformer`.
 
 ### Properties of ML Algorithms
 
@@ -80,12 +80,12 @@ which consists of a sequence of [`PipelineStage`s](api/scala/index.html#org.apac
 
 ### How It Works
 
-A Pipeline is specified as a sequence of stages, and each stage is either a `Transformer` or an `Estimator`.
+A `Pipeline` is specified as a sequence of stages, and each stage is either a `Transformer` or an `Estimator`.
 These stages are run in order, and the input dataset is modified as it passes through each stage.
 For `Transformer` stages, the `transform()` method is called on the dataset.
-For `Estimator` stages, the `fit()` method is called to produce a `Transformer` (which becomes part of the `PipelineModel`, or fitted Pipeline), and that `Transformer`'s `transform()` method is called on the dataset.
+For `Estimator` stages, the `fit()` method is called to produce a `Transformer` (which becomes part of the `PipelineModel`, or fitted `Pipeline`), and that `Transformer`'s `transform()` method is called on the dataset.
 
-We illustrate this for the simple text document workflow.  The figure below is for the *training time* usage of a Pipeline.
+We illustrate this for the simple text document workflow.  The figure below is for the *training time* usage of a `Pipeline`.
 
 <p style="text-align: center;">
   <img
@@ -96,17 +96,17 @@ We illustrate this for the simple text document workflow.  The figure below is f
   />
 </p>
 
-Above, the top row represents a Pipeline with three stages.
-The first two (`Tokenizer` and `HashingTF`) are Transformers (blue), and the third (`LogisticRegression`) is an Estimator (red).
+Above, the top row represents a `Pipeline` with three stages.
+The first two (`Tokenizer` and `HashingTF`) are `Transformer`s (blue), and the third (`LogisticRegression`) is an `Estimator` (red).
 The bottom row represents data flowing through the pipeline, where cylinders indicate `SchemaRDD`s.
-The Pipeline `fit()` method is called on the original dataset which has raw text documents and labels.
+The `Pipeline.fit()` method is called on the original dataset which has raw text documents and labels.
 The `Tokenizer.transform()` method splits the raw text documents into words, adding a new column with words into the dataset.
 The `HashingTF.transform()` method converts the words column into feature vectors, adding a new column with those vectors to the dataset.
-Now, since `LogisticRegression` is an `Estimator`, the Pipeline first calls `LogisticRegression.fit()` to produce a `LogisticRegressionModel`.
-If the Pipeline had more stages, it would call the `LogisticRegressionModel`'s `transform()` method on the dataset before passing the dataset to the next stage.
+Now, since `LogisticRegression` is an `Estimator`, the `Pipeline` first calls `LogisticRegression.fit()` to produce a `LogisticRegressionModel`.
+If the `Pipeline` had more stages, it would call the `LogisticRegressionModel`'s `transform()` method on the dataset before passing the dataset to the next stage.
 
-A Pipeline is an Estimator.
-Thus, after a Pipeline's `fit()` method runs, it produces a `PipelineModel` which is a Transformer.  This PipelineModel is used at *test time*; the figure below illustrates this usage.
+A `Pipeline` is an `Estimator`.
+Thus, after a `Pipeline`'s `fit()` method runs, it produces a `PipelineModel` which is a `Transformer`.  This `PipelineModel` is used at *test time*; the figure below illustrates this usage.
 
 <p style="text-align: center;">
   <img
@@ -117,33 +117,33 @@ Thus, after a Pipeline's `fit()` method runs, it produces a `PipelineModel` whic
   />
 </p>
 
-In the figure above, the PipelineModel has the same number of stages as the original Pipeline, but all Estimators in the original Pipeline have become Transformers.
-When the PipelineModel's `transform()` method is called on a test dataset, the data are passed through the Pipeline in order.
+In the figure above, the `PipelineModel` has the same number of stages as the original `Pipeline`, but all `Estimator`s in the original `Pipeline` have become `Transformer`s.
+When the `PipelineModel`'s `transform()` method is called on a test dataset, the data are passed through the `Pipeline` in order.
 Each stage's `transform()` method updates the dataset and passes it to the next stage.
 
-Pipelines and PipelineModels help to ensure that training and test data go through identical feature processing steps.
+`Pipeline`s and `PipelineModel`s help to ensure that training and test data go through identical feature processing steps.
 
 ### Details
 
-*DAG Pipelines*: A Pipeline's stages are specified as an ordered array.  The examples given here are all for linear Pipelines, i.e., Pipelines in which each stage uses data produced by the previous stage.  It is possible to create non-linear Pipelines as long as the data flow graph forms a Directed Acyclic Graph (DAG).  This graph is currently specified implicitly based on the input and output column names of each stage (generally specified as parameters).  If the Pipeline forms a DAG, then the stages must be specified in topological order.
+*DAG `Pipeline`s*: A `Pipeline`'s stages are specified as an ordered array.  The examples given here are all for linear `Pipeline`s, i.e., `Pipeline`s in which each stage uses data produced by the previous stage.  It is possible to create non-linear `Pipeline`s as long as the data flow graph forms a Directed Acyclic Graph (DAG).  This graph is currently specified implicitly based on the input and output column names of each stage (generally specified as parameters).  If the `Pipeline` forms a DAG, then the stages must be specified in topological order.
 
-*Runtime checking*: Since Pipelines can operate on datasets with varied types, they cannot use compile-time type checking.  Pipelines and PipelineModels instead do runtime checking before actually running the Pipeline.  This type checking is done using the dataset *schema*, a description of the data types of columns in the `SchemaRDD`.
+*Runtime checking*: Since `Pipeline`s can operate on datasets with varied types, they cannot use compile-time type checking.  `Pipeline`s and `PipelineModel`s instead do runtime checking before actually running the `Pipeline`.  This type checking is done using the dataset *schema*, a description of the data types of columns in the `SchemaRDD`.
 
 ## Parameters
 
-Spark ML Estimators and Transformers use a uniform API for specifying parameters.
+Spark ML `Estimator`s and `Transformer`s use a uniform API for specifying parameters.
 
-A [Param](api/scala/index.html#org.apache.spark.ml.param.Param) is a named parameter with self-contained documentation.
-A [ParamMap](api/scala/index.html#org.apache.spark.ml.param.ParamMap)] is a set of (parameter, value) pairs.
+A [`Param`](api/scala/index.html#org.apache.spark.ml.param.Param) is a named parameter with self-contained documentation.
+A [`ParamMap`](api/scala/index.html#org.apache.spark.ml.param.ParamMap)] is a set of (parameter, value) pairs.
 
 There are two main ways to pass parameters to an algorithm:
 
 1. Set parameters for an instance.  E.g., if `lr` is an instance of `LogisticRegression`, one could call `lr.setMaxIter(10)` to make `lr.fit()` use at most 10 iterations.  This API resembles the API used in MLlib.
-2. Pass a `ParamMap` to `fit()` or `transform()`.  Any parameters in the ParamMap will override parameters previously specified via setter methods.
+2. Pass a `ParamMap` to `fit()` or `transform()`.  Any parameters in the `ParamMap` will override parameters previously specified via setter methods.
 
-Parameters belong to specific instances of Estimators and Transformers.
-For example, if we have two `LogisticRegression` instances `lr1` and `lr2`, then we can build a ParamMap with both `maxIter` parameters specified: `ParamMap(lr1.maxIter -> 10, lr2.maxIter -> 20)`.
-This is useful if there are two algorithms with the `maxIter` parameter in a Pipeline.
+Parameters belong to specific instances of `Estimator`s and `Transformer`s.
+For example, if we have two `LogisticRegression` instances `lr1` and `lr2`, then we can build a `ParamMap` with both `maxIter` parameters specified: `ParamMap(lr1.maxIter -> 10, lr2.maxIter -> 20)`.
+This is useful if there are two algorithms with the `maxIter` parameter in a `Pipeline`.
 
 # Code Examples
 
@@ -152,7 +152,7 @@ There is not yet documentation for specific algorithms in Spark ML.  For more in
 
 ## Example: Estimator, Transformer, and Param
 
-This example covers the concepts of Estimator, Transformer, and Param.
+This example covers the concepts of `Estimator`, `Transformer`, and `Param`.
 
 <div class="codetabs">
 
@@ -317,7 +317,7 @@ for (Row r: results.collect()) {
 
 ## Example: Pipeline
 
-This example follows the simple text document Pipeline illustrated in the figures above.
+This example follows the simple text document `Pipeline` illustrated in the figures above.
 
 <div class="codetabs">
 
@@ -482,21 +482,199 @@ for (Row r: predictions.collect()) {
 
 ## Example: Model Selection via Cross-Validation
 
-Pipelines facilitate model selection (choosing parameters for a set of algorithms).
+An important task in ML is *model selection*, or using data to find the best model or parameters for a given task.  This is also called *tuning*.
+`Pipeline`s facilitate model selection by making it easy to tune an entire `Pipeline` at once, rather than tuning each element in the `Pipeline` separately.
 
-grid search with CV (and note that this is expensive)
+Currently, `spark.ml` supports model selection using the [`CrossValidator`](api/scala/index.html#org.apache.spark.ml.tuning.CrossValidator) class, which takes an `Estimator`, a set of `ParamMap`s, and an [`Evaluator`](api/scala/index.html#org.apache.spark.ml.Evaluator).
+`CrossValidator` begins by splitting the dataset into a set of *folds* which are used as separate training and test datasets; e.g., with `$k=3$` folds, `CrossValidator` will generate 3 (training, test) dataset pairs, each of which uses 2/3 of the data for training and 1/3 for testing.
+`CrossValidator` iterates through the set of `ParamMap`s. For each `ParamMap`, it trains the given `Estimator` and evaluates it using the given `Evaluator`.
+The `ParamMap` which produces the best evaluation metric (averaged over the `$k$` folds) is selected as the best model.
+`CrossValidator` finally fits the `Estimator` using the best `ParamMap` and the entire dataset.
+
+The following example demonstrates using `CrossValidator` to select from a grid of parameters.
+To help construct the parameter grid, we use the [`ParamGridBuilder`](api/scala/index.html#org.apache.spark.ml.tuning.ParamGridGuilder) utility.
+
+Note that cross-validation over a grid of parameters is expensive.
+E.g., in the example below, the parameter grid has 3 values for `hashingTF.numFeatures` and 2 values for `lr.regParam`, and `CrossValidator` uses 2 folds.  This multiplies out to `$(3 \times 2) \times 2 = 12$` different models being trained.
+In realistic settings, it can be common to try many more parameters and use more folds (`$k=3$` and `$k=10$` are common).
+In other words, using `CrossValidator` can be very expensive.
+However, it is also a well-established method for choosing parameters which is more statistically sound than heuristic hand-tuning.
 
 <div class="codetabs">
 
 <div data-lang="scala">
 {% highlight scala %}
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkContext._
+import org.apache.spark.ml.Pipeline
+import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
+import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
+import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
+import org.apache.spark.sql.{Row, SQLContext}
 
+val conf = new SparkConf().setAppName("CrossValidatorExample")
+val sc = new SparkContext(conf)
+val sqlContext = new SQLContext(sc)
+import sqlContext._
+
+// Prepare training documents, which are labeled.
+val training = sparkContext.parallelize(Seq(
+  LabeledDocument(0L, "a b c d e spark", 1.0),
+  LabeledDocument(1L, "b d", 0.0),
+  LabeledDocument(2L, "spark f g h", 1.0),
+  LabeledDocument(3L, "hadoop mapreduce", 0.0),
+  LabeledDocument(4L, "b spark who", 1.0),
+  LabeledDocument(5L, "g d a y", 0.0),
+  LabeledDocument(6L, "spark fly", 1.0),
+  LabeledDocument(7L, "was mapreduce", 0.0),
+  LabeledDocument(8L, "e spark program", 1.0),
+  LabeledDocument(9L, "a e c l", 0.0),
+  LabeledDocument(10L, "spark compile", 1.0),
+  LabeledDocument(11L, "hadoop software", 0.0)))
+
+// Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
+val tokenizer = new Tokenizer()
+  .setInputCol("text")
+  .setOutputCol("words")
+val hashingTF = new HashingTF()
+  .setInputCol(tokenizer.getOutputCol)
+  .setOutputCol("features")
+val lr = new LogisticRegression()
+  .setMaxIter(10)
+val pipeline = new Pipeline()
+  .setStages(Array(tokenizer, hashingTF, lr))
+
+// We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
+// This will allow us to jointly choose parameters for all Pipeline stages.
+// A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+val crossval = new CrossValidator()
+  .setEstimator(pipeline)
+  .setEvaluator(new BinaryClassificationEvaluator)
+// We use a ParamGridBuilder to construct a grid of parameters to search over.
+// With 3 values for hashingTF.numFeatures and 2 values for lr.regParam,
+// this grid will have 3 x 2 = 6 parameter settings for CrossValidator to choose from.
+val paramGrid = new ParamGridBuilder()
+  .addGrid(hashingTF.numFeatures, Array(10, 100, 1000))
+  .addGrid(lr.regParam, Array(0.1, 0.01))
+  .build()
+crossval.setEstimatorParamMaps(paramGrid)
+crossval.setNumFolds(2) // Use 3+ in practice
+
+// Run cross-validation, and choose the best set of parameters.
+val cvModel = crossval.fit(training)
+// Get the best LogisticRegression model (with the best set of parameters from paramGrid).
+val lrModel = cvModel.bestModel
+
+// Prepare test documents, which are unlabeled.
+val test = sparkContext.parallelize(Seq(
+  Document(4L, "spark i j k"),
+  Document(5L, "l m n"),
+  Document(6L, "mapreduce spark"),
+  Document(7L, "apache hadoop")))
+
+// Make predictions on test documents. cvModel uses the best model found (lrModel).
+cvModel.transform(test)
+  .select('id, 'text, 'score, 'prediction)
+  .collect()
+  .foreach { case Row(id: Long, text: String, score: Double, prediction: Double) =>
+  println("(" + id + ", " + text + ") --> score=" + score + ", prediction=" + prediction)
+}
 {% endhighlight %}
 </div>
 
 <div data-lang="java">
 {% highlight java %}
+import java.util.List;
+import com.google.common.collect.Lists;
+import org.apache.spark.SparkConf;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.ml.Model;
+import org.apache.spark.ml.Pipeline;
+import org.apache.spark.ml.PipelineStage;
+import org.apache.spark.ml.classification.LogisticRegression;
+import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator;
+import org.apache.spark.ml.feature.HashingTF;
+import org.apache.spark.ml.feature.Tokenizer;
+import org.apache.spark.ml.param.ParamMap;
+import org.apache.spark.ml.tuning.CrossValidator;
+import org.apache.spark.ml.tuning.CrossValidatorModel;
+import org.apache.spark.ml.tuning.ParamGridBuilder;
+import org.apache.spark.sql.api.java.JavaSQLContext;
+import org.apache.spark.sql.api.java.JavaSchemaRDD;
+import org.apache.spark.sql.api.java.Row;
 
+SparkConf conf = new SparkConf().setAppName("JavaCrossValidatorExample");
+JavaSparkContext jsc = new JavaSparkContext(conf);
+JavaSQLContext jsql = new JavaSQLContext(jsc);
+
+// Prepare training documents, which are labeled.
+List<LabeledDocument> localTraining = Lists.newArrayList(
+  new LabeledDocument(0L, "a b c d e spark", 1.0),
+  new LabeledDocument(1L, "b d", 0.0),
+  new LabeledDocument(2L, "spark f g h", 1.0),
+  new LabeledDocument(3L, "hadoop mapreduce", 0.0),
+  new LabeledDocument(4L, "b spark who", 1.0),
+  new LabeledDocument(5L, "g d a y", 0.0),
+  new LabeledDocument(6L, "spark fly", 1.0),
+  new LabeledDocument(7L, "was mapreduce", 0.0),
+  new LabeledDocument(8L, "e spark program", 1.0),
+  new LabeledDocument(9L, "a e c l", 0.0),
+  new LabeledDocument(10L, "spark compile", 1.0),
+  new LabeledDocument(11L, "hadoop software", 0.0));
+JavaSchemaRDD training =
+    jsql.applySchema(jsc.parallelize(localTraining), LabeledDocument.class);
+
+// Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
+Tokenizer tokenizer = new Tokenizer()
+  .setInputCol("text")
+  .setOutputCol("words");
+HashingTF hashingTF = new HashingTF()
+  .setNumFeatures(1000)
+  .setInputCol(tokenizer.getOutputCol())
+  .setOutputCol("features");
+LogisticRegression lr = new LogisticRegression()
+  .setMaxIter(10)
+  .setRegParam(0.01);
+Pipeline pipeline = new Pipeline()
+  .setStages(new PipelineStage[] {tokenizer, hashingTF, lr});
+
+// We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
+// This will allow us to jointly choose parameters for all Pipeline stages.
+// A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+CrossValidator crossval = new CrossValidator()
+    .setEstimator(pipeline)
+    .setEvaluator(new BinaryClassificationEvaluator());
+// We use a ParamGridBuilder to construct a grid of parameters to search over.
+// With 3 values for hashingTF.numFeatures and 2 values for lr.regParam,
+// this grid will have 3 x 2 = 6 parameter settings for CrossValidator to choose from.
+ParamMap[] paramGrid = new ParamGridBuilder()
+    .addGrid(hashingTF.numFeatures(), new int[]{10, 100, 1000})
+    .addGrid(lr.regParam(), new double[]{0.1, 0.01})
+    .build();
+crossval.setEstimatorParamMaps(paramGrid);
+crossval.setNumFolds(2); // Use 3+ in practice
+
+// Run cross-validation, and choose the best set of parameters.
+CrossValidatorModel cvModel = crossval.fit(training);
+// Get the best LogisticRegression model (with the best set of parameters from paramGrid).
+Model lrModel = cvModel.bestModel();
+
+// Prepare test documents, which are unlabeled.
+List<Document> localTest = Lists.newArrayList(
+  new Document(4L, "spark i j k"),
+  new Document(5L, "l m n"),
+  new Document(6L, "mapreduce spark"),
+  new Document(7L, "apache hadoop"));
+JavaSchemaRDD test = jsql.applySchema(jsc.parallelize(localTest), Document.class);
+
+// Make predictions on test documents. cvModel uses the best model found (lrModel).
+cvModel.transform(test).registerAsTable("prediction");
+JavaSchemaRDD predictions = jsql.sql("SELECT id, text, score, prediction FROM prediction");
+for (Row r: predictions.collect()) {
+  System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> score=" + r.get(2)
+      + ", prediction=" + r.get(3));
+}
 {% endhighlight %}
 </div>
 
@@ -513,7 +691,7 @@ Spark ML also depends upon Spark SQL, but the relevant parts of Spark SQL do not
 
 **Development plan**
 
-If all goes well, spark.ml will become the primary ML package at the time of the Spark 1.3 release.  Initially, simple wrappers will be used to port algorithms to spark.ml, but eventually, code will be moved to spark.ml and spark.mllib will be deprecated.
+If all goes well, `spark.ml` will become the primary ML package at the time of the Spark 1.3 release.  Initially, simple wrappers will be used to port algorithms to `spark.ml`, but eventually, code will be moved to `spark.ml` and `spark.mllib` will be deprecated.
 
 **Advice to developers**
 
