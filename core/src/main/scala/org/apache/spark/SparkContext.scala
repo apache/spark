@@ -1630,28 +1630,28 @@ object SparkContext extends Logging {
   // following ones.
 
   @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double) = 0.0
   }
 
   @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   object IntAccumulatorParam extends AccumulatorParam[Int] {
     def addInPlace(t1: Int, t2: Int): Int = t1 + t2
     def zero(initialValue: Int) = 0
   }
 
   @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   object LongAccumulatorParam extends AccumulatorParam[Long] {
     def addInPlace(t1: Long, t2: Long) = t1 + t2
     def zero(initialValue: Long) = 0L
   }
 
   @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   object FloatAccumulatorParam extends AccumulatorParam[Float] {
     def addInPlace(t1: Float, t2: Float) = t1 + t2
     def zero(initialValue: Float) = 0f
@@ -1662,34 +1662,34 @@ object SparkContext extends Logging {
   // and just call the corresponding functions in `object RDD`.
 
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.2.0")
+    "kept here only for backward compatibility.", "1.3.0")
   def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
       (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
     RDD.rddToPairRDDFunctions(rdd)
   }
 
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.2.0")
+    "kept here only for backward compatibility.", "1.3.0")
   def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = RDD.rddToAsyncRDDActions(rdd)
 
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.2.0")
+    "kept here only for backward compatibility.", "1.3.0")
   def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
       rdd: RDD[(K, V)]) =
     RDD.rddToSequenceFileRDDFunctions(rdd)
 
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.2.0")
+    "kept here only for backward compatibility.", "1.3.0")
   def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](
       rdd: RDD[(K, V)]) =
     RDD.rddToOrderedRDDFunctions(rdd)
 
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.2.0")
+    "kept here only for backward compatibility.", "1.3.0")
   def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = RDD.doubleRDDToDoubleRDDFunctions(rdd)
 
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.2.0")
+    "kept here only for backward compatibility.", "1.3.0")
   def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T]) =
     RDD.numericRDDToDoubleRDDFunctions(rdd)
 
@@ -1722,42 +1722,42 @@ object SparkContext extends Logging {
   // and just call the corresponding functions in `object WritableConverter`.
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def intWritableConverter(): WritableConverter[Int] =
     WritableConverter.intWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def longWritableConverter(): WritableConverter[Long] =
     WritableConverter.longWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def doubleWritableConverter(): WritableConverter[Double] =
     WritableConverter.doubleWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def floatWritableConverter(): WritableConverter[Float] =
     WritableConverter.floatWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def booleanWritableConverter(): WritableConverter[Boolean] =
     WritableConverter.booleanWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def bytesWritableConverter(): WritableConverter[Array[Byte]] =
     WritableConverter.bytesWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def stringWritableConverter(): WritableConverter[String] =
     WritableConverter.stringWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def writableWritableConverter[T <: Writable]() =
     WritableConverter.writableWritableConverter()
 
