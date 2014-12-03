@@ -21,6 +21,29 @@
 import re
 from subprocess import Popen, PIPE
 
+try:
+    from jira.client import JIRA
+    from jira.exceptions import JIRAError
+except ImportError:
+    print "This tool requires the jira-python library"
+    print "Install using 'sudo pip install jira-python'"
+    sys.exit(-1)
+
+try:
+    from github import Github
+    from github import GithubException
+except ImportError:
+    print "This tool requires the PyGithub library"
+    print "Install using 'sudo pip install PyGithub'"
+    sys.exit(-1)
+
+try:
+    import unidecode
+except ImportError:
+    print "This tool requires the unidecode library to decode obscure github usernames"
+    print "Install using 'sudo pip install unidecode'"
+    sys.exit(-1)
+
 # Utility functions run git commands (written with Git 1.8.5)
 def run_cmd(cmd): return Popen(cmd, stdout=PIPE).communicate()[0]
 def get_author(commit_hash):
@@ -121,4 +144,74 @@ def nice_join(str_list):
         return " and ".join(str_list)
     else:
         return ", ".join(str_list[:-1]) + ", and " + str_list[-1]
+
+# Return the full name of the specified user on Github
+# If the user doesn't exist, return None
+def get_github_name(author, github_client):
+    if github_client:
+        try:
+            return github_client.get_user(author).name
+        except GithubException as e:
+            # If this is not a "not found" exception
+            if e.status != 404:
+                raise e
+    return None
+
+# Return the full name of the specified user on JIRA
+# If the user doesn't exist, return None
+def get_jira_name(author, jira_client):
+    if jira_client:
+        try:
+            return jira_client.user(author).displayName
+        except JIRAError as e:
+            # If this is not a "not found" exception
+            if e.status_code != 404:
+                raise e
+    return None
+
+# Return whether the given name is in the form <First Name><space><Last Name>
+def is_valid_author(author):
+    if not author: return False
+    author_words = len(author.split(" "))
+    return author_words == 2 or author_words == 3
+
+# Capitalize the first letter of each word in the given author name
+def capitalize_author(author):
+    if not author: return None
+    words = author.split(" ")
+    words = [w[0].capitalize() + w[1:] for w in words if w]
+    return " ".join(words)
+
+# Maintain a mapping of translated author names as a cache
+translated_authors = {}
+
+# Format the given author in a format appropriate for the contributors list.
+# If the author is not an actual name, search github and JIRA for potential
+# replacements and log all candidates as a warning.
+def translate_author(github_author, github_client, jira_client, warnings):
+    if is_valid_author(github_author):
+        return capitalize_author(github_author)
+    # If the translated author is already cached, just return it
+    if github_author in translated_authors:
+        return translated_authors[github_author]
+    # Otherwise, author name is not found, so we need to search for an alternative name
+    candidates = set()
+    github_name = get_github_name(github_author, github_client)
+    jira_name = get_jira_name(github_author, jira_client)
+    if is_valid_author(github_name): github_name = capitalize_author(github_name)
+    if is_valid_author(jira_name): jira_name = capitalize_author(jira_name)
+    if github_name: candidates.add(github_name)
+    if jira_name: candidates.add(jira_name)
+    # Only use the github name as a replacement automatically
+    # The JIRA name may not make sense because it can belong to someone else
+    if is_valid_author(github_name):
+        candidates_message = " (another candidate is %s)" % jira_name if jira_name else ""
+        warnings.append("Replacing github user %s with %s%s" % (github_author, github_name, candidates_message))
+        translated_authors[github_name] = github_name
+        return translated_authors[github_name]
+    # No direct replacement, so return the original author and list any candidates found
+    candidates_message = " (candidates: %s)" % nice_join(candidates) if candidates else ""
+    warnings.append("Unable to find a replacement for github user %s%s" % (github_author, candidates_message))
+    translated_authors[github_author] = github_author
+    return translated_authors[github_author]
 
