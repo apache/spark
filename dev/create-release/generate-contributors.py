@@ -26,22 +26,10 @@ from releaseutils import *
 
 # You must set the following before use!
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
+JIRA_USERNAME = os.environ.get("JIRA_USERNAME", None)
+JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", None)
 START_COMMIT = os.environ.get("START_COMMIT", "37b100")
 END_COMMIT = os.environ.get("END_COMMIT", "3693ae")
-
-try:
-    from jira.client import JIRA
-except ImportError:
-    print "This tool requires the jira-python library"
-    print "Install using 'sudo pip install jira-python'"
-    sys.exit(-1)
-
-try:
-    import unidecode
-except ImportError:
-    print "This tool requires the unidecode library to decode obscure github usernames"
-    print "Install using 'sudo pip install unidecode'"
-    sys.exit(-1)
 
 # If commit range is not specified, prompt the user to provide it
 if not START_COMMIT or not END_COMMIT:
@@ -52,6 +40,8 @@ if not START_COMMIT or not END_COMMIT:
         END_COMMIT = raw_input("Please specify ending commit hash (non-inclusive): ")
 
 # Verify provided arguments
+if not JIRA_USERNAME: sys.exit("JIRA_USERNAME must be provided")
+if not JIRA_PASSWORD: sys.exit("JIRA_PASSWORD must be provided")
 start_commit_line = get_one_line(START_COMMIT)
 end_commit_line = get_one_line(END_COMMIT)
 num_commits = num_commits_in_range(START_COMMIT, END_COMMIT)
@@ -69,6 +59,14 @@ response = raw_input("Is this correct? [Y/n] ")
 if response.lower() != "y" and response:
     sys.exit("Ok, exiting")
 print "==================================================================================\n"
+
+# Setup JIRA and github clients. We use two JIRA clients, one with authentication
+# and one without, because authentication is slow and required only when we query
+# JIRA user details but not Spark issues
+jira_options = { "server": JIRA_API_BASE }
+jira_client = JIRA(options = jira_options)
+jira_client_auth = JIRA(options = jira_options, basic_auth = (JIRA_USERNAME, JIRA_PASSWORD))
+github_client = Github()
 
 # Find all commits within this range
 print "Gathering commits within range [%s..%s)" % (START_COMMIT, END_COMMIT)
@@ -129,14 +127,16 @@ warnings = []
 # }
 #
 author_info = {}
-jira_options = { "server": JIRA_API_BASE }
-jira = JIRA(jira_options)
 print "\n=========================== Compiling contributor list ==========================="
 for commit in filtered_commits:
     commit_hash = re.findall("^[a-z0-9]+", commit)[0]
     issues = re.findall("SPARK-[0-9]+", commit.upper())
+    # Translate the author in case the github username is not an actual name
+    # Also guard against any special characters used in the name
+    # Note the JIRA client we use here must have authentication enabled
     author = get_author(commit_hash)
-    author = unidecode.unidecode(unicode(author, "UTF-8")) # guard against special characters
+    author = unidecode.unidecode(unicode(author, "UTF-8"))
+    author = translate_author(author, github_client, jira_client_auth, warnings)
     date = get_date(commit_hash)
     # Parse components from the commit message, if any
     commit_components = find_components(commit, commit_hash)
@@ -151,7 +151,7 @@ for commit in filtered_commits:
             author_info[author][issue_type].add(component)
     # Find issues and components associated with this commit
     for issue in issues:
-        jira_issue = jira.issue(issue)
+        jira_issue = jira_client.issue(issue)
         jira_type = jira_issue.fields.issuetype.name
         jira_type = translate_issue_type(jira_type, issue, warnings)
         jira_components = [translate_component(c.name, commit_hash, warnings)\
