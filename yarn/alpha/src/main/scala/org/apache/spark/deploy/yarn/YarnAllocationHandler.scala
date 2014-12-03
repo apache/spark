@@ -29,7 +29,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import org.apache.spark.{Logging, SparkConf, SparkEnv}
 import org.apache.spark.scheduler.{SplitInfo,TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.AMRMProtocol
@@ -245,11 +245,12 @@ private[yarn] class YarnAllocationHandler(
           // Deallocate + allocate can result in reusing id's wrongly - so use a different counter
           // (executorIdCounter)
           val executorId = executorIdCounter.incrementAndGet().toString
-          val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
+          val driverUrl = AkkaUtils.address(
             SparkEnv.driverActorSystemName,
             sparkConf.get("spark.driver.host"),
             sparkConf.get("spark.driver.port"),
-            CoarseGrainedSchedulerBackend.ACTOR_NAME)
+            CoarseGrainedSchedulerBackend.ACTOR_NAME,
+            sparkConf)
 
           logInfo("launching container on " + containerId + " host " + executorHostname)
           // Just to be safe, simply remove it from pendingReleaseContainers.

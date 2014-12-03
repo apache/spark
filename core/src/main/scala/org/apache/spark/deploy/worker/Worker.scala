@@ -77,7 +77,7 @@ private[spark] class Worker(
   var masterAddress: Address = null
   var activeMasterUrl: String = ""
   var activeMasterWebUiUrl : String = ""
-  val akkaUrl = "akka.tcp://%s@%s:%s/user/%s".format(actorSystemName, host, port, actorName)
+  val akkaUrl = AkkaUtils.address(actorSystemName, host, port, actorName, conf)
   @volatile var registered = false
   @volatile var connected = false
   val workerId = generateWorkerId()
@@ -148,10 +148,10 @@ private[spark] class Worker(
     masterLock.synchronized {
       activeMasterUrl = url
       activeMasterWebUiUrl = uiUrl
-      master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
+      master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl, conf))
       masterAddress = activeMasterUrl match {
         case Master.sparkUrlRegex(_host, _port) =>
-          Address("akka.tcp", Master.systemName, _host, _port.toInt)
+          Address(AkkaUtils.protocol(conf), Master.systemName, _host, _port.toInt)
         case x =>
           throw new SparkException("Invalid spark URL: " + x)
       }
@@ -162,7 +162,7 @@ private[spark] class Worker(
   def tryRegisterAllMasters() {
     for (masterUrl <- masterUrls) {
       logInfo("Connecting to master " + masterUrl + "...")
-      val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
+      val actor = context.actorSelection(Master.toAkkaUrl(masterUrl, conf))
       actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
     }
   }

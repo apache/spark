@@ -25,7 +25,8 @@ import org.apache.spark.util.Utils
 
 private[spark] class HttpFileServer(
     securityManager: SecurityManager,
-    requestedPort: Int = 0)
+    requestedPort: Int = 0,
+    conf: SparkConf)
   extends Logging {
 
   var baseDir : File = null
@@ -41,7 +42,7 @@ private[spark] class HttpFileServer(
     fileDir.mkdir()
     jarDir.mkdir()
     logInfo("HTTP File server directory is " + baseDir)
-    httpServer = new HttpServer(baseDir, securityManager, requestedPort, "HTTP file server")
+    httpServer = new HttpServer(baseDir, securityManager, requestedPort, "HTTP file server", conf)
     httpServer.start()
     serverUri = httpServer.uri
     logDebug("HTTP file server started at: " + serverUri)

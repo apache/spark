@@ -798,10 +798,10 @@ private[spark] object Master extends Logging {
   }
 
   /** Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:ip`. */
-  def toAkkaUrl(sparkUrl: String): String = {
+  def toAkkaUrl(sparkUrl: String, conf: SparkConf): String = {
     sparkUrl match {
       case sparkUrlRegex(host, port) =>
-        "akka.tcp://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
+        AkkaUtils.address(systemName, host, port, actorName, conf)
       case _ =>
         throw new SparkException("Invalid master URL: " + sparkUrl)
     }

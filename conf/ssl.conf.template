@@ -1,0 +1,10 @@
+# Spark SSL settings
+
+# ssl.enabled               true
+# ssl.keyStore              /path/to/your/keyStore
+# ssl.keyStorePassword      password
+# ssl.keyPassword           password
+# ssl.trustStore            /path/to/your/trustStore
+# ssl.trustStorePassword    password
+# ssl.enabledAlgorithms     [TLS_RSA_WITH_AES_128_CBC_SHA, TLS_RSA_WITH_AES_256_CBC_SHA]
+# ssl.protocol              TLSv1.2

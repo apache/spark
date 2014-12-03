@@ -48,6 +48,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   private[spark] val settings = new HashMap[String, String]()
 
   if (loadDefaults) {
+    // Load SSL settings from SSL configuration file
+    for ((k, v) <- SSLOptions.load().asScala) {
+      settings(k) = v
+    }
+
     // Load any spark.* system properties
     for ((k, v) <- System.getProperties.asScala if k.startsWith("spark.")) {
       settings(k) = v

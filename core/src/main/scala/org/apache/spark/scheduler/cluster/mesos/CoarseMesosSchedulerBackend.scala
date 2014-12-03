@@ -21,6 +21,8 @@ import java.io.File
 import java.util.{List => JList}
 import java.util.Collections
 
+import org.apache.spark.util.AkkaUtils
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
 
@@ -138,11 +140,12 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
-    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
+    val driverUrl = AkkaUtils.address(
       SparkEnv.driverActorSystemName,
       conf.get("spark.driver.host"),
       conf.get("spark.driver.port"),
-      CoarseGrainedSchedulerBackend.ACTOR_NAME)
+      CoarseGrainedSchedulerBackend.ACTOR_NAME,
+      conf)
 
     val uri = conf.get("spark.executor.uri", null)
     if (uri == null) {

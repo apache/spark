@@ -39,7 +39,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
   val timeout = AkkaUtils.askTimeout(conf)
 
   override def preStart() = {
-    masterActor = context.actorSelection(Master.toAkkaUrl(driverArgs.master))
+    masterActor = context.actorSelection(Master.toAkkaUrl(driverArgs.master, conf))
 
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
