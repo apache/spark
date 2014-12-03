@@ -204,7 +204,9 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
     // Assert src has a size smaller than the threshold.
     val sizes = rdd.queryExecution.analyzed.collect {
-      case r if implicitly[ClassTag[MetastoreRelation]].runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
+      case r if implicitly[ClassTag[MetastoreRelation]].runtimeClass
+        .isAssignableFrom(r.getClass) =>
+        r.statistics.sizeInBytes
     }
     assert(sizes.size === 2 && sizes(1) <= autoBroadcastJoinThreshold
       && sizes(0) <= autoBroadcastJoinThreshold,
@@ -223,7 +225,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
     TestHive.settings.synchronized {
       val tmp = autoBroadcastJoinThreshold
 
-      sql( s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
+      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1")
       rdd = sql(leftSemiJoinQuery)
       bhj = rdd.queryExecution.sparkPlan.collect {
         case j: BroadcastLeftSemiJoinHash => j
@@ -236,7 +238,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
       assert(shj.size === 1,
         "LeftSemiJoinHash should be planned when BroadcastHashJoin is turned off")
 
-      sql( s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp""")
+      sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=$tmp")
     }
 
   }

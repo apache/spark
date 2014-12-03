@@ -389,14 +389,15 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
     sql("CACHE TABLE testData")
     val tmp = autoBroadcastJoinThreshold
 
-    sql( s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=1000000000""")
+    sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=1000000000")
     Seq(
-      ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[BroadcastLeftSemiJoinHash])
+      ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
+        classOf[BroadcastLeftSemiJoinHash])
     ).foreach {
       case (query, joinClass) => assertJoin(query, joinClass)
     }
 
-    sql( s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1""")
+    sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1")
 
     Seq(
       ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash])
