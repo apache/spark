@@ -18,6 +18,9 @@
 package org.apache.spark.storage
 
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.{ReentrantLock, Condition}
+
+import scala.collection.mutable
 
 private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
   // To save space, 'pending' and 'failed' are encoded as special sizes:
@@ -25,6 +28,17 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
   private def pending: Boolean = size == BlockInfo.BLOCK_PENDING
   private def failed: Boolean = size == BlockInfo.BLOCK_FAILED
   private def initThread: Thread = BlockInfo.blockInfoInitThreads.get(this)
+
+  val lock = new ReentrantLock()
+  private val waitNCondition = lock.newCondition()
+  private val wait1Condition = lock.newCondition()
+
+  val waitTypes = new WaitType(new mutable.HashMap +=
+                            ("PUT" -> waitNCondition,
+                            "DROP" -> wait1Condition,
+                            "GET" -> wait1Condition))
+
+  var removed = false
 
   setInitThread()
 
@@ -39,13 +53,13 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
    * Wait for this BlockInfo to be marked as ready (i.e. block is finished writing).
    * Return true if the block is available, false otherwise.
    */
-  def waitForReady(): Boolean = {
+  def waitForReady(waitType: WaitType#WaitTypeVal): Boolean = {
     if (pending && initThread != Thread.currentThread()) {
-      synchronized {
-        while (pending) {
-          this.wait()
-        }
+      lock.lock()
+      while (pending) {
+        waitType.waitFor()
       }
+      lock.unlock()
     }
     !failed
   }
@@ -56,19 +70,25 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
     assert(pending)
     size = sizeInBytes
     BlockInfo.blockInfoInitThreads.remove(this)
-    synchronized {
-      this.notifyAll()
-    }
+    lock.lock()
+    waitTypes.myValues.filter(_.count > 0).foreach(_.notifySuccess())
+    lock.unlock()
   }
 
   /** Mark this BlockInfo as ready but failed */
-  def markFailure() {
+  def markFailureOrWithRemove(): Boolean = {
     assert(pending)
     size = BlockInfo.BLOCK_FAILED
     BlockInfo.blockInfoInitThreads.remove(this)
-    synchronized {
-      this.notifyAll()
-    }
+    lock.lock()
+    removed = waitTypes.PUT.count == 0 || waitTypes.DROP.count == 0
+    waitTypes.myValues.filter(_.count > 0).foreach(_.notifyFailure())
+    lock.unlock()
+    removed
+  }
+
+  def resetStatus() {
+    size = BlockInfo.BLOCK_PENDING
   }
 }
 
@@ -80,4 +100,46 @@ private object BlockInfo {
 
   private val BLOCK_PENDING: Long = -1L
   private val BLOCK_FAILED: Long = -2L
+}
+
+class WaitType(conditions: mutable.HashMap[String, Condition]) extends Enumeration {
+  val actualValues: mutable.HashSet[WaitTypeVal] = new mutable.HashSet[WaitTypeVal]()
+
+  class WaitTypeVal(condition: Condition) extends Val {
+    val finalCondition = condition
+    @volatile var count = 0
+
+    def notifyFailure() {
+      count = 0
+      finalCondition.signalAll()
+    }
+
+    def waitFor() {
+      count += 1
+      finalCondition.await()
+    }
+
+    def notifySuccess() {
+      count = 0
+      finalCondition.signalAll()
+    }
+  }
+
+  val PUT = new WaitTypeVal(conditions("PUT")) {
+    override def notifyFailure() {
+      count -= 1
+      finalCondition.signal()
+    }
+  }
+  val DROP = new WaitTypeVal(conditions("DROP"))
+  val GET = new WaitTypeVal(conditions("GET"))
+
+  def  myValues = {
+    if (actualValues.isEmpty) {
+      values.foreach(v => actualValues += v.asInstanceOf[WaitTypeVal])
+    }
+    actualValues
+  }
+
+  implicit def convert(waitType: Value) = waitType.asInstanceOf[WaitTypeVal]
 }

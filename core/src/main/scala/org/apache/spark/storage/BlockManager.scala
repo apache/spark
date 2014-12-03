@@ -468,7 +468,7 @@ private[spark] class BlockManager(
         }
 
         // If another thread is writing the block, wait for it to become ready.
-        if (!info.waitForReady()) {
+        if (!info.waitForReady(info.waitTypes.GET)) {
           // If we get here, the block write failed.
           logWarning(s"Block $blockId was marked as failure.")
           return None
@@ -716,13 +716,15 @@ private[spark] class BlockManager(
       // Do atomically !
       val oldBlockOpt = blockInfo.putIfAbsent(blockId, tinfo)
       if (oldBlockOpt.isDefined) {
-        if (oldBlockOpt.get.waitForReady()) {
+        val oldInfo = oldBlockOpt.get
+        if (oldInfo.waitForReady(oldInfo.waitTypes.PUT)) {
           logWarning(s"Block $blockId already exists on this machine; not re-adding it")
           return updatedBlocks
         }
-        // TODO: So the block info exists - but previous attempt to load it (?) failed.
-        // What do we do now ? Retry on it ?
-        oldBlockOpt.get
+        if (oldInfo.removed) {
+          return doPut(blockId, data, level, tellMaster, effectiveStorageLevel)
+        }
+        oldInfo
       } else {
         tinfo
       }
@@ -759,6 +761,7 @@ private[spark] class BlockManager(
       logTrace("Put for block %s took %s to get into synchronized block"
         .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
 
+      putBlockInfo.resetStatus()
       var marked = false
       try {
         // returnValues - Whether to return the values put
@@ -820,8 +823,7 @@ private[spark] class BlockManager(
         if (!marked) {
           // Note that the remove must happen before markFailure otherwise another thread
           // could've inserted a new BlockInfo before we remove it.
-          blockInfo.remove(blockId)
-          putBlockInfo.markFailure()
+          if (putBlockInfo.markFailureOrWithRemove()) { blockInfo.remove(blockId) }
           logWarning(s"Putting block $blockId failed")
         }
       }
