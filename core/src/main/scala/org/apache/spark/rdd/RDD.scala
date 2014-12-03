@@ -47,6 +47,44 @@ import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, BernoulliCellSampler,
   SamplingUtils}
 
+
+object RDD {
+
+  // The following implicit functions were in SparkContext before 1.2 and users had to
+  // `import SparkContext._` to enable them. Now we move them here to make the compiler find
+  // them automatically. However, we still keep the old functions in SparkContext for backward
+  // compatibility and forward to the following functions directly.
+
+  implicit def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
+    (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null): PairRDDFunctions[K, V] = {
+    new PairRDDFunctions(rdd)
+  }
+
+  implicit def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]): AsyncRDDActions[T] = {
+    new AsyncRDDActions(rdd)
+  }
+
+  implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
+      rdd: RDD[(K, V)]): SequenceFileRDDFunctions[K, V] = {
+    new SequenceFileRDDFunctions(rdd)
+  }
+
+  implicit def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](rdd: RDD[(K, V)])
+    : OrderedRDDFunctions[K, V] = {
+    new OrderedRDDFunctions[K, V, (K, V)](rdd)
+  }
+
+  implicit def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]): DoubleRDDFunctions = {
+    new DoubleRDDFunctions(rdd)
+  }
+
+  implicit def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T])
+    : DoubleRDDFunctions = {
+    new DoubleRDDFunctions(rdd.map(x => num.toDouble(x)))
+  }
+}
+
+
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
  * partitioned collection of elements that can be operated on in parallel. This class contains the
@@ -1384,32 +1422,4 @@ abstract class RDD[T: ClassTag](
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)
   }
-}
-
-object RDD {
-
-  // The following implicit functions were in SparkContext before 1.2 and users had to
-  // `import SparkContext._` to enable them. Now we move them here to make the compiler find
-  // them automatically. However, we still keep the old functions in SparkContext for backward
-  // compatibility and forward to the following functions directly.
-
-  implicit def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
-      (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
-    new PairRDDFunctions(rdd)
-  }
-
-  implicit def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = new AsyncRDDActions(rdd)
-
-  implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
-      rdd: RDD[(K, V)]) =
-    new SequenceFileRDDFunctions(rdd)
-
-  implicit def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](
-      rdd: RDD[(K, V)]) =
-    new OrderedRDDFunctions[K, V, (K, V)](rdd)
-
-  implicit def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = new DoubleRDDFunctions(rdd)
-
-  implicit def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T]) =
-    new DoubleRDDFunctions(rdd.map(x => num.toDouble(x)))
 }
