@@ -38,7 +38,7 @@ object DenseGmmEM {
     val data = ctx.textFile(inputFile).map(line =>
         Vectors.dense(line.trim.split(' ').map(_.toDouble))).cache()
       
-    val clusters = GMMExpectationMaximization.train(data, k)
+    val clusters = GMMExpectationMaximization.train(data, k, tol)
     
     for(i <- 0 until clusters.k) {
       println("w=%f mu=%s sigma=\n%s\n" format (clusters.w(i), clusters.mu(i), clusters.sigma(i)))
