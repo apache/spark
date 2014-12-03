@@ -47,7 +47,8 @@ private[sql] case class ParquetRelation(
     path: String,
     @transient conf: Option[Configuration],
     @transient sqlContext: SQLContext,
-    partitioningAttributes: Seq[Attribute] = Nil)
+    partitioningAttributes: Seq[Attribute] = Nil,
+    metastoreAttributes: Option[Seq[Attribute]] = None)
   extends LeafNode with MultiInstanceRelation {
 
   self: Product =>
@@ -55,19 +56,28 @@ private[sql] case class ParquetRelation(
   /** Schema derived from ParquetFile */
   def parquetSchema: MessageType =
     ParquetTypesConverter
-      .readMetaData(new Path(path), conf)
+      .readMetaData(new Path(path.split(",").head), conf)
       .getFileMetaData
       .getSchema
 
   /** Attributes */
-  override val output =
-    partitioningAttributes ++
-    ParquetTypesConverter.readSchemaFromFile(
-      new Path(path.split(",").head),
-      conf,
-      sqlContext.isParquetBinaryAsString)
+  override val output = {
+    // All non-partitioning attributes from Parquet metadata
+    val parquetAttributes = ParquetTypesConverter
+      .readSchemaFromFile(new Path(path.split(",").head), conf, sqlContext.isParquetBinaryAsString)
+      .filter(a => partitioningAttributes.find(_.name == a.name).isEmpty)
+    // Parquet is case sensitive while Hive is not, have to restore case information for non-
+    // partitioning keys here.
+    val attributes = metastoreAttributes.map { attrs =>
+      (attrs, parquetAttributes.map(_.name)).zipped.map(_ withName _)
+    }.getOrElse {
+      parquetAttributes
+    }
+    partitioningAttributes ++ attributes
+  }
 
-  override def newInstance() = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
+  override def newInstance() = ParquetRelation(
+    path, conf, sqlContext, partitioningAttributes, metastoreAttributes).asInstanceOf[this.type]
 
   // Equals must also take into account the output attributes so that we can distinguish between
   // different instances of the same relation,
@@ -89,7 +99,7 @@ private[sql] object ParquetRelation {
     // checks first to see if there's any handlers already set
     // and if not it creates them. If this method executes prior
     // to that class being loaded then:
-    //  1) there's no handlers installed so there's none to 
+    //  1) there's no handlers installed so there's none to
     // remove. But when it IS finally loaded the desired affect
     // of removing them is circumvented.
     //  2) The parquet.Log static initializer calls setUseParentHanders(false)

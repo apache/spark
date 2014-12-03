@@ -22,16 +22,14 @@ import java.util.{List => JList}
 
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.hadoop.util.ReflectionUtils
-
 import org.apache.hadoop.hive.metastore.TableType
-import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
-import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table, HiveException}
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition => TPartition, Table => TTable}
+import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
+import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
@@ -42,6 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.util.Utils
 
 /* Implicit conversions */
@@ -81,9 +80,27 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         }
 
       // Since HiveQL is case insensitive for table names we make them all lowercase.
-      MetastoreRelation(
+      val relation = MetastoreRelation(
         databaseName, tblName, alias)(
           table.getTTable, partitions.map(part => part.getTPartition))(hive)
+
+      if (hive.convertMetastoreParquet &&
+        relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet")) {
+        val path = if (relation.hiveQlTable.isPartitioned) {
+          partitions.map(_.getLocation).mkString(",")
+        } else {
+          relation.hiveQlTable.getDataLocation.toString
+        }
+
+        ParquetRelation(
+          path,
+          Some(hive.sparkContext.hadoopConfiguration),
+          hive,
+          relation.partitionKeys,
+          Some(relation.attributes))
+      } else {
+        relation
+      }
     }
   }
 
@@ -145,9 +162,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         logInfo(s"Default to LazySimpleSerDe for table $dbName.$tblName")
         tbl.setSerializationLib(classOf[LazySimpleSerDe].getName())
 
-        import org.apache.hadoop.mapred.TextInputFormat
         import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
         import org.apache.hadoop.io.Text
+        import org.apache.hadoop.mapred.TextInputFormat
 
         tbl.setInputFormatClass(classOf[TextInputFormat])
         tbl.setOutputFormatClass(classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]])
@@ -497,7 +514,7 @@ private[hive] case class MetastoreRelation
   val output = attributes ++ partitionKeys
 
   /** An attribute map that can be used to lookup original attributes based on expression id. */
-  val attributeMap = AttributeMap(output.map(o => (o,o)))
+  val attributeMap = AttributeMap(output.map(o => (o, o)))
 
   /** An attribute map for determining the ordinal for non-partition columns. */
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)

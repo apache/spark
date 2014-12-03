@@ -345,7 +345,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       TakeOrdered,
       ParquetOperations,
       InMemoryScans,
-      ParquetConversion, // Must be before HiveTableScans
       HiveTableScans,
       DataSinks,
       Scripts,
