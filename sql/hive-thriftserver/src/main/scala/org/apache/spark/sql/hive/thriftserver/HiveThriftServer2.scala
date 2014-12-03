@@ -22,7 +22,7 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.thrift.ThriftBinaryCLIService
 import org.apache.hive.service.server.{HiveServer2, ServerOptionsProcessor}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkEnv, Logging}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
@@ -43,8 +43,32 @@ object HiveThriftServer2 extends Logging {
     val server = new HiveThriftServer2(sqlContext)
     server.init(sqlContext.hiveconf)
     server.start()
+    asyncMonitorDriver(server)
   }
 
+  /**
+   * Monitor the driver state in a separate thread.
+   * If the driver has broken for any reason, stop the thriftServer2.
+   * Yarn HA may cause the sparkContext had been stopped, but JVM
+   * still wait thriftServer2 to exit.
+   */
+  private def asyncMonitorDriver(thriftServer2: HiveServer2) = {
+    assert(SparkEnv.get != null, "Spark has not been started yet!")
+    val t = new Thread {
+      override def run() {
+        while (null != SparkEnv.get) {
+          Thread.sleep(1000L)
+        }
+
+        logInfo("Detected driver had been down, so stopping thriftServer2.")
+        thriftServer2.stop()
+        Thread.currentThread().interrupt()
+      }
+    }
+    t.setName("Driver alive monitor")
+    t.setDaemon(true)
+    t.start()
+  }
 
   def main(args: Array[String]) {
     val optionsProcessor = new ServerOptionsProcessor("HiveThriftServer2")
@@ -68,6 +92,7 @@ object HiveThriftServer2 extends Logging {
       server.init(SparkSQLEnv.hiveContext.hiveconf)
       server.start()
       logInfo("HiveThriftServer2 started")
+      asyncMonitorDriver(server)
     } catch {
       case e: Exception =>
         logError("Error starting HiveThriftServer2", e)
