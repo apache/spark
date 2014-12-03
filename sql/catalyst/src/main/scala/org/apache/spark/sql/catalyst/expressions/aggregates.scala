@@ -388,7 +388,7 @@ case class CombineSetsAndSum(inputSet: Expression, base: Expression) extends Agg
   def this() = this(null, null)
 
   override def children = inputSet :: Nil
-  override def nullable = false
+  override def nullable = true
   override def dataType = base.dataType
   override def toString = s"CombineAndSum($inputSet)"
   override def newInstance() = new CombineSetsAndSumFunction(inputSet, this)
@@ -413,8 +413,14 @@ case class CombineSetsAndSumFunction(
 
   override def eval(input: Row): Any = {
     val casted = seen.asInstanceOf[OpenHashSet[Row]]
-    casted.iterator.map(f => f.apply(0))reduceLeft(
-        base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)
+    if (casted.size == 0) {
+      null
+    } else {
+      Cast(Literal(
+        casted.iterator.map(f => f.apply(0)).reduceLeft(
+          base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)),
+        base.dataType).eval(null)
+    }
   }
 }
 
