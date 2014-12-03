@@ -288,7 +288,10 @@ abstract class RDD[T: ClassTag](
    */
   def filter(f: T => Boolean): RDD[T] = {
     val cleanF = sc.clean(f)
-    new MapPartitionsRDD[T, T](this, (context, pid, iter) => iter.filter(cleanF))
+    new MapPartitionsRDD[T, T](
+      this,
+      (context, pid, iter) => iter.filter(cleanF),
+      preservesPartitioning = true)
   }
 
   /**
