@@ -1929,7 +1929,6 @@ object SparkContext extends Logging {
             Class.forName("org.apache.spark.scheduler.cluster.YarnClientClusterScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
           cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
-
         } catch {
           case e: Exception => {
             throw new SparkException("YARN mode not available ?", e)

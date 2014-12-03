@@ -17,10 +17,12 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.security.{ProtectionDomain, Permission, Policy}
+
 import akka.actor.{Actor, ActorRef, Props}
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.ui.JettyUtils
@@ -69,6 +71,16 @@ private[spark] abstract class YarnSchedulerBackend(
     totalRegisteredExecutors.get() >= totalExpectedExecutors * minRegisteredRatio
   }
 
+  // Make sure stopExecutorLauncher message only sent once
+  var isStopExecutorLauncher: Boolean = false
+
+  def stopExecutorLauncher(): Unit = {
+    if (!isStopExecutorLauncher) {
+      isStopExecutorLauncher = true
+      yarnSchedulerActor ! StopExecutorLauncher
+    }
+  }
+
   /**
    * Add filters to the SparkUI.
    */
@@ -92,6 +104,57 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 
   /**
+   * This system security manager applies to the entire process.
+   * It's main purpose is to handle the case if the user code does a System.exit.
+   * This allows us to catch that and properly set the YARN application status and
+   * cleanup if needed.
+   */
+  private def setupSystemSecurityManager(amActor: ActorRef): Unit = {
+    try {
+      System.setSecurityManager(new java.lang.SecurityManager() {
+        override def checkExit(paramInt: Int) {
+          logInfo("In securityManager checkExit, exit code: " + paramInt)
+          if (paramInt == 0) {
+            amActor ! SendAmExitStatus(0)
+          } else {
+            amActor ! SendAmExitStatus(1)
+          }
+        }
+
+        // required for the checkExit to work properly
+        override def checkPermission(perm: java.security.Permission): Unit = {}
+      }
+      )
+    }
+    catch {
+      case e: SecurityException =>
+        amActor ! SendAmExitStatus(1)
+        logError("Error in setSecurityManager:", e)
+    }
+  }
+
+  private def setupUserPolicy(): Unit = {
+    Policy.setPolicy(new UserPolicy())
+  }
+
+  /**
+   * Set the permission for javax.management.MBeanTrustPermission to register.
+   * Otherwise, it will throw AccessControlException in metrics.JmxReporter.
+   */
+  private class UserPolicy extends java.security.Policy {
+    private final val defaultPolicy: Policy = Policy.getPolicy
+
+    override def implies(domain: ProtectionDomain, permission: Permission): Boolean = {
+      if (permission.isInstanceOf[javax.management.MBeanTrustPermission]) {
+        return true
+      }
+      else {
+        return defaultPolicy.implies(domain, permission)
+      }
+    }
+  }
+
+  /**
    * An actor that communicates with the ApplicationMaster.
    */
   private class YarnSchedulerActor extends Actor {
@@ -105,6 +168,8 @@ private[spark] abstract class YarnSchedulerBackend(
     override def receive = {
       case RegisterClusterManager =>
         logInfo(s"ApplicationMaster registered as $sender")
+        setupSystemSecurityManager(sender)
+        setupUserPolicy
         amActor = Some(sender)
 
       case r: RequestExecutors =>
@@ -129,6 +194,14 @@ private[spark] abstract class YarnSchedulerBackend(
         addWebUIFilter(filterName, filterParams, proxyBase)
         sender ! true
 
+      case StopExecutorLauncher =>
+        amActor match {
+          case Some(actor) =>
+            actor ! SendAmExitStatus(0)
+          case None =>
+            logWarning("Attempted to stop executorLauncher before the AM has registered!")
+        }
+
       case d: DisassociatedEvent =>
         if (amActor.isDefined && sender == amActor.get) {
           logWarning(s"ApplicationMaster has disassociated: $d")
@@ -137,6 +210,6 @@ private[spark] abstract class YarnSchedulerBackend(
   }
 }
 
-private[spark] object YarnSchedulerBackend {
+private[spark] object YarnSchedulerBackend extends Logging{
   val ACTOR_NAME = "YarnScheduler"
 }

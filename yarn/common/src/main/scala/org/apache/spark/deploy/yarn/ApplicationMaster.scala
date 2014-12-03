@@ -466,7 +466,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     override def receive = {
       case x: DisassociatedEvent =>
         logInfo(s"Driver terminated or disconnected! Shutting down. $x")
-        finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+        unregister(FinalApplicationStatus.FAILED, "Driver has been dead, no need to retry the AM.")
 
       case x: AddWebUIFilter =>
         logInfo(s"Add WebUI Filter. $x")
@@ -487,6 +487,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           case None => logWarning("Container allocator is not ready to kill executors yet.")
         }
         sender ! true
+
+      case SendAmExitStatus(status) =>
+        logInfo(s"Received exit code $status from driver.")
+        if (0 == status) {
+          finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+        } else {
+          unregister(FinalApplicationStatus.FAILED, "Driver has been dead, no need to retry the AM.")
+        }
     }
   }
 

@@ -364,6 +364,8 @@ object SparkSubmit {
         case null => throw e
       }
     }
+
+    System.exit(0)
   }
 
   private def addJarToClasspath(localJar: String, loader: ExecutorURLClassLoader) {
