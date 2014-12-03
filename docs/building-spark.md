@@ -149,7 +149,7 @@ should run continuous compilation (i.e. wait for changes). However, this has not
 
 # Using With IntelliJ IDEA
 
-This setup works fine in IntelliJ IDEA 11.1.4. After opening the project via the pom.xml file in the project root folder, you only need to activate either the hadoop1 or hadoop2 profile in the "Maven Properties" popout. We have not tried Eclipse/Scala IDE with this.
+This setup works fine in IntelliJ IDEA 11.1.4. After opening the project via the pom.xml file in the project root folder, you only need to activate the corresponding profiles in the "Maven Properties" popout according to your requirements. We have not tried Eclipse/Scala IDE with this.
 
 # Building Spark Debian Packages
 
