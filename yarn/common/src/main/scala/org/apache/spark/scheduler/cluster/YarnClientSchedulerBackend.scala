@@ -79,8 +79,11 @@ private[spark] class YarnClientSchedulerBackend(
         ("--name", "SPARK_YARN_APP_NAME", "spark.app.name")
       )
     optionTuples.foreach { case (optionName, envVar, sparkProp) =>
-      if (System.getenv(envVar) != null) extraArgs += (optionName, System.getenv(envVar))
-      if (sc.getConf.contains(sparkProp)) extraArgs += (optionName, sc.getConf.get(sparkProp))
+      if (sc.getConf.contains(sparkProp)) {
+        extraArgs += (optionName, sc.getConf.get(sparkProp))
+      } else if (System.getenv(envVar) != null) {
+        extraArgs += (optionName, System.getenv(envVar))
+      }
     }
     extraArgs
   }
