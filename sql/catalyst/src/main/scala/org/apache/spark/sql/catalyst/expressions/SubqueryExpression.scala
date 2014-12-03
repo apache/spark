@@ -36,5 +36,5 @@ case class SubqueryExpression(value: Expression, subquery: LogicalPlan) extends 
   def children = value :: Nil
   override def eval(input: Row): Any =
     sys.error(s"SubqueryExpression eval should not be called since it will be converted"
-        +" to LeftSemiJoin query")
+        + " to join query")
 }
