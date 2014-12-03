@@ -95,7 +95,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.queue</code></td>
   <td>default</td>
   <td>
-    The YARN queue name which the application is being submitted.
+    The name of the YARN queue to which the application is submitted.
   </td>
 </tr>
 <tr>
