@@ -1,10 +1,15 @@
+/*
+ * A C function for R extension which implements the Java String hash algorithm.
+ * Refer to http://en.wikipedia.org/wiki/Java_hashCode%28%29#The_java.lang.String_hash_function
+ *
+ */
+
 #include <R.h>
 #include <Rinternals.h>
 
 SEXP stringHashCode(SEXP string) {
   const char* str;
   R_xlen_t len, i;
-  SEXP hashCodeR;
   int hashCode = 0;
   
   if (!IS_SCALAR(string, STRSXP)) {
@@ -18,8 +23,5 @@ SEXP stringHashCode(SEXP string) {
     hashCode = (hashCode << 5) - hashCode + *str++;
   }
 
-  hashCodeR = PROTECT(allocVector(INTSXP, 1));
-  INTEGER(hashCodeR)[0] = hashCode;
-  UNPROTECT(1);
-  return hashCodeR;
+  return ScalarInteger(hashCode);
 }
