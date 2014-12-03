@@ -22,19 +22,21 @@ import org.scalatest.FunSuite
 import org.apache.spark.storage.ShuffleBlockId
 
 
-class ShuffleFaultToleranceSuite extends FunSuite {
+class ShuffleFaultToleranceSuite extends FunSuite with LocalSparkContext {
 
   test("[SPARK-4085] hash shuffle manager recovers when local shuffle files get deleted") {
     val conf = new SparkConf(false)
     conf.set("spark.shuffle.manager", "hash")
-    val sc = new SparkContext("local", "test", conf)
+    sc = new SparkContext("local", "test", conf)
     val rdd = sc.parallelize(1 to 10, 2).map((_, 1)).reduceByKey(_ + _)
     rdd.count()
 
     // Delete one of the local shuffle blocks.
-    sc.env.blockManager.diskBlockManager.getFile(new ShuffleBlockId(0, 0, 0)).delete()
-    rdd.count()
+    val shuffleFile = sc.env.blockManager.diskBlockManager.getFile(new ShuffleBlockId(0, 0, 0))
+    assert(shuffleFile.exists())
+    shuffleFile.delete()
 
-    sc.stop()
+    // This count should retry the execution of the previous stage and rerun shuffle.
+    rdd.count()
   }
 }

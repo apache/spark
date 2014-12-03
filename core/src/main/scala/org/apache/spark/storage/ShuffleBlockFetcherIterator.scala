@@ -296,18 +296,15 @@ final class ShuffleBlockFetcherIterator(
         // There is a chance that createInputStream can fail (e.g. fetching a local file that does
         // not exist, SPARK-4085). In that case, we should propagate the right exception so
         // the scheduler gets a FetchFailedException.
-        Try(buf.createInputStream()) match {
-          case Success(is0) =>
-            val is = blockManager.wrapForCompression(blockId, is0)
-            val iter = serializer.newInstance().deserializeStream(is).asIterator
-            Success(CompletionIterator[Any, Iterator[Any]](iter, {
-              // Once the iterator is exhausted, release the buffer and set currentResult to null
-              // so we don't release it again in cleanup.
-              currentResult = null
-              buf.release()
-            }))
-          case Failure(e) =>
-            Failure(e)
+        Try(buf.createInputStream()).map { is0 =>
+          val is = blockManager.wrapForCompression(blockId, is0)
+          val iter = serializer.newInstance().deserializeStream(is).asIterator
+          CompletionIterator[Any, Iterator[Any]](iter, {
+            // Once the iterator is exhausted, release the buffer and set currentResult to null
+            // so we don't release it again in cleanup.
+            currentResult = null
+            buf.release()
+          })
         }
     }
 
