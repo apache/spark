@@ -1012,7 +1012,7 @@ private[spark] class BlockManager(
       info.synchronized {
         // required ? As of now, this will be invoked only for blocks which are ready
         // But in case this changes in future, adding for consistency sake.
-        if (!info.waitForReady()) {
+        if (!info.waitForReady(info.waitTypes.DROP)) {
           // If we get here, the block write failed.
           logWarning(s"Block $blockId was marked as failure. Nothing to drop")
           return None
