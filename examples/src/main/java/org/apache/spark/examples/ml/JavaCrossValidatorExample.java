@@ -17,7 +17,6 @@
 
 package org.apache.spark.examples.ml;
 
-import java.util.ArrayList;
 import java.util.List;
 
 import com.google.common.collect.Lists;
@@ -28,7 +27,6 @@ import org.apache.spark.ml.Model;
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineStage;
 import org.apache.spark.ml.classification.LogisticRegression;
-import org.apache.spark.ml.classification.LogisticRegressionModel;
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator;
 import org.apache.spark.ml.feature.HashingTF;
 import org.apache.spark.ml.feature.Tokenizer;
@@ -65,7 +63,15 @@ public class JavaCrossValidatorExample {
       new LabeledDocument(0L, "a b c d e spark", 1.0),
       new LabeledDocument(1L, "b d", 0.0),
       new LabeledDocument(2L, "spark f g h", 1.0),
-      new LabeledDocument(3L, "hadoop mapreduce", 0.0));
+      new LabeledDocument(3L, "hadoop mapreduce", 0.0),
+      new LabeledDocument(4L, "b spark who", 1.0),
+      new LabeledDocument(5L, "g d a y", 0.0),
+      new LabeledDocument(6L, "spark fly", 1.0),
+      new LabeledDocument(7L, "was mapreduce", 0.0),
+      new LabeledDocument(8L, "e spark program", 1.0),
+      new LabeledDocument(9L, "a e c l", 0.0),
+      new LabeledDocument(10L, "spark compile", 1.0),
+      new LabeledDocument(11L, "hadoop software", 0.0));
     JavaSchemaRDD training =
         jsql.applySchema(jsc.parallelize(localTraining), LabeledDocument.class);
 
@@ -112,8 +118,8 @@ public class JavaCrossValidatorExample {
       new Document(7L, "apache hadoop"));
     JavaSchemaRDD test = jsql.applySchema(jsc.parallelize(localTest), Document.class);
 
-    // Make predictions on test documents.
-    lrModel.transform(test).registerAsTable("prediction");
+    // Make predictions on test documents. cvModel uses the best model found (lrModel).
+    cvModel.transform(test).registerAsTable("prediction");
     JavaSchemaRDD predictions = jsql.sql("SELECT id, text, score, prediction FROM prediction");
     for (Row r: predictions.collect()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> score=" + r.get(2)

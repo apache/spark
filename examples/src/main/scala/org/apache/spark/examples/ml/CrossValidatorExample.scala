@@ -18,6 +18,7 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkContext._
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
@@ -50,7 +51,15 @@ object CrossValidatorExample {
       LabeledDocument(0L, "a b c d e spark", 1.0),
       LabeledDocument(1L, "b d", 0.0),
       LabeledDocument(2L, "spark f g h", 1.0),
-      LabeledDocument(3L, "hadoop mapreduce", 0.0)))
+      LabeledDocument(3L, "hadoop mapreduce", 0.0),
+      LabeledDocument(4L, "b spark who", 1.0),
+      LabeledDocument(5L, "g d a y", 0.0),
+      LabeledDocument(6L, "spark fly", 1.0),
+      LabeledDocument(7L, "was mapreduce", 0.0),
+      LabeledDocument(8L, "e spark program", 1.0),
+      LabeledDocument(9L, "a e c l", 0.0),
+      LabeledDocument(10L, "spark compile", 1.0),
+      LabeledDocument(11L, "hadoop software", 0.0)))
 
     // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
     val tokenizer = new Tokenizer()
@@ -81,16 +90,7 @@ object CrossValidatorExample {
     crossval.setNumFolds(2)
 
     // Run cross-validation, and choose the best set of parameters.
-    val cvModel = try {
-      crossval.fit(training)
-    } catch {
-      case e: Exception =>
-        println("\nSTACK TRACE\n")
-        println(e.getStackTraceString)
-        println("\nSTACK TRACE OF CAUSE\n")
-        println(e.getCause.getStackTraceString)
-        throw e
-    }
+    val cvModel = crossval.fit(training)
     // Get the best LogisticRegression model (with the best set of parameters from paramGrid).
     val lrModel = cvModel.bestModel
 
@@ -101,8 +101,8 @@ object CrossValidatorExample {
       Document(6L, "mapreduce spark"),
       Document(7L, "apache hadoop")))
 
-    // Make predictions on test documents using the best LogisticRegression model.
-    lrModel.transform(test)
+    // Make predictions on test documents. cvModel uses the best model found (lrModel).
+    cvModel.transform(test)
       .select('id, 'text, 'score, 'prediction)
       .collect()
       .foreach { case Row(id: Long, text: String, score: Double, prediction: Double) =>
