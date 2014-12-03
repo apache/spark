@@ -232,8 +232,14 @@ private[spark] trait ClientBase extends Logging {
     /**
      * Do the same for datanucleus jars, if they exist in spark home. Find all datanucleus-* jars,
      * copy them to the remote fs, and add them to the class path.
+     *
+     * This is necessary because the datanucleus jars cannot be included in the assembly jar due
+     * to metadata conflicts involving plugin.xml. At the time of writing, these are the only
+     * jars that cannot be distributed with the uber jar and have to be treated differently.
+     *
+     * For more details, see SPARK-2624, and https://github.com/apache/spark/pull/3238
      */
-    for (libsDir <- sparkDatanucleusJars(sparkConf)) {
+    for (libsDir <- dataNucleusJarsDir(sparkConf)) {
       val libsURI = new URI(libsDir)
       val jarLinks = ListBuffer.empty[String]
       if (libsURI.getScheme != LOCAL_SCHEME) {
@@ -588,7 +594,7 @@ private[spark] object ClientBase extends Logging {
   val CONF_SPARK_DATANUCLEUS_DIR = "spark.yarn.datanucleus.dir"
 
   // Internal config to propagate the locations of datanucleus jars found to add to the
-  // classpath of the executors
+  // classpath of the executors. Value should be a comma-separated list of paths to each jar.
   val CONF_SPARK_DATANUCLEUS_JARS = "spark.yarn.datanucleus.jars"
 
   // Internal config to propagate the locations of any extra jars to add to the classpath
@@ -629,7 +635,7 @@ private[spark] object ClientBase extends Logging {
    * This method first looks for $CONF_SPARK_DATANUCLEUS_DIR inside the SparkConf, then looks for
    * Spark home inside the the SparkConf and the user environment.
    */
-  private def sparkDatanucleusJars(conf: SparkConf): Option[String] = {
+  private def dataNucleusJarsDir(conf: SparkConf): Option[String] = {
     conf.getOption(CONF_SPARK_DATANUCLEUS_DIR).orElse {
       val sparkHome = conf.getOption("spark.home").orElse(sys.env.get("SPARK_HOME"))
       sparkHome.map(path => path + Path.SEPARATOR + "lib")
