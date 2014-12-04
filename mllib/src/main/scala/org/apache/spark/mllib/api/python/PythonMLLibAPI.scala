@@ -266,12 +266,16 @@ class PythonMLLibAPI extends Serializable {
       k: Int,
       maxIterations: Int,
       runs: Int,
-      initializationMode: String): KMeansModel = {
+      initializationMode: String,
+      seed: java.lang.Long): KMeansModel = {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
       .setRuns(runs)
       .setInitializationMode(initializationMode)
+
+    if (seed != null) kMeansAlg.setSeed(seed)
+
     try {
       kMeansAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
     } finally {

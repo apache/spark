@@ -78,10 +78,10 @@ class KMeansModel(object):
 class KMeans(object):
 
     @classmethod
-    def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||"):
+    def train(cls, rdd, k, maxIterations=100, runs=1, initializationMode="k-means||", seed=None):
         """Train a k-means clustering model."""
         model = callMLlibFunc("trainKMeansModel", rdd.map(_convert_to_vector), k, maxIterations,
-                              runs, initializationMode)
+                              runs, initializationMode, seed)
         centers = callJavaFunc(rdd.context, model.clusterCenters)
         return KMeansModel([c.toArray() for c in centers])
 

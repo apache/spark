@@ -129,6 +129,23 @@ class ListTests(PySparkTestCase):
         self.assertEquals(clusters.predict(data[0]), clusters.predict(data[1]))
         self.assertEquals(clusters.predict(data[2]), clusters.predict(data[3]))
 
+    def test_clustering_deterministic(self):
+        from pyspark.mllib.clustering import KMeans
+        X = range(0, 100, 10)
+        Y = range(0, 100, 10)
+        data = [[x, y] for x, y in zip(X, Y)]
+        clusters1 = KMeans.train(self.sc.parallelize(data),
+                                 3, initializationMode="k-means||", seed=42)
+        clusters2 = KMeans.train(self.sc.parallelize(data),
+                                 3, initializationMode="k-means||", seed=42)
+        clusters3 = KMeans.train(self.sc.parallelize(data),
+                                 3, initializationMode="k-means||", seed=42)
+        centers1 = array(clusters1.centers).flatten().tolist()
+        centers2 = array(clusters2.centers).flatten().tolist()
+        centers3 = array(clusters3.centers).flatten().tolist()
+        self.assertListEqual(centers1, centers2)
+        self.assertListEqual(centers1, centers3)
+
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
         from pyspark.mllib.tree import DecisionTree

@@ -43,13 +43,19 @@ class KMeans private (
     private var runs: Int,
     private var initializationMode: String,
     private var initializationSteps: Int,
-    private var epsilon: Double) extends Serializable with Logging {
+    private var epsilon: Double,
+    private var seed: Long = System.nanoTime()) extends Serializable with Logging {
 
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
    * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4}.
    */
   def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4)
+
+  def setSeed(seed: Long): this.type = {
+    this.seed = seed
+    this
+  }
 
   /** Set the number of clusters to create (k). Default: 2. */
   def setK(k: Int): this.type = {
@@ -255,7 +261,7 @@ class KMeans private (
   private def initRandom(data: RDD[VectorWithNorm])
   : Array[Array[VectorWithNorm]] = {
     // Sample all the cluster centers in one pass to avoid repeated scans
-    val sample = data.takeSample(true, runs * k, new XORShiftRandom().nextInt()).toSeq
+    val sample = data.takeSample(true, runs * k, new XORShiftRandom(this.seed).nextInt()).toSeq
     Array.tabulate(runs)(r => sample.slice(r * k, (r + 1) * k).map { v =>
       new VectorWithNorm(Vectors.dense(v.vector.toArray), v.norm)
     }.toArray)
@@ -273,7 +279,7 @@ class KMeans private (
   private def initKMeansParallel(data: RDD[VectorWithNorm])
   : Array[Array[VectorWithNorm]] = {
     // Initialize each run's center to a random point
-    val seed = new XORShiftRandom().nextInt()
+    val seed = new XORShiftRandom(this.seed).nextInt()
     val sample = data.takeSample(true, runs, seed).toSeq
     val centers = Array.tabulate(runs)(r => ArrayBuffer(sample(r).toDense))
 
