@@ -31,7 +31,7 @@ E.g., a learning algorithm is an `Estimator` which trains on a dataset and produ
 
 * **[`Pipeline`](ml-guide.html#pipeline)**: A `Pipeline` chains multiple `Transformer`s and `Estimator`s together to specify an ML workflow.
 
-* **[`Param`](ml-guide.html#param)**: All `Transformer`s and `Estimator`s now share a common API for specifying parameters.
+* **[`Param`](ml-guide.html#parameters)**: All `Transformer`s and `Estimator`s now share a common API for specifying parameters.
 
 ## ML Dataset
 
@@ -134,7 +134,7 @@ Each stage's `transform()` method updates the dataset and passes it to the next 
 Spark ML `Estimator`s and `Transformer`s use a uniform API for specifying parameters.
 
 A [`Param`](api/scala/index.html#org.apache.spark.ml.param.Param) is a named parameter with self-contained documentation.
-A [`ParamMap`](api/scala/index.html#org.apache.spark.ml.param.ParamMap)] is a set of (parameter, value) pairs.
+A [`ParamMap`](api/scala/index.html#org.apache.spark.ml.param.ParamMap) is a set of (parameter, value) pairs.
 
 There are two main ways to pass parameters to an algorithm:
 
@@ -148,7 +148,7 @@ This is useful if there are two algorithms with the `maxIter` parameter in a `Pi
 # Code Examples
 
 This section gives code examples illustrating the functionality discussed above.
-There is not yet documentation for specific algorithms in Spark ML.  For more info, please refer to the [API Documentation](api/scala/index.html).  Spark ML algorithms are currently wrappers for MLlib algorithms, and the [MLlib programming guide](mllib-guide.html) has details on specific algorithms.
+There is not yet documentation for specific algorithms in Spark ML.  For more info, please refer to the [API Documentation](api/scala/index.html#org.apache.spark.ml.package).  Spark ML algorithms are currently wrappers for MLlib algorithms, and the [MLlib programming guide](mllib-guide.html) has details on specific algorithms.
 
 ## Example: Estimator, Transformer, and Param
 
@@ -492,7 +492,7 @@ The `ParamMap` which produces the best evaluation metric (averaged over the `$k$
 `CrossValidator` finally fits the `Estimator` using the best `ParamMap` and the entire dataset.
 
 The following example demonstrates using `CrossValidator` to select from a grid of parameters.
-To help construct the parameter grid, we use the [`ParamGridBuilder`](api/scala/index.html#org.apache.spark.ml.tuning.ParamGridGuilder) utility.
+To help construct the parameter grid, we use the [`ParamGridBuilder`](api/scala/index.html#org.apache.spark.ml.tuning.ParamGridBuilder) utility.
 
 Note that cross-validation over a grid of parameters is expensive.
 E.g., in the example below, the parameter grid has 3 values for `hashingTF.numFeatures` and 2 values for `lr.regParam`, and `CrossValidator` uses 2 folds.  This multiplies out to `$(3 \times 2) \times 2 = 12$` different models being trained.
