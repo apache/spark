@@ -96,7 +96,9 @@ private[spark] object BLAS extends Serializable with Logging {
    * dot(x, y)
    */
   def dot(x: Vector, y: Vector): Double = {
-    require(x.size == y.size)
+    require(x.size == y.size,
+      "BLAS.dot(x: Vector, y:Vector) was given Vectors with non-matching sizes:" +
+      " x.size = " + x.size + ", y.size = " + y.size)
     (x, y) match {
       case (dx: DenseVector, dy: DenseVector) =>
         dot(dx, dy)

@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Machine Learning Library (MLlib)
+title: Machine Learning Library (MLlib) Programming Guide
 ---
 
 MLlib is Spark's scalable machine learning library consisting of common learning algorithms and utilities,
@@ -34,6 +34,17 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
 MLlib is under active development.
 The APIs marked `Experimental`/`DeveloperApi` may change in future releases, 
 and the migration guide below will explain all changes between releases.
+
+# spark.ml: The New ML Package
+
+Spark 1.2 includes a new machine learning package called `spark.ml`, currently an alpha component but potentially a successor to `spark.mllib`.  The `spark.ml` package aims to replace the old APIs with a cleaner, more uniform set of APIs which will help users create full machine learning pipelines.
+
+See the **[spark.ml programming guide](ml-guide.html)** for more information on this package.
+
+Users can use algorithms from either of the two packages, but APIs may differ.  Currently, `spark.ml` offers a subset of the algorithms from `spark.mllib`.
+
+Developers should contribute new algorithms to `spark.mllib` and can optionally contribute to `spark.ml`.
+See the `spark.ml` programming guide linked above for more details.
 
 # Dependencies
 
