@@ -142,6 +142,7 @@ class Airflow(BaseView):
         session.expunge_all()
 
         all_data = {}
+        hc = None
         hook = db.get_hook()
         try:
             args = eval(chart.default_params)
@@ -237,7 +238,7 @@ class Airflow(BaseView):
             chart=chart,
             title="Chart",
             table=Markup(table),
-            hc=json.dumps(hc),
+            hc=json.dumps(hc) if hc else None,
             show_chart=show_chart,
             show_sql=show_sql,
             sql=sql, label=label)
