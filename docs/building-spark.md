@@ -124,7 +124,15 @@ We use the scala-maven-plugin which supports incremental and continuous compilat
 
     mvn scala:cc
 
-should run continuous compilation (i.e. wait for changes). However, this has not been tested extensively.
+should run continuous compilation (i.e. wait for changes). However, this has not been tested 
+extensively. A couple of gotchas to note:
+* it only scans the paths `src/main` and `src/test` (see
+[docs](http://scala-tools.org/mvnsites/maven-scala-plugin/usage_cc.html)), so it will only work
+from within certain submodules that have that structure.
+* compiling submodules that depend on other submodules (e.g. `core`, which depends on `network/common` and `network/shuffle`) requires those dependencies
+(and typically the "parent" artifact, which requires all modules) to have been `mvn install`ed;
+therefore, compiles triggerred by `mvn scala:cc` (or even `mvn compile`) from within `core` will
+only work if you first run `mvn install` on the root project.
 
 # Using With IntelliJ IDEA
 
