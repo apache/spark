@@ -36,7 +36,7 @@ class ApplicationMasterArguments(val args: Array[String]) {
 
     var args = inputArgs
 
-    while (! args.isEmpty) {
+    while (!args.isEmpty) {
       // --num-workers, --worker-memory, and --worker-cores are deprecated since 1.0,
       // the properties with executor in their names are preferred.
       args match {
