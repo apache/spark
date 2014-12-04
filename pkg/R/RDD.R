@@ -1524,14 +1524,26 @@ setMethod("cogroup",
             group.func <- function(vlist) {
               res <- list()
               length(res) <- rddsLen
-              for (i in 1:length(res)) {
-                res[[i]] <- list()
-              }
               for (x in vlist) {
                 i <- x[[1]]
-                res[[i]] <- c(res[[i]], x[[2]])
+                acc <- res[[i]]
+                # Create an accumulator.
+                if (is.null(acc)) {
+                  acc <- new.env()
+                  acc$counter <- 0
+                  acc$data <- list(NULL)
+                  acc$size <- 1
+                }
+                addItemToAccumulator(acc, x[[2]])
+                res[[i]] <- acc
               }
-              res
+              lapply(res, function(acc) {
+                if (is.null(acc)) {
+                  list()
+                } else {
+                  acc$data
+                }
+              })
             }
             cogroup.rdd <- mapValues(groupByKey(union.rdd, numPartitions), 
                                      group.func)
