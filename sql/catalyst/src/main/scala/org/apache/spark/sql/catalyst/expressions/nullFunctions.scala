@@ -45,9 +45,9 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   override def eval(input: Row): Any = {
     var i = 0
     var result: Any = null
-    while(i < children.size && result == null) {
-      result = children(i).eval(input)
-      i += 1
+    val childIterator = children.iterator
+    while (childIterator.hasNext && result == null) {
+      result = childIterator.next().eval(input)
     }
     result
   }

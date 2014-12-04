@@ -17,32 +17,31 @@
 
 package org.apache.spark.examples.ml
 
-import scala.beans.BeanInfo
-
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
+import org.apache.spark.ml.tuning.{ParamGridBuilder, CrossValidator}
 import org.apache.spark.sql.{Row, SQLContext}
 
-@BeanInfo
-case class LabeledDocument(id: Long, text: String, label: Double)
-
-@BeanInfo
-case class Document(id: Long, text: String)
-
 /**
- * A simple text classification pipeline that recognizes "spark" from input text. This is to show
- * how to create and configure an ML pipeline. Run with
+ * A simple example demonstrating model selection using CrossValidator.
+ * This example also demonstrates how Pipelines are Estimators.
+ *
+ * This example uses the [[LabeledDocument]] and [[Document]] case classes from
+ * [[SimpleTextClassificationPipeline]].
+ *
+ * Run with
  * {{{
- * bin/run-example ml.SimpleTextClassificationPipeline
+ * bin/run-example ml.CrossValidatorExample
  * }}}
  */
-object SimpleTextClassificationPipeline {
+object CrossValidatorExample {
 
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("SimpleTextClassificationPipeline")
+    val conf = new SparkConf().setAppName("CrossValidatorExample")
     val sc = new SparkContext(conf)
     val sqlContext = new SQLContext(sc)
     import sqlContext._
@@ -52,24 +51,46 @@ object SimpleTextClassificationPipeline {
       LabeledDocument(0L, "a b c d e spark", 1.0),
       LabeledDocument(1L, "b d", 0.0),
       LabeledDocument(2L, "spark f g h", 1.0),
-      LabeledDocument(3L, "hadoop mapreduce", 0.0)))
+      LabeledDocument(3L, "hadoop mapreduce", 0.0),
+      LabeledDocument(4L, "b spark who", 1.0),
+      LabeledDocument(5L, "g d a y", 0.0),
+      LabeledDocument(6L, "spark fly", 1.0),
+      LabeledDocument(7L, "was mapreduce", 0.0),
+      LabeledDocument(8L, "e spark program", 1.0),
+      LabeledDocument(9L, "a e c l", 0.0),
+      LabeledDocument(10L, "spark compile", 1.0),
+      LabeledDocument(11L, "hadoop software", 0.0)))
 
     // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
     val tokenizer = new Tokenizer()
       .setInputCol("text")
       .setOutputCol("words")
     val hashingTF = new HashingTF()
-      .setNumFeatures(1000)
       .setInputCol(tokenizer.getOutputCol)
       .setOutputCol("features")
     val lr = new LogisticRegression()
       .setMaxIter(10)
-      .setRegParam(0.01)
     val pipeline = new Pipeline()
       .setStages(Array(tokenizer, hashingTF, lr))
 
-    // Fit the pipeline to training documents.
-    val model = pipeline.fit(training)
+    // We now treat the Pipeline as an Estimator, wrapping it in a CrossValidator instance.
+    // This will allow us to jointly choose parameters for all Pipeline stages.
+    // A CrossValidator requires an Estimator, a set of Estimator ParamMaps, and an Evaluator.
+    val crossval = new CrossValidator()
+      .setEstimator(pipeline)
+      .setEvaluator(new BinaryClassificationEvaluator)
+    // We use a ParamGridBuilder to construct a grid of parameters to search over.
+    // With 3 values for hashingTF.numFeatures and 2 values for lr.regParam,
+    // this grid will have 3 x 2 = 6 parameter settings for CrossValidator to choose from.
+    val paramGrid = new ParamGridBuilder()
+      .addGrid(hashingTF.numFeatures, Array(10, 100, 1000))
+      .addGrid(lr.regParam, Array(0.1, 0.01))
+      .build()
+    crossval.setEstimatorParamMaps(paramGrid)
+    crossval.setNumFolds(2) // Use 3+ in practice
+
+    // Run cross-validation, and choose the best set of parameters.
+    val cvModel = crossval.fit(training)
 
     // Prepare test documents, which are unlabeled.
     val test = sparkContext.parallelize(Seq(
@@ -78,12 +99,12 @@ object SimpleTextClassificationPipeline {
       Document(6L, "mapreduce spark"),
       Document(7L, "apache hadoop")))
 
-    // Make predictions on test documents.
-    model.transform(test)
+    // Make predictions on test documents. cvModel uses the best model found (lrModel).
+    cvModel.transform(test)
       .select('id, 'text, 'score, 'prediction)
       .collect()
       .foreach { case Row(id: Long, text: String, score: Double, prediction: Double) =>
-        println("(" + id + ", " + text + ") --> score=" + score + ", prediction=" + prediction)
-      }
+      println("(" + id + ", " + text + ") --> score=" + score + ", prediction=" + prediction)
+    }
   }
 }

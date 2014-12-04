@@ -21,6 +21,7 @@ import java.io.File
 import java.net.URI
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
@@ -102,6 +103,81 @@ class ClientBaseSuite extends FunSuite with Matchers {
     cp should contain (s"${Environment.PWD.$()}${File.separator}*")
     cp should not contain (ClientBase.SPARK_JAR)
     cp should not contain (ClientBase.APP_JAR)
+  }
+
+  test("DataNucleus in classpath") {
+    val dnJars = "local:/dn/core.jar,/dn/api.jar"
+    val conf = new Configuration()
+    val sparkConf = new SparkConf()
+      .set(ClientBase.CONF_SPARK_JAR, SPARK)
+      .set(ClientBase.CONF_SPARK_DATANUCLEUS_JARS, dnJars)
+    val env = new MutableHashMap[String, String]()
+    val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
+
+    ClientBase.populateClasspath(args, conf, sparkConf, env)
+
+    val cp = env("CLASSPATH").split(File.pathSeparator)
+    s"$dnJars".split(",").foreach({ entry =>
+      val uri = new URI(entry)
+      if (ClientBase.LOCAL_SCHEME.equals(uri.getScheme())) {
+        cp should contain (uri.getPath())
+      } else {
+        cp should not contain (uri.getPath())
+      }
+    })
+  }
+
+  test("DataNucleus using local:") {
+    val dnDir = "local:/datanucleus"
+    val conf = new Configuration()
+    val sparkConf = new SparkConf()
+      .set(ClientBase.CONF_SPARK_JAR, SPARK)
+      .set(ClientBase.CONF_SPARK_DATANUCLEUS_DIR, dnDir)
+    val yarnConf = new YarnConfiguration()
+    val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
+
+    val client = spy(new DummyClient(args, conf, sparkConf, yarnConf))
+    doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
+      any(classOf[Path]), anyShort(), anyBoolean())
+
+    val tempDir = Utils.createTempDir()
+    try {
+      client.prepareLocalResources(tempDir.getAbsolutePath())
+      val jars = sparkConf.get(ClientBase.CONF_SPARK_DATANUCLEUS_JARS).split(",")
+      val uri = new URI(dnDir)
+      jars should contain (uri.toString + Path.SEPARATOR + "*")
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
+  test("DataNucleus using file:") {
+    val dnDir = Utils.createTempDir()
+    val tempDir = Utils.createTempDir()
+
+    try {
+      // create mock datanucleus jar
+      val tempJar = File.createTempFile("datanucleus-", null, dnDir)
+
+      val conf = new Configuration()
+      val sparkConf = new SparkConf()
+        .set(ClientBase.CONF_SPARK_JAR, SPARK)
+        .set(ClientBase.CONF_SPARK_DATANUCLEUS_DIR, dnDir.toURI.toString)
+      val yarnConf = new YarnConfiguration()
+      val args = new ClientArguments(Array("--jar", USER, "--addJars", ADDED), sparkConf)
+
+      val client = spy(new DummyClient(args, conf, sparkConf, yarnConf))
+      doReturn(new Path("/")).when(client).copyFileToRemote(any(classOf[Path]),
+        any(classOf[Path]), anyShort(), anyBoolean())
+
+      client.prepareLocalResources(tempDir.getAbsolutePath())
+
+      val jars = sparkConf.get(ClientBase.CONF_SPARK_DATANUCLEUS_JARS).split(",")
+      jars should contain (tempJar.getName)
+    } finally {
+      Utils.deleteRecursively(dnDir)
+      Utils.deleteRecursively(tempDir)
+    }
   }
 
   test("Jar path propagation through SparkConf") {
