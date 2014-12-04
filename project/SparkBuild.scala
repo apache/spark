@@ -363,7 +363,10 @@ object Unidoc {
         "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",
         "mllib.linalg.distributed", "mllib.optimization", "mllib.rdd", "mllib.recommendation",
         "mllib.regression", "mllib.stat", "mllib.tree", "mllib.tree.configuration",
-        "mllib.tree.impurity", "mllib.tree.model", "mllib.util"
+        "mllib.tree.impurity", "mllib.tree.model", "mllib.util",
+        "mllib.evaluation", "mllib.feature", "mllib.random", "mllib.stat.correlation",
+        "mllib.stat.test", "mllib.tree.impl", "mllib.tree.loss",
+        "ml", "ml.classification", "ml.evaluation", "ml.feature", "ml.param", "ml.tuning"
       ),
       "-group", "Spark SQL", packageList("sql.api.java", "sql.api.java.types", "sql.hive.api.java"),
       "-noqualifier", "java.lang"
