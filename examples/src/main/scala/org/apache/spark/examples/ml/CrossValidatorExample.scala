@@ -91,8 +91,6 @@ object CrossValidatorExample {
 
     // Run cross-validation, and choose the best set of parameters.
     val cvModel = crossval.fit(training)
-    // Get the best LogisticRegression model (with the best set of parameters from paramGrid).
-    val lrModel = cvModel.bestModel
 
     // Prepare test documents, which are unlabeled.
     val test = sparkContext.parallelize(Seq(

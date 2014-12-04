@@ -47,8 +47,8 @@ public class JavaSimpleParamsExample {
     JavaSQLContext jsql = new JavaSQLContext(jsc);
 
     // Prepare training data.
-    // We use LabeledPoint, which is a case class.  Spark SQL can convert RDDs of case classes
-    // into SchemaRDDs, where it uses the case class metadata to infer the schema.
+    // We use LabeledPoint, which is a case class.  Spark SQL can convert RDDs of Java Beans
+    // into SchemaRDDs, where it uses the bean metadata to infer the schema.
     List<LabeledPoint> localTraining = Lists.newArrayList(
       new LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
       new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
@@ -75,13 +75,13 @@ public class JavaSimpleParamsExample {
 
     // We may alternatively specify parameters using a ParamMap.
     ParamMap paramMap = new ParamMap();
-    paramMap.put(lr.maxIter(), 20); // Specify 1 Param.
+    paramMap.put(lr.maxIter().w(20)); // Specify 1 Param.
     paramMap.put(lr.maxIter(), 30); // This overwrites the original maxIter.
-    paramMap.put(lr.regParam(), 0.1);
+    paramMap.put(lr.regParam().w(0.1), lr.threshold().w(0.55)); // Specify multiple Params.
 
     // One can also combine ParamMaps.
     ParamMap paramMap2 = new ParamMap();
-    paramMap2.put(lr.scoreCol(), "probability"); // Changes output column name.
+    paramMap2.put(lr.scoreCol().w("probability")); // Change output column name
     ParamMap paramMapCombined = paramMap.$plus$plus(paramMap2);
 
     // Now learn a new model using the paramMapCombined parameters.

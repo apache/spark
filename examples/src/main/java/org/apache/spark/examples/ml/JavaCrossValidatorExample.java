@@ -107,8 +107,6 @@ public class JavaCrossValidatorExample {
 
     // Run cross-validation, and choose the best set of parameters.
     CrossValidatorModel cvModel = crossval.fit(training);
-    // Get the best LogisticRegression model (with the best set of parameters from paramGrid).
-    Model lrModel = cvModel.bestModel();
 
     // Prepare test documents, which are unlabeled.
     List<Document> localTest = Lists.newArrayList(
