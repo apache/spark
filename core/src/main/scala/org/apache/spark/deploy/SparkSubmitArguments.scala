@@ -39,6 +39,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var driverExtraLibraryPath: String = null
   var driverExtraJavaOptions: String = null
   var driverCores: String = null
+  var amMemory: String = null
   var supervise: Boolean = false
   var queue: String = null
   var numExecutors: String = null
@@ -107,6 +108,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
       .orElse(sparkProperties.get("spark.driver.memory"))
       .orElse(env.get("SPARK_DRIVER_MEMORY"))
       .orNull
+    amMemory = Option(amMemory)
+        .orElse(sparkProperties.get("spark.yarn.appMaster.memory"))
+        .orElse(env.get("SPARK_YARN_AM_MEMORY"))
+        .orNull
     executorMemory = Option(executorMemory)
       .orElse(sparkProperties.get("spark.executor.memory"))
       .orElse(env.get("SPARK_EXECUTOR_MEMORY"))
@@ -193,6 +198,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |  driverExtraClassPath    $driverExtraClassPath
     |  driverExtraLibraryPath  $driverExtraLibraryPath
     |  driverExtraJavaOptions  $driverExtraJavaOptions
+    |  amMemory                $amMemory
     |  supervise               $supervise
     |  queue                   $queue
     |  numExecutors            $numExecutors
@@ -277,6 +283,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
 
       case ("--driver-library-path") :: value :: tail =>
         driverExtraLibraryPath = value
+        parse(tail)
+
+      case ("--am-memory") :: value :: tail =>
+        amMemory = value
         parse(tail)
 
       case ("--properties-file") :: value :: tail =>
@@ -390,7 +400,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
         |  --num-executors NUM         Number of executors to launch (Default: 2).
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
-        |                              working directory of each executor.""".stripMargin
+        |                              working directory of each executor.
+        |  --am-memory MEM             Memory for ApplicationMaster(e.g. 1000M, 2G) (Default: 512M).
+        |                              Only available on yarn-client mode.
+      """.stripMargin
     )
     SparkSubmit.exitFn()
   }
