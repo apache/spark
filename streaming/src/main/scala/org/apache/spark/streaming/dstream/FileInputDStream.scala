@@ -407,7 +407,6 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
   object FileInputDStream {
 
     def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
-
     /**
      * Calculate the number of last batches to remember, such that all the files selected in
      * at least last minRememberDurationS duration can be remembered.
