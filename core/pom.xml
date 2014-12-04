@@ -29,6 +29,8 @@
   <artifactId>spark-core_2.10</artifactId>
   <properties>
     <sbt.project.name>core</sbt.project.name>
+    <timestamp>${maven.build.timestamp}</timestamp>
+    <maven.build.timestamp.format>yyyy-MM-dd HH:mm</maven.build.timestamp.format>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Project Core</name>
@@ -431,6 +433,17 @@
     <resources>
       <resource>
         <directory>src/main/resources</directory>
+        <excludes>
+          <exclude>spark-version.properties</exclude>
+        </excludes>
+        <filtering>false</filtering>
+      </resource>
+      <resource>
+        <directory>src/main/resources</directory>
+        <includes>
+          <include>spark-version.properties</include>
+        </includes>
+        <filtering>true</filtering>
       </resource>
       <resource>
         <directory>../python</directory>
