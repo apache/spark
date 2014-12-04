@@ -188,7 +188,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
       }
       val directoryDepth = directoryPath.depth()
 
-      //nested directories
+      // nested directories
       def dfs(status: FileStatus, currentDepth: Int): List[FileStatus] = {
         val modTime = status.getModificationTime
         status match {
