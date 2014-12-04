@@ -22,7 +22,6 @@ import scala.collection.mutable
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
-import org.apache.spark.SparkContext._
 
 class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
 

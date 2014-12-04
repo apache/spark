@@ -25,7 +25,7 @@ import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 
 /** Page showing list of all ongoing and recently finished stages and pools */
-private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") {
+private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
   private val sc = parent.sc
   private val listener = parent.listener
   private def isFairScheduler = parent.isFairScheduler
@@ -41,11 +41,14 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
 
       val activeStagesTable =
         new StageTableBase(activeStages.sortBy(_.submissionTime).reverse,
-          parent, parent.killEnabled)
+          parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+          killEnabled = parent.killEnabled)
       val completedStagesTable =
-        new StageTableBase(completedStages.sortBy(_.submissionTime).reverse, parent)
+        new StageTableBase(completedStages.sortBy(_.submissionTime).reverse, parent.basePath,
+          parent.listener, isFairScheduler = parent.isFairScheduler, killEnabled = false)
       val failedStagesTable =
-        new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
+        new FailedStageTable(failedStages.sortBy(_.submissionTime).reverse, parent.basePath,
+          parent.listener, isFairScheduler = parent.isFairScheduler)
 
       // For now, pool information is only accessible in live UIs
       val pools = sc.map(_.getAllPools).getOrElse(Seq.empty[Schedulable])
@@ -93,7 +96,7 @@ private[ui] class JobProgressPage(parent: JobProgressTab) extends WebUIPage("") 
         <h4 id ="failed">Failed Stages ({numFailedStages})</h4> ++
         failedStagesTable.toNodeSeq
 
-      UIUtils.headerSparkPage("Spark Stages", content, parent)
+      UIUtils.headerSparkPage("Spark Stages (for all jobs)", content, parent)
     }
   }
 }

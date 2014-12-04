@@ -98,7 +98,7 @@ of the most common options to set are:
   <td>(none)</td>
   <td>
     The cluster manager to connect to. See the list of
-    <a href="scala-programming-guide.html#master-urls"> allowed master URL's</a>.
+    <a href="submitting-applications.html#master-urls"> allowed master URL's</a>.
   </td>
 </tr>
 <tr>
@@ -224,6 +224,7 @@ Apart from these, the following properties are also available, and may be useful
     (Experimental) Whether to give user-added jars precedence over Spark's own jars when
     loading classes in Executors. This feature can be used to mitigate conflicts between
     Spark's dependencies and user dependencies. It is currently an experimental feature.
+    (Currently, this setting does not work for YARN, see <a href="https://issues.apache.org/jira/browse/SPARK-2996">SPARK-2996</a> for more details).
   </td>
 </tr>
 <tr>

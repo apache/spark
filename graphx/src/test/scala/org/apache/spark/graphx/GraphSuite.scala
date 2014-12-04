@@ -328,7 +328,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
               "expected ctx.dstAttr to be null due to TripletFields, but it was " + ctx.dstAttr)
           }
           ctx.sendToDst(ctx.srcAttr)
-        }, _ + _, TripletFields.SrcOnly)
+        }, _ + _, TripletFields.Src)
       assert(agg.collect().toSet === (1 to n).map(x => (x: VertexId, "v")).toSet)
     }
   }
