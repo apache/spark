@@ -284,6 +284,11 @@ object SparkSubmit {
       sysProps.getOrElseUpdate(k, v)
     }
 
+    // Ignore spark.driver.host in cluster modes (see SPARK-4253 for context):
+    if (deployMode == CLUSTER) {
+      sysProps -= "spark.driver.host"
+    }
+
     (childArgs, childClasspath, sysProps, childMainClass)
   }
 
