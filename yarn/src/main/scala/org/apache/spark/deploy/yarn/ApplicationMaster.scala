@@ -331,15 +331,12 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     logInfo("Waiting for spark context initialization")
     try {
       sparkContextRef.synchronized {
-        var count = 0
-        val waitTime = 10000L
-        val totalWaitTime = sparkConf.getInt("spark.yarn.applicationMaster.waitTime", 100000)
+        val totalWaitTime = sparkConf.getInt("spark.yarn.am.waitTime", 100000)
         val deadline = System.currentTimeMillis() + totalWaitTime
 
         while (sparkContextRef.get() == null && System.currentTimeMillis < deadline && !finished) {
-          logInfo("Waiting for spark context initialization ... " + count)
-          count = count + 1
-          sparkContextRef.wait(waitTime)
+          logInfo("Waiting for spark context initialization ... ")
+          sparkContextRef.wait(10000L)
         }
 
         val sparkContext = sparkContextRef.get()
@@ -355,19 +352,16 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private def waitForSparkDriver(): ActorRef = {
     logInfo("Waiting for Spark driver to be reachable.")
     var driverUp = false
-    var count = 0
     val hostport = args.userArgs(0)
     val (driverHost, driverPort) = Utils.parseHostPort(hostport)
 
     // Spark driver should already be up since it launched us, but we don't want to
     // wait forever, so wait 100 seconds max to match the cluster mode setting.
-    val waitTime = 100
-    val totalWaitTime = sparkConf.getInt("spark.yarn.applicationMaster.waitTime", 100000)
+    val totalWaitTime = sparkConf.getInt("spark.yarn.am.waitTime", 100000)
     val deadline = System.currentTimeMillis + totalWaitTime
 
-    while (!driverUp && !finished && System.currentTimeMillis < deadline + waitTime) {
+    while (!driverUp && !finished && System.currentTimeMillis < deadline) {
       try {
-        count = count + 1
         val socket = new Socket(driverHost, driverPort)
         socket.close()
         logInfo("Driver now available: %s:%s".format(driverHost, driverPort))
@@ -376,7 +370,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         case e: Exception =>
           logError("Failed to connect to driver at %s:%s, retrying ...".
             format(driverHost, driverPort))
-          Thread.sleep(waitTime)
+          Thread.sleep(100)
       }
     }
 

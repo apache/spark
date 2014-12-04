@@ -22,7 +22,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.yarn.applicationMaster.waitTime</code></td>
+  <td><code>spark.yarn.am.waitTime</code></td>
   <td>100000</td>
   <td>
     In yarn-cluster mode, time in milliseconds for the application master to wait for the
