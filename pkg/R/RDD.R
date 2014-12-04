@@ -1727,10 +1727,7 @@ setMethod("cogroup",
                 acc <- res[[i]]
                 # Create an accumulator.
                 if (is.null(acc)) {
-                  acc <- new.env()
-                  acc$counter <- 0
-                  acc$data <- list(NULL)
-                  acc$size <- 1
+                  acc <- initAccumulator()
                 }
                 addItemToAccumulator(acc, x[[2]])
                 res[[i]] <- acc

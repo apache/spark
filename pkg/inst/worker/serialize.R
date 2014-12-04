@@ -69,3 +69,26 @@ writeEnvironment <- function(con, e, keyValPairsSerialized = TRUE) {
   }
 }
 
+# Fast append to list by using an accumulator.
+# http://stackoverflow.com/questions/17046336/here-we-go-again-append-an-element-to-a-list-in-r
+#
+# The accumulator should has three fields size, counter and data.
+# This function amortizes the allocation cost by doubling
+# the size of the list every time it fills up.
+addItemToAccumulator <- function(acc, item) {
+  if(acc$counter == acc$size) {
+    acc$size <- acc$size * 2
+    length(acc$data) <- acc$size
+  }
+  acc$counter <- acc$counter + 1
+  acc$data[[acc$counter]] <- item
+}
+
+initAccumulator <- function() {
+  acc <- new.env()
+  acc$counter <- 0
+  acc$data <- list(NULL)
+  acc$size <- 1
+  acc
+}
+

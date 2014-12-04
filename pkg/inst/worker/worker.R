@@ -108,10 +108,11 @@ if (isEmpty != 0) {
       acc <- res[[bucket]]
       # Create a new accumulator
       if (is.null(acc)) {
-        acc <- new.env()
-        acc$counter <- 0
-        acc$data <- list(NULL)
-        acc$size <- 1
+        acc <- initAccumulator()
+#new.env()
+#        acc$counter <- 0
+#        acc$data <- list(NULL)
+#        acc$size <- 1
       }
       addItemToAccumulator(acc, tuple)
       res[[bucket]] <- acc
