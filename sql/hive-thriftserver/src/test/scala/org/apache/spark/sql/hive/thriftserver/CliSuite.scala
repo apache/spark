@@ -123,6 +123,7 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(1.minute, Seq("-e", "SHOW TABLES;"))("" -> "OK")
   }
 
+  // test comment support feature for spark-sql
   test("Test single line commond support using --"){
     runCliWithin(1.minute, Seq("-e", "SHOW TABLES;--test single line commond support;"))("" -> "OK")
   }
@@ -162,5 +163,13 @@ class CliSuite extends FunSuite with BeforeAndAfterAll with Logging {
         |SHOW DATABASES;/*test multi sql commonds in one line */ SHOW
         |TABLES; --end
       """.stripMargin))("" -> "OK")
+  }
+
+  test("Test input from a file") {
+    val sqlFilePath =
+      Thread.currentThread().getContextClassLoader.getResource("data/files/sqlfile.sql")
+
+    runCliWithin(3.minute, Seq("-f", sqlFilePath.getPath))("" -> "OK")
+
   }
 }
