@@ -87,6 +87,11 @@ private[sql] trait UDFRegistration {
   */
 
   // scalastyle:off
+  def registerFunction[T: TypeTag](name: String, func: Function0[T]): Unit = {
+    def builder(e: Seq[Expression]) = ScalaUdf(func, ScalaReflection.schemaFor[T].dataType, e)
+    functionRegistry.registerFunction(name, builder)
+  }
+
   def registerFunction[T: TypeTag](name: String, func: Function1[_, T]): Unit = {
     def builder(e: Seq[Expression]) = ScalaUdf(func, ScalaReflection.schemaFor[T].dataType, e)
     functionRegistry.registerFunction(name, builder)
