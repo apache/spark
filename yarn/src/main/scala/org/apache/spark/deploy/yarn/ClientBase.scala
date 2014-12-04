@@ -320,7 +320,10 @@ private[spark] trait ClientBase extends Logging {
     // Add Xmx for AM memory
     javaOpts += "-Xmx" + args.amMemory + "m"
 
-    val tmpDir = new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
+    val tmpDir = new Path(
+      YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
+      YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR
+    )
     javaOpts += "-Djava.io.tmpdir=" + tmpDir
 
     // TODO: Remove once cpuset version is pushed out.
@@ -411,7 +414,9 @@ private[spark] trait ClientBase extends Logging {
         "--num-executors ", args.numExecutors.toString)
 
     // Command for the ApplicationMaster
-    val commands = prefixEnv ++ Seq(Environment.JAVA_HOME.$() + "/bin/java", "-server") ++
+    val commands = prefixEnv ++ Seq(
+        YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java", "-server"
+      ) ++
       javaOpts ++ amArgs ++
       Seq(
         "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
@@ -690,7 +695,9 @@ private[spark] object ClientBase extends Logging {
       env: HashMap[String, String],
       extraClassPath: Option[String] = None): Unit = {
     extraClassPath.foreach(addClasspathEntry(_, env))
-    addClasspathEntry(Environment.PWD.$(), env)
+    addClasspathEntry(
+      YarnSparkHadoopUtil.expandEnvironment(Environment.PWD), env
+    )
 
     // Normally the users app.jar is last in case conflicts with spark jars
     if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
@@ -704,7 +711,9 @@ private[spark] object ClientBase extends Logging {
     }
 
     // Append all jar files under the working directory to the classpath.
-    addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + "*", env)
+    addClasspathEntry(
+      YarnSparkHadoopUtil.expandEnvironment(Environment.PWD) + Path.SEPARATOR + "*", env
+    )
   }
 
   /**
@@ -759,7 +768,9 @@ private[spark] object ClientBase extends Logging {
       }
     }
     if (fileName != null) {
-      addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + fileName, env)
+      addClasspathEntry(
+        YarnSparkHadoopUtil.expandEnvironment(Environment.PWD) + Path.SEPARATOR + fileName, env
+      )
     }
   }
 

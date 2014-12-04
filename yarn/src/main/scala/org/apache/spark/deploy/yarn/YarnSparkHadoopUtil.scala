@@ -32,6 +32,8 @@ import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
+import org.apache.hadoop.yarn.api.ApplicationConstants
+import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.util.RackResolver
 import org.apache.hadoop.conf.Configuration
 
@@ -112,7 +114,7 @@ object YarnSparkHadoopUtil {
    * If the map already contains this key, append the value to the existing value instead.
    */
   def addPathToEnvironment(env: HashMap[String, String], key: String, value: String): Unit = {
-    val newValue = if (env.contains(key)) { env(key) + File.pathSeparator + value } else value
+    val newValue = if (env.contains(key)) { env(key) + getClassPathSeparator  + value } else value
     env.put(key, newValue)
   }
 
@@ -223,4 +225,43 @@ object YarnSparkHadoopUtil {
     )
   }
 
+  /**
+   * Expand environment variable using Yarn API.
+   * If environment.$$() is implemented, return the result of it.
+   * Otherwise, return the result of environment.$()
+   * Note: $$() is added in Hadoop 2.4.
+   */
+  def expandEnvironment(environment: Environment): String = {
+    var result = environment.$()
+
+    // We use reflection in order not to fail building with Hadoop 2.3 or before.
+    val clazz = classOf[Environment]
+    val name = "$$"
+    if (clazz.getMethods().exists(_.getName == name)){
+      val method = clazz.getMethod(name)
+      result = method.invoke(environment).asInstanceOf[String]
+    }
+
+    result
+  }
+
+  /**
+   * Get class path separator using Yarn API.
+   * If ApplicationConstants.CLASS_PATH_SEPARATOR is implemented, return it.
+   * Otherwise, return File.pathSeparator
+   * Note: File.pathSeparator is added in Hadoop 2.4.
+   */
+  def getClassPathSeparator(): String = {
+    var result = File.pathSeparator
+
+    // We use reflection in order not to fail building with Hadoop 2.3 or before.
+    val clazz = classOf[ApplicationConstants]
+    val name = "CLASS_PATH_SEPARATOR"
+    if (clazz.getFields().exists(_.getName == name)){
+      val field = clazz.getField(name)
+      result = field.get(null).asInstanceOf[String]
+    }
+
+    result
+  }
 }
