@@ -985,6 +985,7 @@ object DecisionTree extends Serializable with Logging {
         1.0
       }
       logDebug("fraction of data used for calculating quantiles = " + fraction)
+      // To discuss: being able to set the seed via train method, or in Strategy of constructor.
       input.sample(withReplacement = false, fraction, new XORShiftRandom().nextInt()).collect()
     } else {
       new Array[LabeledPoint](0)
