@@ -17,8 +17,6 @@
 
 package org.apache.spark
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkContext._
