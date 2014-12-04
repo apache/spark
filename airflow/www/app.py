@@ -127,6 +127,7 @@ class Airflow(BaseView):
         session.close()
         return self.render(
             'airflow/query.html', form=form,
+            title="Query",
             results=results, has_data=has_data)
 
     @expose('/chart')
@@ -159,15 +160,20 @@ class Airflow(BaseView):
         has_data = False
         table = None
         height = "{0}px".format(chart.height)
+        failed = False
         try:
             df = hook.get_pandas_df(sql)
             has_data = len(df)
         except Exception as e:
             flash(str(e), 'error')
             has_data = False
+            failed = True
 
         show_chart = True
-        if not has_data:
+        if failed:
+            show_sql = True
+            show_chart = False
+        elif not has_data:
             show_sql = True
             show_chart = False
             flash('No data was returned', 'error')
@@ -178,8 +184,6 @@ class Airflow(BaseView):
                 "SQL needs to return at least 3 columns (series, x, y)",
                 'error')
         else:
-
-
             # Preparing the data in a format that chartkick likes
             for i, (series, x, y) in df.iterrows():
                 series = str(series)
@@ -194,7 +198,8 @@ class Airflow(BaseView):
                     'name': series,
                     'data': sorted(all_data[series], key=lambda r: r[0])
                 }
-                for series in sorted(all_data)
+                for series in sorted(
+                    all_data, key=lambda s: all_data[s][0][1], reverse=True)
             ]
 
             if chart.show_datatable:
