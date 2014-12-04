@@ -47,7 +47,7 @@ public class JavaSimpleParamsExample {
     JavaSQLContext jsql = new JavaSQLContext(jsc);
 
     // Prepare training data.
-    // We use LabeledPoint, which is a case class.  Spark SQL can convert RDDs of Java Beans
+    // We use LabeledPoint, which is a JavaBean.  Spark SQL can convert RDDs of JavaBeans
     // into SchemaRDDs, where it uses the bean metadata to infer the schema.
     List<LabeledPoint> localTraining = Lists.newArrayList(
       new LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
