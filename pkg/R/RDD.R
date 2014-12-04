@@ -173,6 +173,57 @@ setMethod("cache",
             rdd
           })
 
+#' Persist an RDD
+#'
+#' Persist this RDD with the specified storage level. For details of the
+#' supported storage levels, refer to
+#' http://spark.apache.org/docs/latest/programming-guide.html#rdd-persistence.
+#'
+#' @param rdd The RDD to persist
+#' @param newLevel The new storage level to be assigned
+#' @rdname persist
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10, 2L)
+#' persist(rdd, "MEMORY_AND_DISK")
+#'}
+setGeneric("persist", function(rdd, newLevel) { standardGeneric("persist") })
+
+#' @rdname persist
+#' @aliases persist,RDD-method
+setMethod("persist",
+          signature(rdd = "RDD", newLevel = "character"),
+          function(rdd, newLevel = c("DISK_ONLY",
+                                     "DISK_ONLY_2",
+                                     "MEMORY_AND_DISK",
+                                     "MEMORY_AND_DISK_2",
+                                     "MEMORY_AND_DISK_SER",
+                                     "MEMORY_AND_DISK_SER_2",
+                                     "MEMORY_ONLY",
+                                     "MEMORY_ONLY_2",
+                                     "MEMORY_ONLY_SER",
+                                     "MEMORY_ONLY_SER_2",
+                                     "OFF_HEAP")) {
+            match.arg(newLevel)
+            storageLevel <- switch(newLevel,
+              "DISK_ONLY" = J("org.apache.spark.storage.StorageLevel")$DISK_ONLY(),
+              "DISK_ONLY_2" = J("org.apache.spark.storage.StorageLevel")$DISK_ONLY_2(),
+              "MEMORY_AND_DISK" = J("org.apache.spark.storage.StorageLevel")$MEMORY_AND_DISK(),
+              "MEMORY_AND_DISK_2" = J("org.apache.spark.storage.StorageLevel")$MEMORY_AND_DISK_2(),
+              "MEMORY_AND_DISK_SER" = J("org.apache.spark.storage.StorageLevel")$MEMORY_AND_DISK_SER(),
+              "MEMORY_AND_DISK_SER_2" = J("org.apache.spark.storage.StorageLevel")$MEMORY_AND_DISK_SER_2(),
+              "MEMORY_ONLY" = J("org.apache.spark.storage.StorageLevel")$MEMORY_ONLY(),
+              "MEMORY_ONLY_2" = J("org.apache.spark.storage.StorageLevel")$MEMORY_ONLY_2(),
+              "MEMORY_ONLY_SER" = J("org.apache.spark.storage.StorageLevel")$MEMORY_ONLY_SER(),
+              "MEMORY_ONLY_SER_2" = J("org.apache.spark.storage.StorageLevel")$MEMORY_ONLY_SER_2(),
+              "OFF_HEAP" = J("org.apache.spark.storage.StorageLevel")$OFF_HEAP())
+            
+            .jcall(getJRDD(rdd), "Lorg/apache/spark/api/java/JavaRDD;", "persist", storageLevel)
+            rdd@env$isCached <- TRUE
+            rdd
+          })
 
 #' Unpersist an RDD
 #'
@@ -1432,8 +1483,13 @@ setMethod("unionRDD",
 
 #' Join two RDDs
 #'
-#' @param rdd1 An RDD.
-#' @param rdd2 An RDD.
+#' This function joins two RDDs where every element is of the form list(K, V).
+#' The key types of the two RDDs should be the same.
+#'
+#' @param rdd1 An RDD to be joined. Should be an RDD where each element is
+#'             list(K, V).
+#' @param rdd2 An RDD to be joined. Should be an RDD where each element is
+#'             list(K, V).
 #' @param numPartitions Number of partitions to create.
 #' @return a new RDD containing all pairs of elements with matching keys in
 #'         two input RDDs.
@@ -1453,29 +1509,171 @@ setGeneric("join", function(rdd1, rdd2, numPartitions) { standardGeneric("join")
 setMethod("join",
           signature(rdd1 = "RDD", rdd2 = "RDD", numPartitions = "integer"),
           function(rdd1, rdd2, numPartitions) {
-            if (rdd1@env$serialized != rdd2@env$serialized) {
-              # One of the RDDs is not serialized, we need to serialize it first.
-              if (!rdd1@env$serialized) {
-                rdd1 <- reserialize(rdd1)
-              } else {
-                rdd2 <- reserialize(rdd2)
-              }
-            }  
             rdd1Tagged <- lapply(rdd1, function(x) { list(x[[1]], list(1L, x[[2]])) })
             rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
             
             doJoin <- function(v) {
-              t1 <- Filter(function(x) { x[[1]] == 1L }, v)
-              t1 <- lapply(t1, function(x) { x[[2]] })
-              t2 <- Filter(function(x) { x[[1]] == 2L }, v)
-              t2 <- lapply(t2, function(x) { x[[2]] })
+              t1 <- vector("list", length(v))
+              t2 <- vector("list", length(v))
+              index1 <- 1
+              index2 <- 1
+              for (x in v) {
+                if (x[[1]] == 1L) {
+                  t1[[index1]] <- x[[2]]
+                  index1 <- index1 + 1
+                } else {
+                  t2[[index2]] <- x[[2]]
+                  index2 <- index2 + 1
+                }
+              }
+              length(t1) <- index1 - 1
+              length(t2) <- index2 - 1
+
               result <- list()
               length(result) <- length(t1) * length(t2)
-              index <- 1L
+              index <- 1
               for (i in t1) {
                 for (j in t2) {
                   result[[index]] <- list(i, j)
-                  index <- index + 1L
+                  index <- index + 1
+                }
+              }
+              result
+            }
+            
+            joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
+          })
+
+#' Left outer join two RDDs
+#'
+#' This function left-outer-joins two RDDs where every element is of the form list(K, V).
+#' The key types of the two RDDs should be the same.
+#'
+#' @param rdd1 An RDD to be joined. Should be an RDD where each element is
+#'             list(K, V).
+#' @param rdd2 An RDD to be joined. Should be an RDD where each element is
+#'             list(K, V).
+#' @param numPartitions Number of partitions to create.
+#' @return For each element (k, v) in rdd1, the resulting RDD will either contain 
+#'         all pairs (k, (v, w)) for (k, w) in rdd2, or the pair (k, (v, NULL)) 
+#'         if no elements in rdd2 have key k.
+#' @rdname leftOuterJoin
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
+#' rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
+#' leftOuterJoin(rdd1, rdd2, 2L) # list(list(1, list(1, 2)), list(1, list(1, 3)), list(2, list(4, NULL)))
+#'}
+setGeneric("leftOuterJoin", function(rdd1, rdd2, numPartitions) { standardGeneric("leftOuterJoin") })
+
+#' @rdname leftOuterJoin
+#' @aliases leftOuterJoin,RDD,RDD-method
+setMethod("leftOuterJoin",
+          signature(rdd1 = "RDD", rdd2 = "RDD", numPartitions = "integer"),
+          function(rdd1, rdd2, numPartitions) {
+            rdd1Tagged <- lapply(rdd1, function(x) { list(x[[1]], list(1L, x[[2]])) })
+            rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
+            
+            doJoin <- function(v) {
+              t1 <- vector("list", length(v))
+              t2 <- vector("list", length(v))
+              index1 <- 1
+              index2 <- 1
+              for (x in v) {
+                if (x[[1]] == 1L) {
+                  t1[[index1]] <- x[[2]]
+                  index1 <- index1 + 1
+                } else {
+                  t2[[index2]] <- x[[2]]
+                  index2 <- index2 + 1
+                }
+              }
+              length(t1) <- index1 - 1
+              len2 <- index2 - 1
+              if (len2 == 0) {
+                t2 <- list(NULL)
+              } else {
+                length(t2) <- len2
+              }
+
+              result <- list()
+              length(result) <- length(t1) * length(t2)
+              index <- 1
+              for (i in t1) {
+                for (j in t2) {
+                  result[[index]] <- list(i, j)
+                  index <- index + 1
+                }
+              }
+              result
+            }
+            
+            joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
+          })
+
+#' Right outer join two RDDs
+#'
+#' This function right-outer-joins two RDDs where every element is of the form list(K, V).
+#' The key types of the two RDDs should be the same.
+#'
+#' @param rdd1 An RDD to be joined. Should be an RDD where each element is
+#'             list(K, V).
+#' @param rdd2 An RDD to be joined. Should be an RDD where each element is
+#'             list(K, V).
+#' @param numPartitions Number of partitions to create.
+#' @return For each element (k, w) in rdd2, the resulting RDD will either contain
+#'         all pairs (k, (v, w)) for (k, v) in rdd1, or the pair (k, (NULL, w))
+#'         if no elements in rdd1 have key k.
+#' @rdname rightOuterJoin
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd1 <- parallelize(sc, list(list(1, 2), list(1, 3)))
+#' rdd2 <- parallelize(sc, list(list(1, 1), list(2, 4)))
+#' rightOuterJoin(rdd1, rdd2, 2L) # list(list(1, list(2, 1)), list(1, list(3, 1)), list(2, list(NULL, 4)))
+#'}
+setGeneric("rightOuterJoin", function(rdd1, rdd2, numPartitions) { standardGeneric("rightOuterJoin") })
+
+#' @rdname rightOuterJoin
+#' @aliases rightOuterJoin,RDD,RDD-method
+setMethod("rightOuterJoin",
+          signature(rdd1 = "RDD", rdd2 = "RDD", numPartitions = "integer"),
+          function(rdd1, rdd2, numPartitions) {
+            rdd1Tagged <- lapply(rdd1, function(x) { list(x[[1]], list(1L, x[[2]])) })
+            rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
+            
+            doJoin <- function(v) {
+              t1 <- vector("list", length(v))
+              t2 <- vector("list", length(v))
+              index1 <- 1
+              index2 <- 1
+              for (x in v) {
+                if (x[[1]] == 1L) {
+                  t1[[index1]] <- x[[2]]
+                  index1 <- index1 + 1
+                } else {
+                  t2[[index2]] <- x[[2]]
+                  index2 <- index2 + 1
+                }
+              }
+              len1 <- index1 - 1
+              if (len1 == 0) {
+                t1 <- list(NULL)
+              } else {
+                length(t1) <- len1
+              }
+              length(t2) <- index2 - 1
+              
+              result <- list()
+              length(result) <- length(t1) * length(t2)
+              index <- 1
+              for (i in t1) {
+                for (j in t2) {
+                  result[[index]] <- list(i, j)
+                  index <- index + 1
                 }
               }
               result
