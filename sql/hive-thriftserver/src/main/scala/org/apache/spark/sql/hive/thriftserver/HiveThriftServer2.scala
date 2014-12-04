@@ -22,10 +22,11 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.thrift.ThriftBinaryCLIService
 import org.apache.hive.service.server.{HiveServer2, ServerOptionsProcessor}
 
-import org.apache.spark.{SparkEnv, Logging}
+import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
+import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListener}
 
 /**
  * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSQLContext` and a
@@ -43,31 +44,7 @@ object HiveThriftServer2 extends Logging {
     val server = new HiveThriftServer2(sqlContext)
     server.init(sqlContext.hiveconf)
     server.start()
-    asyncMonitorDriver(server)
-  }
-
-  /**
-   * Monitor the driver state in a separate thread.
-   * If the driver has broken for any reason, stop the thriftServer2.
-   * Yarn HA may cause the sparkContext had been stopped, but JVM
-   * still wait thriftServer2 to exit.
-   */
-  private def asyncMonitorDriver(thriftServer2: HiveServer2) = {
-    assert(SparkEnv.get != null, "Spark has not been started yet!")
-    val t = new Thread {
-      override def run() {
-        while (null != SparkEnv.get) {
-          Thread.sleep(1000L)
-        }
-
-        logInfo("Detected driver had been down, so stopping thriftServer2.")
-        thriftServer2.stop()
-        Thread.currentThread().interrupt()
-      }
-    }
-    t.setName("Driver alive monitor")
-    t.setDaemon(true)
-    t.start()
+    sqlContext.sparkContext.addSparkListener(new HiveThriftServer2Listener(server))
   }
 
   def main(args: Array[String]) {
@@ -92,13 +69,23 @@ object HiveThriftServer2 extends Logging {
       server.init(SparkSQLEnv.hiveContext.hiveconf)
       server.start()
       logInfo("HiveThriftServer2 started")
-      asyncMonitorDriver(server)
+      SparkSQLEnv.sparkContext.addSparkListener(new HiveThriftServer2Listener(server))
     } catch {
       case e: Exception =>
         logError("Error starting HiveThriftServer2", e)
         System.exit(-1)
     }
   }
+
+  /**
+   * A inner sparkListener called in sc.stop to clean up the HiveThriftServer2
+   */
+  class HiveThriftServer2Listener(val server: HiveServer2) extends SparkListener {
+    override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+      server.stop()
+    }
+  }
+
 }
 
 private[hive] class HiveThriftServer2(hiveContext: HiveContext)
