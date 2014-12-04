@@ -400,15 +400,10 @@ class ExternalAppendOnlyMap[K, V, C](
       // Note that batchOffsets.length = numBatches + 1 since we did a scan above; check whether
       // we're still in a valid batch.
       if (batchIndex < batchOffsets.length - 1) {
-        if (deserializeStream != null) {
-          deserializeStream.close()
-          fileStream.close()
-          deserializeStream = null
-          fileStream = null
-        }
-
         val start = batchOffsets(batchIndex)
-        fileStream = new FileInputStream(file)
+        if (fileStream == null) {
+          fileStream = new FileInputStream(file)
+        }
         fileStream.getChannel.position(start)
         batchIndex += 1
 
