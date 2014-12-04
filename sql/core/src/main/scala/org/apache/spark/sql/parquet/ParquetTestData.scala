@@ -422,5 +422,41 @@ private[sql] object ParquetTestData {
     val first = reader.read()
     assert(first != null)
   } */
+
+  // to test golb pattern (wild card pattern matching for parquetFile input
+  val testGlobDir = Utils.createTempDir()
+  val testGlobSubDir1 = Utils.createTempDir(testGlobDir.getPath)
+  val testGlobSubDir2 = Utils.createTempDir(testGlobDir.getPath)
+  val testGlobSubDir3 = Utils.createTempDir(testGlobDir.getPath)
+
+  def writeGlobFiles() = {
+    val subDirs = Array(testGlobSubDir1, testGlobSubDir2, testGlobSubDir3)
+
+    subDirs.foreach { dir =>
+      val path: Path = new Path(new Path(dir.toURI), new Path("part-r-0.parquet"))
+      val job = new Job()
+      val schema: MessageType = MessageTypeParser.parseMessageType(testSchema)
+      val writeSupport = new TestGroupWriteSupport(schema)
+      val writer = new ParquetWriter[Group](path, writeSupport)
+
+      for(i <- 0 until 15) {
+        val record = new SimpleGroup(schema)
+        if(i % 3 == 0) {
+          record.add(0, true)
+        } else {
+          record.add(0, false)
+        }
+        if(i % 5 == 0) {
+          record.add(1, 5)
+        }
+        record.add(2, "abc")
+        record.add(3, i.toLong << 33)
+        record.add(4, 2.5F)
+        record.add(5, 4.5D)
+        writer.write(record)
+      }
+      writer.close()
+    }
+  }
 }
 
