@@ -359,6 +359,31 @@ object KMeans {
   }
 
   /**
+   * Trains a k-means model using the given set of parameters.
+   *
+   * @param data training points stored as `RDD[Array[Double]]`
+   * @param k number of clusters
+   * @param maxIterations max number of iterations
+   * @param runs number of parallel runs, defaults to 1. The best model is returned.
+   * @param initializationMode initialization model, either "random" or "k-means||" (default).
+   * @param seed seed value for cluster initialization
+   */
+  def train(
+      data: RDD[Vector],
+      k: Int,
+      maxIterations: Int,
+      runs: Int,
+      initializationMode: String,
+      seed: Long): KMeansModel = {
+    new KMeans().setK(k)
+      .setMaxIterations(maxIterations)
+      .setRuns(runs)
+      .setInitializationMode(initializationMode)
+      .setSeed(seed)
+      .run(data)
+  }
+
+  /**
    * Trains a k-means model using specified parameters and the default values for unspecified.
    */
   def train(
