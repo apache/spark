@@ -23,7 +23,7 @@ class LocalWorker(multiprocessing.Process):
                 # Received poison pill, no more tasks to run
                 self.task_queue.task_done()
                 break
-            logging.info(command)
+            logging.info("%s running %s", self.__class__.__name__, command)
             command = (
                 "exec bash -c '"
                 "cd $AIRFLOW_HOME;\n" +
