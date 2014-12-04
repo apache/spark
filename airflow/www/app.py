@@ -195,7 +195,7 @@ class Airflow(BaseView):
                 if series not in all_data:
                     all_data[series] = []
                 if type(x) in (datetime, Timestamp, date) :
-                    x = x.strftime("%s") * 1000
+                    x = int(x.strftime("%s")) * 1000
                 else:
                     x = int(dateutil.parser.parse(x).strftime("%s")) * 1000
                 all_data[series].append([x, float(y)])
@@ -209,6 +209,13 @@ class Airflow(BaseView):
             hc = {
                 'chart':{
                     'type': chart.chart_type
+                },
+                'plotOptions': {
+                    'series': {
+                        'marker': {
+                            'enabled': False
+                        }
+                    }
                 },
                 'title': {'text': ''},
                 'xAxis': {
@@ -742,6 +749,7 @@ class ChartModelView(ModelView):
     form_choices = {
         'chart_type': [
             ('line', 'Line Chart'),
+            ('spline', 'Spline Chart'),
             ('bar', 'Bar Chart'),
             ('column', 'Column Chart'),
             ('area', 'Area Chart'),

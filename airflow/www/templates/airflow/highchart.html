@@ -31,7 +31,6 @@
     <script src="{{ url_for('static', filename='highcharts-more.js') }}">
     </script>
     <script>
-      execution_date = '{{ execution_date }}';
       hc = {{ hc|safe }};
       $('#hc').highcharts(hc);
     </script>
