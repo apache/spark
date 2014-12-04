@@ -3,6 +3,10 @@ require 'capistrano_recipes/deploy/packserv'
 
 set :application, "spark"
 set :user, "deploy"
+set :shared_work_path, "/u/apps/spark/shared/work"
+set :shared_logs_path, "/u/apps/spark/shared/log"
+set :shared_conf_path, "/u/apps/spark/shared/conf"
+set :gateway, nil
 
 BROKEN = ["dn04.chi.shopify.com", "dn06.chi.shopify.com", "dn07.chi.shopify.com", "dn08.chi.shopify.com", "dn11.chi.shopify.com", "dn14.chi.shopify.com"]
 
@@ -20,13 +24,6 @@ end
 
 
 namespace :deploy do
-  task :setup_spark_paths do
-    set :shared_work_path, "#{deploy_to}/shared/work"
-    set :shared_logs_path, "#{deploy_to}/shared/log"
-    set :shared_conf_path, "#{deploy_to}/shared/conf"
-    set :gateway, nil
-  end
-
   task :restart_master, :roles => :master, :on_no_matching_servers => :continue do
     run "sv-sudo restart spark-master"
   end
@@ -45,6 +42,6 @@ namespace :deploy do
     run "rm -rf #{release_path}/conf && ln -nfs #{shared_conf_path} #{release_path}/conf"
   end
 
-  before 'deploy:restart', 'deploy:symlink_shared', 'deploy:restart_master', 'deploy:restart_history'
-  after  'deploy:initialize_variables', 'deploy:setup_spark_paths'
+  before 'deploy:restart', 'deploy:restart_master', 'deploy:restart_history'
+  after  'deploy:finalize_update', 'deploy:setup_spark_paths'
 end
