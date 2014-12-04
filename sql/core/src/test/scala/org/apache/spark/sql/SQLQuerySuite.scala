@@ -22,7 +22,6 @@ import java.util.TimeZone
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /* Implicits */
