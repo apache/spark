@@ -20,20 +20,12 @@ package org.apache.spark.sql.execution
 import java.util.HashMap
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.physical.AllTuples
-import org.apache.spark.sql.catalyst.plans.physical.ClusteredDistribution
-import org.apache.spark.sql.catalyst.errors._
-import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.util.collection.CompactBuffer
-import org.apache.spark.sql.catalyst.plans.physical.ClusteredDistribution
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.expressions.InterpretedMutableProjection
-import org.apache.spark.sql.catalyst.expressions.Alias
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.SortPartitions
+import org.apache.spark.sql.catalyst.errors._
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, InterpretedMutableProjection, _}
+import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution}
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.util.collection.CompactBuffer
 
 
 /**
@@ -47,10 +39,10 @@ import org.apache.spark.sql.catalyst.plans.logical.SortPartitions
  */
 @DeveloperApi
 case class WindowFunction(
-  partitionExpressions: Seq[Expression],
-  windowAttributes: Seq[WindowAttribute],
-  otherExpressions: Seq[NamedExpression],
-  child: SparkPlan)
+    partitionExpressions: Seq[Expression],
+    windowAttributes: Seq[WindowAttribute],
+    otherExpressions: Seq[NamedExpression],
+    child: SparkPlan)
   extends UnaryNode {
 
   override def requiredChildDistribution =
@@ -78,8 +70,7 @@ case class WindowFunction(
   private[this] val resultAttributes = otherAttributes ++ computeAttributes.map(_._2)
 
   private[this] val resultMap =
-    (otherExpressions.map { other => other -> other.toAttribute } ++ computeAttributes
-    ).toMap
+    (otherExpressions.map { other => other -> other.toAttribute } ++ computeAttributes).toMap
 
   private[this] val resultExpressions = (windowAttributes ++ otherExpressions).map { sel =>
     sel.transform {
@@ -87,11 +78,10 @@ case class WindowFunction(
     }
   }
 
-  private[this] val sortExpressions =
-    if (child.isInstanceOf[Sort]) {
-      child.asInstanceOf[Sort].sortOrder
-    }
-    else null
+  private[this] val sortExpressions = child match {
+    case Sort(sortOrder, _, _) => sortOrder
+    case _ => null
+  }
 
   /** Creates a new function buffer for a partition. */
   private[this] def newFunctionBuffer(): Array[AggregateFunction] = {
@@ -114,16 +104,23 @@ case class WindowFunction(
       val aggrFunction = aggrFunctions(i)
       val base = aggrFunction.base
       val windowSpec = base.windowSpec
-      if (windowSpec.windowFrame == null) {
+
+      windowSpec.windowFrame.map { frame =>
+        functionResults(i) = frame.frameType match {
+          case RowsFrame => rowsWindowFunction(base, rows).iterator
+          case ValueFrame => valueWindowFunction(base, rows).iterator
+        }
+      }.getOrElse {
         if (sortExpressions != null) {
-          if (aggrFunction.dataType.isInstanceOf[ArrayType]) {
-            rows.foreach(aggrFunction.update)
-            functionResults(i) = aggrFunction.eval(EmptyRow).asInstanceOf[Seq[Any]].iterator
-          } else {
-            functionResults(i) = rows.map(row => {
-              aggrFunction.update(row)
-              aggrFunction.eval(EmptyRow)
-            }).iterator
+          aggrFunction.dataType match {
+            case _: ArrayType =>
+              rows.foreach(aggrFunction.update)
+              functionResults(i) = aggrFunction.eval(EmptyRow).asInstanceOf[Seq[Any]].iterator
+            case _ =>
+              functionResults(i) = rows.map { row =>
+                aggrFunction.update(row)
+                aggrFunction.eval(EmptyRow)
+              }.iterator
           }
         } else {
           rows.foreach(aggrFunction.update)
@@ -132,13 +129,6 @@ case class WindowFunction(
             case other => (0 to rows.size - 1).map(r => other).iterator
           }
         }
-
-      } else {
-        functionResults(i) =
-          if (windowSpec.windowFrame.frameType == "ROWS_FRAME") {
-            rowsWindowFunction(base, rows).iterator
-          }
-          else valueWindowFunction(base, rows).iterator
       }
       i += 1
     }
@@ -151,8 +141,7 @@ case class WindowFunction(
     val rangeResults = new CompactBuffer[Any]()
     var rowIndex = 0
     while (rowIndex < rows.size) {
-
-      val windowFrame = base.windowSpec.windowFrame
+      val windowFrame = base.windowSpec.windowFrame.get
       var start =
         if (windowFrame.preceding == Int.MaxValue) 0
         else rowIndex - windowFrame.preceding
@@ -178,9 +167,9 @@ case class WindowFunction(
   private[this] def valueWindowFunction(base: AggregateExpression,
     rows: CompactBuffer[Row]): CompactBuffer[Any] = {
 
-    val windowFrame = base.windowSpec.windowFrame
+    val windowFrame = base.windowSpec.windowFrame.get
 
-    // rande only support 1 order
+    // range only support 1 order
     val sortExpression = BindReferences.bindReference(sortExpressions.head, childOutput)
 
     val preceding = sortExpression.child.dataType match {
@@ -206,25 +195,24 @@ case class WindowFunction(
     var rowIndex = 0
     while (rowIndex < rows.size) {
       val currentRow = rows(rowIndex)
+      val eval = sortExpression.child.eval(currentRow)
       val precedingExpr =
         if (sortExpression.direction == Ascending) {
-          Literal(sortExpression.child.eval(currentRow)) - sortExpression.child <= preceding
+          Literal(eval) - sortExpression.child <= preceding
         } else {
-          sortExpression.child - Literal(sortExpression.child.eval(currentRow)) <= preceding
+          sortExpression.child - Literal(eval) <= preceding
         }
-
 
       val followingExpr =
         if (sortExpression.direction == Ascending) {
-          sortExpression.child - Literal(sortExpression.child.eval(currentRow)) <= following
+          sortExpression.child - Literal(eval) <= following
         } else {
-          Literal(sortExpression.child.eval(currentRow)) - sortExpression.child <= following
+          Literal(eval) - sortExpression.child <= following
         }
 
       var precedingIndex = 0
       var followingIndex = rows.size - 1
       if (sortExpression != null) {
-
         if (windowFrame.preceding != Int.MaxValue) precedingIndex = rowIndex
         while (precedingIndex > 0 &&
           precedingExpr.eval(rows(precedingIndex - 1)).asInstanceOf[Boolean]) {

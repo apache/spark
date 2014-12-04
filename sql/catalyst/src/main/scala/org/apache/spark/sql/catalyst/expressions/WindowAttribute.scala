@@ -28,7 +28,8 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
  * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this
  *               alias. Auto-assigned if left blank.
  */
-case class WindowAttribute(child: Expression, name: String, windowSpec: WindowSpec)
+case class WindowAttribute
+    (child: Expression, name: String, windowSpec: WindowSpec)
     (val exprId: ExprId = NamedExpression.newExprId, val qualifiers: Seq[String] = Nil)
   extends NamedExpression with trees.UnaryNode[Expression] {
 
@@ -50,11 +51,14 @@ case class WindowAttribute(child: Expression, name: String, windowSpec: WindowSp
   override def toString: String = s"$child $windowSpec AS $name#${exprId.id}$typeSuffix"
 
   override protected final def otherCopyArgs = exprId :: qualifiers :: Nil
-
 }
 
-case class WindowSpec(windowPartition: WindowPartition, windowFrame: WindowFrame)
+case class WindowSpec(windowPartition: WindowPartition, windowFrame: Option[WindowFrame])
 
 case class WindowPartition(partitionBy: Seq[Expression], sortBy: Seq[SortOrder])
 
-case class WindowFrame(frameType:String, preceding: Int, following: Int)
+sealed trait FrameType
+case object ValueFrame extends FrameType
+case object RowsFrame extends FrameType
+
+case class WindowFrame(frameType: FrameType, preceding: Int, following: Int)

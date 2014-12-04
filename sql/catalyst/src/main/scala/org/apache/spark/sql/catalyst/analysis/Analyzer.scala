@@ -232,12 +232,10 @@ class Analyzer(catalog: Catalog,
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: WindowFunction =>
         q transformExpressions {
-          case u @ WindowAttribute(children, name, windowSpec)
+          case u @ WindowAttribute(child: AggregateExpression, name, windowSpec) =>
             // set window spec in AggregateExpression for execution and GlobalAggregates check
-            if (children.isInstanceOf[AggregateExpression]) => {
-              children.asInstanceOf[AggregateExpression].windowSpec = windowSpec
-              u
-            }
+            child.windowSpec = windowSpec
+            u
         }
       case q: LogicalPlan =>
         q transformExpressions {
@@ -258,7 +256,7 @@ class Analyzer(catalog: Catalog,
 
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
       exprs.foreach(_.foreach {
-        case agg: AggregateExpression if (agg.windowSpec == null) => return true
+        case agg: AggregateExpression if agg.windowSpec == null => return true
         case _ =>
       })
       false
