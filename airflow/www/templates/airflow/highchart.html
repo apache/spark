@@ -1,0 +1,40 @@
+{% extends "airflow/master.html" %}
+
+{% block head_css %}
+{{ super() }}
+{% endblock %}
+{% block title %}
+{{ title }}
+{% endblock %}
+
+{% block body %}
+{{ super() }}
+<div id="container">
+    <h2>{{ label }}</h2>
+    <div id="hc" style="height:{{ chart.height }}px;">
+        <img src="{{ url_for('static', filename='loading.gif') }}" width="50px">
+    </div>
+    {% if show_sql %}
+        <h4>SQL</h4>
+        {{ sql }}
+    {% endif %}
+    {% if chart.show_datatable %}
+        <h4>Data</h4>
+        {{ table }}
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block tail %}
+    {{ super() }}
+    <script src="{{ url_for('static', filename='highcharts.js') }}"></script>
+    <script src="{{ url_for('static', filename='highcharts-more.js') }}">
+    </script>
+    <script>
+      execution_date = '{{ execution_date }}';
+      hc = {{ hc|safe }};
+      $('#hc').highcharts(hc);
+    </script>
+
+{% endblock %}
+

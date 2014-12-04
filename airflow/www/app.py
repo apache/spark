@@ -159,7 +159,6 @@ class Airflow(BaseView):
         label = jinja2.Template(chart.label).render(**args)
         has_data = False
         table = None
-        height = "{0}px".format(chart.height)
         failed = False
         try:
             df = hook.get_pandas_df(sql)
@@ -169,6 +168,12 @@ class Airflow(BaseView):
             has_data = False
             failed = True
 
+        if show_sql:
+            sql = Markup(highlight(
+                sql,
+                SqlLexer(), # Lexer call
+                HtmlFormatter(noclasses=True))
+            )
         show_chart = True
         if failed:
             show_sql = True
@@ -190,9 +195,9 @@ class Airflow(BaseView):
                 if series not in all_data:
                     all_data[series] = []
                 if type(x) in (datetime, Timestamp, date) :
-                    x = x.isoformat()
+                    x = x.strftime("%s") * 1000
                 else:
-                    x = dateutil.parser.parse(x).isoformat()[:10]
+                    x = int(dateutil.parser.parse(x).strftime("%s")) * 1000
                 all_data[series].append([x, float(y)])
             all_data = [{
                     'name': series,
@@ -201,17 +206,32 @@ class Airflow(BaseView):
                 for series in sorted(
                     all_data, key=lambda s: all_data[s][0][1], reverse=True)
             ]
+            hc = {
+                'chart':{
+                    'type': chart.chart_type
+                },
+                'title': {'text': ''},
+                'xAxis': {
+                    'title': {'text': df.columns[1]},
+                    'type': 'datetime',
+                },
+                'yAxis': {
+                    'title': {'text': df.columns[2]}
+                },
+                'series': all_data,
+            }
 
             if chart.show_datatable:
                 table = df.to_html(
                     classes='table table-striped table-bordered')
 
         response = self.render(
-            'airflow/modelchart.html',
-            chart=chart, data=all_data, table=Markup(table),
-            chart_options={},
+            'airflow/highchart.html',
+            chart=chart,
+            title="Chart",
+            table=Markup(table),
+            hc=json.dumps(hc),
             show_chart=show_chart,
-            height=height,
             show_sql=show_sql,
             sql=sql, label=label)
         session.commit()
@@ -721,10 +741,10 @@ class ChartModelView(ModelView):
     column_formatters = dict(label=chart_link)
     form_choices = {
         'chart_type': [
-            ('line_chart', 'Line Chart'),
-            ('bar_chart', 'Bar Chart'),
-            ('column_chart', 'Column Chart'),
-            ('area_chart', 'Area Chart'),
+            ('line', 'Line Chart'),
+            ('bar', 'Bar Chart'),
+            ('column', 'Column Chart'),
+            ('area', 'Area Chart'),
         ]
     }
 mv = ChartModelView(
