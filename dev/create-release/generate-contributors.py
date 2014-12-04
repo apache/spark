@@ -26,8 +26,6 @@ from releaseutils import *
 
 # You must set the following before use!
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
-JIRA_USERNAME = os.environ.get("JIRA_USERNAME", None)
-JIRA_PASSWORD = os.environ.get("JIRA_PASSWORD", None)
 START_COMMIT = os.environ.get("START_COMMIT", "37b100")
 END_COMMIT = os.environ.get("END_COMMIT", "3693ae")
 
@@ -40,8 +38,6 @@ if not START_COMMIT or not END_COMMIT:
         END_COMMIT = raw_input("Please specify ending commit hash (non-inclusive): ")
 
 # Verify provided arguments
-if not JIRA_USERNAME: sys.exit("JIRA_USERNAME must be provided")
-if not JIRA_PASSWORD: sys.exit("JIRA_PASSWORD must be provided")
 start_commit_line = get_one_line(START_COMMIT)
 end_commit_line = get_one_line(END_COMMIT)
 num_commits = num_commits_in_range(START_COMMIT, END_COMMIT)
@@ -59,14 +55,6 @@ response = raw_input("Is this correct? [Y/n] ")
 if response.lower() != "y" and response:
     sys.exit("Ok, exiting")
 print "==================================================================================\n"
-
-# Setup JIRA and github clients. We use two JIRA clients, one with authentication
-# and one without, because authentication is slow and required only when we query
-# JIRA user details but not Spark issues
-jira_options = { "server": JIRA_API_BASE }
-jira_client = JIRA(options = jira_options)
-jira_client_auth = JIRA(options = jira_options, basic_auth = (JIRA_USERNAME, JIRA_PASSWORD))
-github_client = Github()
 
 # Find all commits within this range
 print "Gathering commits within range [%s..%s)" % (START_COMMIT, END_COMMIT)
@@ -105,12 +93,16 @@ if releases or reverts or nojiras:
     if reverts: print "Reverts (%d)" % len(reverts); print_indented(reverts)
     if nojiras: print "No JIRA (%d)" % len(nojiras); print_indented(nojiras)
     print "==================== Warning: the above commits will be ignored ==================\n"
-response = raw_input("%d commits left to process. Ok to proceed? [y/N] " % len(filtered_commits))
-if response.lower() != "y":
+response = raw_input("%d commits left to process. Ok to proceed? [Y/n] " % len(filtered_commits))
+if response.lower() != "y" and response:
     sys.exit("Ok, exiting.")
 
 # Keep track of warnings to tell the user at the end
 warnings = []
+
+# Mapping from the invalid author name to its associated JIRA issues
+# E.g. andrewor14 -> set("SPARK-2413", "SPARK-3551", "SPARK-3471")
+invalid_authors = {}
 
 # Populate a map that groups issues and components by author
 # It takes the form: Author name -> { Contribution type -> Spark components }
@@ -127,16 +119,23 @@ warnings = []
 # }
 #
 author_info = {}
+jira_options = { "server": JIRA_API_BASE }
+jira_client = JIRA(options = jira_options)
 print "\n=========================== Compiling contributor list ==========================="
 for commit in filtered_commits:
     commit_hash = re.findall("^[a-z0-9]+", commit)[0]
     issues = re.findall("SPARK-[0-9]+", commit.upper())
-    # Translate the author in case the github username is not an actual name
-    # Also guard against any special characters used in the name
-    # Note the JIRA client we use here must have authentication enabled
     author = get_author(commit_hash)
-    author = unidecode.unidecode(unicode(author, "UTF-8"))
-    author = translate_author(author, github_client, jira_client_auth, warnings)
+    author = unidecode.unidecode(unicode(author, "UTF-8")).strip() # guard against special characters
+    # If the author name is invalid, keep track of it along
+    # with all associated issues so we can translate it later
+    if is_valid_author(author):
+        author = capitalize_author(author)
+    else:
+        if author not in invalid_authors:
+            invalid_authors[author] = set()
+        for issue in issues:
+            invalid_authors[author].add(issue)
     date = get_date(commit_hash)
     # Parse components from the commit message, if any
     commit_components = find_components(commit, commit_hash)
@@ -147,7 +146,7 @@ for commit in filtered_commits:
             author_info[author] = {}
         if issue_type not in author_info[author]:
             author_info[author][issue_type] = set()
-        for component in all_components:
+        for component in components:
             author_info[author][issue_type].add(component)
     # Find issues and components associated with this commit
     for issue in issues:
@@ -168,7 +167,6 @@ print "=========================================================================
 # Each line takes the format "Author name - semi-colon delimited contributions"
 # e.g. Andrew Or - Bug fixes in Windows, Core, and Web UI; improvements in Core
 # e.g. Tathagata Das - Bug fixes and new features in Streaming
-contributors_file_name = "contributors.txt"
 contributors_file = open(contributors_file_name, "w")
 authors = author_info.keys()
 authors.sort()
@@ -192,10 +190,22 @@ for author in authors:
     # Do not use python's capitalize() on the whole string to preserve case
     assert contribution
     contribution = contribution[0].capitalize() + contribution[1:]
+    # If the author name is invalid, use an intermediate format that
+    # can be translated through translate-contributors.py later
+    # E.g. andrewor14/SPARK-3425/SPARK-1157/SPARK-6672
+    if author in invalid_authors and invalid_authors[author]:
+        author = author + "/" + "/".join(invalid_authors[author])
     line = "%s - %s" % (author, contribution)
     contributors_file.write(line + "\n")
 contributors_file.close()
 print "Contributors list is successfully written to %s!" % contributors_file_name
+
+# Prompt the user to translate author names if necessary
+if invalid_authors:
+    warnings.append("Found the following invalid authors:")
+    for a in invalid_authors:
+        warnings.append("\t%s" % a)
+    warnings.append("Please run './translate-contributors.py' to translate them.")
 
 # Log any warnings encountered in the process
 if warnings:
