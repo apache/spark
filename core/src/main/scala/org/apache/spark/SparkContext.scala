@@ -1758,7 +1758,7 @@ object SparkContext extends Logging {
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
     "backward compatibility.", "1.3.0")
-  def writableWritableConverter[T <: Writable]() =
+  def writableWritableConverter[T <: Writable](): WritableConverter[T] =
     WritableConverter.writableWritableConverter()
 
   /**
@@ -2017,15 +2017,15 @@ object WritableConverter {
     simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
   implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
-    simpleWritableConverter[Array[Byte], BytesWritable](bw =>
+    simpleWritableConverter[Array[Byte], BytesWritable] { bw =>
       // getBytes method returns array which is longer then data to be returned
       Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
-    )
+    }
   }
 
   implicit def stringWritableConverter(): WritableConverter[String] =
     simpleWritableConverter[String, Text](_.toString)
 
-  implicit def writableWritableConverter[T <: Writable]() =
+  implicit def writableWritableConverter[T <: Writable](): WritableConverter[T] =
     new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])
 }
