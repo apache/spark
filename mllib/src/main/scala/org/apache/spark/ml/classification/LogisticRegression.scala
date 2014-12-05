@@ -68,6 +68,13 @@ class LogisticRegression extends Classifier[LogisticRegression, LogisticRegressi
   def setThreshold(value: Double): this.type = set(threshold, value)
   def setScoreCol(value: String): this.type = set(scoreCol, value)
 
+  /**
+   * Same as [[fit()]], but using strong types.
+   *
+   * @param dataset  Training data.  WARNING: This does not yet handle instance weights.
+   * @param paramMap  Parameters for training.
+   *                  These values override any specified in this Estimator's embedded ParamMap.
+   */
   def train(dataset: RDD[LabeledPoint], paramMap: ParamMap): LogisticRegressionModel = {
     val oldDataset = dataset.map { case LabeledPoint(label: Double, features: Vector, weight) =>
       org.apache.spark.mllib.regression.LabeledPoint(label, features)

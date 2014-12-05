@@ -45,6 +45,13 @@ class LinearRegression extends Regressor[LinearRegression, LinearRegressionModel
   def setRegParam(value: Double): this.type = set(regParam, value)
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
+  /**
+   * Same as [[fit()]], but using strong types.
+   *
+   * @param dataset  Training data.  WARNING: This does not yet handle instance weights.
+   * @param paramMap  Parameters for training.
+   *                  These values override any specified in this Estimator's embedded ParamMap.
+   */
   def train(dataset: RDD[LabeledPoint], paramMap: ParamMap): LinearRegressionModel = {
     val oldDataset = dataset.map { case LabeledPoint(label: Double, features: Vector, weight) =>
       org.apache.spark.mllib.regression.LabeledPoint(label, features)

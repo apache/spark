@@ -94,12 +94,11 @@ private[ml] abstract class Predictor[Learner <: Predictor[Learner, M], M <: Pred
   }
 
   /**
-   * Notes to developers:
-   *  - Unlike [[fit()]], this method takes [[paramMap]] which has already been
-   *    combined with the internal paramMap.
-   *  - This should handle caching the dataset if needed.
+   * Same as [[fit()]], but using strong types.
+   *
    * @param dataset  Training data
    * @param paramMap  Parameters for training.
+   *                  These values override any specified in this Estimator's embedded ParamMap.
    */
   def train(dataset: RDD[LabeledPoint], paramMap: ParamMap): M
 }
