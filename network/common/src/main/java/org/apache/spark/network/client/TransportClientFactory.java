@@ -66,6 +66,9 @@ public class TransportClientFactory implements Closeable {
     public ClientPool() {
       clients = new TransportClient[numConnectionsPerPeer];
       locks = new Object[numConnectionsPerPeer];
+      for (int i = 0; i < numConnectionsPerPeer; i++) {
+        locks[i] = new Object();
+      }
     }
   }
 
@@ -120,7 +123,8 @@ public class TransportClientFactory implements Closeable {
     // Create the ClientPool if we don't have it yet.
     ClientPool clientPool = connectionPool.get(address);
     if (clientPool == null) {
-      clientPool = connectionPool.putIfAbsent(address, new ClientPool());
+      connectionPool.putIfAbsent(address, new ClientPool());
+      clientPool = connectionPool.get(address);
     }
 
     int clientIndex = rand.nextInt(numConnectionsPerPeer);
