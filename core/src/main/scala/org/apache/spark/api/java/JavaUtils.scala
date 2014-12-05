@@ -34,12 +34,11 @@ private[spark] object JavaUtils {
     new SerializableMapWrapper(underlying)
 
   // Implementation is copied from scala.collection.convert.Wrappers.MapWrapper,
-  // but implements java.io.Serializable and adds a no-arg constructor
+  // but implements java.io.Serializable. It can't just be subclassed to make it
+  // Serializable since the MapWrapper class has no no-arg constructor. This class
+  // doesn't need a no-arg constructor though.
   class SerializableMapWrapper[A, B](underlying: collection.Map[A, B])
     extends ju.AbstractMap[A, B] with java.io.Serializable { self =>
-
-    // Add no-arg constructor just for serialization
-    def this() = this(null)
 
     override def size = underlying.size
 
