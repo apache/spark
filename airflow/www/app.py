@@ -191,7 +191,8 @@ class Airflow(BaseView):
                 'error')
         else:
             # Preparing the data in a format that chartkick likes
-            for i, (series, x, y) in df.iterrows():
+            for i, t in df.iterrows():
+                series, x, y = t[:3]
                 series = str(series)
                 if series not in all_data:
                     all_data[series] = []
