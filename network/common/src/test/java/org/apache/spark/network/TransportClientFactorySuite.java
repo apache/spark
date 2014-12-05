@@ -18,7 +18,11 @@
 package org.apache.spark.network;
 
 import java.io.IOException;
-import java.util.concurrent.TimeoutException;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.NoSuchElementException;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.junit.After;
 import org.junit.Before;
@@ -32,6 +36,7 @@ import org.apache.spark.network.client.TransportClientFactory;
 import org.apache.spark.network.server.NoOpRpcHandler;
 import org.apache.spark.network.server.RpcHandler;
 import org.apache.spark.network.server.TransportServer;
+import org.apache.spark.network.util.ConfigProvider;
 import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.SystemPropertyConfigProvider;
 import org.apache.spark.network.util.TransportConf;
@@ -57,16 +62,113 @@ public class TransportClientFactorySuite {
     JavaUtils.closeQuietly(server2);
   }
 
+  /**
+   * Request a bunch of clients to a single server to test
+   * we create up to maxConnections of clients.
+   */
+  private void testClientReuse(final int maxConnections) throws IOException {
+    TransportConf conf = new TransportConf(new ConfigProvider() {
+      @Override
+      public String get(String name) {
+        if (name.equals("spark.shuffle.io.numConnectionsPerPeer")) {
+          return Integer.toString(maxConnections);
+        } else {
+          throw new NoSuchElementException();
+        }
+      }
+    });
+
+    RpcHandler rpcHandler = new NoOpRpcHandler();
+    TransportContext context = new TransportContext(conf, rpcHandler);
+    TransportClientFactory factory = context.createClientFactory();
+    HashSet<TransportClient> clients = new HashSet<TransportClient>();
+    for (int i = 0; i < maxConnections * 10; i++) {
+      TransportClient client = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+      assert(client.isActive());
+      clients.add(client);
+    }
+
+    assert(clients.size() == maxConnections);
+  }
+
+  /**
+   * Request a bunch of clients to a single server to test
+   * we create up to maxConnections of clients. This is a parallel
+   * version of testClientReuse.
+   */
+  private void testClientReuseConcurrent(final int maxConnections)
+    throws IOException, InterruptedException {
+    TransportConf conf = new TransportConf(new ConfigProvider() {
+      @Override
+      public String get(String name) {
+        if (name.equals("spark.shuffle.io.numConnectionsPerPeer")) {
+          return Integer.toString(maxConnections);
+        } else {
+          throw new NoSuchElementException();
+        }
+      }
+    });
+
+    RpcHandler rpcHandler = new NoOpRpcHandler();
+    TransportContext context = new TransportContext(conf, rpcHandler);
+    final TransportClientFactory factory = context.createClientFactory();
+    final Set<TransportClient> clients = Collections.synchronizedSet(
+      new HashSet<TransportClient>());
+
+    final AtomicInteger failed = new AtomicInteger();
+    Thread[] attempts = new Thread[maxConnections * 10];
+
+    // Launch a bunch of threads to create new clients.
+    for (int i = 0; i < attempts.length; i++) {
+      attempts[i] = new Thread() {
+        @Override
+        public void run() {
+          try {
+            TransportClient client =
+              factory.createClient(TestUtils.getLocalHost(), server1.getPort());
+            assert (client.isActive());
+            clients.add(client);
+          } catch (IOException e) {
+            failed.incrementAndGet();
+          }
+        }
+      };
+      attempts[i].run();
+    }
+
+    // Wait until all the threads complete.
+    for (int i = 0; i < attempts.length; i++) {
+      attempts[i].join();
+    }
+
+    assert(failed.get() == 0);
+    assert(clients.size() == maxConnections);
+  }
+
   @Test
-  public void createAndReuseBlockClients() throws IOException {
+  public void reuseClientsUpToConfigVariable() throws IOException {
+    testClientReuse(1);
+    testClientReuse(2);
+    testClientReuse(3);
+    testClientReuse(4);
+  }
+
+  @Test
+  public void reuseClientsUpToConfigVariableConcurrent() throws Exception {
+    testClientReuseConcurrent(1);
+    testClientReuseConcurrent(2);
+    testClientReuseConcurrent(3);
+    testClientReuseConcurrent(4);
+  }
+
+  @Test
+  public void returnDifferentClientsForDifferentServers() throws IOException {
     TransportClientFactory factory = context.createClientFactory();
     TransportClient c1 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
-    TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
-    TransportClient c3 = factory.createClient(TestUtils.getLocalHost(), server2.getPort());
+    TransportClient c2 = factory.createClient(TestUtils.getLocalHost(), server2.getPort());
     assertTrue(c1.isActive());
-    assertTrue(c3.isActive());
-    assertTrue(c1 == c2);
-    assertTrue(c1 != c3);
+    assertTrue(c2.isActive());
+    assertTrue(c1 != c2);
     factory.close();
   }
 
