@@ -24,6 +24,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
+import scala.collection.mutable
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -67,7 +68,7 @@ class NaiveBayesModel private[mllib] (
   }
 
   def classProbabilities(testData: RDD[Vector]):
-   RDD[scala.collection.mutable.Map[Double, Double]] = {
+   RDD[mutable.Map[Double, Double]] = {
     val bcModel = testData.context.broadcast(this)
     testData.mapPartitions { iter =>
       val model = bcModel.value
@@ -75,10 +76,10 @@ class NaiveBayesModel private[mllib] (
     }
   }
 
-  def classProbabilities(testData: Vector): scala.collection.mutable.Map[Double, Double] = {
+  def classProbabilities(testData: Vector): mutable.Map[Double, Double] = {
     val posteriors = (brzPi + brzTheta * testData.toBreeze) 
-    val probs:scala.collection.mutable.Map[Double,Double] = 
-      scala.collection.mutable.Map.empty[Double, Double]
+    val probs:mutable.Map[Double,Double] = 
+      mutable.Map.empty[Double, Double]
     posteriors.foreachPair((k,v) => probs += (labels(k) -> v))
     probs
   }
