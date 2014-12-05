@@ -279,7 +279,7 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
   def copy: ParamMap = new ParamMap(map.clone())
 
   override def toString: String = {
-    map.map { case (param, value) =>
+    map.toSeq.sorted.map { case (param, value) =>
       s"\t${param.parent.uid}-${param.name}: $value"
     }.mkString("{\n", ",\n", "\n}")
   }
