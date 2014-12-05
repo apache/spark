@@ -120,6 +120,10 @@ def parse_args():
              "Only possible on EBS-backed AMIs. " +
              "EBS volumes are only attached if --ebs-vol-size > 0." +
              "Only support up to 8 EBS volumes.")
+    parser.add_option("--placement-group", type="string", default=None,
+                      help="Which placement group to try and launch " +
+                      "instances into. Assumes placement group is already " +
+                      "created.")
     parser.add_option(
         "--swap", metavar="SWAP", type="int", default=1024,
         help="Swap space to set up per node, in MB (default: %default)")
@@ -395,7 +399,8 @@ def launch_cluster(conn, opts, cluster_name):
                 security_groups=[slave_group] + additional_groups,
                 instance_type=opts.instance_type,
                 block_device_map=block_map,
-                user_data=user_data_content)
+                user_data=user_data_content,
+                placement_group=opts.placement_group)
             my_req_ids += [req.id for req in slave_reqs]
             i += 1
 
@@ -447,7 +452,8 @@ def launch_cluster(conn, opts, cluster_name):
                                       min_count=num_slaves_this_zone,
                                       max_count=num_slaves_this_zone,
                                       block_device_map=block_map,
-                                      user_data=user_data_content)
+                                      user_data=user_data_content,
+                                      placement_group=opts.placement_group)
                 slave_nodes += slave_res.instances
                 print "Launched %d slaves in %s, regid = %s" % (num_slaves_this_zone,
                                                                 zone, slave_res.id)
@@ -473,7 +479,8 @@ def launch_cluster(conn, opts, cluster_name):
                                min_count=1,
                                max_count=1,
                                block_device_map=block_map,
-                               user_data=user_data_content)
+                               user_data=user_data_content,
+                               placement_group=opts.placement_group)
         master_nodes = master_res.instances
         print "Launched master in %s, regid = %s" % (zone, master_res.id)
 
