@@ -278,7 +278,7 @@ performed on JSON files.
 from pyspark.sql import SQLContext, Row
 sqlContext = SQLContext(sc)
 
-# Load a text file and convert each line to a dictionary.
+# Load a text file and convert each line to a Row.
 lines = sc.textFile("examples/src/main/resources/people.txt")
 parts = lines.map(lambda l: l.split(","))
 people = parts.map(lambda p: Row(name=p[0], age=int(p[1])))
