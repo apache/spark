@@ -58,6 +58,7 @@ import org.apache.spark.network.util.TransportConf;
  */
 public class TransportClientFactory implements Closeable {
 
+  /** A simple data structure to track the pool of clients between two peer nodes. */
   private class ClientPool {
     TransportClient[] clients;
     Object[] locks;
@@ -152,12 +153,12 @@ public class TransportClientFactory implements Closeable {
 
     Bootstrap bootstrap = new Bootstrap();
     bootstrap.group(workerGroup)
-        .channel(socketChannelClass)
-            // Disable Nagle's Algorithm since we don't want packets to wait
-        .option(ChannelOption.TCP_NODELAY, true)
-        .option(ChannelOption.SO_KEEPALIVE, true)
-        .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionTimeoutMs())
-        .option(ChannelOption.ALLOCATOR, pooledAllocator);
+      .channel(socketChannelClass)
+      // Disable Nagle's Algorithm since we don't want packets to wait
+      .option(ChannelOption.TCP_NODELAY, true)
+      .option(ChannelOption.SO_KEEPALIVE, true)
+      .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, conf.connectionTimeoutMs())
+      .option(ChannelOption.ALLOCATOR, pooledAllocator);
 
     final AtomicReference<TransportClient> clientRef = new AtomicReference<TransportClient>();
 
@@ -174,7 +175,7 @@ public class TransportClientFactory implements Closeable {
     ChannelFuture cf = bootstrap.connect(address);
     if (!cf.awaitUninterruptibly(conf.connectionTimeoutMs())) {
       throw new IOException(
-          String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
+        String.format("Connecting to %s timed out (%s ms)", address, conf.connectionTimeoutMs()));
     } else if (cf.cause() != null) {
       throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
     }
