@@ -243,21 +243,18 @@ private[spark] trait ClientBase extends Logging {
       val libsURI = new URI(libsDir)
       val jarLinks = ListBuffer.empty[String]
       if (libsURI.getScheme != LOCAL_SCHEME) {
-        val localPath = getQualifiedLocalPath(libsURI)
-        val localFs = FileSystem.get(localPath.toUri, hadoopConf)
-        if (localFs.exists(localPath)) {
-          val jars = localFs.listFiles(localPath, /* recursive */ false)
-          while (jars.hasNext) {
-            val jar = jars.next()
-            val name = jar.getPath.getName
-            if (name.startsWith("datanucleus-")) {
-              // copy to remote and add to classpath
-              val src = jar.getPath
-              val destPath = copyFileToRemote(dst, src, replication)
-              distCacheMgr.addResource(localFs, hadoopConf, destPath,
-                localResources, LocalResourceType.FILE, name, statCache)
-              jarLinks += name
-            }
+        val localURI = getQualifiedLocalPath(libsURI).toUri()
+        val jars = FileSystem.get(localURI, hadoopConf).listFiles(new Path(localURI.getPath), false)
+        while (jars.hasNext) {
+          val jar = jars.next()
+          val name = jar.getPath.getName
+          if (name.startsWith("datanucleus-")) {
+            // copy to remote and add to classpath
+            val src = jar.getPath
+            val destPath = copyFileToRemote(dst, src, replication)
+            distCacheMgr.addResource(fs, hadoopConf, destPath,
+              localResources, LocalResourceType.FILE, name, statCache)
+            jarLinks += name
           }
         }
       } else {
