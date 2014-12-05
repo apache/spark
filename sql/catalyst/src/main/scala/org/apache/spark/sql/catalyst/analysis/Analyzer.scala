@@ -507,7 +507,7 @@ class Analyzer(catalog: Catalog,
           // Replace the condition column names with alias names.
           val transformedConds = condition.transform{
             case a: Attribute if resolvedChild.resolve(a.name, resolver) != None =>
-              UnresolvedAttribute("subquery."+cache.get(a.name).get)
+              UnresolvedAttribute("subquery." + cache.get(a.name).get)
           }
           // Join the first projection column of subquery to the main query and add as condition
           // TODO : We can avoid if the parent condition already has this condition.
