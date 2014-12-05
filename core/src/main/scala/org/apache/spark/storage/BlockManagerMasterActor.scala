@@ -360,7 +360,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       } else {
         return false
       }
-      return true
     }
 
     if (blockId == null) {
