@@ -98,7 +98,7 @@ of the most common options to set are:
   <td>(none)</td>
   <td>
     The cluster manager to connect to. See the list of
-    <a href="scala-programming-guide.html#master-urls"> allowed master URL's</a>.
+    <a href="submitting-applications.html#master-urls"> allowed master URL's</a>.
   </td>
 </tr>
 <tr>

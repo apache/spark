@@ -146,7 +146,7 @@ describes the various methods for loading data into a SchemaRDD.
 
 Spark SQL supports two different methods for converting existing RDDs into SchemaRDDs.  The first
 method uses reflection to infer the schema of an RDD that contains specific types of objects.  This
-reflection based approach leads to more concise code and works well when you already know the schema 
+reflection based approach leads to more concise code and works well when you already know the schema
 while writing your Spark application.
 
 The second method for creating SchemaRDDs is through a programmatic interface that allows you to
@@ -278,7 +278,7 @@ performed on JSON files.
 from pyspark.sql import SQLContext, Row
 sqlContext = SQLContext(sc)
 
-# Load a text file and convert each line to a dictionary.
+# Load a text file and convert each line to a Row.
 lines = sc.textFile("examples/src/main/resources/people.txt")
 parts = lines.map(lambda l: l.split(","))
 people = parts.map(lambda p: Row(name=p[0], age=int(p[1])))
@@ -566,7 +566,7 @@ for teenName in teenNames.collect():
 
 ### Configuration
 
-Configuration of Parquet can be done using the `setConf` method on SQLContext or by running 
+Configuration of Parquet can be done using the `setConf` method on SQLContext or by running
 `SET key=value` commands using SQL.
 
 <table class="table">
@@ -575,8 +575,8 @@ Configuration of Parquet can be done using the `setConf` method on SQLContext or
   <td><code>spark.sql.parquet.binaryAsString</code></td>
   <td>false</td>
   <td>
-    Some other Parquet-producing systems, in particular Impala and older versions of Spark SQL, do 
-    not differentiate between binary data and strings when writing out the Parquet schema.  This 
+    Some other Parquet-producing systems, in particular Impala and older versions of Spark SQL, do
+    not differentiate between binary data and strings when writing out the Parquet schema.  This
     flag tells Spark SQL to interpret binary data as a string to provide compatibility with these systems.
   </td>
 </tr>
@@ -591,8 +591,18 @@ Configuration of Parquet can be done using the `setConf` method on SQLContext or
   <td><code>spark.sql.parquet.compression.codec</code></td>
   <td>gzip</td>
   <td>
-    Sets the compression codec use when writing Parquet files. Acceptable values include: 
+    Sets the compression codec use when writing Parquet files. Acceptable values include:
     uncompressed, snappy, gzip, lzo.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.filterPushdown</code></td>
+  <td>false</td>
+  <td>
+    Turn on Parquet filter pushdown optimization. This feature is turned off by default because of a known
+    bug in Paruet 1.6.0rc3 (<a href="https://issues.apache.org/jira/browse/PARQUET-136">PARQUET-136</a>).
+    However, if your table doesn't contain any nullable string or binary columns, it's still safe to turn
+    this feature on.
   </td>
 </tr>
 <tr>
@@ -945,7 +955,7 @@ options.
 
 ## Migration Guide for Shark User
 
-### Scheduling 
+### Scheduling
 To set a [Fair Scheduler](job-scheduling.html#fair-scheduler-pools) pool for a JDBC client session,
 users can set the `spark.sql.thriftserver.scheduler.pool` variable:
 
@@ -992,7 +1002,7 @@ Several caching related features are not supported yet:
 ## Compatibility with Apache Hive
 
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.  Currently Spark
-SQL is based on Hive 0.12.0.
+SQL is based on Hive 0.12.0 and 0.13.1.
 
 #### Deploying in Existing Hive Warehouses
 
@@ -1031,6 +1041,7 @@ Spark SQL supports the vast majority of Hive features, such as:
 * Sampling
 * Explain
 * Partitioned tables
+* View
 * All Hive DDL Functions, including:
   * `CREATE TABLE`
   * `CREATE TABLE AS SELECT`
@@ -1046,6 +1057,7 @@ Spark SQL supports the vast majority of Hive features, such as:
   * `STRING`
   * `BINARY`
   * `TIMESTAMP`
+  * `DATE`
   * `ARRAY<>`
   * `MAP<>`
   * `STRUCT<>`
@@ -1146,6 +1158,7 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
 * Datetime type
     - `TimestampType`: Represents values comprising values of fields year, month, day,
     hour, minute, and second.
+    - `DateType`: Represents values comprising values of fields year, month, day.
 * Complex types
     - `ArrayType(elementType, containsNull)`: Represents values comprising a sequence of
     elements with the type of `elementType`. `containsNull` is used to indicate if
@@ -1251,6 +1264,13 @@ import  org.apache.spark.sql._
   <td> java.sql.Timestamp </td>
   <td>
   TimestampType
+  </td>
+</tr>
+<tr>
+  <td> <b>DateType</b> </td>
+  <td> java.sql.Date </td>
+  <td>
+  DateType
   </td>
 </tr>
 <tr>
@@ -1377,6 +1397,13 @@ please use factory methods provided in
   <td> java.sql.Timestamp </td>
   <td>
   DataType.TimestampType
+  </td>
+</tr>
+<tr>
+  <td> <b>DateType</b> </td>
+  <td> java.sql.Date </td>
+  <td>
+  DataType.DateType
   </td>
 </tr>
 <tr>
@@ -1524,6 +1551,13 @@ from pyspark.sql import *
   <td> datetime.datetime </td>
   <td>
   TimestampType()
+  </td>
+</tr>
+<tr>
+  <td> <b>DateType</b> </td>
+  <td> datetime.date </td>
+  <td>
+  DateType()
   </td>
 </tr>
 <tr>
