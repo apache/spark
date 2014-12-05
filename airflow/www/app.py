@@ -127,6 +127,7 @@ class Airflow(BaseView):
         session.close()
         return self.render(
             'airflow/query.html', form=form,
+            title="Query",
             results=results, has_data=has_data)
 
     @expose('/chart')
@@ -141,6 +142,7 @@ class Airflow(BaseView):
         session.expunge_all()
 
         all_data = {}
+        hc = None
         hook = db.get_hook()
         try:
             args = eval(chart.default_params)
@@ -158,16 +160,26 @@ class Airflow(BaseView):
         label = jinja2.Template(chart.label).render(**args)
         has_data = False
         table = None
-        height = "{0}px".format(chart.height)
+        failed = False
         try:
             df = hook.get_pandas_df(sql)
             has_data = len(df)
         except Exception as e:
             flash(str(e), 'error')
             has_data = False
+            failed = True
 
+        if show_sql:
+            sql = Markup(highlight(
+                sql,
+                SqlLexer(), # Lexer call
+                HtmlFormatter(noclasses=True))
+            )
         show_chart = True
-        if not has_data:
+        if failed:
+            show_sql = True
+            show_chart = False
+        elif not has_data:
             show_sql = True
             show_chart = False
             flash('No data was returned', 'error')
@@ -178,35 +190,57 @@ class Airflow(BaseView):
                 "SQL needs to return at least 3 columns (series, x, y)",
                 'error')
         else:
-
-
             # Preparing the data in a format that chartkick likes
-            for i, (series, x, y) in df.iterrows():
+            for i, t in df.iterrows():
+                series, x, y = t[:3]
                 series = str(series)
                 if series not in all_data:
                     all_data[series] = []
                 if type(x) in (datetime, Timestamp, date) :
-                    x = x.isoformat()
+                    x = int(x.strftime("%s")) * 1000
                 else:
-                    x = dateutil.parser.parse(x).isoformat()[:10]
+                    x = int(dateutil.parser.parse(x).strftime("%s")) * 1000
                 all_data[series].append([x, float(y)])
             all_data = [{
                     'name': series,
                     'data': sorted(all_data[series], key=lambda r: r[0])
                 }
-                for series in sorted(all_data)
+                for series in sorted(
+                    all_data, key=lambda s: all_data[s][0][1], reverse=True)
             ]
+            hc = {
+                'chart':{
+                    'type': chart.chart_type
+                },
+                'plotOptions': {
+                    'series': {
+                        'marker': {
+                            'enabled': False
+                        }
+                    }
+                },
+                'title': {'text': ''},
+                'xAxis': {
+                    'title': {'text': df.columns[1]},
+                    'type': 'datetime',
+                },
+                'yAxis': {
+                    'title': {'text': df.columns[2]}
+                },
+                'series': all_data,
+            }
 
             if chart.show_datatable:
                 table = df.to_html(
                     classes='table table-striped table-bordered')
 
         response = self.render(
-            'airflow/modelchart.html',
-            chart=chart, data=all_data, table=Markup(table),
-            chart_options={},
+            'airflow/highchart.html',
+            chart=chart,
+            title="Chart",
+            table=Markup(table),
+            hc=json.dumps(hc) if hc else None,
             show_chart=show_chart,
-            height=height,
             show_sql=show_sql,
             sql=sql, label=label)
         session.commit()
@@ -716,10 +750,11 @@ class ChartModelView(ModelView):
     column_formatters = dict(label=chart_link)
     form_choices = {
         'chart_type': [
-            ('line_chart', 'Line Chart'),
-            ('bar_chart', 'Bar Chart'),
-            ('column_chart', 'Column Chart'),
-            ('area_chart', 'Area Chart'),
+            ('line', 'Line Chart'),
+            ('spline', 'Spline Chart'),
+            ('bar', 'Bar Chart'),
+            ('column', 'Column Chart'),
+            ('area', 'Area Chart'),
         ]
     }
 mv = ChartModelView(
