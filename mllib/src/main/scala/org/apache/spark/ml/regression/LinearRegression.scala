@@ -19,7 +19,7 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.LabeledPoint
-import org.apache.spark.ml.param.{ParamMap, HasMaxIter, HasRegParam}
+import org.apache.spark.ml.param.{Params, ParamMap, HasMaxIter, HasRegParam}
 import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.rdd.RDD
@@ -88,5 +88,11 @@ class LinearRegressionModel private[ml] (
 
   override def predict(features: Vector): Double = {
     BLAS.dot(features, weights) + intercept
+  }
+
+  private[ml] override def copy(): LinearRegressionModel = {
+    val m = new LinearRegressionModel(parent, fittingParamMap, weights, intercept)
+    Params.inheritValues(this.paramMap, this, m)
+    m
   }
 }

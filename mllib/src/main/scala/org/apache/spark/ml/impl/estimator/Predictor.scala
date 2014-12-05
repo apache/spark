@@ -128,22 +128,33 @@ private[ml] abstract class PredictionModel[M <: PredictionModel[M]]
 
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
+    val tmpModel = this.copy()
+    Params.inheritValues(paramMap, parent, tmpModel)
     val pred: Vector => Double = (features) => {
-      predict(features)
+      tmpModel.predict(features)
     }
     dataset.select(Star(None), pred.call(map(featuresCol).attr) as map(predictionCol))
   }
 
   /**
-   * Default implementation.
-   * Override for efficiency; e.g., this does not broadcast the model.
+   * Default implementation using single-instance predict().
+   *
+   * Developers should override this for efficiency.  E.g., this does not broadcast the model.
    */
-  def predict(dataset: RDD[Vector]): RDD[Double] = {
-    dataset.map(predict)
+  def predict(dataset: RDD[Vector], paramMap: ParamMap): RDD[Double] = {
+    val tmpModel = this.copy()
+    Params.inheritValues(paramMap, parent, tmpModel)
+    dataset.map(tmpModel.predict)
   }
 
   /**
    * Predict label for the given features.
    */
   def predict(features: Vector): Double
+
+  /**
+   * Create a copy of the model.
+   * The copy is shallow, except for the embedded paramMap, which gets a deep copy.
+   */
+  private[ml] def copy(): M
 }

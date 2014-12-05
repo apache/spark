@@ -76,6 +76,7 @@ class LogisticRegression extends Classifier[LogisticRegression, LogisticRegressi
    *                  These values override any specified in this Estimator's embedded ParamMap.
    */
   def train(dataset: RDD[LabeledPoint], paramMap: ParamMap): LogisticRegressionModel = {
+    val map = this.paramMap ++ paramMap
     val oldDataset = dataset.map { case LabeledPoint(label: Double, features: Vector, weight) =>
       org.apache.spark.mllib.regression.LabeledPoint(label, features)
     }
@@ -86,14 +87,13 @@ class LogisticRegression extends Classifier[LogisticRegression, LogisticRegressi
     }
     val lr = new LogisticRegressionWithLBFGS
     lr.optimizer
-      .setRegParam(paramMap(regParam))
-      .setNumIterations(paramMap(maxIter))
+      .setRegParam(map(regParam))
+      .setNumIterations(map(maxIter))
     val model = lr.run(oldDataset)
-    val lrm = new LogisticRegressionModel(this, paramMap, model.weights, model.intercept)
+    val lrm = new LogisticRegressionModel(this, map, model.weights, model.intercept)
     if (handlePersistence) {
       oldDataset.unpersist()
     }
-    lrm.setThreshold(paramMap(threshold))
     lrm
   }
 }
@@ -115,17 +115,8 @@ class LogisticRegressionModel private[ml] (
 
   setThreshold(0.5)
 
-  def setThreshold(value: Double): this.type = {
-    this.threshold_internal = value
-    set(threshold, value)
-  }
+  def setThreshold(value: Double): this.type = set(threshold, value)
   def setScoreCol(value: String): this.type = set(scoreCol, value)
-
-  /**
-   * Store for faster test-time prediction.
-   * Initialized to threshold in fittingParamMap if exists, else default threshold.
-   */
-  private var threshold_internal: Double = fittingParamMap.get(threshold).getOrElse(getThreshold)
 
   private val margin: Vector => Double = (features) => {
     BLAS.dot(features, weights) + intercept
@@ -142,7 +133,8 @@ class LogisticRegressionModel private[ml] (
     val scoreFunction = udf { v: Vector =>
       val margin = BLAS.dot(v, weights)
       1.0 / (1.0 + math.exp(-margin))
-    val t = threshold_internal
+    }
+    val t = map(threshold)
     val predictFunction: Double => Double = (score) => { if (score > t) 1.0 else 0.0 }
     dataset
       .select($"*", scoreFunction(col(map(featuresCol))).as(map(scoreCol)))
@@ -151,12 +143,14 @@ class LogisticRegressionModel private[ml] (
 
   override val numClasses: Int = 2
 
+  // TODO: Override batch predict() for efficiency.
+
   /**
    * Predict label for the given feature vector.
    * The behavior of this can be adjusted using [[threshold]].
    */
   override def predict(features: Vector): Double = {
-    if (score(features) > threshold_internal) 1 else 0
+    if (score(features) > paramMap(threshold)) 1 else 0
   }
 
   override def predictProbabilities(features: Vector): Vector = {
@@ -167,5 +161,11 @@ class LogisticRegressionModel private[ml] (
   override def predictRaw(features: Vector): Vector = {
     val m = margin(features)
     Vectors.dense(Array(-m, m))
+  }
+
+  private[ml] override def copy(): LogisticRegressionModel = {
+    val m = new LogisticRegressionModel(parent, fittingParamMap, weights, intercept)
+    Params.inheritValues(this.paramMap, this, m)
+    m
   }
 }
