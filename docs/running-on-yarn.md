@@ -136,9 +136,9 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.am.extraJavaOptions</code></td>
   <td>(none)</td>
   <td>
-    A string of extra JVM options to pass to the Application Master in both yarn-client and yarn-cluster mode.
-    For instance, GC settings or other specific system properties. Note that it is different from
-    spark.driver.extraJavaOptions, as the driver options are only passed to Application Master in yarn-cluster mode.
+    A string of extra JVM options to pass to the Application Master in yarn-client mode. For instance, specific
+    system properties. Note that it is complementary to spark.driver.extraJavaOptions, which are only passed to
+    the Application Master in yarn-cluster mode.
   </td>
 </tr>
 </table>
