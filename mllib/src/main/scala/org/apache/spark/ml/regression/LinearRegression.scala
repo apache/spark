@@ -28,7 +28,6 @@ import org.apache.spark.storage.StorageLevel
 /**
  * Params for linear regression.
  */
-@AlphaComponent
 private[regression] trait LinearRegressionParams extends RegressorParams
   with HasRegParam with HasMaxIter
 

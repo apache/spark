@@ -30,10 +30,8 @@ import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import org.apache.spark.storage.StorageLevel
 
 /**
- * :: AlphaComponent ::
  * Params for logistic regression.
  */
-@AlphaComponent
 private[classification] trait LogisticRegressionParams extends ClassifierParams
   with HasRegParam with HasMaxIter with HasThreshold with HasScoreCol {
 
@@ -53,9 +51,11 @@ private[classification] trait LogisticRegressionParams extends ClassifierParams
 
 
 /**
+ * :: AlphaComponent ::
  * Logistic regression.
  * Currently, this class only supports binary classification.
  */
+@AlphaComponent
 class LogisticRegression extends Classifier[LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams {
 
@@ -106,14 +106,19 @@ class LogisticRegressionModel private[ml] (
   with ProbabilisticClassificationModel
   with LogisticRegressionParams {
 
+  setThreshold(0.5)
+
   def setThreshold(value: Double): this.type = {
     this.threshold_internal = value
     set(threshold, value)
   }
   def setScoreCol(value: String): this.type = set(scoreCol, value)
 
-  /** Store for faster test-time prediction. */
-  private var threshold_internal: Double = this.getThreshold
+  /**
+   * Store for faster test-time prediction.
+   * Initialized to threshold in fittingParamMap if exists, else default threshold.
+   */
+  private var threshold_internal: Double = fittingParamMap.get(threshold).getOrElse(getThreshold)
 
   private val margin: Vector => Double = (features) => {
     BLAS.dot(features, weights) + intercept
