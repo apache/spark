@@ -54,6 +54,7 @@ private[classification] trait LogisticRegressionParams extends ClassifierParams
 
 /**
  * Logistic regression.
+ * Currently, this class only supports binary classification.
  */
 class LogisticRegression extends Classifier[LogisticRegression, LogisticRegressionModel]
   with LogisticRegressionParams {
@@ -71,7 +72,8 @@ class LogisticRegression extends Classifier[LogisticRegression, LogisticRegressi
     val oldDataset = dataset.map { case LabeledPoint(label: Double, features: Vector, weight) =>
       org.apache.spark.mllib.regression.LabeledPoint(label, features)
     }
-    val handlePersistence = oldDataset.getStorageLevel == StorageLevel.NONE
+    // If dataset is persisted, do not persist oldDataset.
+    val handlePersistence = dataset.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) {
       oldDataset.persist(StorageLevel.MEMORY_AND_DISK)
     }
@@ -84,6 +86,7 @@ class LogisticRegression extends Classifier[LogisticRegression, LogisticRegressi
     if (handlePersistence) {
       oldDataset.unpersist()
     }
+    lrm.setThreshold(paramMap(threshold))
     lrm
   }
 }
@@ -103,8 +106,14 @@ class LogisticRegressionModel private[ml] (
   with ProbabilisticClassificationModel
   with LogisticRegressionParams {
 
-  def setThreshold(value: Double): this.type = set(threshold, value)
+  def setThreshold(value: Double): this.type = {
+    this.threshold_internal = value
+    set(threshold, value)
+  }
   def setScoreCol(value: String): this.type = set(scoreCol, value)
+
+  /** Store for faster test-time prediction. */
+  private var threshold_internal: Double = this.getThreshold
 
   private val margin: Vector => Double = (features) => {
     BLAS.dot(features, weights) + intercept
@@ -121,11 +130,8 @@ class LogisticRegressionModel private[ml] (
     val scoreFunction = udf { v: Vector =>
       val margin = BLAS.dot(v, weights)
       1.0 / (1.0 + math.exp(-margin))
-    }
-    val t = map(threshold)
-    val predictFunction = udf { score: Double =>
-      if (score > t) 1.0 else 0.0
-    }
+    val t = threshold_internal
+    val predictFunction: Double => Double = (score) => { if (score > t) 1.0 else 0.0 }
     dataset
       .select($"*", scoreFunction(col(map(featuresCol))).as(map(scoreCol)))
       .select($"*", predictFunction(col(map(scoreCol))).as(map(predictionCol)))
@@ -138,7 +144,7 @@ class LogisticRegressionModel private[ml] (
    * The behavior of this can be adjusted using [[threshold]].
    */
   override def predict(features: Vector): Double = {
-    if (score(features) > paramMap(threshold)) 1 else 0
+    if (score(features) > threshold_internal) 1 else 0
   }
 
   override def predictProbabilities(features: Vector): Vector = {
