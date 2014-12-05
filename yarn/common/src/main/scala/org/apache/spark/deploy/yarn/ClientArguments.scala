@@ -39,14 +39,6 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var appName: String = "Spark"
   var priority = 0
 
-  // Additional memory to allocate to containers
-  // For now, use driver's memory overhead as our AM container's memory overhead
-  val amMemoryOverhead = sparkConf.getInt("spark.yarn.driver.memoryOverhead",
-    math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
-
-  val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
-    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
-
   private val isDynamicAllocationEnabled =
     sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
 
@@ -54,8 +46,25 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   loadEnvironmentArgs()
   validateArgs()
 
+  // Additional memory to allocate to containers
+  // For now, use driver's memory overhead as our AM container's memory overhead
+  val memOverheadStr = if (userClass == null) {
+    "spark.yarn.driver.memoryOverhead"
+  } else {
+    "spark.yarn.am.memoryOverhead"
+  }
+  val amMemoryOverhead = sparkConf.getInt(memOverheadStr,
+    math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
+
+  val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
+    math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
+
   /** Load any default arguments provided through environment variables and Spark properties. */
   private def loadEnvironmentArgs(): Unit = {
+    // We use spark.yarn.am.memory to initialize Application Master in yarn-client mode.
+    if (userClass == null) {
+      amMemory = Utils.memoryStringToMb(sparkConf.get("spark.yarn.am.memory", "512m"))
+    }
     // For backward compatibility, SPARK_YARN_DIST_{ARCHIVES/FILES} should be resolved to hdfs://,
     // while spark.yarn.dist.{archives/files} should be resolved to file:// (SPARK-2051).
     files = Option(files)

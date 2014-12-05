@@ -318,12 +318,7 @@ private[spark] trait ClientBase extends Logging {
     var prefixEnv: Option[String] = None
 
     // Add Xmx for AM memory
-    val amMemory = if (isLaunchingDriver) {
-      args.amMemory
-    } else {
-      Utils.memoryStringToMb(sparkConf.get("spark.yarn.appMaster.memory", "512m"))
-    }
-    javaOpts += "-Xmx" + amMemory + "m"
+    javaOpts += "-Xmx" + args.amMemory + "m"
 
     val tmpDir = new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
     javaOpts += "-Djava.io.tmpdir=" + tmpDir
