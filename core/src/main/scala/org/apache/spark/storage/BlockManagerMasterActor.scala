@@ -352,21 +352,20 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       diskSize: Long,
       tachyonSize: Long): Boolean = {
 
-    var updated = true
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.isDriver && !isLocal) {
         // We intentionally do not register the master (except in local mode),
         // so we should not indicate failure.
-        // do nothing here, "updated == true".
+        return true
       } else {
-        updated = false
+        return false
       }
-      return updated
+      return true
     }
 
     if (blockId == null) {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
-      return updated
+      return true
     }
 
     blockManagerInfo(blockManagerId).updateBlockInfo(
@@ -390,7 +389,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     if (locations.size == 0) {
       blockLocations.remove(blockId)
     }
-    updated
+    true
   }
 
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
