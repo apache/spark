@@ -74,7 +74,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     case UpdateBlockInfo(
       blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize) =>
       sender ! updateBlockInfo(
-          blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize)
+        blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize)
 
     case GetLocations(blockId) =>
       sender ! getLocations(blockId)
