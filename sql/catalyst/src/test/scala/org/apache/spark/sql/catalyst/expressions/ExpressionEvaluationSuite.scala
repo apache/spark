@@ -197,6 +197,24 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(InSet(one, hS) && InSet(two, hS), true)
   }
 
+  test("INTUPLESET") {
+    val hS = HashSet[Any]() + Seq(1,2) + Seq(3,4)
+    val nS = HashSet[Any]() + Seq(1,2) + Seq(3,null)
+    val one = Seq(Literal(1),Literal(2))
+    val two = Seq(Literal(3),Literal(4))
+    val three = Seq(Literal(4), Literal(3))
+    val nl = Seq(Literal(3),Literal(null))
+    val s = Seq(one, two)
+    val nullS = Seq(one, two, null)
+    checkEvaluation(InTupleSet(one, hS), true)
+    checkEvaluation(InTupleSet(two, hS), true)
+    checkEvaluation(InTupleSet(one, nS), true)
+    checkEvaluation(InTupleSet(nl, nS), true)
+    checkEvaluation(InTupleSet(three, hS), false)
+    checkEvaluation(InTupleSet(three, nS), false)
+    checkEvaluation(InTupleSet(one, hS) && InTupleSet(two, hS), true)
+  }
+
   test("MaxOf") {
     checkEvaluation(MaxOf(1, 2), 2)
     checkEvaluation(MaxOf(2, 1), 2)

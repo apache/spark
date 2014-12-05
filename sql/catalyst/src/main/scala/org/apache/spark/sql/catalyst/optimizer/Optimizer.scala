@@ -290,6 +290,9 @@ object OptimizeIn extends Rule[LogicalPlan] {
       case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) =>
           val hSet = list.map(e => e.eval(null))
           InSet(v, HashSet() ++ hSet)
+      case InTuple(v, list) if !list.flatten.exists(!_.isInstanceOf[Literal]) =>
+          val hSet = list.map(e => e.map(k => k.eval(null)))
+          InTupleSet(v, HashSet() ++ hSet)
     }
   }
 }

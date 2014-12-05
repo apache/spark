@@ -1002,6 +1002,14 @@ private[hive] object HiveQl {
       IsNotNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) =>
       IsNull(nodeToExpr(child))
+    case Token("TOK_FUNCTION", Token(IN(), Nil) :: Token("TOK_TABLE_OR_COLLIST", value) :: list) =>
+      val values = value.map { 
+         case Token(name, Nil) => UnresolvedAttribute(cleanIdentifier(name)) 
+      }
+      val lists = list.map { 
+        case Token("TOK_EXPLIST", sublist) => sublist.map(nodeToExpr)
+      }
+      InTuple(values, lists)
     case Token("TOK_FUNCTION", Token(IN(), Nil) :: value :: list) =>
       In(nodeToExpr(value), list.map(nodeToExpr))
     case Token("TOK_FUNCTION",

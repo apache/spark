@@ -112,6 +112,41 @@ case class InSet(value: Expression, hset: Set[Any])
   }
 }
 
+/**
+ * A tuple version of In class, where value consists of values from multiple columns.
+ */
+case class InTuple(values: Seq[Expression], lists: Seq[Seq[Expression]]) 
+  extends Predicate {
+  
+  def children = (values +: lists).flatten
+
+  def nullable = true // TODO: Figure out correct nullability semantics of IN.
+  override def toString = s"$values INTUPLE ${lists.mkString("(", ",", ")")}"
+
+  override def eval(input: Row): Any = {
+    val evaluatedValue = values.map(k => k.eval(input)).toSet
+    lists.exists(list => list.map(k => k.eval(input)).toSet == (evaluatedValue))
+  }
+}
+
+/**
+ * Optimized version of InTuple clause, when all filter values of the clause are
+ * static.
+ */
+case class InTupleSet(values: Seq[Expression], hSet: HashSet[Any]) 
+  extends Predicate {
+
+  def children = values
+
+  def nullable = true // TODO: Figure out correct nullability semantics of IN.
+  override def toString = s"$values INTUPLESET ${hSet.mkString("(", ",", ")")}"
+
+  override def eval(input: Row): Any = {
+    val evaluatedValue = values.map(k => k.eval(input))
+    hSet.contains(evaluatedValue)
+  }
+}
+
 case class And(left: Expression, right: Expression) extends BinaryPredicate {
   def symbol = "&&"
 

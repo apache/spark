@@ -72,4 +72,39 @@ class OptimizeInSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
+
+  test("OptimizedIn test: InTuple clause optimized to InTupleSet") {
+    val originalQuery =
+      testRelation
+        .where(InTuple(Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b")), 
+          Seq(Seq(Literal(1),Literal(2)), Seq(Literal(3),Literal(4)))))
+        .analyze
+
+    val optimized = Optimize(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where(InTupleSet(Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b")),
+          HashSet[Any]()+Seq(1,2)+Seq(3,4)))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+  
+  test("OptimizedIn test: InTuple clause not optimized in case filter has attributes") {
+    val originalQuery =
+      testRelation
+        .where(InTuple(Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b")), 
+          Seq(Seq(Literal(1),Literal(2)), Seq(UnresolvedAttribute("c"), Literal(3)))))
+        .analyze
+
+    val optimized = Optimize(originalQuery.analyze)
+    val correctAnswer =
+      testRelation
+        .where(InTuple(Seq(UnresolvedAttribute("a"), UnresolvedAttribute("b")), 
+          Seq(Seq(Literal(1),Literal(2)), Seq(UnresolvedAttribute("c"), Literal(3)))))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
 }
