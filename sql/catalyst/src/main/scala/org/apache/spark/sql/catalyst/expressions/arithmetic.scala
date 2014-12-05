@@ -38,11 +38,20 @@ case class Sqrt(child: Expression) extends UnaryExpression {
 
   def dataType = DoubleType
   override def foldable = child.foldable
-  def nullable = child.nullable
+  def nullable = true
   override def toString = s"SQRT($child)"
 
-  override def eval(input: Row): Any = {
-    n1(child, input, (na,a) => math.sqrt(na.toDouble(a)))
+  override def eval(input: Row): Any = child.dataType match {
+    case n: NumericType =>
+      val evalE = child.eval(input)
+      if (evalE == null) {
+        null
+      } else {
+        val value = n.numeric.toDouble(evalE.asInstanceOf[n.JvmType])
+        if (value < 0) null
+        else math.sqrt(value)
+      }
+    case other => sys.error(s"Type $other does not support non-negative numeric operations")
   }
 }
 
