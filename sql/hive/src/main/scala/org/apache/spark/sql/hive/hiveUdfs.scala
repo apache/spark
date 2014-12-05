@@ -279,7 +279,7 @@ private[hive] case class HiveGenericUdtf(
   }
 
   override protected def makeOutput() = {
-    // Use column names when given, otherwise c_1, c_2, ... c_n.
+    // Use column names when given, otherwise _c1, _c2, ... _cn.
     if (aliasNames.size == outputDataTypes.size) {
       aliasNames.zip(outputDataTypes).map {
         case (attrName, attrDataType) =>
@@ -288,7 +288,7 @@ private[hive] case class HiveGenericUdtf(
     } else {
       outputDataTypes.zipWithIndex.map {
         case (attrDataType, i) =>
-          AttributeReference(s"c_$i", attrDataType, nullable = true)()
+          AttributeReference(s"_c$i", attrDataType, nullable = true)()
       }
     }
   }

@@ -379,7 +379,7 @@ private[hive] object HiveQl {
   protected def nameExpressions(exprs: Seq[Expression]): Seq[NamedExpression] = {
     exprs.zipWithIndex.map {
       case (ne: NamedExpression, _) => ne
-      case (e, i) => Alias(e, s"c_$i")()
+      case (e, i) => Alias(e, s"_c$i")()
     }
   }
 

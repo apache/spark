@@ -47,6 +47,12 @@ object MimaExcludes {
               "org.apache.spark.SparkStageInfoImpl.this"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.SparkStageInfo.submissionTime")
+          ) ++ Seq(
+            // SPARK-4614
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrices.randn"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrices.rand")
           )
 
         case v if v.startsWith("1.2") =>
