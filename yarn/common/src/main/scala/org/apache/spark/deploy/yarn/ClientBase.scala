@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.yarn
 
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
-import java.io.{File, FilenameFilter}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, ListBuffer, Map}
@@ -224,46 +223,8 @@ private[spark] trait ClientBase extends Logging {
         }
       }
     }
-
     if (cachedSecondaryJarLinks.nonEmpty) {
       sparkConf.set(CONF_SPARK_YARN_SECONDARY_JARS, cachedSecondaryJarLinks.mkString(","))
-    }
-
-    /**
-     * Do the same for datanucleus jars, if they exist in spark home. Find all datanucleus-* jars,
-     * copy them to the remote fs, and add them to the class path.
-     *
-     * This is necessary because the datanucleus jars cannot be included in the assembly jar due
-     * to metadata conflicts involving plugin.xml. At the time of writing, these are the only
-     * jars that cannot be distributed with the uber jar and have to be treated differently.
-     *
-     * For more details, see SPARK-2624, and https://github.com/apache/spark/pull/3238
-     */
-    for (libsDir <- dataNucleusJarsDir(sparkConf)) {
-      val libsURI = new URI(libsDir)
-      val jarLinks = ListBuffer.empty[String]
-      if (libsURI.getScheme != LOCAL_SCHEME) {
-        val localURI = getQualifiedLocalPath(libsURI).toUri()
-        val jars = FileSystem.get(localURI, hadoopConf).listFiles(new Path(localURI.getPath), false)
-        while (jars.hasNext) {
-          val jar = jars.next()
-          val name = jar.getPath.getName
-          if (name.startsWith("datanucleus-")) {
-            // copy to remote and add to classpath
-            val src = jar.getPath
-            val destPath = copyFileToRemote(dst, src, replication)
-            distCacheMgr.addResource(fs, hadoopConf, destPath,
-              localResources, LocalResourceType.FILE, name, statCache)
-            jarLinks += name
-          }
-        }
-      } else {
-        jarLinks += libsURI.toString + Path.SEPARATOR + "*"
-      }
-
-      if (jarLinks.nonEmpty) {
-        sparkConf.set(CONF_SPARK_DATANUCLEUS_JARS, jarLinks.mkString(","))
-      }
     }
 
     localResources
@@ -590,13 +551,6 @@ private[spark] object ClientBase extends Logging {
   // Internal config to propagate the location of the user's jar to the driver/executors
   val CONF_SPARK_USER_JAR = "spark.yarn.user.jar"
 
-  // Location of the datanucleus jars
-  val CONF_SPARK_DATANUCLEUS_DIR = "spark.yarn.datanucleus.dir"
-
-  // Internal config to propagate the locations of datanucleus jars found to add to the
-  // classpath of the executors. Value should be a comma-separated list of paths to each jar.
-  val CONF_SPARK_DATANUCLEUS_JARS = "spark.yarn.datanucleus.jars"
-
   // Internal config to propagate the locations of any extra jars to add to the classpath
   // of the executors
   val CONF_SPARK_YARN_SECONDARY_JARS = "spark.yarn.secondary.jars"
@@ -626,19 +580,6 @@ private[spark] object ClientBase extends Logging {
       System.getenv(ENV_SPARK_JAR)
     } else {
       SparkContext.jarOfClass(this.getClass).head
-    }
-  }
-
-  /**
-   * Find the user-defined provided jars directory if configured, or return SPARK_HOME/lib if not.
-   *
-   * This method first looks for $CONF_SPARK_DATANUCLEUS_DIR inside the SparkConf, then looks for
-   * Spark home inside the the SparkConf and the user environment.
-   */
-  private def dataNucleusJarsDir(conf: SparkConf): Option[String] = {
-    conf.getOption(CONF_SPARK_DATANUCLEUS_DIR).orElse {
-      val sparkHome = conf.getOption("spark.home").orElse(sys.env.get("SPARK_HOME"))
-      sparkHome.map(path => path + Path.SEPARATOR + "lib")
     }
   }
 
@@ -741,13 +682,6 @@ private[spark] object ClientBase extends Logging {
       addFileToClasspath(sparkJar(sparkConf), SPARK_JAR, env)
       populateHadoopClasspath(conf, env)
       addUserClasspath(args, sparkConf, env)
-    }
-
-    // Add datanucleus jars to classpath
-    for (entries <- sparkConf.getOption(CONF_SPARK_DATANUCLEUS_JARS)) {
-      entries.split(",").filter(_.nonEmpty).foreach { entry =>
-        addFileToClasspath(entry, null, env)
-      }
     }
 
     // Append all jar files under the working directory to the classpath.
