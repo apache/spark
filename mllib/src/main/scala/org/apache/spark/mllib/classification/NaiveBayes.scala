@@ -65,6 +65,24 @@ class NaiveBayesModel private[mllib] (
   override def predict(testData: Vector): Double = {
     labels(brzArgmax(brzPi + brzTheta * testData.toBreeze))
   }
+
+  def classProbabilities(testData: RDD[Vector]):
+   RDD[scala.collection.mutable.Map[Double, Double]] = {
+    val bcModel = testData.context.broadcast(this)
+    testData.mapPartitions { iter =>
+      val model = bcModel.value
+      iter.map(model.classProbabilities)
+    }
+  }
+
+  def classProbabilities(testData: Vector): scala.collection.mutable.Map[Double, Double] = {
+    val posteriors = (brzPi + brzTheta * testData.toBreeze) 
+    val probs:scala.collection.mutable.Map[Double,Double] = 
+      scala.collection.mutable.Map.empty[Double, Double]
+    posteriors.foreachPair((k,v) => probs += (labels(k) -> v))
+    probs
+  }
+
 }
 
 /**
