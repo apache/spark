@@ -193,7 +193,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |  driverExtraClassPath    $driverExtraClassPath
     |  driverExtraLibraryPath  $driverExtraLibraryPath
     |  driverExtraJavaOptions  $driverExtraJavaOptions
-    |  amMemory                $amMemory
     |  supervise               $supervise
     |  queue                   $queue
     |  numExecutors            $numExecutors
