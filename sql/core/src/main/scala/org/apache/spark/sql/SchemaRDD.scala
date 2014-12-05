@@ -225,6 +225,8 @@ class SchemaRDD(
    * {{{
    *   schemaRDD.limit(10)
    * }}}
+   * 
+   * @group Query
    */
   def limit(limitNum: Int): SchemaRDD =
     new SchemaRDD(sqlContext, Limit(Literal(limitNum), logicalPlan))
@@ -355,6 +357,8 @@ class SchemaRDD(
    * Return the number of elements in the RDD. Unlike the base RDD implementation of count, this
    * implementation leverages the query optimizer to compute the count on the SchemaRDD, which
    * supports features such as filter pushdown.
+   * 
+   * @group Query
    */
   @Experimental
   override def count(): Long = aggregate(Count(Literal(1))).collect().head.getLong(0)

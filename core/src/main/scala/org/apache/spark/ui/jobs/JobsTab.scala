@@ -15,18 +15,18 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rdd
+package org.apache.spark.ui.jobs
 
-import scala.reflect.ClassTag
+import org.apache.spark.scheduler.SchedulingMode
+import org.apache.spark.ui.{SparkUI, SparkUITab}
 
-import org.apache.spark.{Partition, TaskContext}
+/** Web UI showing progress status of all jobs in the given SparkContext. */
+private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
+  val sc = parent.sc
+  val killEnabled = parent.killEnabled
+  def isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
+  val listener = parent.jobProgressListener
 
-private[spark]
-class MappedRDD[U: ClassTag, T: ClassTag](prev: RDD[T], f: T => U)
-  extends RDD[U](prev) {
-
-  override def getPartitions: Array[Partition] = firstParent[T].partitions
-
-  override def compute(split: Partition, context: TaskContext) =
-    firstParent[T].iterator(split, context).map(f)
+  attachPage(new AllJobsPage(this))
+  attachPage(new JobPage(this))
 }

@@ -39,8 +39,8 @@ import scala.collection.JavaConversions._
 
 /**
  * Allows creation of parquet based tables using the syntax
- * `CREATE TABLE ... USING org.apache.spark.sql.parquet`.  Currently the only option required
- * is `path`, which should be the location of a collection of, optionally partitioned,
+ * `CREATE TEMPORARY TABLE ... USING org.apache.spark.sql.parquet`.  Currently the only option 
+ * required is `path`, which should be the location of a collection of, optionally partitioned,
  * parquet files.
  */
 class DefaultSource extends RelationProvider {
@@ -49,7 +49,7 @@ class DefaultSource extends RelationProvider {
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     val path =
-      parameters.getOrElse("path", sys.error("'path' must be specifed for parquet tables."))
+      parameters.getOrElse("path", sys.error("'path' must be specified for parquet tables."))
 
     ParquetRelation2(path)(sqlContext)
   }
@@ -191,7 +191,10 @@ case class ParquetRelation2(path: String)(@transient val sqlContext: SQLContext)
     val selectedPartitions = partitions.filter(p => partitionFilters.forall(_(p)))
     val fs = FileSystem.get(new java.net.URI(path), sparkContext.hadoopConfiguration)
     val selectedFiles = selectedPartitions.flatMap(_.files).map(f => fs.makeQualified(f.getPath))
-    org.apache.hadoop.mapreduce.lib.input.FileInputFormat.setInputPaths(job, selectedFiles:_*)
+    // FileInputFormat cannot handle empty lists.
+    if (selectedFiles.nonEmpty) {
+      org.apache.hadoop.mapreduce.lib.input.FileInputFormat.setInputPaths(job, selectedFiles: _*)
+    }
 
     // Push down filters when possible
     predicates

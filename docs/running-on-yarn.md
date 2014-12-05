@@ -30,7 +30,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 </tr>
 <tr>
   <td><code>spark.yarn.submit.file.replication</code></td>
-  <td>3</td>
+  <td>The default HDFS replication (usually 3)</td>
   <td>
     HDFS replication level for the files uploaded into HDFS for the application. These include things like the Spark jar, the app jar, and any distributed cache files/archives.
   </td>
@@ -92,6 +92,13 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.queue</code></td>
+  <td>default</td>
+  <td>
+    The name of the YARN queue to which the application is submitted.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.jar</code></td>
   <td>(none)</td>
   <td>
@@ -130,6 +137,21 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>25</td>
   <td>
     The maximum number of threads to use in the application master for launching executor containers.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.datanucleus.dir</code></td>
+  <td>$SPARK_HOME/lib</td>
+  <td>
+     The location of the DataNucleus jars, in case overriding the default location is desired.
+     By default, Spark on YARN will use the DataNucleus jars installed at
+     <code>$SPARK_HOME/lib</code>, but the jars can also be in a world-readable location on HDFS.
+     This allows YARN to cache it on nodes so that it doesn't need to be distributed each time an
+     application runs. To point to a directory on HDFS, for example, set this configuration to
+     "hdfs:///some/path".
+
+     This is required because the datanucleus jars cannot be packaged into the
+     assembly jar due to metadata conflicts (involving <code>plugin.xml</code>.)
   </td>
 </tr>
 <tr>

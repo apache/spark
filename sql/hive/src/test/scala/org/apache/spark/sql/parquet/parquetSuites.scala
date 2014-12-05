@@ -218,6 +218,12 @@ abstract class ParquetTest extends QueryTest with BeforeAndAfterAll {
         10)
     }
 
+    test(s"non-existant partition $table") {
+      checkAnswer(
+        sql(s"SELECT COUNT(*) FROM $table WHERE p = 1000"),
+        0)
+    }
+
     test(s"multi-partition pruned count $table") {
       checkAnswer(
         sql(s"SELECT COUNT(*) FROM $table WHERE p IN (1,2,3)"),

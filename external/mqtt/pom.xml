@@ -43,8 +43,8 @@
     </dependency>
     <dependency>
       <groupId>org.eclipse.paho</groupId>
-      <artifactId>mqtt-client</artifactId>
-       <version>0.4.0</version>
+      <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
+      <version>1.0.1</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>

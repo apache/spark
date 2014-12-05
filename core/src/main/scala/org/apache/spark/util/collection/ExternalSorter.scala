@@ -205,6 +205,13 @@ private[spark] class ExternalSorter[K, V, C](
         map.changeValue((getPartition(kv._1), kv._1), update)
         maybeSpillCollection(usingMap = true)
       }
+    } else if (bypassMergeSort) {
+      // SPARK-4479: Also bypass buffering if merge sort is bypassed to avoid defensive copies
+      if (records.hasNext) {
+        spillToPartitionFiles(records.map { kv =>
+          ((getPartition(kv._1), kv._1), kv._2.asInstanceOf[C])
+        })
+      }
     } else {
       // Stick values into our buffer
       while (records.hasNext) {
@@ -336,6 +343,10 @@ private[spark] class ExternalSorter[K, V, C](
    * @param collection whichever collection we're using (map or buffer)
    */
   private def spillToPartitionFiles(collection: SizeTrackingPairCollection[(Int, K), C]): Unit = {
+    spillToPartitionFiles(collection.iterator)
+  }
+
+  private def spillToPartitionFiles(iterator: Iterator[((Int, K), C)]): Unit = {
     assert(bypassMergeSort)
 
     // Create our file writers if we haven't done so yet
@@ -350,9 +361,9 @@ private[spark] class ExternalSorter[K, V, C](
       }
     }
 
-    val it = collection.iterator  // No need to sort stuff, just write each element out
-    while (it.hasNext) {
-      val elem = it.next()
+    // No need to sort stuff, just write each element out
+    while (iterator.hasNext) {
+      val elem = iterator.next()
       val partitionId = elem._1._1
       val key = elem._1._2
       val value = elem._2
@@ -748,6 +759,12 @@ private[spark] class ExternalSorter[K, V, C](
 
     context.taskMetrics.memoryBytesSpilled += memoryBytesSpilled
     context.taskMetrics.diskBytesSpilled += diskBytesSpilled
+    context.taskMetrics.shuffleWriteMetrics.filter(_ => bypassMergeSort).foreach { m =>
+      if (curWriteMetrics != null) {
+        m.shuffleBytesWritten += curWriteMetrics.shuffleBytesWritten
+        m.shuffleWriteTime += curWriteMetrics.shuffleWriteTime
+      }
+    }
 
     lengths
   }

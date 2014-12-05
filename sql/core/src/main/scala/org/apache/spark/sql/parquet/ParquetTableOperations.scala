@@ -302,11 +302,14 @@ case class InsertIntoParquetTable(
       val committer = format.getOutputCommitter(hadoopContext)
       committer.setupTask(hadoopContext)
       val writer = format.getRecordWriter(hadoopContext)
-      while (iter.hasNext) {
-        val row = iter.next()
-        writer.write(null, row)
+      try {
+        while (iter.hasNext) {
+          val row = iter.next()
+          writer.write(null, row)
+        }
+      } finally {
+        writer.close(hadoopContext)
       }
-      writer.close(hadoopContext)
       committer.commitTask(hadoopContext)
       1
     }

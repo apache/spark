@@ -103,7 +103,7 @@ object GradientBoostedTreesRunner {
       params.dataFormat, params.testInput, Algo.withName(params.algo), params.fracTest)
 
     val boostingStrategy = BoostingStrategy.defaultParams(params.algo)
-    boostingStrategy.treeStrategy.numClassesForClassification = numClasses
+    boostingStrategy.treeStrategy.numClasses = numClasses
     boostingStrategy.numIterations = params.numIterations
     boostingStrategy.treeStrategy.maxDepth = params.maxDepth
 

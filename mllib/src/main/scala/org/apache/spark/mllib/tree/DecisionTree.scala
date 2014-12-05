@@ -136,7 +136,7 @@ object DecisionTree extends Serializable with Logging {
    * @param impurity impurity criterion used for information gain calculation
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   * @param numClassesForClassification number of classes for classification. Default value of 2.
+   * @param numClasses number of classes for classification. Default value of 2.
    * @return DecisionTreeModel that can be used for prediction
    */
   def train(
@@ -144,8 +144,8 @@ object DecisionTree extends Serializable with Logging {
       algo: Algo,
       impurity: Impurity,
       maxDepth: Int,
-      numClassesForClassification: Int): DecisionTreeModel = {
-    val strategy = new Strategy(algo, impurity, maxDepth, numClassesForClassification)
+      numClasses: Int): DecisionTreeModel = {
+    val strategy = new Strategy(algo, impurity, maxDepth, numClasses)
     new DecisionTree(strategy).run(input)
   }
 
@@ -164,7 +164,7 @@ object DecisionTree extends Serializable with Logging {
    * @param impurity criterion used for information gain calculation
    * @param maxDepth Maximum depth of the tree.
    *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
-   * @param numClassesForClassification number of classes for classification. Default value of 2.
+   * @param numClasses number of classes for classification. Default value of 2.
    * @param maxBins maximum number of bins used for splitting features
    * @param quantileCalculationStrategy  algorithm for calculating quantiles
    * @param categoricalFeaturesInfo Map storing arity of categorical features.
@@ -177,11 +177,11 @@ object DecisionTree extends Serializable with Logging {
       algo: Algo,
       impurity: Impurity,
       maxDepth: Int,
-      numClassesForClassification: Int,
+      numClasses: Int,
       maxBins: Int,
       quantileCalculationStrategy: QuantileStrategy,
       categoricalFeaturesInfo: Map[Int,Int]): DecisionTreeModel = {
-    val strategy = new Strategy(algo, impurity, maxDepth, numClassesForClassification, maxBins,
+    val strategy = new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo)
     new DecisionTree(strategy).run(input)
   }
@@ -191,7 +191,7 @@ object DecisionTree extends Serializable with Logging {
    *
    * @param input Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
    *              Labels should take values {0, 1, ..., numClasses-1}.
-   * @param numClassesForClassification number of classes for classification.
+   * @param numClasses number of classes for classification.
    * @param categoricalFeaturesInfo Map storing arity of categorical features.
    *                                E.g., an entry (n -> k) indicates that feature n is categorical
    *                                with k categories indexed from 0: {0, 1, ..., k-1}.
@@ -206,13 +206,13 @@ object DecisionTree extends Serializable with Logging {
    */
   def trainClassifier(
       input: RDD[LabeledPoint],
-      numClassesForClassification: Int,
+      numClasses: Int,
       categoricalFeaturesInfo: Map[Int, Int],
       impurity: String,
       maxDepth: Int,
       maxBins: Int): DecisionTreeModel = {
     val impurityType = Impurities.fromString(impurity)
-    train(input, Classification, impurityType, maxDepth, numClassesForClassification, maxBins, Sort,
+    train(input, Classification, impurityType, maxDepth, numClasses, maxBins, Sort,
       categoricalFeaturesInfo)
   }
 
@@ -221,12 +221,12 @@ object DecisionTree extends Serializable with Logging {
    */
   def trainClassifier(
       input: JavaRDD[LabeledPoint],
-      numClassesForClassification: Int,
+      numClasses: Int,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer],
       impurity: String,
       maxDepth: Int,
       maxBins: Int): DecisionTreeModel = {
-    trainClassifier(input.rdd, numClassesForClassification,
+    trainClassifier(input.rdd, numClasses,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap,
       impurity, maxDepth, maxBins)
   }

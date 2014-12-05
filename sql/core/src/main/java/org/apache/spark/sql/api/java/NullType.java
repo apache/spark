@@ -15,21 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rdd
+package org.apache.spark.sql.api.java;
 
-import org.apache.spark.{Partition, TaskContext}
-
-private[spark]
-class FlatMappedValuesRDD[K, V, U](prev: RDD[_ <: Product2[K, V]], f: V => TraversableOnce[U])
-  extends RDD[(K, U)](prev) {
-
-  override def getPartitions = firstParent[Product2[K, V]].partitions
-
-  override val partitioner = firstParent[Product2[K, V]].partitioner
-
-  override def compute(split: Partition, context: TaskContext) = {
-    firstParent[Product2[K, V]].iterator(split, context).flatMap { case Product2(k, v) =>
-      f(v).map(x => (k, x))
-    }
-  }
+/**
+ * The data type representing null and NULL values.
+ *
+ * {@code NullType} is represented by the singleton object {@link DataType#NullType}.
+ */
+public class NullType extends DataType {
+  protected NullType() {}
 }
