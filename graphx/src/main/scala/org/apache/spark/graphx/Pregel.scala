@@ -90,6 +90,9 @@ object Pregel extends Logging {
    * in the previous round. If this is `EdgeDirection.Both`, `sendMsg` will only run on edges where
    * *both* vertices received a message.
    *
+   * @param checkpointFrequency how frequently to checkpoint the graph, if the checkpoint directory
+   * is set. This reduces task launch overhead by preventing the lineage from growing too long.
+   *
    * @param vprog the user-defined vertex program which runs on each
    * vertex and receives the inbound message and computes a new vertex
    * value.  On the first iteration the vertex program is invoked on
@@ -113,7 +116,8 @@ object Pregel extends Logging {
      (graph: Graph[VD, ED],
       initialMsg: A,
       maxIterations: Int = Int.MaxValue,
-      activeDirection: EdgeDirection = EdgeDirection.Either)
+      activeDirection: EdgeDirection = EdgeDirection.Either,
+      checkpointFrequency: Int = 25)
      (vprog: (VertexId, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       mergeMsg: (A, A) => A)
@@ -126,6 +130,9 @@ object Pregel extends Logging {
     // Loop
     var prevG: Graph[VD, ED] = null
     var i = 0
+
+    val checkpoint = g.vertices.context.getCheckpointDir.nonEmpty
+
     while (activeMessages > 0 && i < maxIterations) {
       // Receive the messages. Vertices that didn't get any messages do not appear in newVerts.
       val newVerts = g.vertices.innerJoin(messages)(vprog).cache()
@@ -139,6 +146,14 @@ object Pregel extends Logging {
       // get to send messages. We must cache messages so it can be materialized on the next line,
       // allowing us to uncache the previous iteration.
       messages = g.mapReduceTriplets(sendMsg, mergeMsg, Some((newVerts, activeDirection))).cache()
+
+      if (checkpoint && i % checkpointFrequency == checkpointFrequency - 1) {
+        logInfo("Checkpointing in iteration " + i)
+        g.vertices.checkpoint()
+        g.edges.checkpoint()
+        messages.checkpoint()
+      }
+
       // The call to count() materializes `messages`, `newVerts`, and the vertices of `g`. This
       // hides oldMessages (depended on by newVerts), newVerts (depended on by messages), and the
       // vertices of prevG (depended on by newVerts, oldMessages, and the vertices of g).
