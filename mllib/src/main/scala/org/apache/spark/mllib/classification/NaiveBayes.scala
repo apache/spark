@@ -68,7 +68,7 @@ class NaiveBayesModel private[mllib] (
   }
 
   def classProbabilities(testData: RDD[Vector]):
-   RDD[mutable.Map[Double, Double]] = {
+   RDD[scala.collection.Map[Double, Double]] = {
     val bcModel = testData.context.broadcast(this)
     testData.mapPartitions { iter =>
       val model = bcModel.value
@@ -76,11 +76,12 @@ class NaiveBayesModel private[mllib] (
     }
   }
 
-  def classProbabilities(testData: Vector): mutable.Map[Double, Double] = {
+  def classProbabilities(testData: Vector): scala.collection.Map[Double, Double] = {
     val posteriors = (brzPi + brzTheta * testData.toBreeze) 
+    val sum = posteriors.sum
     val probs:mutable.Map[Double,Double] = 
       mutable.Map.empty[Double, Double]
-    posteriors.foreachPair((k,v) => probs += (labels(k) -> v))
+    posteriors.foreachPair((k,v) => probs += (labels(k) -> v/sum))
     probs
   }
 
