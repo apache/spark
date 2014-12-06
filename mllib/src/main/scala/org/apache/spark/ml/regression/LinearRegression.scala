@@ -47,12 +47,12 @@ class LinearRegression extends Regressor[LinearRegression, LinearRegressionModel
 
   /**
    * Same as [[fit()]], but using strong types.
-   *
-   * @param dataset  Training data.  WARNING: This does not yet handle instance weights.
+   * NOTE: This does NOT support instance weights.
+   * @param dataset  Training data.  Instance weights are ignored.
    * @param paramMap  Parameters for training.
    *                  These values override any specified in this Estimator's embedded ParamMap.
    */
-  def train(dataset: RDD[LabeledPoint], paramMap: ParamMap): LinearRegressionModel = {
+  override def train(dataset: RDD[LabeledPoint], paramMap: ParamMap): LinearRegressionModel = {
     val oldDataset = dataset.map { case LabeledPoint(label: Double, features: Vector, weight) =>
       org.apache.spark.mllib.regression.LabeledPoint(label, features)
     }
@@ -71,6 +71,13 @@ class LinearRegression extends Regressor[LinearRegression, LinearRegressionModel
     }
     lrm
   }
+
+  /**
+   * Same as [[fit()]], but using strong types.
+   * NOTE: This does NOT support instance weights.
+   * @param dataset  Training data.  Instance weights are ignored.
+   */
+  def train(dataset: RDD[LabeledPoint]): LinearRegressionModel = train(dataset, new ParamMap())
 }
 
 /**
