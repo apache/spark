@@ -34,6 +34,9 @@ import org.apache.spark.mllib.linalg.Vector
 @BeanInfo
 case class LabeledPoint(label: Double, features: Vector, weight: Double) {
 
+  /** Constructor which sets instance weight to 1.0 */
+  def this(label: Double, features: Vector) = this(label, features, 1.0)
+
   override def toString: String = {
     "(%s,%s,%s)".format(label, features, weight)
   }

@@ -19,11 +19,13 @@ package org.apache.spark.ml
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{SQLContext, SchemaRDD}
+import org.apache.spark.sql.SQLContext
 
+/**
+ * Test [[LabeledPoint]]
+ */
 class LabeledPointSuite extends FunSuite with MLlibTestSparkContext {
 
   @transient var sqlContext: SQLContext = _
