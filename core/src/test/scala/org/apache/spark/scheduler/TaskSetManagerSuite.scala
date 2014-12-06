@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
 import java.util.Random
 
 import scala.collection.mutable.ArrayBuffer
@@ -561,6 +562,19 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.resourceOffer("exec1", "host1", ANY).get.index === 0)
 
     assert(manager.emittedTaskSizeWarning)
+  }
+
+  test("Not serializable exception thrown if the task cannot be serialized") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+
+    val taskSet = new TaskSet(Array(new NotSerializableFakeTask(1, 0), new NotSerializableFakeTask(0, 1)), 0, 0, 0, null)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+
+    intercept[TaskNotSerializableException] {
+      manager.resourceOffer("exec1", "host1", ANY)
+    }
+    assert(manager.isZombie)
   }
 
   test("abort the job if total size of results is too large") {

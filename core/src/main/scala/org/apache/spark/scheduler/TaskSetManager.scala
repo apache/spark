@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
+import java.nio.ByteBuffer
 import java.util.Arrays
 
 import scala.collection.mutable.ArrayBuffer
@@ -417,6 +418,7 @@ private[spark] class TaskSetManager(
    * @param host  the host Id of the offered resource
    * @param maxLocality the maximum locality we want to schedule the tasks at
    */
+  @throws[TaskNotSerializableException]
   def resourceOffer(
       execId: String,
       host: String,
@@ -456,12 +458,23 @@ private[spark] class TaskSetManager(
           }
           // Serialize and return the task
           val startTime = clock.getTime()
-          // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
-          // we assume the task can be serialized without exceptions.
-          val serializedTask = Task.serializeWithDependencies(
-            task, sched.sc.addedFiles, sched.sc.addedJars, ser)
+          var serializedTaskOpt : Option[ByteBuffer] = None
+          try {
+            serializedTaskOpt = Some(Task.serializeWithDependencies(
+              task, sched.sc.addedFiles, sched.sc.addedJars, ser))
+          } catch {
+            // If the task cannot be serialized, then there's no point to re-attempt the task,
+            // as it will always fail. So just abort the whole task-set.
+            case e : Throwable => {
+              logError(s"Failed to serialize task $taskId, not attempting to retry it.", e)
+              abort(s"Failed to serialize task $taskId, not attempt to retry it. Exception" +
+                s"duringserialization is: $e")
+              throw new TaskNotSerializableException(e)
+            }
+          }
+          val serializedTask = serializedTaskOpt.get
           if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
-              !emittedTaskSizeWarning) {
+            !emittedTaskSizeWarning) {
             emittedTaskSizeWarning = true
             logWarning(s"Stage ${task.stageId} contains a task of very large size " +
               s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
@@ -474,7 +487,7 @@ private[spark] class TaskSetManager(
           // val timeTaken = clock.getTime() - startTime
           val taskName = s"task ${info.id} in stage ${taskSet.id}"
           logInfo("Starting %s (TID %d, %s, %s, %d bytes)".format(
-              taskName, taskId, host, taskLocality, serializedTask.limit))
+            taskName, taskId, host, taskLocality, serializedTask.limit))
 
           sched.dagScheduler.taskStarted(task, info)
           return Some(new TaskDescription(taskId, execId, taskName, index, serializedTask))
