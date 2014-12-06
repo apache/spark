@@ -82,6 +82,7 @@ trait ExecutorRunnableUtil extends Logging {
     sparkConf.getAkkaConf.
       foreach { case (k, v) => javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v") }
 
+    // scalastyle:off
     // Commenting it out for now - so that people can refer to the properties if required. Remove
     // it once cpuset version is pushed out.
     // The context is, default gc for server class machines end up using all cores to do gc - hence
@@ -93,10 +94,10 @@ trait ExecutorRunnableUtil extends Logging {
     /*
         else {
           // If no java_opts specified, default to using -XX:+CMSIncrementalMode
-          // It might be possible that other modes/config is being done in spark.executor.extraJavaOptions,
-          // so we dont want to mess with it.
-          // In our expts, using (default) throughput collector has severe perf ramnifications in
-          // multi-tennent machines
+          // It might be possible that other modes/config is being done in
+          // spark.executor.extraJavaOptions, so we don't want to mess with it.
+          // In our expts, using (default) throughput collector has severe perf ramifications in
+          // multi-tenant machines
           // The options are based on
           // http://www.oracle.com/technetwork/java/gc-tuning-5-138395.html#0.0.0.%20When%20to%20Use%20the%20Concurrent%20Low%20Pause%20Collector|outline
           javaOpts += " -XX:+UseConcMarkSweepGC "
@@ -106,6 +107,7 @@ trait ExecutorRunnableUtil extends Logging {
           javaOpts += " -XX:CMSIncrementalDutyCycle=10 "
         }
     */
+    // scalastyle:on
 
     // For log4j configuration to reference
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)

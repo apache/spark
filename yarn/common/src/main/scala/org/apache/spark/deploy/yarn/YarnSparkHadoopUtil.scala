@@ -48,15 +48,18 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
     dest.addCredentials(source.getCredentials())
   }
 
-  // Note that all params which start with SPARK are propagated all the way through, so if in yarn mode, this MUST be set to true.
+  // Note that all params which start with SPARK are propagated all the way through,
+  // so if in yarn mode, this MUST be set to true.
   override def isYarnMode(): Boolean = { true }
 
-  // Return an appropriate (subclass) of Configuration. Creating config can initializes some hadoop subsystems
+  // Return an appropriate (subclass) of Configuration.
+  // Creating config can initializes some hadoop subsystems
   // Always create a new config, dont reuse yarnConf.
   override def newConfiguration(conf: SparkConf): Configuration =
     new YarnConfiguration(super.newConfiguration(conf))
 
-  // add any user credentials to the job conf which are necessary for running on a secure Hadoop cluster
+  // add any user credentials to the job conf which are
+  // necessary for running on a secure Hadoop cluster
   override def addCredentials(conf: JobConf) {
     val jobCreds = conf.getCredentials()
     jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())

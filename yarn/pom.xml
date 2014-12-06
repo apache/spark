@@ -157,6 +157,16 @@
         </executions>
       </plugin>
       <plugin>
+        <groupId>org.scalastyle</groupId>
+        <artifactId>scalastyle-maven-plugin</artifactId>
+        <configuration>
+          <sourceDirectories>
+            <sourceDirectory>../common/src/main/scala</sourceDirectory>
+            <sourceDirectory>src/main/scala</sourceDirectory>
+          </sourceDirectories>
+        </configuration>
+      </plugin>
+      <plugin>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
