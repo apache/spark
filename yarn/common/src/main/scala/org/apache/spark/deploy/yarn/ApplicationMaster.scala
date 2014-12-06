@@ -36,8 +36,8 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, Spar
 import org.apache.spark.SparkException
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.HistoryServer
-import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages.AddWebUIFilter
+import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
 
 /**
@@ -60,7 +60,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
   @volatile private var finished = false
-  @volatile private var finalStatus = FinalApplicationStatus.UNDEFINED
+  @volatile private var finalStatus = FinalApplicationStatus.SUCCEEDED
   @volatile private var finalMsg: String = ""
   @volatile private var userClassThread: Thread = _
 
@@ -92,6 +92,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
       logInfo("ApplicationAttemptId: " + appAttemptId)
 
+      val fs = FileSystem.get(yarnConf)
       val cleanupHook = new Runnable {
         override def run() {
           // If the SparkContext is still registered, shut it down as a best case effort in case
@@ -105,17 +106,21 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
 
           if (!finished) {
-            // this shouldn't ever happen, but if it does assume weird failure
-            finish(FinalApplicationStatus.FAILED,
-              ApplicationMaster.EXIT_UNCAUGHT_EXCEPTION,
-              "shutdown hook called without cleanly finishing")
+            // This happens when the user application calls System.exit(). We have the choice
+            // of either failing or succeeding at this point. We report success to avoid
+            // retrying applications that have succeeded (System.exit(0)), which means that
+            // applications that explicitly exit with a non-zero status will also show up as
+            // succeeded in the RM UI.
+            finish(finalStatus,
+              ApplicationMaster.EXIT_SUCCESS,
+              "Shutdown hook called before final status was reported.")
           }
 
           if (!unregistered) {
             // we only want to unregister if we don't want the RM to retry
             if (finalStatus == FinalApplicationStatus.SUCCEEDED || isLastAttempt) {
               unregister(finalStatus, finalMsg)
-              cleanupStagingDir()
+              cleanupStagingDir(fs)
             }
           }
         }
@@ -163,17 +168,18 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   final def finish(status: FinalApplicationStatus, code: Int, msg: String = null) = synchronized {
     if (!finished) {
+      val inShutdown = Utils.inShutdown()
       logInfo(s"Final app status: ${status}, exitCode: ${code}" +
         Option(msg).map(msg => s", (reason: $msg)").getOrElse(""))
       exitCode = code
       finalStatus = status
       finalMsg = msg
       finished = true
-      if (Thread.currentThread() != reporterThread && reporterThread != null) {
+      if (!inShutdown && Thread.currentThread() != reporterThread && reporterThread != null) {
         logDebug("shutting down reporter thread")
         reporterThread.interrupt()
       }
-      if (Thread.currentThread() != userClassThread && userClassThread != null) {
+      if (!inShutdown && Thread.currentThread() != userClassThread && userClassThread != null) {
         logDebug("shutting down user thread")
         userClassThread.interrupt()
       }
@@ -213,7 +219,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
-    setupSystemSecurityManager()
     userClassThread = startUserClass()
 
     // This a bit hacky, but we need to wait until the spark.driver.port property has
@@ -303,8 +308,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   /**
    * Clean up the staging directory.
    */
-  private def cleanupStagingDir() {
-    val fs = FileSystem.get(yarnConf)
+  private def cleanupStagingDir(fs: FileSystem) {
     var stagingDirPath: Path = null
     try {
       val preserveFiles = sparkConf.get("spark.yarn.preserve.staging.files", "false").toBoolean
@@ -385,8 +389,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       SparkEnv.driverActorSystemName,
       driverHost,
       driverPort.toString,
-      CoarseGrainedSchedulerBackend.ACTOR_NAME)
-    actorSystem.actorOf(Props(new MonitorActor(driverUrl)), name = "YarnAM")
+      YarnSchedulerBackend.ACTOR_NAME)
+    actorSystem.actorOf(Props(new AMActor(driverUrl)), name = "YarnAM")
   }
 
   /** Add the Yarn IP filter that is required for properly securing the UI. */
@@ -403,45 +407,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   }
 
   /**
-   * This system security manager applies to the entire process.
-   * It's main purpose is to handle the case if the user code does a System.exit.
-   * This allows us to catch that and properly set the YARN application status and
-   * cleanup if needed.
-   */
-  private def setupSystemSecurityManager(): Unit = {
-    try {
-      var stopped = false
-      System.setSecurityManager(new java.lang.SecurityManager() {
-        override def checkExit(paramInt: Int) {
-          if (!stopped) {
-            logInfo("In securityManager checkExit, exit code: " + paramInt)
-            if (paramInt == 0) {
-              finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
-            } else {
-              finish(FinalApplicationStatus.FAILED,
-                paramInt,
-                "User class exited with non-zero exit code")
-            }
-            stopped = true
-          }
-        }
-        // required for the checkExit to work properly
-        override def checkPermission(perm: java.security.Permission): Unit = {}
-      })
-    }
-    catch {
-      case e: SecurityException =>
-        finish(FinalApplicationStatus.FAILED,
-          ApplicationMaster.EXIT_SECURITY,
-          "Error in setSecurityManager")
-        logError("Error in setSecurityManager:", e)
-    }
-  }
-
-  /**
    * Start the user class, which contains the spark driver, in a separate Thread.
-   * If the main routine exits cleanly or exits with System.exit(0) we
-   * assume it was successful, for all other cases we assume failure.
+   * If the main routine exits cleanly or exits with System.exit(N) for any N
+   * we assume it was successful, for all other cases we assume failure.
    *
    * Returns the user thread that was started.
    */
@@ -479,9 +447,10 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     userThread
   }
 
-  // Actor used to monitor the driver when running in client deploy mode.
-  private class MonitorActor(driverUrl: String) extends Actor {
-
+  /**
+   * Actor that communicates with the driver in client deploy mode.
+   */
+  private class AMActor(driverUrl: String) extends Actor {
     var driver: ActorSelection = _
 
     override def preStart() = {
@@ -490,6 +459,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       // Send a hello message to establish the connection, after which
       // we can monitor Lifecycle Events.
       driver ! "Hello"
+      driver ! RegisterClusterManager
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     }
 
@@ -497,11 +467,27 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       case x: DisassociatedEvent =>
         logInfo(s"Driver terminated or disconnected! Shutting down. $x")
         finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+
       case x: AddWebUIFilter =>
         logInfo(s"Add WebUI Filter. $x")
         driver ! x
-    }
 
+      case RequestExecutors(requestedTotal) =>
+        logInfo(s"Driver requested a total number of $requestedTotal executor(s).")
+        Option(allocator) match {
+          case Some(a) => a.requestTotalExecutors(requestedTotal)
+          case None => logWarning("Container allocator is not ready to request executors yet.")
+        }
+        sender ! true
+
+      case KillExecutors(executorIds) =>
+        logInfo(s"Driver requested to kill executor(s) ${executorIds.mkString(", ")}.")
+        Option(allocator) match {
+          case Some(a) => executorIds.foreach(a.killExecutor)
+          case None => logWarning("Container allocator is not ready to kill executors yet.")
+        }
+        sender ! true
+    }
   }
 
 }

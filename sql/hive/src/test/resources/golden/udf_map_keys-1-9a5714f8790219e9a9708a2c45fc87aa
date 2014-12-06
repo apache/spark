@@ -1,1 +1,0 @@
-map_keys(map) - Returns an unordered array containing the keys of the input map.

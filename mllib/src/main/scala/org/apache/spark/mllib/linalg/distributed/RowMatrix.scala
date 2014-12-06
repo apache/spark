@@ -152,7 +152,7 @@ class RowMatrix(
    * storing the right singular vectors, is computed via matrix multiplication as
    * U = A * (V * S^-1^), if requested by user. The actual method to use is determined
    * automatically based on the cost:
-   *  - If n is small (n < 100) or k is large compared with n (k > n / 2), we compute the Gramian
+   *  - If n is small (n &lt; 100) or k is large compared with n (k > n / 2), we compute the Gramian
    *    matrix first and then compute its top eigenvalues and eigenvectors locally on the driver.
    *    This requires a single pass with O(n^2^) storage on each executor and on the driver, and
    *    O(n^2^ k) time on the driver.
@@ -169,7 +169,8 @@ class RowMatrix(
    * @note The conditions that decide which method to use internally and the default parameters are
    *       subject to change.
    *
-   * @param k number of leading singular values to keep (0 < k <= n). It might return less than k if
+   * @param k number of leading singular values to keep (0 &lt; k &lt;= n).
+   *          It might return less than k if
    *          there are numerically zero singular values or there are not enough Ritz values
    *          converged before the maximum number of Arnoldi update iterations is reached (in case
    *          that matrix A is ill-conditioned).
@@ -192,7 +193,7 @@ class RowMatrix(
   /**
    * The actual SVD implementation, visible for testing.
    *
-   * @param k number of leading singular values to keep (0 < k <= n)
+   * @param k number of leading singular values to keep (0 &lt; k &lt;= n)
    * @param computeU whether to compute U
    * @param rCond the reciprocal condition number
    * @param maxIter max number of iterations (if ARPACK is used)

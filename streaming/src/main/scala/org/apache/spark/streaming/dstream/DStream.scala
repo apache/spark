@@ -31,7 +31,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.scheduler.Job
-import org.apache.spark.util.{CallSite, MetadataCleaner}
+import org.apache.spark.util.{CallSite, MetadataCleaner, Utils}
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
@@ -254,7 +254,7 @@ abstract class DStream[T: ClassTag] (
   }
 
   private[streaming] def remember(duration: Duration) {
-    if (duration != null && duration > rememberDuration) {
+    if (duration != null && (rememberDuration == null || duration > rememberDuration)) {
       rememberDuration = duration
       logInfo("Duration for remembering RDDs set to " + rememberDuration + " for " + this)
     }
@@ -400,7 +400,7 @@ abstract class DStream[T: ClassTag] (
   }
 
   @throws(classOf[IOException])
-  private def writeObject(oos: ObjectOutputStream) {
+  private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     logDebug(this.getClass().getSimpleName + ".writeObject used")
     if (graph != null) {
       graph.synchronized {
@@ -423,7 +423,7 @@ abstract class DStream[T: ClassTag] (
   }
 
   @throws(classOf[IOException])
-  private def readObject(ois: ObjectInputStream) {
+  private def readObject(ois: ObjectInputStream): Unit = Utils.tryOrIOException {
     logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
     generatedRDDs = new HashMap[Time, RDD[T]] ()

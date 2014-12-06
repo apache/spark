@@ -14,7 +14,7 @@ title: Spark SQL Programming Guide
 Spark SQL allows relational queries expressed in SQL, HiveQL, or Scala to be executed using
 Spark.  At the core of this component is a new type of RDD,
 [SchemaRDD](api/scala/index.html#org.apache.spark.sql.SchemaRDD).  SchemaRDDs are composed of
-[Row](api/scala/index.html#org.apache.spark.sql.catalyst.expressions.Row) objects, along with
+[Row](api/scala/index.html#org.apache.spark.sql.package@Row:org.apache.spark.sql.catalyst.expressions.Row.type) objects, along with
 a schema that describes the data types of each column in the row.  A SchemaRDD is similar to a table
 in a traditional relational database.  A SchemaRDD can be created from an existing RDD, a [Parquet](http://parquet.io)
 file, a JSON dataset, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
@@ -146,7 +146,7 @@ describes the various methods for loading data into a SchemaRDD.
 
 Spark SQL supports two different methods for converting existing RDDs into SchemaRDDs.  The first
 method uses reflection to infer the schema of an RDD that contains specific types of objects.  This
-reflection based approach leads to more concise code and works well when you already know the schema 
+reflection based approach leads to more concise code and works well when you already know the schema
 while writing your Spark application.
 
 The second method for creating SchemaRDDs is through a programmatic interface that allows you to
@@ -278,7 +278,7 @@ performed on JSON files.
 from pyspark.sql import SQLContext, Row
 sqlContext = SQLContext(sc)
 
-# Load a text file and convert each line to a dictionary.
+# Load a text file and convert each line to a Row.
 lines = sc.textFile("examples/src/main/resources/people.txt")
 parts = lines.map(lambda l: l.split(","))
 people = parts.map(lambda p: Row(name=p[0], age=int(p[1])))
@@ -566,7 +566,7 @@ for teenName in teenNames.collect():
 
 ### Configuration
 
-Configuration of Parquet can be done using the `setConf` method on SQLContext or by running 
+Configuration of Parquet can be done using the `setConf` method on SQLContext or by running
 `SET key=value` commands using SQL.
 
 <table class="table">
@@ -575,24 +575,42 @@ Configuration of Parquet can be done using the `setConf` method on SQLContext or
   <td><code>spark.sql.parquet.binaryAsString</code></td>
   <td>false</td>
   <td>
-    Some other Parquet-producing systems, in particular Impala and older versions of Spark SQL, do 
-    not differentiate between binary data and strings when writing out the Parquet schema.  This 
+    Some other Parquet-producing systems, in particular Impala and older versions of Spark SQL, do
+    not differentiate between binary data and strings when writing out the Parquet schema.  This
     flag tells Spark SQL to interpret binary data as a string to provide compatibility with these systems.
   </td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.cacheMetadata</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Turns on caching of Parquet schema metadata.  Can speed up querying of static data.
   </td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.compression.codec</code></td>
-  <td>snappy</td>
+  <td>gzip</td>
   <td>
-    Sets the compression codec use when writing Parquet files. Acceptable values include: 
+    Sets the compression codec use when writing Parquet files. Acceptable values include:
     uncompressed, snappy, gzip, lzo.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.filterPushdown</code></td>
+  <td>false</td>
+  <td>
+    Turn on Parquet filter pushdown optimization. This feature is turned off by default because of a known
+    bug in Paruet 1.6.0rc3 (<a href="https://issues.apache.org/jira/browse/PARQUET-136">PARQUET-136</a>).
+    However, if your table doesn't contain any nullable string or binary columns, it's still safe to turn
+    this feature on.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.convertMetastoreParquet</code></td>
+  <td>true</td>
+  <td>
+    When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of the built in
+    support.
   </td>
 </tr>
 </table>
@@ -720,7 +738,7 @@ anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD)
 
 Spark SQL also supports reading and writing data stored in [Apache Hive](http://hive.apache.org/).
 However, since Hive has a large number of dependencies, it is not included in the default Spark assembly.
-In order to use Hive you must first run "`sbt/sbt -Phive assembly/assembly`" (or use `-Phive` for maven).
+Hive support is enabled by adding the `-Phive` and `-Phive-thriftserver` flags to Spark's build.
 This command builds a new assembly jar that includes Hive. Note that this Hive assembly jar must also be present
 on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
 (SerDes) in order to access data stored in Hive.
@@ -815,7 +833,7 @@ Configuration of in-memory caching can be done using the `setConf` method on SQL
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.sql.inMemoryColumnarStorage.compressed</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     When set to true Spark SQL will automatically select a compression codec for each column based
     on statistics of the data.
@@ -823,7 +841,7 @@ Configuration of in-memory caching can be done using the `setConf` method on SQL
 </tr>
 <tr>
   <td><code>spark.sql.inMemoryColumnarStorage.batchSize</code></td>
-  <td>1000</td>
+  <td>10000</td>
   <td>
     Controls the size of batches for columnar caching.  Larger batch sizes can improve memory utilization
     and compression, but risk OOMs when caching data.
@@ -841,7 +859,7 @@ that these options will be deprecated in future release as more optimizations ar
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
     <td><code>spark.sql.autoBroadcastJoinThreshold</code></td>
-    <td>10000</td>
+    <td>10485760 (10 MB)</td>
     <td>
       Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when
       performing a join.  By setting this value to -1 broadcasting can be disabled.  Note that currently
@@ -892,7 +910,6 @@ export HIVE_SERVER2_THRIFT_BIND_HOST=<listening-host>
 ./sbin/start-thriftserver.sh \
   --master <master-uri> \
   ...
-```
 {% endhighlight %}
 
 or system properties:
@@ -903,7 +920,6 @@ or system properties:
   --hiveconf hive.server2.thrift.bind.host=<listening-host> \
   --master <master-uri>
   ...
-```
 {% endhighlight %}
 
 Now you can use beeline to test the Thrift JDBC/ODBC server:
@@ -939,7 +955,7 @@ options.
 
 ## Migration Guide for Shark User
 
-### Scheduling 
+### Scheduling
 To set a [Fair Scheduler](job-scheduling.html#fair-scheduler-pools) pool for a JDBC client session,
 users can set the `spark.sql.thriftserver.scheduler.pool` variable:
 
@@ -986,7 +1002,7 @@ Several caching related features are not supported yet:
 ## Compatibility with Apache Hive
 
 Spark SQL is designed to be compatible with the Hive Metastore, SerDes and UDFs.  Currently Spark
-SQL is based on Hive 0.12.0.
+SQL is based on Hive 0.12.0 and 0.13.1.
 
 #### Deploying in Existing Hive Warehouses
 
@@ -1025,6 +1041,7 @@ Spark SQL supports the vast majority of Hive features, such as:
 * Sampling
 * Explain
 * Partitioned tables
+* View
 * All Hive DDL Functions, including:
   * `CREATE TABLE`
   * `CREATE TABLE AS SELECT`
@@ -1040,6 +1057,7 @@ Spark SQL supports the vast majority of Hive features, such as:
   * `STRING`
   * `BINARY`
   * `TIMESTAMP`
+  * `DATE`
   * `ARRAY<>`
   * `MAP<>`
   * `STRUCT<>`
@@ -1051,7 +1069,6 @@ in Hive deployments.
 
 **Major Hive Features**
 
-* Spark SQL does not currently support inserting to tables using dynamic partitioning.
 * Tables with buckets: bucket is the hash partitioning within a Hive table partition. Spark SQL
   doesn't support buckets yet.
 
@@ -1141,6 +1158,7 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
 * Datetime type
     - `TimestampType`: Represents values comprising values of fields year, month, day,
     hour, minute, and second.
+    - `DateType`: Represents values comprising values of fields year, month, day.
 * Complex types
     - `ArrayType(elementType, containsNull)`: Represents values comprising a sequence of
     elements with the type of `elementType`. `containsNull` is used to indicate if
@@ -1215,7 +1233,7 @@ import  org.apache.spark.sql._
 </tr>
 <tr>
   <td> <b>DecimalType</b> </td>
-  <td> scala.math.sql.BigDecimal </td>
+  <td> scala.math.BigDecimal </td>
   <td>
   DecimalType
   </td>
@@ -1246,6 +1264,13 @@ import  org.apache.spark.sql._
   <td> java.sql.Timestamp </td>
   <td>
   TimestampType
+  </td>
+</tr>
+<tr>
+  <td> <b>DateType</b> </td>
+  <td> java.sql.Date </td>
+  <td>
+  DateType
   </td>
 </tr>
 <tr>
@@ -1372,6 +1397,13 @@ please use factory methods provided in
   <td> java.sql.Timestamp </td>
   <td>
   DataType.TimestampType
+  </td>
+</tr>
+<tr>
+  <td> <b>DateType</b> </td>
+  <td> java.sql.Date </td>
+  <td>
+  DataType.DateType
   </td>
 </tr>
 <tr>
@@ -1519,6 +1551,13 @@ from pyspark.sql import *
   <td> datetime.datetime </td>
   <td>
   TimestampType()
+  </td>
+</tr>
+<tr>
+  <td> <b>DateType</b> </td>
+  <td> datetime.date </td>
+  <td>
+  DateType()
   </td>
 </tr>
 <tr>

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import com.google.common.cache.{CacheLoader, CacheBuilder}
+import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 import scala.language.existentials
 
@@ -358,7 +359,24 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
       case Add(e1, e2) =>      (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 + $eval2" }
       case Subtract(e1, e2) => (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 - $eval2" }
       case Multiply(e1, e2) => (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 * $eval2" }
-      case Divide(e1, e2) =>   (e1, e2) evaluate { case (eval1, eval2) => q"$eval1 / $eval2" }
+      case Divide(e1, e2) =>
+        val eval1 = expressionEvaluator(e1)
+        val eval2 = expressionEvaluator(e2)
+
+        eval1.code ++ eval2.code ++
+        q"""
+          var $nullTerm = false
+          var $primitiveTerm: ${termForType(e1.dataType)} = 0
+
+          if (${eval1.nullTerm} || ${eval2.nullTerm} ) {
+            $nullTerm = true
+          } else if (${eval2.primitiveTerm} == 0)
+            $nullTerm = true
+          else {
+            $nullTerm = false
+            $primitiveTerm = ${eval1.primitiveTerm} / ${eval2.primitiveTerm}
+          }
+         """.children
 
       case IsNotNull(e) =>
         val eval = expressionEvaluator(e)
@@ -485,6 +503,34 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           }
         """.children
 
+      case UnscaledValue(child) =>
+        val childEval = expressionEvaluator(child)
+
+        childEval.code ++
+        q"""
+         var $nullTerm = ${childEval.nullTerm}
+         var $primitiveTerm: Long = if (!$nullTerm) {
+           ${childEval.primitiveTerm}.toUnscaledLong
+         } else {
+           ${defaultPrimitive(LongType)}
+         }
+         """.children
+
+      case MakeDecimal(child, precision, scale) =>
+        val childEval = expressionEvaluator(child)
+
+        childEval.code ++
+        q"""
+         var $nullTerm = ${childEval.nullTerm}
+         var $primitiveTerm: org.apache.spark.sql.catalyst.types.decimal.Decimal =
+           ${defaultPrimitive(DecimalType())}
+
+         if (!$nullTerm) {
+           $primitiveTerm = new org.apache.spark.sql.catalyst.types.decimal.Decimal()
+           $primitiveTerm = $primitiveTerm.setOrNull(${childEval.primitiveTerm}, $precision, $scale)
+           $nullTerm = $primitiveTerm == null
+         }
+         """.children
     }
 
     // If there was no match in the partial function above, we fall back on calling the interpreted
@@ -562,7 +608,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case LongType => ru.Literal(Constant(1L))
     case ByteType => ru.Literal(Constant(-1.toByte))
     case DoubleType => ru.Literal(Constant(-1.toDouble))
-    case DecimalType => ru.Literal(Constant(-1)) // Will get implicity converted as needed.
+    case DecimalType() => q"org.apache.spark.sql.catalyst.types.decimal.Decimal(-1)"
     case IntegerType => ru.Literal(Constant(-1))
     case _ => ru.Literal(Constant(null))
   }

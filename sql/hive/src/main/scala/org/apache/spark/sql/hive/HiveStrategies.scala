@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.ql.parse.ASTNode
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
@@ -25,11 +27,11 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.StringType
-import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan}
+import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan, PhysicalRDD}
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.{SQLContext, SchemaRDD}
+import org.apache.spark.sql.{SQLContext, SchemaRDD, Strategy}
 
 import scala.collection.JavaConversions._
 
@@ -56,12 +58,18 @@ private[hive] trait HiveStrategies {
       def lowerCase =
         new SchemaRDD(s.sqlContext, s.logicalPlan)
 
-      def addPartitioningAttributes(attrs: Seq[Attribute]) =
-        new SchemaRDD(
-          s.sqlContext,
-          s.logicalPlan transform {
-            case p: ParquetRelation => p.copy(partitioningAttributes = attrs)
-          })
+      def addPartitioningAttributes(attrs: Seq[Attribute]) = {
+        // Don't add the partitioning key if its already present in the data.
+        if (attrs.map(_.name).toSet.subsetOf(s.logicalPlan.output.map(_.name).toSet)) {
+          s
+        } else {
+          new SchemaRDD(
+            s.sqlContext,
+            s.logicalPlan transform {
+              case p: ParquetRelation => p.copy(partitioningAttributes = attrs)
+            })
+        }
+      }
     }
 
     implicit class PhysicalPlanHacks(originalPlan: SparkPlan) {
@@ -96,53 +104,61 @@ private[hive] trait HiveStrategies {
           case a: AttributeReference => UnresolvedAttribute(a.name)
         })
 
-        if (relation.hiveQlTable.isPartitioned) {
-          val rawPredicate = pruningPredicates.reduceOption(And).getOrElse(Literal(true))
-          // Translate the predicate so that it automatically casts the input values to the correct
-          // data types during evaluation
-          val castedPredicate = rawPredicate transform {
-            case a: AttributeReference =>
-              val idx = relation.partitionKeys.indexWhere(a.exprId == _.exprId)
-              val key = relation.partitionKeys(idx)
-              Cast(BoundReference(idx, StringType, nullable = true), key.dataType)
-          }
-
-          val inputData = new GenericMutableRow(relation.partitionKeys.size)
-          val pruningCondition =
-            if(codegenEnabled) {
-              GeneratePredicate(castedPredicate)
-            } else {
-              InterpretedPredicate(castedPredicate)
+        try {
+          if (relation.hiveQlTable.isPartitioned) {
+            val rawPredicate = pruningPredicates.reduceOption(And).getOrElse(Literal(true))
+            // Translate the predicate so that it automatically casts the input values to the
+            // correct data types during evaluation.
+            val castedPredicate = rawPredicate transform {
+              case a: AttributeReference =>
+                val idx = relation.partitionKeys.indexWhere(a.exprId == _.exprId)
+                val key = relation.partitionKeys(idx)
+                Cast(BoundReference(idx, StringType, nullable = true), key.dataType)
             }
 
-          val partitions = relation.hiveQlPartitions.filter { part =>
-            val partitionValues = part.getValues
-            var i = 0
-            while (i < partitionValues.size()) {
-              inputData(i) = partitionValues(i)
-              i += 1
-            }
-            pruningCondition(inputData)
-          }
+            val inputData = new GenericMutableRow(relation.partitionKeys.size)
+            val pruningCondition =
+              if (codegenEnabled) {
+                GeneratePredicate(castedPredicate)
+              } else {
+                InterpretedPredicate(castedPredicate)
+              }
 
-          hiveContext
-            .parquetFile(partitions.map(_.getLocation).mkString(","))
-            .addPartitioningAttributes(relation.partitionKeys)
-            .lowerCase
-            .where(unresolvedOtherPredicates)
-            .select(unresolvedProjection:_*)
-            .queryExecution
-            .executedPlan
-            .fakeOutput(projectList.map(_.toAttribute)):: Nil
-        } else {
-          hiveContext
-            .parquetFile(relation.hiveQlTable.getDataLocation.toString)
-            .lowerCase
-            .where(unresolvedOtherPredicates)
-            .select(unresolvedProjection:_*)
-            .queryExecution
-            .executedPlan
-            .fakeOutput(projectList.map(_.toAttribute)) :: Nil
+            val partitions = relation.hiveQlPartitions.filter { part =>
+              val partitionValues = part.getValues
+              var i = 0
+              while (i < partitionValues.size()) {
+                inputData(i) = partitionValues(i)
+                i += 1
+              }
+              pruningCondition(inputData)
+            }
+
+            hiveContext
+              .parquetFile(partitions.map(_.getLocation).mkString(","))
+              .addPartitioningAttributes(relation.partitionKeys)
+              .lowerCase
+              .where(unresolvedOtherPredicates)
+              .select(unresolvedProjection: _*)
+              .queryExecution
+              .executedPlan
+              .fakeOutput(projectList.map(_.toAttribute)) :: Nil
+          } else {
+            hiveContext
+              .parquetFile(relation.hiveQlTable.getDataLocation.toString)
+              .lowerCase
+              .where(unresolvedOtherPredicates)
+              .select(unresolvedProjection: _*)
+              .queryExecution
+              .executedPlan
+              .fakeOutput(projectList.map(_.toAttribute)) :: Nil
+          }
+        } catch {
+          // parquetFile will throw an exception when there is no data.
+          // TODO: Remove this hack for Spark 1.3.
+          case iae: java.lang.IllegalArgumentException
+              if iae.getMessage.contains("Can not create a Path from an empty string") =>
+            PhysicalRDD(plan.output, sparkContext.emptyRDD[Row]) :: Nil
         }
       case _ => Nil
     }
@@ -159,18 +175,19 @@ private[hive] trait HiveStrategies {
   object DataSinks extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
-        InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
-
-      case logical.CreateTableAsSelect(database, tableName, child) =>
-        val query = planLater(child)
+        execution.InsertIntoHiveTable(
+          table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+      case hive.InsertIntoHiveTable(table: MetastoreRelation, partition, child, overwrite) =>
+        execution.InsertIntoHiveTable(
+          table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+      case logical.CreateTableAsSelect(
+             Some(database), tableName, child, allowExisting, Some(extra: ASTNode)) =>
         CreateTableAsSelect(
-          database.get,
+          database,
           tableName,
-          query,
-          InsertIntoHiveTable(_: MetastoreRelation,
-            Map(),
-            query,
-            overwrite = true)(hiveContext)) :: Nil
+          child,
+          allowExisting,
+          extra) :: Nil
       case _ => Nil
     }
   }
@@ -206,6 +223,8 @@ private[hive] trait HiveStrategies {
       case hive.DropTable(tableName, ifExists) => execution.DropTable(tableName, ifExists) :: Nil
 
       case hive.AddJar(path) => execution.AddJar(path) :: Nil
+
+      case hive.AddFile(path) => execution.AddFile(path) :: Nil
 
       case hive.AnalyzeTable(tableName) => execution.AnalyzeTable(tableName) :: Nil
 

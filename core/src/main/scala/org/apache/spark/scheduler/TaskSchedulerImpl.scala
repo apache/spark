@@ -34,7 +34,6 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
-import akka.actor.Props
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -221,6 +220,7 @@ private[spark] class TaskSchedulerImpl(
     var newExecAvail = false
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
+      activeExecutorIds += o.executorId
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
@@ -261,7 +261,6 @@ private[spark] class TaskSchedulerImpl(
               val tid = task.taskId
               taskIdToTaskSetId(tid) = taskSet.taskSet.id
               taskIdToExecutorId(tid) = execId
-              activeExecutorIds += execId
               executorsByHost(host) += execId
               availableCpus(i) -= CPUS_PER_TASK
               assert(availableCpus(i) >= 0)

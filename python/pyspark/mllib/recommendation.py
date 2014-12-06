@@ -15,28 +15,31 @@
 # limitations under the License.
 #
 
+from collections import namedtuple
+
 from pyspark import SparkContext
-from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.rdd import RDD
-from pyspark.mllib.linalg import _to_java_object_rdd
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 
-__all__ = ['MatrixFactorizationModel', 'ALS']
+__all__ = ['MatrixFactorizationModel', 'ALS', 'Rating']
 
 
-class Rating(object):
-    def __init__(self, user, product, rating):
-        self.user = int(user)
-        self.product = int(product)
-        self.rating = float(rating)
+class Rating(namedtuple("Rating", ["user", "product", "rating"])):
+    """
+    Represents a (user, product, rating) tuple.
+
+    >>> r = Rating(1, 2, 5.0)
+    >>> (r.user, r.product, r.rating)
+    (1, 2, 5.0)
+    >>> (r[0], r[1], r[2])
+    (1, 2, 5.0)
+    """
 
     def __reduce__(self):
-        return Rating, (self.user, self.product, self.rating)
-
-    def __repr__(self):
-        return "Rating(%d, %d, %d)" % (self.user, self.product, self.rating)
+        return Rating, (int(self.user), int(self.product), float(self.rating))
 
 
-class MatrixFactorizationModel(object):
+class MatrixFactorizationModel(JavaModelWrapper):
 
     """A matrix factorisation model trained by regularized alternating
     least-squares.
@@ -45,43 +48,55 @@ class MatrixFactorizationModel(object):
     >>> r2 = (1, 2, 2.0)
     >>> r3 = (2, 1, 2.0)
     >>> ratings = sc.parallelize([r1, r2, r3])
-    >>> model = ALS.trainImplicit(ratings, 1)
-    >>> model.predict(2,2) is not None
-    True
+    >>> model = ALS.trainImplicit(ratings, 1, seed=10)
+    >>> model.predict(2,2)
+    0.4473...
 
     >>> testset = sc.parallelize([(1, 2), (1, 1)])
-    >>> model = ALS.train(ratings, 1)
-    >>> model.predictAll(testset).count() == 2
+    >>> model = ALS.train(ratings, 1, seed=10)
+    >>> model.predictAll(testset).collect()
+    [Rating(user=1, product=1, rating=1.0471...), Rating(user=1, product=2, rating=1.9679...)]
+
+    >>> model = ALS.train(ratings, 4, seed=10)
+    >>> model.userFeatures().collect()
+    [(2, array('d', [...])), (1, array('d', [...]))]
+
+    >>> first_user = model.userFeatures().take(1)[0]
+    >>> latents = first_user[1]
+    >>> len(latents) == 4
     True
+
+    >>> model.productFeatures().collect()
+    [(2, array('d', [...])), (1, array('d', [...]))]
+
+    >>> first_product = model.productFeatures().take(1)[0]
+    >>> latents = first_product[1]
+    >>> len(latents) == 4
+    True
+
+    >>> model = ALS.train(ratings, 1, nonnegative=True, seed=10)
+    >>> model.predict(2,2)
+    3.735...
+
+    >>> model = ALS.trainImplicit(ratings, 1, nonnegative=True, seed=10)
+    >>> model.predict(2,2)
+    0.4473...
     """
-
-    def __init__(self, sc, java_model):
-        self._context = sc
-        self._java_model = java_model
-
-    def __del__(self):
-        self._context._gateway.detach(self._java_model)
-
     def predict(self, user, product):
-        return self._java_model.predict(user, product)
+        return self._java_model.predict(int(user), int(product))
 
     def predictAll(self, user_product):
         assert isinstance(user_product, RDD), "user_product should be RDD of (user, product)"
         first = user_product.first()
-        if isinstance(first, list):
-            user_product = user_product.map(tuple)
-            first = tuple(first)
-        assert type(first) is tuple and len(first) == 2, \
-            "user_product should be RDD of (user, product)"
-        if any(isinstance(x, str) for x in first):
-            user_product = user_product.map(lambda (u, p): (int(x), int(p)))
-            first = tuple(map(int, first))
-        assert all(type(x) is int for x in first), "user and product in user_product shoul be int"
-        sc = self._context
-        tuplerdd = sc._jvm.SerDe.asTupleRDD(_to_java_object_rdd(user_product).rdd())
-        jresult = self._java_model.predict(tuplerdd).toJavaRDD()
-        return RDD(sc._jvm.SerDe.javaToPython(jresult), sc,
-                   AutoBatchedSerializer(PickleSerializer()))
+        assert len(first) == 2, "user_product should be RDD of (user, product)"
+        user_product = user_product.map(lambda (u, p): (int(u), int(p)))
+        return self.call("predict", user_product)
+
+    def userFeatures(self):
+        return self.call("getUserFeatures")
+
+    def productFeatures(self):
+        return self.call("getProductFeatures")
 
 
 class ALS(object):
@@ -95,32 +110,28 @@ class ALS(object):
                 ratings = ratings.map(lambda x: Rating(*x))
             else:
                 raise ValueError("rating should be RDD of Rating or tuple/list")
-        # serialize them by AutoBatchedSerializer before cache to reduce the
-        # objects overhead in JVM
-        cached = ratings._reserialize(AutoBatchedSerializer(PickleSerializer())).cache()
-        return _to_java_object_rdd(cached)
+        return ratings
 
     @classmethod
-    def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1):
-        sc = ratings.context
-        jrating = cls._prepare(ratings)
-        mod = sc._jvm.PythonMLLibAPI().trainALSModel(jrating, rank, iterations, lambda_, blocks)
-        return MatrixFactorizationModel(sc, mod)
+    def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, nonnegative=False,
+              seed=None):
+        model = callMLlibFunc("trainALSModel", cls._prepare(ratings), rank, iterations,
+                              lambda_, blocks, nonnegative, seed)
+        return MatrixFactorizationModel(model)
 
     @classmethod
-    def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01):
-        sc = ratings.context
-        jrating = cls._prepare(ratings)
-        mod = sc._jvm.PythonMLLibAPI().trainImplicitALSModel(
-            jrating, rank, iterations, lambda_, blocks, alpha)
-        return MatrixFactorizationModel(sc, mod)
+    def trainImplicit(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01,
+                      nonnegative=False, seed=None):
+        model = callMLlibFunc("trainImplicitALSModel", cls._prepare(ratings), rank,
+                              iterations, lambda_, blocks, alpha, nonnegative, seed)
+        return MatrixFactorizationModel(model)
 
 
 def _test():
     import doctest
     import pyspark.mllib.recommendation
     globs = pyspark.mllib.recommendation.__dict__.copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    globs['sc'] = SparkContext('local[4]', 'PythonTest')
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
     if failure_count:

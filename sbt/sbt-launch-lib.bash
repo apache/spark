@@ -104,7 +104,7 @@ addResidual () {
   residual_args=( "${residual_args[@]}" "$1" )
 }
 addDebugger () {
-  addJava "-Xdebug -Xrunjdwp:transport=dt_socket,server=y,suspend=n,address=$1"
+  addJava "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=$1"
 }
 
 # a ham-fisted attempt to move some memory settings in concert
@@ -124,7 +124,8 @@ require_arg () {
   local opt="$2"
   local arg="$3"
   if [[ -z "$arg" ]] || [[ "${arg:0:1}" == "-" ]]; then
-    die "$opt requires <$type> argument"
+    echo "$opt requires <$type> argument" 1>&2
+    exit 1
   fi
 }
 
@@ -184,11 +185,4 @@ run() {
     -jar "$sbt_jar" \
     "${sbt_commands[@]}" \
     "${residual_args[@]}"
-}
-
-runAlternateBoot() {
-  local bootpropsfile="$1"
-  shift
-  addJava "-Dsbt.boot.properties=$bootpropsfile"
-  run $@
 }
