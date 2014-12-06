@@ -468,7 +468,7 @@ private[spark] class BlockManager(
         }
 
         // If another thread is writing the block, wait for it to become ready.
-        if (!info.waitForReady(info.waitTypes.GET)) {
+        if (!info.waitForReady("GET")) {
           // If we get here, the block write failed.
           logWarning(s"Block $blockId was marked as failure.")
           return None
@@ -717,11 +717,11 @@ private[spark] class BlockManager(
       val oldBlockOpt = blockInfo.putIfAbsent(blockId, tinfo)
       if (oldBlockOpt.isDefined) {
         val oldInfo = oldBlockOpt.get
-        if (oldInfo.waitForReady(oldInfo.waitTypes.PUT)) {
+        if (oldInfo.waitForReady("PUT")) {
           logWarning(s"Block $blockId already exists on this machine; not re-adding it")
           return updatedBlocks
         }
-        if (oldInfo.removed) {
+        if (oldInfo.isRemoved) {
           return doPut(blockId, data, level, tellMaster, effectiveStorageLevel)
         }
         oldInfo
@@ -1012,7 +1012,7 @@ private[spark] class BlockManager(
       info.synchronized {
         // required ? As of now, this will be invoked only for blocks which are ready
         // But in case this changes in future, adding for consistency sake.
-        if (!info.waitForReady(info.waitTypes.DROP)) {
+        if (!info.waitForReady("DROP")) {
           // If we get here, the block write failed.
           logWarning(s"Block $blockId was marked as failure. Nothing to drop")
           return None

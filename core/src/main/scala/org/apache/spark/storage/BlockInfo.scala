@@ -23,22 +23,21 @@ import java.util.concurrent.locks.{ReentrantLock, Condition}
 import scala.collection.mutable
 
 private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
+  //Those lock conditions is used for PUT/GET/DROP thread to wait this block be ready
+  private val lock = new ReentrantLock()
+  private val putCondition = lock.newCondition()
+  private val othersCondition = lock.newCondition()
+
+  val waitTypes = new BlockWaitCondition(Map("PUT" -> putCondition,
+                                             "DROP" -> othersCondition,
+                                             "GET" -> othersCondition))
+  private var removed = false
+
   // To save space, 'pending' and 'failed' are encoded as special sizes:
   @volatile var size: Long = BlockInfo.BLOCK_PENDING
   private def pending: Boolean = size == BlockInfo.BLOCK_PENDING
   private def failed: Boolean = size == BlockInfo.BLOCK_FAILED
   private def initThread: Thread = BlockInfo.blockInfoInitThreads.get(this)
-
-  val lock = new ReentrantLock()
-  private val waitNCondition = lock.newCondition()
-  private val wait1Condition = lock.newCondition()
-
-  val waitTypes = new WaitType(new mutable.HashMap +=
-                            ("PUT" -> waitNCondition,
-                            "DROP" -> wait1Condition,
-                            "GET" -> wait1Condition))
-
-  var removed = false
 
   setInitThread()
 
@@ -53,11 +52,11 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
    * Wait for this BlockInfo to be marked as ready (i.e. block is finished writing).
    * Return true if the block is available, false otherwise.
    */
-  def waitForReady(waitType: WaitType#WaitTypeVal): Boolean = {
+  def waitForReady(waitType: String): Boolean = {
     if (pending && initThread != Thread.currentThread()) {
       lock.lock()
       while (pending) {
-        waitType.waitFor()
+        waitTypes.waitTypeValWithName(waitType).await()
       }
       lock.unlock()
     }
@@ -71,7 +70,7 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
     size = sizeInBytes
     BlockInfo.blockInfoInitThreads.remove(this)
     lock.lock()
-    waitTypes.myValues.filter(_.count > 0).foreach(_.notifySuccess())
+    waitTypes.myValues.filter(_.count > 0).foreach(_.signalSuccess())
     lock.unlock()
   }
 
@@ -81,8 +80,8 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
     size = BlockInfo.BLOCK_FAILED
     BlockInfo.blockInfoInitThreads.remove(this)
     lock.lock()
-    removed = waitTypes.PUT.count == 0 || waitTypes.DROP.count == 0
-    waitTypes.myValues.filter(_.count > 0).foreach(_.notifyFailure())
+    removed = waitTypes.PUT.count == 0
+    waitTypes.myValues.filter(_.count > 0).foreach(_.signalFailure())
     lock.unlock()
     removed
   }
@@ -90,6 +89,8 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
   def resetStatus() {
     size = BlockInfo.BLOCK_PENDING
   }
+
+  def isRemoved = removed
 }
 
 private object BlockInfo {
@@ -102,35 +103,39 @@ private object BlockInfo {
   private val BLOCK_FAILED: Long = -2L
 }
 
-class WaitType(conditions: mutable.HashMap[String, Condition]) extends Enumeration {
-  val actualValues: mutable.HashSet[WaitTypeVal] = new mutable.HashSet[WaitTypeVal]()
+//A class for GET/PUT/DROP threads to use as lock.condition to wait block be ready
+class BlockWaitCondition(conditions: Map[String, Condition]) extends Enumeration {
+  private val actualValues: mutable.HashSet[WaitTypeVal] = new mutable.HashSet[WaitTypeVal]()
 
   class WaitTypeVal(condition: Condition) extends Val {
-    val finalCondition = condition
+    protected val finalCondition = condition
     @volatile var count = 0
 
-    def notifyFailure() {
+    def signalFailure() {
       count = 0
       finalCondition.signalAll()
     }
 
-    def waitFor() {
+    def await() {
       count += 1
       finalCondition.await()
     }
 
-    def notifySuccess() {
+    def signalSuccess() {
       count = 0
       finalCondition.signalAll()
     }
   }
 
+  //Put Threads that wait will execute one by one until one will be succeed
   val PUT = new WaitTypeVal(conditions("PUT")) {
-    override def notifyFailure() {
+    override def signalFailure() {
       count -= 1
       finalCondition.signal()
     }
   }
+
+  //DROP and GET Thread just return if one PUT thread is failed
   val DROP = new WaitTypeVal(conditions("DROP"))
   val GET = new WaitTypeVal(conditions("GET"))
 
@@ -141,5 +146,5 @@ class WaitType(conditions: mutable.HashMap[String, Condition]) extends Enumerati
     actualValues
   }
 
-  implicit def convert(waitType: Value) = waitType.asInstanceOf[WaitTypeVal]
+  def waitTypeValWithName(name: String) = this.withName(name).asInstanceOf[WaitTypeVal]
 }
