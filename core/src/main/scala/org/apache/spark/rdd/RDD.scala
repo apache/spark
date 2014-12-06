@@ -1210,7 +1210,8 @@ abstract class RDD[T: ClassTag](
   /**
    * Mark this RDD for checkpointing. It will be saved to a file inside the checkpoint
    * directory set with SparkContext.setCheckpointDir() and all references to its parent
-   * RDDs will be removed. It is strongly recommended that this RDD is persisted in
+   * RDDs will be removed. This function must be called before any job has been
+   * executed on this RDD. It is strongly recommended that this RDD is persisted in
    * memory, otherwise saving it on a file will require recomputation.
    */
   def checkpoint() {
@@ -1278,7 +1279,7 @@ abstract class RDD[T: ClassTag](
   }
 
   // Avoid handling doCheckpoint multiple times to prevent excessive recursion
-  @transient private var doCheckpointCalled = 0
+  @transient private var doCheckpointCalled = false
 
   /**
    * Performs the checkpointing of this RDD by saving this. It is called after a job using this RDD
@@ -1286,12 +1287,13 @@ abstract class RDD[T: ClassTag](
    * doCheckpoint() is called recursively on the parent RDDs.
    */
   private[spark] def doCheckpoint() {
-    if (checkpointData == None && doCheckpointCalled == 0) {
-      dependencies.foreach(_.rdd.doCheckpoint())
-      doCheckpointCalled = 1
-    } else if (checkpointData.isDefined && doCheckpointCalled < 2) {
-      checkpointData.get.doCheckpoint()
-      doCheckpointCalled = 2
+    if (!doCheckpointCalled) {
+      doCheckpointCalled = true
+      if (checkpointData.isDefined) {
+        checkpointData.get.doCheckpoint()
+      } else {
+        dependencies.foreach(_.rdd.doCheckpoint())
+      }
     }
   }
 

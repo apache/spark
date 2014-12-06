@@ -376,18 +376,13 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val rdd = sc.parallelize(ring)
       val graph = Graph.fromEdges(rdd, 1.0F)
       graph.checkpoint()
+      graph.edges.map(_.attr).count()
+      graph.vertices.map(_._2).count()
+
       val edgesDependencies = graph.edges.partitionsRDD.dependencies
       val verticesDependencies = graph.vertices.partitionsRDD.dependencies
-      val edges = graph.edges.collect().map(_.attr)
-      val vertices = graph.vertices.collect().map(_._2)
-
-      graph.vertices.count()
-      graph.edges.count()
-
-      assert(graph.edges.partitionsRDD.dependencies != edgesDependencies)
-      assert(graph.vertices.partitionsRDD.dependencies != verticesDependencies)
-      assert(graph.vertices.collect().map(_._2) === vertices)
-      assert(graph.edges.collect().map(_.attr) === edges)
+      assert(edgesDependencies.forall(_.rdd.isInstanceOf[CheckpointRDD[_]]))
+      assert(verticesDependencies.forall(_.rdd.isInstanceOf[CheckpointRDD[_]]))
     }
   }
 
