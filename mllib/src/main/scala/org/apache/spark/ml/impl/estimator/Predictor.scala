@@ -137,6 +137,7 @@ private[ml] abstract class PredictionModel[M <: PredictionModel[M]]
   }
 
   /**
+   * Strongly typed version of [[transform()]].
    * Default implementation using single-instance predict().
    *
    * Developers should override this for efficiency.  E.g., this does not broadcast the model.
@@ -146,6 +147,9 @@ private[ml] abstract class PredictionModel[M <: PredictionModel[M]]
     Params.inheritValues(paramMap, parent, tmpModel)
     dataset.map(tmpModel.predict)
   }
+
+  /** Strongly typed version of [[transform()]]. */
+  def predict(dataset: RDD[Vector]): RDD[Double] = predict(dataset, new ParamMap)
 
   /**
    * Predict label for the given features.

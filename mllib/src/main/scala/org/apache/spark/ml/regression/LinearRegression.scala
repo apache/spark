@@ -53,6 +53,7 @@ class LinearRegression extends Regressor[LinearRegression, LinearRegressionModel
    *                  These values override any specified in this Estimator's embedded ParamMap.
    */
   override def train(dataset: RDD[LabeledPoint], paramMap: ParamMap): LinearRegressionModel = {
+    val map = this.paramMap ++ paramMap
     val oldDataset = dataset.map { case LabeledPoint(label: Double, features: Vector, weight) =>
       org.apache.spark.mllib.regression.LabeledPoint(label, features)
     }
@@ -62,10 +63,10 @@ class LinearRegression extends Regressor[LinearRegression, LinearRegressionModel
     }
     val lr = new LinearRegressionWithSGD()
     lr.optimizer
-      .setRegParam(paramMap(regParam))
-      .setNumIterations(paramMap(maxIter))
+      .setRegParam(map(regParam))
+      .setNumIterations(map(maxIter))
     val model = lr.run(oldDataset)
-    val lrm = new LinearRegressionModel(this, paramMap, model.weights, model.intercept)
+    val lrm = new LinearRegressionModel(this, map, model.weights, model.intercept)
     if (handlePersistence) {
       oldDataset.unpersist()
     }

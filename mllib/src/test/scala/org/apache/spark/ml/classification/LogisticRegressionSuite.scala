@@ -19,8 +19,11 @@ package org.apache.spark.ml.classification
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.ml.LabeledPoint
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
 
 
@@ -28,6 +31,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
   @transient var sqlContext: SQLContext = _
   @transient var dataset: DataFrame = _
+  private val eps: Double = 1e-5
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -38,6 +42,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
   test("logistic regression: default params") {
     val lr = new LogisticRegression
+    assert(lr.getLabelCol == "label")
     val model = lr.fit(dataset)
     model.transform(dataset)
       .select("label", "prediction")
@@ -95,5 +100,44 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model2.fittingParamMap.get(lr.threshold) === Some(0.4))
     assert(model2.getThreshold === 0.4)
     assert(model2.getScoreCol == "theProb")
+  }
+
+  test("logistic regression: Predictor, Classifier methods") {
+    val sqlContext = this.sqlContext
+    import sqlContext._
+    val lr = new LogisticRegression
+
+    // fit() vs. train()
+    val model1 = lr.fit(dataset)
+    val rdd = dataset.select('label, 'features).map { case Row(label: Double, features: Vector) =>
+      LabeledPoint(label, features)
+    }
+    val features = rdd.map(_.features)
+    val model2 = lr.train(rdd)
+    assert(model1.intercept == model2.intercept)
+    assert(model1.weights.equals(model2.weights))
+    assert(model1.numClasses == model2.numClasses)
+    assert(model1.numClasses === 2)
+
+    // transform() vs. predict()
+    val trans = model1.transform(dataset).select('prediction)
+    val preds = model1.predict(rdd.map(_.features))
+    trans.zip(preds).collect().foreach { case (Row(pred1: Double), pred2: Double) =>
+      assert(pred1 == pred2)
+    }
+
+    // Check various types of predictions.
+    val allPredictions = features.map { f =>
+      (model1.predictRaw(f), model1.predictProbabilities(f), model1.predict(f))
+    }.collect()
+    val threshold = model1.getThreshold
+    allPredictions.foreach { case (raw: Vector, prob: Vector, pred: Double) =>
+      val computeProbFromRaw: (Double => Double) = (m) => 1.0 / (1.0 + math.exp(-m))
+      raw.toArray.map(computeProbFromRaw).zip(prob.toArray).foreach { case (r, p) =>
+        assert(r ~== p relTol eps)
+      }
+      val predFromProb = prob.toArray.zipWithIndex.maxBy(_._1)._2
+      assert(pred == predFromProb)
+    }
   }
 }
