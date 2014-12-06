@@ -43,6 +43,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.spark.network.TransportContext;
 import org.apache.spark.network.server.TransportChannelHandler;
 import org.apache.spark.network.util.IOMode;
+import org.apache.spark.network.util.JavaUtils;
 import org.apache.spark.network.util.NettyUtils;
 import org.apache.spark.network.util.TransportConf;
 
@@ -59,14 +60,14 @@ import org.apache.spark.network.util.TransportConf;
 public class TransportClientFactory implements Closeable {
 
   /** A simple data structure to track the pool of clients between two peer nodes. */
-  private class ClientPool {
+  private static class ClientPool {
     TransportClient[] clients;
     Object[] locks;
 
-    public ClientPool() {
-      clients = new TransportClient[numConnectionsPerPeer];
-      locks = new Object[numConnectionsPerPeer];
-      for (int i = 0; i < numConnectionsPerPeer; i++) {
+    public ClientPool(int size) {
+      clients = new TransportClient[size];
+      locks = new Object[size];
+      for (int i = 0; i < size; i++) {
         locks[i] = new Object();
       }
     }
@@ -123,7 +124,7 @@ public class TransportClientFactory implements Closeable {
     // Create the ClientPool if we don't have it yet.
     ClientPool clientPool = connectionPool.get(address);
     if (clientPool == null) {
-      connectionPool.putIfAbsent(address, new ClientPool());
+      connectionPool.putIfAbsent(address, new ClientPool(numConnectionsPerPeer));
       clientPool = connectionPool.get(address);
     }
 
@@ -219,11 +220,7 @@ public class TransportClientFactory implements Closeable {
         TransportClient client = clientPool.clients[i];
         if (client != null) {
           clientPool.clients[i] = null;
-          try {
-            client.close();
-          } catch (RuntimeException e) {
-            logger.warn("Ignoring exception during close", e);
-          }
+          JavaUtils.closeQuietly(client);
         }
       }
     }

@@ -65,38 +65,10 @@ public class TransportClientFactorySuite {
   /**
    * Request a bunch of clients to a single server to test
    * we create up to maxConnections of clients.
+   *
+   * If concurrent is true, create multiple threads to create clients in parallel.
    */
-  private void testClientReuse(final int maxConnections) throws IOException {
-    TransportConf conf = new TransportConf(new ConfigProvider() {
-      @Override
-      public String get(String name) {
-        if (name.equals("spark.shuffle.io.numConnectionsPerPeer")) {
-          return Integer.toString(maxConnections);
-        } else {
-          throw new NoSuchElementException();
-        }
-      }
-    });
-
-    RpcHandler rpcHandler = new NoOpRpcHandler();
-    TransportContext context = new TransportContext(conf, rpcHandler);
-    TransportClientFactory factory = context.createClientFactory();
-    HashSet<TransportClient> clients = new HashSet<TransportClient>();
-    for (int i = 0; i < maxConnections * 10; i++) {
-      TransportClient client = factory.createClient(TestUtils.getLocalHost(), server1.getPort());
-      assert(client.isActive());
-      clients.add(client);
-    }
-
-    assert(clients.size() == maxConnections);
-  }
-
-  /**
-   * Request a bunch of clients to a single server to test
-   * we create up to maxConnections of clients. This is a parallel
-   * version of testClientReuse.
-   */
-  private void testClientReuseConcurrent(final int maxConnections)
+  private void testClientReuse(final int maxConnections, boolean concurrent)
     throws IOException, InterruptedException {
     TransportConf conf = new TransportConf(new ConfigProvider() {
       @Override
@@ -133,7 +105,12 @@ public class TransportClientFactorySuite {
           }
         }
       };
-      attempts[i].run();
+
+      if (concurrent) {
+        attempts[i].start();
+      } else {
+        attempts[i].run();
+      }
     }
 
     // Wait until all the threads complete.
@@ -143,22 +120,26 @@ public class TransportClientFactorySuite {
 
     assert(failed.get() == 0);
     assert(clients.size() == maxConnections);
+
+    for (TransportClient client : clients) {
+      client.close();
+    }
   }
 
   @Test
-  public void reuseClientsUpToConfigVariable() throws IOException {
-    testClientReuse(1);
-    testClientReuse(2);
-    testClientReuse(3);
-    testClientReuse(4);
+  public void reuseClientsUpToConfigVariable() throws Exception {
+    testClientReuse(1, false);
+    testClientReuse(2, false);
+    testClientReuse(3, false);
+    testClientReuse(4, false);
   }
 
   @Test
   public void reuseClientsUpToConfigVariableConcurrent() throws Exception {
-    testClientReuseConcurrent(1);
-    testClientReuseConcurrent(2);
-    testClientReuseConcurrent(3);
-    testClientReuseConcurrent(4);
+    testClientReuse(1, true);
+    testClientReuse(2, true);
+    testClientReuse(3, true);
+    testClientReuse(4, true);
   }
 
   @Test
