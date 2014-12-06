@@ -52,7 +52,10 @@ object TwitterAlgebirdHLL {
     val filters = args
     val sparkConf = new SparkConf().setAppName("TwitterAlgebirdHLL")
     val ssc = new StreamingContext(sparkConf, Seconds(5))
-    val stream = TwitterUtils.createStream(ssc, None, filters, StorageLevel.MEMORY_ONLY_SER)
+    val stream = TwitterUtils.createStream(ssc,
+                                           None,
+                                           filters,
+                                           storageLevel=StorageLevel.MEMORY_ONLY_SER)
 
     val users = stream.map(status => status.getUser.getId)
 

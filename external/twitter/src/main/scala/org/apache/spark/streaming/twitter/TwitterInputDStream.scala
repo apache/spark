@@ -31,8 +31,9 @@ import org.apache.spark.streaming.receiver.Receiver
 /* A stream of Twitter statuses, potentially filtered by one or more keywords.
 *
 * @constructor create a new Twitter stream using the supplied Twitter4J authentication credentials.
-* An optional set of string filters can be used to restrict the set of tweets. The Twitter API is
-* such that this may return a sampled subset of all tweets during each interval.
+* An optional set of string keywordFilters and (longitude, latitude) pairs can be used to restrict
+* the set of tweets. The Twitter API is such that this may return a sampled subset of all tweets
+* during each interval.
 *
 * If no Authorization object is provided, initializes OAuth authorization using the system
 * properties twitter4j.oauth.consumerKey, .consumerSecret, .accessToken and .accessTokenSecret.
@@ -41,7 +42,8 @@ private[streaming]
 class TwitterInputDStream(
     @transient ssc_ : StreamingContext,
     twitterAuth: Option[Authorization],
-    filters: Seq[String],
+    keywordFilters: Seq[String],
+    latLonFilters: Seq[Array[Double]],
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[Status](ssc_)  {
 
@@ -52,14 +54,15 @@ class TwitterInputDStream(
   private val authorization = twitterAuth.getOrElse(createOAuthAuthorization())
 
   override def getReceiver(): Receiver[Status] = {
-    new TwitterReceiver(authorization, filters, storageLevel)
+    new TwitterReceiver(authorization, keywordFilters, latLonFilters, storageLevel)
   }
 }
 
 private[streaming]
 class TwitterReceiver(
     twitterAuth: Authorization,
-    filters: Seq[String],
+    keywordFilters: Seq[String],
+    latLonFilters: Seq[Array[Double]],
     storageLevel: StorageLevel
   ) extends Receiver[Status](storageLevel) with Logging {
 
@@ -86,12 +89,24 @@ class TwitterReceiver(
       })
 
       val query = new FilterQuery
-      if (filters.size > 0) {
-        query.track(filters.toArray)
+
+      // If either keyword filters or (longitude,latitude) filters were passed in
+      if (keywordFilters.size > 0 || latLonFilters.size > 0) {
+        // If any keyword filter strings were passed in
+        if (keywordFilters.size > 0) {
+          query.track(keywordFilters.toArray)
+        }
+
+        // If any (latitude, longitude) pairs were passed in
+        if (latLonFilters.size > 0) {
+          // Flip to (longitude, latitude) per the API
+          query.locations(latLonFilters.map(x => Array(x(1),x(0))).toArray)
+        }
         newTwitterStream.filter(query)
       } else {
         newTwitterStream.sample()
       }
+
       setTwitterStream(newTwitterStream)
       logInfo("Twitter receiver started")
       stopped = false
