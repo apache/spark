@@ -33,8 +33,8 @@ trait ANNClassifierHelper {
   private val labelCount = labelToIndex.size
 
   protected def labeledPointToVectorPair(labeledPoint: LabeledPoint) = {
-    val output = Array.fill(labelCount){0.0}
-    output(labelToIndex(labeledPoint.label)) = 1.0
+    val output = Array.fill(labelCount){0.1}
+    output(labelToIndex(labeledPoint.label)) = 0.9
     (labeledPoint.features, Vectors.dense(output))
   }
 
