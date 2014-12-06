@@ -73,9 +73,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
     case UpdateBlockInfo(
       blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize) =>
-      // TODO: Ideally we want to handle all the message replies in receive instead of in the
-      // individual private methods.
-      updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize)
+      sender ! updateBlockInfo(
+        blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize)
 
     case GetLocations(blockId) =>
       sender ! getLocations(blockId)
@@ -355,23 +354,21 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long,
-      tachyonSize: Long) {
+      tachyonSize: Long): Boolean = {
 
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.isDriver && !isLocal) {
         // We intentionally do not register the master (except in local mode),
         // so we should not indicate failure.
-        sender ! true
+        return true
       } else {
-        sender ! false
+        return false
       }
-      return
     }
 
     if (blockId == null) {
       blockManagerInfo(blockManagerId).updateLastSeenMs()
-      sender ! true
-      return
+      return true
     }
 
     blockManagerInfo(blockManagerId).updateBlockInfo(
@@ -395,7 +392,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     if (locations.size == 0) {
       blockLocations.remove(blockId)
     }
-    sender ! true
+    true
   }
 
   private def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
