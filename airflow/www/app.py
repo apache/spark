@@ -225,7 +225,8 @@ class Airflow(BaseView):
                     'type': 'datetime',
                 },
                 'yAxis': {
-                    'title': {'text': df.columns[2]}
+                    'min': 0,
+                    'title': {'text': df.columns[2]},
                 },
                 'series': all_data,
             }

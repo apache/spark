@@ -337,7 +337,7 @@ class TaskInstance(Base):
 
         # Checking that the depends_on_past is fulfilled
         if (task.depends_on_past and
-                not task.execution_date == task.start_date):
+                not self.execution_date == task.start_date):
             current_state = self.current_state()
             if current_state == State.SUCCESS:
                 return False
@@ -602,7 +602,7 @@ class BackfillJob(BaseJob):
         tasks_to_run = {}
         failed = []
         succeeded = []
-        running = []
+        started = []
         wont_run = []
         for task in self.dag.tasks:
             start_date = start_date or task.start_date
@@ -617,12 +617,12 @@ class BackfillJob(BaseJob):
             msg = (
                 "Yet to run: {0} | "
                 "Succeeded: {1} | "
-                "Running: {2} | "
+                "Started: {2} | "
                 "Failed: {3} | "
                 "Won't run: {4} ").format(
                 len(tasks_to_run),
                 len(succeeded),
-                len(running),
+                len(started),
                 len(failed),
                 len(wont_run))
 
@@ -639,14 +639,14 @@ class BackfillJob(BaseJob):
                             pickle_id=pickle_id)
                     )
                     ti.state = State.RUNNING
-                    running.append(key)
+                    if key not in started:
+                        started.append(key)
             if tasks_to_run:
                 self.heartbeat()
             executor.heartbeat()
 
             # Reacting to events
             for key, state in executor.get_event_buffer().items():
-                running.remove(key)
                 dag_id, task_id, execution_date = key
                 if key not in tasks_to_run:
                     continue
