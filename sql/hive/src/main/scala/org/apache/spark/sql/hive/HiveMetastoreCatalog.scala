@@ -94,7 +94,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    * @param schema Schema of the new table, if not specified, will use the schema
    *               specified in crtTbl
    * @param allowExisting if true, ignore AlreadyExistsException
-   * @param crtTbl CreateTableDesc object which contains the SerDe info. Currently
+   * @param desc CreateTableDesc object which contains the SerDe info. Currently
    *               we support most of the features except the bucket.
    */
   def createTable(
@@ -102,11 +102,13 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       tableName: String,
       schema: Seq[Attribute],
       allowExisting: Boolean = false,
-      crtTbl: CreateTableDesc = null) {
+      desc: Option[CreateTableDesc] = None) {
     val hconf = hive.hiveconf
 
     val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
     val tbl = new Table(dbName, tblName)
+
+    val crtTbl: CreateTableDesc = desc.getOrElse(null)
 
     // We should respect the passed in schema, unless it's not set
     val hiveSchema: JList[FieldSchema] = if (schema == null || schema.isEmpty) {

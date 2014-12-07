@@ -53,7 +53,7 @@ case class CreateTableAsSelect(
   // A lazy computing of the metastoreRelation
   private[this] lazy val metastoreRelation: MetastoreRelation = {
     // Create Hive Table
-    sc.catalog.createTable(database, tableName, query.output, allowExisting, desc.getOrElse(null))
+    sc.catalog.createTable(database, tableName, query.output, allowExisting, desc)
 
     // Get the Metastore Relation
     sc.catalog.lookupRelation(Some(database), tableName, None) match {
