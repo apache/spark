@@ -62,6 +62,7 @@ protected[sql] object DataTypeConversions {
     case IntegerType => JDataType.IntegerType
     case LongType => JDataType.LongType
     case ShortType => JDataType.ShortType
+    case NullType => JDataType.NullType
 
     case arrayType: ArrayType => JDataType.createArrayType(
         asJavaDataType(arrayType.elementType), arrayType.containsNull)
