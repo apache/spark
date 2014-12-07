@@ -126,7 +126,7 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT * FROM nested").collect().toSeq)
 
     intercept[org.apache.hadoop.hive.ql.metadata.InvalidTableException] {
-      sql("CREATE TABLE test_ctas_1234 AS SELECT * from notexists").collect()
+      sql("CREATE TABLE test_ctas_12345 AS SELECT * from notexists").collect()
     }
   }
 
