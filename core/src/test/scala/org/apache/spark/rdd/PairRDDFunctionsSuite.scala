@@ -559,7 +559,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     assert(emas.collect.toSet === Set((1, 1.0736), (5, 0.26)))
 
     val pairs = sc.parallelize(Array((5, "c"), (1, "a"), (5, "b"), (1, "c"), (1, "b")))
-    val top2 = pairs.groupByKeyAndSortValues(2).mapValues(_.take(2).mkString(""))
+    val top2 = pairs.groupByKeyAndSortValues(2).mapValues(_.toIterator.take(2).mkString(""))
     assert(top2.collect.toSet === Set((1, "ab"), (5, "bc")))
   }
 

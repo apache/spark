@@ -469,7 +469,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupByKeyAndSortValues(valueOrdering: Ordering[V], partitioner: Partitioner): 
-      RDD[(K, Iterable[V])] = {
+      RDD[(K, TraversableOnce[V])] = {
     val keyPartitioner = new Partitioner{
       override def numPartitions: Int = partitioner.numPartitions
       override def getPartition(key: Any): Int = 
@@ -479,9 +479,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val shuffled = new ShuffledRDD[(K, V), Unit, Unit](self.map{ kv => (kv, ())}, keyPartitioner)
       .setKeyOrdering(new KeyValueOrdering[K, V](None, Some(valueOrdering)))
 
-    new RDD[(K, Iterable[V])](shuffled) {
-      def compute(split: Partition, context: TaskContext): Iterator[(K, Iterable[V])] = 
-        new Iterator[(K, Iterable[V])] {
+    new RDD[(K, TraversableOnce[V])](shuffled) {
+      def compute(split: Partition, context: TaskContext): Iterator[(K, TraversableOnce[V])] = 
+        new Iterator[(K, TraversableOnce[V])] {
           private val iter = shuffled.compute(split, context).map(_._1).buffered
 
           private var prevKey: K = _
@@ -498,21 +498,19 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
             iter.hasNext
           }
 
-          override def next(): (K, Iterable[V]) = {
+          override def next(): (K, TraversableOnce[V]) = {
             finishPrev()
             val key = iter.head._1
             prevKey = key
             doneWithPrev = false
-            (key, new Iterable[V] {
-              override def iterator: Iterator[V] = new Iterator[V] {
-                override def hasNext: Boolean = iter.hasNext && iter.head._1 == key
+            (key, new Iterator[V] {
+              override def hasNext: Boolean = iter.hasNext && iter.head._1 == key
 
-                override def next(): V =
-                  if (iter.head._1 == key)
-                    iter.next()._2
-                  else
-                    throw new NoSuchElementException("next on empty iterator")
-              }
+              override def next(): V =
+                if (iter.head._1 == key)
+                  iter.next()._2
+                else
+                  throw new NoSuchElementException("next on empty iterator")
             })
           }
         }
@@ -525,7 +523,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Simplified version of groupByKeyAndSortValues that hash-partitions the output RDD.
    */
   def groupByKeyAndSortValues(valueOrdering: Ordering[V], numPartitions: Int): 
-      RDD[(K, Iterable[V])] = 
+      RDD[(K, TraversableOnce[V])] = 
     groupByKeyAndSortValues(valueOrdering, new HashPartitioner(numPartitions))
 
   /**
@@ -533,7 +531,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * and uses the natural ordering for sorting the values.
    */
   def groupByKeyAndSortValues(numPartitions: Int)(implicit valueOrdering: Ordering[V]):
-      RDD[(K, Iterable[V])] =
+      RDD[(K, TraversableOnce[V])] =
     groupByKeyAndSortValues(valueOrdering, numPartitions)
 
   /**

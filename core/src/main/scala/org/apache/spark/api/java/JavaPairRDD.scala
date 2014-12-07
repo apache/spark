@@ -17,7 +17,7 @@
 
 package org.apache.spark.api.java
 
-import java.util.{Comparator, List => JList, Map => JMap}
+import java.util.{Comparator, List => JList, Map => JMap, Iterator => JIterator}
 import java.lang.{Iterable => JIterable}
 
 import scala.collection.JavaConversions._
@@ -397,21 +397,24 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupByKeyAndSortValues(valueComp: Comparator[V], partitioner: Partitioner):
-      JavaPairRDD[K, JIterable[V]] = fromRDD(groupByResultToJava(rdd.groupByKeyAndSortValues(Ordering.comparatorToOrdering(valueComp), partitioner)))
+      JavaPairRDD[K, JIterator[V]] = fromRDD(groupByKeyAndSortValuesResultToJava(
+        rdd.groupByKeyAndSortValues(Ordering.comparatorToOrdering(valueComp), partitioner)))
 
   /**
    * Simplified version of groupByKeyAndSortValues that hash-partitions the output RDD.
    */
   def groupByKeyAndSortValues(valueComp: Comparator[V], numPartitions: Int):
-      JavaPairRDD[K, JIterable[V]] = fromRDD(groupByResultToJava(rdd.groupByKeyAndSortValues(Ordering.comparatorToOrdering(valueComp), numPartitions)))
+      JavaPairRDD[K, JIterator[V]] = fromRDD(groupByKeyAndSortValuesResultToJava(
+        rdd.groupByKeyAndSortValues(Ordering.comparatorToOrdering(valueComp), numPartitions)))
 
   /**
    * Simplified version of groupByKeyAndSortValues that hash-partitions the output RDD
    * and uses the natural ordering for sorting the values.
    */
-  def groupByKeyAndSortValues(numPartitions: Int): JavaPairRDD[K, JIterable[V]] = {
+  def groupByKeyAndSortValues(numPartitions: Int): JavaPairRDD[K, JIterator[V]] = {
     val valueComp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[V]]
-    fromRDD(groupByResultToJava(rdd.groupByKeyAndSortValues(Ordering.comparatorToOrdering(valueComp), numPartitions)))
+    fromRDD(groupByKeyAndSortValuesResultToJava(
+      rdd.groupByKeyAndSortValues(Ordering.comparatorToOrdering(valueComp), numPartitions)))
   }
 
   /**
@@ -987,6 +990,12 @@ object JavaPairRDD {
   def groupByResultToJava[K: ClassTag, T](rdd: RDD[(K, Iterable[T])]): RDD[(K, JIterable[T])] = {
     rddToPairRDDFunctions(rdd).mapValues(asJavaIterable)
   }
+
+  private[spark]
+  def groupByKeyAndSortValuesResultToJava[K: ClassTag, T](rdd: RDD[(K, TraversableOnce[T])]): RDD[(K, JIterator[T])] = {
+    rddToPairRDDFunctions(rdd).mapValues{ x => asJavaIterator(x.toIterator) }
+  }
+
 
   private[spark]
   def cogroupResultToJava[K: ClassTag, V, W](
