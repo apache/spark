@@ -2,6 +2,8 @@
 layout: global
 title: Running Spark on Mesos
 ---
+* This will become a table of contents (this text will be scraped).
+{:toc}
 
 Spark can run on hardware clusters managed by [Apache Mesos](http://mesos.apache.org/).
 
