@@ -94,7 +94,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    * @param schema Schema of the new table, if not specified, will use the schema
    *               specified in crtTbl
    * @param allowExisting if true, ignore AlreadyExistsException
-   * @param desc CreateTableDesc object which contains the SerDe info. Currently
+   * @param crtTbl CreateTableDesc object which contains the SerDe info. Currently
    *               we support most of the features except the bucket.
    */
   def createTable(
@@ -102,13 +102,11 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       tableName: String,
       schema: Seq[Attribute],
       allowExisting: Boolean = false,
-      desc: Option[CreateTableDesc] = None) {
+      crtTbl: CreateTableDesc = null) {
     val hconf = hive.hiveconf
 
     val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
     val tbl = new Table(dbName, tblName)
-
-    val crtTbl: CreateTableDesc = desc.getOrElse(null)
 
     // We should respect the passed in schema, unless it's not set
     val hiveSchema: JList[FieldSchema] = if (schema == null || schema.isEmpty) {
@@ -254,15 +252,37 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    * For example, because of a CREATE TABLE X AS statement.
    */
   object CreateTables extends Rule[LogicalPlan] {
+    import org.apache.hadoop.hive.ql.Context
+    import org.apache.hadoop.hive.ql.parse.{QB, ASTNode, SemanticAnalyzer}
+
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
 
-      case CreateTableAsSelect(db, tableName, child, allowExisting, extra) =>
+      case p @ CreateTableAsSelect(db, tableName, child, allowExisting, Some(extra: ASTNode)) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
-        CreateTableAsSelect(Some(databaseName), tableName, child, allowExisting, extra)
+        // Get the CreateTableDesc from Hive SemanticAnalyzer
+        val desc: Option[CreateTableDesc] = if (tableExists(Some(databaseName), tblName)) {
+          None
+        } else {
+          val sa = new SemanticAnalyzer(hive.hiveconf) {
+            override def analyzeInternal(ast: ASTNode) {
+              // A hack to intercept the SemanticAnalyzer.analyzeInternal, ignore the query clause
+              // for CTAS
+              val method = classOf[SemanticAnalyzer].getDeclaredMethod(
+                "analyzeCreateTable", classOf[ASTNode], classOf[QB])
+              method.setAccessible(true)
+              method.invoke(this, ast, this.getQB)
+            }
+          }
+
+          sa.analyze(extra, new Context(hive.hiveconf))
+          Some(sa.getQB().getTableDesc)
+        }
+
+        CreateTableAsSelect(Some(databaseName), tblName, child, allowExisting, desc)
     }
   }
 
