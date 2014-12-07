@@ -21,6 +21,7 @@ import markdown
 import chartkick
 
 from airflow.settings import Session
+from airflow import jobs
 from airflow import models
 from airflow.models import State
 from airflow import settings
@@ -271,7 +272,18 @@ class Airflow(BaseView):
             f = open(loc)
             log = "".join(f.readlines())
         except:
-            log = "Log file is missing"
+            log = "The log file '{loc}' is missing.".format(**locals())
+            TI = models.TaskInstance
+            session = Session()
+            ti = session.query(TI).filter(
+                TI.dag_id==dag_id, TI.task_id==task_id,
+                TI.execution_date==execution_date).first()
+            if ti:
+                host = ti.hostname
+                log += "\n\nIt should be on host [{host}]".format(**locals())
+            session.commit()
+            session.close()
+
 
         log = "<pre><code>" + log + "</code></pre>"
         title = "Logs for {task_id} on {execution_date}".format(**locals())
@@ -682,7 +694,7 @@ admin.add_view(mv)
 
 class JobModelView(ModelViewOnly):
     column_default_sort = ('start_date', True)
-mv = JobModelView(models.BaseJob, session, name="Jobs", category="Admin")
+mv = JobModelView(jobs.BaseJob, session, name="Jobs", category="Admin")
 admin.add_view(mv)
 
 
