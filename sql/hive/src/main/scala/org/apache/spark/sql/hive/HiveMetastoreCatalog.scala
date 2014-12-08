@@ -271,8 +271,8 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         } else {
           val sa = new SemanticAnalyzer(hive.hiveconf) {
             override def analyzeInternal(ast: ASTNode) {
-              // A hack to intercept the SemanticAnalyzer.analyzeInternal, ignore the query clause
-              // for CTAS
+              // A hack to intercept the SemanticAnalyzer.analyzeInternal,
+              // to ignore the SELECT clause of the CTAS
               val method = classOf[SemanticAnalyzer].getDeclaredMethod(
                 "analyzeCreateTable", classOf[ASTNode], classOf[QB])
               method.setAccessible(true)

@@ -182,13 +182,20 @@ private[hive] trait HiveStrategies {
         execution.InsertIntoHiveTable(
           table, partition, planLater(child), overwrite)(hiveContext) :: Nil
       case logical.CreateTableAsSelect(
-             Some(database), tableName, child, allowExisting, desc: Option[CreateTableDesc]) =>
+             Some(database), tableName, child, allowExisting, Some(desc: CreateTableDesc)) =>
         execution.CreateTableAsSelect(
           database,
           tableName,
           child,
           allowExisting,
-          desc) :: Nil
+          Some(desc)) :: Nil
+      case logical.CreateTableAsSelect(Some(database), tableName, child, allowExisting, None) =>
+        execution.CreateTableAsSelect(
+          database,
+          tableName,
+          child,
+          allowExisting,
+          None) :: Nil
       case _ => Nil
     }
   }
