@@ -60,13 +60,13 @@ class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
       .setMaxIter(10)
       .setRegParam(1.0)
     val model = lr.fit(dataset)
-    assert(model.fittingParamMap.get(lr.maxIter) === Some(10))
-    assert(model.fittingParamMap.get(lr.regParam) === Some(1.0))
+    assert(model.fittingParamMap.get(lr.maxIter).get === 10)
+    assert(model.fittingParamMap.get(lr.regParam).get === 1.0)
 
     // Call fit() with new params, and check as many as we can.
     val model2 = lr.fit(dataset, lr.maxIter -> 5, lr.regParam -> 0.1, lr.predictionCol -> "thePred")
-    assert(model2.fittingParamMap.get(lr.maxIter) === Some(5))
-    assert(model2.fittingParamMap.get(lr.regParam) === Some(0.1))
+    assert(model2.fittingParamMap.get(lr.maxIter).get === 5)
+    assert(model2.fittingParamMap.get(lr.regParam).get === 0.1)
     assert(model2.getPredictionCol == "thePred")
   }
 
