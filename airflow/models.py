@@ -1,12 +1,13 @@
 import copy
 from datetime import datetime, timedelta
+import getpass
 import imp
 import jinja2
 import logging
 import os
 import pickle
 import re
-from time import sleep
+import socket
 
 from sqlalchemy import (
         Column, Integer, String, DateTime, Text, Boolean, ForeignKey)
@@ -20,7 +21,6 @@ from airflow.executors import DEFAULT_EXECUTOR
 from airflow.configuration import getconf
 from airflow import settings
 from airflow import utils
-import socket
 from airflow.utils import State
 from airflow.utils import apply_defaults
 
@@ -39,8 +39,10 @@ class DagBag(object):
     """
     def __init__(
             self,
-            dag_folder=getconf().get('core', 'DAGS_FOLDER'),
+            dag_folder=None,
             executor=DEFAULT_EXECUTOR):
+        if not dag_folder:
+            dag_folder = getconf().get('core', 'DAGS_FOLDER')
         logging.info("Filling up the DagBag from " + dag_folder)
         self.dag_folder = dag_folder
         self.dags = {}
@@ -203,6 +205,8 @@ class TaskInstance(Base):
     duration = Column(Integer)
     state = Column(String(20))
     try_number = Column(Integer)
+    hostname = Column(String(1000))
+    unixname = Column(String(1000))
 
     def __init__(self, task, execution_date):
         self.dag_id = task.dag_id
@@ -210,6 +214,7 @@ class TaskInstance(Base):
         self.execution_date = execution_date
         self.task = task
         self.try_number = 1
+        self.unixname = getpass.getuser()
 
     def command(
             self,
@@ -396,6 +401,7 @@ class TaskInstance(Base):
         session = settings.Session()
         self.refresh_from_db(session)
         iso = datetime.now().isoformat()
+        self.hostname = socket.gethostname()
 
         msg = "\n"
         msg += ("-" * 80)
@@ -518,157 +524,6 @@ class Log(Base):
         self.execution_date = task_instance.execution_date
         self.event = event
         self.owner = task_instance.task.owner
-
-
-class BaseJob(Base):
-    """
-    Abstract class to be derived for jobs. Jobs are processing items with state
-    and duration that aren't task instances. For instance a BackfillJob is
-    a collection of task instance runs, but should have it's own state, start
-    and end time.
-    """
-
-    __tablename__ = "job"
-
-    id = Column(Integer, primary_key=True)
-    dag_id = Column(String(ID_LEN),)
-    state = Column(String(20))
-    job_type = Column(String(30))
-    start_date = Column(DateTime())
-    end_date = Column(DateTime())
-    latest_heartbeat = Column(DateTime())
-    executor_class = Column(String(500))
-    hostname = Column(String(500))
-
-    __mapper_args__ = {
-        'polymorphic_on': job_type,
-        'polymorphic_identity': 'BaseJob'
-    }
-
-    def __init__(self, executor=DEFAULT_EXECUTOR):
-        self.state = None
-        self.hostname = socket.gethostname()
-        self.executor = executor
-        self.executor_class = executor.__class__.__name__
-        self.start_date = datetime.now()
-        self.latest_heartbeat = datetime.now()
-
-    def is_alive(self):
-        return (
-            (datetime.now() - self.latest_heartbeat).seconds <
-            (getconf().getint('misc', 'JOB_HEARTBEAT_SEC') * 2.1)
-        )
-
-    def heartbeat(self):
-        session = settings.Session()
-        sleep_for = getconf().getint('misc', 'JOB_HEARTBEAT_SEC') - (
-            datetime.now() - self.latest_heartbeat).total_seconds()
-        if sleep_for > 0:
-            sleep(sleep_for)
-        self.latest_heartbeat = datetime.now()
-        session.merge(self)
-        session.commit()
-        session.close()
-
-    def run(self):
-        raise NotImplemented("This method needs to be overriden")
-
-
-class BackfillJob(BaseJob):
-    """
-    A backfill job consists of a dag or subdag for a specific time range. It
-    triggers a set of task instance runs, in the right order and lasts for
-    as long as it takes for the set of task instance to be completed.
-    """
-
-    __mapper_args__ = {
-        'polymorphic_identity': 'BackfillJob'
-    }
-
-    def run(self, dag, start_date=None, end_date=None, mark_success=False):
-        """
-        Runs a dag for a specified date range.
-        """
-        session = settings.Session()
-        self.dag = dag
-        pickle = DagPickle(dag, self)
-        executor = self.executor
-        executor.start()
-        session.add(pickle)
-        session.commit()
-        pickle_id = pickle.id
-
-        # Build a list of all intances to run
-        tasks_to_run = {}
-        failed = []
-        succeeded = []
-        started = []
-        wont_run = []
-        for task in self.dag.tasks:
-            start_date = start_date or task.start_date
-            end_date = end_date or task.end_date or datetime.now()
-            for dttm in utils.date_range(
-                    start_date, end_date, task.dag.schedule_interval):
-                ti = TaskInstance(task, dttm)
-                tasks_to_run[ti.key] = ti
-
-        # Triggering what is ready to get triggered
-        while tasks_to_run:
-            msg = (
-                "Yet to run: {0} | "
-                "Succeeded: {1} | "
-                "Started: {2} | "
-                "Failed: {3} | "
-                "Won't run: {4} ").format(
-                len(tasks_to_run),
-                len(succeeded),
-                len(started),
-                len(failed),
-                len(wont_run))
-
-            logging.info(msg)
-            for key, ti in tasks_to_run.items():
-                ti.refresh_from_db()
-                if ti.state == State.SUCCESS and key in tasks_to_run:
-                    succeeded.append(key)
-                    del tasks_to_run[key]
-                elif ti.is_runnable():
-                    executor.queue_command(
-                        key=ti.key, command=ti.command(
-                            mark_success=mark_success,
-                            pickle_id=pickle_id)
-                    )
-                    ti.state = State.RUNNING
-                    if key not in started:
-                        started.append(key)
-            if tasks_to_run:
-                self.heartbeat()
-            executor.heartbeat()
-
-            # Reacting to events
-            for key, state in executor.get_event_buffer().items():
-                dag_id, task_id, execution_date = key
-                if key not in tasks_to_run:
-                    continue
-                ti = tasks_to_run[key]
-                ti.refresh_from_db()
-                if ti.state == State.FAILED:
-                    failed.append(key)
-                    logging.error("Task instance " + str(key) + " failed")
-                    del tasks_to_run[key]
-                    # Removing downstream tasks from the one that has failed
-                    for t in dag.get_task(task_id).get_flat_relatives(
-                            upstream=False):
-                        key = (ti.dag_id, t.task_id, execution_date)
-                        if key in tasks_to_run:
-                            wont_run.append(key)
-                            del tasks_to_run[key]
-                elif ti.state == State.SUCCESS:
-                    succeeded.append(key)
-                    del tasks_to_run[key]
-        executor.end()
-        logging.info("Run summary:")
-        session.close()
 
 
 class BaseOperator(Base):
@@ -1156,16 +1011,10 @@ class DAG(Base):
         session.commit()
 
     def run(self, start_date=None, end_date=None, mark_success=False):
-        session = settings.Session()
-        job = BackfillJob(executor=self.executor)
-        session.add(job)
-        session.expunge_all()
-        session.commit()
-        job.run(self, start_date, end_date, mark_success)
-        job.state = State.SUCCESS
-        job.end_date = datetime.now()
-        session.merge(job)
-        session.commit()
+        from airflow import jobs
+        job = jobs.BackfillJob(
+            self, start_date, end_date)
+        job.run()
 
 
 class Chart(Base):

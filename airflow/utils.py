@@ -9,11 +9,12 @@ class State(object):
     Static class with task instance states constants and color method to
     avoid hardcoding.
     """
-    FAILED = "failed"
+    QUEUED = "queued"
     RUNNING = "running"
     SUCCESS = "success"
+    SHUTDOWN = "shutdown"  # External request to shut down
+    FAILED = "failed"
     UP_FOR_RETRY = "up_for_retry"
-    QUEUED = "queued"
 
     @classmethod
     def color(cls, state):
