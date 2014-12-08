@@ -458,9 +458,9 @@ private[spark] class TaskSetManager(
           }
           // Serialize and return the task
           val startTime = clock.getTime()
-          var serializedTaskOpt : Option[ByteBuffer] = None
+          var serializedTask : ByteBuffer = null
           try {
-            serializedTaskOpt = Some(Task.serializeWithDependencies(
+            serializedTask = Task.serializeWithDependencies(
               task, sched.sc.addedFiles, sched.sc.addedJars, ser))
           } catch {
             // If the task cannot be serialized, then there's no point to re-attempt the task,
@@ -472,9 +472,8 @@ private[spark] class TaskSetManager(
               throw new TaskNotSerializableException(e)
             }
           }
-          val serializedTask = serializedTaskOpt.get
           if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
-            !emittedTaskSizeWarning) {
+              !emittedTaskSizeWarning) {
             emittedTaskSizeWarning = true
             logWarning(s"Stage ${task.stageId} contains a task of very large size " +
               s"(${serializedTask.limit / 1024} KB). The maximum recommended task size is " +
@@ -487,7 +486,7 @@ private[spark] class TaskSetManager(
           // val timeTaken = clock.getTime() - startTime
           val taskName = s"task ${info.id} in stage ${taskSet.id}"
           logInfo("Starting %s (TID %d, %s, %s, %d bytes)".format(
-            taskName, taskId, host, taskLocality, serializedTask.limit))
+              taskName, taskId, host, taskLocality, serializedTask.limit))
 
           sched.dagScheduler.taskStarted(task, info)
           return Some(new TaskDescription(taskId, execId, taskName, index, serializedTask))
