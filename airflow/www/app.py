@@ -209,16 +209,26 @@ class Airflow(BaseView):
                 for series in sorted(
                     all_data, key=lambda s: all_data[s][0][1], reverse=True)
             ]
+            chart_type = chart.chart_type
+            if chart.chart_type == "stacked_area":
+                stacking = "normal"
+                chart_type = 'area'
+            elif chart.chart_type == "percent_area":
+                stacking = "percent"
+                chart_type = 'area'
+            else:
+                stacking = None
             hc = {
                 'chart':{
-                    'type': chart.chart_type
+                    'type': chart_type
                 },
                 'plotOptions': {
                     'series': {
                         'marker': {
                             'enabled': False
                         }
-                    }
+                    },
+                    'area': {'stacking': stacking},
                 },
                 'title': {'text': ''},
                 'xAxis': {
@@ -767,7 +777,9 @@ class ChartModelView(ModelView):
             ('spline', 'Spline Chart'),
             ('bar', 'Bar Chart'),
             ('column', 'Column Chart'),
-            ('area', 'Area Chart'),
+            ('area', 'Overlapping Area Chart'),
+            ('stacked_area', 'Stacked Area Chart'),
+            ('percent_area', 'Percent Area Chart'),
         ]
     }
 mv = ChartModelView(
