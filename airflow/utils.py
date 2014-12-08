@@ -115,3 +115,18 @@ def apply_defaults(func):
         result = func(*args, **kwargs)
         return result
     return wrapper
+
+def ask_yesno(question):
+    yes = set(['yes','y',])
+    no = set(['no','n'])
+
+    done = False
+    print(question)
+    while not done:
+        choice = raw_input().lower()
+        if choice in yes:
+           return True
+        elif choice in no:
+           return False
+        else:
+            print("Please respond by yes or no.")

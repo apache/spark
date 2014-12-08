@@ -908,7 +908,8 @@ class DAG(Base):
     def clear(
             self, start_date=None, end_date=None,
             upstream=False, downstream=False,
-            only_failed=False):
+            only_failed=False,
+            confirm_prompt=False):
         session = settings.Session()
         """
         Clears a set of task instances associated with the current dag for
@@ -926,7 +927,22 @@ class DAG(Base):
             tis = tis.filter(TI.state == State.FAILED)
 
         count = tis.count()
-        tis.delete()
+        if count == 0:
+            print("Nothing to clear.")
+            return 0
+        if confirm_prompt:
+            ti_list = "\n".join([str(t) for t in tis])
+            question = (
+                "You are about to delete these {count} tasks:\n"
+                "{ti_list}\n\n"
+                "Are you sure? (yes/no): ").format(**locals())
+            if utils.ask_yesno(question):
+                tis.delete()
+            else:
+                count = 0
+                print("Bail. Nothing was cleared.")
+        else:
+            tis.delete()
 
         session.commit()
         session.close()
