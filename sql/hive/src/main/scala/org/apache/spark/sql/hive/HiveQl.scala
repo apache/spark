@@ -1006,9 +1006,13 @@ private[hive] object HiveQl {
       val values = value.map { 
          case Token(name, Nil) => UnresolvedAttribute(cleanIdentifier(name)) 
       }
+      val vSize = values.size()
       val lists = list.map { 
         case Token("TOK_EXPLIST", sublist) => sublist.map(nodeToExpr)
       }
+      if (lists.exists(list => list.size() != vSize)) {
+        throw new RuntimeException(s"Failed to parse : ${lists.toString}, size mismatch")
+      } 
       InTuple(values, lists)
     case Token("TOK_FUNCTION", Token(IN(), Nil) :: value :: list) =>
       In(nodeToExpr(value), list.map(nodeToExpr))
