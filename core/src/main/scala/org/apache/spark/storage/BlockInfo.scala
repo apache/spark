@@ -28,7 +28,7 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
   private val putCondition = lock.newCondition()
   private val othersCondition = lock.newCondition()
 
-  val waitTypes = new BlockWaitCondition(Map("PUT" -> putCondition,
+  private val waitTypes = new BlockWaitCondition(Map("PUT" -> putCondition,
                                              "DROP" -> othersCondition,
                                              "GET" -> othersCondition))
   private var removed = false
@@ -54,11 +54,14 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
    */
   def waitForReady(waitType: String): Boolean = {
     if (pending && initThread != Thread.currentThread()) {
-      lock.lock()
-      while (pending) {
-        waitTypes.waitTypeValWithName(waitType).await()
+      try {
+        lock.lock()
+        while (pending) {
+          waitTypes.waitTypeValWithName(waitType).await()
+        }
+      } finally {
+        lock.unlock()
       }
-      lock.unlock()
     }
     !failed
   }
@@ -69,9 +72,12 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
     assert(pending)
     size = sizeInBytes
     BlockInfo.blockInfoInitThreads.remove(this)
-    lock.lock()
-    waitTypes.myValues.filter(_.count > 0).foreach(_.signalSuccess())
-    lock.unlock()
+    try {
+      lock.lock()
+      waitTypes.myValues.filter(_.getCount > 0).foreach(_.signalSuccess())
+    } finally {
+      lock.unlock()
+    }
   }
 
   /** Mark this BlockInfo as ready but failed */
@@ -79,10 +85,13 @@ private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolea
     assert(pending)
     size = BlockInfo.BLOCK_FAILED
     BlockInfo.blockInfoInitThreads.remove(this)
-    lock.lock()
-    removed = waitTypes.PUT.count == 0
-    waitTypes.myValues.filter(_.count > 0).foreach(_.signalFailure())
-    lock.unlock()
+    try {
+      lock.lock()
+      removed = waitTypes.PUT.getCount == 0
+      waitTypes.myValues.filter(_.getCount > 0).foreach(_.signalFailure())
+    } finally {
+      lock.unlock()
+    }
     removed
   }
 
@@ -103,13 +112,17 @@ private object BlockInfo {
   private val BLOCK_FAILED: Long = -2L
 }
 
-//A class for GET/PUT/DROP threads to use as lock.condition to wait block be ready
-class BlockWaitCondition(conditions: Map[String, Condition]) extends Enumeration {
+/**
+ * A class for GET/PUT/DROP threads to use as lock.condition to wait block be ready
+ * All GET/DROP thread wait one time for PUT whether succeed or failed
+ * PUT thread do one by one until one succeed
+ */
+private[storage] class BlockWaitCondition(conditions: Map[String, Condition]) extends Enumeration {
   private val actualValues: mutable.HashSet[WaitTypeVal] = new mutable.HashSet[WaitTypeVal]()
 
-  class WaitTypeVal(condition: Condition) extends Val {
-    protected val finalCondition = condition
-    @volatile var count = 0
+  class WaitTypeVal(protected val finalCondition: Condition) extends Val {
+    @volatile protected var count = 0
+    def getCount = count
 
     def signalFailure() {
       count = 0
