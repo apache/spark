@@ -124,7 +124,7 @@ case class CreateTableAsSelect[T](
   override lazy val resolved = (databaseName != None && childrenResolved)
 }
 
-case class WriteToFile(
+case class WriteToPaquetFile(
     path: String,
     child: LogicalPlan) extends UnaryNode {
   override def output = child.output

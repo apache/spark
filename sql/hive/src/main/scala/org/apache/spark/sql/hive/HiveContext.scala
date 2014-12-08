@@ -22,7 +22,8 @@ import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
-import scala.reflect.runtime.universe.TypeTag
+import scala.reflect.runtime.universe.{TypeTag, typeTag}
+import scala.Some
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.conf.HiveConf
@@ -33,13 +34,18 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 
 import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.hive.orc.OrcSchemaRDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperators, OverrideCatalog, OverrideFunctionRegistry}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.catalyst.types.DecimalType
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
-import org.apache.spark.sql.execution.{ExtractPythonUdfs, QueryExecutionException, Command => PhysicalCommand}
+import org.apache.spark.sql.execution.{Command => PhysicalCommand}
+import org.apache.spark.sql.catalyst.plans.logical.SetCommand
+import org.apache.spark.sql.catalyst.plans.logical.NativeCommand
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
 import org.apache.spark.sql.sources.DataSourceStrategy
 
@@ -106,6 +112,20 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   def hql(hqlQuery: String): SchemaRDD = hiveql(hqlQuery)
 
   /**
+   * Creates a SchemaRDD from an RDD of case classes.
+   *
+   * @group userf
+   */
+  implicit override def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) = {
+    SparkPlan.currentContext.set(self)
+    val attributeSeq = ScalaReflection.attributesFor[A]
+    val schema = StructType.fromAttributes(attributeSeq)
+    val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
+    new OrcSchemaRDD(this,
+      LogicalRDD(ScalaReflection.attributesFor[A], rowRDD)(self))
+  }
+
+  /**
    * Creates a table using the schema of the given class.
    *
    * @param tableName The name of the table to create.
@@ -115,6 +135,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   def createTable[A <: Product : TypeTag](tableName: String, allowExisting: Boolean = true) {
     catalog.createTable("default", tableName, ScalaReflection.attributesFor[A], allowExisting)
   }
+
+  /**
+   * Loads a ORC file, returning the result as a [[SchemaRDD]].
+   *
+   * @group userf
+   */
+  def orcFile(path: String): SchemaRDD = new SchemaRDD(
+    this, orc.OrcRelation(Seq.empty, path, Some(sparkContext.hadoopConfiguration), this))
 
   /**
    * Analyzes the given table in the current database to generate statistics, which will be
@@ -344,6 +372,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       HiveCommandStrategy(self),
       TakeOrdered,
       ParquetOperations,
+      OrcOperations,
       InMemoryScans,
       ParquetConversion, // Must be before HiveTableScans
       HiveTableScans,
