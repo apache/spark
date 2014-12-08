@@ -27,8 +27,7 @@ package org.apache
  * contains operations available only on RDDs of Doubles; and
  * [[org.apache.spark.rdd.SequenceFileRDDFunctions]] contains operations available on RDDs that can
  * be saved as SequenceFiles. These operations are automatically available on any RDD of the right
- * type (e.g. RDD[(Int, Int)] through implicit conversions except `saveAsSequenceFile`. You need to
- * `import org.apache.spark.SparkContext._` to make `saveAsSequenceFile` work.
+ * type (e.g. RDD[(Int, Int)] through implicit conversions.
  *
  * Java programmers should reference the [[org.apache.spark.api.java]] package
  * for Spark programming APIs in Java.
