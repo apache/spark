@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.export
 
+import org.apache.spark.mllib.classification.SVMModel
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.export.ModelExportType.ModelExportType
 import org.apache.spark.mllib.export.ModelExportType.PMML
@@ -44,6 +45,8 @@ private[mllib] object ModelExportFactory {
           new GeneralizedLinearPMMLModelExport(ridgeRegression, "ridge regression")
         case lassoRegression: LassoModel => 
           new GeneralizedLinearPMMLModelExport(lassoRegression, "lasso regression")
+        case svm: SVMModel => 
+          new GeneralizedLinearPMMLModelExport(svm, "linear SVM")
         case _ => 
           throw new IllegalArgumentException("Export not supported for model: " + model.getClass)
       }

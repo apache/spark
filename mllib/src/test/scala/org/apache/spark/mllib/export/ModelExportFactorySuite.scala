@@ -19,6 +19,7 @@ package org.apache.spark.mllib.export
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.mllib.classification.SVMModel
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LassoModel
@@ -48,8 +49,8 @@ class ModelExportFactorySuite extends FunSuite{
    
    }
    
-   test("ModelExportFactory create GeneralizedLinearPMMLModelExport when passing a"
-       +"LinearRegressionModel, RidgeRegressionModel or LassoModel") {
+   test("ModelExportFactory create GeneralizedLinearPMMLModelExport when passing a "
+       +"LinearRegressionModel, RidgeRegressionModel, LassoModel or SVMModel") {
     
     //arrange
     val linearInput = LinearDataGenerator.generateLinearInput(
@@ -57,6 +58,7 @@ class ModelExportFactorySuite extends FunSuite{
     val linearRegressionModel = new LinearRegressionModel(linearInput(0).features, linearInput(0).label);
     val ridgeRegressionModel = new RidgeRegressionModel(linearInput(0).features, linearInput(0).label);
     val lassoModel = new LassoModel(linearInput(0).features, linearInput(0).label);
+    val svmModel = new SVMModel(linearInput(0).features, linearInput(0).label);
     
     //act
     val linearModelExport = ModelExportFactory.createModelExport(linearRegressionModel, ModelExportType.PMML)         
@@ -72,6 +74,11 @@ class ModelExportFactorySuite extends FunSuite{
     val lassoModelExport = ModelExportFactory.createModelExport(lassoModel, ModelExportType.PMML)         
     //assert
     assert(lassoModelExport.isInstanceOf[GeneralizedLinearPMMLModelExport])
+    
+    //act
+    val svmModelExport = ModelExportFactory.createModelExport(svmModel, ModelExportType.PMML)         
+    //assert
+    assert(svmModelExport.isInstanceOf[GeneralizedLinearPMMLModelExport])
     
    }
    

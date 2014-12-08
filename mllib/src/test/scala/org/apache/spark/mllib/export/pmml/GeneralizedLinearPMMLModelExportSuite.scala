@@ -20,6 +20,7 @@ package org.apache.spark.mllib.export.pmml
 import org.dmg.pmml.RegressionModel
 import org.scalatest.FunSuite
 
+import org.apache.spark.mllib.classification.SVMModel
 import org.apache.spark.mllib.export.ModelExportFactory
 import org.apache.spark.mllib.export.ModelExportType
 import org.apache.spark.mllib.regression.LassoModel
@@ -37,6 +38,7 @@ class GeneralizedLinearPMMLModelExportSuite extends FunSuite{
     val linearRegressionModel = new LinearRegressionModel(linearInput(0).features, linearInput(0).label);
     val ridgeRegressionModel = new RidgeRegressionModel(linearInput(0).features, linearInput(0).label);
     val lassoModel = new LassoModel(linearInput(0).features, linearInput(0).label);
+    val svmModel = new SVMModel(linearInput(0).features, linearInput(0).label);
     
     //act by exporting the model to the PMML format
     val linearModelExport = ModelExportFactory.createModelExport(linearRegressionModel, ModelExportType.PMML)         
@@ -76,11 +78,25 @@ class GeneralizedLinearPMMLModelExportSuite extends FunSuite{
     //it also verifies that the pmml model has a regression table with the same number of predictors of the model weights
     assert(pmml.getModels().get(0).asInstanceOf[RegressionModel]
      .getRegressionTables().get(0).getNumericPredictors().size() === lassoModel.weights.size)
+     
+    //act
+    val svmModelExport = ModelExportFactory.createModelExport(svmModel, ModelExportType.PMML)         
+    //assert that the PMML format is as expected
+    assert(svmModelExport.isInstanceOf[PMMLModelExport])
+    pmml = svmModelExport.asInstanceOf[PMMLModelExport].getPmml()
+    assert(pmml.getHeader().getDescription() === "linear SVM")
+    //check that the number of fields match the weights size
+    assert(pmml.getDataDictionary().getNumberOfFields() === svmModel.weights.size + 1)
+    //this verify that there is a model attached to the pmml object and the model is a regression one
+    //it also verifies that the pmml model has a regression table with the same number of predictors of the model weights
+    assert(pmml.getModels().get(0).asInstanceOf[RegressionModel]
+     .getRegressionTables().get(0).getNumericPredictors().size() === svmModel.weights.size)
    
     //manual checking
     //ModelExporter.toPMML(linearRegressionModel,"/tmp/linearregression.xml")
     //ModelExporter.toPMML(ridgeRegressionModel,"/tmp/ridgeregression.xml")
     //ModelExporter.toPMML(lassoModel,"/tmp/lassoregression.xml")
+    //ModelExporter.toPMML(svmModel,"/tmp/svm.xml")
     
    }
   
