@@ -138,6 +138,45 @@ class GradientDescentSuite extends FunSuite with MLlibTestSparkContext with Matc
       "The different between newWeights with/without regularization " +
         "should be initialWeightsWithIntercept.")
   }
+
+  test("iteration should end with convergence tolerance") {
+    val nPoints = 10000
+    val A = 2.0
+    val B = -1.5
+
+    val initialB = -1.0
+    val initialWeights = Array(initialB)
+
+    val gradient = new LogisticGradient()
+    val updater = new SimpleUpdater()
+    val stepSize = 1.0
+    val numIterations = 10
+    val regParam = 0
+    val miniBatchFrac = 1.0
+    val convergenceTolerance = 5.0e-1
+
+    // Add a extra variable consisting of all 1.0's for the intercept.
+    val testData = GradientDescentSuite.generateGDInput(A, B, nPoints, 42)
+    val data = testData.map { case LabeledPoint(label, features) =>
+      label -> Vectors.dense(1.0 +: features.toArray)
+    }
+
+    val dataRDD = sc.parallelize(data, 2).cache()
+    val initialWeightsWithIntercept = Vectors.dense(1.0 +: initialWeights.toArray)
+
+    val (_, loss) = GradientDescent.runMiniBatchSGD(
+      dataRDD,
+      gradient,
+      updater,
+      stepSize,
+      numIterations,
+      regParam,
+      miniBatchFrac,
+      convergenceTolerance,
+      initialWeightsWithIntercept)
+
+    assert(loss.length < numIterations, "doesn't satisfy convergence tolerance")
+  }
 }
 
 class GradientDescentClusterSuite extends FunSuite with LocalClusterSparkContext {
