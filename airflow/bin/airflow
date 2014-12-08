@@ -106,7 +106,8 @@ def clear(args):
         end_date=args.end_date,
         upstream=args.upstream,
         downstream=args.downstream,
-        only_failed=args.only_failed)
+        only_failed=args.only_failed,
+        confirm_prompt=True)
 
 
 def webserver(args):
