@@ -261,7 +261,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
 
-      case p @ CreateTableAsSelect(db, tableName, child, allowExisting, Some(extra: ASTNode)) =>
+      case CreateTableAsSelect(db, tableName, child, allowExisting, Some(extra: ASTNode)) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
