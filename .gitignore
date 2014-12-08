@@ -57,6 +57,8 @@ unit-tests.log
 /lib/
 rat-results.txt
 scalastyle.txt
+conf/spark-defaults.conf.bak
+conf/*.conf
 scalastyle-output.xml
 
 # For Hive

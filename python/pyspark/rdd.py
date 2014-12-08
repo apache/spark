@@ -31,7 +31,6 @@ import bisect
 import random
 from math import sqrt, log, isinf, isnan
 
-from pyspark.accumulators import PStatsParam
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \
     PickleSerializer, pack_long, AutoBatchedSerializer
@@ -46,6 +45,7 @@ from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
 from pyspark.traceback_utils import SCCallSiteSync
 
 from py4j.java_collections import ListConverter, MapConverter
+from statsd import DogStatsd as statsd
 
 
 __all__ = ["RDD"]
@@ -1474,10 +1474,13 @@ class RDD(object):
 
         def add_shuffle_key(split, iterator):
 
+            client = statsd()
             buckets = defaultdict(list)
+            record_count = 0
             c, batch = 0, min(10 * numPartitions, 1000)
 
             for k, v in iterator:
+                record_count += 1
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
                 c += 1
 
@@ -1500,7 +1503,11 @@ class RDD(object):
                         batch = max(batch / 1.5, 1)
                     c = 0
 
+            client.histogram('spark.partition_metric.record_count', record_count)
+            client.histogram('spark.partition_metric.partition_count', len(buckets))
+
             for split, items in buckets.iteritems():
+                client.histogram('spark.partition_metric.partition_size', len(items))
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
 
@@ -2098,9 +2105,13 @@ class PipelinedRDD(RDD):
             return self._jrdd_val
         if self._bypass_serializer:
             self._jrdd_deserializer = NoOpSerializer()
-        enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
-        profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
-        command = (self.func, profileStats, self._prev_jrdd_deserializer,
+
+        if self.ctx.profiler_collector:
+            profiler = self.ctx.profiler_collector.new_profiler(self.ctx)
+        else:
+            profiler = None
+
+        command = (self.func, profiler, self._prev_jrdd_deserializer,
                    self._jrdd_deserializer)
         # the serialized command will be compressed by broadcast
         ser = CloudPickleSerializer()
@@ -2123,9 +2134,9 @@ class PipelinedRDD(RDD):
                                              broadcast_vars, self.ctx._javaAccumulator)
         self._jrdd_val = python_rdd.asJavaRDD()
 
-        if enable_profile:
+        if profiler:
             self._id = self._jrdd_val.id()
-            self.ctx._add_profile(self._id, profileStats)
+            self.ctx.profiler_collector.add_profiler(self._id, profiler)
         return self._jrdd_val
 
     def id(self):
