@@ -289,7 +289,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       // we release the memory claimed by this thread later on when the task finishes.
       if (keepUnrolling) {
         val amountToRelease = currentUnrollMemoryForThisThread - previousMemoryReserved
-        releaseUnrollMemoryForThisThread(amountToRelease)
+        releaseUnrollMemoryForThisThread(amountToRelease, true)
       }
     }
   }
@@ -455,13 +455,15 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * Release memory used by this thread for unrolling blocks.
    * If the amount is not specified, remove the current thread's allocation altogether.
    */
-  def releaseUnrollMemoryForThisThread(memory: Long = -1L): Unit = {
+  def releaseUnrollMemoryForThisThread(memory: Long = -1L, pending: Boolean = false): Unit = {
     val threadId = Thread.currentThread().getId
     accountingLock.synchronized {
       if (memory < 0) {
         unrollMemoryMap.remove(threadId)
       } else {
-        pendingUnrollMemoryMap(threadId) = pendingUnrollMemoryMap.getOrElse(threadId) + memory
+        if (pending) {
+          pendingUnrollMemoryMap(threadId) = pendingUnrollMemoryMap.getOrElse(threadId) + memory
+        }
         unrollMemoryMap(threadId) = unrollMemoryMap.getOrElse(threadId, memory) - memory
         // If this thread claims no more unroll memory, release it completely
         if (unrollMemoryMap(threadId) <= 0) {
