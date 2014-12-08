@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.impl.estimator
 
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.{Estimator, LabeledPoint, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
@@ -101,6 +102,18 @@ private[ml] abstract class Predictor[Learner <: Predictor[Learner, M], M <: Pred
    *                  These values override any specified in this Estimator's embedded ParamMap.
    */
   def train(dataset: RDD[LabeledPoint], paramMap: ParamMap): M
+
+  /**
+   * Same as [[fit()]], but using strong types.
+   * @param dataset  Training data
+   */
+  def train(dataset: RDD[LabeledPoint]): M = train(dataset, new ParamMap())
+
+  /** Java-friendly version of [[train()]]. */
+  def train(dataset: JavaRDD[LabeledPoint], paramMap: ParamMap): M = train(dataset.rdd, paramMap)
+
+  /** Java-friendly version of [[train()]]. */
+  def train(dataset: JavaRDD[LabeledPoint]): M = train(dataset.rdd)
 }
 
 private[ml] abstract class PredictionModel[M <: PredictionModel[M]]
@@ -155,6 +168,16 @@ private[ml] abstract class PredictionModel[M <: PredictionModel[M]]
    * Predict label for the given features.
    */
   def predict(features: Vector): Double
+
+  /** Java-friendly version of [[predict()]]. */
+  def predict(dataset: JavaRDD[Vector], paramMap: ParamMap): JavaRDD[java.lang.Double] = {
+    predict(dataset.rdd, paramMap).map(_.asInstanceOf[java.lang.Double]).toJavaRDD()
+  }
+
+  /** Java-friendly version of [[predict()]]. */
+  def predict(dataset: JavaRDD[Vector]): JavaRDD[java.lang.Double] = {
+    predict(dataset.rdd, new ParamMap).map(_.asInstanceOf[java.lang.Double]).toJavaRDD()
+  }
 
   /**
    * Create a copy of the model.

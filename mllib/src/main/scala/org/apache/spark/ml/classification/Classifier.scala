@@ -18,8 +18,10 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.rdd.RDD
 
 /**
  * Params for classification.
@@ -71,6 +73,14 @@ abstract class ClassificationModel[M <: ClassificationModel[M]]
    *          confidence for that label.
    */
   def predictRaw(features: Vector): Vector
+
+  /** Batch version of [[predictRaw]] */
+  def predictRaw(dataset: RDD[Vector]): RDD[Vector] = dataset.map(predictRaw)
+
+  /** Java-friendly batch version of [[predictRaw]] */
+  def predictRaw(dataset: JavaRDD[Vector]): JavaRDD[Vector] = {
+    dataset.rdd.map(predictRaw).toJavaRDD()
+  }
 
   // TODO: accuracy(dataset: RDD[LabeledPoint]): Double (follow-up PR)
 

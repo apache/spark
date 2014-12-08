@@ -17,7 +17,9 @@
 
 package org.apache.spark.ml.impl.estimator
 
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.rdd.RDD
 
 /**
  * Trait for a [[org.apache.spark.ml.classification.ClassificationModel]] which can output
@@ -34,4 +36,11 @@ private[ml] trait ProbabilisticClassificationModel {
    */
   def predictProbabilities(features: Vector): Vector
 
+  /** Batch version of [[predictProbabilities()]] */
+  def predictProbabilities(features: RDD[Vector]): RDD[Vector] = features.map(predictProbabilities)
+
+  /** Java-friendly batch version of [[predictProbabilities()]] */
+  def predictProbabilities(features: JavaRDD[Vector]): JavaRDD[Vector] = {
+    features.rdd.map(predictProbabilities).toJavaRDD()
+  }
 }

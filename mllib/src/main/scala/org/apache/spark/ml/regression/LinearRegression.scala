@@ -78,7 +78,8 @@ class LinearRegression extends Regressor[LinearRegression, LinearRegressionModel
    * NOTE: This does NOT support instance weights.
    * @param dataset  Training data.  Instance weights are ignored.
    */
-  def train(dataset: RDD[LabeledPoint]): LinearRegressionModel = train(dataset, new ParamMap())
+  override def train(dataset: RDD[LabeledPoint]): LinearRegressionModel =
+    train(dataset, new ParamMap()) // Override documentation
 }
 
 /**
