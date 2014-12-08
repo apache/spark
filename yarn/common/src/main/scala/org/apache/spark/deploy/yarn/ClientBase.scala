@@ -362,17 +362,17 @@ private[spark] trait ClientBase extends Logging {
       // Validate and include yarn am specific java options in yarn-client mode.
       val amOptsKey = "spark.yarn.clientmode.am.extraJavaOptions"
       val amOpts = sparkConf.getOption(amOptsKey)
-      amOpts.map { javaOpts =>
-        if (javaOpts.contains("-Dspark")) {
-          val msg = s"$amOptsKey is not allowed to set Spark options (was '$javaOpts'). "
+      amOpts.foreach { opts =>
+        if (opts.contains("-Dspark")) {
+          val msg = s"$amOptsKey is not allowed to set Spark options (was '$opts'). "
           throw new SparkException(msg)
         }
-        if (javaOpts.contains("-Xmx") || javaOpts.contains("-Xms")) {
-          val msg = s"$amOptsKey is not allowed to alter memory settings (was '$javaOpts')."
+        if (opts.contains("-Xmx") || opts.contains("-Xms")) {
+          val msg = s"$amOptsKey is not allowed to alter memory settings (was '$opts')."
           throw new SparkException(msg)
         }
+        javaOpts += opts
       }
-      amOpts.foreach(opts => javaOpts += opts)
     }
 
     // For log4j configuration to reference
