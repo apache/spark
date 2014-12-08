@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+
+# Determine the current working directory
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Called before any binaries are installed for any unknown operating system.
+# Current checks are as follows:
+# - NA
+prep_install_for_unknown() {
+  echo "ERROR: Forced installation is not available at this time for an"
+  echo "Operating System of type $OSTYPE"
+  exit 1
+}
+
+# Called before any binaries are installed for the Solaris operating system.
+# Current checks are as follows:
+# - NA
+prep_install_for_solaris() {
+  echo "ERROR: Forced installation is not available at this time for"
+  echo "Solaris-based systems."
+  exit 1
+}
+
+# Called before any binaries are installed for the BSD operating system.
+# Current checks are as follows:
+# - NA
+prep_install_for_bsd() {
+  echo "ERROR: Forced installation is not available at this time for BSD-based systems."
+  exit 1
+}
+
+# Called before any binaries are installed for the Linux operating system.
+# Current checks are as follows:
+# - NA
+prep_install_for_linux() {
+  echo
+}
+
+# Called before any binaries are installed for the OS X operating system.
+# Current checks are as follows:
+# - 'brew' must be installed
+prep_install_for_osx() {
+  [ -z "`which brew 2>/dev/null`" ] && \
+    echo "ERROR: Must have 'brew' installed for forced installation on OSX." && \
+    echo "       - You can download 'brew' at: http://brew.sh/" && \
+    exit 1
+}
+
+# Determine if a given application is already installed and, if not, check for
+# forced installation,
+## Arg1 - application name
+check_and_install_app() {
+  if [ -z "`which $1 2>/dev/null`" ]; then
+    # attempt to force install if flagged
+    if [ -n "${FORCE_INSTALL}" ]; then
+      local resource="${DIR}/packages/$1.sh"
+      if [ -f "$resource" ]; then
+        source "${DIR}/packages/$1.sh"
+        prep_install_for_${_OSTYPE}
+        install_$1_for_${_OSTYPE}
+      else
+        echo "ERROR: Cannot find the $1.sh build file from within ${DIR}/packages."
+        echo "       Ensure the file exists and is accesible."
+        exit 1
+      fi
+    # else exit with error message
+    else
+      echo "ERROR: $1 isn't installed; please install or automatically force install (-f)."
+      exit 2
+    fi
+  fi
+}
+
+# Set a cleaned OS type string based on the $OSTYPE bash variable
+case "$OSTYPE" in
+  solaris*)
+    _OSTYPE="solaris"
+    ;;
+  darwin*)
+    _OSTYPE="osx"
+    ;;
+  linux*)
+    _OSTYPE="linux"
+    ;;
+  bsd*)
+    _OSTYPE="bsd"
+    ;;
+  *)
+    _OSTYPE="unknown"
+    ;;
+esac
+
+# Here we build our own CLI event loop with the '--' as the stop
+OPT="$1"
+while [ ! "$OPT" = "--" -a ! $# -eq 0 ]; do
+  case $OPT in
+    -f)
+      FORCE_INSTALL=1
+      shift
+      ;;
+    -p=*)
+      ZINC_PORT=${OPT/-p=/}
+      shift
+      ;;
+    *)
+      echo "Unknown option: $OPT"
+      shift
+      ;;
+  esac
+  OPT="$1"
+done
+shift
+
+# Setup healthy defaults for the Zinc port if none were provided
+ZINC_PORT=${ZINC_PORT:-"3030"}
+
+# Check and install all applications necessary to fully build Spark
+check_and_install_app "mvn"
+check_and_install_app "zinc"
+check_and_install_app "scala"
+
+# Now that zinc is ensured to be installed, check its status and, if not
+# running, start it
+if [ -z "`zinc -status`" ]; then
+  zinc -start -port ${ZINC_PORT}
+fi
+
+# Determine the parameters pushed in from the command line and, if any are
+# present, use those within the maven
+if [ $# -gt 0 ]; then
+  mvn "$@"
+else
+  mvn clean package -DskipTests
+fi

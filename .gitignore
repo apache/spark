@@ -11,8 +11,8 @@
 sbt/*.jar
 .settings
 .cache
+cache
 .generated-mima*
-/build/
 work/
 out/
 .DS_Store
