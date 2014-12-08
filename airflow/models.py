@@ -1,5 +1,6 @@
 import copy
 from datetime import datetime, timedelta
+import getpass
 import imp
 import jinja2
 import logging
@@ -205,6 +206,7 @@ class TaskInstance(Base):
     state = Column(String(20))
     try_number = Column(Integer)
     hostname = Column(String(1000))
+    unixname = Column(String(1000))
 
     def __init__(self, task, execution_date):
         self.dag_id = task.dag_id
@@ -212,6 +214,7 @@ class TaskInstance(Base):
         self.execution_date = execution_date
         self.task = task
         self.try_number = 1
+        self.unixname = getpass.getuser()
 
     def command(
             self,

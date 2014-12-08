@@ -1,4 +1,5 @@
 from datetime import datetime
+import getpass
 import logging
 import signal
 import sys
@@ -40,6 +41,7 @@ class BaseJob(Base):
     latest_heartbeat = Column(DateTime())
     executor_class = Column(String(500))
     hostname = Column(String(500))
+    unixname = Column(String(1000))
 
     __mapper_args__ = {
         'polymorphic_on': job_type,
@@ -57,6 +59,7 @@ class BaseJob(Base):
         self.start_date = datetime.now()
         self.latest_heartbeat = None
         self.heartrate = heartrate
+        self.unixname = getpass.getuser()
         super(BaseJob, self).__init__(*args, **kwargs)
 
     def is_alive(self):
@@ -309,8 +312,7 @@ class BackfillJob(BaseJob):
                     ti.state = State.RUNNING
                     if key not in started:
                         started.append(key)
-            if tasks_to_run:
-                self.heartbeat()
+            self.heartbeat()
             executor.heartbeat()
 
             # Reacting to events
