@@ -23,7 +23,7 @@ Spark is built using [Apache Maven](http://maven.apache.org/).
 To build Spark and its example programs, run:
 
     export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
-    mvn -DskipTests clean package
+    mvn -Dhadoop.version=2.0.0-mr1-cdh4.7.0 -DskipTests clean package
 
 (You do not need to do this if you downloaded a pre-built package.)
 More detailed documentation is available from the project site, at
