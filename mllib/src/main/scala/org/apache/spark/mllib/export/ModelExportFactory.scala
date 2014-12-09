@@ -17,12 +17,14 @@
 
 package org.apache.spark.mllib.export
 
+import org.apache.spark.mllib.classification.LogisticRegressionModel
 import org.apache.spark.mllib.classification.SVMModel
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.export.ModelExportType.ModelExportType
 import org.apache.spark.mllib.export.ModelExportType.PMML
 import org.apache.spark.mllib.export.pmml.GeneralizedLinearPMMLModelExport
 import org.apache.spark.mllib.export.pmml.KMeansPMMLModelExport
+import org.apache.spark.mllib.export.pmml.LogisticRegressionPMMLModelExport
 import org.apache.spark.mllib.regression.LassoModel
 import org.apache.spark.mllib.regression.LinearRegressionModel
 import org.apache.spark.mllib.regression.RidgeRegressionModel
@@ -46,7 +48,14 @@ private[mllib] object ModelExportFactory {
         case lassoRegression: LassoModel => 
           new GeneralizedLinearPMMLModelExport(lassoRegression, "lasso regression")
         case svm: SVMModel => 
-          new GeneralizedLinearPMMLModelExport(svm, "linear SVM")
+          new GeneralizedLinearPMMLModelExport(
+              svm, 
+              "linear SVM: if predicted value > 0, the outcome is positive, or negative otherwise")
+        case logisticRegression: LogisticRegressionModel => 
+          new LogisticRegressionPMMLModelExport(
+              logisticRegression, 
+              "logistic regression: if predicted value > 0.5, "
+              + "the outcome is positive, or negative otherwise")
         case _ => 
           throw new IllegalArgumentException("Export not supported for model: " + model.getClass)
       }

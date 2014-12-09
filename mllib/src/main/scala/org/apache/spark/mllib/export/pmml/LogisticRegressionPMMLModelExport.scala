@@ -29,23 +29,23 @@ import org.dmg.pmml.NumericPredictor
 import org.dmg.pmml.OpType
 import org.dmg.pmml.RegressionModel
 import org.dmg.pmml.RegressionTable
-
-import org.apache.spark.mllib.regression.GeneralizedLinearModel
+import org.apache.spark.mllib.classification.LogisticRegressionModel
+import org.dmg.pmml.RegressionNormalizationMethodType
 
 /**
- * PMML Model Export for GeneralizedLinearModel abstract class
+ * PMML Model Export for LogisticRegressionModel class
  */
-private[mllib] class GeneralizedLinearPMMLModelExport(
-    model : GeneralizedLinearModel, 
+private[mllib] class LogisticRegressionPMMLModelExport(
+    model : LogisticRegressionModel, 
     description : String) 
   extends PMMLModelExport{
 
   /**
-   * Export the input GeneralizedLinearModel model to PMML format
+   * Export the input LogisticRegressionModel model to PMML format
    */
-  populateGeneralizedLinearPMML(model)
+  populateLogisticRegressionPMML(model)
   
-  private def populateGeneralizedLinearPMML(model : GeneralizedLinearModel): Unit = {
+  private def populateLogisticRegressionPMML(model : LogisticRegressionModel): Unit = {
 
      pmml.getHeader().setDescription(description) 
      
@@ -57,10 +57,16 @@ private[mllib] class GeneralizedLinearPMMLModelExport(
        
        val miningSchema = new MiningSchema()
        
-       val regressionTable = new RegressionTable(model.intercept)
+       val regressionTableYES = new RegressionTable(model.intercept)
+       .withTargetCategory("YES")
        
-       val regressionModel = new RegressionModel(miningSchema,MiningFunctionType.REGRESSION)
-        .withModelName(description).withRegressionTables(regressionTable)
+       val regressionTableNO = new RegressionTable(0.0)
+       .withTargetCategory("NO")
+       
+       val regressionModel = new RegressionModel(miningSchema,MiningFunctionType.CLASSIFICATION)
+        .withModelName(description)
+        .withNormalizationMethod(RegressionNormalizationMethodType.LOGIT)
+        .withRegressionTables(regressionTableYES, regressionTableNO)
         
        for ( i <- 0 until model.weights.size) {
          fields(i) = FieldName.create("field_" + i)
@@ -69,10 +75,11 @@ private[mllib] class GeneralizedLinearPMMLModelExport(
          miningSchema
             .withMiningFields(new MiningField(fields(i))
             .withUsageType(FieldUsageType.ACTIVE))
-         regressionTable.withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))   
+         regressionTableYES
+            .withNumericPredictors(new NumericPredictor(fields(i), model.weights(i)))   
        }
        
-       // for completeness add target field
+       // add target field
        val targetField = FieldName.create("target");
        dataDictionary
         .withDataFields(

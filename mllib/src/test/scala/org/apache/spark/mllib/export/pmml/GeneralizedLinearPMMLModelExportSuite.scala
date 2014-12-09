@@ -84,7 +84,7 @@ class GeneralizedLinearPMMLModelExportSuite extends FunSuite{
     //assert that the PMML format is as expected
     assert(svmModelExport.isInstanceOf[PMMLModelExport])
     pmml = svmModelExport.asInstanceOf[PMMLModelExport].getPmml()
-    assert(pmml.getHeader().getDescription() === "linear SVM")
+    assert(pmml.getHeader().getDescription() === "linear SVM: if predicted value > 0, the outcome is positive, or negative otherwise")
     //check that the number of fields match the weights size
     assert(pmml.getDataDictionary().getNumberOfFields() === svmModel.weights.size + 1)
     //this verify that there is a model attached to the pmml object and the model is a regression one
@@ -96,7 +96,7 @@ class GeneralizedLinearPMMLModelExportSuite extends FunSuite{
     //ModelExporter.toPMML(linearRegressionModel,"/tmp/linearregression.xml")
     //ModelExporter.toPMML(ridgeRegressionModel,"/tmp/ridgeregression.xml")
     //ModelExporter.toPMML(lassoModel,"/tmp/lassoregression.xml")
-    //ModelExporter.toPMML(svmModel,"/tmp/svm.xml")
+    //ModelExporter.toPMML(svmModel,"/tmp/linearsvm.xml")
     
    }
   
