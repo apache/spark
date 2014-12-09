@@ -302,11 +302,14 @@ case class InsertIntoParquetTable(
       val committer = format.getOutputCommitter(hadoopContext)
       committer.setupTask(hadoopContext)
       val writer = format.getRecordWriter(hadoopContext)
-      while (iter.hasNext) {
-        val row = iter.next()
-        writer.write(null, row)
+      try {
+        while (iter.hasNext) {
+          val row = iter.next()
+          writer.write(null, row)
+        }
+      } finally {
+        writer.close(hadoopContext)
       }
-      writer.close(hadoopContext)
       committer.commitTask(hadoopContext)
       1
     }
@@ -361,7 +364,7 @@ private[parquet] class FilteringParquetRowInputFormat
 
   private var footers: JList[Footer] = _
 
-  private var fileStatuses= Map.empty[Path, FileStatus]
+  private var fileStatuses = Map.empty[Path, FileStatus]
 
   override def createRecordReader(
       inputSplit: InputSplit,
@@ -405,7 +408,9 @@ private[parquet] class FilteringParquetRowInputFormat
         }
         val newFooters = new mutable.HashMap[FileStatus, Footer]
         if (toFetch.size > 0) {
+          val startFetch = System.currentTimeMillis
           val fetched = getFooters(conf, toFetch)
+          logInfo(s"Fetched $toFetch footers in ${System.currentTimeMillis - startFetch} ms")
           for ((status, i) <- toFetch.zipWithIndex) {
             newFooters(status) = fetched.get(i)
           }

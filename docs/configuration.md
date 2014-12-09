@@ -98,7 +98,7 @@ of the most common options to set are:
   <td>(none)</td>
   <td>
     The cluster manager to connect to. See the list of
-    <a href="scala-programming-guide.html#master-urls"> allowed master URL's</a>.
+    <a href="submitting-applications.html#master-urls"> allowed master URL's</a>.
   </td>
 </tr>
 <tr>
@@ -224,6 +224,7 @@ Apart from these, the following properties are also available, and may be useful
     (Experimental) Whether to give user-added jars precedence over Spark's own jars when
     loading classes in Executors. This feature can be used to mitigate conflicts between
     Spark's dependencies and user dependencies. It is currently an experimental feature.
+    (Currently, this setting does not work for YARN, see <a href="https://issues.apache.org/jira/browse/SPARK-2996">SPARK-2996</a> for more details).
   </td>
 </tr>
 <tr>
@@ -938,11 +939,11 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </tr>
   <td><code>spark.scheduler.minRegisteredResourcesRatio</code></td>
-  <td>0</td>
+  <td>0.0 for Mesos and Standalone mode, 0.8 for YARN</td>
   <td>
     The minimum ratio of registered resources (registered resources / total expected resources)
     (resources are executors in yarn mode, CPU cores in standalone mode)
-    to wait for before scheduling begins. Specified as a double between 0 and 1.
+    to wait for before scheduling begins. Specified as a double between 0.0 and 1.0.
     Regardless of whether the minimum ratio of resources has been reached,
     the maximum amount of time it will wait before scheduling begins is controlled by config 
     <code>spark.scheduler.maxRegisteredResourcesWaitingTime</code>.

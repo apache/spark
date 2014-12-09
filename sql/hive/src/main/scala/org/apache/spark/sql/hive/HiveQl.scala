@@ -124,7 +124,6 @@ private[hive] object HiveQl {
 
   // Commands that we do not need to explain.
   protected val noExplainCommands = Seq(
-    "TOK_CREATETABLE",
     "TOK_DESCTABLE",
     "TOK_TRUNCATETABLE"     // truncate table" is a NativeCommand, does not need to explain.
   ) ++ nativeCommands
@@ -380,7 +379,7 @@ private[hive] object HiveQl {
   protected def nameExpressions(exprs: Seq[Expression]): Seq[NamedExpression] = {
     exprs.zipWithIndex.map {
       case (ne: NamedExpression, _) => ne
-      case (e, i) => Alias(e, s"c_$i")()
+      case (e, i) => Alias(e, s"_c$i")()
     }
   }
 
@@ -421,6 +420,11 @@ private[hive] object HiveQl {
     case Token("TOK_EXPLAIN", explainArgs)
       if noExplainCommands.contains(explainArgs.head.getText) =>
       ExplainCommand(NoRelation)
+    case Token("TOK_EXPLAIN", explainArgs)
+      if "TOK_CREATETABLE" == explainArgs.head.getText =>
+      val Some(crtTbl) :: _ :: extended :: Nil =
+        getClauses(Seq("TOK_CREATETABLE", "FORMATTED", "EXTENDED"), explainArgs)
+      ExplainCommand(nodeToPlan(crtTbl), extended != None)
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
       val Some(query) :: _ :: extended :: Nil =
@@ -1124,7 +1128,10 @@ private[hive] object HiveQl {
         Explode(attributes, nodeToExpr(child))
 
       case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
-        HiveGenericUdtf(functionName, attributes, children.map(nodeToExpr))
+        HiveGenericUdtf(
+          new HiveFunctionWrapper(functionName),
+          attributes,
+          children.map(nodeToExpr))
 
       case a: ASTNode =>
         throw new NotImplementedError(

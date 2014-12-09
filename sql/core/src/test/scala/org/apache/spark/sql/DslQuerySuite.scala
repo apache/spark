@@ -156,22 +156,58 @@ class DslQuerySuite extends QueryTest {
 
   test("average") {
     checkAnswer(
-      testData2.groupBy()(avg('a)),
+      testData2.aggregate(avg('a)),
       2.0)
+
+    checkAnswer(
+      testData2.aggregate(avg('a), sumDistinct('a)), // non-partial
+      (2.0, 6.0) :: Nil)
+
+    checkAnswer(
+      decimalData.aggregate(avg('a)),
+      BigDecimal(2.0))
+    checkAnswer(
+      decimalData.aggregate(avg('a), sumDistinct('a)), // non-partial
+      (BigDecimal(2.0), BigDecimal(6)) :: Nil)
+
+    checkAnswer(
+      decimalData.aggregate(avg('a cast DecimalType(10, 2))),
+      BigDecimal(2.0))
+    checkAnswer(
+      decimalData.aggregate(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))), // non-partial
+      (BigDecimal(2.0), BigDecimal(6)) :: Nil)
   }
 
   test("null average") {
     checkAnswer(
-      testData3.groupBy()(avg('b)),
+      testData3.aggregate(avg('b)),
       2.0)
 
     checkAnswer(
-      testData3.groupBy()(avg('b), countDistinct('b)),
+      testData3.aggregate(avg('b), countDistinct('b)),
       (2.0, 1) :: Nil)
+
+    checkAnswer(
+      testData3.aggregate(avg('b), sumDistinct('b)), // non-partial
+      (2.0, 2.0) :: Nil)
+  }
+
+  test("zero average") {
+    checkAnswer(
+      emptyTableData.aggregate(avg('a)),
+      null)
+
+    checkAnswer(
+      emptyTableData.aggregate(avg('a), sumDistinct('b)), // non-partial
+      (null, null) :: Nil)
   }
 
   test("count") {
     assert(testData2.count() === testData2.map(_ => 1).count())
+
+    checkAnswer(
+      testData2.aggregate(count('a), sumDistinct('a)), // non-partial
+      (6, 6.0) :: Nil)
   }
 
   test("null count") {
@@ -186,13 +222,34 @@ class DslQuerySuite extends QueryTest {
     )
 
     checkAnswer(
-      testData3.groupBy()(count('a), count('b), count(1), countDistinct('a), countDistinct('b)),
+      testData3.aggregate(count('a), count('b), count(1), countDistinct('a), countDistinct('b)),
       (2, 1, 2, 2, 1) :: Nil
+    )
+
+    checkAnswer(
+      testData3.aggregate(count('b), countDistinct('b), sumDistinct('b)), // non-partial
+      (1, 1, 2) :: Nil
     )
   }
 
   test("zero count") {
     assert(emptyTableData.count() === 0)
+
+    checkAnswer(
+      emptyTableData.aggregate(count('a), sumDistinct('a)), // non-partial
+      (0, null) :: Nil)
+  }
+
+  test("zero sum") {
+    checkAnswer(
+      emptyTableData.aggregate(sum('a)),
+      null)
+  }
+
+  test("zero sum distinct") {
+    checkAnswer(
+      emptyTableData.aggregate(sumDistinct('a)),
+      null)
   }
 
   test("except") {
@@ -223,6 +280,74 @@ class DslQuerySuite extends QueryTest {
       // SELECT *, foo(key, value) FROM testData
       testData.select(Star(None), foo.call('key, 'value)).limit(3),
       (1, "1", "11") :: (2, "2", "22") :: (3, "3", "33") :: Nil
+    )
+  }
+
+  test("sqrt") {
+    checkAnswer(
+      testData.select(sqrt('key)).orderBy('key asc),
+      (1 to 100).map(n => Seq(math.sqrt(n)))
+    )
+
+    checkAnswer(
+      testData.select(sqrt('value), 'key).orderBy('key asc, 'value asc),
+      (1 to 100).map(n => Seq(math.sqrt(n), n))
+    )
+
+    checkAnswer(
+      testData.select(sqrt(Literal(null))),
+      (1 to 100).map(_ => Seq(null))
+    )
+  }
+
+  test("abs") {
+    checkAnswer(
+      testData.select(abs('key)).orderBy('key asc),
+      (1 to 100).map(n => Seq(n))
+    )
+
+    checkAnswer(
+      negativeData.select(abs('key)).orderBy('key desc),
+      (1 to 100).map(n => Seq(n))
+    )
+
+    checkAnswer(
+      testData.select(abs(Literal(null))),
+      (1 to 100).map(_ => Seq(null))
+    )
+  }
+
+  test("upper") {
+    checkAnswer(
+      lowerCaseData.select(upper('l)),
+      ('a' to 'd').map(c => Seq(c.toString.toUpperCase()))
+    )
+
+    checkAnswer(
+      testData.select(upper('value), 'key),
+      (1 to 100).map(n => Seq(n.toString, n))
+    )
+
+    checkAnswer(
+      testData.select(upper(Literal(null))),
+      (1 to 100).map(n => Seq(null))
+    )
+  }
+
+  test("lower") {
+    checkAnswer(
+      upperCaseData.select(lower('L)),
+      ('A' to 'F').map(c => Seq(c.toString.toLowerCase()))
+    )
+
+    checkAnswer(
+      testData.select(lower('value), 'key),
+      (1 to 100).map(n => Seq(n.toString, n))
+    )
+
+    checkAnswer(
+      testData.select(lower(Literal(null))),
+      (1 to 100).map(n => Seq(null))
     )
   }
 }
