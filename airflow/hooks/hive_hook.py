@@ -1,4 +1,5 @@
 import logging
+import json
 import subprocess
 import sys
 from tempfile import NamedTemporaryFile
@@ -20,7 +21,7 @@ from airflow.hooks.base_hook import BaseHook
 
 class HiveHook(BaseHook):
     def __init__(self,
-        hive_dbid=getconf().get('hooks', 'HIVE_DEFAULT_DBID')):
+            hive_dbid=getconf().get('hooks', 'HIVE_DEFAULT_DBID')):
         session = settings.Session()
         db = session.query(
             DatabaseConnection).filter(
@@ -31,6 +32,12 @@ class HiveHook(BaseHook):
             db = db.all()[0]
         self.host = db.host
         self.db = db.schema
+        self.hiveconf = None
+        try:
+            self.hiveconf = json.loads(db.extra)['hiveconf']
+        except:
+            pass
+
         self.port = db.port
         session.commit()
         session.close()
@@ -102,8 +109,9 @@ class HiveHook(BaseHook):
         f = NamedTemporaryFile()
         f.write(hql)
         f.flush()
+        hiveconf = ["-hiveconf", self.hiveconf] if self.hiveconf else []
         sp = subprocess.Popen(
-                ['hive', '-f', f.name],
+                ['hive', '-f', f.name] + hiveconf,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT)
         all_err = ''
