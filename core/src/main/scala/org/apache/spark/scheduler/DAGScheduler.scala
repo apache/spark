@@ -1046,7 +1046,6 @@ class DAGScheduler(
                   newlyRunnable += stage
                 }
                 waitingStages --= newlyRunnable
-                runningStages ++= newlyRunnable
                 for {
                   stage <- newlyRunnable.sortBy(_.id)
                   jobId <- activeJobForStage(stage)
