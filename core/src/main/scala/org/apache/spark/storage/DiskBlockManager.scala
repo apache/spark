@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.File
+import java.io.{IOException, File}
 import java.text.SimpleDateFormat
 import java.util.{Date, Random, UUID}
 
@@ -71,24 +71,15 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
           old
         } else {
           var foundLocalDir = false
-          var tries = 0
           val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-          while (!foundLocalDir && tries < MAX_DIR_CREATION_ATTEMPTS) {
-            tries += 1
-            try {
-              if (!newDir.exists()) {
-                foundLocalDir = newDir.mkdir()
-              }
-              else {
-                foundLocalDir = true
-              }
-            } catch {
-              case e: Exception =>
-                logWarning(s"Attempt $tries to create local dir $newDir failed", e)
-            }
+          if (!newDir.exists()) {
+            foundLocalDir = newDir.mkdir()
+          }
+          else {
+            foundLocalDir = true
           }
           if (!foundLocalDir) {
-            throw new Exception(s"Failed $MAX_DIR_CREATION_ATTEMPTS attempts to create local dir in $newDir.")
+            throw new IOException(s"Failed to create local dir in $newDir.")
           }
           subDirs(dirId)(subDirId) = newDir
           newDir
