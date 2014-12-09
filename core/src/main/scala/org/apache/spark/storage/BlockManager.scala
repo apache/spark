@@ -1010,15 +1010,14 @@ private[spark] class BlockManager(
       info.synchronized {
         // required ? As of now, this will be invoked only for blocks which are ready
         // But in case this changes in future, adding for consistency sake.
-        if (blockInfo.get(blockId).isEmpty) {
-          logWarning(s"Block $blockId was already dropped.")
-          return None
-        } else if(!info.waitForReady()) {
+        if (!info.waitForReady()) {
           // If we get here, the block write failed.
           logWarning(s"Block $blockId was marked as failure. Nothing to drop")
           return None
+        } else if (blockInfo.get(blockId).isEmpty) {
+          logWarning(s"Block $blockId was already dropped.")
+          return None
         }
-
         var blockIsUpdated = false
         val level = info.level
 
