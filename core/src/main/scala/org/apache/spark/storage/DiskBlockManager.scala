@@ -70,10 +70,25 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
         if (old != null && old.exists()) {
           old
         } else {
+          var foundLocalDir = false
+          var tries = 0
           val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-          val foundLocalDir = newDir.mkdir()
-           if (!foundLocalDir) {
-            logError(s"Failed to create local dir in $newDir. Ignoring this directory.")
+          while (!foundLocalDir && tries < MAX_DIR_CREATION_ATTEMPTS) {
+            tries += 1
+            try {
+              if (!newDir.exists()) {
+                foundLocalDir = newDir.mkdir()
+              }
+              else {
+                foundLocalDir = true
+              }
+            } catch {
+              case e: Exception =>
+                logWarning(s"Attempt $tries to create local dir $newDir failed", e)
+            }
+          }
+          if (!foundLocalDir) {
+            throw new Exception(s"Failed $MAX_DIR_CREATION_ATTEMPTS attempts to create local dir in $newDir.")
           }
           subDirs(dirId)(subDirId) = newDir
           newDir
