@@ -58,6 +58,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       ImplicitGenerate ::
       StarExpansion ::
       ResolveFunctions ::
+      WindowAttributes ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
       TrimGroupingAliases ::
@@ -223,6 +224,28 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   }
 
   /**
+   * translate WindowAttribute in SelectExpression to attribute
+   */
+  object WindowAttributes extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case q: WindowFunction =>
+        q transformExpressions {
+          case u @ WindowAttribute(children, name, windowSpec)
+            // set window spec in AggregateExpression for execution and GlobalAggregates check
+            if (children.isInstanceOf[AggregateExpression]) => {
+              children.asInstanceOf[AggregateExpression].windowSpec = windowSpec
+              u
+            }
+        }
+      case q: LogicalPlan =>
+        q transformExpressions {
+          // translate WindowAttribute in SelectExpression to attribute
+          case u @ WindowAttribute(children, name, windowSpec) => u.toAttribute
+        }
+    }
+  }
+
+  /**
    * Turns projections that contain aggregate expressions into aggregations.
    */
   object GlobalAggregates extends Rule[LogicalPlan] {
@@ -233,7 +256,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
 
     def containsAggregates(exprs: Seq[Expression]): Boolean = {
       exprs.foreach(_.foreach {
-        case agg: AggregateExpression => return true
+        case agg: AggregateExpression if (agg.windowSpec == null) => return true
         case _ =>
       })
       false

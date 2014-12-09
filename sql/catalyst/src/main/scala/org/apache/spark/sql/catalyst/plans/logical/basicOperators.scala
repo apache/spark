@@ -143,6 +143,16 @@ case class Aggregate(
   override def output = aggregateExpressions.map(_.toAttribute)
 }
 
+case class WindowFunction(
+    partitionExpressions: Seq[Expression],
+    computeExpressions: Seq[WindowAttribute],
+    otherExpressions: Seq[NamedExpression],
+    child: LogicalPlan)
+  extends UnaryNode {
+
+  override def output = (computeExpressions ++ otherExpressions).map(_.toAttribute)
+}
+
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output = child.output
 

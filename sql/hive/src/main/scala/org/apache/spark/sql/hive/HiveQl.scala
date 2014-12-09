@@ -33,6 +33,9 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
+import java.util.concurrent.ConcurrentHashMap
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -526,7 +529,8 @@ private[hive] object HiveQl {
             clusterByClause ::
             distributeByClause ::
             limitClause ::
-            lateralViewClause :: Nil) = {
+            lateralViewClause ::
+            windowClause :: Nil) = {
           getClauses(
             Seq(
               "TOK_INSERT_INTO",
@@ -541,9 +545,12 @@ private[hive] object HiveQl {
               "TOK_CLUSTERBY",
               "TOK_DISTRIBUTEBY",
               "TOK_LIMIT",
-              "TOK_LATERAL_VIEW"),
+              "TOK_LATERAL_VIEW",
+              "WINDOW"),
             singleInsert)
         }
+
+        initWindowDef(windowClause)
 
         val relations = nodeToRelation(fromClause)
         val withWhere = whereClause.map { whereNode =>
@@ -607,11 +614,14 @@ private[hive] object HiveQl {
           // Not a transformation so must be either project or aggregation.
           val selectExpressions = nameExpressions(select.getChildren.flatMap(selExprNodeToExpr))
 
+          //not support both window and group by yet
           groupByClause match {
             case Some(groupBy) =>
               Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withLateralView)
-            case None =>
-              Project(selectExpressions, withLateralView)
+            case None => {
+              val withWindowView = windowToPlan(selectExpressions, withLateralView)
+              Project(selectExpressions, withWindowView)
+            }
           }
         }
 
@@ -862,6 +872,190 @@ private[hive] object HiveQl {
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
 
+  // store the window def of current sql
+  // use thread id as key to avoid mistake when multi-sqls parse at the same time
+  protected val windowDefMap = new ConcurrentHashMap[Long, Map[String, Seq[ASTNode]]]()
+
+  // store the window spec number of current sql
+  protected val windowNoMap = new ConcurrentHashMap[Long, Int]()
+
+  protected def initWindowDef(windowClause: Option[Node]) = {
+
+    var winDefs = Map[String, Seq[ASTNode]]()
+
+    windowClause match {
+      case Some(window) => window.getChildren.foreach {
+        case Token("TOK_WINDOWDEF", Token(alias, Nil) :: Token("TOK_WINDOWSPEC", ws) :: Nil) => {
+          winDefs += alias -> ws
+        }
+      }
+      case None => // do nothing
+    }
+
+    windowDefMap.put(Thread.currentThread().getId, winDefs)
+    windowNoMap.put(Thread.currentThread().getId, 0)
+  }
+
+  protected def nextWindowNo: Int = {
+    var no = windowNoMap.get(Thread.currentThread().getId)
+    no += 1
+    windowNoMap.put(Thread.currentThread().getId, no)
+    no
+  }
+  protected def translateWindowSpec(windowSpec: Seq[ASTNode]): Seq[ASTNode]= {
+
+    windowSpec match {
+      case Token(alias, Nil) :: Nil => translateWindowSpec(getWindowSpec(alias))
+      case Token(alias, Nil) :: frame => {
+        val (partitionClause :: rowsFrame :: valueFrame :: Nil) = getClauses(
+          Seq(
+            "TOK_PARTITIONINGSPEC",
+            "TOK_WINDOWRANGE",
+            "TOK_WINDOWVALUES"),
+          translateWindowSpec(getWindowSpec(alias)))
+        partitionClause match {
+          case Some(partition) => partition.asInstanceOf[ASTNode] :: frame
+          case None => frame
+        }
+      }
+      case e => e
+    }
+  }
+
+  protected def getWindowSpec(alias: String): Seq[ASTNode]= {
+    windowDefMap.get(Thread.currentThread().getId).getOrElse(
+      alias, sys.error("no window def for " + alias))
+  }
+
+  protected def windowToPlan(selectExpressions: Seq[NamedExpression],
+    withLateralView: LogicalPlan): LogicalPlan = {
+
+    val windowAttributes = new ArrayBuffer[WindowAttribute]
+    val attrExpressions = new ArrayBuffer[NamedExpression]
+    selectExpressions.foreach { sel =>
+      sel.collect {
+        case win: WindowAttribute => windowAttributes += win
+        case attr: UnresolvedAttribute =>
+          if (!attrExpressions.contains(attr)) attrExpressions += attr
+      }
+    }
+
+    // Multi-step of WindowFunction will be needed,
+    // if there're multi-windowAttributes with different window partitions,
+    var currentPlan = withLateralView
+    while (!windowAttributes.isEmpty) {
+
+      var currentPartition: WindowPartition = null
+      val computeExpressions = new ArrayBuffer[WindowAttribute]
+      val otherExpressions = attrExpressions.clone()
+
+      windowAttributes.foreach(expr => {
+        val windowPartition = expr.windowSpec.windowPartition
+
+        if (currentPartition == null) {
+          computeExpressions += expr
+          currentPartition = windowPartition
+        } else if (currentPartition == windowPartition) {
+          computeExpressions += expr
+        }
+      })
+
+      val partitionExpr = currentPartition.partitionBy
+      val sortExpr = currentPartition.sortBy
+
+      val withWindowPartition =
+        if (partitionExpr.size > 0) {
+          if (sortExpr.size > 0) SortPartitions(sortExpr, Repartition(partitionExpr, currentPlan))
+          else Repartition(partitionExpr, currentPlan)
+        } else {
+          if (sortExpr.size > 0) Sort(sortExpr, currentPlan)
+          else currentPlan
+        }
+
+      (partitionExpr ++ sortExpr.map(_.child)).collect {
+        case attr: UnresolvedAttribute =>
+          if (!otherExpressions.contains(attr)) otherExpressions += attr
+      }
+
+      currentPlan = WindowFunction(
+        partitionExpr, computeExpressions.toSeq, otherExpressions, withWindowPartition)
+      attrExpressions ++= computeExpressions
+      windowAttributes --= computeExpressions
+
+    }
+    currentPlan
+  }
+
+  protected def checkWindowSpec(windowSpec: Seq[ASTNode]): WindowSpec = {
+
+    val (partitionClause :: rowsFrame :: valueFrame :: Nil) = getClauses(
+      Seq(
+        "TOK_PARTITIONINGSPEC",
+        "TOK_WINDOWRANGE",
+        "TOK_WINDOWVALUES"),
+      translateWindowSpec(windowSpec))
+
+    val wp = partitionClause match {
+      case Some(partition) => {
+        val (orderByClause :: sortByClause :: distributeByClause :: clusterByClause :: Nil) =
+          getClauses(
+            Seq(
+              "TOK_ORDERBY",
+              "TOK_SORTBY",
+              "TOK_DISTRIBUTEBY",
+              "TOK_CLUSTERBY"),
+            partition.getChildren.toIndexedSeq.asInstanceOf[Seq[ASTNode]])
+
+        val partitionExpr = (distributeByClause orElse clusterByClause) match {
+          case Some(partitionBy) => partitionBy.getChildren.map(nodeToExpr)
+          case None => Seq()
+        }
+
+        val sortByExpr = (orderByClause orElse sortByClause) match {
+          case Some(sortBy) => sortBy.getChildren.map(nodeToSortOrder)
+          case None => Seq()
+        }
+        WindowPartition(partitionExpr, sortByExpr)
+      }
+      case None => WindowPartition(Seq(), Seq())
+    }
+
+
+    (rowsFrame orElse valueFrame) match {
+      case Some(frame) => {
+        val rangeSeq = frame.getChildren.toIndexedSeq
+
+        if (rangeSeq.size > 0) {
+
+          val preceding = rangeSeq.get(0) match {
+            case Token("preceding", Token(name, Nil) :: Nil) =>
+              if (name == "unbounded") Int.MaxValue
+              else name.toInt
+            case Token("current", Nil) => 0
+            case _ => 0
+          }
+
+          val following = if (rangeSeq.size > 1) {
+            rangeSeq.get(1) match {
+              case Token("following", Token(name, Nil) :: Nil) =>
+                if (name == "unbounded") Int.MaxValue
+                else name.toInt
+              case Token("current", Nil) => 0
+              case _ => 0
+            }
+          } else 0
+
+          if (rowsFrame.isDefined) {
+            WindowSpec(wp, WindowFrame("ROWS_FRAME", preceding, following))
+          } else {
+            WindowSpec(wp, WindowFrame("VALUE_FRAME", preceding, following))
+          }
+          
+        } else WindowSpec(wp, null)
+      }
+      case None => WindowSpec(wp, null)
+    }
+  }
 
   protected val escapedIdentifier = "`([^`]+)`".r
   /** Strips backticks from ident if present */
@@ -1055,8 +1249,18 @@ private[hive] object HiveQl {
       Substring(nodeToExpr(string), nodeToExpr(pos), nodeToExpr(length))
 
     /* UDFs - Must be last otherwise will preempt built in functions */
-    case Token("TOK_FUNCTION", Token(name, Nil) :: args) =>
-      UnresolvedFunction(name, args.map(nodeToExpr))
+    case Token("TOK_FUNCTION", Token(name, Nil) :: args) => {
+      val exprs = new ArrayBuffer[Node]
+      var windowSpec: WindowSpec = null
+      args.foreach {
+          case Token("TOK_WINDOWSPEC", winSpec) => windowSpec = checkWindowSpec(winSpec)
+          case a: ASTNode => exprs += a
+      }
+      if (windowSpec == null) UnresolvedFunction(name, exprs.map(nodeToExpr))
+      else WindowAttribute(UnresolvedFunction(name, exprs.map(nodeToExpr)),
+        s"w_" + nextWindowNo, windowSpec)()
+    }
+
     case Token("TOK_FUNCTIONSTAR", Token(name, Nil) :: args) =>
       UnresolvedFunction(name, Star(None) :: Nil)
 
