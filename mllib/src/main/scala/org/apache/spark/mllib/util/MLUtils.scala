@@ -19,8 +19,7 @@ package org.apache.spark.mllib.util
 
 import scala.reflect.ClassTag
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV,
-  squaredDistance => breezeSquaredDistance}
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
@@ -264,6 +263,16 @@ object MLUtils {
     }
     Vectors.fromBreeze(vector1)
   }
+ 
+  /**
+   * Returns the squared distance between two Vectors.
+   */
+  def vectorSquaredDistance(v1: Vector, v2: Vector): Double = {
+    v1.toArray.zip(v2.toArray).foldLeft(0.0)((distance, elems) => {
+      val score = elems._1 - elems._2
+      distance + score * score
+    })
+  }
 
   /**
    * Returns the squared Euclidean distance between two vectors. The following formula will be used
@@ -314,12 +323,10 @@ object MLUtils {
       val precisionBound2 = EPSILON * (sumSquaredNorm + 2.0 * math.abs(dotValue)) /
         (sqDist + EPSILON)
       if (precisionBound2 > precision) {
-        // TODO: breezeSquaredDistance is slow,
-        // so we should replace it with our own implementation.
-        sqDist = breezeSquaredDistance(v1.toBreeze, v2.toBreeze)
+        sqDist = vectorSquaredDistance(v1, v2)
       }
     } else {
-      sqDist = breezeSquaredDistance(v1.toBreeze, v2.toBreeze)
+      sqDist = vectorSquaredDistance(v1, v2)
     }
     sqDist
   }
