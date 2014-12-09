@@ -85,10 +85,10 @@ PipelinedRDD <- function(prev, func) {
 
 
 # The jrdd accessor function.
-setGeneric("getJRDD", function(rdd) { standardGeneric("getJRDD") })
+setGeneric("getJRDD", function(rdd, ...) { standardGeneric("getJRDD") })
 setMethod("getJRDD", signature(rdd = "RDD"), function(rdd) rdd@jrdd )
 setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
-          function(rdd) {
+          function(rdd, dataSerialization = TRUE) {
             if (!is.null(rdd@env$jrdd_val)) {
               return(rdd@env$jrdd_val)
             }
@@ -116,17 +116,29 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
 
             prev_jrdd <- rdd@prev_jrdd
 
-            rddRef <- new(J("edu.berkeley.cs.amplab.sparkr.RRDD"),
-                           prev_jrdd$rdd(),
-                           serializedFuncArr,
-                           rdd@env$serialized,
-                           depsBinArr,
-                           packageNamesArr,
-                           as.character(.sparkREnv[["libname"]]),
-                           broadcastArr,
-                           prev_jrdd$classTag())
-            # The RDD is serialized after we create a RRDD
-            rdd@env$serialized <- TRUE
+            if (dataSerialization) {
+              rddRef <- new(J("edu.berkeley.cs.amplab.sparkr.RRDD"),
+                             prev_jrdd$rdd(),
+                             serializedFuncArr,
+                             rdd@env$serialized,
+                             depsBinArr,
+                             packageNamesArr,
+                             as.character(.sparkREnv[["libname"]]),
+                             broadcastArr,
+                             prev_jrdd$classTag())
+            } else {
+              rddRef <- new(J("edu.berkeley.cs.amplab.sparkr.StringRRDD"),
+                             prev_jrdd$rdd(),
+                             serializedFuncArr,
+                             rdd@env$serialized,
+                             depsBinArr,
+                             packageNamesArr,
+                             as.character(.sparkREnv[["libname"]]),
+                             broadcastArr,
+                             prev_jrdd$classTag())
+            }
+            # Save the serialization flag after we create a RRDD
+            rdd@env$serialized <- dataSerialization
             rdd@env$jrdd_val <- rddRef$asJavaRDD()
             rdd@env$jrdd_val
           })
@@ -1034,6 +1046,34 @@ setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
 
             # TODO(zongheng): investigate if this call is an in-place shuffle?
             sample(samples)[1:total]
+          })
+
+#' Save this RDD as a text file, using string representations of elements.
+#'
+#' @param rdd The RDD to save
+#' @param path The directory where the splits of the text file are saved
+#' @rdname saveAsTextFile
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:3)
+#' saveAsTextFile(rdd, "/tmp/sparkR-tmp")
+#'}
+setGeneric("saveAsTextFile", function(rdd, path) { standardGeneric("saveAsTextFile") })
+
+#' @rdname saveAsTextFile
+#' @aliases saveAsTextFile,RDD
+setMethod("saveAsTextFile",
+          signature(rdd = "RDD", path = "character"),
+          function(rdd, path) {
+            func <- function(x) {
+              toString(x)
+            }
+            stringRdd <- lapply(rdd, func)
+            .jcall(getJRDD(stringRdd, dataSerialization = FALSE), "V", "saveAsTextFile", path)
+            # Return nothing
+            invisible(NULL)
           })
 
 #' Return an RDD with the keys of each tuple.

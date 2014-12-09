@@ -33,8 +33,11 @@ splitIndex <- readInt(inputCon)
 execLen <- readInt(inputCon)
 execFunctionName <- unserialize(readRawLen(inputCon, execLen))
 
-# read the isSerialized bit flag
-isSerialized <- readInt(inputCon)
+# read the isParentSerialized bit flag
+isParentSerialized <- readInt(inputCon)
+
+# read the dataSerialization bit flag
+dataSerialization <- readInt(inputCon)
 
 # Redirect stdout to stderr to prevent print statements from
 # interfering with outputStream
@@ -82,16 +85,20 @@ isEmpty <- readInt(inputCon)
 if (isEmpty != 0) {
 
   if (numPartitions == -1) {
-    if (isSerialized) {
+    if (isParentSerialized) {
       # Now read as many characters as described in funcLen
       data <- readDeserialize(inputCon)
     } else {
       data <- readLines(inputCon)
     }
     output <- do.call(execFunctionName, list(splitIndex, data))
-    writeRaw(outputCon, output)
+    if (dataSerialization) {
+      writeRaw(outputCon, output)
+    } else {
+      writeStrings(outputCon, output)
+    }
   } else {
-    if (isSerialized) {
+    if (isParentSerialized) {
       # Now read as many characters as described in funcLen
       data <- readDeserialize(inputCon)
     } else {
@@ -130,7 +137,9 @@ if (isEmpty != 0) {
 }
 
 # End of output
-writeInt(outputCon, 0L)
+if (dataSerialization) {
+  writeInt(outputCon, 0L)
+}
 
 close(outputCon)
 

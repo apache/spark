@@ -20,7 +20,7 @@ private class PairwiseRRDD[T: ClassTag](
     parent: RDD[T],
     numPartitions: Int,
     hashFunc: Array[Byte],
-    dataSerialized: Boolean,
+    parentSerialized: Boolean,
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
@@ -38,8 +38,8 @@ private class PairwiseRRDD[T: ClassTag](
 
     RRDD.startStderrThread(proc)
 
-    val tempFile = RRDD.startStdinThread(rLibDir, proc, hashFunc, dataSerialized,
-      functionDependencies, packageNames, broadcastVars,
+    val tempFile = RRDD.startStdinThread(rLibDir, proc, hashFunc, parentSerialized,
+      true, functionDependencies, packageNames, broadcastVars,
       parentIterator, numPartitions,
       split.index)
 
@@ -100,7 +100,7 @@ private class PairwiseRRDD[T: ClassTag](
 class RRDD[T: ClassTag](
     parent: RDD[T],
     func: Array[Byte],
-    dataSerialized: Boolean,
+    parentSerialized: Boolean,
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
@@ -119,8 +119,8 @@ class RRDD[T: ClassTag](
     RRDD.startStderrThread(proc)
 
     // Write -1 in numPartitions to indicate this is a normal RDD
-    val tempFile = RRDD.startStdinThread(rLibDir, proc, func, dataSerialized,
-      functionDependencies, packageNames, broadcastVars,
+    val tempFile = RRDD.startStdinThread(rLibDir, proc, func, parentSerialized,
+      true, functionDependencies, packageNames, broadcastVars,
       parentIterator, numPartitions = -1, split.index)
 
     // Return an iterator that read lines from the process's stdout
@@ -173,6 +173,76 @@ class RRDD[T: ClassTag](
   val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
 }
 
+/**
+ * An RDD that stores R objects as Array[String].
+ */
+class StringRRDD[T: ClassTag](
+    parent: RDD[T],
+    func: Array[Byte],
+    parentSerialized: Boolean,
+    functionDependencies: Array[Byte],
+    packageNames: Array[Byte],
+    rLibDir: String,
+    broadcastVars: Array[Broadcast[Object]])
+  extends RDD[String](parent) {
+
+  override def getPartitions = parent.partitions
+
+  override def compute(split: Partition, context: TaskContext): Iterator[String] = {
+
+    val parentIterator = firstParent[T].iterator(split, context)
+
+    val pb = RRDD.rWorkerProcessBuilder(rLibDir)
+    val proc = pb.start()
+
+    RRDD.startStderrThread(proc)
+
+    // Write -1 in numPartitions to indicate this is a normal RDD
+    val tempFile = RRDD.startStdinThread(rLibDir, proc, func, parentSerialized,
+      false, functionDependencies, packageNames, broadcastVars,
+      parentIterator, numPartitions = -1, split.index)
+
+    // Return an iterator that read lines from the process's stdout
+    val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
+    val stdOutFileName = inputStream.readLine().trim()
+
+    val dataStream = new BufferedReader(
+                           new InputStreamReader(new FileInputStream(stdOutFileName)))
+
+    return new Iterator[String] {
+      def next(): String = {
+        val obj = _nextObj
+        if (hasNext) {
+          _nextObj = read()
+        }
+        obj
+      }
+
+      private def read(): String = {
+        try {
+          dataStream.readLine()
+        } catch {
+          case e: IOException => {
+            throw new SparkException("R worker exited unexpectedly (crashed)", e)
+          }
+        }
+      }
+      var _nextObj = read()
+
+      def hasNext(): Boolean = {
+        val hasMore = _nextObj != null
+        if (!hasMore) {
+          // Delete the temporary file we created as we are done reading it
+          dataStream.close()
+          tempFile.delete()
+        }
+        hasMore
+      }
+    }
+  }
+
+  val asJavaRDD : JavaRDD[String] = JavaRDD.fromRDD(this)
+}
 
 object RRDD {
 
@@ -242,7 +312,8 @@ object RRDD {
       rLibDir: String,
       proc: Process,
       func: Array[Byte],
-      dataSerialized: Boolean,
+      parentSerialized: Boolean,
+      dataSerialization: Boolean,
       functionDependencies: Array[Byte],
       packageNames: Array[Byte],
       broadcastVars: Array[Broadcast[Object]],
@@ -281,7 +352,8 @@ object RRDD {
         dataOut.writeInt(func.length)
         dataOut.write(func, 0, func.length)
 
-        dataOut.writeInt(if (dataSerialized) 1 else 0)
+        dataOut.writeInt(if (parentSerialized) 1 else 0)
+        dataOut.writeInt(if (dataSerialization) 1 else 0)
 
         dataOut.writeInt(functionDependencies.length)
         dataOut.write(functionDependencies, 0, functionDependencies.length)
@@ -308,7 +380,7 @@ object RRDD {
         }
 
         for (elem <- iter) {
-          if (dataSerialized) {
+          if (parentSerialized) {
             val elemArr = elem.asInstanceOf[Array[Byte]]
             dataOut.writeInt(elemArr.length)
             dataOut.write(elemArr, 0, elemArr.length)
