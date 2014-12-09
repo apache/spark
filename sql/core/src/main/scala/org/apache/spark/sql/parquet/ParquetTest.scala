@@ -57,17 +57,19 @@ trait ParquetTest {
   }
 
   /**
-   * Generates a temporary path without creating the actual file/directory, then pass it to `f`.
+   * Generates a temporary path without creating the actual file/directory, then pass it to `f`. If
+   * a file/directory is created there by `f`, it will be delete after `f` returns.
    *
    * @todo Probably this method should be moved to a more general place
    */
   protected def withTempPath(f: File => Unit): Unit = {
     val file = util.getTempFilePath("parquetTest").getCanonicalFile
-    try f(file) finally Utils.deleteRecursively(file)
+    try f(file) finally if (file.exists()) Utils.deleteRecursively(file)
   }
 
   /**
-   * Creates a temporary directory, which is then passed to `f`.
+   * Creates a temporary directory, which is then passed to `f` and will be deleted after `f`
+   * returns.
    *
    * @todo Probably this method should be moved to a more general place
    */
@@ -77,7 +79,8 @@ trait ParquetTest {
   }
 
   /**
-   * Writes `data` to a Parquet file, which is then passed to `f`.
+   * Writes `data` to a Parquet file, which is then passed to `f` and will be deleted after `f`
+   * returns.
    */
   protected def withParquetFile[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
@@ -90,6 +93,7 @@ trait ParquetTest {
 
   /**
    * Writes `data` to a Parquet file and reads it back as a SchemaRDD, which is then passed to `f`.
+   * The Parquet file will be deleted after `f` returns.
    */
   protected def withParquetRDD[T <: Product: ClassTag: TypeTag]
       (data: Seq[T])
@@ -106,7 +110,8 @@ trait ParquetTest {
 
   /**
    * Writes `data` to a Parquet file, reads it back as a SchemaRDD and registers it as a temporary
-   * table named `tableName`, then call `f`.
+   * table named `tableName`, then call `f`. The temporary table together with the Parquet file will
+   * be dropped/deleted after `f` returns.
    */
   protected def withParquetTable[T <: Product: ClassTag: TypeTag]
       (data: Seq[T], tableName: String)
