@@ -1,5 +1,5 @@
 import logging
-from subprocess import Popen, PIPE
+from subprocess import Popen, STDOUT, PIPE
 
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
@@ -25,12 +25,13 @@ class BashOperator(BaseOperator):
 
         logging.info("Runnning command: " + bash_command)
         sp = Popen(
-            bash_command, shell=True, stdout=PIPE, stderr=PIPE)
-        out, err = sp.communicate()
-        sp.wait()
+            bash_command, shell=True, stdout=PIPE, stderr=STDOUT)
 
-        logging.info("Command STDOUT:\n" + out)
-        if err:
-            logging.error(err)
+        logging.info("Output:")
+        for line in iter(sp.stdout.readline, ''):
+            logging.info(line.strip())
+        sp.wait()
+        logging.info("Command exited with return code %d", sp.returncode)
+
         if sp.returncode:
             raise Exception("Bash command failed")
