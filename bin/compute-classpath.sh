@@ -68,14 +68,14 @@ else
   assembly_folder="$ASSEMBLY_DIR"
 fi
 
-num_jars="$(ls "$assembly_folder" | grep "spark-assembly.*hadoop.*\.jar" | wc -l)"
+num_jars="$(ls "$assembly_folder" | grep "spark-assembly.*hadoop.*\.jar$" | wc -l)"
 if [ "$num_jars" -eq "0" ]; then
   echo "Failed to find Spark assembly in $assembly_folder"
   echo "You need to build Spark before running this program."
   exit 1
 fi
 if [ "$num_jars" -gt "1" ]; then
-  jars_list=$(ls "$assembly_folder" | grep "spark-assembly.*hadoop.*.jar")
+  jars_list=$(ls "$assembly_folder" | grep "spark-assembly.*hadoop.*.jar$")
   echo "Found multiple Spark assembly jars in $assembly_folder:"
   echo "$jars_list"
   echo "Please remove all but one jar."
