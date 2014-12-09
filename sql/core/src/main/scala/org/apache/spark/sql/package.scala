@@ -470,4 +470,13 @@ package object sql {
    */
   @DeveloperApi
   type MetadataBuilder = catalyst.util.MetadataBuilder
+
+  import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+  /**
+   * Implicit StringContext conversion to allow strings as references to columns.
+   */
+  implicit class StringToSymbol(val sc: StringContext) extends AnyVal {
+    def $() = UnresolvedAttribute(sc.parts(0))
+  }
+
 }
