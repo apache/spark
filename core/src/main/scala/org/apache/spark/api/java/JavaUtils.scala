@@ -19,7 +19,8 @@ package org.apache.spark.api.java
 
 import com.google.common.base.Optional
 
-import scala.collection.convert.Wrappers.MapWrapper
+import java.{util => ju}
+import scala.collection.mutable
 
 private[spark] object JavaUtils {
   def optionToOptional[T](option: Option[T]): Optional[T] =
@@ -32,7 +33,64 @@ private[spark] object JavaUtils {
   def mapAsSerializableJavaMap[A, B](underlying: collection.Map[A, B]) =
     new SerializableMapWrapper(underlying)
 
+  // Implementation is copied from scala.collection.convert.Wrappers.MapWrapper,
+  // but implements java.io.Serializable. It can't just be subclassed to make it
+  // Serializable since the MapWrapper class has no no-arg constructor. This class
+  // doesn't need a no-arg constructor though.
   class SerializableMapWrapper[A, B](underlying: collection.Map[A, B])
-    extends MapWrapper(underlying) with java.io.Serializable
+    extends ju.AbstractMap[A, B] with java.io.Serializable { self =>
 
+    override def size = underlying.size
+
+    override def get(key: AnyRef): B = try {
+      underlying get key.asInstanceOf[A] match {
+        case None => null.asInstanceOf[B]
+        case Some(v) => v
+      }
+    } catch {
+      case ex: ClassCastException => null.asInstanceOf[B]
+    }
+
+    override def entrySet: ju.Set[ju.Map.Entry[A, B]] = new ju.AbstractSet[ju.Map.Entry[A, B]] {
+      def size = self.size
+
+      def iterator = new ju.Iterator[ju.Map.Entry[A, B]] {
+        val ui = underlying.iterator
+        var prev : Option[A] = None
+
+        def hasNext = ui.hasNext
+
+        def next() = {
+          val (k, v) = ui.next
+          prev = Some(k)
+          new ju.Map.Entry[A, B] {
+            import scala.util.hashing.byteswap32
+            def getKey = k
+            def getValue = v
+            def setValue(v1 : B) = self.put(k, v1)
+            override def hashCode = byteswap32(k.hashCode) + (byteswap32(v.hashCode) << 16)
+            override def equals(other: Any) = other match {
+              case e: ju.Map.Entry[_, _] => k == e.getKey && v == e.getValue
+              case _ => false
+            }
+          }
+        }
+
+        def remove() {
+          prev match {
+            case Some(k) =>
+              underlying match {
+                case mm: mutable.Map[a, _] =>
+                  mm remove k
+                  prev = None
+                case _ =>
+                  throw new UnsupportedOperationException("remove")
+              }
+            case _ =>
+              throw new IllegalStateException("next must be called at least once before remove")
+          }
+        }
+      }
+    }
+  }
 }
