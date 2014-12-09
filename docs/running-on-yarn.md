@@ -25,7 +25,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.am.memory</code></td>
   <td>512m</td>
   <td>
-    Amount of memory to use for the ApplicationMaster process on yarn-client mode. Use spark.driver.memory instead on yarn-cluster mode.
+    Amount of memory to use for the ApplicationMaster process on yarn-client mode. Use <code>spark.driver.memory</code> instead on yarn-cluster mode.
         (e.g. <code>512m</code>, <code>2g</code>).
   </td>
 </tr>
