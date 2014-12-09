@@ -1,24 +1,23 @@
 #!/usr/bin/env bash
 
-# Determine the current working directory
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
-MVN_URL="http://apache.claz.org/maven/maven-3/3.2.3/binaries/apache-maven-3.2.3-bin.tar.gz"
-MVN_LOC="${DIR}/../apache-maven-3.2.3-bin.tar.gz"
-
 install_mvn_for_linux() {
-  local mvn_bin="${DIR}/../apache-maven-3.2.3/bin/mvn"
+  # Determine the current working directory
+  local dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+  local mvn_url="http://apache.claz.org/maven/maven-3/3.2.3/binaries/apache-maven-3.2.3-bin.tar.gz"
+  local mvn_loc="${dir}/../apache-maven-3.2.3-bin.tar.gz"
+  local mvn_bin="${dir}/../apache-maven-3.2.3/bin/mvn"
 
   if [ ! -f "${mvn_bin}" ]; then
-    # first check if we have curl installed and, if so, download Leiningen
-    [ -n "`which curl 2>/dev/null`" ] && curl "${MVN_URL}" > "${MVN_LOC}"
-    # if the `lein` file still doesn't exist, lets try `wget` and cross our fingers
-    [ ! -f "${MVN_LOC}" ] && [ -n "`which wget 2>/dev/null`" ] && wget -O "${MVN_LOC}" "${MVN_URL}"
+    # check if we already have the tarball; check if we have curl installed; download `mvn`
+    [ ! -f "${mvn_loc}" ] && [ -n "`which curl 2>/dev/null`" ] && curl "${mvn_url}" > "${mvn_loc}"
+    # if the `mvn` file still doesn't exist, lets try `wget` and cross our fingers
+    [ ! -f "${mvn_loc}" ] && [ -n "`which wget 2>/dev/null`" ] && wget -O "${mvn_loc}" "${mvn_url}"
     # if both weren't successful, exit
-    [ ! -f "${MVN_LOC}" ] && \
+    [ ! -f "${mvn_loc}" ] && \
       echo "ERROR: Cannot find or download a version of Maven, please install manually and try again." && \
       exit 2
-    cd "${DIR}/.." && tar -xzf "${MVN_LOC}"
+    cd "${dir}/.." && tar -xzf "${mvn_loc}"
+    rm -rf "${mvn_loc}"
   fi
   export MVN_BIN="${mvn_bin}"
 }
@@ -27,4 +26,3 @@ install_mvn_for_osx() {
   brew install maven
   export MVN_BIN=`which mvn`
 }
-

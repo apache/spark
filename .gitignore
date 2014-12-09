@@ -18,6 +18,8 @@ out/
 .DS_Store
 third_party/libmesos.so
 third_party/libmesos.dylib
+build/apache-maven*
+build/zinc*
 conf/java-opts
 conf/*.sh
 conf/*.cmd

@@ -33,7 +33,7 @@ prep_install_for_bsd() {
 # Current checks are as follows:
 # - NA
 prep_install_for_linux() {
-  echo
+  echo -n ""
 }
 
 # Called before any binaries are installed for the OS X operating system.
@@ -143,14 +143,13 @@ ZINC_PORT=${ZINC_PORT:-"3030"}
 # Check and install all applications necessary to fully build Spark
 check_and_install_app "mvn"
 check_and_install_app "zinc"
-check_and_install_app "scala"
 
 # Reset the current working directory
 cd "${_DIR}/.."
 
 # Now that zinc is ensured to be installed, check its status and, if its
 # not running, start it
-if [ -z "`zinc -status`" ]; then
+if [ -z "`${ZINC_BIN} -status`" ]; then
   ${ZINC_BIN} -start -port ${ZINC_PORT}
 fi
 

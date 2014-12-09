@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
 
-# Determine the current working directory
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
-SCALA_URL="http://downloads.typesafe.com/scala/2.11.4/scala-2.11.4.tgz"
-SCALA_LOC="${DIR}/../scala/scala-2.11.4.tgz"
-
 install_scala_for_linux() {
-  # first check if we have curl installed and, if so, download Leiningen
-  [ -n "`which curl 2>/dev/null`" ] && curl "${SCALA_URL}" > "${SCALA_LOC}"
-  # if the `lein` file still doesn't exist, lets try `wget` and cross our fingers
-  [ ! -f "${SCALA_LOC}" ] && [ -n "`which wget 2>/dev/null`" ] && wget -O "${SCALA_LOC}" "${SCALA_URL}"
-  # if both weren't successful, exit
-  [ ! -f "${SCALA_LOC}" ] && \
-    echo "ERROR: Cannot find or download a version of Scala, please install manually and try again." && \
-    exit 2
+  # Determine the current working directory
+  local dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+  local scala_url="http://downloads.typesafe.com/scala/2.11.4/scala-2.11.4.tgz"
+  local scala_loc="${dir}/../scala-2.11.4.tgz"
+  local scala_bin="${dir}/../scala-2.11.4/bin/scala"
+
+  if [ ! -f "${scala_bin}" ]; then
+    # check if we already have the tarball; check if we have curl installed; download `scala`
+    [ ! -f "${scala_loc}" ] && [ -n "`which curl 2>/dev/null`" ] && curl "${scala_url}" > "${scala_loc}"
+    # if the `scala` file still doesn't exist, lets try `wget` and cross our fingers
+    [ ! -f "${scala_loc}" ] && [ -n "`which wget 2>/dev/null`" ] && wget -O "${scala_loc}" "${scala_url}"
+    # if both weren't successful, exit
+    [ ! -f "${scala_loc}" ] && \
+      echo "ERROR: Cannot find or download a version of Maven, please install manually and try again." && \
+      exit 2
+    cd "${dir}/.." && tar -xzf "${scala_loc}"
+    rm -rf "${scala_loc}"
+  fi
+  export SCALA_BIN="${scala_bin}"
 }
 
 install_scala_for_osx() {
