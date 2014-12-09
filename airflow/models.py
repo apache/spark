@@ -130,6 +130,7 @@ class DatabaseConnection(Base):
     login = Column(String(500))
     password = Column(String(500))
     port = Column(Integer())
+    extra = Column(String(5000))
 
     def __init__(
             self, db_id=None, db_type=None,
