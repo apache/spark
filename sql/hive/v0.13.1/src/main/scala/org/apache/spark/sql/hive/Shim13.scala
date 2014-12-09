@@ -48,6 +48,17 @@ import scala.language.implicitConversions
 private[hive] object HiveShim {
   val version = "0.13.1"
 
+  import org.apache.hadoop.hive.ql.exec.Utilities
+  import org.apache.hadoop.hive.conf.HiveConf
+
+  def deserializePlan[UDFType](is: java.io.InputStream, clazz: Class[UDFType]): UDFType = {
+    Utilities.deserializePlan(is, clazz, new HiveConf())
+  }
+
+  def serializePlan(function: Any, out: java.io.OutputStream): Unit = {
+    Utilities.serializePlan(function, out, new HiveConf())
+  }
+
   def getTableDesc(
     serdeClass: Class[_ <: Deserializer],
     inputFormatClass: Class[_ <: InputFormat[_, _]],

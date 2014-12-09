@@ -49,6 +49,16 @@ import org.apache.spark.sql.catalyst.types.DecimalType
 private[hive] object HiveShim {
   val version = "0.12.0"
 
+  import org.apache.hadoop.hive.ql.exec.Utilities
+
+  def deserializePlan[UDFType](is: java.io.InputStream, clazz: Class[UDFType]): UDFType = {
+    Utilities.deserializePlan(is).asInstanceOf[UDFType]
+  }
+
+  def serializePlan(function: Any, out: java.io.OutputStream): Unit = {
+    Utilities.serializePlan(function, out)
+  }
+
   def getTableDesc(
     serdeClass: Class[_ <: Deserializer],
     inputFormatClass: Class[_ <: InputFormat[_, _]],
