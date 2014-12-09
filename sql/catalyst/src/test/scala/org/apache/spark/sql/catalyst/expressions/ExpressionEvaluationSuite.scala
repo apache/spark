@@ -42,6 +42,21 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Literal(1) + Literal(1), 2)
   }
 
+  test("unary BitwiseNOT") {
+    checkEvaluation(BitwiseNot(1), -2)
+    assert(BitwiseNot(1).dataType === IntegerType)
+    assert(BitwiseNot(1).eval(EmptyRow).isInstanceOf[Int])
+    checkEvaluation(BitwiseNot(1.toLong), -2.toLong)
+    assert(BitwiseNot(1.toLong).dataType === LongType)
+    assert(BitwiseNot(1.toLong).eval(EmptyRow).isInstanceOf[Long])
+    checkEvaluation(BitwiseNot(1.toShort), -2.toShort)
+    assert(BitwiseNot(1.toShort).dataType === ShortType)
+    assert(BitwiseNot(1.toShort).eval(EmptyRow).isInstanceOf[Short])
+    checkEvaluation(BitwiseNot(1.toByte), -2.toByte)
+    assert(BitwiseNot(1.toByte).dataType === ByteType)
+    assert(BitwiseNot(1.toByte).eval(EmptyRow).isInstanceOf[Byte])
+  }
+
   /**
    * Checks for three-valued-logic.  Based on:
    * http://en.wikipedia.org/wiki/Null_(SQL)#Comparisons_with_NULL_and_the_three-valued_logic_.283VL.29
@@ -149,6 +164,21 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(In(Literal(1), Seq(Literal(1), Literal(2))) && In(Literal(2), Seq(Literal(1), Literal(2))), true)
   }
 
+  test("Divide") {
+    checkEvaluation(Divide(Literal(2), Literal(1)), 2)
+    checkEvaluation(Divide(Literal(1.0), Literal(2.0)), 0.5)
+    checkEvaluation(Divide(Literal(1), Literal(2)), 0)
+    checkEvaluation(Divide(Literal(1), Literal(0)), null)
+    checkEvaluation(Divide(Literal(1.0), Literal(0.0)), null)
+    checkEvaluation(Divide(Literal(0.0), Literal(0.0)), null)
+    checkEvaluation(Divide(Literal(0), Literal(null, IntegerType)), null)
+    checkEvaluation(Divide(Literal(1), Literal(null, IntegerType)), null)
+    checkEvaluation(Divide(Literal(null, IntegerType), Literal(0)), null)
+    checkEvaluation(Divide(Literal(null, DoubleType), Literal(0.0)), null)
+    checkEvaluation(Divide(Literal(null, IntegerType), Literal(1)), null)
+    checkEvaluation(Divide(Literal(null, IntegerType), Literal(null, IntegerType)), null)
+  }
+
   test("INSET") {
     val hS = HashSet[Any]() + 1 + 2
     val nS = HashSet[Any]() + 1 + 2 + null
@@ -158,13 +188,13 @@ class ExpressionEvaluationSuite extends FunSuite {
     val nl = Literal(null)
     val s = Seq(one, two)
     val nullS = Seq(one, two, null)
-    checkEvaluation(InSet(one, hS, one +: s), true)
-    checkEvaluation(InSet(two, hS, two +: s), true)
-    checkEvaluation(InSet(two, nS, two +: nullS), true)
-    checkEvaluation(InSet(nl, nS, nl +: nullS), true)
-    checkEvaluation(InSet(three, hS, three +: s), false)
-    checkEvaluation(InSet(three, nS, three +: nullS), false)
-    checkEvaluation(InSet(one, hS, one +: s) && InSet(two, hS, two +: s), true)
+    checkEvaluation(InSet(one, hS), true)
+    checkEvaluation(InSet(two, hS), true)
+    checkEvaluation(InSet(two, nS), true)
+    checkEvaluation(InSet(nl, nS), true)
+    checkEvaluation(InSet(three, hS), false)
+    checkEvaluation(InSet(three, nS), false)
+    checkEvaluation(InSet(one, hS) && InSet(two, hS), true)
   }
 
   test("MaxOf") {
@@ -347,8 +377,8 @@ class ExpressionEvaluationSuite extends FunSuite {
     // - Because of this, casts to fixed-precision decimals should be nullable
 
     assert(Cast(Literal(123), DecimalType.Unlimited).nullable === false)
-    assert(Cast(Literal(10.03f), DecimalType.Unlimited).nullable === false)
-    assert(Cast(Literal(10.03), DecimalType.Unlimited).nullable === false)
+    assert(Cast(Literal(10.03f), DecimalType.Unlimited).nullable === true)
+    assert(Cast(Literal(10.03), DecimalType.Unlimited).nullable === true)
     assert(Cast(Literal(Decimal(10.03)), DecimalType.Unlimited).nullable === false)
 
     assert(Cast(Literal(123), DecimalType(2, 1)).nullable === true)
@@ -396,6 +426,16 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Literal(-9.95), DecimalType(1, 0)), null)
     checkEvaluation(Cast(Literal(Decimal(-9.95)), DecimalType(3, 1)), Decimal(-10.0))
     checkEvaluation(Cast(Literal(Decimal(-9.95)), DecimalType(1, 0)), null)
+
+    checkEvaluation(Cast(Literal(Double.NaN), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(1.0 / 0.0), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(Float.NaN), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(1.0f / 0.0f), DecimalType.Unlimited), null)
+
+    checkEvaluation(Cast(Literal(Double.NaN), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(1.0 / 0.0), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(Float.NaN), DecimalType(2, 1)), null)
+    checkEvaluation(Cast(Literal(1.0f / 0.0f), DecimalType(2, 1)), null)
   }
 
   test("timestamp") {
@@ -440,6 +480,11 @@ class ExpressionEvaluationSuite extends FunSuite {
 
     // A test for higher precision than millis
     checkEvaluation(Cast(Cast(0.00000001, TimestampType), DoubleType), 0.00000001)
+
+    checkEvaluation(Cast(Literal(Double.NaN), TimestampType), null)
+    checkEvaluation(Cast(Literal(1.0 / 0.0), TimestampType), null)
+    checkEvaluation(Cast(Literal(Float.NaN), TimestampType), null)
+    checkEvaluation(Cast(Literal(1.0f / 0.0f), TimestampType), null)
   }
 
   test("null checking") {

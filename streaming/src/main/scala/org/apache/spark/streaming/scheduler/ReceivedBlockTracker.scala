@@ -70,18 +70,7 @@ private[streaming] class ReceivedBlockTracker(
   
   private val streamIdToUnallocatedBlockQueues = new mutable.HashMap[Int, ReceivedBlockQueue]
   private val timeToAllocatedBlocks = new mutable.HashMap[Time, AllocatedBlocks]
-
-  private val logManagerRollingIntervalSecs = conf.getInt(
-    "spark.streaming.receivedBlockTracker.writeAheadLog.rotationIntervalSecs", 60)
-  private val logManagerOption = checkpointDirOption.map { checkpointDir =>
-    new WriteAheadLogManager(
-      ReceivedBlockTracker.checkpointDirToLogDir(checkpointDir),
-      hadoopConf,
-      rollingIntervalSecs = logManagerRollingIntervalSecs,
-      callerName = "ReceivedBlockHandlerMaster",
-      clock = clock
-    )
-  }
+  private val logManagerOption = createLogManager()
 
   private var lastAllocatedBatchTime: Time = null
 
@@ -221,6 +210,30 @@ private[streaming] class ReceivedBlockTracker(
   private def getReceivedBlockQueue(streamId: Int): ReceivedBlockQueue = {
     streamIdToUnallocatedBlockQueues.getOrElseUpdate(streamId, new ReceivedBlockQueue)
   }
+
+  /** Optionally create the write ahead log manager only if the feature is enabled */
+  private def createLogManager(): Option[WriteAheadLogManager] = {
+    if (conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)) {
+      if (checkpointDirOption.isEmpty) {
+        throw new SparkException(
+          "Cannot enable receiver write-ahead log without checkpoint directory set. " +
+            "Please use streamingContext.checkpoint() to set the checkpoint directory. " +
+            "See documentation for more details.")
+      }
+      val logDir = ReceivedBlockTracker.checkpointDirToLogDir(checkpointDirOption.get)
+      val rollingIntervalSecs = conf.getInt(
+        "spark.streaming.receivedBlockTracker.writeAheadLog.rotationIntervalSecs", 60)
+      val logManager = new WriteAheadLogManager(logDir, hadoopConf,
+        rollingIntervalSecs = rollingIntervalSecs, clock = clock,
+        callerName = "ReceivedBlockHandlerMaster")
+      Some(logManager)
+    } else {
+      None
+    }
+  }
+
+  /** Check if the log manager is enabled. This is only used for testing purposes. */
+  private[streaming] def isLogManagerEnabled: Boolean = logManagerOption.nonEmpty
 }
 
 private[streaming] object ReceivedBlockTracker {

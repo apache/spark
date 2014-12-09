@@ -444,7 +444,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |${stringOrError(optimizedPlan)}
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
-         |Code Generation: ${executedPlan.codegenEnabled}
+         |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
          |== RDD ==
       """.stripMargin.trim
   }

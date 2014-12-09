@@ -17,11 +17,13 @@
 
 package org.apache.spark.sql.parquet
 
+import _root_.parquet.filter2.predicate.{FilterPredicate, Operators}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
 import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
 import parquet.hadoop.ParquetFileWriter
 import parquet.hadoop.util.ContextUtil
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.IntegerType
@@ -95,6 +97,8 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     testRDD.registerTempTable("testsource")
     parquetFile(ParquetTestData.testFilterDir.toString)
       .registerTempTable("testfiltersource")
+
+    setConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED, "true")
   }
 
   override def afterAll() {
@@ -445,44 +449,36 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(true)
   }
 
-  test("create RecordFilter for simple predicates") {
-    val attribute1 = new AttributeReference("first", IntegerType, false)()
-    val predicate1 = new EqualTo(attribute1, new Literal(1, IntegerType))
-    val filter1 = ParquetFilters.createFilter(predicate1)
-    assert(filter1.isDefined)
-    assert(filter1.get.predicate == predicate1, "predicates do not match")
-    assert(filter1.get.isInstanceOf[ComparisonFilter])
-    val cmpFilter1 = filter1.get.asInstanceOf[ComparisonFilter]
-    assert(cmpFilter1.columnName == "first", "column name incorrect")
+  test("make RecordFilter for simple predicates") {
+    def checkFilter[T <: FilterPredicate](predicate: Expression, defined: Boolean = true): Unit = {
+      val filter = ParquetFilters.createFilter(predicate)
+      if (defined) {
+        assert(filter.isDefined)
+        assert(filter.get.isInstanceOf[T])
+      } else {
+        assert(filter.isEmpty)
+      }
+    }
 
-    val predicate2 = new LessThan(attribute1, new Literal(4, IntegerType))
-    val filter2 = ParquetFilters.createFilter(predicate2)
-    assert(filter2.isDefined)
-    assert(filter2.get.predicate == predicate2, "predicates do not match")
-    assert(filter2.get.isInstanceOf[ComparisonFilter])
-    val cmpFilter2 = filter2.get.asInstanceOf[ComparisonFilter]
-    assert(cmpFilter2.columnName == "first", "column name incorrect")
+    checkFilter[Operators.Eq[Integer]]('a.int === 1)
+    checkFilter[Operators.Eq[Integer]](Literal(1) === 'a.int)
 
-    val predicate3 = new And(predicate1, predicate2)
-    val filter3 = ParquetFilters.createFilter(predicate3)
-    assert(filter3.isDefined)
-    assert(filter3.get.predicate == predicate3, "predicates do not match")
-    assert(filter3.get.isInstanceOf[AndFilter])
+    checkFilter[Operators.Lt[Integer]]('a.int < 4)
+    checkFilter[Operators.Lt[Integer]](Literal(4) > 'a.int)
+    checkFilter[Operators.LtEq[Integer]]('a.int <= 4)
+    checkFilter[Operators.LtEq[Integer]](Literal(4) >= 'a.int)
 
-    val predicate4 = new Or(predicate1, predicate2)
-    val filter4 = ParquetFilters.createFilter(predicate4)
-    assert(filter4.isDefined)
-    assert(filter4.get.predicate == predicate4, "predicates do not match")
-    assert(filter4.get.isInstanceOf[OrFilter])
+    checkFilter[Operators.Gt[Integer]]('a.int > 4)
+    checkFilter[Operators.Gt[Integer]](Literal(4) < 'a.int)
+    checkFilter[Operators.GtEq[Integer]]('a.int >= 4)
+    checkFilter[Operators.GtEq[Integer]](Literal(4) <= 'a.int)
 
-    val attribute2 = new AttributeReference("second", IntegerType, false)()
-    val predicate5 = new GreaterThan(attribute1, attribute2)
-    val badfilter = ParquetFilters.createFilter(predicate5)
-    assert(badfilter.isDefined === false)
+    checkFilter[Operators.And]('a.int === 1 && 'a.int < 4)
+    checkFilter[Operators.Or]('a.int === 1 || 'a.int < 4)
+    checkFilter[Operators.Not](!('a.int === 1))
 
-    val predicate6 = And(GreaterThan(attribute1, attribute2), GreaterThan(attribute1, attribute2))
-    val badfilter2 = ParquetFilters.createFilter(predicate6)
-    assert(badfilter2.isDefined === false)
+    checkFilter('a.int > 'b.int, defined = false)
+    checkFilter(('a.int > 'b.int) && ('a.int > 'b.int), defined = false)
   }
 
   test("test filter by predicate pushdown") {
