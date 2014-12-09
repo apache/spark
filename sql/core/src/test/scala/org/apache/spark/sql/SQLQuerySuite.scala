@@ -22,7 +22,6 @@ import java.util.TimeZone
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /* Implicits */
@@ -70,6 +69,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT ABS(2.5)"),
       2.5)
+  }
+
+  test("aggregation with codegen") {
+    val originalValue = codegenEnabled
+    setConf(SQLConf.CODEGEN_ENABLED, "true")
+    sql("SELECT key FROM testData GROUP BY key").collect()
+    setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
 
   test("SPARK-3176 Added Parser of SQL LAST()") {
@@ -189,7 +195,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Seq(Seq("1")))
   }
 
-  test("sorting") {
+  def sortTest() = {
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC"),
       Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)))
@@ -229,6 +235,20 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT * FROM mapData ORDER BY data[1] DESC"),
       mapData.collect().sortBy(_.data(1)).reverse.toSeq)
+  }
+
+  test("sorting") {
+    val before = externalSortEnabled
+    setConf(SQLConf.EXTERNAL_SORT, "false")
+    sortTest()
+    setConf(SQLConf.EXTERNAL_SORT, before.toString)
+  }
+
+  test("external sorting") {
+    val before = externalSortEnabled
+    setConf(SQLConf.EXTERNAL_SORT, "true")
+    sortTest()
+    setConf(SQLConf.EXTERNAL_SORT, before.toString)
   }
 
   test("limit") {
@@ -281,14 +301,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       3)
   }
 
-  // No support for primitive nulls yet.
-  ignore("null count") {
+  test("null count") {
     checkAnswer(
-      sql("SELECT a, COUNT(b) FROM testData3"),
-      Seq((1,0), (2, 1)))
+      sql("SELECT a, COUNT(b) FROM testData3 GROUP BY a"),
+      Seq((1, 0), (2, 1)))
 
     checkAnswer(
-      testData3.groupBy()(Count('a), Count('b), Count(1), CountDistinct('a :: Nil), CountDistinct('b :: Nil)),
+      sql("SELECT COUNT(a), COUNT(b), COUNT(1), COUNT(DISTINCT a), COUNT(DISTINCT b) FROM testData3"),
       (2, 1, 2, 2, 1) :: Nil)
   }
 
@@ -545,7 +564,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql("SELECT * FROM upperCaseData EXCEPT SELECT * FROM upperCaseData"), Nil)
   }
 
- test("INTERSECT") {
+  test("INTERSECT") {
     checkAnswer(
       sql("SELECT * FROM lowerCaseData INTERSECT SELECT * FROM lowerCaseData"),
       (1, "a") ::
@@ -942,5 +961,41 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("SPARK-4207 Query which has syntax like 'not like' is not working in Spark SQL") {
     checkAnswer(sql("SELECT key FROM testData WHERE value not like '100%' order by key"),
         (1 to 99).map(i => Seq(i)))
+  }
+
+  test("SPARK-4322 Grouping field with struct field as sub expression") {
+    jsonRDD(sparkContext.makeRDD("""{"a": {"b": [{"c": 1}]}}""" :: Nil)).registerTempTable("data")
+    checkAnswer(sql("SELECT a.b[0].c FROM data GROUP BY a.b[0].c"), 1)
+    dropTempTable("data")
+
+    jsonRDD(sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
+    checkAnswer(sql("SELECT a.b + 1 FROM data GROUP BY a.b + 1"), 2)
+    dropTempTable("data")
+  }
+
+  test("SPARK-4432 Fix attribute reference resolution error when using ORDER BY") {
+    checkAnswer(
+      sql("SELECT a + b FROM testData2 ORDER BY a"),
+      Seq(2, 3, 3 ,4 ,4 ,5).map(Seq(_))
+    )
+  }
+
+  test("Supporting relational operator '<=>' in Spark SQL") {
+    val nullCheckData1 = TestData(1,"1") :: TestData(2,null) :: Nil
+    val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
+    rdd1.registerTempTable("nulldata1")
+    val nullCheckData2 = TestData(1,"1") :: TestData(2,null) :: Nil
+    val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
+    rdd2.registerTempTable("nulldata2")
+    checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
+      "nulldata2 on nulldata1.value <=> nulldata2.value"),
+        (1 to 2).map(i => Seq(i)))
+  }
+
+  test("Multi-column COUNT(DISTINCT ...)") {
+    val data = TestData(1,"val_1") :: TestData(2,"val_2") :: Nil
+    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
+    rdd.registerTempTable("distinctData")
+    checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), 2)
   }
 }

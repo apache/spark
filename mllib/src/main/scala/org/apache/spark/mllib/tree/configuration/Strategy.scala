@@ -37,7 +37,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
  * @param maxDepth Maximum depth of the tree.
  *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
- * @param numClassesForClassification Number of classes for classification.
+ * @param numClasses Number of classes for classification.
  *                                    (Ignored for regression.)
  *                                    Default value is 2 (binary classification).
  * @param maxBins Maximum number of bins used for discretizing continuous features and
@@ -70,10 +70,10 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  */
 @Experimental
 class Strategy (
-    val algo: Algo,
+    @BeanProperty var algo: Algo,
     @BeanProperty var impurity: Impurity,
     @BeanProperty var maxDepth: Int,
-    @BeanProperty var numClassesForClassification: Int = 2,
+    @BeanProperty var numClasses: Int = 2,
     @BeanProperty var maxBins: Int = 32,
     @BeanProperty var quantileCalculationStrategy: QuantileStrategy = Sort,
     @BeanProperty var categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
@@ -85,17 +85,9 @@ class Strategy (
     @BeanProperty var checkpointDir: Option[String] = None,
     @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
 
-  if (algo == Classification) {
-    require(numClassesForClassification >= 2)
-  }
-  require(minInstancesPerNode >= 1,
-    s"DecisionTree Strategy requires minInstancesPerNode >= 1 but was given $minInstancesPerNode")
-  require(maxMemoryInMB <= 10240,
-    s"DecisionTree Strategy requires maxMemoryInMB <= 10240, but was given $maxMemoryInMB")
-
-  val isMulticlassClassification =
-    algo == Classification && numClassesForClassification > 2
-  val isMulticlassWithCategoricalFeatures
+  def isMulticlassClassification =
+    algo == Classification && numClasses > 2
+  def isMulticlassWithCategoricalFeatures
     = isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
 
   /**
@@ -105,11 +97,28 @@ class Strategy (
       algo: Algo,
       impurity: Impurity,
       maxDepth: Int,
-      numClassesForClassification: Int,
+      numClasses: Int,
       maxBins: Int,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]) {
-    this(algo, impurity, maxDepth, numClassesForClassification, maxBins, Sort,
+    this(algo, impurity, maxDepth, numClasses, maxBins, Sort,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
+  }
+
+  /**
+   * Sets Algorithm using a String.
+   */
+  def setAlgo(algo: String): Unit = algo match {
+    case "Classification" => setAlgo(Classification)
+    case "Regression" => setAlgo(Regression)
+  }
+
+  /**
+   * Sets categoricalFeaturesInfo using a Java Map.
+   */
+  def setCategoricalFeaturesInfo(
+      categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]): Unit = {
+    this.categoricalFeaturesInfo =
+      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap
   }
 
   /**
@@ -119,9 +128,9 @@ class Strategy (
   private[tree] def assertValid(): Unit = {
     algo match {
       case Classification =>
-        require(numClassesForClassification >= 2,
-          s"DecisionTree Strategy for Classification must have numClassesForClassification >= 2," +
-          s" but numClassesForClassification = $numClassesForClassification.")
+        require(numClasses >= 2,
+          s"DecisionTree Strategy for Classification must have numClasses >= 2," +
+          s" but numClasses = $numClasses.")
         require(Set(Gini, Entropy).contains(impurity),
           s"DecisionTree Strategy given invalid impurity for Classification: $impurity." +
           s"  Valid settings: Gini, Entropy")
@@ -143,6 +152,33 @@ class Strategy (
         s"DecisionTree Strategy given invalid categoricalFeaturesInfo setting:" +
         s" feature $feature has $arity categories.  The number of categories should be >= 2.")
     }
+    require(minInstancesPerNode >= 1,
+      s"DecisionTree Strategy requires minInstancesPerNode >= 1 but was given $minInstancesPerNode")
+    require(maxMemoryInMB <= 10240,
+      s"DecisionTree Strategy requires maxMemoryInMB <= 10240, but was given $maxMemoryInMB")
   }
 
+  /** Returns a shallow copy of this instance. */
+  def copy: Strategy = {
+    new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
+      quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode, minInfoGain,
+      maxMemoryInMB, subsamplingRate, useNodeIdCache, checkpointDir, checkpointInterval)
+  }
+}
+
+@Experimental
+object Strategy {
+
+  /**
+   * Construct a default set of parameters for [[org.apache.spark.mllib.tree.DecisionTree]]
+   * @param algo  "Classification" or "Regression"
+   */
+  def defaultStrategy(algo: String): Strategy = algo match {
+    case "Classification" =>
+      new Strategy(algo = Classification, impurity = Gini, maxDepth = 10,
+        numClasses = 2)
+    case "Regression" =>
+      new Strategy(algo = Regression, impurity = Variance, maxDepth = 10,
+        numClasses = 0)
+  }
 }

@@ -17,16 +17,17 @@
 
 package org.apache.spark.sql.types.util
 
+import java.text.SimpleDateFormat
+
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{DataType => JDataType, StructField => JStructField,
-  MetadataBuilder => JMetaDataBuilder, UDTWrappers, JavaToScalaUDTWrapper}
+  MetadataBuilder => JMetaDataBuilder, UDTWrappers}
 import org.apache.spark.sql.api.java.{DecimalType => JDecimalType}
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.types.UserDefinedType
-
 
 protected[sql] object DataTypeConversions {
 
@@ -61,6 +62,7 @@ protected[sql] object DataTypeConversions {
     case IntegerType => JDataType.IntegerType
     case LongType => JDataType.LongType
     case ShortType => JDataType.ShortType
+    case NullType => JDataType.NullType
 
     case arrayType: ArrayType => JDataType.createArrayType(
         asJavaDataType(arrayType.elementType), arrayType.containsNull)
@@ -130,11 +132,38 @@ protected[sql] object DataTypeConversions {
       StructType(structType.getFields.map(asScalaStructField))
   }
 
+  def stringToTime(s: String): java.util.Date = {
+    if (!s.contains('T')) {
+      // JDBC escape string
+      if (s.contains(' ')) {
+        java.sql.Timestamp.valueOf(s)
+      } else {
+        java.sql.Date.valueOf(s)
+      }
+    } else if (s.endsWith("Z")) {
+      // this is zero timezone of ISO8601
+      stringToTime(s.substring(0, s.length - 1) + "GMT-00:00")
+    } else if (s.indexOf("GMT") == -1) {
+      // timezone with ISO8601
+      val inset = "+00.00".length
+      val s0 = s.substring(0, s.length - inset)
+      val s1 = s.substring(s.length - inset, s.length)
+      if (s0.substring(s0.lastIndexOf(':')).contains('.')) {
+        stringToTime(s0 + "GMT" + s1)
+      } else {
+        stringToTime(s0 + ".0GMT" + s1)
+      }
+    } else {
+      // ISO8601 with GMT insert
+      val ISO8601GMT: SimpleDateFormat = new SimpleDateFormat( "yyyy-MM-dd'T'HH:mm:ss.SSSz" )
+      ISO8601GMT.parse(s)
+    }
+  }
+
   /** Converts Java objects to catalyst rows / types */
   def convertJavaToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
     case (obj, udt: UserDefinedType[_]) => ScalaReflection.convertToCatalyst(obj, udt) // Scala type
     case (d: java.math.BigDecimal, _) => Decimal(BigDecimal(d))
-    case (d: java.math.BigDecimal, _) => BigDecimal(d)
     case (other, _) => other
   }
 

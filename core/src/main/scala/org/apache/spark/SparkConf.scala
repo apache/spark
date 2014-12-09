@@ -61,7 +61,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
       throw new NullPointerException("null key")
     }
     if (value == null) {
-      throw new NullPointerException("null value")
+      throw new NullPointerException("null value for " + key)
     }
     settings(key) = value
     this
@@ -216,6 +216,12 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
      *   E.g. spark.akka.option.x.y.x = "value"
      */
     getAll.filter { case (k, _) => isAkkaConf(k) }
+
+  /**
+   * Returns the Spark application id, valid in the Driver after TaskScheduler registration and
+   * from the start in the Executor.
+   */
+  def getAppId: String = get("spark.app.id")
 
   /** Does the configuration contain a given parameter? */
   def contains(key: String): Boolean = settings.contains(key)

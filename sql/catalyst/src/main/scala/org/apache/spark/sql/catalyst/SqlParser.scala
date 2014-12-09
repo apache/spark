@@ -55,10 +55,10 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val DECIMAL = Keyword("DECIMAL")
   protected val DESC = Keyword("DESC")
   protected val DISTINCT = Keyword("DISTINCT")
+  protected val DOUBLE = Keyword("DOUBLE")
   protected val ELSE = Keyword("ELSE")
   protected val END = Keyword("END")
   protected val EXCEPT = Keyword("EXCEPT")
-  protected val DOUBLE = Keyword("DOUBLE")
   protected val FALSE = Keyword("FALSE")
   protected val FIRST = Keyword("FIRST")
   protected val FROM = Keyword("FROM")
@@ -234,6 +234,7 @@ class SqlParser extends AbstractSparkSQLParser {
     | termExpression ~ (">=" ~> termExpression) ^^ { case e1 ~ e2 => GreaterThanOrEqual(e1, e2) }
     | termExpression ~ ("!=" ~> termExpression) ^^ { case e1 ~ e2 => Not(EqualTo(e1, e2)) }
     | termExpression ~ ("<>" ~> termExpression) ^^ { case e1 ~ e2 => Not(EqualTo(e1, e2)) }
+    | termExpression ~ ("<=>" ~> termExpression) ^^ { case e1 ~ e2 => EqualNullSafe(e1, e2) }
     | termExpression ~ NOT.? ~ (BETWEEN ~> termExpression) ~ (AND ~> termExpression) ^^ {
         case e ~ not ~ el ~ eu =>
           val betweenExpr: Expression = And(GreaterThanOrEqual(e, el), LessThanOrEqual(e, eu))
@@ -276,7 +277,8 @@ class SqlParser extends AbstractSparkSQLParser {
     | SUM   ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => SumDistinct(exp) }
     | COUNT ~  "(" ~> "*"                    <~ ")" ^^ { case _ => Count(Literal(1)) }
     | COUNT ~  "(" ~> expression             <~ ")" ^^ { case exp => Count(exp) }
-    | COUNT ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => CountDistinct(exp :: Nil) }
+    | COUNT ~> "(" ~> DISTINCT ~> repsep(expression, ",") <~ ")" ^^
+      { case exps => CountDistinct(exps) }
     | APPROXIMATE ~ COUNT ~ "(" ~ DISTINCT ~> expression <~ ")" ^^
       { case exp => ApproxCountDistinct(exp) }
     | APPROXIMATE ~> "(" ~> floatLit ~ ")" ~ COUNT ~ "(" ~ DISTINCT ~ expression <~ ")" ^^
@@ -339,18 +341,13 @@ class SqlParser extends AbstractSparkSQLParser {
     | floatLit ^^ { f => Literal(f.toDouble) }
     )
 
-  private val longMax = BigDecimal(s"${Long.MaxValue}")
-  private val longMin = BigDecimal(s"${Long.MinValue}")
-  private val intMax = BigDecimal(s"${Int.MaxValue}")
-  private val intMin = BigDecimal(s"${Int.MinValue}")
-
   private def toNarrowestIntegerType(value: String) = {
     val bigIntValue = BigDecimal(value)
 
     bigIntValue match {
-      case v if v < longMin || v > longMax => v
-      case v if v < intMin || v > intMax => v.toLong
-      case v => v.toInt
+      case v if bigIntValue.isValidInt => v.toIntExact
+      case v if bigIntValue.isValidLong => v.toLongExact
+      case v => v
     }
   }
 

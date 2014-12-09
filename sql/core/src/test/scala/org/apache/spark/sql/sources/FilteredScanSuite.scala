@@ -51,6 +51,7 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sqlContext: SQL
       case LessThanOrEqual("a", v: Int) => (a: Int) => a <= v
       case GreaterThan("a", v: Int) => (a: Int) => a > v
       case GreaterThanOrEqual("a", v: Int) => (a: Int) => a >= v
+      case In("a", values) => (a: Int) => values.map(_.asInstanceOf[Int]).toSet.contains(a)
     }
 
     def eval(a: Int) = !filterFunctions.map(_(a)).contains(false)
@@ -122,6 +123,10 @@ class FilteredScanSuite extends DataSourceTest {
     Seq(1).map(i => Row(i, i * 2)).toSeq)
 
   sqlTest(
+    "SELECT * FROM oneToTenFiltered WHERE a IN (1,3,5)",
+    Seq(1,3,5).map(i => Row(i, i * 2)).toSeq)
+
+  sqlTest(
     "SELECT * FROM oneToTenFiltered WHERE A = 1",
     Seq(1).map(i => Row(i, i * 2)).toSeq)
 
@@ -149,6 +154,8 @@ class FilteredScanSuite extends DataSourceTest {
   testPushDown("SELECT * FROM oneToTenFiltered WHERE a <= 2", 2)
 
   testPushDown("SELECT * FROM oneToTenFiltered WHERE a > 1 AND a < 10", 8)
+
+  testPushDown("SELECT * FROM oneToTenFiltered WHERE a IN (1,3,5)", 3)
 
   testPushDown("SELECT * FROM oneToTenFiltered WHERE a = 20", 0)
   testPushDown("SELECT * FROM oneToTenFiltered WHERE b = 1", 10)

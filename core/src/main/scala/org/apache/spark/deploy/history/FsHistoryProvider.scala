@@ -31,8 +31,15 @@ import org.apache.spark.scheduler._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
+/**
+ * A class that provides application history from event logs stored in the file system.
+ * This provider checks for new finished applications in the background periodically and
+ * renders the history application UI by parsing the associated event logs.
+ */
 private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHistoryProvider
   with Logging {
+
+  import FsHistoryProvider._
 
   private val NOT_STARTED = "<Not Started>"
 
@@ -40,13 +47,11 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   private val UPDATE_INTERVAL_MS = conf.getInt("spark.history.fs.updateInterval",
     conf.getInt("spark.history.updateInterval", 10)) * 1000
 
-  private val logDir = conf.get("spark.history.fs.logDirectory", null)
-  private val resolvedLogDir = Option(logDir)
-    .map { d => Utils.resolveURI(d) }
-    .getOrElse { throw new IllegalArgumentException("Logging directory must be specified.") }
+  private val logDir = conf.getOption("spark.history.fs.logDirectory")
+    .map { d => Utils.resolveURI(d).toString }
+    .getOrElse(DEFAULT_LOG_DIR)
 
-  private val fs = Utils.getHadoopFileSystem(resolvedLogDir,
-    SparkHadoopUtil.get.newConfiguration(conf))
+  private val fs = Utils.getHadoopFileSystem(logDir, SparkHadoopUtil.get.newConfiguration(conf))
 
   // A timestamp of when the disk was last accessed to check for log updates
   private var lastLogCheckTimeMs = -1L
@@ -95,14 +100,17 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
   private def initialize() {
     // Validate the log directory.
-    val path = new Path(resolvedLogDir)
+    val path = new Path(logDir)
     if (!fs.exists(path)) {
-      throw new IllegalArgumentException(
-        "Logging directory specified does not exist: %s".format(resolvedLogDir))
+      var msg = s"Log directory specified does not exist: $logDir."
+      if (logDir == DEFAULT_LOG_DIR) {
+        msg += " Did you configure the correct one through spark.fs.history.logDirectory?"
+      }
+      throw new IllegalArgumentException(msg)
     }
     if (!fs.getFileStatus(path).isDir) {
       throw new IllegalArgumentException(
-        "Logging directory specified is not a directory: %s".format(resolvedLogDir))
+        "Logging directory specified is not a directory: %s".format(logDir))
     }
 
     checkForLogs()
@@ -147,8 +155,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
     }
   }
 
-  override def getConfig(): Map[String, String] =
-    Map("Event Log Location" -> resolvedLogDir.toString)
+  override def getConfig(): Map[String, String] = Map("Event log directory" -> logDir.toString)
 
   /**
    * Builds the application list based on the current contents of the log directory.
@@ -161,7 +168,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
 
     try {
       var newLastModifiedTime = lastModifiedTime
-      val logInfos = fs.listStatus(new Path(logDir))
+      val statusList = Option(fs.listStatus(new Path(logDir))).map(_.toSeq)
+        .getOrElse(Seq[FileStatus]())
+      val logInfos = statusList
         .filter { entry =>
           try {
             val isFinishedApplication =
@@ -311,6 +320,10 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   /** Returns the system's mononotically increasing time. */
   private def getMonotonicTimeMs(): Long = System.nanoTime() / (1000 * 1000)
 
+}
+
+private object FsHistoryProvider {
+  val DEFAULT_LOG_DIR = "file:/tmp/spark-events"
 }
 
 private class FsApplicationHistoryInfo(

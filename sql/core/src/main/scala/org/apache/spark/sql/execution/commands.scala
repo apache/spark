@@ -160,12 +160,11 @@ case class CacheTableCommand(
     import sqlContext._
 
     plan.foreach(_.registerTempTable(tableName))
-    val schemaRDD = table(tableName)
-    schemaRDD.cache()
+    cacheTable(tableName)
 
     if (!isLazy) {
       // Performs eager caching
-      schemaRDD.count()
+      table(tableName).count()
     }
 
     Seq.empty[Row]

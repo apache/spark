@@ -38,23 +38,19 @@ public final class ChunkFetchFailure implements ResponseMessage {
 
   @Override
   public int encodedLength() {
-    return streamChunkId.encodedLength() + 4 + errorString.getBytes(Charsets.UTF_8).length;
+    return streamChunkId.encodedLength() + Encoders.Strings.encodedLength(errorString);
   }
 
   @Override
   public void encode(ByteBuf buf) {
     streamChunkId.encode(buf);
-    byte[] errorBytes = errorString.getBytes(Charsets.UTF_8);
-    buf.writeInt(errorBytes.length);
-    buf.writeBytes(errorBytes);
+    Encoders.Strings.encode(buf, errorString);
   }
 
   public static ChunkFetchFailure decode(ByteBuf buf) {
     StreamChunkId streamChunkId = StreamChunkId.decode(buf);
-    int numErrorStringBytes = buf.readInt();
-    byte[] errorBytes = new byte[numErrorStringBytes];
-    buf.readBytes(errorBytes);
-    return new ChunkFetchFailure(streamChunkId, new String(errorBytes, Charsets.UTF_8));
+    String errorString = Encoders.Strings.decode(buf);
+    return new ChunkFetchFailure(streamChunkId, errorString);
   }
 
   @Override

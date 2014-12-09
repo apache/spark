@@ -26,14 +26,26 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
+
 /**
- * Provides experimental support for generating catalyst schemas for scala objects.
+ * A default version of ScalaReflection that uses the runtime universe.
  */
-object ScalaReflection {
+object ScalaReflection extends ScalaReflection {
+  val universe: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
+}
+
+/**
+ * Support for generating catalyst schemas for scala objects.
+ */
+trait ScalaReflection {
+  /** The universe we work in (runtime or macro) */
+  val universe: scala.reflect.api.Universe
+
+  import universe._
+
   // The Predef.Map is scala.collection.immutable.Map.
   // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
   import scala.collection.Map
-  import scala.reflect.runtime.universe._
 
   case class Schema(dataType: DataType, nullable: Boolean)
 

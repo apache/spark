@@ -123,7 +123,7 @@ class CachedTableSuite extends QueryTest {
     cacheTable("testData")
     assertResult(0, "Double InMemoryRelations found, cacheTable() is not idempotent") {
       table("testData").queryExecution.withCachedData.collect {
-        case r @ InMemoryRelation(_, _, _, _, _: InMemoryColumnarTableScan) => r
+        case r @ InMemoryRelation(_, _, _, _, _: InMemoryColumnarTableScan, _) => r
       }.size
     }
 
