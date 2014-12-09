@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.{ObjectInputStream, Serializable}
+import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.generic.Growable
 import scala.collection.mutable.Map
@@ -228,6 +229,7 @@ GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Serializa
  */
 class Accumulator[T](@transient initialValue: T, param: AccumulatorParam[T], name: Option[String])
     extends Accumulable[T,T](initialValue, param, name) {
+
   def this(initialValue: T, param: AccumulatorParam[T]) = this(initialValue, param, None)
 }
 
@@ -282,7 +284,7 @@ private object Accumulators {
   val localAccums = Map[Thread, Map[Long, Accumulable[_, _]]]()
   var lastId: Long = 0
 
-  def newId: Long = synchronized {
+  def newId(): Long = synchronized {
     lastId += 1
     lastId
   }

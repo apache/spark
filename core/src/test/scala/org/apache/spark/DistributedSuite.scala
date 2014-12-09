@@ -23,7 +23,6 @@ import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
 import org.scalatest.time.{Millis, Span}
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 class NotSerializableClass

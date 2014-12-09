@@ -38,9 +38,9 @@ object BuildCommons {
       "streaming-flume", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
       "streaming-zeromq").map(ProjectRef(buildLocation, _))
 
-  val optionallyEnabledProjects@Seq(yarn, yarnStable, yarnAlpha, java8Tests,
-    sparkGangliaLgpl, sparkKinesisAsl) = Seq("yarn", "yarn-stable", "yarn-alpha",
-    "java8-tests", "ganglia-lgpl", "kinesis-asl").map(ProjectRef(buildLocation, _))
+  val optionallyEnabledProjects@Seq(yarn, yarnStable, java8Tests, sparkGangliaLgpl,
+    sparkKinesisAsl) = Seq("yarn", "yarn-stable", "java8-tests", "ganglia-lgpl",
+    "kinesis-asl").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(assembly, examples, networkYarn) =
     Seq("assembly", "examples", "network-yarn").map(ProjectRef(buildLocation, _))
@@ -79,14 +79,8 @@ object SparkBuild extends PomBuild {
       case None =>
     }
     if (Properties.envOrNone("SPARK_YARN").isDefined) {
-      if(isAlphaYarn) {
-        println("NOTE: SPARK_YARN is deprecated, please use -Pyarn-alpha flag.")
-        profiles ++= Seq("yarn-alpha")
-      }
-      else {
-        println("NOTE: SPARK_YARN is deprecated, please use -Pyarn flag.")
-        profiles ++= Seq("yarn")
-      }
+      println("NOTE: SPARK_YARN is deprecated, please use -Pyarn flag.")
+      profiles ++= Seq("yarn")
     }
     profiles
   }
@@ -136,7 +130,12 @@ object SparkBuild extends PomBuild {
     },
     publishMavenStyle in MavenCompile := true,
     publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
-    publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
+    publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn,
+
+    javacOptions in (Compile, doc) ++= {
+      val Array(major, minor, _) = System.getProperty("java.version").split("\\.", 3)
+      if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
+    }
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
@@ -330,9 +329,9 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, streamingFlumeSink, yarn),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, catalyst, streamingFlumeSink, yarn),
 
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
@@ -360,7 +359,10 @@ object Unidoc {
         "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",
         "mllib.linalg.distributed", "mllib.optimization", "mllib.rdd", "mllib.recommendation",
         "mllib.regression", "mllib.stat", "mllib.tree", "mllib.tree.configuration",
-        "mllib.tree.impurity", "mllib.tree.model", "mllib.util"
+        "mllib.tree.impurity", "mllib.tree.model", "mllib.util",
+        "mllib.evaluation", "mllib.feature", "mllib.random", "mllib.stat.correlation",
+        "mllib.stat.test", "mllib.tree.impl", "mllib.tree.loss",
+        "ml", "ml.classification", "ml.evaluation", "ml.feature", "ml.param", "ml.tuning"
       ),
       "-group", "Spark SQL", packageList("sql.api.java", "sql.api.java.types", "sql.hive.api.java"),
       "-noqualifier", "java.lang"

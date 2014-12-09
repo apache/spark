@@ -154,6 +154,25 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
+   * Evaluation helper function for 1 Fractional children expression.
+   * if the expression result is null, the evaluation result should be null.
+   */
+  @inline
+  protected final def f1(i: Row, e1: Expression, f: ((Fractional[Any], Any) => Any)): Any  = {
+    val evalE1 = e1.eval(i: Row)
+    if(evalE1 == null) {
+      null
+    } else {
+      e1.dataType match {
+        case ft: FractionalType =>
+          f.asInstanceOf[(Fractional[ft.JvmType], ft.JvmType) => ft.JvmType](
+            ft.fractional, evalE1.asInstanceOf[ft.JvmType])
+        case other => sys.error(s"Type $other does not support fractional operations")
+      }
+    }
+  }
+
+  /**
    * Evaluation helper function for 2 Integral children expressions. Those expressions are
    * supposed to be in the same data type, and also the return type.
    * Either one of the expressions result is null, the evaluation result should be null.
@@ -185,6 +204,28 @@ abstract class Expression extends TreeNode[Expression] {
               i.asIntegral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
         }
+      }
+    }
+  }
+
+  /**
+   * Evaluation helper function for 1 Integral children expression.
+   * if the expression result is null, the evaluation result should be null.
+   */
+  @inline
+  protected final def i1(i: Row, e1: Expression, f: ((Integral[Any], Any) => Any)): Any  = {
+    val evalE1 = e1.eval(i)
+    if(evalE1 == null) {
+      null
+    } else {
+      e1.dataType match {
+        case i: IntegralType =>
+          f.asInstanceOf[(Integral[i.JvmType], i.JvmType) => i.JvmType](
+            i.integral, evalE1.asInstanceOf[i.JvmType])
+        case i: FractionalType =>
+          f.asInstanceOf[(Integral[i.JvmType], i.JvmType) => i.JvmType](
+            i.asIntegral, evalE1.asInstanceOf[i.JvmType])
+        case other => sys.error(s"Type $other does not support numeric operations")
       }
     }
   }
