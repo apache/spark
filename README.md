@@ -22,6 +22,7 @@ This README file only contains basic setup instructions.
 Spark is built using [Apache Maven](http://maven.apache.org/).
 To build Spark and its example programs, run:
 
+    export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
     mvn -DskipTests clean package
 
 (You do not need to do this if you downloaded a pre-built package.)
