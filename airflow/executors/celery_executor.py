@@ -1,3 +1,4 @@
+import logging
 import multiprocessing
 import time
 
@@ -47,11 +48,12 @@ class CelerySubmitter(multiprocessing.Process):
 
     def run(self):
         while True:
-            key, command = self.task_queue.get()
-            if command is None:
+            work = self.task_queue.get()
+            if work is None:
                 # Received poison pill, no more tasks to run
                 self.task_queue.task_done()
                 break
+            key, command = work
             BASE_FOLDER = getconf().get('core', 'BASE_FOLDER')
             command = (
                 "exec bash -c '"
@@ -66,6 +68,7 @@ class CelerySubmitter(multiprocessing.Process):
                 result = res.get()
             except Exception as e:
                 self.result_queue.put((key, State.FAILED))
+                logging.exception(e)
                 raise e
             self.result_queue.put((key, State.SUCCESS))
             self.task_queue.task_done()
