@@ -165,7 +165,7 @@ private[hive] case class HiveGenericUdf(functionClassName: String, children: Seq
     isUDFDeterministic && returnInspector.isInstanceOf[ConstantObjectInspector]
 
   @transient
-  protected lazy val constantReturnValue = unwrap(
+  protected def constantReturnValue = unwrap(
     returnInspector.asInstanceOf[ConstantObjectInspector].getWritableConstantValue(),
     returnInspector)
   
