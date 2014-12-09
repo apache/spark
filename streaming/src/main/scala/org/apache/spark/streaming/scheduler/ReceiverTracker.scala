@@ -152,6 +152,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
     receiverInfo(streamId) = newReceiverInfo
     listenerBus.post(StreamingListenerReceiverStopped(receiverInfo(streamId)))
+    receiverInfo.remove(streamId)
     val messageWithError = if (error != null && !error.isEmpty) {
       s"$message - $error"
     } else {
