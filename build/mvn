@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Determine the current working directory
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 # Called before any binaries are installed for any unknown operating system.
 # Current checks are as follows:
@@ -50,16 +50,21 @@ prep_install_for_osx() {
 # forced installation,
 ## Arg1 - application name
 check_and_install_app() {
+  # create the local environment variable in uppercase
+  APP_BIN="`echo $1 | awk '{print toupper(\$0)}'`_BIN"
+  # some black magic to set the generated app variable (i.e. MVN_BIN) into the
+  # environment
+  eval "${APP_BIN}=`which $1 2>/dev/null`"
   if [ -z "`which $1 2>/dev/null`" ]; then
     # attempt to force install if flagged
     if [ -n "${FORCE_INSTALL}" ]; then
-      local resource="${DIR}/packages/$1.sh"
+      local resource="${_DIR}/packages/$1.sh"
       if [ -f "$resource" ]; then
-        source "${DIR}/packages/$1.sh"
+        source "${_DIR}/packages/$1.sh"
         prep_install_for_${_OSTYPE}
         install_$1_for_${_OSTYPE}
       else
-        echo "ERROR: Cannot find the $1.sh build file from within ${DIR}/packages."
+        echo "ERROR: Cannot find the $1.sh build file from within ${_DIR}/packages."
         echo "       Ensure the file exists and is accesible."
         exit 1
       fi
@@ -69,6 +74,23 @@ check_and_install_app() {
       exit 2
     fi
   fi
+}
+
+# Prints the help and usage for this script
+print_help() {
+  echo "Spark Build Suite for Maven" && echo
+  echo "Usage: ./build/mvn <options> -- <mvn-parameters>" && echo
+  echo "  Options:"
+  echo -e "    -p=<port>\t\tSets the port for a local Zinc instance"
+  echo -e "    -f\t\t\tForces install of necessary packages"
+  echo -e "    -h\t\t\tPrints this help message" && echo
+  echo "  Maven Parameters:"
+  echo "    All parameters after the double-dash (--) will be pushed to the Maven"
+  echo "    call. If none are provided the default of 'clean package -DskipTests'"
+  echo "    will be executed." && echo
+  echo "  Examples:"
+  echo "    ./build/mvn -f -- clean package"
+  echo "    ./build/mvn -p=3031 -- clean"
 }
 
 # Set a cleaned OS type string based on the $OSTYPE bash variable
@@ -102,6 +124,10 @@ while [ ! "$OPT" = "--" -a ! $# -eq 0 ]; do
       ZINC_PORT=${OPT/-p=/}
       shift
       ;;
+    -h)
+      print_help
+      exit 0
+      ;;
     *)
       echo "Unknown option: $OPT"
       shift
@@ -119,16 +145,19 @@ check_and_install_app "mvn"
 check_and_install_app "zinc"
 check_and_install_app "scala"
 
-# Now that zinc is ensured to be installed, check its status and, if not
-# running, start it
+# Reset the current working directory
+cd "${_DIR}/.."
+
+# Now that zinc is ensured to be installed, check its status and, if its
+# not running, start it
 if [ -z "`zinc -status`" ]; then
-  zinc -start -port ${ZINC_PORT}
+  ${ZINC_BIN} -start -port ${ZINC_PORT}
 fi
 
 # Determine the parameters pushed in from the command line and, if any are
 # present, use those within the maven
 if [ $# -gt 0 ]; then
-  mvn "$@"
+  ${MVN_BIN} "$@"
 else
-  mvn clean package -DskipTests
+  ${MVN_BIN} clean package -DskipTests
 fi

@@ -8,4 +8,5 @@ install_zinc_for_linux() {
 
 install_zinc_for_osx() {
   brew install zinc
+  export ZINC_BIN=`which zinc`
 }
