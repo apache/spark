@@ -47,10 +47,9 @@ import scala.language.implicitConversions
 /**
  * This class provides the UDF creation and also the UDF instance serialization and
  * de-serialization cross process boundary.
+ * 
+ * Detail discussion can be found at https://github.com/apache/spark/pull/3640
  *
- * We use class instead of trait, seems property variables of trait cannot be serialized when
- * bundled with Case Class; in the other hand, we need to intercept the UDF instance ser/de.
- * the "Has-a" probably better than "Is-a".
  * @param functionClassName UDF class name
  */
 class HiveFunctionWrapper(var functionClassName: String) extends java.io.Externalizable {
