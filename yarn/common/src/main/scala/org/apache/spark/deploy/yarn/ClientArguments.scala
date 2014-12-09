@@ -43,17 +43,19 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
     sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
 
   parseArgs(args.toList)
+
+  val isClusterMode = userClass != null
+
   loadEnvironmentArgs()
   validateArgs()
 
-  // Additional memory to allocate to containers
-  // For now, use driver's memory overhead as our AM container's memory overhead
-  val memOverheadStr = if (userClass == null) {
+  // Additional memory to allocate to containers. In different modes, we use different configs.
+  val amMemOverheadConf = if (isClusterMode) {
     "spark.yarn.driver.memoryOverhead"
   } else {
     "spark.yarn.am.memoryOverhead"
   }
-  val amMemoryOverhead = sparkConf.getInt(memOverheadStr,
+  val amMemoryOverhead = sparkConf.getInt(amMemOverheadConf,
     math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
 
   val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
@@ -61,8 +63,8 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
   /** Load any default arguments provided through environment variables and Spark properties. */
   private def loadEnvironmentArgs(): Unit = {
-    // We use spark.yarn.am.memory to initialize Application Master in yarn-client mode.
-    if (userClass == null) {
+    // In cluster mode, the driver and the AM live in the same JVM, so this does not apply
+    if (!isClusterMode) {
       amMemory = Utils.memoryStringToMb(sparkConf.get("spark.yarn.am.memory", "512m"))
     }
     // For backward compatibility, SPARK_YARN_DIST_{ARCHIVES/FILES} should be resolved to hdfs://,
