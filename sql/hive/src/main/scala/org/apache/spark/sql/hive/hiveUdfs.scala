@@ -73,17 +73,21 @@ private[hive] abstract class HiveFunctionRegistry
 /**
  * This class provides the UDF creation and also the UDF instance serialization and
  * de-serialization cross process boundary.
+ *
+ * We use class instead of trait, seems property variables of trait cannot be serialized when
+ * bundled with Case Class; in the other hand, we need to intercept the UDF instance ser/de.
+ * the "Has-a" probably better than "Is-a".
  * @param functionClassName UDF class name
  */
 class HiveFunctionCache(var functionClassName: String) extends java.io.Externalizable {
-  // for Seriliazation
+  // for Serialization
   def this() = this(null)
 
   private var instance: Any = null
 
   def writeExternal(out: java.io.ObjectOutput) {
-    // Some of the UDF are serializable, but some not
-    // Hive Utilities can handle both case
+    // Some of the UDF are serializable, but some others are not
+    // Hive Utilities can handle both cases
     val baos = new java.io.ByteArrayOutputStream()
     HiveShim.serializePlan(instance, baos)
     val functionInBytes = baos.toByteArray
