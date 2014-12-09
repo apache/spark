@@ -1295,7 +1295,7 @@ abstract class RDD[T: ClassTag](
     // caused by recursively visiting
     val waitingForVisit = new Stack[RDD[_]]
     def visit(rdd: RDD[_]) {
-      if (!visited(rdd) || rdd.isCheckpointed) {
+      if (!visited(rdd) && !rdd.isCheckpointed) {
         visited += rdd
         if (rdd.checkpointData.isDefined) {
           rdd.checkpointData.get.doCheckpoint()
