@@ -172,8 +172,8 @@ class GradientDescentSuite extends FunSuite with MLlibTestSparkContext with Matc
       numIterations,
       regParam,
       miniBatchFrac,
-      convergenceTolerance,
-      initialWeightsWithIntercept)
+      initialWeightsWithIntercept,
+      convergenceTolerance)
 
     assert(loss.length < numIterations, "doesn't satisfy convergence tolerance")
   }
