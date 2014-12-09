@@ -54,86 +54,23 @@ private[hive] abstract class HiveFunctionRegistry
     val functionClassName = functionInfo.getFunctionClass.getName
 
     if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      HiveSimpleUdf(new HiveFunctionCache(functionClassName), children)
+      HiveSimpleUdf(new HiveFunctionWrapper(functionClassName), children)
     } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      HiveGenericUdf(new HiveFunctionCache(functionClassName), children)
+      HiveGenericUdf(new HiveFunctionWrapper(functionClassName), children)
     } else if (
          classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
-      HiveGenericUdaf(new HiveFunctionCache(functionClassName), children)
+      HiveGenericUdaf(new HiveFunctionWrapper(functionClassName), children)
     } else if (classOf[UDAF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      HiveUdaf(new HiveFunctionCache(functionClassName), children)
+      HiveUdaf(new HiveFunctionWrapper(functionClassName), children)
     } else if (classOf[GenericUDTF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      HiveGenericUdtf(new HiveFunctionCache(functionClassName), Nil, children)
+      HiveGenericUdtf(new HiveFunctionWrapper(functionClassName), Nil, children)
     } else {
       sys.error(s"No handler for udf ${functionInfo.getFunctionClass}")
     }
   }
 }
 
-/**
- * This class provides the UDF creation and also the UDF instance serialization and
- * de-serialization cross process boundary.
- *
- * We use class instead of trait, seems property variables of trait cannot be serialized when
- * bundled with Case Class; in the other hand, we need to intercept the UDF instance ser/de.
- * the "Has-a" probably better than "Is-a".
- * @param functionClassName UDF class name
- */
-class HiveFunctionCache(var functionClassName: String) extends java.io.Externalizable {
-  // for Serialization
-  def this() = this(null)
-
-  private var instance: Any = null
-
-  def writeExternal(out: java.io.ObjectOutput) {
-    // output the function name
-    out.writeUTF(functionClassName)
-
-    // Write a flag if instance is null or not
-    out.writeBoolean(instance != null)
-    if (instance != null) {
-      // Some of the UDF are serializable, but some others are not
-      // Hive Utilities can handle both cases
-      val baos = new java.io.ByteArrayOutputStream()
-      HiveShim.serializePlan(instance, baos)
-      val functionInBytes = baos.toByteArray
-
-      // output the function bytes
-      out.writeInt(functionInBytes.length)
-      out.write(functionInBytes, 0, functionInBytes.length)
-    }
-  }
-
-  def readExternal(in: java.io.ObjectInput) {
-    // read the function name
-    functionClassName = in.readUTF()
-
-    if (in.readBoolean()) {
-      // if the instance is not null
-      // read the function in bytes
-      val functionInBytesLength = in.readInt()
-      val functionInBytes = new Array[Byte](functionInBytesLength)
-      in.read(functionInBytes, 0, functionInBytesLength)
-
-      // deserialize the function object via Hive Utilities
-      instance = HiveShim.deserializePlan(new java.io.ByteArrayInputStream(functionInBytes),
-        getContextOrSparkClassLoader.loadClass(functionClassName))
-    }
-  }
-
-  def createFunction[UDFType](alwaysCreateNewInstance: Boolean = false) = {
-    if (alwaysCreateNewInstance) {
-      getContextOrSparkClassLoader.loadClass(functionClassName).newInstance.asInstanceOf[UDFType]
-    } else {
-      if (instance == null) {
-        instance = getContextOrSparkClassLoader.loadClass(functionClassName).newInstance
-      }
-      instance.asInstanceOf[UDFType]
-    }
-  }
-}
-
-private[hive] case class HiveSimpleUdf(cache: HiveFunctionCache, children: Seq[Expression])
+private[hive] case class HiveSimpleUdf(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression with HiveInspectors with Logging {
   type EvaluatedType = Any
   type UDFType = UDF
@@ -141,7 +78,7 @@ private[hive] case class HiveSimpleUdf(cache: HiveFunctionCache, children: Seq[E
   def nullable = true
 
   @transient
-  lazy val function = cache.createFunction[UDFType](true) // Simple UDF should be not serialized.
+  lazy val function = funcWrapper.createFunction[UDFType]()
 
   @transient
   protected lazy val method =
@@ -180,7 +117,7 @@ private[hive] case class HiveSimpleUdf(cache: HiveFunctionCache, children: Seq[E
       returnInspector)
   }
 
-  override def toString = s"$nodeName#${cache.functionClassName}(${children.mkString(",")})"
+  override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
 }
 
 // Adapter from Catalyst ExpressionResult to Hive DeferredObject
@@ -194,7 +131,7 @@ private[hive] class DeferredObjectAdapter(oi: ObjectInspector)
   override def get(): AnyRef = wrap(func(), oi)
 }
 
-private[hive] case class HiveGenericUdf(cache: HiveFunctionCache, children: Seq[Expression])
+private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, children: Seq[Expression])
   extends Expression with HiveInspectors with Logging {
   type UDFType = GenericUDF
   type EvaluatedType = Any
@@ -202,7 +139,7 @@ private[hive] case class HiveGenericUdf(cache: HiveFunctionCache, children: Seq[
   def nullable = true
 
   @transient
-  lazy val function = cache.createFunction[UDFType]()
+  lazy val function = funcWrapper.createFunction[UDFType]()
 
   @transient
   protected lazy val argumentInspectors = children.map(toInspector)
@@ -241,18 +178,18 @@ private[hive] case class HiveGenericUdf(cache: HiveFunctionCache, children: Seq[
     unwrap(function.evaluate(deferedObjects), returnInspector)
   }
 
-  override def toString = s"$nodeName#${cache.functionClassName}(${children.mkString(",")})"
+  override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
 }
 
 private[hive] case class HiveGenericUdaf(
-    cache: HiveFunctionCache,
+    funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression]) extends AggregateExpression
   with HiveInspectors {
 
   type UDFType = AbstractGenericUDAFResolver
 
   @transient
-  protected lazy val resolver: AbstractGenericUDAFResolver = cache.createFunction()
+  protected lazy val resolver: AbstractGenericUDAFResolver = funcWrapper.createFunction()
 
   @transient
   protected lazy val objectInspector  = {
@@ -267,14 +204,14 @@ private[hive] case class HiveGenericUdaf(
 
   def nullable: Boolean = true
 
-  override def toString = s"$nodeName#${cache.functionClassName}(${children.mkString(",")})"
+  override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
 
-  def newInstance() = new HiveUdafFunction(cache, children, this)
+  def newInstance() = new HiveUdafFunction(funcWrapper, children, this)
 }
 
 /** It is used as a wrapper for the hive functions which uses UDAF interface */
 private[hive] case class HiveUdaf(
-    cache: HiveFunctionCache,
+    funcWrapper: HiveFunctionWrapper,
     children: Seq[Expression]) extends AggregateExpression
   with HiveInspectors {
 
@@ -282,7 +219,7 @@ private[hive] case class HiveUdaf(
 
   @transient
   protected lazy val resolver: AbstractGenericUDAFResolver =
-    new GenericUDAFBridge(cache.createFunction())
+    new GenericUDAFBridge(funcWrapper.createFunction())
 
   @transient
   protected lazy val objectInspector  = {
@@ -297,10 +234,10 @@ private[hive] case class HiveUdaf(
 
   def nullable: Boolean = true
 
-  override def toString = s"$nodeName#${cache.functionClassName}(${children.mkString(",")})"
+  override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
 
   def newInstance() =
-    new HiveUdafFunction(cache, children, this, true)
+    new HiveUdafFunction(funcWrapper, children, this, true)
 }
 
 /**
@@ -315,13 +252,13 @@ private[hive] case class HiveUdaf(
  * user defined aggregations, which have clean semantics even in a partitioned execution.
  */
 private[hive] case class HiveGenericUdtf(
-    cache: HiveFunctionCache,
+    funcWrapper: HiveFunctionWrapper,
     aliasNames: Seq[String],
     children: Seq[Expression])
   extends Generator with HiveInspectors {
 
   @transient
-  protected lazy val function: GenericUDTF = cache.createFunction()
+  protected lazy val function: GenericUDTF = funcWrapper.createFunction()
 
   @transient
   protected lazy val inputInspectors = children.map(_.dataType).map(toInspector)
@@ -378,11 +315,11 @@ private[hive] case class HiveGenericUdtf(
     }
   }
 
-  override def toString = s"$nodeName#${cache.functionClassName}(${children.mkString(",")})"
+  override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
 }
 
 private[hive] case class HiveUdafFunction(
-    cache: HiveFunctionCache,
+    funcWrapper: HiveFunctionWrapper,
     exprs: Seq[Expression],
     base: AggregateExpression,
     isUDAFBridgeRequired: Boolean = false)
@@ -393,9 +330,9 @@ private[hive] case class HiveUdafFunction(
 
   private val resolver =
     if (isUDAFBridgeRequired) {
-      new GenericUDAFBridge(cache.createFunction[UDAF]())
+      new GenericUDAFBridge(funcWrapper.createFunction[UDAF]())
     } else {
-      cache.createFunction[AbstractGenericUDAFResolver]()
+      funcWrapper.createFunction[AbstractGenericUDAFResolver]()
     }
 
   private val inspectors = exprs.map(_.dataType).map(toInspector).toArray

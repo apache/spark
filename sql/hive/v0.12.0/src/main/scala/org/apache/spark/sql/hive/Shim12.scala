@@ -43,21 +43,22 @@ import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.types.DecimalType
 
+class HiveFunctionWrapper(var functionClassName: String) extends java.io.Serializable {
+  // for Serialization
+  def this() = this(null)
+
+  import org.apache.spark.util.Utils._
+  def createFunction[UDFType <: AnyRef](): UDFType = {
+    getContextOrSparkClassLoader
+      .loadClass(functionClassName).newInstance.asInstanceOf[UDFType]
+  }
+}
+
 /**
  * A compatibility layer for interacting with Hive version 0.12.0.
  */
 private[hive] object HiveShim {
   val version = "0.12.0"
-
-  import org.apache.hadoop.hive.ql.exec.Utilities
-
-  def deserializePlan[UDFType](is: java.io.InputStream, clazz: Class[UDFType]): UDFType = {
-    Utilities.deserializePlan(is).asInstanceOf[UDFType]
-  }
-
-  def serializePlan(function: Any, out: java.io.OutputStream): Unit = {
-    Utilities.serializePlan(function, out)
-  }
 
   def getTableDesc(
     serdeClass: Class[_ <: Deserializer],
