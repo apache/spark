@@ -834,8 +834,10 @@ private[spark] class BlockManager(
           // If we get here, the block write failed.
           logWarning("Block " + blockId + " was marked as failure. Nothing to drop")
           return None
+        } else if (blockInfo.get(blockId).isEmpty) {
+          logWarning(s"Block $blockId was already dropped.")
+          return None
         }
-
         var blockIsUpdated = false
         val level = info.level
 
