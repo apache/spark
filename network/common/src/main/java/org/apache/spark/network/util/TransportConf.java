@@ -95,7 +95,7 @@ public class TransportConf {
    * this will be read in using traditional IO into JVM heap and send to network.
    */
   public int transferToBytes() {
-    return conf.getInt("spark.storage.transferToThreshold", 2 * 1024 * 1024);
+    return conf.getInt("spark.storage.transferToThreshold", 1024 * 1024 * 1024);
   }
 
   /**
