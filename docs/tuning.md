@@ -233,6 +233,39 @@ Spark prints the serialized size of each task on the master, so you can look at 
 decide whether your tasks are too large; in general tasks larger than about 20 KB are probably
 worth optimizing.
 
+## Data Locality
+
+Data locality can have a major impact on the performance of Spark jobs.  If data and the code that
+operates on it are together than computation tends to be fast.  But if code and data are separated,
+one must move to the other.  Typically it is faster to ship serialized code from place to place than
+a chunk of data because code size is much smaller than data.  Spark builds its scheduling around
+this general principle of data locality.
+
+Data locality is how close data is to the code processing it.  There are several levels of
+locality based on the data's current location.  In order from closest to farthest:
+
+- `PROCESS_LOCAL` data is in the same JVM as the running code.  This is the best locality
+  possible
+- `NODE_LOCAL` data is on the same node.  Examples might be in HDFS on the same node, or in
+  another executor on the same node.  This is a little slower than `PROCESS_LOCAL` because the data
+  has to travel between processes
+- `NO_PREF` data is accessed equally quickly from anywhere and has no locality preference
+- `RACK_LOCAL` data is on the same rack of servers.  Data is on a different server on the same rack
+  so needs to be sent over the network, typically through a single switch
+- `ANY` data is elsewhere on the network and not in the same rack
+
+Spark prefers to schedule all tasks at the best locality level, but this is not always possible.  In
+situations where there is no unprocessed data on any idle executor, Spark switches to lower locality
+levels. There are two options: a) wait until a busy CPU frees up to start a task on data on the same
+server, or b) immediately start a new task in a farther away place that requires moving data there.
+
+What Spark typically does is wait a bit in the hopes that a busy CPU frees up.  Once that timeout
+expires, it starts moving the data from far away to the free CPU.  The wait timeout for fallback
+between each level can be configured individually or all together in one parameter; see the
+`spark.locality` parameters on the [configuration page](configuration.html#scheduling) for details.
+You should increase these settings if your tasks are long and see poor locality, but the default
+usually works well.
+
 # Summary
 
 This has been a short guide to point out the main concerns you should know about when tuning a
