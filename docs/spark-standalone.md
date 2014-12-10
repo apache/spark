@@ -272,10 +272,10 @@ should specify them through the `--jars` flag using comma as a delimiter (e.g. `
 To control the application's configuration or execution environment, see
 [Spark Configuration](configuration.html).
 
-Additionally, standalone `cluster` mode supports restarting your application on failure. To use
-this feature, you may pass in the `--supervise` flag to `spark-submit` when launching your
-application. Then, if you wish to kill an application that is failing repeatedly, you may do so
-through:
+Additionally, standalone `cluster` mode supports restarting your application automatically if it
+exited with non-zero exit code. To use this feature, you may pass in the `--supervise` flag to
+`spark-submit` when launching your application. Then, if you wish to kill an application that is
+failing repeatedly, you may do so through:
 
     ./bin/spark-class org.apache.spark.deploy.Client kill <master url> <driver ID>
 
