@@ -1826,7 +1826,7 @@ system that needs to recovered in the event of failures:
 
 Furthermore, there are two kinds of failures that we should be concerned about:
 
-1. *Failure of a Worker Node* - Any of the nodes in the cluster can fail,
+1. *Failure of a Worker Node* - Any of the worker nodes running executors can fail,
    and all in-memory data on those nodes will be lost. If any receivers were running on failed
    nodes, then their buffered data will be lost.
 1. *Failure of the Driver Node* - If the driver node running the Spark Streaming application
@@ -1844,7 +1844,7 @@ HDFS, Spark Streaming can always recover from any failure and process all the da
 ## Semantics with input sources based on receivers
 {:.no_toc}
 For input sources based on receivers, the fault-tolerance semantics depend on both the failure
-scenario and type of receiver.
+scenario and the type of receiver.
 As we discussed [earlier](#receiver-reliability), there are two types of receivers:
 
 1. *Reliable Receiver* - These receivers acknowledge reliable sources only after ensuring that
