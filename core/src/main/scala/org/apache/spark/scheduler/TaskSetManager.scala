@@ -27,8 +27,9 @@ import scala.math.{min, max}
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
+
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.{Clock, SystemClock, Utils, SerializationHelper}
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
@@ -249,7 +250,7 @@ private[spark] class TaskSetManager(
    * This method also cleans up any tasks in the list that have already
    * been launched, since we want that to happen lazily.
    */
-  private def findTaskFromList(execId: String, list: ArrayBuffer[Int]): Option[Int] = {
+  private def dequeTaskFromList(execId: String, list: ArrayBuffer[Int]): Option[Int] = {
     var indexOffset = list.size
     while (indexOffset > 0) {
       indexOffset -= 1
@@ -290,7 +291,7 @@ private[spark] class TaskSetManager(
    * an attempt running on this host, in case the host is slow. In addition, the task should meet
    * the given locality constraint.
    */
-  private def findSpeculativeTask(execId: String, host: String, locality: TaskLocality.Value)
+  private def dequeSpeculativeTask(execId: String, host: String, locality: TaskLocality.Value)
     : Option[(Int, TaskLocality.Value)] =
   {
     speculatableTasks.retain(index => !successful(index)) // Remove finished tasks from set
@@ -366,22 +367,22 @@ private[spark] class TaskSetManager(
    *
    * @return An option containing (task index within the task set, locality, is speculative?)
    */
-  private def findTask(execId: String, host: String, maxLocality: TaskLocality.Value)
+  private def dequeTask(execId: String, host: String, maxLocality: TaskLocality.Value)
     : Option[(Int, TaskLocality.Value, Boolean)] =
   {
-    for (index <- findTaskFromList(execId, getPendingTasksForExecutor(execId))) {
+    for (index <- dequeTaskFromList(execId, getPendingTasksForExecutor(execId))) {
       return Some((index, TaskLocality.PROCESS_LOCAL, false))
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.NODE_LOCAL)) {
-      for (index <- findTaskFromList(execId, getPendingTasksForHost(host))) {
+      for (index <- dequeTaskFromList(execId, getPendingTasksForHost(host))) {
         return Some((index, TaskLocality.NODE_LOCAL, false))
       }
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.NO_PREF)) {
       // Look for noPref tasks after NODE_LOCAL for minimize cross-rack traffic
-      for (index <- findTaskFromList(execId, pendingTasksWithNoPrefs)) {
+      for (index <- dequeTaskFromList(execId, pendingTasksWithNoPrefs)) {
         return Some((index, TaskLocality.PROCESS_LOCAL, false))
       }
     }
@@ -389,20 +390,20 @@ private[spark] class TaskSetManager(
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.RACK_LOCAL)) {
       for {
         rack <- sched.getRackForHost(host)
-        index <- findTaskFromList(execId, getPendingTasksForRack(rack))
+        index <- dequeTaskFromList(execId, getPendingTasksForRack(rack))
       } {
         return Some((index, TaskLocality.RACK_LOCAL, false))
       }
     }
 
     if (TaskLocality.isAllowed(maxLocality, TaskLocality.ANY)) {
-      for (index <- findTaskFromList(execId, allPendingTasks)) {
+      for (index <- dequeTaskFromList(execId, allPendingTasks)) {
         return Some((index, TaskLocality.ANY, false))
       }
     }
 
     // find a speculative task if all others tasks have been scheduled
-    findSpeculativeTask(execId, host, maxLocality).map {
+    dequeSpeculativeTask(execId, host, maxLocality).map {
       case (taskIndex, allowedLocality) => (taskIndex, allowedLocality, true)}
   }
 
@@ -436,7 +437,7 @@ private[spark] class TaskSetManager(
         }
       }
 
-      findTask(execId, host, allowedLocality) match {
+      dequeTask(execId, host, allowedLocality) match {
         case Some((index, taskLocality, speculative)) => {
           // Found a task; do some bookkeeping and return a task description
           val task = tasks(index)
@@ -458,6 +459,20 @@ private[spark] class TaskSetManager(
           val startTime = clock.getTime()
           // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
           // we assume the task can be serialized without exceptions.
+
+          // Check if serialization debugging is enabled
+          // TODO After acceptance, documentation for this option should be added to ScalaDoc
+          val printRdd : Boolean = sched.sc.getConf.getOption("spark.serializer.debug")
+            .getOrElse("false").equals("true")
+          
+          // If enabled, print out the added JARs and files (as part of the context) to help 
+          // identify unserializable components
+          if(printRdd)
+          {
+            logDebug(SerializationHelper.taskDebugString(task, sched.sc.addedFiles, 
+              sched.sc.addedJars))
+          }
+
           val serializedTask = Task.serializeWithDependencies(
             task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
