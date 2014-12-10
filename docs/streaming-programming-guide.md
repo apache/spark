@@ -7,13 +7,13 @@ title: Spark Streaming Programming Guide
 {:toc}
 
 # Overview
-Spark Streaming is an extension of the core Spark API that allows enables scalable, high-throughput,
+Spark Streaming is an extension of the core Spark API that enables scalable, high-throughput,
 fault-tolerant stream processing of live data streams. Data can be ingested from many sources
-like Kafka, Flume, Twitter, ZeroMQ, Kinesis or plain old TCP sockets and be processed using complex
+like Kafka, Flume, Twitter, ZeroMQ, Kinesis or TCP sockets can be processed using complex
 algorithms expressed with high-level functions like `map`, `reduce`, `join` and `window`.
 Finally, processed data can be pushed out to filesystems, databases,
 and live dashboards. In fact, you can apply Spark's
-[machine learning](mllib-guide.html) algorithms, and
+[machine learning](mllib-guide.html) and
 [graph processing](graphx-programming-guide.html) algorithms on data streams.
 
 <p style="text-align: center;">
@@ -38,14 +38,15 @@ stream of results in batches.
 
 Spark Streaming provides a high-level abstraction called *discretized stream* or *DStream*,
 which represents a continuous stream of data. DStreams can be created either from input data
-stream from sources such as Kafka, Flume, and Kinesis, or by applying high-level
+streams from sources such as Kafka, Flume, and Kinesis, or by applying high-level
 operations on other DStreams. Internally, a DStream is represented as a sequence of
 [RDDs](api/scala/index.html#org.apache.spark.rdd.RDD).
 
 This guide shows you how to start writing Spark Streaming programs with DStreams. You can
 write Spark Streaming programs in Scala, Java or Python (introduced in Spark 1.2),
 all of which are presented in this guide.
-You will find tabs throughout this guide that let you choose between different code snippets.
+You will find tabs throughout this guide that let you choose between code snippets of
+different languages.
 
 **Note:** *Python API has been introduced in Spark 1.2. It has all the DStream transformations
 and almost all the output operations available in Scala and Java interfaces.
@@ -83,7 +84,7 @@ val ssc = new StreamingContext(conf, Seconds(1))
 {% endhighlight %}
 
 Using this context, we can create a DStream that represents streaming data from a TCP
-source hostname, e.g. `localhost`, and port, e.g. `9999`
+source, specified as hostname (e.g. `localhost`) and port (e.g. `9999`).
 
 {% highlight scala %}
 // Create a DStream that will connect to hostname:port, like localhost:9999
@@ -152,7 +153,7 @@ JavaStreamingContext jssc = new JavaStreamingContext(conf, Durations.seconds(1))
 {% endhighlight %}
 
 Using this context, we can create a DStream that represents streaming data from a TCP
-source hostname, e.g. `localhost`, and port, e.g. `9999`
+source, specified as hostname (e.g. `localhost`) and port (e.g. `9999`).
 
 {% highlight java %}
 // Create a DStream that will connect to hostname:port, like localhost:9999
@@ -235,7 +236,7 @@ ssc = StreamingContext(sc, 1)
 {% endhighlight %}
 
 Using this context, we can create a DStream that represents streaming data from a TCP
-source hostname, e.g. `localhost`, and port, e.g. `9999`
+source, specified as hostname (e.g. `localhost`) and port (e.g. `9999`).
 
 {% highlight python %}
 # Create a DStream that will connect to hostname:port, like localhost:9999
@@ -315,7 +316,7 @@ $ ./bin/spark-submit examples/src/main/python/streaming/network_wordcount.py loc
 
 
 Then, any lines typed in the terminal running the netcat server will be counted and printed on
-screen every second. It will look something like this.
+screen every second. It will look something like the following.
 
 <table width="100%">
     <td>
@@ -389,8 +390,7 @@ Time: 2014-10-14 15:25:21
 
 # Basic Concepts
 
-Next, we move beyond the simple example and elaborate on the basics of Spark Streaming that you
-need to know to write your streaming applications.
+Next, we move beyond the simple example and elaborate on the basics of Spark Streaming.
 
 ## Linking
 
@@ -533,18 +533,18 @@ section for more details.
 </div>
 </div>
 
-After a context is defined, you have to do the follow steps.
+After a context is defined, you have to do the following.
 
 1. Define the input sources by creating input DStreams.
-1. Setup the streaming computations by applying transformation and output operations to DStreams.
-1. Start the receiving data and procesing it using `streamingContext.start()`.
+1. Define the streaming computations by applying transformation and output operations to DStreams.
+1. Start receiving data and processing it using `streamingContext.start()`.
 1. Wait for the processing to be stopped (manually or due to any error) using `streamingContext.awaitTermination()`.
-1. The processing can be stopped manually stopped using `streamingContext.stop()`.
+1. The processing can be manually stopped using `streamingContext.stop()`.
 
 ##### Points to remember:
 {:.no_toc}
-- Once a context has been started, no new streaming computations can be setup or added to it.
-- Once a context has been stopped, it cannot be started (that is, re-used) again.
+- Once a context has been started, no new streaming computations can be set up or added to it.
+- Once a context has been stopped, it cannot be restarted.
 - Only one StreamingContext can be active in a JVM at the same time.
 - stop() on StreamingContext also stops the SparkContext. To stop only the StreamingContext, set optional parameter of `stop()` called `stopSparkContext` to false.
 - A SparkContext can be re-used to create multiple StreamingContexts, as long as the previous StreamingContext is stopped (without stopping the SparkContext) before the next StreamingContext is created.
@@ -586,17 +586,33 @@ These operations are discussed in detail in later sections.
 ***
 
 ## Input DStreams and Receivers
-Input DStreams are DStreams representing the stream of input data received from streaming sources.
+Input DStreams are DStreams representing the stream of input data received from streaming
+sources. In the [quick example](#a-quick-example), `lines` was an input DStream as it represented
+the stream of data received from the netcat server.
+
+Every input DStream (except file stream, discussed later) is associated with a **Receiver**
+([Scala](api/scala/index.html#org.apache.spark.streaming.receiver.Receiver),
+[Java](api/java/org/apache/spark/streaming/receiver/Receiver.html)) object which receives the
+data from a source and stores it in Spark's memory for processing. There are
+
 Spark Streaming has two categories of streaming sources.
 
-- *Basic sources*: Sources directly available in the StreamingContext API. Example: file systems, socket connections, and Akka actors.
-- *Advanced sources*: Sources like Kafka, Flume, Kinesis, Twitter, etc. are available through extra utility classes. These require linking against extra dependencies as discussed in the [linking](#linking) section.
-In this section, we will first discuss these different sources and then elaborate on what
-are Receivers and how they are run.
+- *Basic sources*: Sources directly available in the StreamingContext API.
+  Example: file systems, socket connections, and Akka actors.
+- *Advanced sources*: Sources like Kafka, Flume, Kinesis, Twitter, etc. are available through
+  extra utility classes. These require linking against extra dependencies as discussed in the
+  [linking](#linking) section.
 
-Every input DStream (except file stream) is associated with a single [Receiver](api/scala/index.html#org.apache.spark.streaming.receiver.Receiver) object which receives the data from a source and stores it in Spark's memory for processing. So every input DStream receives a single stream of data. Note that in a streaming application, you can create multiple input DStreams to receive multiple streams of data in parallel. This is discussed later in the [Performance Tuning](#level-of-parallelism-in-data-receiving) section.
+We are going to discuss some of the sources present in each category later in this section.
 
-A receiver is run within a Spark worker/executor as a long-running task, hence it occupies one of the cores allocated to the Spark Streaming application. Hence, it is important to remember that Spark Streaming application needs to be allocated enough cores (or threads, if running locally) to process the received data, as well as, to run the receiver(s). Therefore, few important points to remember are:
+Note that, if you want to receive multiple streams of data in parallel in your streaming
+application, you can create multiple input DStreams (discussed
+further in the [Performance Tuning](#level-of-parallelism-in-data-receiving) section). This will
+create multiple receivers which will simultaneously receive multiple data streams. But note that
+Spark worker/executor as a long-running task, hence it occupies one of the cores allocated to the
+Spark Streaming application. Hence, it is important to remember that Spark Streaming application
+needs to be allocated enough cores (or threads, if running locally) to process the received data,
+as well as, to run the receiver(s).
 
 ##### Points to remember
 {:.no_toc}
@@ -723,7 +739,22 @@ Some of these advanced sources are as follows.
 Input DStreams can also be created out of custom data sources. All you have to do is implement an user-defined **receiver** (see next section to understand what that is) that can receive data from the custom sources and push it into Spark. See the
 [Custom Receiver Guide](streaming-custom-receivers.html) for details.
 
-### Receivers
+### Receiver Reliability
+{:.no_toc}
+
+There can be two kinds of data sources based on their *reliability*. Sources
+(like Kafka and Flume) allow the transferred data to be acknowledged. If the system receiving
+data from these *reliable* sources acknowledge the received data correctly, it can be ensured
+that no data gets lost due to any kind of failure. This leads to two kinds of receivers.
+
+1. *Reliable Receiver* - A *reliable receiver* correctly acknowledges a reliable
+  source that the data has been received and stored in Spark with replication.
+1. *Unreliable Receiver* - These are receivers for sources that do not support acknowledging. Even
+  for reliable sources, one may implement an unreliable receiver that do not go into the complexity
+  of acknowledging correctly.
+
+The details of how to write a reliable receiver is discussed in the
+[Custom Receiver Guide](streaming-custom-receivers.html).
 
 ***
 
@@ -882,6 +913,10 @@ The update function will be called for each word, with `newValues` having a sequ
 the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
 Scala code, take a look at the example
 [stateful_network_wordcount.py]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/stateful_network_wordcount.py).
+
+Note that using `updateStateByKey` requires the checkpoint directory to be configured, which is
+discussed in detail in the [checkpointing](#checkpointing) section.
+
 
 #### Transform Operation
 {:.no_toc}
@@ -1047,7 +1082,8 @@ said two parameters - <i>windowLength</i> and <i>slideInterval</i>.
   of keys as the window slides. However, it is applicable to only "invertible reduce functions",
   that is, those reduce functions which have a corresponding "inverse reduce" function (taken as
   parameter <i>invFunc</i>. Like in <code>reduceByKeyAndWindow</code>, the number of reduce tasks
-  is configurable through an optional argument.
+  is configurable through an optional argument. Note that [checkpointing](#checkpointing) must be
+  enabled for using this operation.
 </td>
 </tr>
 <tr>
@@ -1268,7 +1304,7 @@ Note that the connections in the pool should be lazily created on demand and tim
 
 ## Caching / Persistence
 Similar to RDDs, DStreams also allow developers to persist the stream's data in memory. That is,
-using `persist()` method on a DStream would automatically persist every RDD of that DStream in
+using `persist()` method on a DStream will automatically persist every RDD of that DStream in
 memory. This is useful if the data in the DStream will be computed multiple times (e.g., multiple
 operations on the same data). For window-based operations like `reduceByWindow` and
 `reduceByKeyAndWindow` and state-based operations like `updateStateByKey`, this is implicitly true.
@@ -1286,47 +1322,45 @@ information on different persistence levels can be found in
 ***
 
 ## Checkpointing
-A streaming application must operation 24/7 and hence must be resilient to failures unrelated
+A streaming application must operate 24/7 and hence must be resilient to failures unrelated
 to the application logic (e.g., system failures, JVM crashes, etc.). For this to be possible,
-Spark Streaming has to *checkpoints* enough information of the streaming application to a fault-
-tolerant storage system such that it can recover from failures if required. The information
-checkpointed are as follows:
+Spark Streaming needs to *checkpoints* enough information to a fault-
+tolerant storage system such that it can recover from failures. There are two types of data
+that are checkpointed.
 
 - *Metadata checkpointing* - Saving of the information defining the streaming computation to
   fault-tolerant storage like HDFS. This is used to recover from failure of the node running the
-  driver of the streaming application (discussed in detail later). Some of the information
-  considered as metadata are.
+  driver of the streaming application (discussed in detail later). Metadata includes:
   +  *Configuration* - The configuration that were used to create the streaming application.
   +  *DStream operations* - The set of DStream operations that define the streaming application.
-  +  *Incomplete batches* - Batches who jobs are queued but have not completed yet.
+  +  *Incomplete batches* - Batches whose jobs are queued but have not completed yet.
 - *Data checkpointing* - Saving of the generated RDDs to reliable storage. This is necessary
-  in some *statefule* transformations that combine data across multiple batches. In such
+  in some *stateful* transformations that combine data across multiple batches. In such
   transformations, the generated RDDs depends on RDDs of previous batches, which causes the length
   of the dependency chain to keep increasing with time. To avoid such unbounded increase in recovery
    time (proportional to dependency chain), intermediate RDDs of stateful transformations are periodically
-  *checkpointed* to a reliable storage (e.g. HDFS) to cut off the dependency chains.
+  *checkpointed* to reliable storage (e.g. HDFS) to cut off the dependency chains.
 
 To summarize, metadata checkpointing is primarily needed for recovery from driver failures,
-where as data or RDD checkpointing is necessary even for basic functioning if some stateful
+whereas data or RDD checkpointing is necessary even for basic functioning if stateful
 transformations are used.
 
 #### When to enable Checkpointing
 {:.no_toc}
 
-It is recommended that the checkpointing be enabled by providing a checkpoint directory.
-In fact, it must be enabled if any of the following is required from the application.
+Checkpointing must be enabled for applications with any of the following requirements:
 
-- Recovering from failures of the driver running the application - Metadata checkpoints are used
-  for to recover with progress information.
-- Usage of stateful transformations - If either `updateStateByKey` or `reduceByKeyAndWindow` (with
+- *Usage of stateful transformations* - If either `updateStateByKey` or `reduceByKeyAndWindow` (with
   inverse function) is used in the application, then the checkpoint directory must be provided for
   allowing periodic RDD checkpointing.
+- *Recovering from failures of the driver running the application* - Metadata checkpoints are used
+  for to recover with progress information.
 
 Note that simple streaming applications without the aforementioned stateful transformations can be
 run without enabling checkpointing. The recovery from driver failures will also be partial in
 that case (some received but unprocessed data may be lost). This is often acceptable and many run
-Spark Streaming application in this way. Support for non-Hadoop environments is expected
-to improve in future.
+Spark Streaming applications in this way. Support for non-Hadoop environments is expected
+to improve in the future.
 
 #### How to configure Checkpointing
 {:.no_toc}
@@ -1334,7 +1368,7 @@ to improve in future.
 Checkpointing can be enabled by setting a directory in a fault-tolerant,
 reliable file system (e.g., HDFS, S3, etc.) to which the checkpoint information will be saved.
 This is done by using `streamingContext.checkpoint(checkpointDirectory)`. This will allow you to
-use the aforementioned stateful transformations. Along with it,
+use the aforementioned stateful transformations. Additionally,
 if you want make the application recover from driver failures, you should rewrite your
 streaming application to have the following behavior.
 
@@ -1453,12 +1487,12 @@ You can also explicitly create a `StreamingContext` from the checkpoint data and
 </div>
 </div>
 
-In addition to using `getOrCreate` one also needs to make sure that the driver process gets
+In addition to using `getOrCreate` one also needs to ensure that the driver process gets
 restarted automatically on failure. This can only be done by the deployment infrastructure that is
-used to run the application. This is further discussed in the [Deployment]
-(#deploying-applications) section.
+used to run the application. This is further discussed in the
+[Deployment](#deploying-applications.html) section.
 
-Another point to note is that checkpointing of RDDs incurs the cost of saving to reliable storage.
+Note that checkpointing of RDDs incurs the cost of saving to reliable storage.
 This may cause an increase in the processing time of those batches where RDDs get checkpointed.
 Hence, the interval of
 checkpointing needs to be set carefully. At small batch sizes (say 1 second), checkpointing every
@@ -1472,42 +1506,66 @@ sliding interval of a DStream is good setting to try.
 ***
 
 ## Deploying Applications
-A Spark Streaming application is deployed on a cluster in the same way as any other Spark application.
-Please refer to the [deployment guide](cluster-overview.html) for more details.
+This section discussed the steps to deploy a Spark Streaming applications.
 
-Note that the applications
-that use [advanced sources](#advanced-sources) (e.g. Kafka, Flume, Twitter) are also required to package the
-extra artifact they link to, along with their dependencies, in the JAR that is used to deploy the application.
-For example, an application using `TwitterUtils` will have to include
-`spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}}` and all its transitive
-dependencies in the application JAR.
-
-There are a few aspects that require further discussions.
-
-#### Setting up for Driver Fault Recovery
+### Requirements
 {:.no_toc}
-To automatically recover from a driver failure, the deployment infrastructure that is
-used to run the streaming application must monitor the driver process and relaunch the driver
-if it fails. Usually different [cluster managers](cluster-overview.html#cluster-manager-types)
-have different tools to achieve this. Here are some pointers on how to achieve this in each
-cluster manager.
 
-- *Spark Standalone* - A Spark application can be submitted to run within the Spark Standalone
-  cluster, that is, the application driver itself runs on one of the worker nodes. Furthermore, the
-  Standalone cluster manager can be instructed to *supervise* the driver,
-  and relaunch it if the driver fails either due to non-zero exit code,
-  or due to failure of the node running the driver. See *cluster mode* and *supervise* in the
-  [Spark Standalone guide](spark-standalone.html) for more details.
-- *YARN* - Yarn supports a similar mechanism for automatically restarting an application. Please
-  refer to YARN documentation for more details.
-- *Mesos* - [Marathon](https://github.com/mesosphere/marathon) has been used to achieve this with
-  Mesos.
+To run a Spark Streaming applications, you need to have the following.
 
-Also, note that you have to write you streaming application such that it can be restarted. This
-has been explained in the [Checkpointing](#how-to-configure-checkpointing)) section.
+- *Cluster with a cluster manager* - This is the general requirement of any Spark application,
+  and discussed in detail in the [deployment guide](cluster-overview.html).
 
-#### Upgrading Application Code
+- *Package the application JAR* - You have to compile your streaming application into a JAR.
+  If you are using [`spark-submit`](submitting-applications.html) to start the
+  application, then you will not need to provide Spark and Spark Streaming in the JAR. However,
+  if your application uses [advanced sources](#advanced-sources) (e.g. Kafka, Flume, Twitter),
+  then you will have to package the extra artifact they link to, along with their dependencies,
+  in the JAR that is used to deploy the application. For example, an application using `TwitterUtils`
+  will have to include `spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}}` and all its
+  transitive dependencies in the application JAR.
+
+- *Configuring sufficient memory for the executors* - Since the received data must be stored in
+  memory, the executors must be configured with sufficient memory to hold the received data. Note
+  that if you are doing 10 minute window operations, the system has to keep at least last 10 minutes
+  of data in memory. So the memory requirements for the application depends on the operations
+  used in it.
+
+- *Configuring checkpointing* - If the stream application requires it, then a directory in the
+  Hadoop API compatible fault-tolerant storage (e.g. HDFS, S3, etc.) must be configured as the
+  checkpoint directory and the streaming application written in a way that checkpoint
+  information can be used for failure recovery. See the [checkpointing](#checkpointing) section
+  for more details.
+
+- *Configuring automatic restart of the application driver* - To automatically recover from a
+  driver failure, the deployment infrastructure that is
+  used to run the streaming application must monitor the driver process and relaunch the driver
+  if it fails. Different [cluster managers](cluster-overview.html#cluster-manager-types)
+  have different tools to achieve this.
+    + *Spark Standalone* - A Spark application driver can be submitted to run within the Spark
+      Standalone cluster (see
+      [cluster deploy mode](spark-standalone.html#launching-spark-applications)), that is, the
+      application driver itself runs on one of the worker nodes. Furthermore, the
+      Standalone cluster manager can be instructed to *supervise* the driver,
+      and relaunch it if the driver fails either due to non-zero exit code,
+      or due to failure of the node running the driver. See *cluster mode* and *supervise* in the
+      [Spark Standalone guide](spark-standalone.html) for more details.
+    + *YARN* - Yarn supports a similar mechanism for automatically restarting an application.
+      Please refer to YARN documentation for more details.
+    + *Mesos* - [Marathon](https://github.com/mesosphere/marathon) has been used to achieve this
+      with Mesos.
+
+- *Configuring write ahead logs (Spark 1.2+)* - Starting for Spark 1.2, we have introduced a new
+  feature of write ahead logs. If enabled, all the data received from a receiver gets written into
+  a write ahead log in the configuration checkpoint directory. This prevents data loss on driver
+  recovery, thus allowing zero data loss guarantees which is discussed in detail in the
+  [Fault-tolerant Semantics](#fault-tolerant-semantics) section. Enable this by setting the
+  [configuration parameter](configuration.html#spark-streaming)
+  `spark.streaming.receiver.writeAheadLogs.enable` to `true`.
+
+### Upgrading Application Code
 {:.no_toc}
+
 If a running Spark Streaming application needs to be upgraded with new
 application code, then there are two possible mechanism.
 
@@ -1523,12 +1581,19 @@ for graceful shutdown options) which ensure data that have been received is comp
 processed before shutdown. Then the
 upgraded application can be started, which will start processing from the same point where the earlier
 application left off. Note that this can be done only with input sources that support source-side buffering
-(like Kafka, and Flume) as data needs to be buffered while the previous application down and
+(like Kafka, and Flume) as data needs to be buffered while the previous application was down and
 the upgraded application is not yet up. And restarting from earlier checkpoint
 information of pre-upgrade code cannot be done. The checkpoint information essentially
 contains serialized Scala/Java/Python objects and trying to deserialize objects with new,
 modified classes may lead to errors. In this case, either start the upgraded app with a different
 checkpoint directory, or delete the previous checkpoint directory.
+
+### Other Considerations
+{:.no_toc}
+If the data is being received by the receivers faster than what can be processed,
+you can limit the rate by setting the [configuration parameter](configuration.html#spark-streaming)
+`spark.streaming.receiver.maxRate`.
+
 ***
 
 ## Monitoring Applications
@@ -1540,11 +1605,14 @@ receivers are active, number of records received, receiver error, etc.)
 and completed batches (batch processing times, queueing delays, etc.). This can be used to
 monitor the progress of the streaming application.
 
-The following two metrics in web UI is particularly important -
-*Processing Time* and *Scheduling Delay* (under *Batch Processing Statistics*). The first is the
-time to process each batch of data, and the second is the time a batch waits in a queue
-for the processing of previous batches to finish. If the batch processing time is consistently more
-than the batch interval and/or the queueing delay keeps increasing, then it indicates the system is
+The following two metrics in web UI are particularly important -
+
+- *Processing Time* - The time to process each batch of data.
+- *Scheduling Delay* - the time a batch waits in a queue for the processing of previous batches
+  to finish.
+
+If the batch processing time is consistently more than the batch interval and/or the queueing
+delay keeps increasing, then it indicates the system is
 not able to process the batches as fast they are being generated and falling behind.
 In that case, consider
 [reducing](#reducing-the-processing-time-of-each-batch) the batch processing time.
@@ -1608,13 +1676,18 @@ unifiedStream.print();
 </div>
 </div>
 
-
-Another parameter that should be considered is the receiver's blocking interval. For most receivers,
-the received data is coalesced together into large blocks of data before storing inside Spark's memory.
-The number of blocks in each batch determines the number of tasks that will be used to process those
-the received data in a map-like transformation. This blocking interval is determined by the
-[configuration parameter](configuration.html) `spark.streaming.blockInterval` and the default value
-is 200 milliseconds.
+Another parameter that should be considered is the receiver's blocking interval,
+which is determined by the [configuration parameter](configuration.html#spark-streaming)
+`spark.streaming.blockInterval`. For most receivers, the received data is coalesced together into
+blocks of data before storing inside Spark's memory. The number of blocks in each batch
+determines the number of tasks that will be used to process those
+the received data in a map-like transformation. The number of tasks per receiver per batch will be
+approximately (batch interval / block interval). For example, block interval of 200 ms will
+create 10 tasks per 2 second batches. Too low the number of tasks (that is, less than the number
+of cores per machine), then it will be inefficient as all available cores will not be used to
+process the data. To increase the number of tasks for a given batch interval, reduce the
+block interval. However, the recommended minimum value of block interval is about 50 ms,
+below which the task launching overheads may be a problem.
 
 An alternative to receiving data with multiple input streams / receivers is to explicitly repartition
 the input data stream (using `inputStream.repartition(<number of partitions>)`).
@@ -1726,7 +1799,7 @@ consistent batch processing times.
 ***************************************************************************************************
 
 # Fault-tolerance Semantics
-In this section, we are going to discuss the behavior of Spark Streaming application in the event
+In this section, we will discuss the behavior of Spark Streaming application in the event
 of a node failure. To understand this, let us remember the basic fault-tolerance semantics of
 Spark's RDDs.
 
@@ -1738,13 +1811,13 @@ re-computed from the original fault-tolerant dataset using the lineage of operat
 1. Assuming all the RDD transformations are deterministic, the data in the final transformed RDD
 will always be the same irrespective of failures in Spark cluster.
 
-Spark operates on data on a fault-tolerant file systems like HDFS or S3. Hence,
-all RDDs generated from the fault-tolerant data is also fault-tolerant. However, this is not
+Spark operates on data on fault-tolerant file systems like HDFS or S3. Hence,
+all the RDDs generated from the fault-tolerant data are also fault-tolerant. However, this is not
 the case for Spark Streaming as the data in most cases is received over the network (except when
 `fileStream` is used). To achieve the same fault-tolerance properties for all the generated RDDs,
 the received data is replicated among multiple Spark executors in worker nodes in the cluster
-(default replication factor is 2). Though, this leads to two kinds of data in the
-system, that needs to recovered in the event of a failure.
+(default replication factor is 2). This leads to two kinds of data in the
+system that needs to recovered in the event of a failure.
 
 1. *Data received and replicated* - This data survives failure of a single worker node as a copy
   of it exists on one of the nodes.
@@ -1770,19 +1843,15 @@ HDFS, Spark Streaming can always recover from any failure and process all the da
 
 ## Semantics with input sources based on receivers
 {:.no_toc}
-Here we will first discuss the semantics in the context of different types of failures. Also,
-we will consider two types of receivers -
+Here we will first discuss the semantics in the context of different types of failures. As we
+discussed [earlier](#receiver-reliability), there are two kinds of receivers.
 
-1. *Reliable Receiver* - For "reliable" sources that allow sent data to be acknowledged, a
-  "reliable" receiver correctly acknowledges to the source that the data has been received
-  and stored in Spark reliably (that is, replicated successfully). If the
-  receiver fails, the data received but not yet replicated at the time of failure is not
-  acknowledged to the source. If the receiver is restarted, the source would resend the data,
-  and so no data will be lost due to the failure.
-1. *Unreliable Receiver* - These are receivers for sources that do not support acknowledging. Even
-  for reliable sources, one may implement an unreliable receiver that do not go into the complexity
-  of acknowledging correctly. Such receivers can lose data when the receiver fails due to a worker
-  or driver failure.
+1. *Reliable Receiver* - These receivers acknowledge reliable sources only after ensuring that
+  the received data has been replicated. If such a receiver fails,
+  the buffered (unreplicated) data does not get acknowledged to the source. If the receiver is
+  restarted, the source would resend the data, and so no data will be lost due to the failure.
+1. *Unreliable Receiver* - Such receivers can lose data when they fail due to worker
+  or driver failures.
 
 Depending on what type of receivers are used we achieve the following semantics.
 If a worker node fails, then there is no data loss with reliable receivers. With unreliable
@@ -1791,9 +1860,9 @@ then besides these losses, all the past data that were received and replicated i
 lost. This will affect the results of the stateful transformations.
 
 To avoid this loss of past received data, Spark 1.2 introduces an experimental feature of write
-ahead logs, that saves the received data to a fault-tolerant storage. With the write ahead logs
-enabled (as discussed earlier) and reliable receivers, there is zero data loss and exactly once
-semantics.
+ahead logs, that saves the received data to a fault-tolerant storage. With the [write ahead logs
+enabled](#deploying-applications) and reliable receivers, there is zero data loss and
+exactly-once semantics.
 
 The following table summarizes the semantics under failures.
 
@@ -1805,22 +1874,23 @@ The following table summarizes the semantics under failures.
   </tr>
   <tr>
     <td>
-      <b>Spark 1.1, or</b><br/>
+      <b>Spark 1.1 or earlier, or</b><br/>
       <b>Spark 1.2 without write ahead log</b>
     </td>
     <td>
       Buffered data lost with unreliable receivers<br/>
-      Zero data loss with reliable receivers
+      Zero data loss with reliable receivers and files<br/>
     </td>
     <td>
       Buffered data lost with unreliable receivers<br/>
-      Past data lost with all receivers
+      Past data lost with all receivers<br/>
+      Zero data loss with files
       </td>
   </tr>
   <tr>
     <td><b>Spark 1.2 with write ahead log</b></td>
-    <td>Zero data loss with reliable receivers</td>
-    <td>Zero data loss with reliable receivers</td>
+    <td>Zero data loss with reliable receivers and files</td>
+    <td>Zero data loss with reliable receivers and files</td>
   </tr>
   <tr>
     <td></td>
@@ -1837,7 +1907,7 @@ Since all data is modeled as RDDs with their lineage of deterministic operations
  was a worker node failure. However, output operations (like `foreachRDD`) have _at-least once_
  semantics, that is, the transformed data may get written to an external entity more than once in
  the event of a worker failure. While this is acceptable for saving to HDFS using the
- `saveAs*Files` operations (as the file will simply get over-written by the same data),
+ `saveAs***Files` operations (as the file will simply get over-written by the same data),
  additional transactions-like mechanisms may be necessary to achieve exactly-once semantics
  for output operations.
 
