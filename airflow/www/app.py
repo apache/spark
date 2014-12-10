@@ -365,23 +365,56 @@ class Airflow(BaseView):
             past = request.args.get('past') == "true"
             upstream = request.args.get('upstream') == "true"
             downstream = request.args.get('downstream') == "true"
+            confirmed = request.args.get('confirmed') == "true"
 
-            start_date = execution_date
-            end_date = execution_date
+            if confirmed:
+                end_date = execution_date if not future else None
+                start_date = execution_date if not past else None
 
-            if future:
-                end_date = None
-            if past:
-                start_date = None
+                count = task.clear(
+                    start_date=start_date,
+                    end_date=end_date,
+                    upstream=upstream,
+                    downstream=downstream)
 
-            count = task.clear(
-                start_date=start_date,
-                end_date=end_date,
-                upstream=upstream,
-                downstream=downstream)
+                flash("{0} task instances have been cleared".format(count))
+                return redirect(origin)
+            else:
+                TI = models.TaskInstance
+                qry = session.query(TI).filter(TI.dag_id == dag_id)
 
-            flash("{0} task instances have been cleared".format(count))
-            return redirect(origin)
+                if not future:
+                    qry = qry.filter(TI.execution_date <= execution_date)
+                if not past:
+                    qry = qry.filter(TI.execution_date >= execution_date)
+
+                tasks = [task_id]
+
+                if upstream:
+                    tasks += \
+                        [t.task_id for t in task.get_flat_relatives(upstream=True)]
+                if downstream:
+                    tasks += \
+                        [t.task_id for t in task.get_flat_relatives(upstream=False)]
+
+                qry = qry.filter(TI.task_id.in_(tasks))
+                if not qry.count():
+                    flash("No task instances to clear", 'error')
+                    response = redirect(origin)
+                else:
+                    details = "\n".join([str(t) for t in qry])
+
+                    response = self.render(
+                        'airflow/confirm.html',
+                        message=(
+                            "Here's the list of task instances you are about "
+                            "to clear:"),
+                        details=details,)
+
+                session.commit()
+                session.close()
+                return response
+
 
     @expose('/tree')
     def tree(self):

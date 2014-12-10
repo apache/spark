@@ -1,0 +1,18 @@
+{% extends "airflow/master.html" %}
+
+{% block body %}
+    {{ super() }}
+    <h2>Wait a minute.</h2>
+    <div class="panel">
+    <p>{{ message }}</p>
+    {% if details %}
+        <pre><code>{{ details }}</code></pre>
+    {% endif %}
+    </div>
+    <button class="btn btn-primary" onclick="window.location += '&confirmed=true'">
+        Ok!
+    </button>
+    <button class="btn" onclick="window.history.back()">bail.</button>
+    <br>
+    <br>
+{% endblock %}
