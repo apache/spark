@@ -36,7 +36,7 @@ else:
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
     DenseMatrix
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib.random import RandomRDDs
+from pyspark.mllib.rand import RandomRDDs
 from pyspark.mllib.stat import Statistics
 from pyspark.serializers import PickleSerializer
 from pyspark.sql import SQLContext

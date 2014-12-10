@@ -36,10 +36,10 @@ pyspark.mllib.linalg module
     :undoc-members:
     :show-inheritance:
 
-pyspark.mllib.random module
+pyspark.mllib.rand module
 ---------------------------
 
-.. automodule:: pyspark.mllib.random
+.. automodule:: pyspark.mllib.rand
     :members:
     :undoc-members:
     :show-inheritance:
