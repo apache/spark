@@ -622,7 +622,7 @@ as well as, to run the receiver(s).
   a input DStream based on a receiver (e.g. sockets, Kafka, Flume, etc.), then the single thread will
   be used to run the receiver, leaving no thread for processing the received data. Hence, when
   running locally, always use "local[*n*]" as the master URL where *n* > number of receivers to run
-  (see [Spark Properties] (configuration.html#spark-properties.html for information on how to set
+  (see [Spark Properties](configuration.html#spark-properties.html) for information on how to set
   the master).
 
 - Extending the logic to running on a cluster, the number of cores allocated to the Spark Streaming
@@ -667,7 +667,7 @@ methods for creating DStreams from files and Akka actors as input sources.
   Guide](streaming-custom-receivers.html#implementing-and-using-a-custom-actor-based-receiver) for
   more details.
 
-  *Note on Python API:** Since actors are available only in the Java and Scala
+  **Note on Python API:** Since actors are available only in the Java and Scala
   libraries, `actorStream` is not available in the Python API.
 
 - **Queue of RDDs as a Stream:** For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
@@ -676,7 +676,7 @@ For more details on streams from sockets, files, and actors,
 see the API documentations of the relevant functions in
 [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) for
 Scala, [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html)
-for Java, and [StreamingContext].
+for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext) for Python.
 
 ### Advanced Sources
 {:.no_toc}
@@ -1698,12 +1698,12 @@ before further processing.
 {:.no_toc}
 Cluster resources can be under-utilized if the number of parallel tasks used in any stage of the
 computation is not high enough. For example, for distributed reduce operations like `reduceByKey`
-and `reduceByKeyAndWindow`, the default number of parallel tasks is decided by the [config property]
-(configuration.html#spark-properties) `spark.default.parallelism`. You can pass the level of
-parallelism as an argument (see [`PairDStreamFunctions`]
-(api/scala/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions)
-documentation), or set the [config property](configuration.html#spark-properties)
-`spark.default.parallelism` to change the default.
+and `reduceByKeyAndWindow`, the default number of parallel tasks is controlled by
+the`spark.default.parallelism` [configuration property](configuration.html#spark-properties). You
+can pass the level of parallelism as an argument (see
+[`PairDStreamFunctions`](api/scala/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions)
+documentation), or set the `spark.default.parallelism`
+[configuration property](configuration.html#spark-properties) to change the default.
 
 ### Data Serialization
 {:.no_toc}
@@ -1994,5 +1994,5 @@ package and renamed for better clarity.
 
 * More examples in [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming)
   and [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming)
-  and [Python] ({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python/streaming)
+  and [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python/streaming)
 * [Paper](http://www.eecs.berkeley.edu/Pubs/TechRpts/2012/EECS-2012-259.pdf) and [video](http://youtu.be/g171ndOHgJ0) describing Spark Streaming.
