@@ -279,7 +279,7 @@ object AccumulatorParam {
 
 // TODO: The multi-thread support in accumulators is kind of lame; check
 // if there's a more intuitive way of doing it right
-private object Accumulators {
+private[spark] object Accumulators {
   // TODO: Use soft references? => need to make readObject work properly then
   val originals = Map[Long, Accumulable[_, _]]()
   val localAccums = new ThreadLocal[Map[Long, Accumulable[_, _]]]() {
