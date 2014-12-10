@@ -178,21 +178,25 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
   private def getUsageMessage(unknownParam: List[String] = null): String = {
     val message = if (unknownParam != null) s"Unknown/unsupported param $unknownParam\n" else ""
-    message +
-      "Usage: org.apache.spark.deploy.yarn.Client [options] \n" +
-      "Options:\n" +
-      "  --jar JAR_PATH             Path to your application's JAR file (required in yarn-cluster mode)\n" +
-      "  --class CLASS_NAME         Name of your application's main class (required)\n" +
-      "  --arg ARG                  Argument to be passed to your application's main class.\n" +
-      "                             Multiple invocations are possible, each will be passed in order.\n" +
-      "  --num-executors NUM        Number of executors to start (Default: 2)\n" +
-      "  --executor-cores NUM       Number of cores for the executors (Default: 1).\n" +
-      "  --driver-memory MEM        Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
-      "  --executor-memory MEM      Memory per executor (e.g. 1000M, 2G) (Default: 1G)\n" +
-      "  --name NAME                The name of your application (Default: Spark)\n" +
-      "  --queue QUEUE              The hadoop queue to use for allocation requests (Default: 'default')\n" +
-      "  --addJars jars             Comma separated list of local jars that want SparkContext.addJar to work with.\n" +
-      "  --files files              Comma separated list of files to be distributed with the job.\n" +
-      "  --archives archives        Comma separated list of archives to be distributed with the job."
+    message + """
+      |Usage: org.apache.spark.deploy.yarn.Client [options]
+      |Options:
+      |  --jar JAR_PATH           Path to your application's JAR file (required in yarn-cluster
+      |                           mode)
+      |  --class CLASS_NAME       Name of your application's main class (required)
+      |  --arg ARG                Argument to be passed to your application's main class.
+      |                           Multiple invocations are possible, each will be passed in order.
+      |  --num-executors NUM      Number of executors to start (Default: 2)
+      |  --executor-cores NUM     Number of cores for the executors (Default: 1).
+      |  --driver-memory MEM      Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)
+      |  --executor-memory MEM    Memory per executor (e.g. 1000M, 2G) (Default: 1G)
+      |  --name NAME              The name of your application (Default: Spark)
+      |  --queue QUEUE            The hadoop queue to use for allocation requests (Default:
+      |                           'default')
+      |  --addJars jars           Comma separated list of local jars that want SparkContext.addJar
+      |                           to work with.
+      |  --files files            Comma separated list of files to be distributed with the job.
+      |  --archives archives      Comma separated list of archives to be distributed with the job.
+      """
   }
 }

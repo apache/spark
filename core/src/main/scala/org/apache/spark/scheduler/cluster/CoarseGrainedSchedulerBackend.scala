@@ -334,7 +334,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
    * Request that the cluster manager kill the specified executors.
    * Return whether the kill request is acknowledged.
    */
-  final def killExecutors(executorIds: Seq[String]): Boolean = {
+  final def killExecutors(executorIds: Seq[String]): Boolean = synchronized {
     logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
     val filteredExecutorIds = new ArrayBuffer[String]
     executorIds.foreach { id =>
