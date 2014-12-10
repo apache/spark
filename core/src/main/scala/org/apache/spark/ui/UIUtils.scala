@@ -181,7 +181,9 @@ private[spark] object UIUtils extends Logging {
       </li>
     }
     val helpButton: Seq[Node] = helpText.map { helpText =>
-      <a data-toggle="tooltip" data-placement="bottom" title={helpText}>(?)</a>
+      <sup>
+        (<a data-toggle="tooltip" data-placement="bottom" title={helpText}>?</a>)
+      </sup>
     }.getOrElse(Seq.empty)
 
     <html>
