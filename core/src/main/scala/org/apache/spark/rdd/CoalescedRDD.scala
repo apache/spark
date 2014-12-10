@@ -55,7 +55,7 @@ private[spark] case class CoalescedRDDPartition(
    */
   def localFraction: Double = {
     val loc = parents.count { p =>
-      val parentPreferredLocations = rdd.context.getPreferredLocs.map(_.host)
+      val parentPreferredLocations = rdd.context.getPreferredLocs(rdd, p.index).map(_.host)
       preferredLocation.exists(parentPreferredLocations.contains)
     }
     if (parents.size == 0) 0.0 else (loc.toDouble / parents.size.toDouble)
