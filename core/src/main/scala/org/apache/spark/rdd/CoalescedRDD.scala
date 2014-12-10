@@ -55,9 +55,8 @@ private[spark] case class CoalescedRDDPartition(
    */
   def localFraction: Double = {
     val loc = parents.count { p =>
-      preferredLocation.exists { l =>
-        rdd.context.getPreferredLocs(rdd, p.index).map(_.host).contains(l)
-      }
+      val parentPreferredLocations = rdd.context.getPreferredLocs.map(_.host)
+      preferredLocation.exists(parentPreferredLocations.contains)
     }
     if (parents.size == 0) 0.0 else (loc.toDouble / parents.size.toDouble)
   }
@@ -348,5 +347,8 @@ private case class PartitionGroup(prefLoc: Option[String] = None) {
 }
 
 private object PartitionGroup {
-  def apply(prefLoc: String): PartitionGroup = PartitionGroup(Some(prefLoc))
+  def apply(prefLoc: String): PartitionGroup = {
+    require(prefLoc != "", "Preferred location must not be empty")
+    PartitionGroup(Some(prefLoc))
+  }
 }
