@@ -51,8 +51,8 @@ different languages.
 **Note:** *Python API has been introduced in Spark 1.2. It has all the DStream transformations
 and almost all the output operations available in Scala and Java interfaces.
 However, it has only support for basic sources like text files and text data over sockets.
-API for creating more sources like Kafka, and Flume will be available in future.
-Further information about available features in Python API are mentioned throughout this
+APIs for additional sources, like Kafka and Flume, will be available in the future.
+Further information about available features in the Python API is mentioned throughout this
 document; look out for the tag* "**Note on Python API**".
 
 ***************************************************************************************************
@@ -1506,7 +1506,7 @@ sliding interval of a DStream is good setting to try.
 ***
 
 ## Deploying Applications
-This section discussed the steps to deploy a Spark Streaming applications.
+This section discusses the steps to deploy a Spark Streaming application.
 
 ### Requirements
 {:.no_toc}
@@ -1605,7 +1605,7 @@ receivers are active, number of records received, receiver error, etc.)
 and completed batches (batch processing times, queueing delays, etc.). This can be used to
 monitor the progress of the streaming application.
 
-The following two metrics in web UI are particularly important -
+The following two metrics in web UI are particularly important:
 
 - *Processing Time* - The time to process each batch of data.
 - *Scheduling Delay* - the time a batch waits in a queue for the processing of previous batches
@@ -1799,8 +1799,8 @@ consistent batch processing times.
 ***************************************************************************************************
 
 # Fault-tolerance Semantics
-In this section, we will discuss the behavior of Spark Streaming application in the event
-of a node failure. To understand this, let us remember the basic fault-tolerance semantics of
+In this section, we will discuss the behavior of Spark Streaming applications in the event
+of node failures. To understand this, let us remember the basic fault-tolerance semantics of
 Spark's RDDs.
 
 1. An RDD is an immutable, deterministically re-computable, distributed dataset. Each RDD
@@ -1808,29 +1808,29 @@ remembers the lineage of deterministic operations that were used on a fault-tole
 dataset to create it.
 1. If any partition of an RDD is lost due to a worker node failure, then that partition can be
 re-computed from the original fault-tolerant dataset using the lineage of operations.
-1. Assuming all the RDD transformations are deterministic, the data in the final transformed RDD
-will always be the same irrespective of failures in Spark cluster.
+1. Assuming that all of the RDD transformations are deterministic, the data in the final transformed
+   RDD will always be the same irrespective of failures in the Spark cluster.
 
 Spark operates on data on fault-tolerant file systems like HDFS or S3. Hence,
-all the RDDs generated from the fault-tolerant data are also fault-tolerant. However, this is not
+all of the RDDs generated from the fault-tolerant data are also fault-tolerant. However, this is not
 the case for Spark Streaming as the data in most cases is received over the network (except when
-`fileStream` is used). To achieve the same fault-tolerance properties for all the generated RDDs,
+`fileStream` is used). To achieve the same fault-tolerance properties for all of the generated RDDs,
 the received data is replicated among multiple Spark executors in worker nodes in the cluster
 (default replication factor is 2). This leads to two kinds of data in the
-system that needs to recovered in the event of a failure.
+system that needs to recovered in the event of failures:
 
 1. *Data received and replicated* - This data survives failure of a single worker node as a copy
   of it exists on one of the nodes.
 1. *Data received but buffered for replication* - Since this is not replicated,
    the only way to recover that data is to get it again from the source.
 
-Furthermore, there are two kinds of failures that we should be concerned about.
+Furthermore, there are two kinds of failures that we should be concerned about:
 
-1. *Failure of a Worker Node* - Any of the workers in the cluster can fail,
-   and all in-memory data on that node will be lost. If there are any receiver running on that
-   node, all buffered data will be lost.
+1. *Failure of a Worker Node* - Any of the nodes in the cluster can fail,
+   and all in-memory data on those nodes will be lost. If any receivers were running on failed
+   nodes, then their buffered data will be lost.
 1. *Failure of the Driver Node* - If the driver node running the Spark Streaming application
-   fails, then obviously the SparkContext is lost, as well as all executors with their in-memory
+   fails, then obviously the SparkContext is lost, and all executors with their in-memory
    data are lost.
 
 With this basic knowledge, let us understand the fault-tolerance semantics of Spark Streaming.
