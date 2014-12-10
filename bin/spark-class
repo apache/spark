@@ -107,8 +107,7 @@ else
 fi
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
-# SPARK-3936: scala does not assume use of the java classpath, so we need to add the "-Dscala.usejavacp=true"
-JAVA_OPTS="-Dscala.usejavacp=true -XX:MaxPermSize=128m $OUR_JAVA_OPTS"
+JAVA_OPTS="-XX:MaxPermSize=128m $OUR_JAVA_OPTS"
 JAVA_OPTS="$JAVA_OPTS -Xms$OUR_JAVA_MEM -Xmx$OUR_JAVA_MEM"
 
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
