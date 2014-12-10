@@ -1837,34 +1837,35 @@ With this basic knowledge, let us understand the fault-tolerance semantics of Sp
 
 ## Semantics with files as input source
 {:.no_toc}
-In this case, since all the input data is already present in a fault-tolerant files system like
+If all of the input data is already present in a fault-tolerant files system like
 HDFS, Spark Streaming can always recover from any failure and process all the data. This gives
 *exactly-once* semantics, that all the data will be processed exactly once no matter what fails.
 
 ## Semantics with input sources based on receivers
 {:.no_toc}
-Here we will first discuss the semantics in the context of different types of failures. As we
-discussed [earlier](#receiver-reliability), there are two kinds of receivers.
+For input sources based on receivers, the fault-tolerance semantics depend on both the failure
+scenario and type of receiver.
+As we discussed [earlier](#receiver-reliability), there are two types of receivers:
 
 1. *Reliable Receiver* - These receivers acknowledge reliable sources only after ensuring that
   the received data has been replicated. If such a receiver fails,
   the buffered (unreplicated) data does not get acknowledged to the source. If the receiver is
-  restarted, the source would resend the data, and so no data will be lost due to the failure.
+  restarted, the source will resend the data, and therefore no data will be lost due to the failure.
 1. *Unreliable Receiver* - Such receivers can lose data when they fail due to worker
   or driver failures.
 
 Depending on what type of receivers are used we achieve the following semantics.
 If a worker node fails, then there is no data loss with reliable receivers. With unreliable
 receivers, data received but not replicated can get lost. If the driver node fails,
-then besides these losses, all the past data that were received and replicated in memory will be
+then besides these losses, all the past data that was received and replicated in memory will be
 lost. This will affect the results of the stateful transformations.
 
-To avoid this loss of past received data, Spark 1.2 introduces an experimental feature of write
-ahead logs, that saves the received data to a fault-tolerant storage. With the [write ahead logs
+To avoid this loss of past received data, Spark 1.2 introduces an experimental feature of _write
+ahead logs_ which saves the received data to fault-tolerant storage. With the [write ahead logs
 enabled](#deploying-applications) and reliable receivers, there is zero data loss and
 exactly-once semantics.
 
-The following table summarizes the semantics under failures.
+The following table summarizes the semantics under failures:
 
 <table class="table">
   <tr>
