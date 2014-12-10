@@ -26,7 +26,7 @@ if [ -z "$SPARK_ON_MESOS" ]; then
   if [[ -z "$MASTER" ]]; then
     if [ "$(uname)" == "Darwin" ]; then
       echoerr "Sparkify: Connecting to chicago spark cluster ..."
-      export MASTER=spark://dn05.chi.shopify.com:7077
+      export MASTER=spark://hadoop-rm.chi.shopify.com:7077
 
       # Figure out the local IP to bind spark to for shell <-> master communication
       vpn_interface=tap0;
