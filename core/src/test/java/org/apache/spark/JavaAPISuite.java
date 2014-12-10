@@ -367,12 +367,12 @@ public class JavaAPISuite implements Serializable {
     Comparator<Tuple2<Integer, Double>> comp = new CompForGroupByKeyAndSortValues();
     JavaPairRDD<Integer, Double> rdd2 = rdd1
       .groupByKeyAndSortValues(comp, 2)
-      .mapValues(new Function<Iterator<Tuple2<Integer, Double>>, Double>() {
+      .mapValues(new Function<Iterable<Tuple2<Integer, Double>>, Double>() {
         @Override
-        public Double call(Iterator<Tuple2<Integer, Double>> it) {
+        public Double call(Iterable<Tuple2<Integer, Double>> iterable) {
           double result = 0.0;
-          while (it.hasNext())
-            result = 0.8 * result + 0.2 * it.next()._2;
+          for (Tuple2<Integer, Double> item: iterable)
+            result = 0.8 * result + 0.2 * item._2;
           return result;
         }
       });
@@ -396,11 +396,11 @@ public class JavaAPISuite implements Serializable {
 
     JavaPairRDD<Integer, String> rdd2 = rdd1
       .groupByKeyAndSortValues(2)
-      .mapValues(new Function<Iterator<String>, String>() {
+      .mapValues(new Function<Iterable<String>, String>() {
         @Override
-        public String call(Iterator<String> it) {
+        public String call(Iterable<String> iterable) {
           String result = "";
-          Iterator<String> limited = Iterators.limit(it, 2);
+          Iterator<String> limited = Iterators.limit(iterable.iterator(), 2);
           while (limited.hasNext())
             result = result + limited.next();
           return result;
