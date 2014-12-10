@@ -149,18 +149,18 @@ function, each for use with different parameters. All take as the first paramete
 In addition, there are three functions for generating random weights. Two take a fixed seed,
 which is useful for testing if one wants to start with the same weights in every test.
 
-* `def train(trainingRDD: RDD[(Vector, Vector)], hiddenLayersTopology: Array[Int], maxNumIterations:
-Int): ArtificialNeuralNetworkModel`: starts training with random initial weights, and a default
-convergenceTol=1e-4.
+* `def train(trainingRDD: RDD[(Vector, Vector)], hiddenLayersTopology: Array[Int],
+maxNumIterations: Int): ArtificialNeuralNetworkModel`: starts training with random initial
+weights, and a default convergenceTol=1e-4.
 * `def train(trainingRDD: RDD[(Vector, Vector)], model: ArtificialNeuralNetworkModel,
 maxNumIterations: Int): ArtificialNeuralNetworkModel`: resumes training given an earlier
 calculated model, and a default convergenceTol=1e-4.
 * `def train(trainingRDD: RDD[(Vector,Vector)], hiddenLayersTopology: Array[Int],
 initialWeights: Vector, maxNumIterations: Int): ArtificialNeuralNetworkModel`: Trains an ANN
 with given initial weights, and a default convergenceTol=1e-4.
-* `def train(trainingRDD: RDD[(Vector, Vector)], hiddenLayersTopology: Array[Int], maxNumIterations:
-Int, convergenceTol: Double): ArtificialNeuralNetworkModel`: starts training with random
-initial weights. Allows setting a customised "convergenceTol".
+* `def train(trainingRDD: RDD[(Vector, Vector)], hiddenLayersTopology: Array[Int],
+maxNumIterations: Int, convergenceTol: Double): ArtificialNeuralNetworkModel`: starts training
+with random initial weights. Allows setting a customised "convergenceTol".
 * `def train(trainingRDD: RDD[(Vector, Vector)], model: ArtificialNeuralNetworkModel,
 maxNumIterations: Int, convergenceTol: Double): ArtificialNeuralNetworkModel`: resumes training
 given an earlier calculated model. Allows setting a customised "convergenceTol".
@@ -199,7 +199,7 @@ The weights used by "predict" come from the model.
 ## Training
 
 We have chosen to implement the ANN with LBFGS as optimiser function. We compared it with
-Statistical Gradient Descent. LBGFS was much faster, but in accordance is also earlier with
+Stochastic Gradient Descent. LBGFS was much faster, but in accordance is also earlier with
 overfitting.
 
 Science has provided many different strategies to train an ANN. Hence it is important that the
