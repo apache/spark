@@ -22,6 +22,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 import com.google.common.base.Preconditions;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.Unpooled;
 
 import org.apache.spark.network.buffer.ManagedBuffer;
@@ -76,8 +77,8 @@ public class TestManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public Object convertToNetty() throws IOException {
-    return underlying.convertToNetty();
+  public Object convertToNetty(ByteBufAllocator allocator) throws IOException {
+    return underlying.convertToNetty(allocator);
   }
 
   @Override

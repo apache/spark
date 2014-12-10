@@ -91,6 +91,14 @@ public class TransportConf {
   }
 
   /**
+   * Minimum size of a block that we should start using transferTo in the JVM. Blocks smaller than
+   * this will be read in using traditional IO into JVM heap and send to network.
+   */
+  public int transferToBytes() {
+    return conf.getInt("spark.storage.transferToThreshold", 2 * 1024 * 1024);
+  }
+
+  /**
    * Whether to initialize shuffle FileDescriptor lazily or not. If true, file descriptors are
    * created only when data is going to be transferred. This can reduce the number of open files.
    */

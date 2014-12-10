@@ -52,7 +52,7 @@ public final class MessageEncoder extends MessageToMessageEncoder<Message> {
       ChunkFetchSuccess resp = (ChunkFetchSuccess) in;
       try {
         bodyLength = resp.buffer.size();
-        body = resp.buffer.convertToNetty();
+        body = resp.buffer.convertToNetty(ctx.alloc());
       } catch (Exception e) {
         // Re-encode this message as BlockFetchFailure.
         logger.error(String.format("Error opening block %s for client %s",
