@@ -1103,7 +1103,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>200</td>
   <td>
     Interval (milliseconds) at which data received by Spark Streaming receivers is chunked
-    into blocks of data before storing them in Spark. Minimum recommended - 50 ms.
+    into blocks of data before storing them in Spark. Minimum recommended - 50 ms. See the
+    <a href="streaming-programming-guide.html#level-of-parallelism-in-data-receiving">performance
+     tuning</a> section in the Spark Streaming programing guide for more details.
   </td>
 </tr>
 <tr>
@@ -1113,6 +1115,8 @@ Apart from these, the following properties are also available, and may be useful
     Maximum number records per second at which each receiver will receive data.
     Effectively, each stream will consume at most this number of records per second.
     Setting this configuration to 0 or a negative number will put no limit on the rate.
+    See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
+    in the Spark Streaming programing guide for mode details.
   </td>
 </tr>
 <tr>
@@ -1121,6 +1125,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Enable write ahead logs for receivers. All the input data received through receivers
     will be saved to write ahead logs that will allow it to be recovered after driver failures.
+    See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
+    in the Spark Streaming programing guide for more details.
   </td>
 </tr>
 <tr>
