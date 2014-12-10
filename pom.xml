@@ -1294,13 +1294,6 @@
     </profile>
 
     <profile>
-      <id>yarn-alpha</id>
-      <modules>
-        <module>yarn</module>
-      </modules>
-    </profile>
-
-    <profile>
       <id>yarn</id>
       <modules>
         <module>yarn</module>
