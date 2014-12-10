@@ -42,6 +42,7 @@ import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.execution.{ExtractPythonUdfs, QueryExecutionException, Command => PhysicalCommand}
 import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
 import org.apache.spark.sql.sources.DataSourceStrategy
+import scala.collection.mutable
 
 /**
  * DEPRECATED: Use HiveContext instead.
@@ -218,20 +219,22 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
-  /**
-   * SQLConf and HiveConf contracts:
-   *
-   * 1. reuse existing started SessionState if any
-   * 2. when the Hive session is first initialized, params in HiveConf will get picked up by the
-   *    SQLConf.  Additionally, any properties set by set() or a SET command inside sql() will be
-   *    set in the SQLConf *as well as* in the HiveConf.
-   */
-  @transient protected[hive] lazy val (hiveconf, sessionState) =
-    Option(SessionState.get())
-      .orElse {
+  // store all of the session states to the thread id, this will be updated when open new session
+  @transient
+  protected lazy val hiveSessionStates = mutable.Map[Long, SessionState]()
+
+  def addSessionState(sessionState: SessionState) =
+    hiveSessionStates(Thread.currentThread().getId) = sessionState
+
+  def removeSessionState =
+    hiveSessionStates -= Thread.currentThread().getId
+
+  def sessionState: SessionState =
+    hiveSessionStates.getOrElse(Thread.currentThread().getId,
+      // if start with cliDriver, no records in sessionStates, use the latest one
+      Option(SessionState.get())
+        .orElse {
         val newState = new SessionState(new HiveConf(classOf[SessionState]))
-        // Only starts newly created `SessionState` instance.  Any existing `SessionState` instance
-        // returned by `SessionState.get()` must be the most recently started one.
         SessionState.start(newState)
         Some(newState)
       }
@@ -239,9 +242,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         setConf(state.getConf.getAllProperties)
         if (state.out == null) state.out = new PrintStream(outputBuffer, true, "UTF-8")
         if (state.err == null) state.err = new PrintStream(outputBuffer, true, "UTF-8")
-        (state.getConf, state)
+        state
       }
-      .get
+      .get)
+
+  def hiveconf = sessionState.getConf
 
   override def setConf(key: String, value: String): Unit = {
     super.setConf(key, value)
@@ -291,13 +296,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
       val proc: CommandProcessor = HiveShim.getCommandProcessor(Array(tokens(0)), hiveconf)
 
-      // Makes sure the session represented by the `sessionState` field is activated. This implies
-      // Spark SQL Hive support uses a single `SessionState` for all Hive operations and breaks
-      // session isolation under multi-user scenarios (i.e. HiveThriftServer2).
-      // TODO Fix session isolation
-      if (SessionState.get() != sessionState) {
-        SessionState.start(sessionState)
-      }
+      SessionState.start(sessionState)
 
       proc match {
         case driver: Driver =>
