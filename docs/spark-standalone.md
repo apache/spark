@@ -34,8 +34,12 @@ Finally, the following configuration options can be passed to the master and wor
 <table class="table">
   <tr><th style="width:21%">Argument</th><th>Meaning</th></tr>
   <tr>
-    <td><code>-i IP</code>, <code>--ip IP</code></td>
-    <td>IP address or DNS name to listen on</td>
+    <td><code>-h HOST</code>, <code>--host HOST</code></td>
+    <td>Hostname to listen on</td>
+  </tr>
+  <tr>
+    <td><code>-i HOST</code>, <code>--ip HOST</code></td>
+    <td>Hostname to listen on (deprecated, use -h or --host)</td>
   </tr>
   <tr>
     <td><code>-p PORT</code>, <code>--port PORT</code></td>
@@ -56,6 +60,10 @@ Finally, the following configuration options can be passed to the master and wor
   <tr>
     <td><code>-d DIR</code>, <code>--work-dir DIR</code></td>
     <td>Directory to use for scratch space and job output logs (default: SPARK_HOME/work); only on worker</td>
+  </tr>
+  <tr>
+    <td><code>--properties-file FILE</code></td>
+    <td>Path to a custom Spark properties file to load (default: conf/spark-defaults.conf)</td>
   </tr>
 </table>
 

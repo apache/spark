@@ -1357,6 +1357,19 @@ public class JavaAPISuite implements Serializable {
     pairRDD.collectAsMap();  // Used to crash with ClassCastException
   }
 
+  @SuppressWarnings("unchecked")
+  @Test
+  public void collectAsMapAndSerialize() throws Exception {
+    JavaPairRDD<String,Integer> rdd =
+        sc.parallelizePairs(Arrays.asList(new Tuple2<String,Integer>("foo", 1)));
+    Map<String,Integer> map = rdd.collectAsMap();
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    new ObjectOutputStream(bytes).writeObject(map);
+    Map<String,Integer> deserializedMap = (Map<String,Integer>)
+        new ObjectInputStream(new ByteArrayInputStream(bytes.toByteArray())).readObject();
+    Assert.assertEquals(1, deserializedMap.get("foo").intValue());
+  }
+
   @Test
   @SuppressWarnings("unchecked")
   public void sampleByKey() {
