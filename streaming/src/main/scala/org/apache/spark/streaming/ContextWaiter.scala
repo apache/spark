@@ -17,19 +17,18 @@
 
 package org.apache.spark.streaming
 
-import java.util.concurrent.{TimeoutException, TimeUnit}
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
-import javax.annotation.concurrent.GuardedBy
 
 private[streaming] class ContextWaiter {
 
   private val lock = new ReentrantLock()
   private val condition = lock.newCondition()
 
-  @GuardedBy("lock")
+  // Guarded by "lock"
   private var error: Throwable = null
 
-  @GuardedBy("lock")
+  // Guarded by "lock"
   private var stopped: Boolean = false
 
   def notifyError(e: Throwable) = {
@@ -60,29 +59,19 @@ private[streaming] class ContextWaiter {
     lock.lock()
     try {
       if (timeout < 0) {
-        while (true) {
-          // If already stopped, then exit
-          if (stopped) return true
-          // If already had error, then throw it
-          if (error != null) throw error
-
+        while (!stopped && error == null) {
           condition.await()
         }
       } else {
         var nanos = TimeUnit.MILLISECONDS.toNanos(timeout)
-        while (true) {
-          // If already stopped, then exit
-          if (stopped) return true
-          // If already had error, then throw it
-          if (error != null) throw error
-          // If no time remains, then exit
-          if (nanos <= 0) return false
-
+        while (!stopped && error == null && nanos > 0) {
           nanos = condition.awaitNanos(nanos)
         }
       }
-      // Never reached. Make the compiler happy.
-      true
+      // If already had error, then throw it
+      if (error != null) throw error
+      // already stopped or timeout
+      stopped
     } finally {
       lock.unlock()
     }
