@@ -30,9 +30,9 @@ import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
  */
 @DeveloperApi
 case class Aggregator[K, V, C] (
-           createCombiner: V => C,
-           mergeValue: (C, V) => C,
-           mergeCombiners: (C, C) => C) {
+     createCombiner: V => C,
+     mergeValue: (C, V) => C,
+     mergeCombiners: (C, C) => C) {
 
   // When spilling is enabled sorting will happen externally, but not necessarily with an 
   // ExternalSorter. 
