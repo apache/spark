@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.api.java.{DataType => JDataType, StructField => JStructField,
-  MetadataBuilder => JMetaDataBuilder, UDTWrappers, JavaToScalaUDTWrapper}
+  MetadataBuilder => JMetaDataBuilder, UDTWrappers}
 import org.apache.spark.sql.api.java.{DecimalType => JDecimalType}
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -62,6 +62,7 @@ protected[sql] object DataTypeConversions {
     case IntegerType => JDataType.IntegerType
     case LongType => JDataType.LongType
     case ShortType => JDataType.ShortType
+    case NullType => JDataType.NullType
 
     case arrayType: ArrayType => JDataType.createArrayType(
         asJavaDataType(arrayType.elementType), arrayType.containsNull)

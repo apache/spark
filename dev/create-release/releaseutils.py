@@ -21,6 +21,32 @@
 import re
 from subprocess import Popen, PIPE
 
+try:
+    from jira.client import JIRA
+    from jira.exceptions import JIRAError
+except ImportError:
+    print "This tool requires the jira-python library"
+    print "Install using 'sudo pip install jira-python'"
+    sys.exit(-1)
+
+try:
+    from github import Github
+    from github import GithubException
+except ImportError:
+    print "This tool requires the PyGithub library"
+    print "Install using 'sudo pip install PyGithub'"
+    sys.exit(-1)
+
+try:
+    import unidecode
+except ImportError:
+    print "This tool requires the unidecode library to decode obscure github usernames"
+    print "Install using 'sudo pip install unidecode'"
+    sys.exit(-1)
+
+# Contributors list file name
+contributors_file_name = "contributors.txt"
+
 # Utility functions run git commands (written with Git 1.8.5)
 def run_cmd(cmd): return Popen(cmd, stdout=PIPE).communicate()[0]
 def get_author(commit_hash):
@@ -46,7 +72,8 @@ known_issue_types = {
     "build": "build fixes",
     "improvement": "improvements",
     "new feature": "new features",
-    "documentation": "documentation"
+    "documentation": "documentation",
+    "test": "test"
 }
 
 # Maintain a mapping for translating component names when creating the release notes
@@ -121,4 +148,41 @@ def nice_join(str_list):
         return " and ".join(str_list)
     else:
         return ", ".join(str_list[:-1]) + ", and " + str_list[-1]
+
+# Return the full name of the specified user on Github
+# If the user doesn't exist, return None
+def get_github_name(author, github_client):
+    if github_client:
+        try:
+            return github_client.get_user(author).name
+        except GithubException as e:
+            # If this is not a "not found" exception
+            if e.status != 404:
+                raise e
+    return None
+
+# Return the full name of the specified user on JIRA
+# If the user doesn't exist, return None
+def get_jira_name(author, jira_client):
+    if jira_client:
+        try:
+            return jira_client.user(author).displayName
+        except JIRAError as e:
+            # If this is not a "not found" exception
+            if e.status_code != 404:
+                raise e
+    return None
+
+# Return whether the given name is in the form <First Name><space><Last Name>
+def is_valid_author(author):
+    if not author: return False
+    author_words = len(author.split(" "))
+    return author_words == 2 or author_words == 3
+
+# Capitalize the first letter of each word in the given author name
+def capitalize_author(author):
+    if not author: return None
+    words = author.split(" ")
+    words = [w[0].capitalize() + w[1:] for w in words if w]
+    return " ".join(words)
 

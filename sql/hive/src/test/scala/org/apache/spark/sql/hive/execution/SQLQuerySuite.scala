@@ -119,6 +119,15 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT f1.f2.f3 FROM nested"),
       1)
+    checkAnswer(sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested"),
+      Seq.empty[Row])
+    checkAnswer(
+      sql("SELECT * FROM test_ctas_1234"),
+      sql("SELECT * FROM nested").collect().toSeq)
+
+    intercept[org.apache.hadoop.hive.ql.metadata.InvalidTableException] {
+      sql("CREATE TABLE test_ctas_12345 AS SELECT * from notexists").collect()
+    }
   }
 
   test("test CTAS") {
