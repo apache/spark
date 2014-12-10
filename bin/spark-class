@@ -109,9 +109,6 @@ else
 fi
 JAVA_VERSION=$("$RUNNER" -version 2>&1 | grep 'version' | sed 's/.* version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q')
 
-# SPARK-3936: scala does not assume use of the java classpath, so we need to add the "-Dscala.usejavacp=true"
-OUR_JAVA_OPTS="$OUR_JAVA_OPTS -Dscala.usejavacp=true"
-
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
 if [ "$JAVA_VERSION" -ge 18 ]; then
   JAVA_OPTS="$OUR_JAVA_OPTS"
