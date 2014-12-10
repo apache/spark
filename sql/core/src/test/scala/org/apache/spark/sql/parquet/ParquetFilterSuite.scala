@@ -79,7 +79,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
         case s: Seq[_] => s.map(_.asInstanceOf[Row].getAs[Array[Byte]](0).mkString(","))
         case s => Seq(s.asInstanceOf[Array[Byte]].mkString(","))
       }
-      assert(actual === expected)
+      assert(actual.sorted === expected.sorted)
     }
     checkFilterPushdown(rdd, output, predicate, filterClass, checkBinaryAnswer _, expectedResult)
   }
