@@ -143,8 +143,7 @@ the space allocated to the RDD cache to mitigate this.
 **Measuring the Impact of GC**
 
 The first step in GC tuning is to collect statistics on how frequently garbage collection occurs and the amount of
-time spent GC. This can be done by adding `-verbose:gc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps` to your
-`SPARK_JAVA_OPTS` environment variable. Next time your Spark job is run, you will see messages printed in the worker's logs
+time spent GC. This can be done by adding `-verbose:gc -XX:+PrintGCDetails -XX:+PrintGCTimeStamps` to the Java options.  (See the [configuration guide](configuration.html#Dynamically-Loading-Spark-Properties) for info on passing Java options to Spark jobs.)  Next time your Spark job is run, you will see messages printed in the worker's logs
 each time a garbage collection occurs. Note these logs will be on your cluster's worker nodes (in the `stdout` files in
 their work directories), *not* on your driver program.
 

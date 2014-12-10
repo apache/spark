@@ -278,7 +278,7 @@ object DecisionTreeRunner {
           impurity = impurityCalculator,
           maxDepth = params.maxDepth,
           maxBins = params.maxBins,
-          numClassesForClassification = numClasses,
+          numClasses = numClasses,
           minInstancesPerNode = params.minInstancesPerNode,
           minInfoGain = params.minInfoGain,
           useNodeIdCache = params.useNodeIdCache,
