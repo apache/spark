@@ -178,7 +178,7 @@ class IDFModel private[mllib] (val idf: Vector) extends Serializable {
   }
 
   /**
-   * Transforms tern frequency (TF) vectors to a TF-IDF vector
+   * Transforms a term frequency (TF) vectors to a TF-IDF vector
    *
    * @param v a term frequency vector
    * @return a TF-IDF vector

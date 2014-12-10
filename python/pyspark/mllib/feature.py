@@ -212,7 +212,7 @@ class IDFModel(JavaVectorTransformer):
     """
     Represents an IDF model that can transform term frequency vectors.
     """
-    def transform(self, data):
+    def transform(self, x):
         """
         Transforms term frequency (TF) vectors to TF-IDF vectors.
 
@@ -220,15 +220,14 @@ class IDFModel(JavaVectorTransformer):
         the terms which occur in fewer than `minDocFreq`
         documents will have an entry of 0.
 
-        :param data: an RDD of term frequency vectors or a term frequency vector
+        :param x: an RDD of term frequency vectors or a term frequency vector
         :return: an RDD of TF-IDF vectors or a TF-IDF vector
         """
-        if isinstance(data, RDD):
-            return JavaVectorTransformer.transform(self, data)
-        elif isinstance(data, Vector):
-            return JavaVectorTransformer.transform(self, data)
-        else:
-            raise TypeError("dataset should be an RDD of term frequency vectors")
+        if isinstance(x, RDD):
+            return JavaVectorTransformer.transform(self, x)
+
+        x = _convert_to_vector(x)
+        return JavaVectorTransformer.transform(self, x)
 
 
 class IDF(object):
@@ -260,7 +259,7 @@ class IDF(object):
     SparseVector(4, {1: 0.0})
     >>> model.transform(Vectors.dense([0.0, 1.0, 2.0, 3.0]))
     DenseVector([0.0, 0.0, 1.3863, 0.863])
-    >>> model.transform(Vectors.dense([0.0, 1.0, 2.0, 3.0]))
+    >>> model.transform([0.0, 1.0, 2.0, 3.0])
     DenseVector([0.0, 0.0, 1.3863, 0.863])
     >>> model.transform(Vectors.sparse(n, (1, 3), (1.0, 2.0)))
     SparseVector(4, {1: 0.0, 3: 0.5754})
