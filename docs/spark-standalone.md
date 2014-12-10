@@ -257,7 +257,7 @@ To run an interactive Spark shell against the cluster, run the following command
 
 You can also pass an option `--total-executor-cores <numCores>` to control the number of cores that spark-shell uses on the cluster.
 
-# Launching Compiled Spark Applications
+# Launching Spark Applications
 
 The [`spark-submit` script](submitting-applications.html) provides the most straightforward way to
 submit a compiled Spark application to the cluster. For standalone clusters, Spark currently
@@ -271,6 +271,15 @@ distributed to all worker nodes. For any additional jars that your application d
 should specify them through the `--jars` flag using comma as a delimiter (e.g. `--jars jar1,jar2`).
 To control the application's configuration or execution environment, see
 [Spark Configuration](configuration.html).
+
+Additionally, standalone `cluster` mode supports restarting your application automatically if it
+exited with non-zero exit code. To use this feature, you may pass in the `--supervise` flag to
+`spark-submit` when launching your application. Then, if you wish to kill an application that is
+failing repeatedly, you may do so through:
+
+    ./bin/spark-class org.apache.spark.deploy.Client kill <master url> <driver ID>
+
+You can find the driver ID through the standalone Master web UI at `http://<master url>:8080`.
 
 # Resource Scheduling
 
