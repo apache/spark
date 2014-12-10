@@ -18,6 +18,7 @@ task :production do
   role :master, "hadoop-rm.chi.shopify.com"
   role :history, "hadoop-rm.chi.shopify.com"
   role :code, "hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reports-reportify-etl3.chi.shopify.com", "reports-reportify-skydb4.chi.shopify.com", "platfora2.chi.shopify.com", *MAINTENANCE
+  role :uploader, "hadoop-etl1.chi.shopify.com"
 end
 
 task :staging do
@@ -26,6 +27,10 @@ task :staging do
 end
 
 namespace :deploy do
+  task :upload_to_hdfs, :roles => :uploader do
+    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-1.3.0-SNAPSHOT-hadoop2.5.0.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-latest.jar"
+  end
+
   task :prevent_gateway do
     set :gateway, nil
   end
@@ -51,4 +56,5 @@ namespace :deploy do
   after 'deploy:initialize_variables', 'deploy:prevent_gateway' # capistrano recipes packserv deploy always uses a gateway
   before  'deploy:symlink_current', 'deploy:symlink_shared'
   before 'deploy:restart', 'deploy:restart_master', 'deploy:restart_history'
+  after  'deploy:download', 'deploy:upload_to_hdfs'
 end
