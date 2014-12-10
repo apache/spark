@@ -60,32 +60,11 @@ mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -DskipTests clean package
 mvn -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
 {% endhighlight %}
 
-For Apache Hadoop 2.x, 0.23.x, Cloudera CDH, and other Hadoop versions with YARN, you can enable the "yarn-alpha" or "yarn" profile and optionally set the "yarn.version" property if it is different from "hadoop.version". The additional build profile required depends on the YARN version:
-
-<table class="table">
-  <thead>
-    <tr><th>YARN version</th><th>Profile required</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>0.23.x to 2.1.x</td><td>yarn-alpha (Deprecated.)</td></tr>
-    <tr><td>2.2.x and later</td><td>yarn</td></tr>
-  </tbody>
-</table>
-
-Note: Support for YARN-alpha API's will be removed in Spark 1.3 (see SPARK-3445).
+For Apache Hadoop 2.x, 0.23.x, Cloudera CDH, and other Hadoop versions with YARN, you can enable the "yarn" profile and optionally set the "yarn.version" property if it is different from "hadoop.version". As of Spark 1.3, Spark only supports YARN versions 2.2.0 and later.
 
 Examples:
 
 {% highlight bash %}
-# Apache Hadoop 2.0.5-alpha
-mvn -Pyarn-alpha -Dhadoop.version=2.0.5-alpha -DskipTests clean package
-
-# Cloudera CDH 4.2.0
-mvn -Pyarn-alpha -Dhadoop.version=2.0.0-cdh4.2.0 -DskipTests clean package
-
-# Apache Hadoop 0.23.x
-mvn -Pyarn-alpha -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
-
 # Apache Hadoop 2.2.X
 mvn -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -DskipTests clean package
 
@@ -99,7 +78,7 @@ Versions of Hadoop after 2.5.X may or may not work with the -Phadoop-2.4 profile
 released after this version of Spark).
 
 # Different versions of HDFS and YARN.
-mvn -Pyarn-alpha -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=0.23.7 -DskipTests clean package
+mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=2.2.0 -DskipTests clean package
 {% endhighlight %}
 
 # Building With Hive and JDBC Support

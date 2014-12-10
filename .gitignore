@@ -5,6 +5,7 @@
 *.ipr
 *.iml
 *.iws
+*.pyc
 .idea/
 .idea_modules/
 sbt/*.jar
@@ -49,6 +50,8 @@ dependency-reduced-pom.xml
 checkpoint
 derby.log
 dist/
+dev/create-release/*txt
+dev/create-release/*new
 spark-*-bin-*.tgz
 unit-tests.log
 /lib/

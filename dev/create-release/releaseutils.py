@@ -44,6 +44,9 @@ except ImportError:
     print "Install using 'sudo pip install unidecode'"
     sys.exit(-1)
 
+# Contributors list file name
+contributors_file_name = "contributors.txt"
+
 # Utility functions run git commands (written with Git 1.8.5)
 def run_cmd(cmd): return Popen(cmd, stdout=PIPE).communicate()[0]
 def get_author(commit_hash):
@@ -69,7 +72,8 @@ known_issue_types = {
     "build": "build fixes",
     "improvement": "improvements",
     "new feature": "new features",
-    "documentation": "documentation"
+    "documentation": "documentation",
+    "test": "test"
 }
 
 # Maintain a mapping for translating component names when creating the release notes
@@ -181,37 +185,4 @@ def capitalize_author(author):
     words = author.split(" ")
     words = [w[0].capitalize() + w[1:] for w in words if w]
     return " ".join(words)
-
-# Maintain a mapping of translated author names as a cache
-translated_authors = {}
-
-# Format the given author in a format appropriate for the contributors list.
-# If the author is not an actual name, search github and JIRA for potential
-# replacements and log all candidates as a warning.
-def translate_author(github_author, github_client, jira_client, warnings):
-    if is_valid_author(github_author):
-        return capitalize_author(github_author)
-    # If the translated author is already cached, just return it
-    if github_author in translated_authors:
-        return translated_authors[github_author]
-    # Otherwise, author name is not found, so we need to search for an alternative name
-    candidates = set()
-    github_name = get_github_name(github_author, github_client)
-    jira_name = get_jira_name(github_author, jira_client)
-    if is_valid_author(github_name): github_name = capitalize_author(github_name)
-    if is_valid_author(jira_name): jira_name = capitalize_author(jira_name)
-    if github_name: candidates.add(github_name)
-    if jira_name: candidates.add(jira_name)
-    # Only use the github name as a replacement automatically
-    # The JIRA name may not make sense because it can belong to someone else
-    if is_valid_author(github_name):
-        candidates_message = " (another candidate is %s)" % jira_name if jira_name else ""
-        warnings.append("Replacing github user %s with %s%s" % (github_author, github_name, candidates_message))
-        translated_authors[github_name] = github_name
-        return translated_authors[github_name]
-    # No direct replacement, so return the original author and list any candidates found
-    candidates_message = " (candidates: %s)" % nice_join(candidates) if candidates else ""
-    warnings.append("Unable to find a replacement for github user %s%s" % (github_author, candidates_message))
-    translated_authors[github_author] = github_author
-    return translated_authors[github_author]
 
