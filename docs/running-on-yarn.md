@@ -139,21 +139,6 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
     The maximum number of threads to use in the application master for launching executor containers.
   </td>
 </tr>
-<tr>
-  <td><code>spark.yarn.datanucleus.dir</code></td>
-  <td>$SPARK_HOME/lib</td>
-  <td>
-     The location of the DataNucleus jars, in case overriding the default location is desired.
-     By default, Spark on YARN will use the DataNucleus jars installed at
-     <code>$SPARK_HOME/lib</code>, but the jars can also be in a world-readable location on HDFS.
-     This allows YARN to cache it on nodes so that it doesn't need to be distributed each time an
-     application runs. To point to a directory on HDFS, for example, set this configuration to
-     "hdfs:///some/path".
-
-     This is required because the datanucleus jars cannot be packaged into the
-     assembly jar due to metadata conflicts (involving <code>plugin.xml</code>.)
-  </td>
-</tr>
 </table>
 
 # Launching Spark on YARN
@@ -231,7 +216,7 @@ If you need a reference to the proper location to put log files in the YARN so t
 
 # Important notes
 
-- Before Hadoop 2.2, YARN does not support cores in container resource requests. Thus, when running against an earlier version, the numbers of cores given via command line arguments cannot be passed to YARN.  Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
+- Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
 - The local directories used by Spark executors will be the local directories configured for YARN (Hadoop YARN config `yarn.nodemanager.local-dirs`). If the user specifies `spark.local.dir`, it will be ignored.
 - The `--files` and `--archives` options support specifying file names with the # similar to Hadoop. For example you can specify: `--files localtest.txt#appSees.txt` and this will upload the file you have locally named localtest.txt into HDFS but this will be linked to by the name `appSees.txt`, and your application should use the name as `appSees.txt` to reference it when running on YARN.
 - The `--jars` option allows the `SparkContext.addJar` function to work if you are using it with local files and running in `yarn-cluster` mode. It does not need to be used if you are using it with HDFS, HTTP, HTTPS, or FTP files.

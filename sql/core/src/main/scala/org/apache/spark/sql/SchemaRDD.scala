@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.util.{Map => JMap, List => JList}
-import java.io.StringWriter
+
 
 import scala.collection.JavaConversions._
 

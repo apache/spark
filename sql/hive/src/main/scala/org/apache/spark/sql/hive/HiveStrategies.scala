@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.ql.parse.ASTNode
+import org.apache.hadoop.hive.ql.plan.CreateTableDesc
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -181,13 +182,20 @@ private[hive] trait HiveStrategies {
         execution.InsertIntoHiveTable(
           table, partition, planLater(child), overwrite)(hiveContext) :: Nil
       case logical.CreateTableAsSelect(
-             Some(database), tableName, child, allowExisting, Some(extra: ASTNode)) =>
-        CreateTableAsSelect(
+             Some(database), tableName, child, allowExisting, Some(desc: CreateTableDesc)) =>
+        execution.CreateTableAsSelect(
           database,
           tableName,
           child,
           allowExisting,
-          extra) :: Nil
+          Some(desc)) :: Nil
+      case logical.CreateTableAsSelect(Some(database), tableName, child, allowExisting, None) =>
+        execution.CreateTableAsSelect(
+          database,
+          tableName,
+          child,
+          allowExisting,
+          None) :: Nil
       case _ => Nil
     }
   }
