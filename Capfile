@@ -7,6 +7,7 @@ set :shared_work_path, "/u/apps/spark/shared/work"
 set :shared_logs_path, "/u/apps/spark/shared/log"
 set :shared_conf_path, "/u/apps/spark/shared/conf"
 set :gateway, nil
+set :keep_releases, 5
 
 MAINTENANCE = ["dn04.chi.shopify.com", "dn07.chi.shopify.com", "dn08.chi.shopify.com", "dn11.chi.shopify.com", "dn14.chi.shopify.com"] # Node is up but should not be part of the production cluster
 DECOMISSIONED = ["dn06.chi.shopify.com", "dn37.chi.shopify.com"] # Node is down don't try to send code
