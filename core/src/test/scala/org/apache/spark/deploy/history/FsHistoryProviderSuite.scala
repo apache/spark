@@ -125,7 +125,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
       val logPath = new Path(logDir.getAbsolutePath())
       try {
-        val (logInput, sparkVersion) = provider.openOldLog(logPath)
+        val (logInput, sparkVersion) = provider.openLegacyEventLog(logPath)
         try {
           Source.fromInputStream(logInput).getLines().toSeq.size should be (2)
         } finally {
