@@ -1559,7 +1559,7 @@ To run a Spark Streaming applications, you need to have the following.
   feature of write ahead logs. If enabled, all the data received from a receiver gets written into
   a write ahead log in the configuration checkpoint directory. This prevents data loss on driver
   recovery, thus allowing zero data loss guarantees which is discussed in detail in the
-  [Fault-tolerant Semantics](#fault-tolerant-semantics) section. Enable this by setting the
+  [Fault-tolerance Semantics](#fault-tolerance-semantics) section. Enable this by setting the
   [configuration parameter](configuration.html#spark-streaming)
   `spark.streaming.receiver.writeAheadLogs.enable` to `true`.
 
