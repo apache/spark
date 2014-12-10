@@ -25,7 +25,6 @@ import org.scalatest.{Matchers, FunSuite}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.JobExecutionStatus._
-import org.apache.spark.SparkContext._
 
 class StatusTrackerSuite extends FunSuite with Matchers with LocalSparkContext {
 

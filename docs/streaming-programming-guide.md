@@ -1081,7 +1081,7 @@ Some of the common mistakes to avoid are as follows.
 
 - Often writing data to external system requires creating a connection object
 (e.g. TCP connection to a remote server) and using it to send data to a remote system.
-For this purpose, a developer may inadvertantly try creating a connection object at
+For this purpose, a developer may inadvertently try creating a connection object at
 the Spark driver, but try to use it in a Spark worker to save records in the RDDs.
 For example (in Scala),
 

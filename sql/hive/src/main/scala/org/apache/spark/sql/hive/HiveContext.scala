@@ -377,7 +377,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         command.executeCollect().map(_.head.toString)
 
       case other =>
-        val result: Seq[Seq[Any]] = toRdd.map(_.copy()).collect().toSeq
+        val result: Seq[Seq[Any]] = other.executeCollect().toSeq
         // We need the types so we can output struct field names
         val types = analyzed.output.map(_.dataType)
         // Reformat to match hive tab delimited output.
@@ -416,6 +416,8 @@ object HiveContext {
     case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
     case (decimal: Decimal, DecimalType()) =>  // Hive strips trailing zeros so use its toString
       HiveShim.createDecimal(decimal.toBigDecimal.underlying()).toString
+    case (decimal: BigDecimal, DecimalType()) =>
+      HiveShim.createDecimal(decimal.underlying()).toString
     case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
 

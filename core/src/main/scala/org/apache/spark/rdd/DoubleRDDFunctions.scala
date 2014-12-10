@@ -27,7 +27,6 @@ import org.apache.spark.util.StatCounter
 
 /**
  * Extra functions available on RDDs of Doubles through an implicit conversion.
- * Import `org.apache.spark.SparkContext._` at the top of your program to use these functions.
  */
 class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   /** Add up the elements in this RDD. */

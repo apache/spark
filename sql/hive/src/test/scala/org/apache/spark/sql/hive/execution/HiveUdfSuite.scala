@@ -60,6 +60,13 @@ class HiveUdfSuite extends QueryTest {
         |       getStruct(1).f5 FROM src LIMIT 1
       """.stripMargin).first() === Row(1, 2, 3, 4, 5))
   }
+  
+  test("SPARK-4785 When called with arguments referring column fields, PMOD throws NPE") {
+    checkAnswer(
+      sql("SELECT PMOD(CAST(key as INT), 10) FROM src LIMIT 1"),
+      8
+    )
+  }
 
   test("hive struct udf") {
     sql(

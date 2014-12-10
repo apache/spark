@@ -85,6 +85,11 @@ another.
      specified version of Spark. The `<version>` can be a version number
      (e.g. "0.7.3") or a specific git hash. By default, a recent
      version will be used.
+-    `--spark-git-repo=<repository url>` will let you run a custom version of
+     Spark that is built from the given git repository. By default, the
+     [Apache Github mirror](https://github.com/apache/spark) will be used.
+     When using a custom Spark version, `--spark-version` must be set to git
+     commit hash, such as 317e114, instead of a version number.
 -    If one of your launches fails due to e.g. not having the right
 permissions on your private key file, you can run `launch` with the
 `--resume` option to restart the setup process on an existing cluster.
