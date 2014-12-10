@@ -32,10 +32,11 @@ function gatherSparkSubmitOpts() {
   APPLICATION_OPTS=()
   while (($#)); do
     case "$1" in
-      --master | --deploy-mode | --class | --name | --jars | --py-files | --files | \
-      --conf | --properties-file | --driver-memory | --driver-java-options | \
-      --driver-library-path | --driver-class-path | --executor-memory | --driver-cores | \
-      --total-executor-cores | --executor-cores | --queue | --num-executors | --archives)
+      --master | --deploy-mode | --class | --name | --jars | --no-progress-bar | \
+      --py-files | --files | --conf | --properties-file | --driver-memory | \
+      --driver-java-options | --driver-library-path | --driver-class-path | \
+      --executor-memory | --driver-cores | --total-executor-cores | --executor-cores | \
+      --queue | --num-executors | --archives)
         if [[ $# -lt 2 ]]; then
           "$SUBMIT_USAGE_FUNCTION"
           exit 1;
