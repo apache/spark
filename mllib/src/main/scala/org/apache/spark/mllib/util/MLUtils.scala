@@ -27,7 +27,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
 import org.apache.spark.util.random.BernoulliCellSampler
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
@@ -268,11 +268,55 @@ object MLUtils {
    * Returns the squared distance between two Vectors.
    */
   def vectorSquaredDistance(v1: Vector, v2: Vector): Double = {
-    v1.toArray.zip(v2.toArray).foldLeft(0.0)((distance, elems) => {
-      val score = elems._1 - elems._2
-      distance + score * score
-    })
+    var squaredDistance = 0.0
+    (v1, v2) match { 
+      case (v1: SparseVector, v2: SparseVector) =>
+        v1.indices.intersect(v2.indices).foreach((idx) => {
+          val score = v1(idx) - v2(idx)
+          squaredDistance += score * score
+        })
+
+        v1.indices.diff(v2.indices).foreach((idx) => {
+          val score = v1(idx)
+          squaredDistance += score * score
+        })
+ 
+        v2.indices.diff(v1.indices).foreach((idx) => {
+          val score = v2(idx)
+          squaredDistance += score * score
+        })
+
+      case (v1: SparseVector, v2: DenseVector) if v1.indices.length / v1.size < 0.5 =>
+        squaredDistance = vectorSquaredDistance(v1, v2)
+
+      case (v1: DenseVector, v2: SparseVector) if v2.indices.length / v2.size < 0.5 =>
+        squaredDistance = vectorSquaredDistance(v2, v1)
+
+      case (v1, v2) =>
+        squaredDistance = v1.toArray.zip(v2.toArray).foldLeft(0.0)((distance, elems) => {
+          val score = elems._1 - elems._2
+          distance + score * score
+        })
+    }
+    squaredDistance
   }
+
+  /**
+   * Returns the squared distance between DenseVector and SparseVector.
+   */
+  def vectorSquaredDistance(v1: SparseVector, v2: DenseVector): Double = {
+    var squaredDistance = 0.0
+    v1.indices.foreach((idx) => {
+      val score = v1(idx) - v2(idx)
+      squaredDistance += score * score
+    })
+    (0 to v2.size - 1).toArray.diff(v1.indices).foreach((idx) => {
+      val score = v2(idx)
+      squaredDistance += score * score
+    })
+    squaredDistance
+  }
+
 
   /**
    * Returns the squared Euclidean distance between two vectors. The following formula will be used
