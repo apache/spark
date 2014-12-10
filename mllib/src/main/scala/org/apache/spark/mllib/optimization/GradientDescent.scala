@@ -154,7 +154,7 @@ object GradientDescent extends Logging {
    * @param regParam - regularization parameter
    * @param miniBatchFraction - fraction of the input data set that should be used for
    *                            one iteration of SGD. Default value 1.0.
-   * @param convergenceTolerance - Minibatch iteration will end within numIterations
+   * @param convergenceTolerance - Minibatch iteration will end before numIterations
    *                               if the difference between last loss and last before loss
    *                               is less than this value. Default value 0.001.
    * @return A tuple containing two elements. The first element is a column matrix containing
@@ -174,7 +174,8 @@ object GradientDescent extends Logging {
 
     // convergenceTolerance should be set with non minibatch settings
     if (miniBatchFraction < 1.0 && convergenceTolerance > 0.0) {
-      logWarning("testing against a convergenceTolerance can be dangerous because of the stochasticity")
+      logWarning("Testing against a convergenceTolerance when using miniBatchFraction " +
+        "< 1.0 can be unstable because of the stochasticity in sampling.")
     }
 
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
@@ -227,11 +228,17 @@ object GradientDescent extends Logging {
            */
           stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
           val update = updater.compute(
-            weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble), stepSize, i, regParam)
+            weights,
+            Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble),
+            stepSize,
+            i,
+            regParam)
           weights = update._1
           regVal = update._2
           if (stochasticLossHistory.length > 1) {
-            if (Math.abs(stochasticLossHistory.last - stochasticLossHistory(stochasticLossHistory.length - 2)) < convergenceTolerance) b.break
+            val lastLoss = stochasticLossHistory.last
+            val lastBeforeLoss = stochasticLossHistory(stochasticLossHistory.length - 2)
+            if (Math.abs(lastLoss - lastBeforeLoss) < convergenceTolerance) b.break
           }
         } else {
           logWarning(s"Iteration ($i/$numIterations). The size of sampled batch is zero")

@@ -24,7 +24,7 @@ import org.scalatest.{FunSuite, Matchers}
 
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
+import org.apache.spark.mllib.util.{MLUtils, LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
 object GradientDescentSuite {
@@ -81,7 +81,7 @@ class GradientDescentSuite extends FunSuite with MLlibTestSparkContext with Matc
     // Add a extra variable consisting of all 1.0's for the intercept.
     val testData = GradientDescentSuite.generateGDInput(A, B, nPoints, 42)
     val data = testData.map { case LabeledPoint(label, features) =>
-      label -> Vectors.dense(1.0 +: features.toArray)
+      label -> MLUtils.appendBias(features)
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()
@@ -158,7 +158,7 @@ class GradientDescentSuite extends FunSuite with MLlibTestSparkContext with Matc
     // Add a extra variable consisting of all 1.0's for the intercept.
     val testData = GradientDescentSuite.generateGDInput(A, B, nPoints, 42)
     val data = testData.map { case LabeledPoint(label, features) =>
-      label -> Vectors.dense(1.0 +: features.toArray)
+      label -> MLUtils.appendBias(features)
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()
@@ -175,7 +175,7 @@ class GradientDescentSuite extends FunSuite with MLlibTestSparkContext with Matc
       initialWeightsWithIntercept,
       convergenceTolerance)
 
-    assert(loss.length < numIterations, "doesn't satisfy convergence tolerance")
+    assert(loss.length < numIterations, "convergenceTolerance failed to stop optimization early\"")
   }
 }
 
