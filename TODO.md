@@ -5,7 +5,6 @@ TODO
 * Tree view: remove dummy root node
 * Backfill wizard
 * Fix datepicker
-* Confirm message on clear with list of tasks instances
 
 #### Write unittests
 * For each existing operator
@@ -27,7 +26,6 @@ TODO
 * Master to derive BaseJob
 * Clear should kill running jobs
 * Mysql port should carry through
-* Command line, confirm on clear, show list
 
 #### Misc
 * Write an hypervisor, looks for dead jobs without a heartbeat and kills
