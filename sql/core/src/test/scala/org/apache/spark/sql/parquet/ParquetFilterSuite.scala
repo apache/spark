@@ -22,6 +22,7 @@ import parquet.filter2.predicate.{FilterPredicate, Operators}
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal, Predicate, Row}
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.{QueryTest, SQLConf, SchemaRDD}
 
 /**
@@ -34,6 +35,8 @@ import org.apache.spark.sql.{QueryTest, SQLConf, SchemaRDD}
  * @todo Add test cases for `IsNull` and `IsNotNull` after merging PR #3367
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest {
+  val sqlContext = TestSQLContext
+
   private def checkFilterPushdown(
       rdd: SchemaRDD,
       output: Seq[Symbol],
@@ -76,7 +79,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
         case s: Seq[_] => s.map(_.asInstanceOf[Row].getAs[Array[Byte]](0).mkString(","))
         case s => Seq(s.asInstanceOf[Array[Byte]].mkString(","))
       }
-      assert(actual.sameElements(expected))
+      assert(actual === expected)
     }
     checkFilterPushdown(rdd, output, predicate, filterClass, checkBinaryAnswer _, expectedResult)
   }

@@ -23,9 +23,8 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
-import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.{SQLContext, SchemaRDD}
 import org.apache.spark.sql.catalyst.util
-import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.util.Utils
 
 /**
@@ -36,7 +35,11 @@ import org.apache.spark.util.Utils
  * Especially, `Tuple1.apply` can be used to easily wrap a single type/value.
  */
 trait ParquetTest {
-  protected val configuration = sparkContext.hadoopConfiguration
+  val sqlContext: SQLContext
+
+  import sqlContext._
+
+  protected def configuration = sparkContext.hadoopConfiguration
 
   /**
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restore all SQL
@@ -86,7 +89,7 @@ trait ParquetTest {
       (data: Seq[T])
       (f: String => Unit): Unit = {
     withTempPath { file =>
-      sparkContext.parallelize(data).toSchemaRDD.saveAsParquetFile(file.getCanonicalPath)
+      sparkContext.parallelize(data).saveAsParquetFile(file.getCanonicalPath)
       f(file.getCanonicalPath)
     }
   }

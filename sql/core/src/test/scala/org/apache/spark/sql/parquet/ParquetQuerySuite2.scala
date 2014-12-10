@@ -19,12 +19,15 @@ package org.apache.spark.sql.parquet
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
 /**
  * A test suite that tests various Parquet queries.
  */
 class ParquetQuerySuite2 extends QueryTest with ParquetTest {
+  val sqlContext = TestSQLContext
+
   test("simple projection") {
     withParquetTable((0 until 10).map(i => (i, i.toString)), "t") {
       checkAnswer(sql("SELECT _1 FROM t"), (0 until 10).map(Row.apply(_)))
