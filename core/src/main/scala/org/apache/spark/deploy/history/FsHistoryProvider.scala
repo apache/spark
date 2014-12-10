@@ -160,13 +160,18 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       // later than the last known log directory will be loaded.
       var newLastModifiedTime = lastModifiedTime
       val logInfos = logDirs
-        .filter { dir =>
-          if (fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))) {
-            val modTime = getModificationTime(dir)
-            newLastModifiedTime = math.max(newLastModifiedTime, modTime)
-            modTime > lastModifiedTime
-          } else {
-            false
+          .filter { dir =>
+          try {
+            if (fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))) {
+              val modTime = getModificationTime(dir)
+              newLastModifiedTime = math.max(newLastModifiedTime, modTime)
+              modTime > lastModifiedTime
+            } else {
+              false
+            }
+          } catch {
+            case t: Exception => logError("Exception in checking for event log updates", t)
+              false
           }
         }
         .flatMap { dir =>
