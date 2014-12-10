@@ -44,18 +44,13 @@ class KMeans private (
     private var initializationMode: String,
     private var initializationSteps: Int,
     private var epsilon: Double,
-    private var seed: Long = System.nanoTime()) extends Serializable with Logging {
+    private var seed: Long) extends Serializable with Logging {
 
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
-   * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4}.
+   * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4, System.nanoTime()}.
    */
-  def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4)
-
-  def setSeed(seed: Long): this.type = {
-    this.seed = seed
-    this
-  }
+  def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4, System.nanoTime())
 
   /** Set the number of clusters to create (k). Default: 2. */
   def setK(k: Int): this.type = {
@@ -115,6 +110,12 @@ class KMeans private (
    */
   def setEpsilon(epsilon: Double): this.type = {
     this.epsilon = epsilon
+    this
+  }
+
+  /** Set the random seed for cluster initialization. */
+  def setSeed(seed: Long): this.type = {
+    this.seed = seed
     this
   }
 
@@ -339,7 +340,7 @@ object KMeans {
   /**
    * Trains a k-means model using the given set of parameters.
    *
-   * @param data training points stored as `RDD[Array[Double]]`
+   * @param data training points stored as `RDD[Vector]`
    * @param k number of clusters
    * @param maxIterations max number of iterations
    * @param runs number of parallel runs, defaults to 1. The best model is returned.
@@ -361,12 +362,12 @@ object KMeans {
   /**
    * Trains a k-means model using the given set of parameters.
    *
-   * @param data training points stored as `RDD[Array[Double]]`
+   * @param data training points stored as `RDD[Vector]`
    * @param k number of clusters
    * @param maxIterations max number of iterations
    * @param runs number of parallel runs, defaults to 1. The best model is returned.
    * @param initializationMode initialization model, either "random" or "k-means||" (default).
-   * @param seed seed value for cluster initialization
+   * @param seed random seed value for cluster initialization
    */
   def train(
       data: RDD[Vector],

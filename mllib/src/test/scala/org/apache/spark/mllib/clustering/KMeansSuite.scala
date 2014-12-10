@@ -90,9 +90,9 @@ class KMeansSuite extends FunSuite with MLlibTestSparkContext {
     assert(model.clusterCenters.size === 3)
   }
 
-  test("deterministic initilization") {
-    // Create a large-ish set of point to cluster
-    val points = List.tabulate(1000)(n => Vectors.dense(n,n))
+  test("deterministic initialization") {
+    // Create a large-ish set of points for clustering
+    val points = List.tabulate(1000)(n => Vectors.dense(n, n))
     val rdd = sc.parallelize(points, 3)
 
     for (initMode <- Seq(RANDOM, K_MEANS_PARALLEL)) {
