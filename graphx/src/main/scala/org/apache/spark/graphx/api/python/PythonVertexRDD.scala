@@ -26,7 +26,6 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.graphx.VertexRDD
 import org.apache.spark.graphx.api.java.JavaVertexRDD
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
 
 private[graphx] class PythonVertexRDD(
     @transient parent: RDD[_],
@@ -36,8 +35,7 @@ private[graphx] class PythonVertexRDD(
     preservePartitioning: Boolean,
     pythonExec: String,
     broadcastVars: JList[Broadcast[Array[Byte]]],
-    accumulator: Accumulator[JList[Array[Byte]]],
-    targetStorageLevel : String = StorageLevel.MEMORY_ONLY)
+    accumulator: Accumulator[JList[Array[Byte]]])
   extends PythonRDD (parent, command, envVars,
                      pythonIncludes, preservePartitioning,
                      pythonExec, broadcastVars, accumulator) {
@@ -65,11 +63,11 @@ private[graphx] class PythonVertexRDD(
       val newIter = Seq(first).iterator ++ items
       // Assuming the type of this RDD will always be Array[Byte]
       newIter.asInstanceOf[Iterator[Array[Byte]]].foreach { bytes =>
-      stream.writeInt(bytes.length)
-      stream.write(bytes)
+        stream.writeInt(bytes.length)
+        stream.write(bytes)
+      }
     }
   }
-
 }
 
 object PythonVertexRDD {

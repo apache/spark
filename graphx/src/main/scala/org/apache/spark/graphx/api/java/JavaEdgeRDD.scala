@@ -28,6 +28,8 @@ class JavaEdgeRDD[ED: ClassTag, VD: ClassTag]
   (edges: RDD[Edge[ED]])
   extends JavaEdgeRDDLike[ED, VD, JavaEdgeRDD[ED, VD], JavaRDD[Edge[ED]]] {
 
+  override def wrapRDD(edgeRDD: RDD[Edge[ED]]): JavaRDD[Edge[ED]] = JavaRDD.fromRDD(edgeRDD)
+
   override def edgeRDD: EdgeRDD[ED, VD] = EdgeRDD.fromEdges(edges)
 
   /** Persist RDDs of this EdgeRDD with the default storage level (MEMORY_ONLY_SER) */
@@ -41,17 +43,13 @@ class JavaEdgeRDD[ED: ClassTag, VD: ClassTag]
     edges.persist(storageLevel).asInstanceOf[JavaEdgeRDD[ED, VD]]
 
   def unpersist(blocking: Boolean = true) : JavaEdgeRDD[ED, VD] =
-    JavaEdgeRDD(edgeRDD.unpersist(blocking))
+    JavaEdgeRDD.fromEdgeRDD(edgeRDD.unpersist(blocking))
 }
 
 object JavaEdgeRDD {
 
   implicit def fromEdgeRDD[ED: ClassTag, VD: ClassTag]
-    (edges: JavaRDD[Edge[ED]]): JavaEdgeRDD[ED, VD] =
+    (edges: EdgeRDD[ED, VD]): JavaEdgeRDD[ED, VD] =
       new JavaEdgeRDD(edges)
-
-  implicit def apply[ED: ClassTag, VD: ClassTag](edges: JavaRDD[Edge[ED]]): JavaEdgeRDD[ED, VD] = {
-    new JavaEdgeRDD(edges)
-  }
 }
 

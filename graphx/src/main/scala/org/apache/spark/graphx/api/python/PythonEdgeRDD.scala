@@ -25,7 +25,6 @@ import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.graphx.api.java.JavaEdgeRDD
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
 
 private[graphx] class PythonEdgeRDD(
     @transient parent: RDD[_],
@@ -35,8 +34,7 @@ private[graphx] class PythonEdgeRDD(
     preservePartitioning: Boolean,
     pythonExec: String,
     broadcastVars: JList[Broadcast[Array[Byte]]],
-    accumulator: Accumulator[JList[Array[Byte]]],
-    targetStorageLevel : String = StorageLevel.MEMORY_ONLY)
+    accumulator: Accumulator[JList[Array[Byte]]])
   extends PythonRDD (parent, command, envVars,
     pythonIncludes, preservePartitioning,
     pythonExec, broadcastVars, accumulator) {

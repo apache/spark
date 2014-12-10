@@ -28,8 +28,9 @@ private[graphx] class PythonGraph (
 //  extends Graph[Array[Byte], Array[Byte]] with Serializable {
     extends Serializable {
 
-  val asJavaGraph = JavaGraph.fromRDD(vertexRDD.asJavaRDD, edgeRDD.asJavaEdgeRDD)
-
+  val vertices = vertexRDD.asJavaVertexRDD
+  val edges = edgeRDD.asJavaEdgeRDD
+  val asJavaGraph = JavaGraph(vertices, edges)
 
 }
 

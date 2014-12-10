@@ -30,7 +30,7 @@ class JavaGraph[@specialized VD: ClassTag, @specialized ED: ClassTag]
   (vertexRDD : RDD[(VertexId, VD)], edgeRDD: RDD[Edge[ED]]) {
 
   def vertices: JavaVertexRDD[VD] = JavaVertexRDD(vertexRDD)
-  def edges: JavaEdgeRDD[ED, VD] = JavaEdgeRDD(edgeRDD)
+  def edges: JavaEdgeRDD[ED, VD] = new JavaEdgeRDD(edgeRDD)
   @transient lazy val graph : Graph[VD, ED] = Graph(vertexRDD, edgeRDD)
 
   def partitionBy(partitionStrategy: PartitionStrategy, numPartitions: Int): JavaGraph[VD, ED] = {
@@ -102,8 +102,14 @@ object JavaGraph {
   }
 
   implicit def apply[VD: ClassTag, ED: ClassTag]
-  (graph: Graph[VD, ED]): JavaGraph[VD, ED] = {
+    (graph: Graph[VD, ED]): JavaGraph[VD, ED] = {
     new JavaGraph[VD, ED](graph.vertices, graph.edges)
+  }
+
+  implicit def apply [VD: ClassTag, ED: ClassTag]
+    (vertices: JavaVertexRDD[VD], edges: JavaEdgeRDD[ED, VD]): JavaGraph[VD, ED] = {
+
+    new JavaGraph(vertices.toRDD, edges.toRDD)
   }
 }
 
