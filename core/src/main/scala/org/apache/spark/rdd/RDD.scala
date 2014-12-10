@@ -788,6 +788,18 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
+   * Take all of the elements in this RDD, and print the first num elements of the RDD.
+   */
+  def printTop (num: Int): Array[T] = {
+    val buf = new ArrayBuffer[T]
+    val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
+    for (partition <- results; data <- partition if buf.size <= num){
+      buf += data
+    }
+    buf.toArray
+  }
+
+  /**
    * Return an array that contains all of the elements in this RDD.
    */
   def collect(): Array[T] = {
