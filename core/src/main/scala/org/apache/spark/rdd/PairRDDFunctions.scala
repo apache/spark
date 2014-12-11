@@ -481,13 +481,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
    */
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
-    if(SparkEnv.get.conf.getBoolean("spark.join.skewed.enabled", false)) {
-      skewedJoin(other, partitioner)(ClassTag.AnyRef.asInstanceOf[ClassTag[W]])
-    } else {
-      this.cogroup(other, partitioner).flatMapValues { pair =>
-        for (v <- pair._1; w <- pair._2) yield (v, w)
-      }
-    }
+    this.cogroup(other, partitioner).flatMapValues( pair =>
+      for (v <- pair._1; w <- pair._2) yield (v, w)
+    )
   }
 
   /**
@@ -687,15 +683,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * partition the output RDD.
    */
   def leftOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, Option[W]))] = {
-    if(SparkEnv.get.conf.getBoolean("spark.join.skewed.enabled", false)) {
-      skewedLeftOuterJoin(other, partitioner)(ClassTag.AnyRef.asInstanceOf[ClassTag[W]])
-    } else {
-      this.cogroup(other, partitioner).flatMapValues { pair =>
-        if (pair._2.isEmpty) {
-          pair._1.map(v => (v, None))
-        } else {
-          for (v <- pair._1; w <- pair._2) yield (v, Some(w))
-        }
+    this.cogroup(other, partitioner).flatMapValues { pair =>
+      if (pair._2.isEmpty) {
+        pair._1.map(v => (v, None))
+      } else {
+        for (v <- pair._1; w <- pair._2) yield (v, Some(w))
       }
     }
   }
@@ -708,15 +700,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def rightOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Option[V], W))] = {
-    if(SparkEnv.get.conf.getBoolean("spark.join.skewed.enabled", false)) {
-      skewedRightOuterJoin(other, partitioner)(ClassTag.AnyRef.asInstanceOf[ClassTag[W]])
-    } else {
-      this.cogroup(other, partitioner).flatMapValues { pair =>
-        if (pair._1.isEmpty) {
-          pair._2.map(w => (None, w))
-        } else {
-          for (v <- pair._1; w <- pair._2) yield (Some(v), w)
-        }
+    this.cogroup(other, partitioner).flatMapValues { pair =>
+      if (pair._1.isEmpty) {
+        pair._2.map(w => (None, w))
+      } else {
+        for (v <- pair._1; w <- pair._2) yield (Some(v), w)
       }
     }
   }
@@ -731,14 +719,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def fullOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Option[V], Option[W]))] = {
-    if(SparkEnv.get.conf.getBoolean("spark.join.skewed.enabled", false)) {
-      skewedFullOuterJoin(other, partitioner)(ClassTag.AnyRef.asInstanceOf[ClassTag[W]])
-    } else {
-      this.cogroup(other, partitioner).flatMapValues {
-        case (vs, Seq()) => vs.map(v => (Some(v), None))
-        case (Seq(), ws) => ws.map(w => (None, Some(w)))
-        case (vs, ws) => for (v <- vs; w <- ws) yield (Some(v), Some(w))
-      }
+    this.cogroup(other, partitioner).flatMapValues {
+      case (vs, Seq()) => vs.map(v => (Some(v), None))
+      case (Seq(), ws) => ws.map(w => (None, Some(w)))
+      case (vs, ws) => for (v <- vs; w <- ws) yield (Some(v), Some(w))
     }
   }
 
