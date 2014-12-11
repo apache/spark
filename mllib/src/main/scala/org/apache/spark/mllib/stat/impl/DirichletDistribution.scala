@@ -21,7 +21,7 @@ package org.apache.spark.mllib.stat.impl
 
 import cern.jet.stat.Gamma
 
-private[mllib] class DirichletDistribution(private[mllib] val alpha: Float) {
+private[mllib] class DirichletDistribution(private[mllib] val alpha: Float) extends Serializable {
   private def logBeta(x: Array[Float]) = {
     val n = x.size
     n * Gamma.logGamma(alpha) - Gamma.logGamma(n * alpha)
