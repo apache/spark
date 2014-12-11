@@ -48,12 +48,13 @@ all of which are presented in this guide.
 You will find tabs throughout this guide that let you choose between code snippets of
 different languages.
 
-**Note:** *Python API has been introduced in Spark 1.2. It has all the DStream transformations
-and almost all the output operations available in Scala and Java interfaces.
+**Note:** Python API for Spark Streaming has been introduced in Spark 1.2. It has all the DStream
+transformations and almost all the output operations available in Scala and Java interfaces.
 However, it has only support for basic sources like text files and text data over sockets.
 API for creating more sources like Kafka, and Flume will be available in future.
 Further information about available features in Python API are mentioned throughout this
-document; look out for the tag* "**Note on Python API**".
+document; look out for the tag
+<span class="badge" style="background-color: grey">Python API</span>.
 
 ***************************************************************************************************
 
@@ -588,14 +589,13 @@ These operations are discussed in detail in later sections.
 ## Input DStreams and Receivers
 Input DStreams are DStreams representing the stream of input data received from streaming
 sources. In the [quick example](#a-quick-example), `lines` was an input DStream as it represented
-the stream of data received from the netcat server.
+the stream of data received from the netcat server. Every input DStream
+(except file stream, discussed later in this section) is associated with a **Receiver**
+([Scala doc](api/scala/index.html#org.apache.spark.streaming.receiver.Receiver),
+[Java doc](api/java/org/apache/spark/streaming/receiver/Receiver.html)) object which receives the
+data from a source and stores it in Spark's memory for processing.
 
-Every input DStream (except file stream, discussed later) is associated with a **Receiver**
-([Scala](api/scala/index.html#org.apache.spark.streaming.receiver.Receiver),
-[Java](api/java/org/apache/spark/streaming/receiver/Receiver.html)) object which receives the
-data from a source and stores it in Spark's memory for processing. There are
-
-Spark Streaming has two categories of streaming sources.
+Spark Streaming provides two categories of built-in streaming sources.
 
 - *Basic sources*: Sources directly available in the StreamingContext API.
   Example: file systems, socket connections, and Akka actors.
@@ -631,6 +631,7 @@ as well as, to run the receiver(s).
 
 ### Basic Sources
 {:.no_toc}
+
 We have already taken a look at the `ssc.socketTextStream(...)` in the [quick example](#a-quick-example)
 which creates a DStream from text
 data received over a TCP socket connection. Besides sockets, the StreamingContext API provides
@@ -659,15 +660,14 @@ methods for creating DStreams from files and Akka actors as input sources.
 
 	For simple text files, there is an easier method `streamingContext.textFileStream(dataDirectory)`. And file streams do not require running a receiver, hence does not require allocating cores.
 
-	**Note on Python API:** *As of Spark 1.2, `fileStream` is not available in the Python API, only
-	`textFileStream` is	available*.
+	<span class="badge" style="background-color: grey">Python API</span>	As of Spark 1.2,
+	`fileStream` is not available in the Python API, only	`textFileStream` is	available.
 
 - **Streams based on Custom Actors:** DStreams can be created with data streams received through Akka
   actors by using `streamingContext.actorStream(actorProps, actor-name)`. See the [Custom Receiver
-  Guide](streaming-custom-receivers.html#implementing-and-using-a-custom-actor-based-receiver) for
-  more details.
+  Guide](streaming-custom-receivers.html) for more details.
 
-  *Note on Python API:** Since actors are available only in the Java and Scala
+  <span class="badge" style="background-color: grey">Python API</span> Since actors are available only in the Java and Scala
   libraries, `actorStream` is not available in the Python API.
 
 - **Queue of RDDs as a Stream:** For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
@@ -680,17 +680,22 @@ for Java, and [StreamingContext].
 
 ### Advanced Sources
 {:.no_toc}
-**Note on Python API:** *As of Spark 1.2, these sources are not available in the Python API.*
+<span class="badge" style="background-color: grey">Python API</span> As of Spark 1.2,
+these sources are not available in the Python API.
 
 This category of sources require interfacing with external non-Spark libraries, some of them with
 complex dependencies (e.g., Kafka and Flume). Hence, to minimize issues related to version conflicts
 of dependencies, the functionality to create DStreams from these sources have been moved to separate
-libraries, that can be [linked to](#linking) explicitly as necessary.  For example, if you want to
+libraries, that can be [linked](#linking) to explicitly when necessary. For example, if you want to
 create a DStream using data from Twitter's stream of tweets, you have to do the following.
 
-1. *Linking*: Add the artifact `spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}}` to the SBT/Maven project dependencies.
-1. *Programming*: Import the `TwitterUtils` class and create a DStream with `TwitterUtils.createStream` as shown below.
-1. *Deploying*: Generate an uber JAR with all the dependencies (including the dependency `spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}}` and its transitive dependencies) and then deploy the application. This is further explained in the [Deploying section](#deploying-applications).
+1. *Linking*: Add the artifact `spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}}` to the
+  SBT/Maven project dependencies.
+1. *Programming*: Import the `TwitterUtils` class and create a DStream with
+  `TwitterUtils.createStream` as shown below.
+1. *Deploying*: Generate an uber JAR with all the dependencies (including the dependency
+  `spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}}` and its transitive dependencies) and
+  then deploy the application. This is further explained in the [Deploying section](#deploying-applications).
 
 <div class="codetabs">
 <div data-lang="scala">
@@ -734,10 +739,13 @@ Some of these advanced sources are as follows.
 ### Custom Sources
 {:.no_toc}
 
-**Note on Python API**: As of Spark 1.2, these sources are not available in the Python API.
+<span class="badge" style="background-color: grey">Python API</span> As of Spark 1.2,
+these sources are not available in the Python API.
 
-Input DStreams can also be created out of custom data sources. All you have to do is implement an user-defined **receiver** (see next section to understand what that is) that can receive data from the custom sources and push it into Spark. See the
-[Custom Receiver Guide](streaming-custom-receivers.html) for details.
+Input DStreams can also be created out of custom data sources. All you have to do is implement an
+user-defined **receiver** (see next section to understand what that is) that can receive data from
+the custom sources and push it into Spark. See the [Custom Receiver
+Guide](streaming-custom-receivers.html) for details.
 
 ### Receiver Reliability
 {:.no_toc}
@@ -1121,7 +1129,8 @@ Currently, the following output operations are defined:
   <td> Prints first ten elements of every batch of data in a DStream on the driver node running
   the streaming application. This is useful for development and debugging.
   <br/>
-  <b>Note on Python API:</b> This is called <b>pprint()</b> in the Python API.
+  <span class="badge" style="background-color: grey">Python API</span> This is called
+  <b>pprint()</b> in the Python API.
   </td>
 </tr>
 <tr>
@@ -1135,7 +1144,8 @@ Currently, the following output operations are defined:
   name at each batch interval is generated based on <i>prefix</i> and
   <i>suffix</i>: <i>"prefix-TIME_IN_MS[.suffix]"</i>.
   <br/>
-  <b>Note on Python API:</b> This is not available in the Python API.
+  <span class="badge" style="background-color: grey">Python API</span> This is not available in
+  the Python API.
   </td>
 </tr>
 <tr>
@@ -1143,7 +1153,8 @@ Currently, the following output operations are defined:
   <td> Save this DStream's contents as a Hadoop file. The file name at each batch interval is
   generated based on <i>prefix</i> and <i>suffix</i>: <i>"prefix-TIME_IN_MS[.suffix]"</i>.
   <br>
-  <b>Note on Python API:</b> This is not available in the Python API.
+  <span class="badge" style="background-color: grey">Python API</span> This is not available in
+  the Python API.
   </td>
 </tr>
 <tr>
@@ -1555,6 +1566,7 @@ To run a Spark Streaming applications, you need to have the following.
     + *Mesos* - [Marathon](https://github.com/mesosphere/marathon) has been used to achieve this
       with Mesos.
 
+
 - *Configuring write ahead logs (Spark 1.2+)* - Starting for Spark 1.2, we have introduced a new
   feature of write ahead logs. If enabled, all the data received from a receiver gets written into
   a write ahead log in the configuration checkpoint directory. This prevents data loss on driver
@@ -1698,10 +1710,10 @@ before further processing.
 {:.no_toc}
 Cluster resources can be under-utilized if the number of parallel tasks used in any stage of the
 computation is not high enough. For example, for distributed reduce operations like `reduceByKey`
-and `reduceByKeyAndWindow`, the default number of parallel tasks is decided by the [config property]
-(configuration.html#spark-properties) `spark.default.parallelism`. You can pass the level of
-parallelism as an argument (see [`PairDStreamFunctions`]
-(api/scala/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions)
+and `reduceByKeyAndWindow`, the default number of parallel tasks is decided by the
+[config property](configuration.html#spark-properties) `spark.default.parallelism`.
+You can pass the level of parallelism as an argument (see
+[`PairDStreamFunctions`](api/scala/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions)
 documentation), or set the [config property](configuration.html#spark-properties)
 `spark.default.parallelism` to change the default.
 
