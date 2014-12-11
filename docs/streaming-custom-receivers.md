@@ -16,6 +16,7 @@ This starts with implementing a **Receiver**
 ([Scala doc](api/scala/index.html#org.apache.spark.streaming.receiver.Receiver),
 [Java doc](api/java/org/apache/spark/streaming/receiver/Receiver.html)).
 A custom receiver must extend this abstract class by implementing two methods
+
 - `onStart()`: Things to do to start receiving data.
 - `onStop()`: Things to do to stop receiving data.
 

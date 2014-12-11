@@ -762,7 +762,7 @@ that no data gets lost due to any kind of failure. This leads to two kinds of re
   for reliable sources, one may implement an unreliable receiver that do not go into the complexity
   of acknowledging correctly.
 
-The details of how to write a reliable receiver is discussed in the
+The details of how to write a reliable receiver are discussed in the
 [Custom Receiver Guide](streaming-custom-receivers.html).
 
 ***
