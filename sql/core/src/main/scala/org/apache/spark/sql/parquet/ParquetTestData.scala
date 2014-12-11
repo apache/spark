@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.parquet
 
-import java.io.File
+import java.sql.{Date, Timestamp}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.sql.test.TestSQLContext
 
@@ -101,6 +101,17 @@ private[sql] object ParquetTestData {
       }
     """
 
+  val testFilterSchema2 =
+    """
+      message myrecord {
+      required int32 mybyte;
+      required int32 myshort;
+      required binary mydate (UTF8);
+      required binary mytimestamp (UTF8);
+      required int64 mydecimal;
+      }
+    """
+
   // field names for test assertion error messages
   val subTestSchemaFieldNames = Seq(
     "myboolean:Boolean",
@@ -109,6 +120,7 @@ private[sql] object ParquetTestData {
 
   val testDir = Utils.createTempDir()
   val testFilterDir = Utils.createTempDir()
+  val testFilterDir2 = Utils.createTempDir()
 
   lazy val testData = new ParquetRelation(testDir.toURI.toString, None, TestSQLContext)
 
@@ -273,7 +285,31 @@ private[sql] object ParquetTestData {
         record.add(10, i.toFloat + 0.5f)
         record.add(11, i.toDouble + 0.5d)
       }
- 
+
+      writer.write(record)
+    }
+    writer.close()
+  }
+
+  def writeFilterFile2(records: Int = 200) = {
+    // for microbenchmark use: records = 300000000
+    testFilterDir2.delete
+    val path: Path = new Path(new Path(testFilterDir2.toURI), new Path("part-r-0.parquet"))
+    val schema: MessageType = MessageTypeParser.parseMessageType(testFilterSchema2)
+    val writeSupport = new TestGroupWriteSupport(schema)
+    val writer = new ParquetWriter[Group](path, writeSupport)
+
+    var nextDate = Date.valueOf("2014-11-23")
+    var nextTimestamp = Timestamp.valueOf("2014-11-23 00:04:00")
+    for(i <- 0 to records) {
+      val record = new SimpleGroup(schema)
+      record.add(0, i.toByte)
+      record.add(1, i.toShort)
+      record.add(2, nextDate.toString)
+      record.add(3, nextTimestamp.toString)
+      record.add(4, BigDecimal(i).toLong)
+      nextDate = new Date(nextDate.getTime + 24 * 60 * 60 * 1000)
+      nextTimestamp = new Timestamp(nextTimestamp.getTime + 100 * 1000)
       writer.write(record)
     }
     writer.close()
