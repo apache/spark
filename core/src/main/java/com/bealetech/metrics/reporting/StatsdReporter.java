@@ -122,6 +122,7 @@ public class StatsdReporter extends ScheduledReporter {
         super(registry, "statsd-reporter", filter, rateUnit, durationUnit);
 
         this.statsd = statsd;
+        this.statsd.setNamePrefix(prefix);
         this.prefix = prefix;
     }
 
