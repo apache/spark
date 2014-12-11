@@ -271,20 +271,33 @@ object MLUtils {
     var squaredDistance = 0.0
     (v1, v2) match { 
       case (v1: SparseVector, v2: SparseVector) =>
-        v1.indices.intersect(v2.indices).foreach((idx) => {
+        var count = 0
+        var indices = v1.indices.intersect(v2.indices)
+
+        while (count < indices.length) {
+          val idx = indices(count)
           val score = v1(idx) - v2(idx)
           squaredDistance += score * score
-        })
+          count += 1
+        }
 
-        v1.indices.diff(v2.indices).foreach((idx) => {
+        count = 0
+        indices = v1.indices.diff(v2.indices)
+        while (count < indices.length) {
+          val idx = indices(count)
           val score = v1(idx)
           squaredDistance += score * score
-        })
- 
-        v2.indices.diff(v1.indices).foreach((idx) => {
+          count += 1
+        }
+        
+        count = 0
+        indices = v2.indices.diff(v1.indices)
+        while (count < indices.length) {
+          val idx = indices(count)
           val score = v2(idx)
           squaredDistance += score * score
-        })
+          count += 1
+        }
 
       case (v1: SparseVector, v2: DenseVector) if v1.indices.length / v1.size < 0.5 =>
         squaredDistance = vectorSquaredDistance(v1, v2)
@@ -306,14 +319,24 @@ object MLUtils {
    */
   private[util] def vectorSquaredDistance(v1: SparseVector, v2: DenseVector): Double = {
     var squaredDistance = 0.0
-    v1.indices.foreach((idx) => {
+    var count = 0
+    var indices = v1.indices
+
+    while (count < indices.length) {
+      val idx = indices(count)
       val score = v1(idx) - v2(idx)
       squaredDistance += score * score
-    })
-    (0 to v2.size - 1).toArray.diff(v1.indices).foreach((idx) => {
+      count += 1
+    }
+
+    count = 0
+    indices = (0 to v2.size - 1).toArray.diff(v1.indices)
+    while (count < indices.length) {
+      val idx = indices(count)
       val score = v2(idx)
       squaredDistance += score * score
-    })
+      count += 1
+    }
     squaredDistance
   }
 
