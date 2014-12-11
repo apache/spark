@@ -8,7 +8,7 @@ title: Spark Configuration
 Spark provides three locations to configure the system:
 
 * [Spark properties](#spark-properties) control most application parameters and can be set by using
-  a [SparkConf](api/core/index.html#org.apache.spark.SparkConf) object, or through Java
+  a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object, or through Java
   system properties.
 * [Environment variables](#environment-variables) can be used to set per-machine settings, such as
   the IP address, through the `conf/spark-env.sh` script on each node.
