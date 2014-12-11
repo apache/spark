@@ -72,7 +72,7 @@ Instead of Flume pushing data directly to Spark Streaming, this approach runs a 
   and transactions to pull data from the sink. Transactions succeed only after data is received and
   replicated by Spark Streaming.
 
-This ensures that stronger reliability and
+This ensures stronger reliability and
 [fault-tolerance guarantees](streaming-programming-guide.html#fault-tolerance-semantics)
 than the previous approach. However, this requires configuring Flume to run a custom sink.
 Here are the configuration steps.

@@ -212,7 +212,7 @@ there are two kinds of receivers based on their reliability and fault-tolerance 
 
 To implement a *reliable receiver*, you have to use `store(multiple-records)` to store data.
 This flavour of `store` is a blocking call which returns only after all the given records have
-been stored inside Spark. If replication is enabled receiver's configured storage level
+been stored inside Spark. If the receiver's configured storage level uses replication
 (enabled by default), then this call returns after replication has completed.
 Thus it ensures that the data is reliably stored, and the receiver can now acknowledge the
 source appropriately. This ensures that no data is caused when the receiver fails in the middle
@@ -226,7 +226,7 @@ not get the reliability guarantees of `store(multiple-records)`, it has the foll
 - The system takes care of chunking that data into appropriate sized blocks (look for block
 interval in the [Spark Streaming Programming Guide](streaming-programming-guide.html)).
 - The system takes care of controlling the receiving rates if the rate limits have been specified.
-- Because of these two, *unreliable receivers are simpler to implement than reliable receivers.
+- Because of these two, unreliable receivers are simpler to implement than reliable receivers.
 
 The following table summarizes the characteristics of both types of receivers
 
@@ -240,7 +240,7 @@ The following table summarizes the characteristics of both types of receivers
   <td>
     Simple to implement.<br>
     System takes care of block generation and rate control.
-    No fault-tolerance guarantees, can loose data on receiver failure.
+    No fault-tolerance guarantees, can lose data on receiver failure.
   </td>
 </tr>
 <tr>
