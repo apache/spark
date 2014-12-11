@@ -66,10 +66,16 @@ class TokenEnumeration private[mllib](private val alphabet : Index[String]) exte
 /**
  * This object enumerates tokens. It assigns an integer to every token.
  * E.g. defines a bijection between set of words and 0 ... (numberOfDifferentTokens - 1)
- * @param rareTokenThreshold tokens that are encountered in the collection less than
- *                           rareTokenThreshold times are omitted
  */
-class TokenEnumerator(private val rareTokenThreshold : Int) extends Serializable {
+class TokenEnumerator extends Serializable {
+  private var rareTokenThreshold : Int = 2
+
+  /**
+   * @param rareTokenThreshold tokens that are encountered in the collection less than
+   *                           rareTokenThreshold times are omitted.
+   *                           Default value: 2
+   */
+  def setRareTokenThreshold(rareTokenThreshold : Int) = this.rareTokenThreshold = rareTokenThreshold
 
   /**
    *
