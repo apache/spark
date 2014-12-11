@@ -43,17 +43,18 @@ Some of the commonly used options are:
 
 * `--class`: The entry point for your application (e.g. `org.apache.spark.examples.SparkPi`)
 * `--master`: The [master URL](#master-urls) for the cluster (e.g. `spark://23.195.26.187:7077`)
-* `--deploy-mode`: Whether to deploy your driver on the worker nodes (`cluster`) or locally as an external client (`client`) (default: `client`)*
+* `--deploy-mode`: Whether to deploy your driver on the worker nodes (`cluster`) or locally as an external client (`client`) (default: `client`) <b> &#8224; </b>
 * `--conf`: Arbitrary Spark configuration property in key=value format. For values that contain spaces wrap "key=value" in quotes (as shown).
 * `application-jar`: Path to a bundled jar including your application and all dependencies. The URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes.
 * `application-arguments`: Arguments passed to the main method of your main class, if any
 
-*A common deployment strategy is to submit your application from a gateway machine that is
+<b>&#8224;</b> A common deployment strategy is to submit your application from a gateway machine
+that is
 physically co-located with your worker machines (e.g. Master node in a standalone EC2 cluster).
 In this setup, `client` mode is appropriate. In `client` mode, the driver is launched directly
-within the client `spark-submit` process, with the input and output of the application attached
-to the console. Thus, this mode is especially suitable for applications that involve the REPL
-(e.g. Spark shell).
+within the `spark-submit` process which acts as a *client* to the cluster. The input and
+output of the application is attached to the console. Thus, this mode is especially suitable
+for applications that involve the REPL (e.g. Spark shell).
 
 Alternatively, if your application is submitted from a machine far from the worker machines (e.g.
 locally on your laptop), it is common to use `cluster` mode to minimize network latency between
@@ -63,8 +64,12 @@ clusters, Mesos clusters, or python applications.
 For Python applications, simply pass a `.py` file in the place of `<application-jar>` instead of a JAR,
 and add Python `.zip`, `.egg` or `.py` files to the search path with `--py-files`.
 
-To enumerate all options available to `spark-submit` run it with `--help`. Here are a few
-examples of common options:
+There are a few options available that are specific to the
+[cluster manager](#cluster-overview.html#cluster-manager-types) that is being used.
+For example, with a [Spark Standalone](#spark-standalone) cluster with `cluster` deploy mode,
+you can also specify `--supervise` to make sure that the driver is automatically restarted if it
+fails with non-zero exit code. To enumerate all such options available to `spark-submit`,
+run it with `--help`. Here are a few examples of common options:
 
 {% highlight bash %}
 # Run application locally on 8 cores
@@ -74,10 +79,21 @@ examples of common options:
   /path/to/examples.jar \
   100
 
-# Run on a Spark standalone cluster
+# Run on a Spark Standalone cluster in client deploy mode
 ./bin/spark-submit \
   --class org.apache.spark.examples.SparkPi \
   --master spark://207.184.161.138:7077 \
+  --executor-memory 20G \
+  --total-executor-cores 100 \
+  /path/to/examples.jar \
+  1000
+
+# Run on a Spark Standalone cluster in cluster deploy mode with supervise
+./bin/spark-submit \
+  --class org.apache.spark.examples.SparkPi \
+  --master spark://207.184.161.138:7077 \
+  --deploy-mode cluster
+  --supervise
   --executor-memory 20G \
   --total-executor-cores 100 \
   /path/to/examples.jar \
@@ -93,7 +109,7 @@ export HADOOP_CONF_DIR=XXX
   /path/to/examples.jar \
   1000
 
-# Run a Python application on a cluster
+# Run a Python application on a Spark Standalone cluster
 ./bin/spark-submit \
   --master spark://207.184.161.138:7077 \
   examples/src/main/python/pi.py \
@@ -163,5 +179,5 @@ to executors.
 
 # More Information
 
-Once you have deployed your application, the [cluster mode overview](cluster-overview.html) describes 
+Once you have deployed your application, the [cluster mode overview](cluster-overview.html) describes
 the components involved in distributed execution, and how to monitor and debug applications.
