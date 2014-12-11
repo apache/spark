@@ -68,7 +68,6 @@ case class HashOuterJoin(
   @transient private[this] lazy val DUMMY_LIST = Seq[Row](null)
   @transient private[this] lazy val EMPTY_LIST = Seq.empty[Row]
 
-  @transient private[this] lazy val joinedRow = new JoinedRow()
   @transient private[this] lazy val leftNullRow = new GenericRow(left.output.length)
   @transient private[this] lazy val rightNullRow = new GenericRow(right.output.length)
   @transient private[this] lazy val boundCondition =
@@ -78,9 +77,7 @@ case class HashOuterJoin(
   // iterator for performance purpose.
 
   private[this] def leftOuterIterator(
-      key: Row, leftRow: Row, rightIter: Iterable[Row]): Iterator[Row] = {
-
-    joinedRow.withLeft(leftRow)
+      key: Row, joinedRow: JoinedRow, rightIter: Iterable[Row]): Iterator[Row] = {
     val ret: Iterable[Row] = (
       if (!key.anyNull) {
         val temp = rightIter.collect {
@@ -99,9 +96,8 @@ case class HashOuterJoin(
   }
 
   private[this] def rightOuterIterator(
-      key: Row, leftIter: Iterable[Row], rightRow: Row): Iterator[Row] = {
+      key: Row, leftIter: Iterable[Row], joinedRow: JoinedRow): Iterator[Row] = {
 
-    joinedRow.withRight(rightRow)
     val ret: Iterable[Row] = (
       if (!key.anyNull) {
         val temp = leftIter.collect {
@@ -120,11 +116,8 @@ case class HashOuterJoin(
   }
 
   private[this] def fullOuterIterator(
-      key: Row, leftIter: Iterable[Row], rightIter: Iterable[Row]): Iterator[Row] = {
-    val leftNullRow = new GenericRow(left.output.length)
-    val rightNullRow = new GenericRow(right.output.length)
-    val boundCondition =
-      condition.map(newPredicate(_, left.output ++ right.output)).getOrElse((row: Row) => true)
+      key: Row, leftIter: Iterable[Row], rightIter: Iterable[Row],
+      joinedRow: JoinedRow): Iterator[Row] = {
 
     if (!key.anyNull) {
       // Store the positions of records in right, if one of its associated row satisfy
@@ -190,6 +183,7 @@ case class HashOuterJoin(
   }
 
   override def execute() = {
+    val joinedRow = new JoinedRow()
     left.execute().zipPartitions(right.execute()) { (leftIter, rightIter) =>
       // TODO this probably can be replaced by external sort (sort merged join?)
 
@@ -199,7 +193,8 @@ case class HashOuterJoin(
           val keyGenerator = newProjection(leftKeys, left.output)
           leftIter.flatMap( currentRow => {
             val rowKey = keyGenerator(currentRow)
-            leftOuterIterator(rowKey, currentRow, rightHashTable.getOrElse(rowKey, EMPTY_LIST))
+            joinedRow.withLeft(currentRow)
+            leftOuterIterator(rowKey, joinedRow, rightHashTable.getOrElse(rowKey, EMPTY_LIST))
           })
         }
         case RightOuter => {
@@ -207,7 +202,8 @@ case class HashOuterJoin(
           val keyGenerator = newProjection(rightKeys, right.output)
           rightIter.flatMap ( currentRow => {
             val rowKey = keyGenerator(currentRow)
-            rightOuterIterator(rowKey, leftHashTable.getOrElse(rowKey, EMPTY_LIST), currentRow)
+            joinedRow.withRight(currentRow)
+            rightOuterIterator(rowKey, leftHashTable.getOrElse(rowKey, EMPTY_LIST), joinedRow)
           })
         }
         case FullOuter => {
@@ -216,7 +212,7 @@ case class HashOuterJoin(
           (leftHashTable.keySet ++ rightHashTable.keySet).iterator.flatMap { key =>
             fullOuterIterator(key,
               leftHashTable.getOrElse(key, EMPTY_LIST),
-              rightHashTable.getOrElse(key, EMPTY_LIST))
+              rightHashTable.getOrElse(key, EMPTY_LIST), joinedRow)
           }
         }
         case x => throw new Exception(s"HashOuterJoin should not take $x as the JoinType")
