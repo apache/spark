@@ -462,7 +462,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         unrollMemoryMap.remove(threadId)
       } else {
         if (pending) {
-          pendingUnrollMemoryMap(threadId) = pendingUnrollMemoryMap.getOrElse(threadId) + memory
+          pendingUnrollMemoryMap(threadId) = pendingUnrollMemoryMap.getOrElse(threadId, 0L) + memory
         }
         unrollMemoryMap(threadId) = unrollMemoryMap.getOrElse(threadId, memory) - memory
         // If this thread claims no more unroll memory, release it completely
