@@ -634,6 +634,80 @@ class JsonSuite extends QueryTest {
     )
   }
 
+  test("Applying schemas with MapType") {
+    val schemaWithSimpleMap = StructType(
+      StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
+    val jsonWithSimpleMap = jsonRDD(mapType1, schemaWithSimpleMap)
+
+    jsonWithSimpleMap.registerTempTable("jsonWithSimpleMap")
+
+    checkAnswer(
+      sql("select map from jsonWithSimpleMap"),
+      Seq(Map("a" -> 1)) ::
+      Seq(Map("b" -> 2)) ::
+      Seq(Map("c" -> 3)) ::
+      Seq(Map("c" -> 1, "d" -> 4)) ::
+      Seq(Map("e" -> null)) :: Nil
+    )
+
+    checkAnswer(
+      sql("select map['c'] from jsonWithSimpleMap"),
+      Seq(null) ::
+      Seq(null) ::
+      Seq(3) ::
+      Seq(1) ::
+      Seq(null) :: Nil
+    )
+
+    val innerStruct = StructType(
+      StructField("field1", ArrayType(IntegerType, true), true) ::
+      StructField("field2", IntegerType, true) :: Nil)
+    val schemaWithComplexMap = StructType(
+      StructField("map", MapType(StringType, innerStruct, true), false) :: Nil)
+
+    val jsonWithComplexMap = jsonRDD(mapType2, schemaWithComplexMap)
+
+    jsonWithComplexMap.registerTempTable("jsonWithComplexMap")
+
+    checkAnswer(
+      sql("select map from jsonWithComplexMap"),
+      Seq(Map("a" -> Seq(Seq(1, 2, 3, null), null))) ::
+      Seq(Map("b" -> Seq(null, 2))) ::
+      Seq(Map("c" -> Seq(Seq(), 4))) ::
+      Seq(Map("c" -> Seq(null, 3), "d" -> Seq(Seq(null), null))) ::
+      Seq(Map("e" -> null)) ::
+      Seq(Map("f" -> Seq(null, null))) :: Nil
+    )
+
+    checkAnswer(
+      sql("select map['a'].field1, map['c'].field2 from jsonWithComplexMap"),
+      Seq(Seq(1, 2, 3, null), null) ::
+      Seq(null, null) ::
+      Seq(null, 4) ::
+      Seq(null, 3) ::
+      Seq(null, null) ::
+      Seq(null, null) :: Nil
+    )
+  }
+
+  test("Automatically convert a StructType to MapType") {
+    val oldConvertStructToMap = TestSQLContext.convertStructToMap
+    val oldConvertStructToMapThreshold = TestSQLContext.convertStructToMapThreshold
+    TestSQLContext.setConf(SQLConf.SCHEMA_CONVERT_STRUCT_TO_MAP, "true")
+    TestSQLContext.setConf(SQLConf.SCHEMA_CONVERT_STRUCT_TO_MAP_THRESHOLD, "5")
+
+    val jsonSchemaRDD = jsonRDD(mapType1)
+    val schema = StructType(
+      StructField("map", MapType(StringType, IntegerType, true), true) :: Nil)
+
+    assert(schema === jsonSchemaRDD.schema)
+
+    TestSQLContext.setConf(
+      SQLConf.SCHEMA_CONVERT_STRUCT_TO_MAP, oldConvertStructToMap.toString)
+    TestSQLContext.setConf(
+      SQLConf.SCHEMA_CONVERT_STRUCT_TO_MAP_THRESHOLD, oldConvertStructToMapThreshold.toString)
+  }
+
   test("SPARK-2096 Correctly parse dot notations") {
     val jsonSchemaRDD = jsonRDD(complexFieldAndType2)
     jsonSchemaRDD.registerTempTable("jsonTable")

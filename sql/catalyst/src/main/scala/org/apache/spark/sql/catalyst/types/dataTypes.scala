@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.types
 
 import java.sql.{Date, Timestamp}
 
-import scala.math.Numeric.{FloatAsIfIntegral, BigDecimalAsIfIntegral, DoubleAsIfIntegral}
+import scala.math.Numeric.{FloatAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
 import scala.util.parsing.combinator.RegexParsers
@@ -31,7 +31,7 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
 import org.apache.spark.sql.catalyst.types.decimal._
 import org.apache.spark.sql.catalyst.util.Metadata
 import org.apache.spark.util.Utils
@@ -216,6 +216,15 @@ abstract class DataType {
   def json: String = compact(render(jsonValue))
 
   def prettyJson: String = pretty(render(jsonValue))
+
+  /**
+   * Returns a copy of this DataType where `rule` has been recursively applied first to all of its
+   * inner DataType (if any) and then itself (post-order). An inner DataType means elementType
+   * of an ArrayType, keyType and valueType of a MapType, and field types of a StructType.
+   * When `rule` does not apply to a given DataType, it is left unchanged.
+   */
+  private[sql] def transformUp(rule: PartialFunction[DataType, DataType]) =
+    rule.applyOrElse(this, identity[DataType])
 }
 
 case object NullType extends DataType
@@ -478,6 +487,11 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
     ("type" -> typeName) ~
       ("elementType" -> elementType.jsonValue) ~
       ("containsNull" -> containsNull)
+
+  override private[sql] def transformUp(rule: PartialFunction[DataType, DataType]): DataType = {
+    val arrayType = ArrayType(elementType.transformUp(rule), containsNull)
+    rule.applyOrElse(arrayType, identity[DataType])
+  }
 }
 
 /**
@@ -548,6 +562,24 @@ case class StructType(fields: Seq[StructField]) extends DataType {
   protected[sql] def toAttributes =
     fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
 
+  override private[sql] def transformUp(rule: PartialFunction[DataType, DataType]): DataType = {
+    val structType = transformFieldTypeUp(rule)
+    rule.applyOrElse(structType, identity[DataType])
+  }
+
+  /**
+   * Returns a copy of this DataType where `rule` has been recursively applied to all of its
+   * field types (by calling transformUp).
+   */
+  private[sql] def transformFieldTypeUp(rule: PartialFunction[DataType, DataType]): StructType = {
+    val newFields = fields.map {
+      case StructField(fieldName, dataType, nullable, metadata) => {
+        StructField(fieldName, dataType.transformUp(rule), nullable, metadata)
+      }
+    }
+    StructType(newFields)
+  }
+
   def treeString: String = {
     val builder = new StringBuilder
     builder.append("root\n")
@@ -600,6 +632,12 @@ case class MapType(
       ("keyType" -> keyType.jsonValue) ~
       ("valueType" -> valueType.jsonValue) ~
       ("valueContainsNull" -> valueContainsNull)
+
+  override private[sql] def transformUp(rule: PartialFunction[DataType, DataType]): DataType = {
+    val mapType =
+      MapType(keyType.transformUp(rule), valueType.transformUp(rule), valueContainsNull)
+    rule.applyOrElse(mapType, identity[DataType])
+  }
 }
 
 /**
