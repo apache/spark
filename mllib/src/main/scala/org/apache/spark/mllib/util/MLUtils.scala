@@ -267,7 +267,7 @@ object MLUtils {
   /**
    * Returns the squared distance between two Vectors.
    */
-  def vectorSquaredDistance(v1: Vector, v2: Vector): Double = {
+  private[util] def vectorSquaredDistance(v1: Vector, v2: Vector): Double = {
     var squaredDistance = 0.0
     (v1, v2) match { 
       case (v1: SparseVector, v2: SparseVector) =>
@@ -304,7 +304,7 @@ object MLUtils {
   /**
    * Returns the squared distance between DenseVector and SparseVector.
    */
-  def vectorSquaredDistance(v1: SparseVector, v2: DenseVector): Double = {
+  private[util] def vectorSquaredDistance(v1: SparseVector, v2: DenseVector): Double = {
     var squaredDistance = 0.0
     v1.indices.foreach((idx) => {
       val score = v1(idx) - v2(idx)
