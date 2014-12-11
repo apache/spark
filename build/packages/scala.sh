@@ -19,10 +19,10 @@ install_scala_for_linux() {
     cd "${dir}/.." && tar -xzf "${scala_loc}"
     rm -rf "${scala_loc}"
   fi
-  export SCALA_BIN="${scala_bin}"
+  export SCALA_HOME="$(dirname ${scala_bin})/.."
 }
 
 install_scala_for_osx() {
   brew install scala
-  export SCALA_BIN=`which scala`
+  export SCALA_HOME="$(dirname "`brew --prefix`/Cellar/$(readlink `which scala`)")/../libexec"
 }

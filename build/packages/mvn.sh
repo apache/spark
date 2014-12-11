@@ -22,6 +22,10 @@ install_mvn_for_linux() {
   export MVN_BIN="${mvn_bin}"
 }
 
+export_mvn_for_linux() {
+
+}
+
 install_mvn_for_osx() {
   brew install maven
   export MVN_BIN=`which mvn`

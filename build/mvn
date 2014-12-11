@@ -55,25 +55,31 @@ check_and_install_app() {
   # some black magic to set the generated app variable (i.e. MVN_BIN) into the
   # environment
   eval "${APP_BIN}=`which $1 2>/dev/null`"
+
+  # Check and source the package build file if present, else error out
+  if [ -f "$resource" ]; then
+    source "${_DIR}/packages/$1.sh"
+  else
+    echo "ERROR: Cannot find the $1.sh build file from within ${_DIR}/packages."
+    echo "       Ensure the file exists and is accesible."
+    exit 1
+  fi
+
   if [ -z "`which $1 2>/dev/null`" ]; then
     # attempt to force install if flagged
     if [ -n "${FORCE_INSTALL}" ]; then
       local resource="${_DIR}/packages/$1.sh"
-      if [ -f "$resource" ]; then
-        source "${_DIR}/packages/$1.sh"
+
         prep_install_for_${_OSTYPE}
         install_$1_for_${_OSTYPE}
-      else
-        echo "ERROR: Cannot find the $1.sh build file from within ${_DIR}/packages."
-        echo "       Ensure the file exists and is accesible."
-        exit 1
-      fi
+
     # else exit with error message
     else
       echo "ERROR: $1 isn't installed; please install or automatically force install (-f)."
       exit 2
     fi
   fi
+  postprocess_$1_for_${_OSTYPE}
 }
 
 # Prints the help and usage for this script
@@ -143,15 +149,19 @@ ZINC_PORT=${ZINC_PORT:-"3030"}
 # Check and install all applications necessary to fully build Spark
 check_and_install_app "mvn"
 check_and_install_app "zinc"
+check_and_install_app "scala"
 
 # Reset the current working directory
 cd "${_DIR}/.."
 
 # Now that zinc is ensured to be installed, check its status and, if its
 # not running, start it
-if [ -z "`${ZINC_BIN} -status`" ]; then
-  ${ZINC_BIN} -start -port ${ZINC_PORT}
+if [ -n "`${ZINC_BIN} -status`" ]; then
+  ${ZINC_BIN} -shutdown
 fi
+
+${ZINC_BIN} -start -port ${ZINC_PORT} -scala-home "${SCALA_HOME}"
+${ZINC_BIN} -status
 
 # Determine the parameters pushed in from the command line and, if any are
 # present, use those within the maven
