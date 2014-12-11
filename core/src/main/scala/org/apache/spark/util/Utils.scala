@@ -408,9 +408,12 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Download a file from `in` to `tempFile`, then move it to `destFile`, checking whether
-   * `destFile` already exists, has the same contents as the downloaded file, and can be
-   * overwritten.
+   * Download `in` to `tempFile`, then move it to `destFile`.
+   *
+   * If `destFile` already exists:
+   *   - no-op if its contents equal those of `sourceFile`,
+   *   - throw an exception if `fileOverwrite` is false,
+   *   - attempt to overwrite it otherwise.
    *
    * @param url URL that `sourceFile` originated from, for logging purposes.
    * @param in InputStream to download.
@@ -419,23 +422,33 @@ private[spark] object Utils extends Logging {
    * @param fileOverwrite Whether to delete/overwrite an existing `destFile` that does not match
    *                      `sourceFile`
    */
-  private def downloadStreamAndMove(
-    url: String,
-    in: InputStream,
-    tempFile: File,
-    destFile: File,
-    fileOverwrite: Boolean): Unit = {
+  private def downloadFile(
+      url: String,
+      in: InputStream,
+      tempFile: File,
+      destFile: File,
+      fileOverwrite: Boolean): Unit = {
 
-    val out = new FileOutputStream(tempFile)
-    Utils.copyStream(in, out, closeStreams = true)
-    copyFile(url, tempFile, destFile, fileOverwrite, removeSourceFile = true)
-
+    try {
+      val out = new FileOutputStream(tempFile)
+      Utils.copyStream(in, out, closeStreams = true)
+      copyFile(url, tempFile, destFile, fileOverwrite, removeSourceFile = true)
+    } finally {
+      // Catch-all for the couple of cases where for some reason we didn't move `tempFile` to
+      // `destFile`.
+      if (tempFile.exists()) {
+        tempFile.delete()
+      }
+    }
   }
 
   /**
-   * Copy file from `sourceFile` to `destFile`, checking whether `destFile` already exists, has
-   * the same contents as the downloaded file, and can be overwritten. Optionally removes
-   * `sourceFile` by moving instead of copying.
+   * Copy `sourceFile` to `destFile`.
+   *
+   * If `destFile` already exists:
+   *   - no-op if its contents equal those of `sourceFile`,
+   *   - throw an exception if `fileOverwrite` is false,
+   *   - attempt to overwrite it otherwise.
    *
    * @param url URL that `sourceFile` originated from, for logging purposes.
    * @param sourceFile File path to copy/move from.
@@ -446,20 +459,26 @@ private[spark] object Utils extends Logging {
    *                         `destFile`.
    */
   private def copyFile(
-    url: String,
-    sourceFile: File,
-    destFile: File,
-    fileOverwrite: Boolean,
-    removeSourceFile: Boolean = false): Unit = {
+      url: String,
+      sourceFile: File,
+      destFile: File,
+      fileOverwrite: Boolean,
+      removeSourceFile: Boolean = false): Unit = {
 
-    var shouldCopy = true
     if (destFile.exists) {
       if (!Files.equal(sourceFile, destFile)) {
         if (fileOverwrite) {
-          destFile.delete()
           logInfo(
             s"File $destFile exists and does not match contents of $url, replacing it with $url"
           )
+          if (!destFile.delete()) {
+            throw new SparkException(
+              "Failed to delete %s while attempting to overwrite it with %s".format(
+                destFile.getAbsolutePath,
+                sourceFile.getAbsolutePath
+              )
+            )
+          }
         } else {
           throw new SparkException(
             s"File $destFile exists and does not match contents of $url")
@@ -468,21 +487,21 @@ private[spark] object Utils extends Logging {
         // Do nothing if the file contents are the same, i.e. this file has been copied
         // previously.
         logInfo(
-          s"${sourceFile.getAbsolutePath} has been previously copied to " +
+          "%s has been previously copied to %s".format(
+            sourceFile.getAbsolutePath,
             destFile.getAbsolutePath
+          )
         )
-        shouldCopy = false
+        return
       }
     }
 
-    if (shouldCopy) {
-      // The file does not exist in the target directory. Copy or move it there.
-      if (removeSourceFile) {
-        Files.move(sourceFile, destFile)
-      } else {
-        logInfo(s"Copying ${sourceFile.getAbsolutePath} to ${destFile.getAbsolutePath}")
-        Files.copy(sourceFile, destFile)
-      }
+    // The file does not exist in the target directory. Copy or move it there.
+    if (removeSourceFile) {
+      Files.move(sourceFile, destFile)
+    } else {
+      logInfo(s"Copying ${sourceFile.getAbsolutePath} to ${destFile.getAbsolutePath}")
+      Files.copy(sourceFile, destFile)
     }
   }
 
@@ -524,7 +543,7 @@ private[spark] object Utils extends Logging {
         uc.setReadTimeout(timeout)
         uc.connect()
         val in = uc.getInputStream()
-        downloadStreamAndMove(url, in, tempFile, targetFile, fileOverwrite)
+        downloadFile(url, in, tempFile, targetFile, fileOverwrite)
       case "file" =>
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
@@ -534,7 +553,7 @@ private[spark] object Utils extends Logging {
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val in = fs.open(new Path(uri))
-        downloadStreamAndMove(url, in, tempFile, targetFile, fileOverwrite)
+        downloadFile(url, in, tempFile, targetFile, fileOverwrite)
     }
   }
 
