@@ -621,9 +621,9 @@ abstract class DStream[T: ClassTag] (
   /**
    * Print the first specified number elements of each RDD in this DStream.
    */
-  def printTop(num: Int) {
+  def processAllAndPrintFirst(num: Int) {
     def foreachFunc = (rdd: RDD[T], time: Time) => {
-      val first11 = rdd.printTop(num)
+      val first11 = rdd.processAllAndTake(num)
       println ("-------------------------------------------")
       println ("Time: " + time)
       println ("-------------------------------------------")
