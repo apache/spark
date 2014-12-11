@@ -219,11 +219,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
-  // store all of the session states to the thread id, this will be updated when open new session
+  // store all of the session states to the thread id, this will be updated as new operation
   @transient
   protected lazy val hiveSessionStates = mutable.Map[Long, SessionState]()
 
-  def addSessionState(sessionState: SessionState) =
+  def updateSessionState(sessionState: SessionState) =
     hiveSessionStates(Thread.currentThread().getId) = sessionState
 
   def removeSessionState =

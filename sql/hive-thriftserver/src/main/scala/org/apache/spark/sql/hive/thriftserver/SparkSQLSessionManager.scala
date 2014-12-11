@@ -27,7 +27,6 @@ import org.apache.hive.service.cli.session.SessionManager
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
-import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.cli.SessionHandle
 
 private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
@@ -47,20 +46,6 @@ private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
     addService(sparkSqlOperationManager)
 
     initCompositeService(hiveConf)
-  }
-
-  override def openSession(
-      protocol: TProtocolVersion,
-      username: String,
-      password: String,
-      sessionConf: java.util.Map[String, String],
-      withImpersonation: Boolean,
-      delegationToken: String): SessionHandle = {
-    val sessionHandle =
-      super.openSession(
-        protocol, username, password, sessionConf, withImpersonation, delegationToken)
-    hiveContext.addSessionState(getSession(sessionHandle).getSessionState)
-    sessionHandle
   }
 
   override def closeSession(sessionHandle: SessionHandle) {
