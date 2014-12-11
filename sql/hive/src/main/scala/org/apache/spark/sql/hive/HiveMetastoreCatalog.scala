@@ -260,8 +260,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
-      case p: LogicalPlan if p.resolved => p
 
+      // TODO extra is in type of ASTNode which means the logical plan is not resolved
+      // Need to think about how to implement the CreateTableAsSelect.resolved
       case CreateTableAsSelect(db, tableName, child, allowExisting, Some(extra: ASTNode)) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
@@ -287,7 +288,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
         CreateTableAsSelect(Some(databaseName), tblName, child, allowExisting, desc)
 
-      case CreateTableAsSelect(db, tableName, child, allowExisting, None) =>
+      case p: LogicalPlan if p.resolved => p
+
+      case p @ CreateTableAsSelect(db, tableName, child, allowExisting, None) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
         CreateTableAsSelect(Some(databaseName), tblName, child, allowExisting, None)
