@@ -81,13 +81,23 @@ class RandomDataGeneratorSuite extends FunSuite {
   }
 
   test("LogNormalGenerator") {
-    val normal = new LogNormalGenerator(0.0, 1.0)
-    apiChecks(normal)
-    // mean of log normal = e^(mean + var / 2)
-    val expectedMean = math.exp(0.5)
-    // variance of log normal = (e^var - 1) * e^(2 * mean + var)
-    val expectedStd = math.sqrt((math.E - 1.0) * math.E)
-    distributionChecks(normal, expectedMean, expectedStd, 0.1)
+    List((0.0, 1.0), (0.0, 2.0), (2.0, 1.0), (2.0, 2.0)).map {
+      case (mean: Double, vari: Double) =>
+        val normal = new LogNormalGenerator(mean, math.sqrt(vari))
+        apiChecks(normal)
+
+        // mean of log normal = e^(mean + var / 2)
+        val expectedMean = math.exp(mean + 0.5 * vari)
+
+        // variance of log normal = (e^var - 1) * e^(2 * mean + var)
+        val expectedStd = math.sqrt((math.exp(vari) - 1.0) * math.exp(2.0 * mean + vari))
+
+        // since sampling error increases with variance, let's set
+        // the absolute tolerance as a percentage
+        val epsilon = 0.1 * expectedStd
+
+        distributionChecks(normal, expectedMean, expectedStd, epsilon)
+    }
   }
 
   test("PoissonGenerator") {
@@ -101,11 +111,16 @@ class RandomDataGeneratorSuite extends FunSuite {
 
   test("ExponentialGenerator") {
     // mean = 0.0 will not pass the API checks since 0.0 is always deterministically produced.
-    for (mean <- List(2.0, 5.0)) {
+    for (mean <- List(2.0, 5.0, 10.0, 50.0, 100.0)) {
       val exponential = new ExponentialGenerator(mean)
       apiChecks(exponential)
       // var of exp = lambda^-2 = (1.0 / mean)^-2 = mean^2
-      distributionChecks(exponential, mean, mean, 0.1)
+
+      // since sampling error increases with variance, let's set
+      // the absolute tolerance as a percentage
+      val epsilon = 0.05 * mean
+
+      distributionChecks(exponential, mean, mean, epsilon)
     }
   }
 
