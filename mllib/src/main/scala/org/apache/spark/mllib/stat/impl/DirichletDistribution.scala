@@ -17,13 +17,11 @@
 
 
 
-package org.apache.spark.mllib.clustering.topicmodeling.regulaizers
+package org.apache.spark.mllib.stat.impl
 
 import cern.jet.stat.Gamma
 
-private[regulaizers] trait SymmetricDirichletHelper {
-  private[mllib] val alpha: Float
-
+private[mllib] class DirichletDistribution(private[mllib] val alpha: Float) {
   private def logBeta(x: Array[Float]) = {
     val n = x.size
     n * Gamma.logGamma(alpha) - Gamma.logGamma(n * alpha)
@@ -35,6 +33,11 @@ private[regulaizers] trait SymmetricDirichletHelper {
    */
   private val SMALL_VALUE: Double = 0.00001
 
-  protected def dirichletLogLikelihood(x: Array[Float]) = (-logBeta(x) +
-    (alpha - 1) * x.map(xx => math.log(xx + SMALL_VALUE)).sum).toFloat
+  /**
+   *
+   * @param x 
+   * @return probability density function at x: Dir(x | alpha)
+   */
+  def logPDF(x: Array[Float]) =
+    (-logBeta(x) + (alpha - 1) * x.map(xx => math.log(xx + SMALL_VALUE)).sum).toFloat
 }

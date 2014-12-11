@@ -19,15 +19,19 @@
 
 package org.apache.spark.mllib.clustering.topicmodeling.regulaizers
 
+import org.apache.spark.mllib.stat.impl.DirichletDistribution
+
 
 /** Defines Dirichlet symmetric prior on every topic
  *
  * @param alpha - parmeter of Dirichlet distribution
  */
 class SymmetricDirichletTopicRegularizer(private[mllib] val alpha: Float) extends TopicsRegularizer
-    with MatrixInPlaceModification with SymmetricDirichletHelper {
+    with MatrixInPlaceModification  {
+  private val dirichletDistribution = new DirichletDistribution(alpha)
+
   private[mllib] override def apply(topics: Array[Array[Float]]): Float =
-    topics.foldLeft(0f)((sum,x) => sum + dirichletLogLikelihood(x))
+    topics.foldLeft(0f)((sum,x) => sum + dirichletDistribution.logPDF(x))
 
   private[mllib] override def regularize(topics: Array[Array[Float]],
                                          oldTopics: Array[Array[Float]]): Unit = {
