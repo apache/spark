@@ -1036,6 +1036,31 @@ setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
             sample(samples)[1:total]
           })
 
+#' Creates tuples of the elements in this RDD by applying a function.
+#'
+#' @param rdd The RDD.
+#' @param func The function to be applied.
+#' @rdname keyBy
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(1, 2, 3))
+#' collect(keyBy(rdd, function(x) { x*x })) # list(list(1, 1), list(4, 2), list(9, 3))
+#'}
+setGeneric("keyBy", function(rdd, func) { standardGeneric("keyBy") })
+
+#' @rdname keyBy
+#' @aliases keyBy,RDD
+setMethod("keyBy",
+          signature(rdd = "RDD", func = "function"),
+          function(rdd, func) {
+            apply.func <- function(x) {
+              list(func(x), x)
+            }
+            lapply(rdd, apply.func)
+          })
+
 #' Return an RDD with the keys of each tuple.
 #'
 #' @param rdd The RDD from which the keys of each tuple is returned.
