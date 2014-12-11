@@ -31,7 +31,8 @@ class SymmetricDirichletDocumentOverTopicDistributionRegularizer(private[mllib] 
 
   private val dirichletDistribution = new DirichletDistribution(alpha)
 
-  private[mllib] override def apply(theta: Array[Float]): Float = dirichletDistribution.logPDF(theta)
+  private[mllib] override def apply(theta: Array[Float]): Float =
+    dirichletDistribution.logPDF(theta)
 
   private[mllib] override def regularize(theta: Array[Float], oldTheta: Array[Float]) = {
     shift(theta, (theta, i) => theta(i) += alpha - 1)
