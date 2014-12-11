@@ -51,8 +51,9 @@ different languages.
 **Note:** Python API for Spark Streaming has been introduced in Spark 1.2. It has all the DStream
 transformations and almost all the output operations available in Scala and Java interfaces.
 However, it has only support for basic sources like text files and text data over sockets.
-API for creating more sources like Kafka, and Flume will be available in future.
-Further information about available features in Python API are mentioned throughout this
+<<<<<<< HEAD
+APIs for additional sources, like Kafka and Flume, will be available in the future.
+Further information about available features in the Python API are mentioned throughout this
 document; look out for the tag
 <span class="badge" style="background-color: grey">Python API</span>.
 
@@ -622,7 +623,7 @@ as well as, to run the receiver(s).
   a input DStream based on a receiver (e.g. sockets, Kafka, Flume, etc.), then the single thread will
   be used to run the receiver, leaving no thread for processing the received data. Hence, when
   running locally, always use "local[*n*]" as the master URL where *n* > number of receivers to run
-  (see [Spark Properties] (configuration.html#spark-properties.html for information on how to set
+  (see [Spark Properties](configuration.html#spark-properties.html) for information on how to set
   the master).
 
 - Extending the logic to running on a cluster, the number of cores allocated to the Spark Streaming
@@ -676,7 +677,7 @@ For more details on streams from sockets, files, and actors,
 see the API documentations of the relevant functions in
 [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) for
 Scala, [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html)
-for Java, and [StreamingContext].
+for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext) for Python.
 
 ### Advanced Sources
 {:.no_toc}
@@ -1517,7 +1518,7 @@ sliding interval of a DStream is good setting to try.
 ***
 
 ## Deploying Applications
-This section discussed the steps to deploy a Spark Streaming applications.
+This section discusses the steps to deploy a Spark Streaming application.
 
 ### Requirements
 {:.no_toc}
@@ -1571,7 +1572,7 @@ To run a Spark Streaming applications, you need to have the following.
   feature of write ahead logs. If enabled, all the data received from a receiver gets written into
   a write ahead log in the configuration checkpoint directory. This prevents data loss on driver
   recovery, thus allowing zero data loss guarantees which is discussed in detail in the
-  [Fault-tolerant Semantics](#fault-tolerant-semantics) section. Enable this by setting the
+  [Fault-tolerance Semantics](#fault-tolerance-semantics) section. Enable this by setting the
   [configuration parameter](configuration.html#spark-streaming)
   `spark.streaming.receiver.writeAheadLogs.enable` to `true`.
 
@@ -1617,7 +1618,7 @@ receivers are active, number of records received, receiver error, etc.)
 and completed batches (batch processing times, queueing delays, etc.). This can be used to
 monitor the progress of the streaming application.
 
-The following two metrics in web UI are particularly important -
+The following two metrics in web UI are particularly important:
 
 - *Processing Time* - The time to process each batch of data.
 - *Scheduling Delay* - the time a batch waits in a queue for the processing of previous batches
@@ -1710,12 +1711,12 @@ before further processing.
 {:.no_toc}
 Cluster resources can be under-utilized if the number of parallel tasks used in any stage of the
 computation is not high enough. For example, for distributed reduce operations like `reduceByKey`
-and `reduceByKeyAndWindow`, the default number of parallel tasks is decided by the
-[config property](configuration.html#spark-properties) `spark.default.parallelism`.
-You can pass the level of parallelism as an argument (see
+and `reduceByKeyAndWindow`, the default number of parallel tasks is controlled by
+the`spark.default.parallelism` [configuration property](configuration.html#spark-properties). You
+can pass the level of parallelism as an argument (see
 [`PairDStreamFunctions`](api/scala/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions)
-documentation), or set the [config property](configuration.html#spark-properties)
-`spark.default.parallelism` to change the default.
+documentation), or set the `spark.default.parallelism`
+[configuration property](configuration.html#spark-properties) to change the default.
 
 ### Data Serialization
 {:.no_toc}
@@ -1811,8 +1812,8 @@ consistent batch processing times.
 ***************************************************************************************************
 
 # Fault-tolerance Semantics
-In this section, we will discuss the behavior of Spark Streaming application in the event
-of a node failure. To understand this, let us remember the basic fault-tolerance semantics of
+In this section, we will discuss the behavior of Spark Streaming applications in the event
+of node failures. To understand this, let us remember the basic fault-tolerance semantics of
 Spark's RDDs.
 
 1. An RDD is an immutable, deterministically re-computable, distributed dataset. Each RDD
@@ -1820,63 +1821,64 @@ remembers the lineage of deterministic operations that were used on a fault-tole
 dataset to create it.
 1. If any partition of an RDD is lost due to a worker node failure, then that partition can be
 re-computed from the original fault-tolerant dataset using the lineage of operations.
-1. Assuming all the RDD transformations are deterministic, the data in the final transformed RDD
-will always be the same irrespective of failures in Spark cluster.
+1. Assuming that all of the RDD transformations are deterministic, the data in the final transformed
+   RDD will always be the same irrespective of failures in the Spark cluster.
 
 Spark operates on data on fault-tolerant file systems like HDFS or S3. Hence,
-all the RDDs generated from the fault-tolerant data are also fault-tolerant. However, this is not
+all of the RDDs generated from the fault-tolerant data are also fault-tolerant. However, this is not
 the case for Spark Streaming as the data in most cases is received over the network (except when
-`fileStream` is used). To achieve the same fault-tolerance properties for all the generated RDDs,
+`fileStream` is used). To achieve the same fault-tolerance properties for all of the generated RDDs,
 the received data is replicated among multiple Spark executors in worker nodes in the cluster
 (default replication factor is 2). This leads to two kinds of data in the
-system that needs to recovered in the event of a failure.
+system that needs to recovered in the event of failures:
 
 1. *Data received and replicated* - This data survives failure of a single worker node as a copy
   of it exists on one of the nodes.
 1. *Data received but buffered for replication* - Since this is not replicated,
    the only way to recover that data is to get it again from the source.
 
-Furthermore, there are two kinds of failures that we should be concerned about.
+Furthermore, there are two kinds of failures that we should be concerned about:
 
-1. *Failure of a Worker Node* - Any of the workers in the cluster can fail,
-   and all in-memory data on that node will be lost. If there are any receiver running on that
-   node, all buffered data will be lost.
+1. *Failure of a Worker Node* - Any of the worker nodes running executors can fail,
+   and all in-memory data on those nodes will be lost. If any receivers were running on failed
+   nodes, then their buffered data will be lost.
 1. *Failure of the Driver Node* - If the driver node running the Spark Streaming application
-   fails, then obviously the SparkContext is lost, as well as all executors with their in-memory
+   fails, then obviously the SparkContext is lost, and all executors with their in-memory
    data are lost.
 
 With this basic knowledge, let us understand the fault-tolerance semantics of Spark Streaming.
 
 ## Semantics with files as input source
 {:.no_toc}
-In this case, since all the input data is already present in a fault-tolerant files system like
+If all of the input data is already present in a fault-tolerant files system like
 HDFS, Spark Streaming can always recover from any failure and process all the data. This gives
 *exactly-once* semantics, that all the data will be processed exactly once no matter what fails.
 
 ## Semantics with input sources based on receivers
 {:.no_toc}
-Here we will first discuss the semantics in the context of different types of failures. As we
-discussed [earlier](#receiver-reliability), there are two kinds of receivers.
+For input sources based on receivers, the fault-tolerance semantics depend on both the failure
+scenario and the type of receiver.
+As we discussed [earlier](#receiver-reliability), there are two types of receivers:
 
 1. *Reliable Receiver* - These receivers acknowledge reliable sources only after ensuring that
   the received data has been replicated. If such a receiver fails,
   the buffered (unreplicated) data does not get acknowledged to the source. If the receiver is
-  restarted, the source would resend the data, and so no data will be lost due to the failure.
+  restarted, the source will resend the data, and therefore no data will be lost due to the failure.
 1. *Unreliable Receiver* - Such receivers can lose data when they fail due to worker
   or driver failures.
 
 Depending on what type of receivers are used we achieve the following semantics.
 If a worker node fails, then there is no data loss with reliable receivers. With unreliable
 receivers, data received but not replicated can get lost. If the driver node fails,
-then besides these losses, all the past data that were received and replicated in memory will be
+then besides these losses, all the past data that was received and replicated in memory will be
 lost. This will affect the results of the stateful transformations.
 
-To avoid this loss of past received data, Spark 1.2 introduces an experimental feature of write
-ahead logs, that saves the received data to a fault-tolerant storage. With the [write ahead logs
+To avoid this loss of past received data, Spark 1.2 introduces an experimental feature of _write
+ahead logs_ which saves the received data to fault-tolerant storage. With the [write ahead logs
 enabled](#deploying-applications) and reliable receivers, there is zero data loss and
 exactly-once semantics.
 
-The following table summarizes the semantics under failures.
+The following table summarizes the semantics under failures:
 
 <table class="table">
   <tr>
@@ -2006,5 +2008,5 @@ package and renamed for better clarity.
 
 * More examples in [Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming)
   and [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples/streaming)
-  and [Python] ({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python/streaming)
+  and [Python]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/python/streaming)
 * [Paper](http://www.eecs.berkeley.edu/Pubs/TechRpts/2012/EECS-2012-259.pdf) and [video](http://youtu.be/g171ndOHgJ0) describing Spark Streaming.
