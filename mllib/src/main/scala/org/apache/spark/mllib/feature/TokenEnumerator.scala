@@ -75,7 +75,10 @@ class TokenEnumerator extends Serializable {
    *                           rareTokenThreshold times are omitted.
    *                           Default value: 2
    */
-  def setRareTokenThreshold(rareTokenThreshold : Int) = this.rareTokenThreshold = rareTokenThreshold
+  def setRareTokenThreshold(rareTokenThreshold : Int) = {
+    this.rareTokenThreshold = rareTokenThreshold
+    this
+  }
 
   /**
    *

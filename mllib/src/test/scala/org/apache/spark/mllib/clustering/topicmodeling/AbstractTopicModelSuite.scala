@@ -30,7 +30,7 @@ trait AbstractTopicModelSuite[DocumentParameterType <: DocumentParameters,
     // the data in text form
     val rawDocuments = sc.parallelize(Seq("a b a", "x y y z", "a b z x ").map(_.split(" ").toSeq))
 
-    val tokenIndexer = new TokenEnumerator(0)
+    val tokenIndexer = new TokenEnumerator().setRareTokenThreshold(0)
     
     // use token indexer to generate tokenIndex
     val tokenIndex = tokenIndexer(rawDocuments)
