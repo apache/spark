@@ -52,7 +52,8 @@ data loss on failures. This receiver is automatically used when the write ahead 
 may reduce the receiving throughput of individual Kafka receivers compared to the unreliable
 receivers, but this can be corrected by running
 [more receivers in parallel](streaming-programming-guide.html#level-of-parallelism-in-data-receiving)
-to increase aggregate throughput. Also it is strongly recommended that the replication in the
-storage level be disabled when the write ahead log is enabled because the log is already stored
-in a replicated storage system. This is done using `KafkaUtils.createStream(...,
-StorageLevel.MEMORY_AND_DISK_SER)`.
+to increase aggregate throughput. Additionally, it is recommended that the replication of the
+received data within Spark be disabled when the write ahead log is enabled as the log is already stored
+in a replicated storage system. This can be done by setting the storage level for the input
+stream to `StorageLevel.MEMORY_AND_DISK_SER` (that is, use
+`KafkaUtils.createStream(..., StorageLevel.MEMORY_AND_DISK_SER)`).

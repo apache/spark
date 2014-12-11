@@ -1568,13 +1568,20 @@ To run a Spark Streaming applications, you need to have the following.
       with Mesos.
 
 
-- *Configuring write ahead logs (Spark 1.2+)* - Starting for Spark 1.2, we have introduced a new
-  feature of write ahead logs. If enabled, all the data received from a receiver gets written into
+- *[Experimental in Spark 1.2] Configuring write ahead logs* - In Spark 1.2,
+  we have introduced a new experimental feature of write ahead logs for achieved strong
+  fault-tolerance guarantees. If enabled,  all the data received from a receiver gets written into
   a write ahead log in the configuration checkpoint directory. This prevents data loss on driver
-  recovery, thus allowing zero data loss guarantees which is discussed in detail in the
-  [Fault-tolerance Semantics](#fault-tolerance-semantics) section. Enable this by setting the
-  [configuration parameter](configuration.html#spark-streaming)
-  `spark.streaming.receiver.writeAheadLogs.enable` to `true`.
+  recovery, thus ensuring zero data loss (discussed in detail in the
+  [Fault-tolerance Semantics](#fault-tolerance-semantics) section). This can be enabled by setting
+  the [configuration parameter](configuration.html#spark-streaming)
+  `spark.streaming.receiver.writeAheadLogs.enable` to `true`. However, this stronger semantics may
+  come at the cost of the receiving throughput of individual receivers. can be corrected by running
+  [more receivers in parallel](#level-of-parallelism-in-data-receiving)
+  to increase aggregate throughput. Additionally, it is recommended that the replication of the
+  received data within Spark be disabled when the write ahead log is enabled as the log is already
+  stored in a replicated storage system. This can be done by setting the storage level for the
+  input stream to `StorageLevel.MEMORY_AND_DISK_SER`.
 
 ### Upgrading Application Code
 {:.no_toc}
