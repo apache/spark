@@ -52,8 +52,8 @@ private[spark] class FairSchedulingAlgorithm extends SchedulingAlgorithm {
     val runningTasks2 = s2.runningTasks
     val s1Needy = runningTasks1 < minShare1
     val s2Needy = runningTasks2 < minShare2
-    val minShareRatio1 = runningTasks1.toDouble / math.max(minShare1, 1.0).toDouble
-    val minShareRatio2 = runningTasks2.toDouble / math.max(minShare2, 1.0).toDouble
+    val minShareRatio1 = runningTasks1.toDouble / math.max(minShare1, 1.0)
+    val minShareRatio2 = runningTasks2.toDouble / math.max(minShare2, 1.0)
     val taskToWeightRatio1 = runningTasks1.toDouble / s1.weight.toDouble
     val taskToWeightRatio2 = runningTasks2.toDouble / s2.weight.toDouble
     var compare:Int = 0

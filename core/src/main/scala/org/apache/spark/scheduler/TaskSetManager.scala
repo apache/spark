@@ -435,7 +435,6 @@ private[spark] class TaskSetManager(
           allowedLocality = maxLocality
         }
       }
-
       findTask(execId, host, allowedLocality) match {
         case Some((index, taskLocality, speculative)) => {
           // Found a task; do some bookkeeping and return a task description

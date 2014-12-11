@@ -28,6 +28,8 @@ import scala.collection.mutable.HashSet
 import scala.language.postfixOps
 import scala.util.Random
 
+import akka.actor.Cancellable
+
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
@@ -88,11 +90,11 @@ private[spark] class TaskSchedulerImpl(
 
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
-  protected val executorsByHost = new HashMap[String, HashSet[String]]
+  protected[scheduler] val executorsByHost = new HashMap[String, HashSet[String]]
 
   protected val hostsByRack = new HashMap[String, HashSet[String]]
 
-  protected val executorIdToHost = new HashMap[String, String]
+  protected[scheduler] val executorIdToHost = new HashMap[String, String]
 
   // Listener object to pass upcalls into
   var dagScheduler: DAGScheduler = null
@@ -114,6 +116,8 @@ private[spark] class TaskSchedulerImpl(
 
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
+
+  private[spark] var speculativeExecTask: Cancellable = _
 
   override def setDAGScheduler(dagScheduler: DAGScheduler) {
     this.dagScheduler = dagScheduler
@@ -138,11 +142,10 @@ private[spark] class TaskSchedulerImpl(
 
   override def start() {
     backend.start()
-
     if (!isLocal && conf.getBoolean("spark.speculation", false)) {
       logInfo("Starting speculative execution thread")
       import sc.env.actorSystem.dispatcher
-      sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
+      speculativeExecTask = sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
             SPECULATION_INTERVAL milliseconds) {
         Utils.tryOrExit { checkSpeculatableTasks() }
       }
@@ -394,7 +397,9 @@ private[spark] class TaskSchedulerImpl(
       taskResultGetter.stop()
     }
     starvationTimer.cancel()
-
+    if (speculativeExecTask != null) {
+      speculativeExecTask.cancel()
+    }
     // sleeping for an arbitrary 1 seconds to ensure that messages are sent out.
     Thread.sleep(1000L)
   }
