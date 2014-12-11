@@ -260,6 +260,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
+      case p: LogicalPlan if p.resolved => p
 
       case CreateTableAsSelect(db, tableName, child, allowExisting, Some(extra: ASTNode)) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
@@ -285,6 +286,11 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         }
 
         CreateTableAsSelect(Some(databaseName), tblName, child, allowExisting, desc)
+
+      case CreateTableAsSelect(db, tableName, child, allowExisting, None) =>
+        val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
+        val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
+        CreateTableAsSelect(Some(databaseName), tblName, child, allowExisting, None)
     }
   }
 
