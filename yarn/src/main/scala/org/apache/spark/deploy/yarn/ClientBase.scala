@@ -360,7 +360,7 @@ private[spark] trait ClientBase extends Logging {
       }
     } else {
       // Validate and include yarn am specific java options in yarn-client mode.
-      val amOptsKey = "spark.yarn.clientmode.am.extraJavaOptions"
+      val amOptsKey = "spark.yarn.am.extraJavaOptions"
       val amOpts = sparkConf.getOption(amOptsKey)
       amOpts.foreach { opts =>
         if (opts.contains("-Dspark")) {
