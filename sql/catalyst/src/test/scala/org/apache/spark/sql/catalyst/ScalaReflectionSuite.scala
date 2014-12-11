@@ -68,6 +68,10 @@ case class ComplexData(
 case class GenericData[A](
     genericField: A)
 
+case class MultipleConstructorsData(a: Int, b: String, c: Double) {
+  def this(b: String, a: Int) = this(a, b, c = 1.0)
+}
+
 class ScalaReflectionSuite extends FunSuite {
   import ScalaReflection._
 
@@ -252,5 +256,15 @@ class ScalaReflectionSuite extends FunSuite {
     val convertedData = Row(2, 2.toLong, 2.toDouble, 2.toFloat, 2.toShort, 2.toByte, true,
       Row(1, 1, 1, 1, 1, 1, true))
     assert(convertToCatalyst(data, dataType) === convertedData)
+  }
+
+  test("infer schema from case class with multiple constructors") {
+    val dataType = schemaFor[MultipleConstructorsData].dataType
+    dataType match {
+      case s: StructType =>
+        // Schema should have order: a: Int, b: String, c: Double
+        assert(s.fieldNames === Seq("a", "b", "c"))
+        assert(s.fields.map(_.dataType) === Seq(IntegerType, StringType, DoubleType))
+    }
   }
 }
