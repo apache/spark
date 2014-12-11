@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.random
 
+import scala.math
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.util.StatCounter
@@ -25,7 +27,6 @@ import org.apache.spark.util.StatCounter
 class RandomDataGeneratorSuite extends FunSuite {
 
   def apiChecks(gen: RandomDataGenerator[Double]) {
-
     // resetting seed should generate the same sequence of random numbers
     gen.setSeed(42L)
     val array1 = (0 until 1000).map(_ => gen.nextValue())
@@ -79,12 +80,46 @@ class RandomDataGeneratorSuite extends FunSuite {
     distributionChecks(normal, 0.0, 1.0)
   }
 
+  test("LogNormalGenerator") {
+    val normal = new LogNormalGenerator(0.0, 1.0)
+    apiChecks(normal)
+    // mean of log normal = e^(mean + var / 2)
+    val expectedMean = math.exp(0.5)
+    // variance of log normal = (e^var - 1) * e^(2 * mean + var)
+    val expectedStd = math.sqrt((math.E - 1.0) * math.E)
+    distributionChecks(normal, expectedMean, expectedStd, 0.1)
+  }
+
   test("PoissonGenerator") {
     // mean = 0.0 will not pass the API checks since 0.0 is always deterministically produced.
     for (mean <- List(1.0, 5.0, 100.0)) {
       val poisson = new PoissonGenerator(mean)
       apiChecks(poisson)
       distributionChecks(poisson, mean, math.sqrt(mean), 0.1)
+    }
+  }
+
+  test("ExponentialGenerator") {
+    // mean = 0.0 will not pass the API checks since 0.0 is always deterministically produced.
+    for (mean <- List(2.0, 5.0)) {
+      val exponential = new ExponentialGenerator(mean)
+      apiChecks(exponential)
+      // var of exp = lambda^-2 = (1.0 / mean)^-2 = mean^2
+      distributionChecks(exponential, mean, mean, 0.1)
+    }
+  }
+
+  test("GammaGenerator") {
+    // mean = 0.0 will not pass the API checks since 0.0 is always deterministically produced.
+    List((1.0, 2.0), (2.0, 2.0), (3.0, 2.0), (5.0, 1.0), (9.0, 0.5)).map {
+      case (shape: Double, scale: Double) =>
+        val gamma = new GammaGenerator(shape, scale)
+        apiChecks(gamma)
+        // mean of gamma = shape * scale
+        val expectedMean = shape * scale
+        // var of gamma = shape * scale^2
+        val expectedStd = math.sqrt(shape * scale * scale)
+        distributionChecks(gamma, expectedMean, expectedStd, 0.1)
     }
   }
 }
