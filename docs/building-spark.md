@@ -129,10 +129,16 @@ extensively. A couple of gotchas to note:
 * it only scans the paths `src/main` and `src/test` (see
 [docs](http://scala-tools.org/mvnsites/maven-scala-plugin/usage_cc.html)), so it will only work
 from within certain submodules that have that structure.
-* compiling submodules that depend on other submodules (e.g. `core`, which depends on `network/common` and `network/shuffle`) requires those dependencies
-(and typically the "parent" artifact, which requires all modules) to have been `mvn install`ed;
-therefore, compiles triggerred by `mvn scala:cc` (or even `mvn compile`) from within `core` will
-only work if you first run `mvn install` on the root project.
+* you'll typically need to run `mvn install` from the project root for compilation within
+specific submodules to work; this is because submodules that depend on other submodules do so via
+the `spark-parent` module).
+
+Thus, the full flow for running continuous-compilation of the `core` submodule may look more like:
+ ```
+ $ mvn install
+ $ cd core
+ $ mvn scala:cc
+```
 
 # Using With IntelliJ IDEA
 
