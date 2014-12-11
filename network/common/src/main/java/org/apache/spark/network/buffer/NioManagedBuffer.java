@@ -22,6 +22,7 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 import com.google.common.base.Objects;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
 
@@ -61,7 +62,7 @@ public final class NioManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public Object convertToNetty() throws IOException {
+  public Object convertToNetty(ByteBufAllocator allocator) throws IOException {
     return Unpooled.wrappedBuffer(buf);
   }
 

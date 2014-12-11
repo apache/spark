@@ -23,6 +23,7 @@ import java.nio.ByteBuffer;
 
 import com.google.common.base.Objects;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufInputStream;
 
 /**
@@ -63,7 +64,7 @@ public final class NettyManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public Object convertToNetty() throws IOException {
+  public Object convertToNetty(ByteBufAllocator allocator) throws IOException {
     return buf.duplicate();
   }
 

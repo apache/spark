@@ -27,6 +27,9 @@ import java.nio.channels.FileChannel;
 
 import com.google.common.base.Objects;
 import com.google.common.io.ByteStreams;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.DefaultFileRegion;
 
 import org.apache.spark.network.util.JavaUtils;
@@ -62,15 +65,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
       // Just copy the buffer if it's sufficiently small, as memory mapping has a high overhead.
       if (length < conf.memoryMapBytes()) {
         ByteBuffer buf = ByteBuffer.allocate((int) length);
-        channel.position(offset);
-        while (buf.remaining() != 0) {
-          if (channel.read(buf) == -1) {
-            throw new IOException(String.format("Reached EOF before filling buffer\n" +
-              "offset=%s\nfile=%s\nbuf.remaining=%s",
-              offset, file.getAbsoluteFile(), buf.remaining()));
-          }
-        }
-        buf.flip();
+        read(buf);
         return buf;
       } else {
         return channel.map(FileChannel.MapMode.READ_ONLY, offset, length);
@@ -128,12 +123,18 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
   }
 
   @Override
-  public Object convertToNetty() throws IOException {
-    if (conf.lazyFileDescriptor()) {
-      return new LazyFileRegion(file, offset, length);
+  public Object convertToNetty(ByteBufAllocator allocator) throws IOException {
+    if (length < conf.transferToBytes()) {
+      ByteBuffer buf = ByteBuffer.allocate((int) length);
+      read(buf);
+      return Unpooled.wrappedBuffer(buf);
     } else {
-      FileChannel fileChannel = new FileInputStream(file).getChannel();
-      return new DefaultFileRegion(fileChannel, offset, length);
+      if (conf.lazyFileDescriptor()) {
+        return new LazyFileRegion(file, offset, length);
+      } else {
+        FileChannel fileChannel = new FileInputStream(file).getChannel();
+        return new DefaultFileRegion(fileChannel, offset, length);
+      }
     }
   }
 
@@ -150,5 +151,18 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
       .add("offset", offset)
       .add("length", length)
       .toString();
+  }
+
+  private void read(ByteBuffer buf) throws IOException {
+    FileChannel channel = new RandomAccessFile(file, "r").getChannel();
+    channel.position(offset);
+    while (buf.remaining() != 0) {
+      if (channel.read(buf) == -1) {
+        throw new IOException(String.format("Reached EOF before filling buffer\n" +
+            "offset=%s\nfile=%s\nbuf.remaining=%s",
+          offset, file.getAbsoluteFile(), buf.remaining()));
+      }
+    }
+    buf.flip();
   }
 }

@@ -21,6 +21,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 
+import io.netty.buffer.ByteBufAllocator;
+
 /**
  * This interface provides an immutable view for data in the form of bytes. The implementation
  * should specify how the data is provided:
@@ -66,6 +68,7 @@ public abstract class ManagedBuffer {
 
   /**
    * Convert the buffer into an Netty object, used to write the data out.
+   * @param allocator
    */
-  public abstract Object convertToNetty() throws IOException;
+  public abstract Object convertToNetty(ByteBufAllocator allocator) throws IOException;
 }
