@@ -25,7 +25,11 @@ FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 . "$FWDIR"/bin/load-spark-env.sh
 
-CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH"
+if [ -n "$SPARK_CLASSPATH" ]; then
+  CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH"
+else
+  CLASSPATH="$SPARK_SUBMIT_CLASSPATH"
+fi
 
 # Build up classpath
 if [ -n "$SPARK_CONF_DIR" ]; then
