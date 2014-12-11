@@ -20,6 +20,7 @@ package org.apache.spark
 import org.scalatest.FunSuite
 
 import org.apache.hadoop.io.BytesWritable
+import java.io.File
 
 class SparkContextSuite extends FunSuite with LocalSparkContext {
 
@@ -71,5 +72,47 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     bytesWritable.set(inputArray, 0, 0)
     val byteArray2 = converter.convert(bytesWritable)
     assert(byteArray2.length === 0)
+  }
+
+  test("addFile recursive works") {
+    val pluto = new File("pluto")
+    val neptune = new File(pluto, "neptune")
+    val saturn = new File(neptune, "saturn")
+    val alien1 = new File(neptune, "alien1")
+    val alien2 = new File(saturn, "alien2")
+
+    try {
+      assert(neptune.mkdirs())
+      assert(saturn.mkdir())
+      assert(alien1.createNewFile())
+      assert(alien2.createNewFile())
+
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      sc.addDirectory(neptune.getAbsolutePath)
+      sc.parallelize(Array(1), 1).map(x => {
+        val sep = File.separator
+        if (!new File(SparkFiles.get("neptune" + sep + "alien1")).exists()) {
+          throw new SparkException("can't access file under root added directory")
+        }
+        if (!new File(SparkFiles.get("neptune" + sep + "saturn" + sep + "alien2")).exists()) {
+          throw new SparkException("can't access file in nested directory")
+        }
+        if (new File(SparkFiles.get("pluto" + sep + "neptune" + sep + "alien1")).exists()) {
+          throw new SparkException("file exists that shouldn't")
+        }
+        x
+      }).count()
+    } finally {
+      sc.stop()
+      alien2.delete()
+      saturn.delete()
+      alien1.delete()
+      neptune.delete()
+      pluto.delete()
+    }
+  }
+
+  test("addFile recursive can't add the same directory twice") {
+
   }
 }

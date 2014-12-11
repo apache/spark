@@ -124,24 +124,19 @@ private[spark] object Task {
       task: Task[_],
       currentFiles: HashMap[String, Long],
       currentJars: HashMap[String, Long],
+      currentDirs: HashMap[String, Long],
       serializer: SerializerInstance)
     : ByteBuffer = {
 
     val out = new ByteArrayOutputStream(4096)
     val dataOut = new DataOutputStream(out)
 
-    // Write currentFiles
-    dataOut.writeInt(currentFiles.size)
-    for ((name, timestamp) <- currentFiles) {
-      dataOut.writeUTF(name)
-      dataOut.writeLong(timestamp)
-    }
-
-    // Write currentJars
-    dataOut.writeInt(currentJars.size)
-    for ((name, timestamp) <- currentJars) {
-      dataOut.writeUTF(name)
-      dataOut.writeLong(timestamp)
+    Array(currentFiles, currentJars, currentDirs).foreach { resourceMap =>
+      dataOut.writeInt(resourceMap.size)
+      for ((name, timestamp) <- resourceMap) {
+        dataOut.writeUTF(name)
+        dataOut.writeLong(timestamp)
+      }
     }
 
     // Write the task itself and finish
@@ -159,27 +154,27 @@ private[spark] object Task {
    * @return (taskFiles, taskJars, taskBytes)
    */
   def deserializeWithDependencies(serializedTask: ByteBuffer)
-    : (HashMap[String, Long], HashMap[String, Long], ByteBuffer) = {
+    : (HashMap[String, Long], HashMap[String, Long], HashMap[String, Long], ByteBuffer) = {
 
     val in = new ByteBufferInputStream(serializedTask)
     val dataIn = new DataInputStream(in)
 
-    // Read task's files
-    val taskFiles = new HashMap[String, Long]()
-    val numFiles = dataIn.readInt()
-    for (i <- 0 until numFiles) {
-      taskFiles(dataIn.readUTF()) = dataIn.readLong()
+    def deserializeResourceMap(): HashMap[String, Long] = {
+      val map = new HashMap[String, Long]()
+      val numFiles = dataIn.readInt()
+      for (i <- 0 until numFiles) {
+        map(dataIn.readUTF()) = dataIn.readLong()
+      }
+      map
     }
 
-    // Read task's JARs
-    val taskJars = new HashMap[String, Long]()
-    val numJars = dataIn.readInt()
-    for (i <- 0 until numJars) {
-      taskJars(dataIn.readUTF()) = dataIn.readLong()
-    }
+    // Read task's files
+    val taskFiles = deserializeResourceMap()
+    val taskJars = deserializeResourceMap()
+    val taskDirs = deserializeResourceMap()
 
     // Create a sub-buffer for the rest of the data, which is the serialized Task object
     val subBuffer = serializedTask.slice()  // ByteBufferInputStream will have read just up to task
-    (taskFiles, taskJars, subBuffer)
+    (taskFiles, taskJars, taskDirs, subBuffer)
   }
 }

@@ -50,9 +50,10 @@ private[spark] class Executor(
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
 
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
-  // Each map holds the master's timestamp for the version of that file or JAR we got.
+  // Each map holds the master's timestamp for the version of that file, JAR, or directory we got.
   private val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
   private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
+  private val currentDirs: HashMap[String, Long] = new HashMap[String, Long]()
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
@@ -171,8 +172,9 @@ private[spark] class Executor(
       startGCTime = gcTime
 
       try {
-        val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
-        updateDependencies(taskFiles, taskJars)
+        val (taskFiles, taskJars, taskDirs, taskBytes) =
+          Task.deserializeWithDependencies(serializedTask)
+        updateDependencies(taskFiles, taskJars, taskDirs)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
 
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
@@ -333,7 +335,10 @@ private[spark] class Executor(
    * Download any missing dependencies if we receive a new set of files and JARs from the
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
-  private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
+  private def updateDependencies(
+      newFiles: HashMap[String, Long],
+      newJars: HashMap[String, Long],
+      newDirs: HashMap[String, Long]) {
     lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     synchronized {
       // Fetch missing dependencies
@@ -357,6 +362,12 @@ private[spark] class Executor(
           logInfo("Adding " + url + " to class loader")
           urlClassLoader.addURL(url)
         }
+      }
+      for ((name, timestamp) <- newDirs if currentDirs.getOrElse(name, -1L) < timestamp) {
+        logInfo("Fetching " + name + " with timestamp " + timestamp)
+        Utils.fetchHcfsDir(name, new File(SparkFiles.getRootDirectory), conf,
+          env.securityManager, hadoopConf)
+        currentDirs(name) = timestamp
       }
     }
   }

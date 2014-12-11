@@ -570,6 +570,40 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Copies a remote directory from a Hadoop-compatible file system to local disk.
+   */
+  def fetchHcfsDir(
+      url: String,
+      targetDir: File,
+      conf: SparkConf,
+      securityMgr: SecurityManager,
+      hadoopConf: Configuration): Unit = {
+    val uri = new URI(url)
+    val fs = getHadoopFileSystem(uri, hadoopConf)
+    val path = new Path(uri)
+    doFetchHcfsDir(path, new File(targetDir, path.getName), fs, conf, securityMgr, hadoopConf)
+  }
+
+  def doFetchHcfsDir(
+      path: Path,
+      targetDir: File,
+      fs: FileSystem,
+      conf: SparkConf,
+      securityMgr: SecurityManager,
+      hadoopConf: Configuration): Unit = {
+    targetDir.mkdir()
+    fs.listStatus(path).foreach { fileStatus =>
+      val innerPath = fileStatus.getPath
+      if (fileStatus.isDirectory) {
+        doFetchHcfsDir(innerPath, new File(targetDir, innerPath.getName), fs, conf, securityMgr,
+          hadoopConf)
+      } else {
+        doFetchFile(innerPath.toString, targetDir, innerPath.getName, conf, securityMgr, hadoopConf)
+      }
+    }
+  }
+
+  /**
    * Get the path of a temporary directory.  Spark's local directories can be configured through
    * multiple settings, which are used with the following precedence:
    *

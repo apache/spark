@@ -379,7 +379,8 @@ object SparkEnv extends Logging {
       conf: SparkConf,
       schedulingMode: String,
       addedJars: Seq[String],
-      addedFiles: Seq[String]): Map[String, Seq[(String, String)]] = {
+      addedFiles: Seq[String],
+      addedDirs: Seq[String]): Map[String, Seq[(String, String)]] = {
 
     import Properties._
     val jvmInformation = Seq(
@@ -409,8 +410,8 @@ object SparkEnv extends Logging {
       .split(File.pathSeparator)
       .filterNot(_.isEmpty)
       .map((_, "System Classpath"))
-    val addedJarsAndFiles = (addedJars ++ addedFiles).map((_, "Added By User"))
-    val classPaths = (addedJarsAndFiles ++ classPathEntries).sorted
+    val addedResources = (addedJars ++ addedFiles ++ addedDirs).map((_, "Added By User"))
+    val classPaths = (addedResources ++ classPathEntries).sorted
 
     Map[String, Seq[(String, String)]](
       "JVM Information" -> jvmInformation,

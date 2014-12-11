@@ -246,6 +246,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // Used to store a URL for each static file/jar together with the file's local timestamp
   private[spark] val addedFiles = HashMap[String, Long]()
   private[spark] val addedJars = HashMap[String, Long]()
+  private[spark] val addedDirs = HashMap[String, Long]()
 
   // Keeps track of all persisted RDDs
   private[spark] val persistentRdds = new TimeStampedWeakValueHashMap[Int, RDD[_]]
@@ -1015,6 +1016,27 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * Add a directory to be downloaded with this Spark job on every node.
+   * The `path` passed must be a directory in HDFS (or other Hadoop-supported
+   * filesystems).  To access the directory in Spark jobs, use
+   * `SparkFiles.get(directoryName)` to find its download location.
+   */
+  def addDirectory(path: String, fetchLocal: Boolean = true): Unit = {
+    val timestamp = System.currentTimeMillis
+    // TODO: check if addedDirs already contains path and throw an exception if so
+    addedDirs(path) = timestamp
+
+    if (fetchLocal) {
+      // Fetch the file locally in case a job is executed using DAGScheduler.runLocally().
+      Utils.fetchHcfsDir(path, new File(SparkFiles.getRootDirectory()), conf, env.securityManager,
+        hadoopConfiguration)
+    }
+
+    logInfo("Added dir " + path + " at " + path + " with timestamp " + addedDirs(path))
+    postEnvironmentUpdate()
+  }
+
+  /**
    * :: DeveloperApi ::
    * Register a listener to receive up-calls from events that happen during execution.
    */
@@ -1549,8 +1571,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       val schedulingMode = getSchedulingMode.toString
       val addedJarPaths = addedJars.keys.toSeq
       val addedFilePaths = addedFiles.keys.toSeq
-      val environmentDetails =
-        SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)
+      val addedDirPaths = addedDirs.keys.toSeq
+      val environmentDetails = SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths,
+        addedFilePaths, addedDirPaths)
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
       listenerBus.post(environmentUpdate)
     }
