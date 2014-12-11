@@ -32,9 +32,9 @@ class HiveHook(BaseHook):
             db = db.all()[0]
         self.host = db.host
         self.db = db.schema
-        self.hiveconf = None
+        self.hive_cli_params = ""
         try:
-            self.hiveconf = json.loads(db.extra)['hiveconf']
+            self.hive_cli_params = json.loads(db.extra)['hive_cli_params']
         except:
             pass
 
@@ -109,9 +109,9 @@ class HiveHook(BaseHook):
         f = NamedTemporaryFile()
         f.write(hql)
         f.flush()
-        hiveconf = ["-hiveconf", self.hiveconf] if self.hiveconf else []
         sp = subprocess.Popen(
-                ['hive', '-f', f.name] + hiveconf,
+                "hive -f {f.name} {self.hive_cli_params}".format(**locals()),
+                shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT)
         all_err = ''
