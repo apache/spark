@@ -267,7 +267,7 @@ trait can be applied on any Akka actor, which allows received data to be stored 
 {% highlight scala %}
 class CustomActor extends Actor with ActorHelper {
   def receive = {
-   case data: String => store(data)
+    case data: String => store(data)
   }
 }
 {% endhighlight %}

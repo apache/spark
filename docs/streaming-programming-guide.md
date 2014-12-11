@@ -51,7 +51,6 @@ different languages.
 **Note:** Python API for Spark Streaming has been introduced in Spark 1.2. It has all the DStream
 transformations and almost all the output operations available in Scala and Java interfaces.
 However, it has only support for basic sources like text files and text data over sockets.
-<<<<<<< HEAD
 APIs for additional sources, like Kafka and Flume, will be available in the future.
 Further information about available features in the Python API are mentioned throughout this
 document; look out for the tag
