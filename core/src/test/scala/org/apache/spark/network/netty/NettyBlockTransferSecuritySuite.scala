@@ -36,7 +36,9 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite, ShouldMat
 
 class NettyBlockTransferSecuritySuite extends FunSuite with MockitoSugar with ShouldMatchers {
   test("security default off") {
-    testConnection(new SparkConf, new SparkConf) match {
+    val conf = new SparkConf()
+      .set("spark.app.id", "app-id")
+    testConnection(conf, conf) match {
       case Success(_) => // expected
       case Failure(t) => fail(t)
     }
@@ -89,18 +91,6 @@ class NettyBlockTransferSecuritySuite extends FunSuite with MockitoSugar with Sh
     }
   }
 
-  test("security mismatch app ids") {
-    val conf0 = new SparkConf()
-      .set("spark.authenticate", "true")
-      .set("spark.authenticate.secret", "good")
-      .set("spark.app.id", "app-id")
-    val conf1 = conf0.clone.set("spark.app.id", "other-id")
-    testConnection(conf0, conf1) match {
-      case Success(_) => fail("Should have failed")
-      case Failure(t) => t.getMessage should include ("SASL appId app-id did not match")
-    }
-  }
-
   /**
    * Creates two servers with different configurations and sees if they can talk.
    * Returns Success() if they can transfer a block, and Failure() if the block transfer was failed
@@ -114,11 +104,11 @@ class NettyBlockTransferSecuritySuite extends FunSuite with MockitoSugar with Sh
     when(blockManager.getBlockData(blockId)).thenReturn(blockBuffer)
 
     val securityManager0 = new SecurityManager(conf0)
-    val exec0 = new NettyBlockTransferService(conf0, securityManager0)
+    val exec0 = new NettyBlockTransferService(conf0, securityManager0, numCores = 1)
     exec0.init(blockManager)
 
     val securityManager1 = new SecurityManager(conf1)
-    val exec1 = new NettyBlockTransferService(conf1, securityManager1)
+    val exec1 = new NettyBlockTransferService(conf1, securityManager1, numCores = 1)
     exec1.init(blockManager)
 
     val result = fetchBlock(exec0, exec1, "1", blockId) match {

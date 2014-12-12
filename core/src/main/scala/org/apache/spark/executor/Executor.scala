@@ -43,6 +43,7 @@ private[spark] class Executor(
     executorId: String,
     slaveHostname: String,
     properties: Seq[(String, String)],
+    numCores: Int,
     isLocal: Boolean = false,
     actorSystem: ActorSystem = null)
   extends Logging
@@ -83,7 +84,7 @@ private[spark] class Executor(
     if (!isLocal) {
       val port = conf.getInt("spark.executor.port", 0)
       val _env = SparkEnv.createExecutorEnv(
-        conf, executorId, slaveHostname, port, isLocal, actorSystem)
+        conf, executorId, slaveHostname, port, numCores, isLocal, actorSystem)
       SparkEnv.set(_env)
       _env.metricsSystem.registerSource(executorSource)
       _env.blockManager.initialize(conf.getAppId)
@@ -161,7 +162,7 @@ private[spark] class Executor(
     }
 
     override def run() {
-      val startTime = System.currentTimeMillis()
+      val deserializeStartTime = System.currentTimeMillis()
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = SparkEnv.get.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
@@ -171,7 +172,6 @@ private[spark] class Executor(
       val startGCTime = gcTime
 
       try {
-        Accumulators.clear()
         val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(serializedTask)
         updateDependencies(taskFiles, taskJars)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)
@@ -206,7 +206,7 @@ private[spark] class Executor(
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          m.executorDeserializeTime = taskStart - startTime
+          m.executorDeserializeTime = taskStart - deserializeStartTime
           m.executorRunTime = taskFinish - taskStart
           m.jvmGCTime = gcTime - startGCTime
           m.resultSerializationTime = afterSerialization - beforeSerialization
@@ -220,7 +220,7 @@ private[spark] class Executor(
 
         // directSend = sending directly back to the driver
         val serializedResult = {
-          if (resultSize > maxResultSize) {
+          if (maxResultSize > 0 && resultSize > maxResultSize) {
             logWarning(s"Finished $taskName (TID $taskId). Result is larger than maxResultSize " +
               s"(${Utils.bytesToString(resultSize)} > ${Utils.bytesToString(maxResultSize)}), " +
               s"dropping it.")
@@ -263,7 +263,7 @@ private[spark] class Executor(
             m.executorRunTime = serviceTime
             m.jvmGCTime = gcTime - startGCTime
           }
-          val reason = ExceptionFailure(t.getClass.getName, t.getMessage, t.getStackTrace, metrics)
+          val reason = new ExceptionFailure(t, metrics)
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
           // Don't forcibly exit unless the exception was inherently fatal, to avoid
@@ -277,6 +277,8 @@ private[spark] class Executor(
         env.shuffleMemoryManager.releaseMemoryForThisThread()
         // Release memory used by this thread for unrolling blocks
         env.blockManager.memoryStore.releaseUnrollMemoryForThisThread()
+        // Release memory used by this thread for accumulators
+        Accumulators.clear()
         runningTasks.remove(taskId)
       }
     }
@@ -333,7 +335,7 @@ private[spark] class Executor(
    * SparkContext. Also adds any new JARs we fetched to the class loader.
    */
   private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
-    val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
+    lazy val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
     synchronized {
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {

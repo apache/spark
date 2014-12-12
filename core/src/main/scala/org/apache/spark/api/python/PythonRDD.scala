@@ -19,7 +19,9 @@ package org.apache.spark.api.python
 
 import java.io._
 import java.net._
-import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
+import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, UUID, Collections}
+
+import org.apache.spark.input.PortableDataStream
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
@@ -32,7 +34,6 @@ import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{InputFormat, OutputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, OutputFormat => NewOutputFormat}
 import org.apache.spark._
-import org.apache.spark.SparkContext._
 import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -45,7 +46,7 @@ private[spark] class PythonRDD(
     pythonIncludes: JList[String],
     preservePartitoning: Boolean,
     pythonExec: String,
-    broadcastVars: JList[Broadcast[Array[Byte]]],
+    broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]])
   extends RDD[Array[Byte]](parent) {
 
@@ -228,8 +229,7 @@ private[spark] class PythonRDD(
           if (!oldBids.contains(broadcast.id)) {
             // send new broadcast
             dataOut.writeLong(broadcast.id)
-            dataOut.writeInt(broadcast.value.length)
-            dataOut.write(broadcast.value)
+            PythonRDD.writeUTF(broadcast.value.path, dataOut)
             oldBids.add(broadcast.id)
           }
         }
@@ -366,16 +366,8 @@ private[spark] object PythonRDD extends Logging {
     }
   }
 
-  def readBroadcastFromFile(sc: JavaSparkContext, filename: String): Broadcast[Array[Byte]] = {
-    val file = new DataInputStream(new FileInputStream(filename))
-    try {
-      val length = file.readInt()
-      val obj = new Array[Byte](length)
-      file.readFully(obj)
-      sc.broadcast(obj)
-    } finally {
-      file.close()
-    }
+  def readBroadcastFromFile(sc: JavaSparkContext, path: String): Broadcast[PythonBroadcast] = {
+    sc.broadcast(new PythonBroadcast(path))
   }
 
   def writeIteratorToStream[T](iter: Iterator[T], dataOut: DataOutputStream) {
@@ -395,22 +387,33 @@ private[spark] object PythonRDD extends Logging {
           newIter.asInstanceOf[Iterator[String]].foreach { str =>
             writeUTF(str, dataOut)
           }
-        case pair: Tuple2[_, _] =>
-          pair._1 match {
-            case bytePair: Array[Byte] =>
-              newIter.asInstanceOf[Iterator[Tuple2[Array[Byte], Array[Byte]]]].foreach { pair =>
-                dataOut.writeInt(pair._1.length)
-                dataOut.write(pair._1)
-                dataOut.writeInt(pair._2.length)
-                dataOut.write(pair._2)
-              }
-            case stringPair: String =>
-              newIter.asInstanceOf[Iterator[Tuple2[String, String]]].foreach { pair =>
-                writeUTF(pair._1, dataOut)
-                writeUTF(pair._2, dataOut)
-              }
-            case other =>
-              throw new SparkException("Unexpected Tuple2 element type " + pair._1.getClass)
+        case stream: PortableDataStream =>
+          newIter.asInstanceOf[Iterator[PortableDataStream]].foreach { stream =>
+            val bytes = stream.toArray()
+            dataOut.writeInt(bytes.length)
+            dataOut.write(bytes)
+          }
+        case (key: String, stream: PortableDataStream) =>
+          newIter.asInstanceOf[Iterator[(String, PortableDataStream)]].foreach {
+            case (key, stream) =>
+              writeUTF(key, dataOut)
+              val bytes = stream.toArray()
+              dataOut.writeInt(bytes.length)
+              dataOut.write(bytes)
+          }
+        case (key: String, value: String) =>
+          newIter.asInstanceOf[Iterator[(String, String)]].foreach {
+            case (key, value) =>
+              writeUTF(key, dataOut)
+              writeUTF(value, dataOut)
+          }
+        case (key: Array[Byte], value: Array[Byte]) =>
+          newIter.asInstanceOf[Iterator[(Array[Byte], Array[Byte])]].foreach {
+            case (key, value) =>
+              dataOut.writeInt(key.length)
+              dataOut.write(key)
+              dataOut.writeInt(value.length)
+              dataOut.write(value)
           }
         case other =>
           throw new SparkException("Unexpected element type " + first.getClass)
@@ -800,6 +803,52 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
         throw new SparkException("EOF reached before Python server acknowledged")
       }
       null
+    }
+  }
+}
+
+/**
+ * An Wrapper for Python Broadcast, which is written into disk by Python. It also will
+ * write the data into disk after deserialization, then Python can read it from disks.
+ */
+private[spark] class PythonBroadcast(@transient var path: String) extends Serializable {
+
+  /**
+   * Read data from disks, then copy it to `out`
+   */
+  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
+    val in = new FileInputStream(new File(path))
+    try {
+      Utils.copyStream(in, out)
+    } finally {
+      in.close()
+    }
+  }
+
+  /**
+   * Write data into disk, using randomly generated name.
+   */
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
+    val dir = new File(Utils.getLocalDir(SparkEnv.get.conf))
+    val file = File.createTempFile("broadcast", "", dir)
+    path = file.getAbsolutePath
+    val out = new FileOutputStream(file)
+    try {
+      Utils.copyStream(in, out)
+    } finally {
+      out.close()
+    }
+  }
+
+  /**
+   * Delete the file once the object is GCed.
+   */
+  override def finalize() {
+    if (!path.isEmpty) {
+      val file = new File(path)
+      if (file.exists()) {
+        file.delete()
+      }
     }
   }
 }

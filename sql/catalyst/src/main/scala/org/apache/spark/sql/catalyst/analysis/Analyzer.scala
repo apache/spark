@@ -34,13 +34,15 @@ object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true
  * [[UnresolvedRelation]]s into fully typed objects using information in a schema [[Catalog]] and
  * a [[FunctionRegistry]].
  */
-class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Boolean)
+class Analyzer(catalog: Catalog,
+               registry: FunctionRegistry,
+               caseSensitive: Boolean,
+               maxIterations: Int = 100)
   extends RuleExecutor[LogicalPlan] with HiveTypeCoercion {
 
   val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
 
-  // TODO: pass this in as a parameter.
-  val fixedPoint = FixedPoint(100)
+  val fixedPoint = FixedPoint(maxIterations)
 
   /**
    * Override to provide additional rules for the "Resolution" batch.
@@ -60,7 +62,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       ResolveFunctions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
-      TrimAliases ::
+      TrimGroupingAliases ::
       typeCoercionRules ++
       extendedRules : _*),
     Batch("Check Analysis", Once,
@@ -93,17 +95,10 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   /**
    * Removes no-op Alias expressions from the plan.
    */
-  object TrimAliases extends Rule[LogicalPlan] {
+  object TrimGroupingAliases extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case Aggregate(groups, aggs, child) =>
-        Aggregate(
-          groups.map {
-            _ transform {
-              case Alias(c, _) => c
-            }
-          },
-          aggs,
-          child)
+        Aggregate(groups.map(_.transform { case Alias(c, _) => c }), aggs, child)
     }
   }
 
@@ -122,10 +117,15 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
             case e => e.children.forall(isValidAggregateExpression)
           }
 
-          aggregateExprs.foreach { e =>
-            if (!isValidAggregateExpression(e)) {
-              throw new TreeNodeException(plan, s"Expression not in GROUP BY: $e")
-            }
+          aggregateExprs.find { e =>
+            !isValidAggregateExpression(e.transform {
+              // Should trim aliases around `GetField`s. These aliases are introduced while
+              // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
+              // (Should we just turn `GetField` into a `NamedExpression`?)
+              case Alias(g: GetField, _) => g
+            })
+          }.foreach { e =>
+            throw new TreeNodeException(plan, s"Expression not in GROUP BY: $e")
           }
 
           aggregatePlan
@@ -181,7 +181,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {
           // Add missing attributes and then project them away after the sort.
-          Project(projectList,
+          Project(projectList.map(_.toAttribute),
             Sort(ordering,
               Project(projectList ++ missingInProject, child)))
         } else {
@@ -328,4 +328,3 @@ object EliminateAnalysisOperators extends Rule[LogicalPlan] {
     case Subquery(_, child) => child
   }
 }
-

@@ -120,6 +120,20 @@ pre {
   border: none;
 }
 
+.stacktrace-details {
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0;
+  transition: max-height 0.5s ease-out, padding 0.5s ease-out;
+}
+
+.stacktrace-details.collapsed {
+  max-height: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border: none;
+}
+
 span.expand-additional-metrics {
   cursor: pointer;
 }
@@ -153,4 +167,10 @@ span.additional-metric-title {
   border-bottom: 5px solid transparent;
   border-left: 5px solid black;
   display: inline-block;
+}
+
+/* Hide all additional metrics by default. This is done here rather than using JavaScript to
+ * avoid slow page loads for stage pages with large numbers (e.g., thousands) of tasks. */
+.scheduler_delay, .deserialization_time, .serialization_time, .getting_result_time {
+  display: none;
 }

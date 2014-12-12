@@ -17,11 +17,8 @@
 
 package org.apache.spark
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.network.TransportContext
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.server.TransportServer
@@ -38,8 +35,8 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
   var rpcHandler: ExternalShuffleBlockHandler = _
 
   override def beforeAll() {
-    val transportConf = SparkTransportConf.fromSparkConf(conf)
-    rpcHandler = new ExternalShuffleBlockHandler()
+    val transportConf = SparkTransportConf.fromSparkConf(conf, numUsableCores = 2)
+    rpcHandler = new ExternalShuffleBlockHandler(transportConf)
     val transportContext = new TransportContext(transportConf, rpcHandler)
     server = transportContext.createServer()
 
@@ -63,8 +60,9 @@ class ExternalShuffleServiceSuite extends ShuffleSuite with BeforeAndAfterAll {
     rdd.count()
     rdd.count()
 
-    // Invalidate the registered executors, disallowing access to their shuffle blocks.
-    rpcHandler.clearRegisteredExecutors()
+    // Invalidate the registered executors, disallowing access to their shuffle blocks (without
+    // deleting the actual shuffle files, so we could access them without the shuffle service).
+    rpcHandler.applicationRemoved(sc.conf.getAppId, false /* cleanupLocalDirs */)
 
     // Now Spark will receive FetchFailed, and not retry the stage due to "spark.test.noStageRetry"
     // being set.

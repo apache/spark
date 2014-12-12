@@ -56,7 +56,7 @@ function run_core_tests() {
     run_test "pyspark/conf.py"
     PYSPARK_DOC_TEST=1 run_test "pyspark/broadcast.py"
     PYSPARK_DOC_TEST=1 run_test "pyspark/accumulators.py"
-    PYSPARK_DOC_TEST=1 run_test "pyspark/serializers.py"
+    run_test "pyspark/serializers.py"
     run_test "pyspark/shuffle.py"
     run_test "pyspark/tests.py"
 }
@@ -72,7 +72,7 @@ function run_mllib_tests() {
     run_test "pyspark/mllib/clustering.py"
     run_test "pyspark/mllib/feature.py"
     run_test "pyspark/mllib/linalg.py"
-    run_test "pyspark/mllib/random.py"
+    run_test "pyspark/mllib/rand.py"
     run_test "pyspark/mllib/recommendation.py"
     run_test "pyspark/mllib/regression.py"
     run_test "pyspark/mllib/stat.py"

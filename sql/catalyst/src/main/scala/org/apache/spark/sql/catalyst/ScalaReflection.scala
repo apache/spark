@@ -26,14 +26,26 @@ import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
+
 /**
- * Provides experimental support for generating catalyst schemas for scala objects.
+ * A default version of ScalaReflection that uses the runtime universe.
  */
-object ScalaReflection {
+object ScalaReflection extends ScalaReflection {
+  val universe: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
+}
+
+/**
+ * Support for generating catalyst schemas for scala objects.
+ */
+trait ScalaReflection {
+  /** The universe we work in (runtime or macro) */
+  val universe: scala.reflect.api.Universe
+
+  import universe._
+
   // The Predef.Map is scala.collection.immutable.Map.
   // Since the map values can be mutable, we explicitly import scala.collection.Map at here.
   import scala.collection.Map
-  import scala.reflect.runtime.universe._
 
   case class Schema(dataType: DataType, nullable: Boolean)
 
@@ -106,7 +118,19 @@ object ScalaReflection {
       case t if t <:< typeOf[Product] =>
         val formalTypeArgs = t.typeSymbol.asClass.typeParams
         val TypeRef(_, _, actualTypeArgs) = t
-        val params = t.member(nme.CONSTRUCTOR).asMethod.paramss
+        val constructorSymbol = t.member(nme.CONSTRUCTOR)
+        val params = if (constructorSymbol.isMethod) {
+          constructorSymbol.asMethod.paramss
+        } else {
+          // Find the primary constructor, and use its parameter ordering.
+          val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
+            s => s.isMethod && s.asMethod.isPrimaryConstructor)
+          if (primaryConstructorSymbol.isEmpty) {
+            sys.error("Internal SQL error: Product object did not have a primary constructor.")
+          } else {
+            primaryConstructorSymbol.get.asMethod.paramss
+          }
+        }
         Schema(StructType(
           params.head.map { p =>
             val Schema(dataType, nullable) =

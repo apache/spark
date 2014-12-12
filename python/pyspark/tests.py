@@ -32,6 +32,7 @@ import time
 import zipfile
 import random
 import threading
+import hashlib
 
 if sys.version_info[:2] <= (2, 6):
     try:
@@ -47,7 +48,7 @@ from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
-    CloudPickleSerializer
+    CloudPickleSerializer, CompressedSerializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
 from pyspark.sql import SQLContext, IntegerType, Row, ArrayType, StructType, StructField, \
     UserDefinedType, DoubleType
@@ -235,6 +236,17 @@ class SerializationTestCase(unittest.TestCase):
 
         self.assertTrue("exit" in foo.func_code.co_names)
         ser.dumps(foo)
+
+    def test_compressed_serializer(self):
+        ser = CompressedSerializer(PickleSerializer())
+        from StringIO import StringIO
+        io = StringIO()
+        ser.dump_stream(["abc", u"123", range(5)], io)
+        io.seek(0)
+        self.assertEqual(["abc", u"123", range(5)], list(ser.load_stream(io)))
+        ser.dump_stream(range(1000), io)
+        io.seek(0)
+        self.assertEqual(["abc", u"123", range(5)] + range(1000), list(ser.load_stream(io)))
 
 
 class PySparkTestCase(unittest.TestCase):
@@ -440,7 +452,7 @@ class RDDTests(ReusedPySparkTestCase):
         subset = data.takeSample(False, 10)
         self.assertEqual(len(subset), 10)
 
-    def testAggregateByKey(self):
+    def test_aggregate_by_key(self):
         data = self.sc.parallelize([(1, 1), (1, 1), (3, 2), (5, 1), (5, 3)], 2)
 
         def seqOp(x, y):
@@ -477,6 +489,32 @@ class RDDTests(ReusedPySparkTestCase):
         bdata = self.sc.broadcast(data)  # 270MB
         m = self.sc.parallelize(range(1), 1).map(lambda x: len(bdata.value)).sum()
         self.assertEquals(N, m)
+
+    def test_multiple_broadcasts(self):
+        N = 1 << 21
+        b1 = self.sc.broadcast(set(range(N)))  # multiple blocks in JVM
+        r = range(1 << 15)
+        random.shuffle(r)
+        s = str(r)
+        checksum = hashlib.md5(s).hexdigest()
+        b2 = self.sc.broadcast(s)
+        r = list(set(self.sc.parallelize(range(10), 10).map(
+            lambda x: (len(b1.value), hashlib.md5(b2.value).hexdigest())).collect()))
+        self.assertEqual(1, len(r))
+        size, csum = r[0]
+        self.assertEqual(N, size)
+        self.assertEqual(checksum, csum)
+
+        random.shuffle(r)
+        s = str(r)
+        checksum = hashlib.md5(s).hexdigest()
+        b2 = self.sc.broadcast(s)
+        r = list(set(self.sc.parallelize(range(10), 10).map(
+            lambda x: (len(b1.value), hashlib.md5(b2.value).hexdigest())).collect()))
+        self.assertEqual(1, len(r))
+        size, csum = r[0]
+        self.assertEqual(N, size)
+        self.assertEqual(checksum, csum)
 
     def test_large_closure(self):
         N = 1000000
@@ -649,6 +687,9 @@ class RDDTests(ReusedPySparkTestCase):
         self.assertEquals(result.getNumPartitions(), 5)
         self.assertEquals(result.count(), 3)
 
+    def test_sort_on_empty_rdd(self):
+        self.assertEqual([], self.sc.parallelize(zip([], [])).sortByKey().collect())
+
     def test_sample(self):
         rdd = self.sc.parallelize(range(0, 100), 4)
         wo = rdd.sample(False, 0.1, 2).collect()
@@ -752,7 +793,7 @@ class SQLTests(ReusedPySparkTestCase):
     @classmethod
     def tearDownClass(cls):
         ReusedPySparkTestCase.tearDownClass()
-        shutil.rmtree(cls.tempdir.name)
+        shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 
     def setUp(self):
         self.sqlCtx = SQLContext(self.sc)
@@ -879,8 +920,9 @@ class SQLTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize([row])
         srdd = self.sqlCtx.inferSchema(rdd)
         srdd.registerTempTable("test")
-        row = self.sqlCtx.sql("select l[0].a AS la from test").first()
-        self.assertEqual(1, row.asDict()["la"])
+        row = self.sqlCtx.sql("select l, d from test").first()
+        self.assertEqual(1, row.asDict()["l"][0].a)
+        self.assertEqual(1.0, row.asDict()['d']['key'].c)
 
     def test_infer_schema_with_udt(self):
         from pyspark.tests import ExamplePoint, ExamplePointUDT
@@ -1109,6 +1151,25 @@ class InputFormatTests(ReusedPySparkTestCase):
               (u'\x02', [1.0]),
               (u'\x03', [2.0])]
         self.assertEqual(maps, em)
+
+    def test_binary_files(self):
+        path = os.path.join(self.tempdir.name, "binaryfiles")
+        os.mkdir(path)
+        data = "short binary data"
+        with open(os.path.join(path, "part-0000"), 'w') as f:
+            f.write(data)
+        [(p, d)] = self.sc.binaryFiles(path).collect()
+        self.assertTrue(p.endswith("part-0000"))
+        self.assertEqual(d, data)
+
+    def test_binary_records(self):
+        path = os.path.join(self.tempdir.name, "binaryrecords")
+        os.mkdir(path)
+        with open(os.path.join(path, "part-0000"), 'w') as f:
+            for i in range(100):
+                f.write('%04d' % i)
+        result = self.sc.binaryRecords(path, 4).map(int).collect()
+        self.assertEqual(range(100), result)
 
 
 class OutputFormatTests(ReusedPySparkTestCase):

@@ -59,7 +59,7 @@ public class SaslClientBootstrap implements TransportClientBootstrap {
         ByteBuf buf = Unpooled.buffer(msg.encodedLength());
         msg.encode(buf);
 
-        byte[] response = client.sendRpcSync(buf.array(), conf.saslRTTimeout());
+        byte[] response = client.sendRpcSync(buf.array(), conf.saslRTTimeoutMs());
         payload = saslClient.response(response);
       }
     } finally {

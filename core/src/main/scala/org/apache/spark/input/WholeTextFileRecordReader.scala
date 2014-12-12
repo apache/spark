@@ -17,11 +17,13 @@
 
 package org.apache.spark.input
 
+import org.apache.hadoop.conf.{Configuration, Configurable}
 import com.google.common.io.{ByteStreams, Closeables}
 
 import org.apache.hadoop.io.Text
+import org.apache.hadoop.io.compress.CompressionCodecFactory
 import org.apache.hadoop.mapreduce.InputSplit
-import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit
+import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, CombineFileRecordReader}
 import org.apache.hadoop.mapreduce.RecordReader
 import org.apache.hadoop.mapreduce.TaskAttemptContext
 
@@ -34,7 +36,13 @@ private[spark] class WholeTextFileRecordReader(
     split: CombineFileSplit,
     context: TaskAttemptContext,
     index: Integer)
-  extends RecordReader[String, String] {
+  extends RecordReader[String, String] with Configurable {
+
+  private var conf: Configuration = _
+  def setConf(c: Configuration) {
+    conf = c
+  }
+  def getConf: Configuration = conf
 
   private[this] val path = split.getPath(index)
   private[this] val fs = path.getFileSystem(context.getConfiguration)
@@ -57,8 +65,16 @@ private[spark] class WholeTextFileRecordReader(
 
   override def nextKeyValue(): Boolean = {
     if (!processed) {
+      val conf = new Configuration
+      val factory = new CompressionCodecFactory(conf)
+      val codec = factory.getCodec(path)  // infers from file ext.
       val fileIn = fs.open(path)
-      val innerBuffer = ByteStreams.toByteArray(fileIn)
+      val innerBuffer = if (codec != null) {
+        ByteStreams.toByteArray(codec.createInputStream(fileIn))
+      } else {
+        ByteStreams.toByteArray(fileIn)
+      }
+
       value = new Text(innerBuffer).toString
       Closeables.close(fileIn, false)
       processed = true
@@ -66,5 +82,35 @@ private[spark] class WholeTextFileRecordReader(
     } else {
       false
     }
+  }
+}
+
+
+/**
+ * A [[org.apache.hadoop.mapreduce.RecordReader RecordReader]] for reading a single whole text file
+ * out in a key-value pair, where the key is the file path and the value is the entire content of
+ * the file.
+ */
+private[spark] class WholeCombineFileRecordReader(
+    split: InputSplit,
+    context: TaskAttemptContext)
+  extends CombineFileRecordReader[String, String](
+    split.asInstanceOf[CombineFileSplit],
+    context,
+    classOf[WholeTextFileRecordReader]
+  ) with Configurable {
+
+  private var conf: Configuration = _
+  def setConf(c: Configuration) {
+    conf = c
+  }
+  def getConf: Configuration = conf
+
+  override def initNextRecordReader(): Boolean = {
+    val r = super.initNextRecordReader()
+    if (r) {
+      this.curReader.asInstanceOf[WholeTextFileRecordReader].setConf(conf)
+    }
+    r
   }
 }

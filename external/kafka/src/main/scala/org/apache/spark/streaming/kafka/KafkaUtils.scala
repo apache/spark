@@ -17,19 +17,18 @@
 
 package org.apache.spark.streaming.kafka
 
-import scala.reflect.ClassTag
-import scala.collection.JavaConversions._
-
 import java.lang.{Integer => JInt}
 import java.util.{Map => JMap}
+
+import scala.reflect.ClassTag
+import scala.collection.JavaConversions._
 
 import kafka.serializer.{Decoder, StringDecoder}
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.api.java.{JavaPairReceiverInputDStream, JavaStreamingContext, JavaPairDStream}
-import org.apache.spark.streaming.dstream.{ReceiverInputDStream, DStream}
-
+import org.apache.spark.streaming.api.java.{JavaPairReceiverInputDStream, JavaStreamingContext}
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
 object KafkaUtils {
   /**
@@ -71,7 +70,8 @@ object KafkaUtils {
       topics: Map[String, Int],
       storageLevel: StorageLevel
     ): ReceiverInputDStream[(K, V)] = {
-    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, storageLevel)
+    val walEnabled = ssc.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)
+    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, walEnabled, storageLevel)
   }
 
   /**
@@ -100,7 +100,6 @@ object KafkaUtils {
    * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    *                  in its own thread.
    * @param storageLevel RDD storage level.
-   *
    */
   def createStream(
       jssc: JavaStreamingContext,

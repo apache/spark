@@ -47,6 +47,9 @@ class JavaSchemaRDD(
 
   private[sql] val baseSchemaRDD = new SchemaRDD(sqlContext, logicalPlan)
 
+  /** Returns the underlying Scala SchemaRDD. */
+  val schemaRDD: SchemaRDD = baseSchemaRDD
+
   override val classTag = scala.reflect.classTag[Row]
 
   override def wrapRDD(rdd: RDD[Row]): JavaRDD[Row] = JavaRDD.fromRDD(rdd)
@@ -121,6 +124,12 @@ class JavaSchemaRDD(
   }
 
   // Transformations (return a new RDD)
+
+  /**
+   * Returns a new RDD with each row transformed to a JSON string.
+   */
+  def toJSON(): JavaRDD[String] =
+    baseSchemaRDD.toJSON.toJavaRDD
 
   /**
    * Return a new RDD that is reduced into `numPartitions` partitions.
