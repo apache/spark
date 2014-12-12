@@ -85,7 +85,7 @@ class GradientDescentSuite extends FunSuite with MLlibTestSparkContext with Matc
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()
-    val initialWeightsWithIntercept = Vectors.dense(1.0 +: initialWeights.toArray)
+    val initialWeightsWithIntercept = Vectors.dense(initialWeights.toArray :+ 1.0)
 
     val (_, loss) = GradientDescent.runMiniBatchSGD(
       dataRDD,
@@ -162,7 +162,7 @@ class GradientDescentSuite extends FunSuite with MLlibTestSparkContext with Matc
     }
 
     val dataRDD = sc.parallelize(data, 2).cache()
-    val initialWeightsWithIntercept = Vectors.dense(1.0 +: initialWeights.toArray)
+    val initialWeightsWithIntercept = Vectors.dense(initialWeights.toArray :+ 1.0)
 
     val (_, loss) = GradientDescent.runMiniBatchSGD(
       dataRDD,
@@ -175,7 +175,7 @@ class GradientDescentSuite extends FunSuite with MLlibTestSparkContext with Matc
       initialWeightsWithIntercept,
       convergenceTolerance)
 
-    assert(loss.length < numIterations, "convergenceTolerance failed to stop optimization early\"")
+    assert(loss.length < numIterations, "convergenceTolerance failed to stop optimization early")
   }
 }
 

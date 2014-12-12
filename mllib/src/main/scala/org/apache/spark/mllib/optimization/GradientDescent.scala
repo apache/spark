@@ -41,7 +41,7 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
   private var numIterations: Int = 100
   private var regParam: Double = 0.0
   private var miniBatchFraction: Double = 1.0
-  private var convergenceTolerance: Double = 0.001
+  private var convergenceTol: Double = 0.001
 
   /**
    * Set the initial step size of SGD for the first step. Default 1.0.
@@ -81,9 +81,12 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
 
   /**
    * Set the convergence tolerance. Default 0.001
+   * convergenceTol is a condition which decides iteration termination.
+   * If the difference between last loss and last before loss is less than convergenceTol
+   * minibatch iteration will end at that point.
    */
-  def setConvergenceTolerance(tolerance: Double): this.type = {
-    this.convergenceTolerance = tolerance
+  def setconvergenceTol(tolerance: Double): this.type = {
+    this.convergenceTol = tolerance
     this
   }
 
@@ -125,7 +128,7 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
       regParam,
       miniBatchFraction,
       initialWeights,
-      convergenceTolerance)
+      convergenceTol)
     weights
   }
 
@@ -154,7 +157,7 @@ object GradientDescent extends Logging {
    * @param regParam - regularization parameter
    * @param miniBatchFraction - fraction of the input data set that should be used for
    *                            one iteration of SGD. Default value 1.0.
-   * @param convergenceTolerance - Minibatch iteration will end before numIterations
+   * @param convergenceTol - Minibatch iteration will end before numIterations
    *                               if the difference between last loss and last before loss
    *                               is less than this value. Default value 0.001.
    * @return A tuple containing two elements. The first element is a column matrix containing
@@ -170,11 +173,11 @@ object GradientDescent extends Logging {
       regParam: Double,
       miniBatchFraction: Double,
       initialWeights: Vector,
-      convergenceTolerance: Double): (Vector, Array[Double]) = {
+      convergenceTol: Double): (Vector, Array[Double]) = {
 
-    // convergenceTolerance should be set with non minibatch settings
-    if (miniBatchFraction < 1.0 && convergenceTolerance > 0.0) {
-      logWarning("Testing against a convergenceTolerance when using miniBatchFraction " +
+    // convergenceTol should be set with non minibatch settings
+    if (miniBatchFraction < 1.0 && convergenceTol > 0.0) {
+      logWarning("Testing against a convergenceTol when using miniBatchFraction " +
         "< 1.0 can be unstable because of the stochasticity in sampling.")
     }
 
@@ -228,17 +231,13 @@ object GradientDescent extends Logging {
            */
           stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
           val update = updater.compute(
-            weights,
-            Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble),
-            stepSize,
-            i,
-            regParam)
+            weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble), stepSize, i, regParam)
           weights = update._1
           regVal = update._2
           if (stochasticLossHistory.length > 1) {
             val lastLoss = stochasticLossHistory.last
             val lastBeforeLoss = stochasticLossHistory(stochasticLossHistory.length - 2)
-            if (Math.abs(lastLoss - lastBeforeLoss) < convergenceTolerance) b.break
+            if (Math.abs(lastLoss - lastBeforeLoss) < convergenceTol) b.break
           }
         } else {
           logWarning(s"Iteration ($i/$numIterations). The size of sampled batch is zero")
