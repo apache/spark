@@ -48,6 +48,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       case j: LeftSemiJoinBNL => j
       case j: CartesianProduct => j
       case j: BroadcastNestedLoopJoin => j
+      case j: MergeJoin => j
     }
 
     assert(operators.size === 1)
@@ -72,9 +73,9 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
       ("SELECT * FROM testData JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
       ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[ShuffledHashJoin]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[ShuffledHashJoin]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[ShuffledHashJoin]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[MergeJoin]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[MergeJoin]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[MergeJoin]),
       ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[HashOuterJoin]),
       ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
         classOf[HashOuterJoin]),
