@@ -55,14 +55,13 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     val outputStream = new TestOutputStream(networkStream, outputBuffer)
-    def output = outputBuffer.flatMap(x => x)
     outputStream.register()
     ssc.start()
 
     // Feed data to the server to send to the network receiver
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq(1, 2, 3, 4, 5)
-    val expectedOutput = input.map(_.toString)
+    val expectedOutput: Seq[Seq[String]] = input.map(i => Seq(i.toString))
     for (i <- 0 until input.size) {
       testServer.send(input(i).toString + "\n")
       Thread.sleep(500)  // This sleep is to wait for `testServer` to send the data to Spark
@@ -74,22 +73,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     logInfo("Stopping context")
     ssc.stop()
 
-    // Verify whether data received was as expected
-    logInfo("--------------------------------")
-    logInfo("output.size = " + outputBuffer.size)
-    logInfo("output")
-    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-    logInfo("expected output.size = " + expectedOutput.size)
-    logInfo("expected output")
-    expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-    logInfo("--------------------------------")
-
-    // Verify whether all the elements received are as expected
-    // (whether the elements were received one in each interval is not verified)
-    assert(output.size === expectedOutput.size)
-    for (i <- 0 until output.size) {
-      assert(output(i) === expectedOutput(i))
-    }
+    verifyOutput(outputBuffer, expectedOutput, useSet = false)
   }
 
 
@@ -166,21 +150,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     logInfo("Stopping context")
     ssc.stop()
 
-    // Verify whether data received was as expected
-    logInfo("--------------------------------")
-    logInfo("output.size = " + outputBuffer.size)
-    logInfo("output")
-    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-    logInfo("expected output.size = " + expectedOutput.size)
-    logInfo("expected output")
-    expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-    logInfo("--------------------------------")
-
-    // Verify whether all the elements received are as expected
-    assert(output.size === expectedOutput.size)
-    for (i <- 0 until output.size) {
-      assert(output(i) === expectedOutput(i))
-    }
+    verifyOutput(outputBuffer, expectedOutput, useSet = false)
   }
 
   test("queue input stream - oneAtATime = false") {
@@ -212,21 +182,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     logInfo("Stopping context")
     ssc.stop()
 
-    // Verify whether data received was as expected
-    logInfo("--------------------------------")
-    logInfo("output.size = " + outputBuffer.size)
-    logInfo("output")
-    outputBuffer.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-    logInfo("expected output.size = " + expectedOutput.size)
-    logInfo("expected output")
-    expectedOutput.foreach(x => logInfo("[" + x.mkString(",") + "]"))
-    logInfo("--------------------------------")
-
-    // Verify whether all the elements received are as expected
-    assert(output.size === expectedOutput.size)
-    for (i <- 0 until output.size) {
-      assert(output(i) === expectedOutput(i))
-    }
+    verifyOutput(outputBuffer, expectedOutput, useSet = false)
   }
 
   def testFileStream(newFilesOnly: Boolean) {
