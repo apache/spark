@@ -82,6 +82,9 @@ public class Statsd implements Closeable {
         } else if ("executor".equals(parts[3])) {
             // e.g. spark.app-20141209201027-0139.31.executor.filesystem.file.read_bytes
             stringBuilder.append(rawName.substring(rawName.indexOf(".executor.")));
+        } else if ("jvm".equals(parts[3])) {
+            // spark.app-20141212193256-0012.15.jvm.total.max
+            stringBuilder.append(rawName.substring(rawName.indexOf(".jvm.")));
         } else {
             throw new IllegalArgumentException("Unrecognized metric name pattern: " + rawName);
         }
