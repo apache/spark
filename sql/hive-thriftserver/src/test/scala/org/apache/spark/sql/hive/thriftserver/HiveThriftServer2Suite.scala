@@ -70,7 +70,8 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     port
   }
 
-  def withJdbcStatement(serverStartTimeout: FiniteDuration = 1.minute, httpMode: Boolean = false)(f: Statement => Unit) {
+  def withJdbcStatement(serverStartTimeout: FiniteDuration = 1.minute,
+    httpMode: Boolean = false)(f: Statement => Unit) {
     val port = randomListeningPort
 
     startThriftServer(port, serverStartTimeout, httpMode) {
