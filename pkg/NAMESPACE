@@ -5,6 +5,7 @@ exportClasses("Broadcast")
 exportMethods(
               "cache",
               "checkpoint",
+              "cogroup",
               "collect",
               "collectPartition",
               "combineByKey",

@@ -5,7 +5,7 @@
 \alias{foreach,RDD,function-method}
 \alias{foreachPartition}
 \alias{foreachPartition,RDD,function-method}
-\title{Applies a function to all elements in an RDD, and force it evaluated.}
+\title{Applies a function to all elements in an RDD, and force evaluation.}
 \usage{
 foreach(rdd, func)
 
@@ -24,21 +24,26 @@ foreachPartition(rdd, func)
 
 \item{func}{The function to be applied to partitions.}
 }
-\description{
-Applies a function to all elements in an RDD, and force it evaluated.
+\value{
+invisible NULL.
 
-Applies a function to each partition in an RDD, and force it evaluated.
+invisible NULL.
+}
+\description{
+Applies a function to all elements in an RDD, and force evaluation.
+
+Applies a function to each partition in an RDD, and force evaluation.
 }
 \examples{
 \dontrun{
 sc <- sparkR.init()
 rdd <- parallelize(sc, 1:10)
-foreach(rdd, print)
+foreach(rdd, function(x) { save(x, file=...) })
 }
 \dontrun{
 sc <- sparkR.init()
 rdd <- parallelize(sc, 1:10)
-foreachPartition(rdd, function(part) { lapply(part, print); NULL })
+foreachPartition(rdd, function(part) { save(part, file=...); NULL })
 }
 }
 
