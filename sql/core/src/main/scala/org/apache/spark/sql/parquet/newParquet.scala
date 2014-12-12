@@ -47,7 +47,7 @@ class DefaultSource extends RelationProvider {
   /** Returns a new base relation with the given parameters. */
   override def createRelation(
       sqlContext: SQLContext,
-      parameters: CaseInsensitiveMap): BaseRelation = {
+      parameters: Map[String, String]): BaseRelation = {
     val path =
       parameters.getOrElse("path", sys.error("'path' must be specified for parquet tables."))
 

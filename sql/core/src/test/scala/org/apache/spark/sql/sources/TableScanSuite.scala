@@ -24,8 +24,8 @@ class DefaultSource extends SimpleScanSource
 class SimpleScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
-      parameters: CaseInsensitiveMap): BaseRelation = {
-    SimpleScan(parameters("from").toInt, parameters("to").toInt)(sqlContext)
+      parameters: Map[String, String]): BaseRelation = {
+    SimpleScan(parameters("from").toInt, parameters("TO").toInt)(sqlContext)
   }
 }
 

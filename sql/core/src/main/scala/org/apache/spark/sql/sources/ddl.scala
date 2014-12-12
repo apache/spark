@@ -77,10 +77,8 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
         CreateTableUsing(tableName, provider, opts)
     }
 
-  protected lazy val options: Parser[CaseInsensitiveMap] =
-    "(" ~> repsep(pair, ",") <~ ")" ^^ {
-      case s: Seq[(String, String)]=> CaseInsensitiveMap(s)
-    }
+  protected lazy val options: Parser[Map[String, String]] =
+    "(" ~> repsep(pair, ",") <~ ")" ^^ { case s: Seq[(String, String)] => CaseInsensitiveMap(s) }
 
   protected lazy val className: Parser[String] = repsep(ident, ".") ^^ { case s => s.mkString(".")}
 
@@ -90,7 +88,7 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
 private[sql] case class CreateTableUsing(
     tableName: String,
     provider: String,
-    options: CaseInsensitiveMap) extends RunnableCommand {
+    options: Map[String, String]) extends RunnableCommand {
 
   def run(sqlContext: SQLContext) = {
     val loader = Utils.getContextOrSparkClassLoader

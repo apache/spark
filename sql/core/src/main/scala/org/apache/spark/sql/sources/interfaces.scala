@@ -36,8 +36,11 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Attribute}
  */
 @DeveloperApi
 trait RelationProvider {
-  /** Returns a new base relation with the given parameters. */
-  def createRelation(sqlContext: SQLContext, parameters: CaseInsensitiveMap): BaseRelation
+  /**
+   * Returns a new base relation with the given parameters.
+   * Note: the parameters'keywords are case insensitive.
+   */
+  def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation
 }
 
 /**
