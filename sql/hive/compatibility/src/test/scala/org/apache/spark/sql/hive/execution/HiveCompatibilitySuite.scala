@@ -89,7 +89,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "authorization_5",
     "keyword_1",
     "misc_json",
-    "create_like_tbl_props",
     "load_overwrite",
     "alter_table_serde2",
     "alter_table_not_sorted",
@@ -100,8 +99,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "protectmode2",
     //"describe_table",
     "describe_comment_nonascii",
-    "udf5",
-    "udf_java_method",
+
     "create_merge_compressed",
     "create_view_partitioned",
     "database_location",
@@ -221,16 +219,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "orc_predicate_pushdown",
 
     // Requires precision decimal support:
-    "decimal_1",
-    "udf_pmod",
     "udf_when",
     "udf_case",
-    "udf_to_double",
-    "udf_to_float",
 
     // Needs constant object inspectors
     "udf_round",
-    "udf7",
 
     // Sort with Limit clause causes failure.
     "ctas",
@@ -351,6 +344,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "count",
     "cp_mj_rc",
     "create_insert_outputformat",
+    "create_like_tbl_props",
     "create_like_view",
     "create_nested_type",
     "create_skewed_table1",
@@ -785,6 +779,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udaf_covar_samp",
     "udaf_histogram_numeric",
     "udf2",
+    "udf5",
     "udf6",
     "udf7",
     "udf8",
