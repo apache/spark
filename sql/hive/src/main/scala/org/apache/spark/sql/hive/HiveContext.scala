@@ -18,7 +18,9 @@
 package org.apache.spark.sql.hive
 
 import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
+
+import org.apache.spark.sql.catalyst.types.date.Date
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
@@ -411,7 +413,7 @@ object HiveContext {
           toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
       }.toSeq.sorted.mkString("{", ",", "}")
     case (null, _) => "NULL"
-    case (d: Date, DateType) => new DateWritable(d).toString
+    case (d: Date, DateType) => new DateWritable(d.toDays).toString
     case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
     case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
     case (decimal: Decimal, DecimalType()) =>  // Hive strips trailing zeros so use its toString

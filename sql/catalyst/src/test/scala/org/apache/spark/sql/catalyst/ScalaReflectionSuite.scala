@@ -18,8 +18,9 @@
 package org.apache.spark.sql.catalyst
 
 import java.math.BigInteger
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
+import org.apache.spark.sql.catalyst.types.date.Date
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.Row
@@ -207,7 +208,7 @@ class ScalaReflectionSuite extends FunSuite {
     assert(DecimalType.Unlimited === typeOfObject(BigDecimal("1.7976931348623157E318")))
 
     // DateType
-    assert(DateType === typeOfObject(Date.valueOf("2014-07-25")))
+    assert(DateType === typeOfObject(Date("2014-07-25")))
 
     // TimestampType
     assert(TimestampType === typeOfObject(Timestamp.valueOf("2014-07-25 10:26:00")))

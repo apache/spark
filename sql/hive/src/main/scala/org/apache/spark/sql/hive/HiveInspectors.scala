@@ -28,6 +28,7 @@ import org.apache.hadoop.{io => hadoopIo}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.date.Date
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 /* Implicit conversions */
@@ -124,6 +125,7 @@ private[hive] trait HiveInspectors {
     // org.apache.hadoop.hive.serde2.io.TimestampWritable.set will reset current time object
     // if next timestamp is null, so Timestamp object is cloned
     case ti: TimestampObjectInspector => ti.getPrimitiveJavaObject(data).clone()
+    case di: DateObjectInspector => Date(di.getPrimitiveJavaObject(data))
     case pi: PrimitiveObjectInspector => pi.getPrimitiveJavaObject(data)
     case li: ListObjectInspector =>
       Option(li.getList(data))
@@ -154,6 +156,11 @@ private[hive] trait HiveInspectors {
 
     case _: JavaHiveDecimalObjectInspector =>
       (o: Any) => HiveShim.createDecimal(o.asInstanceOf[Decimal].toBigDecimal.underlying())
+
+    case _: JavaDateObjectInspector =>
+      (o: Any) =>
+        if (o.isInstanceOf[java.sql.Date]) o.asInstanceOf[java.sql.Date]
+        else o.asInstanceOf[Date].toJavaDate
 
     case soi: StandardStructObjectInspector =>
       val wrappers = soi.getAllStructFieldRefs.map(ref => wrapperFor(ref.getFieldObjectInspector))
@@ -211,6 +218,7 @@ private[hive] trait HiveInspectors {
         case d: Decimal => HiveShim.createDecimal(d.toBigDecimal.underlying())
         case b: Array[Byte] => b
         case d: java.sql.Date => d
+        case d: Date => d.toJavaDate
         case t: java.sql.Timestamp => t
       }
       case x: StructObjectInspector =>

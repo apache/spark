@@ -18,6 +18,7 @@
 package org.apache.spark.sql.json
 
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.types.date.Date
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.json.JsonRDD.{enforceCorrectType, compatibleType}
@@ -26,7 +27,7 @@ import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 class JsonSuite extends QueryTest {
   import TestJsonData._
@@ -66,14 +67,14 @@ class JsonSuite extends QueryTest {
     checkTypePromotion(Timestamp.valueOf(strTime), enforceCorrectType(strTime, TimestampType))
 
     val strDate = "2014-10-15"
-    checkTypePromotion(Date.valueOf(strDate), enforceCorrectType(strDate, DateType))
+    checkTypePromotion(Date(strDate), enforceCorrectType(strDate, DateType))
 
     val ISO8601Time1 = "1970-01-01T01:00:01.0Z"
     checkTypePromotion(new Timestamp(3601000), enforceCorrectType(ISO8601Time1, TimestampType))
-    checkTypePromotion(new Date(3601000), enforceCorrectType(ISO8601Time1, DateType))
+    checkTypePromotion(Date(3601000), enforceCorrectType(ISO8601Time1, DateType))
     val ISO8601Time2 = "1970-01-01T02:00:01-01:00"
     checkTypePromotion(new Timestamp(10801000), enforceCorrectType(ISO8601Time2, TimestampType))
-    checkTypePromotion(new Date(10801000), enforceCorrectType(ISO8601Time2, DateType))
+    checkTypePromotion(Date(10801000), enforceCorrectType(ISO8601Time2, DateType))
   }
 
   test("Get compatible type") {
