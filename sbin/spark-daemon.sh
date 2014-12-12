@@ -129,9 +129,12 @@ case $option in
     mkdir -p "$SPARK_PID_DIR"
 
     if [ -f $pid ]; then
-      if kill -0 `cat $pid` > /dev/null 2>&1; then
-        echo $command running as process `cat $pid`.  Stop it first.
-        exit 1
+      TARGET_ID=`cat $pid`
+      if kill -0 $TARGET_ID > /dev/null 2>&1; then
+        if [[ `ps -p $TARGET_ID -o args=` =~ $command ]]; then
+          echo $command running as process $TARGET_ID.  Stop it first.
+          exit 1
+        fi
       fi
     fi
 
