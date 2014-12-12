@@ -72,10 +72,13 @@ while (( "$#" )); do
       MAKE_TGZ=true
       ;;
     --name)
-      NAME="$2"
+      ]="$2"
       shift
       ;;
-    --help)
+    --package)
+	SKIP_BUILD=true
+	;;
+	--help)
       exit_with_usage
       ;;
     *)
@@ -84,7 +87,7 @@ while (( "$#" )); do
   esac
   shift
 done
-
+if [ -z "$SKIP_BUILD" ]; then
 if [ -z "$JAVA_HOME" ]; then
   # Fall back on JAVA_HOME from rpm, if found
   if which rpm &>/dev/null; then
@@ -172,7 +175,7 @@ echo -e "\nBuilding with..."
 echo -e "\$ $BUILD_COMMAND\n"
 
 ${BUILD_COMMAND}
-
+fi
 # Make directories
 rm -rf "$DISTDIR"
 mkdir -p "$DISTDIR/lib"
