@@ -34,13 +34,15 @@ object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true
  * [[UnresolvedRelation]]s into fully typed objects using information in a schema [[Catalog]] and
  * a [[FunctionRegistry]].
  */
-class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Boolean)
+class Analyzer(catalog: Catalog,
+               registry: FunctionRegistry,
+               caseSensitive: Boolean,
+               maxIterations: Int = 100)
   extends RuleExecutor[LogicalPlan] with HiveTypeCoercion {
 
   val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
 
-  // TODO: pass this in as a parameter.
-  val fixedPoint = FixedPoint(100)
+  val fixedPoint = FixedPoint(maxIterations)
 
   /**
    * Override to provide additional rules for the "Resolution" batch.
