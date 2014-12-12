@@ -72,7 +72,7 @@ while (( "$#" )); do
       MAKE_TGZ=true
       ;;
     --name)
-      ]="$2"
+      NAME="$2"
       shift
       ;;
     --package)
