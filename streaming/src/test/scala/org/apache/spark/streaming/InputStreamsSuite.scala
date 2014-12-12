@@ -17,10 +17,6 @@
 
 package org.apache.spark.streaming
 
-import akka.actor.Actor
-import akka.actor.Props
-import akka.util.ByteString
-
 import java.io.{File, BufferedWriter, OutputStreamWriter}
 import java.net.{InetSocketAddress, SocketException, ServerSocket}
 import java.nio.charset.Charset
@@ -54,6 +50,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
+    val waiter = new StreamingTestWaiter(ssc)
     val networkStream = ssc.socketTextStream(
       "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
@@ -66,13 +63,12 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq(1, 2, 3, 4, 5)
     val expectedOutput = input.map(_.toString)
-    Thread.sleep(1000)
     for (i <- 0 until input.size) {
       testServer.send(input(i).toString + "\n")
-      Thread.sleep(500)
+      Thread.sleep(500)  // This sleep is to wait for `testServer` to send the data to Spark
       clock.addToTime(batchDuration.milliseconds)
+      waiter.waitForBatchToComplete()
     }
-    Thread.sleep(1000)
     logInfo("Stopping server")
     testServer.stop()
     logInfo("Stopping context")
