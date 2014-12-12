@@ -21,6 +21,7 @@ import scala.collection.JavaConversions._
 import sbt._
 import sbt.Classpaths.publishTask
 import sbt.Keys._
+import sbt.Tests._
 import sbtunidoc.Plugin.genjavadocSettings
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
 import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
@@ -373,6 +374,17 @@ object Unidoc {
 object TestSettings {
   import BuildCommons._
 
+  // See http://stackoverflow.com/questions/15798341 for notes on how to fork
+  // a new JVM for each test in SBT:
+  def singleTests(tests: Seq[TestDefinition]) =
+    tests map { test =>
+      new Group(
+        name = test.name,
+        tests = Seq(test),
+        runPolicy = SubProcess(javaOptions = Seq.empty[String]))
+    }
+
+
   lazy val settings = Seq (
     // Fork new JVMs for tests and set Java options for those
     fork := true,
@@ -397,9 +409,9 @@ object TestSettings {
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
     libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test",
-    // Only allow one test at a time, even across projects, since they run in the same JVM
-    parallelExecution in Test := false,
-    concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
+    parallelExecution in Test := true,
+    testGrouping in Test <<= definedTests in Test map singleTests,
+    logBuffered in Test := true,
     // Remove certain packages from Scaladoc
     scalacOptions in (Compile, doc) := Seq(
       "-groups",
