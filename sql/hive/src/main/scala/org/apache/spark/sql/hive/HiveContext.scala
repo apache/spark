@@ -414,9 +414,7 @@ object HiveContext {
     case (d: Date, DateType) => new DateWritable(d).toString
     case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
     case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
-    case (decimal: Decimal, DecimalType()) =>  // Hive strips trailing zeros so use its toString
-      HiveShim.createDecimal(decimal.toBigDecimal.underlying()).toString
-    case (decimal: BigDecimal, DecimalType()) =>
+    case (decimal: BigDecimal, DecimalType()) => // Hive strips trailing zeros so use its toString
       HiveShim.createDecimal(decimal.underlying()).toString
     case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
