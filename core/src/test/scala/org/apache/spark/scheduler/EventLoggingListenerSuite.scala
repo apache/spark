@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{File, InputStream}
+import java.io.{File, FileOutputStream, InputStream, IOException}
 
 import scala.collection.mutable
 import scala.io.Source
@@ -93,12 +93,13 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
   }
 
   test("Log overwriting") {
-    val log = new File(testDir, "test")
+    val log = new FileOutputStream(new File(testDir, "test"))
+    log.close()
     try {
       testEventLogging()
       assert(false)
     } catch {
-      case e: Exception =>
+      case e: IOException =>
         // Expected, since we haven't enabled log overwrite.
     }
 
