@@ -121,7 +121,7 @@ case class CreateTableAsSelect[T](
     allowExisting: Boolean,
     desc: Option[T] = None) extends UnaryNode {
   override def output = Seq.empty[Attribute]
-  override lazy val resolved = (databaseName != None && childrenResolved)
+  override lazy val resolved = databaseName != None && childrenResolved
 }
 
 case class WriteToFile(
