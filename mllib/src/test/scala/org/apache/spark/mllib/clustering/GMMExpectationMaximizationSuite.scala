@@ -20,7 +20,7 @@ package org.apache.spark.mllib.clustering
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.{Vectors, Matrices}
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
 class GMMExpectationMaximizationSuite extends FunSuite with MLlibTestSparkContext {
@@ -32,12 +32,13 @@ class GMMExpectationMaximizationSuite extends FunSuite with MLlibTestSparkContex
       ))
     
     // expectations
-    val Ew = 1.0;
+    val Ew = 1.0
     val Emu = Vectors.dense(5.0, 10.0)
     val Esigma = Matrices.dense(2, 2, Array(2.0 / 3.0, -2.0 / 3.0, -2.0 / 3.0, 2.0 / 3.0))
     
-    val gmm = GMMExpectationMaximization.train(data, 1)
-    assert(gmm.w(0) ~== Ew absTol 1E-5)
+    val gmm = new GaussianMixtureModelEM().setK(1).run(data)
+                
+    assert(gmm.weight(0) ~== Ew absTol 1E-5)
     assert(gmm.mu(0) ~== Emu absTol 1E-5)
     assert(gmm.sigma(0) ~== Esigma absTol 1E-5)
   }
