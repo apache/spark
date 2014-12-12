@@ -6,6 +6,7 @@ default_args = {
     'owner': 'mistercrunch',
     'start_date': datetime(2014, 8, 21),
     'mysql_dbid': 'local_mysql',
+    'email_on_failure': True,
 }
 
 dag = airflow.DAG('test_mysql')
