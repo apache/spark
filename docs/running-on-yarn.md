@@ -25,7 +25,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.am.memory</code></td>
   <td>512m</td>
   <td>
-    Amount of memory to use for the ApplicationMaster process on yarn-client mode. Use <code>spark.driver.memory</code> instead on yarn-cluster mode.
+    Amount of memory to use for the Yarn ApplicationMaster in client mode. In cluster mode, use `spark.driver.memory` instead.
         (e.g. <code>512m</code>, <code>2g</code>).
   </td>
 </tr>
@@ -96,14 +96,14 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.driver.memoryOverhead</code></td>
   <td>driverMemory * 0.07, with minimum of 384 </td>
   <td>
-    The amount of off heap memory (in megabytes) to be allocated for driver with ApplicationMaster on cluster mode. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the container size (typically 6-10%).
+    The amount of off heap memory (in megabytes) to be allocated per driver. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the container size (typically 6-10%).
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.am.memoryOverhead</code></td>
-  <td>driverMemory * 0.07, with minimum of 384 </td>
+  <td>AM memory * 0.07, with minimum of 384 </td>
   <td>
-    The amount of off heap memory (in megabytes) to be allocated for ApplicationMaster on client mode. This is memory that accounts for things like VM overheads, interned strings, other native overheads, etc. This tends to grow with the container size (typically 6-10%).
+    Same as `spark.yarn.driver.memoryOverhead`, but for the ApplicationMaster in client mode.
   </td>
 </tr>
 <tr>

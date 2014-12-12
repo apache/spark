@@ -50,12 +50,12 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   validateArgs()
 
   // Additional memory to allocate to containers. In different modes, we use different configs.
-  val amMemOverheadConf = if (isClusterMode) {
+  val amMemoryOverheadConf = if (isClusterMode) {
     "spark.yarn.driver.memoryOverhead"
   } else {
     "spark.yarn.am.memoryOverhead"
   }
-  val amMemoryOverhead = sparkConf.getInt(amMemOverheadConf,
+  val amMemoryOverhead = sparkConf.getInt(amMemoryOverheadConf,
     math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
 
   val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
