@@ -70,8 +70,10 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     port
   }
 
-  def withJdbcStatement(serverStartTimeout: FiniteDuration = 1.minute,
-    httpMode: Boolean = false)(f: Statement => Unit) {
+  def withJdbcStatement(
+      serverStartTimeout: FiniteDuration = 1.minute,
+      httpMode: Boolean = false)(
+      f: Statement => Unit) {
     val port = randomListeningPort
 
     startThriftServer(port, serverStartTimeout, httpMode) {
@@ -133,14 +135,14 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     val command =
       if (httpMode) {
           s"""$startScript
-           |  --master local
-           |  --hiveconf hive.root.logger=INFO,console
-           |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
-           |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
-           |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
-           |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=http
-           |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT}=$port
-            """.stripMargin.split("\\s+").toSeq
+             |  --master local
+             |  --hiveconf hive.root.logger=INFO,console
+             |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
+             |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
+             |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
+             |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=http
+             |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT}=$port
+              """.stripMargin.split("\\s+").toSeq
       } else {
           s"""$startScript
              |  --master local
@@ -162,7 +164,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     def captureLogOutput(line: String): Unit = {
       buffer += line
       if (line.contains("ThriftBinaryCLIService listening on") ||
-        line.contains("Started ThriftHttpCLIService in http")) {
+          line.contains("Started ThriftHttpCLIService in http")) {
         serverRunning.success(())
       }
     }

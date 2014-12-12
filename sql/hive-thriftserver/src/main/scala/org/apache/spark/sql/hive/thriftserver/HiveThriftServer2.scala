@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive.thriftserver
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService }
+import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
 import org.apache.hive.service.server.{HiveServer2, ServerOptionsProcessor}
 
 import org.apache.spark.Logging
@@ -86,7 +86,7 @@ private[hive] class HiveThriftServer2(hiveContext: HiveContext)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
 
-    if (isHTTPTransportMode(hiveConf)){
+    if (isHTTPTransportMode(hiveConf)) {
       val thriftCliService = new ThriftHttpCLIService(sparkSqlCliService)
       setSuperField(this, "thriftCLIService", thriftCliService)
       addService(thriftCliService)
