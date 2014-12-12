@@ -87,7 +87,7 @@ private[spark] class EventLoggingListener(
    */
   def start() {
     if (!fileSystem.isDirectory(new Path(logBaseDir))) {
-      throw new IllegalArgumentException(s"Log directory $logBaseDir does not exist.");
+      throw new IllegalArgumentException(s"Log directory $logBaseDir does not exist.")
     }
 
     val workingPath = logPath + IN_PROGRESS
