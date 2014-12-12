@@ -92,6 +92,19 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
     }
   }
 
+  test("Log overwriting") {
+    val log = new File(testDir, "test")
+    try {
+      testEventLogging()
+      assert(false)
+    } catch {
+      case e: Exception =>
+        // Expected, since we haven't enabled log overwrite.
+    }
+
+    // Try again, but enable overwriting.
+    testEventLogging(extraConf = Map("spark.eventLog.overwrite" -> "true"))
+  }
 
   /* ----------------- *
    * Actual test logic *
@@ -105,8 +118,11 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
    * This creates two simple events, posts them to the EventLoggingListener, and verifies that
    * exactly these two events are logged in the expected file.
    */
-  private def testEventLogging(compressionCodec: Option[String] = None) {
+  private def testEventLogging(
+      compressionCodec: Option[String] = None,
+      extraConf: Map[String, String] = Map()) {
     val conf = getLoggingConf(testDirPath, compressionCodec)
+    extraConf.foreach { case (k, v) => conf.set(k, v) }
     val logName = compressionCodec.map("test-" + _).getOrElse("test")
     val eventLogger = new EventLoggingListener(logName, testDirPath.toUri().toString(), conf)
     val listenerBus = new LiveListenerBus

@@ -96,6 +96,11 @@ private[spark] class EventLoggingListener(
     val defaultFs = FileSystem.getDefaultUri(hadoopConf).getScheme
     val isDefaultLocal = defaultFs == null || defaultFs == "file"
 
+    if (shouldOverwrite && fileSystem.exists(path)) {
+      logWarning(s"Event log $path already exists. Overwriting...")
+      fileSystem.delete(path, true)
+    }
+
     /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
      * Therefore, for local files, use FileOutputStream instead. */
     val dstream =
@@ -176,7 +181,12 @@ private[spark] class EventLoggingListener(
 
     val target = new Path(logPath)
     if (fileSystem.exists(target)) {
-      throw new IOException("Target log file already exists (%s)".format(logPath))
+      if (shouldOverwrite) {
+        logWarning(s"Event log $target already exists. Overwriting...")
+        fileSystem.delete(target, true)
+      } else {
+        throw new IOException("Target log file already exists (%s)".format(logPath))
+      }
     }
     fileSystem.rename(new Path(logPath + IN_PROGRESS), target)
   }
