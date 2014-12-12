@@ -21,9 +21,9 @@ import org.apache.spark.mllib.linalg.Matrix
 import org.apache.spark.mllib.linalg.Vector
 
 /**
- * Multivariate Gaussian mixture model consisting of k Gaussians, where points are drawn 
- * from each Gaussian i=1..k with probability w(i); mu(i) and sigma(i) are the respective 
- * mean and covariance for each Gaussian distribution i=1..k. 
+ * Multivariate Gaussian Mixture Model (GMM) consisting of k Gaussians, where points 
+ * are drawn from each Gaussian i=1..k with probability w(i); mu(i) and sigma(i) are 
+ * the respective mean and covariance for each Gaussian distribution i=1..k. 
  * 
  * @param weight Weights for each Gaussian distribution in the mixture, where mu(i) is
  *               the weight for Gaussian i, and weight.sum == 1
