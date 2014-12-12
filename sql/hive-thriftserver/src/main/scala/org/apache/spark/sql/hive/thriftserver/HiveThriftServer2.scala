@@ -101,7 +101,7 @@ private[hive] class HiveThriftServer2(hiveContext: HiveContext)
 
   private def isHTTPTransportMode(hiveConf: HiveConf): Boolean = {
     val transportMode: String = hiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
-    return transportMode.equalsIgnoreCase("http")
+    transportMode.equalsIgnoreCase("http")
   }
 
 }
