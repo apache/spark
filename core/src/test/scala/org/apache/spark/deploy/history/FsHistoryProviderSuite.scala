@@ -40,15 +40,14 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
   private var provider: FsHistoryProvider = null
 
   before {
-    testDir = Files.createTempDir()
+    testDir = Utils.createTempDir()
     provider = new FsHistoryProvider(new SparkConf()
       .set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
       .set("spark.history.fs.updateInterval", "0"))
   }
 
   after {
-    Utils.getHadoopFileSystem("/", SparkHadoopUtil.get.newConfiguration(new SparkConf()))
-      .delete(new Path(testDir.getAbsolutePath()), true)
+    Utils.deleteRecursively(testDir)
   }
 
   test("Parse new and old application logs") {
@@ -107,7 +106,7 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     }
   }
 
-  test("Parse logs with compression codec set") {
+  test("Parse legacy logs with compression codec set") {
     val testCodecs = List((classOf[LZFCompressionCodec].getName(), true),
       (classOf[SnappyCompressionCodec].getName(), true),
       ("invalid.codec", false))

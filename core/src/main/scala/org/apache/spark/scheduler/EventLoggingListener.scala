@@ -215,9 +215,10 @@ private[spark] object EventLoggingListener extends Logging {
    *
    *   [len][bytes]
    *
-   * Where `len` is an integer, and `bytes` is the UTF-8 encoded version of "key=value". The
-   * very last entry in the header is the HEADER_END_MARKER marker, encoded like the above,
-   * so that the parsing code can know when to stop.
+   * Where `len` is a 4-byte integer (encoded in Java's DataOutputStream format, which is
+   * big-endian), and `bytes` is the UTF-8 encoded version of "key=value" followed by a new line.
+   * The very last entry in the header is the `HEADER_END_MARKER` marker, encoded like the above, so
+   * that the parsing code can know when to stop.
    *
    * The format needs to be kept in sync with the openEventLog() method below. Also, it cannot
    * change in new Spark versions without some other way of detecting the change (like some

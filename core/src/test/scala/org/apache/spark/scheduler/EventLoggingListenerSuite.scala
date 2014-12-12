@@ -182,16 +182,16 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
       fileSystem)
     val lines = readLines(logData)
     val eventSet = mutable.Set(
-      Utils.getFormattedClassName(SparkListenerApplicationStart),
-      Utils.getFormattedClassName(SparkListenerBlockManagerAdded),
-      Utils.getFormattedClassName(SparkListenerEnvironmentUpdate),
-      Utils.getFormattedClassName(SparkListenerJobStart),
-      Utils.getFormattedClassName(SparkListenerJobEnd),
-      Utils.getFormattedClassName(SparkListenerStageSubmitted),
-      Utils.getFormattedClassName(SparkListenerStageCompleted),
-      Utils.getFormattedClassName(SparkListenerTaskStart),
-      Utils.getFormattedClassName(SparkListenerTaskEnd),
-      Utils.getFormattedClassName(SparkListenerApplicationEnd))
+      SparkListenerApplicationStart,
+      SparkListenerBlockManagerAdded,
+      SparkListenerEnvironmentUpdate,
+      SparkListenerJobStart,
+      SparkListenerJobEnd,
+      SparkListenerStageSubmitted,
+      SparkListenerStageCompleted,
+      SparkListenerTaskStart,
+      SparkListenerTaskEnd,
+      SparkListenerApplicationEnd).map(Utils.getFormattedClassName)
     lines.foreach { line =>
       eventSet.foreach { event =>
         if (line.contains(event)) {
