@@ -319,10 +319,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("DISTINCT",
     "SELECT DISTINCT key, value FROM src")
 
-  ignore("empty aggregate input") {
-    createQueryTest("empty aggregate input",
-      "SELECT SUM(key) FROM (SELECT * FROM src LIMIT 0) a")
-  }
+  createQueryTest("empty aggregate input",
+    "SELECT SUM(key) FROM (SELECT * FROM src LIMIT 0) a")
 
   createQueryTest("lateral view1",
     "SELECT tbl.* FROM src LATERAL VIEW explode(array(1,2)) tbl as a")
