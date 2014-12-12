@@ -155,7 +155,7 @@ case $option in
     echo $newpid > $pid
     sleep 2
     # Check if the process has died; in that case we'll tail the log so the user can see
-    if ! kill -0 $newpid >/dev/null 2>&1; then
+    if [[ ! `ps -p $newpid -o args=` =~ $command ]]; then
       echo "failed to launch $command:"
       tail -2 "$log" | sed 's/^/  /'
       echo "full log in $log"
@@ -165,9 +165,10 @@ case $option in
   (stop)
 
     if [ -f $pid ]; then
-      if kill -0 `cat $pid` > /dev/null 2>&1; then
+      TARGET_ID=`cat $pid`
+      if [[ `ps -p $TARGET_ID -o args=` =~ $command ]]; then
         echo stopping $command
-        kill `cat $pid`
+        kill $TARGET_ID
       else
         echo no $command to stop
       fi
