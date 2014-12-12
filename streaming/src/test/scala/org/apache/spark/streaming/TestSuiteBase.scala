@@ -26,6 +26,7 @@ import scala.reflect.ClassTag
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
+import org.apache.spark.streaming.scheduler.{StreamingListenerBatchCompleted, StreamingListener}
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.rdd.RDD
@@ -101,6 +102,37 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
   }
 
   def toTestOutputStream = new TestOutputStream[T](this.parent, this.output.map(_.flatten))
+}
+
+/**
+ * This is an interface that can be used to block until certain events occur, such as
+ * the start/completion of batches.  This is much less brittle than waiting on wall-clock time.
+ * Internally, this is implemented using a StreamingListener.  Constructing a new instance of this
+ * class automatically registers a StreamingListener on the given StreamingContext.
+ */
+  class StreamingTestWaiter(ssc: StreamingContext) {
+
+  // All access to this state should be guarded by `StreamingListener.this.synchronized`
+  private var numCompletedBatches = 0
+
+  private val listener = new StreamingListener {
+    override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit =
+      StreamingTestWaiter.this.synchronized {
+        numCompletedBatches += 1
+        StreamingTestWaiter.this.notifyAll()
+      }
+  }
+  ssc.addStreamingListener(listener)
+
+  /**
+   * Block until a batch completes.
+   */
+  def waitForBatchToComplete(): Unit = this.synchronized {
+    val currentBatchesCompleted = numCompletedBatches
+    while (numCompletedBatches < currentBatchesCompleted + 1) {
+      this.wait()
+    }
+  }
 }
 
 /**
