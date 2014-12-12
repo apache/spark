@@ -130,11 +130,9 @@ case $option in
 
     if [ -f $pid ]; then
       TARGET_ID=`cat $pid`
-      if kill -0 $TARGET_ID > /dev/null 2>&1; then
-        if [[ `ps -p $TARGET_ID -o args=` =~ $command ]]; then
-          echo $command running as process $TARGET_ID.  Stop it first.
-          exit 1
-        fi
+      if [[ `ps -p $TARGET_ID -o args=` =~ $command ]]; then
+        echo $command running as process $TARGET_ID.  Stop it first.
+        exit 1
       fi
     fi
 
