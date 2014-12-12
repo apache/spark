@@ -376,12 +376,12 @@ object TestSettings {
 
   // See http://stackoverflow.com/questions/15798341 for notes on how to fork
   // a new JVM for each test in SBT:
-  def singleTests(tests: Seq[TestDefinition]) =
+  def singleTests(tests: Seq[TestDefinition], javaOptions: Seq[String]) =
     tests map { test =>
       new Group(
         name = test.name,
         tests = Seq(test),
-        runPolicy = SubProcess(javaOptions = Seq.empty[String]))
+        runPolicy = SubProcess(javaOptions = javaOptions))
     }
 
 
@@ -410,7 +410,9 @@ object TestSettings {
     // Enable Junit testing.
     libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test",
     parallelExecution in Test := true,
-    testGrouping in Test <<= definedTests in Test map singleTests,
+    testForkedParallel in Test := false,
+    concurrentRestrictions in Global := Seq(Tags.limit(Tags.ForkedTestGroup, 8)),
+    testGrouping in Test <<= (definedTests in Test, javaOptions in Test) map singleTests,
     logBuffered in Test := true,
     // Remove certain packages from Scaladoc
     scalacOptions in (Compile, doc) := Seq(
