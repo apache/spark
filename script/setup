@@ -3,6 +3,10 @@
 set -x
 set -e
 
+if [ -Z '$CI' ]; then
+  ./script/get_config
+fi 
+
 FWDIR="$(cd `dirname $0`/..; pwd)"
 export HADOOP_OPTIONS="$(cat $FWDIR/SHOPIFY_HADOOP_OPTIONS)"
 export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"

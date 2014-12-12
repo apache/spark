@@ -22,35 +22,29 @@
 echoerr() { echo "$@" 1>&2; }
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
-if [ -z "$SPARK_ON_MESOS" ]; then
-  if [[ -z "$MASTER" ]]; then
-    if [ "$(uname)" == "Darwin" ]; then
-      echoerr "Sparkify: Connecting to chicago spark cluster ..."
-      export MASTER=spark://hadoop-rm.chi.shopify.com:7077
+if [[ -z "$MASTER" ]]; then
+  if [ "$(uname)" == "Darwin" ]; then
+    echoerr "Sparkify: Connecting to chicago spark cluster ..."
+    export MASTER=spark://dn05.chi.shopify.com:7077
 
-      # Figure out the local IP to bind spark to for shell <-> master communication
-      vpn_interface=tap0;
-      get_ip_command="ifconfig $vpn_interface 2>&1 | grep 'inet' | awk '{print \$2}'"
-      if ifconfig $vpn_interface > /dev/null 2>&1; then
-        export SPARK_LOCAL_IP=`bash -c "$get_ip_command"`
-      else
-        echoerr "ERROR: could not find an VPN interface to connect to the Shopify Spark Cluster! Please connect your VPN client! See https://vault-unicorn.shopify.com/VPN---Servers ."
-        exit 1
-      fi
+    # Figure out the local IP to bind spark to for shell <-> master communication
+    vpn_interface=tap0;
+    get_ip_command="ifconfig $vpn_interface 2>&1 | grep 'inet' | awk '{print \$2}'"
+    if ifconfig $vpn_interface > /dev/null 2>&1; then
+      export SPARK_LOCAL_IP=`bash -c "$get_ip_command"`
+    else
+      echoerr "ERROR: could not find an VPN interface to connect to the Shopify Spark Cluster! Please connect your VPN client! See https://vault-unicorn.shopify.com/VPN---Servers ."
+      exit 1
     fi
   fi
-
-  if which ipython > /dev/null; then
-    export IPYTHON=1
-  fi
-
-  if [[ $MASTER == 'local' ]]; then
-    export SPARK_LOCAL_IP=127.0.0.1
-  fi
-else
-  export MESOS_NATIVE_LIBRARY=/usr/local/lib/libmesos.so
-  export MASTER=zk://kafka01.chi.shopify.com:2181/mesos
-  export SPARK_EXECUTOR_URI=http://pack.chi.shopify.com/packages/Shopify/spark/latest.tgz
 fi
 
-export HADOOP_CONF_DIR=$FWDIR/conf/chicago_hadoop
+if which ipython > /dev/null; then
+  export IPYTHON=1
+fi
+
+if [[ $MASTER == 'local' ]]; then
+  export SPARK_LOCAL_IP=127.0.0.1
+fi
+
+export HADOOP_CONF_DIR=$FWDIR/conf/conf.cloudera.yarn
