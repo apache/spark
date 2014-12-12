@@ -94,7 +94,7 @@ class RandomDataGeneratorSuite extends FunSuite {
 
         // since sampling error increases with variance, let's set
         // the absolute tolerance as a percentage
-        val epsilon = 0.1 * expectedStd
+        val epsilon = 0.05 * expectedStd * expectedStd
 
         distributionChecks(normal, expectedMean, expectedStd, epsilon)
     }
@@ -118,7 +118,7 @@ class RandomDataGeneratorSuite extends FunSuite {
 
       // since sampling error increases with variance, let's set
       // the absolute tolerance as a percentage
-      val epsilon = 0.05 * mean
+      val epsilon = 0.05 * mean * mean
 
       distributionChecks(exponential, mean, mean, epsilon)
     }
