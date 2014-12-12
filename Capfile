@@ -37,6 +37,7 @@ namespace :deploy do
 
   task :restart_master, :roles => :master, :on_no_matching_servers => :continue do
     run "sv-sudo restart spark-master"
+    run "sv-sudo restart spark-master-sha-server"
   end
 
   task :restart_history, :roles => :history, :on_no_matching_servers => :continue do
