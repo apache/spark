@@ -18,9 +18,11 @@
 package org.apache.spark.streaming
 
 import java.io.{ObjectInputStream, IOException}
+import java.util.concurrent.TimeoutException
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.SynchronizedBuffer
+import scala.concurrent.duration.{Duration => SDuration}
 import scala.reflect.ClassTag
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -124,13 +126,25 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
   }
   ssc.addStreamingListener(listener)
 
+  def getNumCompletedBatches: Int = this.synchronized {
+    numCompletedBatches
+  }
+
   /**
-   * Block until a batch completes.
+   * Block until the number of completed batches reaches the given threshold.
    */
-  def waitForBatchToComplete(): Unit = this.synchronized {
-    val currentBatchesCompleted = numCompletedBatches
-    while (numCompletedBatches < currentBatchesCompleted + 1) {
-      this.wait()
+  def waitForTotalBatchesCompleted(
+      targetNumBatches: Int,
+      timeout: SDuration = SDuration.Inf): Unit = this.synchronized {
+    val startTime = System.nanoTime
+    def timedOut = timeout < SDuration.Inf && (System.nanoTime - startTime) >= timeout.toNanos
+    def successful = getNumCompletedBatches >= targetNumBatches
+    while (!timedOut && !successful) {
+      this.wait(timeout.toMillis)
+    }
+    if (!successful && timedOut) {
+      throw new TimeoutException(s"Waited for $targetNumBatches completed batches, but only" +
+      s" $numCompletedBatches have completed after $timeout")
     }
   }
 }

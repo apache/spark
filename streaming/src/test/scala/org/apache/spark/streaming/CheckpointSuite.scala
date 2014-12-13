@@ -21,6 +21,8 @@ import java.io.File
 import java.nio.charset.Charset
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
+import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import com.google.common.io.Files
@@ -88,7 +90,7 @@ class CheckpointSuite extends TestSuiteBase {
     // Run till a time such that at least one RDD in the stream should have been checkpointed,
     // then check whether some RDD has been checkpointed or not
     ssc.start()
-    advanceTimeWithRealDelay(ssc, firstNumBatches)
+    advanceTimeWithRealDelay(ssc, firstNumBatches.toInt)
     logInfo("Checkpoint data of state stream = \n" + stateStream.checkpointData)
     assert(!stateStream.checkpointData.currentCheckpointFiles.isEmpty,
       "No checkpointed RDDs in state stream before first failure")
@@ -102,7 +104,7 @@ class CheckpointSuite extends TestSuiteBase {
     // Run till a further time such that previous checkpoint files in the stream would be deleted
     // and check whether the earlier checkpoint files are deleted
     val checkpointFiles = stateStream.checkpointData.currentCheckpointFiles.map(x => new File(x._2))
-    advanceTimeWithRealDelay(ssc, secondNumBatches)
+    advanceTimeWithRealDelay(ssc, secondNumBatches.toInt)
     checkpointFiles.foreach(file =>
       assert(!file.exists, "Checkpoint file '" + file + "' was not deleted"))
     ssc.stop()
@@ -409,8 +411,7 @@ class CheckpointSuite extends TestSuiteBase {
     ssc.start()
     val output = advanceTimeWithRealDelay[V](ssc, initialNumBatches)
     ssc.stop()
-    verifyOutput[V](output, expectedOutput.take(initialNumBatches), true)
-    Thread.sleep(1000)
+    verifyOutput(output, expectedOutput.take(initialNumBatches), useSet = true)
 
     // Restart and complete the computation from checkpoint file
     logInfo(
@@ -419,10 +420,13 @@ class CheckpointSuite extends TestSuiteBase {
       "\n-------------------------------------------\n"
     )
     ssc = new StreamingContext(checkpointDir)
+    val waiter = new StreamingTestWaiter(ssc)
     ssc.start()
+    // Wait for the last batch before restart to be re-processed:
+    waiter.waitForTotalBatchesCompleted(1, timeout = 10 seconds)
     val outputNew = advanceTimeWithRealDelay[V](ssc, nextNumBatches)
     // the first element will be re-processed data of the last batch before restart
-    verifyOutput[V](outputNew, expectedOutput.takeRight(nextNumExpectedOutputs), true)
+    verifyOutput(outputNew, expectedOutput.takeRight(nextNumExpectedOutputs), useSet = true)
     ssc.stop()
     ssc = null
   }
@@ -431,15 +435,15 @@ class CheckpointSuite extends TestSuiteBase {
    * Advances the manual clock on the streaming scheduler by given number of batches.
    * It also waits for the expected amount of time for each batch.
    */
-  def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Long): Seq[Seq[V]] = {
+  def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Int): Seq[Seq[V]] = {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    val waiter = new StreamingTestWaiter(ssc)
     logInfo("Manual clock before advancing = " + clock.time)
-    for (i <- 1 to numBatches.toInt) {
+    for (i <- 1 to numBatches) {
       clock.addToTime(batchDuration.milliseconds)
-      Thread.sleep(batchDuration.milliseconds)
+      waiter.waitForTotalBatchesCompleted(i, timeout = 10 seconds)
     }
     logInfo("Manual clock after advancing = " + clock.time)
-    Thread.sleep(batchDuration.milliseconds)
 
     val outputStream = ssc.graph.getOutputStreams.filter { dstream =>
       dstream.isInstanceOf[TestOutputStreamWithPartitions[V]]
