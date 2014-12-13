@@ -146,6 +146,10 @@ class TaskMetrics extends Serializable {
     }
     _shuffleReadMetrics = Some(merged)
   }
+
+  private[spark] def updateInputMetrics() = synchronized {
+    inputMetrics.foreach(_.updateBytesRead())
+  }
 }
 
 private[spark] object TaskMetrics {
@@ -183,6 +187,25 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
    * Total bytes read.
    */
   var bytesRead: Long = 0L
+
+  @volatile @transient var bytesReadCallback: Option[() => Long] = None
+
+  /**
+   * Invoke the bytesReadCallback and mutate bytesRead.
+   */
+  def updateBytesRead() {
+    bytesReadCallback.foreach { c =>
+      bytesRead = c()
+    }
+  }
+
+ /**
+  * Register a function that can be called to get up-to-date information on how many bytes the task
+  * has read from an input source.
+  */
+  def setBytesReadCallback(f: Option[() => Long]) {
+    bytesReadCallback = f
+  }
 }
 
 /**

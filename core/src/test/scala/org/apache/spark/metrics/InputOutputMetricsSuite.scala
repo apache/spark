@@ -68,7 +68,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext {
       sc.textFile(tmpFilePath, 4).coalesce(2).count()
     }
     assert(bytesRead != 0)
-    assert(bytesRead2 == bytesRead)
+    assert(bytesRead == bytesRead2)
     assert(bytesRead2 >= tmpFile.length())
   }
 
@@ -107,6 +107,43 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext {
       sc.textFile(tmpFilePath, 2).count()
     }
     assert(bytesRead >= tmpFile.length())
+  }
+
+  test("input metrics with interleaved reads") {
+    val cartVector = 0 to 9
+    val cartFile = new File(tmpDir, getClass.getSimpleName + "_cart.txt")
+    val cartFilePath = "file://" + cartFile.getAbsolutePath
+
+    // write files to disk so we can read them later.
+    sc.parallelize(cartVector).saveAsTextFile(cartFilePath)
+    val aRdd = sc.textFile(cartFilePath, 1)
+
+    val tmpRdd = sc.textFile(tmpFilePath)
+
+    val firstSize= runAndReturnBytesRead {
+      aRdd.count()
+    }
+    val secondSize = runAndReturnBytesRead {
+      tmpRdd.count()
+    }
+
+    val cartesianBytes = runAndReturnBytesRead {
+      aRdd.cartesian(tmpRdd).count()
+    }
+
+    // Computing the amount of bytes read for a cartesian operation is a little involved.
+    // Cartesian interleaves reads between two partitions eg. p1 and p2.
+    // Here are the steps:
+    //  1) First it creates an iterator for p1
+    //  2) Creates an iterator for p2
+    //  3) Reads the first element of p1 and then all the elements of p2
+    //  4) proceeds to the next element of p1
+    //  5) Creates a new iterator for p2
+    //  6) rinse and repeat.
+    // As a result we read from the second partition n times where n is the number of keys in
+    // p1. Thus the math below for the test.
+    assert(cartesianBytes != 0)
+    assert(cartesianBytes == firstSize + (cartVector.length  * secondSize))
   }
 
   private def runAndReturnBytesRead(job : => Unit): Long = {
