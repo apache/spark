@@ -1142,6 +1142,55 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+#### Dynamic allocation
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.dynamicAllocation.enabled</code></td>
+  <td>false</td>
+  <td>
+    Enabling dynamic resource allocation.
+    Note that spark.shuffle.service.enabled need to be also true if cluster mode is YARN.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.minExecutors</code></td>
+  <td></td>
+  <td>
+    Minimum value of executors when dynamic allocation is enabled.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.maxExecutors</code></td>
+  <td></td>
+  <td>
+    Maximum value of executors when dynamic allocation is enabled.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.schedulerBacklogTimeout </code></td>
+  <td></td>
+  <td>
+    If there are backlogged tasks for this duration, add new executors.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.sustainedSchedulerBacklogTimeout</code></td>
+  <td></td>
+  <td>
+    If the backlog is sustained for this duration, add more executors
+    This is used only after the initial backlog timeout is exceeded.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.executorIdleTimeout</code></td>
+  <td></td>
+  <td>
+    If an executor has been idle for this duration, remove it.
+  </td>
+</tr>
+</table>
+
 #### Cluster Managers
 Each cluster manager in Spark has additional configuration options. Configurations
 can be found on the pages for each mode:
