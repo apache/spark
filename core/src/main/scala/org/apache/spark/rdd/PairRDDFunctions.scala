@@ -25,6 +25,7 @@ import scala.collection.{Map, mutable}
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+import scala.util.DynamicVariable
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import org.apache.hadoop.conf.{Configurable, Configuration}
@@ -961,7 +962,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val outfmt = job.getOutputFormatClass
     val jobFormat = outfmt.newInstance
 
-    if (self.conf.getBoolean("spark.hadoop.validateOutputSpecs", true)) {
+    val validationDisabled = PairRDDFunctions.disableOutputSpecValidation.value
+    if (!validationDisabled && self.conf.getBoolean("spark.hadoop.validateOutputSpecs", true)) {
       // FileOutputFormat ignores the filesystem parameter
       jobFormat.checkOutputSpecs(job)
     }
@@ -1039,7 +1041,8 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
       valueClass.getSimpleName + ")")
 
-    if (self.conf.getBoolean("spark.hadoop.validateOutputSpecs", true)) {
+    val validationDisabled = PairRDDFunctions.disableOutputSpecValidation.value
+    if (!validationDisabled && self.conf.getBoolean("spark.hadoop.validateOutputSpecs", true)) {
       // FileOutputFormat ignores the filesystem parameter
       val ignoredFs = FileSystem.get(hadoopConf)
       hadoopConf.getOutputFormat.checkOutputSpecs(ignoredFs, hadoopConf)
@@ -1118,4 +1121,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
 private[spark] object PairRDDFunctions {
   val RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES = 256
+  /**
+   * Used by Spark Streaming in order to bypass the `spark.hadoop.validateOutputSpecs` checks
+   * for save actions launched by Spark Streaming, since the validation may break Spark Streaming's
+   * ability to recover from checkpoints.  See SPARK-4835 for more details.
+   */
+  val disableOutputSpecValidation: DynamicVariable[Boolean] = new DynamicVariable[Boolean](false)
 }
