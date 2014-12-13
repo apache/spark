@@ -66,6 +66,9 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
     // In cluster mode, the driver and the AM live in the same JVM, so this does not apply
     if (!isClusterMode) {
       amMemory = Utils.memoryStringToMb(sparkConf.get("spark.yarn.am.memory", "512m"))
+    } else {
+      println("spark.yarn.am.memory is set but does not apply in client mode, " +
+          "use spark.driver.memory instead.")
     }
     // For backward compatibility, SPARK_YARN_DIST_{ARCHIVES/FILES} should be resolved to hdfs://,
     // while spark.yarn.dist.{archives/files} should be resolved to file:// (SPARK-2051).
