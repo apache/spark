@@ -19,8 +19,17 @@
 Fuller unit tests for Python MLlib.
 """
 
+import sys
 from numpy import array, array_equal
-import unittest
+
+if sys.version_info[:2] <= (2, 6):
+    try:
+        import unittest2 as unittest
+    except ImportError:
+        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
+        sys.exit(1)
+else:
+    import unittest
 
 from pyspark.mllib._common import _convert_vector, _serialize_double_vector, \
     _deserialize_double_vector, _dot, _squared_distance
