@@ -17,10 +17,6 @@
 
 package org.apache.spark.streaming
 
-import akka.actor.Actor
-import akka.actor.Props
-import akka.util.ByteString
-
 import java.io.{File, BufferedWriter, OutputStreamWriter}
 import java.net.{InetSocketAddress, SocketException, ServerSocket}
 import java.nio.charset.Charset
@@ -54,6 +50,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
+    val waiter = new StreamingTestWaiter(ssc)
     val networkStream = ssc.socketTextStream(
       "localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
@@ -65,13 +62,12 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq(1, 2, 3, 4, 5)
     val expectedOutput: Seq[Seq[String]] = input.map(i => Seq(i.toString))
-    Thread.sleep(1000)
     for (i <- 0 until input.size) {
       testServer.send(input(i).toString + "\n")
-      Thread.sleep(500)
+      Thread.sleep(500)  // This call is to allow time for the testServer to send the data to Spark
       clock.addToTime(batchDuration.milliseconds)
     }
-    Thread.sleep(1000)
+    waiter.waitForTotalBatchesCompleted(input.size, timeout = 10 seconds)
     logInfo("Stopping server")
     testServer.stop()
     logInfo("Stopping context")
@@ -131,6 +127,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   test("queue input stream - oneAtATime = true") {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
+    val waiter = new StreamingTestWaiter(ssc)
     val queue = new SynchronizedQueue[RDD[String]]()
     val queueStream = ssc.queueStream(queue, oneAtATime = true)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
@@ -143,14 +140,14 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val input = Seq("1", "2", "3", "4", "5")
     val expectedOutput = input.map(Seq(_))
-    //Thread.sleep(1000)
     val inputIterator = input.toIterator
     for (i <- 0 until input.size) {
       // Enqueue more than 1 item per tick but they should dequeue one at a time
       inputIterator.take(2).foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
       clock.addToTime(batchDuration.milliseconds)
     }
-    Thread.sleep(1000)
+    waiter.waitForTotalBatchesCompleted(input.size, timeout = 10 seconds)
+
     logInfo("Stopping context")
     ssc.stop()
 
@@ -160,6 +157,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   test("queue input stream - oneAtATime = false") {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(conf, batchDuration)
+    val waiter = new StreamingTestWaiter(ssc)
     val queue = new SynchronizedQueue[RDD[String]]()
     val queueStream = ssc.queueStream(queue, oneAtATime = false)
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
@@ -177,12 +175,12 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val inputIterator = input.toIterator
     inputIterator.take(3).foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
     clock.addToTime(batchDuration.milliseconds)
-    Thread.sleep(1000)
+    waiter.waitForTotalBatchesCompleted(1, timeout = 10 seconds)
 
     // Enqueue the remaining items (again one by one), merged in the final batch
     inputIterator.foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
     clock.addToTime(batchDuration.milliseconds)
-    Thread.sleep(1000)
+    waiter.waitForTotalBatchesCompleted(2, timeout = 10 seconds)
     logInfo("Stopping context")
     ssc.stop()
 

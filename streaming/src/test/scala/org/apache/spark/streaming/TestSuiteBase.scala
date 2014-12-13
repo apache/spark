@@ -22,7 +22,7 @@ import java.util.concurrent.TimeoutException
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.SynchronizedBuffer
-import scala.concurrent.duration.{Duration => SDuration}
+import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -135,10 +135,10 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
    */
   def waitForTotalBatchesCompleted(
       targetNumBatches: Int,
-      timeout: SDuration = SDuration.Inf): Unit = this.synchronized {
+      timeout: FiniteDuration): Unit = this.synchronized {
     val startTime = System.nanoTime
-    def timedOut = timeout < SDuration.Inf && (System.nanoTime - startTime) >= timeout.toNanos
     def successful = getNumCompletedBatches >= targetNumBatches
+    def timedOut = (System.nanoTime - startTime) >= timeout.toNanos
     while (!timedOut && !successful) {
       this.wait(timeout.toMillis)
     }
