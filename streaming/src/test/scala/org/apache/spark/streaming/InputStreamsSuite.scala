@@ -67,7 +67,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       Thread.sleep(500)  // This call is to allow time for the testServer to send the data to Spark
       clock.addToTime(batchDuration.milliseconds)
     }
-    waiter.waitForTotalBatchesCompleted(input.size, timeout = 10 seconds)
+    waiter.waitForTotalBatchesCompleted(input.size, timeout = Durations.seconds(10))
     logInfo("Stopping server")
     testServer.stop()
     logInfo("Stopping context")
@@ -146,7 +146,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       inputIterator.take(2).foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
       clock.addToTime(batchDuration.milliseconds)
     }
-    waiter.waitForTotalBatchesCompleted(input.size, timeout = 10 seconds)
+    waiter.waitForTotalBatchesCompleted(input.size, timeout = Durations.seconds(10))
 
     logInfo("Stopping context")
     ssc.stop()
@@ -175,12 +175,12 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val inputIterator = input.toIterator
     inputIterator.take(3).foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
     clock.addToTime(batchDuration.milliseconds)
-    waiter.waitForTotalBatchesCompleted(1, timeout = 10 seconds)
+    waiter.waitForTotalBatchesCompleted(1, timeout = Durations.seconds(10))
 
     // Enqueue the remaining items (again one by one), merged in the final batch
     inputIterator.foreach(i => queue += ssc.sparkContext.makeRDD(Seq(i)))
     clock.addToTime(batchDuration.milliseconds)
-    waiter.waitForTotalBatchesCompleted(2, timeout = 10 seconds)
+    waiter.waitForTotalBatchesCompleted(2, timeout = Durations.seconds(10))
     logInfo("Stopping context")
     ssc.stop()
 

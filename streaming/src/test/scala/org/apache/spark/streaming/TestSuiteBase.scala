@@ -22,7 +22,6 @@ import java.util.concurrent.TimeoutException
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.SynchronizedBuffer
-import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -135,12 +134,12 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
    */
   def waitForTotalBatchesCompleted(
       targetNumBatches: Int,
-      timeout: FiniteDuration): Unit = this.synchronized {
-    val startTime = System.nanoTime
+      timeout: Duration): Unit = this.synchronized {
+    val startTime = System.currentTimeMillis()
     def successful = getNumCompletedBatches >= targetNumBatches
-    def timedOut = (System.nanoTime - startTime) >= timeout.toNanos
+    def timedOut = (System.currentTimeMillis() - startTime) >= timeout.milliseconds
     while (!timedOut && !successful) {
-      this.wait(timeout.toMillis)
+      this.wait(timeout.milliseconds)
     }
     if (!successful && timedOut) {
       throw new TimeoutException(s"Waited for $targetNumBatches completed batches, but only" +
@@ -332,6 +331,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
     val output = outputStream.output
 
     try {
+      val waiter = new StreamingTestWaiter(ssc)
       // Start computation
       ssc.start()
 
@@ -342,7 +342,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
         for (i <- 1 to numBatches) {
           logInfo("Actually waiting for " + batchDuration)
           clock.addToTime(batchDuration.milliseconds)
-          Thread.sleep(batchDuration.milliseconds)
+          waiter.waitForTotalBatchesCompleted(i, timeout = batchDuration * 5)
         }
       } else {
         clock.addToTime(numBatches * batchDuration.milliseconds)

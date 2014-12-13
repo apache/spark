@@ -21,8 +21,6 @@ import java.io.File
 import java.nio.charset.Charset
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.reflect.ClassTag
 
 import com.google.common.io.Files
@@ -423,7 +421,7 @@ class CheckpointSuite extends TestSuiteBase {
     val waiter = new StreamingTestWaiter(ssc)
     ssc.start()
     // Wait for the last batch before restart to be re-processed:
-    waiter.waitForTotalBatchesCompleted(1, timeout = 10 seconds)
+    waiter.waitForTotalBatchesCompleted(1, timeout = Durations.seconds(10))
     val outputNew = advanceTimeWithRealDelay[V](ssc, nextNumBatches)
     // the first element will be re-processed data of the last batch before restart
     verifyOutput(outputNew, expectedOutput.takeRight(nextNumExpectedOutputs), useSet = true)
@@ -441,7 +439,7 @@ class CheckpointSuite extends TestSuiteBase {
     logInfo("Manual clock before advancing = " + clock.time)
     for (i <- 1 to numBatches) {
       clock.addToTime(batchDuration.milliseconds)
-      waiter.waitForTotalBatchesCompleted(i, timeout = 10 seconds)
+      waiter.waitForTotalBatchesCompleted(i, timeout = Durations.seconds(10))
     }
     logInfo("Manual clock after advancing = " + clock.time)
 
