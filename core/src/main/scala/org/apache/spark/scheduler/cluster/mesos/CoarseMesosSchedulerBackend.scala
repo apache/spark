@@ -32,6 +32,7 @@ import org.apache.spark.{Logging, SparkContext, SparkEnv, SparkException}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
+import com.google.common.collect.{BiMap, HashBiMap}
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -69,13 +70,17 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   val slaveIdsWithExecutors = new HashSet[String]
 
-  val taskIdToSlaveId = new HashMap[Int, String]
+  val taskIdToSlaveId = HashBiMap.create[Int, String]()
+
   val failuresBySlaveId = new HashMap[String, Int] // How many times tasks on each slave failed
 
+  val pendingRemovedSlaveIds = new HashSet[String]
 
   val extraCoresPerSlave = conf.getInt("spark.mesos.extra.cores", 0)
 
   var nextMesosTaskId = 0
+
+  var executorLimit: Option[Int] = None
 
   @volatile var appId: String = _
 
@@ -153,8 +158,8 @@ private[spark] class CoarseMesosSchedulerBackend(
     if (uri == null) {
       val runScript = new File(executorSparkHome, "./bin/spark-class").getCanonicalPath
       command.setValue(
-        "%s \"%s\" org.apache.spark.executor.CoarseGrainedMesosExecutorBackend " +
-        "%s %s %s %d %s".format(
+        ("%s \"%s\" org.apache.spark.executor.CoarseGrainedMesosExecutorBackend " +
+        "%s %s %s %d %s").format(
           prefixEnv, runScript, driverUrl, offer.getSlaveId.getValue,
           offer.getHostname, numCores, appId))
     } else {
@@ -204,10 +209,11 @@ private[spark] class CoarseMesosSchedulerBackend(
       val filters = Filters.newBuilder().setRefuseSeconds(-1).build()
 
       for (offer <- offers) {
-        val slaveId = offer.getSlaveId.toString
+        val slaveId = offer.getSlaveId.getValue
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
-        if (totalCoresAcquired < maxCores &&
+        if (taskIdToSlaveId.size < executorLimit.getOrElse(Int.MaxValue) &&
+            totalCoresAcquired < maxCores &&
             mem >= MemoryUtils.calculateTotalMemory(sc) &&
             cpus >= 1 &&
             failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
@@ -231,9 +237,7 @@ private[spark] class CoarseMesosSchedulerBackend(
           d.launchTasks(
             Collections.singleton(offer.getId),  Collections.singletonList(task), filters)
         } else {
-          // Filter it out
-          d.launchTasks(
-            Collections.singleton(offer.getId), Collections.emptyList[MesosTaskInfo](), filters)
+          d.declineOffer(offer.getId)
         }
       }
     }
@@ -273,6 +277,7 @@ private[spark] class CoarseMesosSchedulerBackend(
         val slaveId = taskIdToSlaveId(taskId)
         slaveIdsWithExecutors -= slaveId
         taskIdToSlaveId -= taskId
+        pendingRemovedSlaveIds -= slaveId
         // Remove the cores we have remembered for this task, if it's in the hashmap
         for (cores <- coresByTaskId.get(taskId)) {
           totalCoresAcquired -= cores
@@ -311,6 +316,11 @@ private[spark] class CoarseMesosSchedulerBackend(
       if (slaveIdsWithExecutors.contains(slaveId.getValue)) {
         // Note that the slave ID corresponds to the executor ID on that slave
         slaveIdsWithExecutors -= slaveId.getValue
+        val slaveIdToTaskId: BiMap[String, Int] = taskIdToSlaveId.inverse()
+        if (slaveIdToTaskId.contains(slaveId.getValue)) {
+          taskIdToSlaveId.remove(slaveIdToTaskId.get(slaveId.getValue))
+        }
+        pendingRemovedSlaveIds -= slaveId.getValue
         removeExecutor(slaveId.getValue, "Mesos slave lost")
       }
     }
@@ -327,4 +337,39 @@ private[spark] class CoarseMesosSchedulerBackend(
       super.applicationId
     }
 
+  override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
+    // We don't truly know if we can fulfill the full amount of executors
+    // since at coarse grain it depends on the amount of slaves available.
+    logInfo("Capping the total amount of executors to " + requestedTotal)
+    executorLimit = Option(requestedTotal);
+    true
+  }
+
+  override def doKillExecutors(executorIds: Seq[String]): Boolean = {
+    if (driver == null) {
+      logWarning("Asked to kill executors before the executor was started.")
+      return false
+    }
+
+    val slaveIdToTaskId = taskIdToSlaveId.inverse()
+    for (executorId <- executorIds) {
+      if (slaveIdToTaskId.contains(executorId)) {
+        driver.killTask(
+          TaskID.newBuilder().setValue(slaveIdToTaskId.get(executorId).toString).build)
+        pendingRemovedSlaveIds += executorId
+      } else {
+        logWarning("Unable to find executor Id '" + executorId + "' in Mesos scheduler")
+      }
+    }
+
+    assert(pendingRemovedSlaveIds.size <= taskIdToSlaveId.size)
+
+    // We cannot simply decrement from the existing executor limit as we may not able to
+    // launch as much executors as the limit. But we assume if we are notified to kill
+    // executors, that means the scheduler wants to set the limit that is less than
+    // the amount of the executors that has been launched. Therefore, we take the existing
+    // amount of executors launched and deduct the executors killed as the new limit.
+    executorLimit = Option(taskIdToSlaveId.size - pendingRemovedSlaveIds.size)
+    true
+  }
 }
