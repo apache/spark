@@ -52,10 +52,7 @@ private[mllib] object ModelExportFactory {
               svm, 
               "linear SVM: if predicted value > 0, the outcome is positive, or negative otherwise")
         case logisticRegression: LogisticRegressionModel => 
-          new LogisticRegressionPMMLModelExport(
-              logisticRegression, 
-              "logistic regression: if predicted value > 0.5, "
-              + "the outcome is positive, or negative otherwise")
+          new LogisticRegressionPMMLModelExport(logisticRegression, "logistic regression")
         case _ => 
           throw new IllegalArgumentException("Export not supported for model: " + model.getClass)
       }

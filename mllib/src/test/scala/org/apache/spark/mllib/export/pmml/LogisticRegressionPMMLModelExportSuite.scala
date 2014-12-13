@@ -39,18 +39,18 @@ class LogisticRegressionPMMLModelExportSuite extends FunSuite{
     //assert that the PMML format is as expected
     assert(logisticModelExport.isInstanceOf[PMMLModelExport])
     var pmml = logisticModelExport.asInstanceOf[PMMLModelExport].getPmml()
-    assert(pmml.getHeader().getDescription() === "logistic regression: if predicted value > 0.5, the outcome is positive, or negative otherwise")
+    assert(pmml.getHeader().getDescription() === "logistic regression")
     //check that the number of fields match the weights size
     assert(pmml.getDataDictionary().getNumberOfFields() === logisticRegressionModel.weights.size + 1)
     //this verify that there is a model attached to the pmml object and the model is a regression one
-    //it also verifies that the pmml model has a regression table (for target category YES) with the same number of predictors of the model weights
+    //it also verifies that the pmml model has a regression table (for target category 1) with the same number of predictors of the model weights
     assert(pmml.getModels().get(0).asInstanceOf[RegressionModel]
-     .getRegressionTables().get(0).getTargetCategory() === "YES")
+     .getRegressionTables().get(0).getTargetCategory() === "1")
     assert(pmml.getModels().get(0).asInstanceOf[RegressionModel]
      .getRegressionTables().get(0).getNumericPredictors().size() === logisticRegressionModel.weights.size)
-    //verify if there is a second table with target category NO and no predictors
+    //verify if there is a second table with target category 0 and no predictors
     assert(pmml.getModels().get(0).asInstanceOf[RegressionModel]
-     .getRegressionTables().get(1).getTargetCategory() === "NO")
+     .getRegressionTables().get(1).getTargetCategory() === "0")
     assert(pmml.getModels().get(0).asInstanceOf[RegressionModel]
      .getRegressionTables().get(1).getNumericPredictors().size() === 0)
    

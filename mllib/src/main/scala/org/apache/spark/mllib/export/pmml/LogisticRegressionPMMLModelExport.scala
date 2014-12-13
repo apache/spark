@@ -58,10 +58,10 @@ private[mllib] class LogisticRegressionPMMLModelExport(
        val miningSchema = new MiningSchema()
        
        val regressionTableYES = new RegressionTable(model.intercept)
-       .withTargetCategory("YES")
+       .withTargetCategory("1")
        
        val regressionTableNO = new RegressionTable(0.0)
-       .withTargetCategory("NO")
+       .withTargetCategory("0")
        
        val regressionModel = new RegressionModel(miningSchema,MiningFunctionType.CLASSIFICATION)
         .withModelName(description)
@@ -83,7 +83,7 @@ private[mllib] class LogisticRegressionPMMLModelExport(
        val targetField = FieldName.create("target");
        dataDictionary
         .withDataFields(
-            new DataField(targetField, OpType.CONTINUOUS, DataType.DOUBLE)
+            new DataField(targetField, OpType.CATEGORICAL, DataType.STRING)
         )
         miningSchema
          .withMiningFields(new MiningField(targetField)
