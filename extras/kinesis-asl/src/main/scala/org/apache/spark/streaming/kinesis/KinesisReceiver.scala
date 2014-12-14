@@ -25,6 +25,8 @@ import org.apache.spark.streaming.Duration
 import org.apache.spark.streaming.receiver.Receiver
 
 import com.amazonaws.auth.AWSCredentialsProvider
+import com.amazonaws.auth.AWSCredentials
+import com.amazonaws.auth.BasicAWSCredentials
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessor
 import com.amazonaws.services.kinesis.clientlibrary.interfaces.IRecordProcessorFactory
@@ -58,6 +60,8 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.Worker
  *                                 (InitialPositionInStream.TRIM_HORIZON) or
  *                                 the tip of the stream (InitialPositionInStream.LATEST).
  * @param storageLevel Storage level to use for storing the received objects
+ * @param awsCredentials Optional tuple containing AWS access key and secret. If not provided, 
+ *                       DefaultAWSCredentialsProviderChain will be used to resolve AWS credentials.
  *
  * @return ReceiverInputDStream[Array[Byte]]   
  */
@@ -67,7 +71,8 @@ private[kinesis] class KinesisReceiver(
     endpointUrl: String,
     checkpointInterval: Duration,
     initialPositionInStream: InitialPositionInStream,
-    storageLevel: StorageLevel)
+    storageLevel: StorageLevel,
+    awsCredentials: Option[(String, String)] = None)
   extends Receiver[Array[Byte]](storageLevel) with Logging { receiver =>
 
   /*
@@ -119,7 +124,12 @@ private[kinesis] class KinesisReceiver(
    */
   override def onStart() {
     workerId = InetAddress.getLocalHost.getHostAddress() + ":" + UUID.randomUUID()
-    credentialsProvider = new DefaultAWSCredentialsProviderChain()
+    credentialsProvider = awsCredentials.map(credentials => new AWSCredentialsProvider() {
+                            override def getCredentials: AWSCredentials = {
+                              new BasicAWSCredentials(credentials._1, credentials._2)
+                            }
+                            override def refresh(): Unit = {}
+                          }).getOrElse(new DefaultAWSCredentialsProviderChain())
     kinesisClientLibConfiguration = new KinesisClientLibConfiguration(appName, streamName,
       credentialsProvider, workerId).withKinesisEndpoint(endpointUrl)
       .withInitialPositionInStream(initialPositionInStream).withTaskBackoffTimeMillis(500)

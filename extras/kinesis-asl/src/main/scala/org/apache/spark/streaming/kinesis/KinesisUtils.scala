@@ -25,6 +25,7 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
 import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionInStream
+import com.amazonaws.auth.AWSCredentials
 
 
 /**
@@ -35,6 +36,8 @@ import com.amazonaws.services.kinesis.clientlibrary.lib.worker.InitialPositionIn
 object KinesisUtils {
   /**
    * Create an InputDStream that pulls messages from a Kinesis stream.
+   * Credentials used to access Kinesis stream will be resolved using 
+   * DefaultAWSCredentialsProviderChain.
    * :: Experimental ::
    * @param ssc    StreamingContext object
    * @param streamName   Kinesis stream name
@@ -63,9 +66,45 @@ object KinesisUtils {
     ssc.receiverStream(new KinesisReceiver(ssc.sc.appName, streamName, endpointUrl,
         checkpointInterval, initialPositionInStream, storageLevel))
   }
+  
+  /**
+   * Create an InputDStream that pulls messages from a Kinesis stream.
+   * :: Experimental ::
+   * @param ssc    StreamingContext object
+   * @param streamName   Kinesis stream name
+   * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
+   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
+   *                            See the Kinesis Spark Streaming documentation for more
+   *                            details on the different types of checkpoints.
+   * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
+   *                                 worker's initial starting position in the stream.
+   *                                 The values are either the beginning of the stream
+   *                                 per Kinesis' limit of 24 hours
+   *                                 (InitialPositionInStream.TRIM_HORIZON) or
+   *                                 the tip of the stream (InitialPositionInStream.LATEST).
+   * @param storageLevel Storage level to use for storing the received objects
+   * @param credentials Credentials to access Kinesis stream.
+   *
+   * @return ReceiverInputDStream[Array[Byte]]
+   */
+  @Experimental
+  def createStream(
+      ssc: StreamingContext,
+      streamName: String,
+      endpointUrl: String,
+      checkpointInterval: Duration,
+      initialPositionInStream: InitialPositionInStream,
+      storageLevel: StorageLevel,
+      credentials: AWSCredentials): ReceiverInputDStream[Array[Byte]] = {
+    ssc.receiverStream(new KinesisReceiver(ssc.sc.appName, streamName, endpointUrl,
+        checkpointInterval, initialPositionInStream, storageLevel, 
+        Some(credentials.getAWSAccessKeyId(), credentials.getAWSSecretKey())))
+  }
 
   /**
    * Create a Java-friendly InputDStream that pulls messages from a Kinesis stream.
+   * Credentials used to access Kinesis stream will be resolved using 
+   * DefaultAWSCredentialsProviderChain.
    * :: Experimental ::
    * @param jssc Java StreamingContext object
    * @param streamName   Kinesis stream name
@@ -93,5 +132,39 @@ object KinesisUtils {
       storageLevel: StorageLevel): JavaReceiverInputDStream[Array[Byte]] = {
     jssc.receiverStream(new KinesisReceiver(jssc.ssc.sc.appName, streamName,
         endpointUrl, checkpointInterval, initialPositionInStream, storageLevel))
+  }
+  
+  /**
+   * Create a Java-friendly InputDStream that pulls messages from a Kinesis stream.
+   * :: Experimental ::
+   * @param jssc Java StreamingContext object
+   * @param streamName   Kinesis stream name
+   * @param endpointUrl  Url of Kinesis service (e.g., https://kinesis.us-east-1.amazonaws.com)
+   * @param checkpointInterval  Checkpoint interval for Kinesis checkpointing.
+   *                            See the Kinesis Spark Streaming documentation for more
+   *                            details on the different types of checkpoints.
+   * @param initialPositionInStream  In the absence of Kinesis checkpoint info, this is the
+   *                                 worker's initial starting position in the stream.
+   *                                 The values are either the beginning of the stream
+   *                                 per Kinesis' limit of 24 hours
+   *                                 (InitialPositionInStream.TRIM_HORIZON) or
+   *                                 the tip of the stream (InitialPositionInStream.LATEST).
+   * @param storageLevel Storage level to use for storing the received objects
+   * @param credentials Credentials to access Kinesis stream.
+   *
+   * @return JavaReceiverInputDStream[Array[Byte]]
+   */
+  @Experimental
+  def createStream(
+      jssc: JavaStreamingContext, 
+      streamName: String, 
+      endpointUrl: String, 
+      checkpointInterval: Duration,
+      initialPositionInStream: InitialPositionInStream,
+      storageLevel: StorageLevel,
+      credentials: AWSCredentials): JavaReceiverInputDStream[Array[Byte]] = {
+    jssc.receiverStream(new KinesisReceiver(jssc.ssc.sc.appName, streamName,
+        endpointUrl, checkpointInterval, initialPositionInStream, storageLevel, 
+        Some(credentials.getAWSAccessKeyId(), credentials.getAWSSecretKey())))
   }
 }
