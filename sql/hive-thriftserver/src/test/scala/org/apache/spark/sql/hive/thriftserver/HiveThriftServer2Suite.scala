@@ -142,7 +142,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
              |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=http
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT}=$port
-              """.stripMargin.split("\\s+").toSeq
+           """.stripMargin.split("\\s+").toSeq
       } else {
           s"""$startScript
              |  --master local
