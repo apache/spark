@@ -219,38 +219,26 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     }
   }
 
-  // store all of the session states to the thread id, this will be updated as new operation
-  @transient
-  protected lazy val hiveSessionStates = mutable.Map[Long, SessionState]()
-
-  def updateSessionState(sessionState: SessionState) =
-    hiveSessionStates(Thread.currentThread().getId) = sessionState
-
-  def removeSessionState =
-    hiveSessionStates -= Thread.currentThread().getId
-
-  def sessionState: SessionState =
-    hiveSessionStates.getOrElse(Thread.currentThread().getId,
-      // if start with cliDriver, no records in sessionStates, use the latest one
-      Option(SessionState.get())
-        .orElse {
-        val newState = new SessionState(new HiveConf(classOf[SessionState]))
-        SessionState.start(newState)
-        Some(newState)
-      }
-      .map { state =>
+  @transient lazy val currentSessionState = new ThreadLocal[SessionState]() {
+    override def initialValue(): SessionState = {
+      Option(SessionState.get()).orElse {
+        val state = new SessionState(new HiveConf(classOf[SessionState]))
+        SessionState.start(state)
         setConf(state.getConf.getAllProperties)
         if (state.out == null) state.out = new PrintStream(outputBuffer, true, "UTF-8")
         if (state.err == null) state.err = new PrintStream(outputBuffer, true, "UTF-8")
-        state
-      }
-      .get)
+        Some(state)
+      }.get
+    }
+  }
+
+  def sessionState = currentSessionState.get()
 
   def hiveconf = sessionState.getConf
 
   override def setConf(key: String, value: String): Unit = {
-    super.setConf(key, value)
     runSqlHive(s"SET $key=$value")
+    super.setConf(key, value)
   }
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
@@ -296,7 +284,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
       val proc: CommandProcessor = HiveShim.getCommandProcessor(Array(tokens(0)), hiveconf)
 
-      SessionState.start(sessionState)
+      if (SessionState.get() != sessionState) {
+        SessionState.start(sessionState)
+      }
 
       proc match {
         case driver: Driver =>

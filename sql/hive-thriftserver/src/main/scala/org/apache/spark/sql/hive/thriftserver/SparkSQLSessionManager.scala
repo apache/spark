@@ -50,6 +50,6 @@ private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
 
   override def closeSession(sessionHandle: SessionHandle) {
     super.closeSession(sessionHandle)
-    hiveContext.removeSessionState
+    hiveContext.currentSessionState.remove()
   }
 }
