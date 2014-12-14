@@ -157,11 +157,15 @@ class Airflow(BaseView):
 
         request_dict = {k:request.args.get(k) for k in request.args}
         args.update(request_dict)
+        from airflow import macros
+        args['macros'] = macros
         sql = jinja2.Template(chart.sql).render(**args)
         label = jinja2.Template(chart.label).render(**args)
         has_data = False
         table = None
         failed = False
+        import pandas as pd
+        pd.set_option('display.max_colwidth', 100)
         try:
             df = hook.get_pandas_df(sql)
             has_data = len(df)
