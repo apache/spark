@@ -122,8 +122,13 @@ class Word2Vec extends Serializable with Logging {
   /** context words from [-window, window] */
   private val window = 5
 
-  /** minimum frequency to consider a vocabulary word */
-  private val minCount = 5
+/** minimum frequency to consider a vocabulary word */
+private var minCount = 5
+
+def setMinCount(minCount: Int): this.type = {
+this.minCount = minCount
+this
+}
 
   private var trainWordsCount = 0
   private var vocabSize = 0
