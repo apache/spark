@@ -49,7 +49,7 @@ object Partitioner {
    * defaultParallelism, otherwise we'll use the max number of upstream partitions.
    *
    * Unless spark.default.parallelism is set, the number of partitions will be the
-   * same as { number of partitions in the largest upstream RDD * spark.default.parallelismRatio },
+   * same as {number of partitions in the largest upstream RDD * spark.default.parallelismRatio},
    * as this should be least likely to cause out-of-memory errors.
    *
    * We use two method parameters (rdd, others) to enforce callers passing at least 1 RDD.
