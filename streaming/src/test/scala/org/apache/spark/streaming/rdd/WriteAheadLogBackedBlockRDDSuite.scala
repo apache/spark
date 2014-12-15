@@ -20,6 +20,7 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.commons.io.FileUtils
+import org.apache.spark.util.Utils
 
 import scala.util.Random
 
@@ -53,7 +54,7 @@ class WriteAheadLogBackedBlockRDDSuite extends FunSuite with BeforeAndAfterAll {
   override def afterAll(): Unit = {
     // Copied from LocalSparkContext, simpler than to introduced test dependencies to core tests.
     sparkContext.stop()
-    FileUtils.deleteDirectory(dir)
+    Utils.deleteRecursively(dir)
     System.clearProperty("spark.driver.port")
   }
 
