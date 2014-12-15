@@ -51,23 +51,23 @@ class WriteAheadLogBackedBlockRDDSuite extends FunSuite with BeforeAndAfterAll {
     System.clearProperty("spark.driver.port")
   }
 
-  ignore("Read data available in block manager and write ahead log") {
+  test("Read data available in block manager and write ahead log") {
     testRDD(5, 5)
   }
 
-  ignore("Read data available only in block manager, not in write ahead log") {
+  test("Read data available only in block manager, not in write ahead log") {
     testRDD(5, 0)
   }
 
-  ignore("Read data available only in write ahead log, not in block manager") {
+  test("Read data available only in write ahead log, not in block manager") {
     testRDD(0, 5)
   }
 
-  ignore("Read data available only in write ahead log, and test storing in block manager") {
+  test("Read data available only in write ahead log, and test storing in block manager") {
     testRDD(0, 5, testStoreInBM = true)
   }
 
-  ignore("Read data with partially available in block manager, and rest in write ahead log") {
+  test("Read data with partially available in block manager, and rest in write ahead log") {
     testRDD(3, 2)
   }
 
