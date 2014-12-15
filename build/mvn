@@ -36,7 +36,7 @@ prep_install_for_linux() {
   echo -n ""
 }
 
-# Called before any binaries are installed for the OS X operating system.
+# Called before any binaries are installed for the OSX operating system.
 # Current checks are as follows:
 # - 'brew' must be installed
 prep_install_for_osx() {
@@ -46,46 +46,70 @@ prep_install_for_osx() {
     exit 1
 }
 
-# Determine if a given application is already installed and, if not, check for
-# forced installation,
+# Determines if a given application is already installed. If not, will attempt
+# to install if the -f (forced install) flag was set from the command line
+# options.
+# Leverages the build/packages directory for package install files which
+# cater installation of a given application across various operating systems.
+# - Current supported operating systems are Linux, Solaris, BSD, and OSX
 ## Arg1 - application name
 check_and_install_app() {
+  local resource="${_DIR}/packages/$1.sh"
   # create the local environment variable in uppercase
-  APP_BIN="`echo $1 | awk '{print toupper(\$0)}'`_BIN"
+  local app_bin="`echo $1 | awk '{print toupper(\$0)}'`_BIN"
   # some black magic to set the generated app variable (i.e. MVN_BIN) into the
   # environment
-  eval "${APP_BIN}=`which $1 2>/dev/null`"
-
-  # Check and source the package build file if present, else error out
-  if [ -f "$resource" ]; then
-    source "${_DIR}/packages/$1.sh"
-  else
-    echo "ERROR: Cannot find the $1.sh build file from within ${_DIR}/packages."
-    echo "       Ensure the file exists and is accesible."
-    exit 1
-  fi
+  eval "${app_bin}=`which $1 2>/dev/null`"
 
   if [ -z "`which $1 2>/dev/null`" ]; then
     # attempt to force install if flagged
     if [ -n "${FORCE_INSTALL}" ]; then
-      local resource="${_DIR}/packages/$1.sh"
-
+      # Check and source the package build file if present, else error out
+      if [ -f "$resource" ]; then
+        source "${_DIR}/packages/$1.sh"
         prep_install_for_${_OSTYPE}
         install_$1_for_${_OSTYPE}
-
-    # else exit with error message
+      else
+        echo "ERROR: Cannot find the $1.sh build file from within ${_DIR}/packages."
+        echo "       Ensure the file exists and is accesible."
+        exit 1
+      fi
     else
       echo "ERROR: $1 isn't installed; please install or automatically force install (-f)."
       exit 2
     fi
   fi
-  postprocess_$1_for_${_OSTYPE}
+}
+
+check_and_download_scala() {
+  # Using Python's minidom model, parse the pom.xml and retrieve the Scala version
+  local scala_version=`python -c "
+from xml.dom import minidom
+print(minidom.parse('pom.xml').getElementsByTagName('scala.version')[0].firstChild.data)"`
+  local scala_url="http://downloads.typesafe.com/scala/${scala_version}/scala-${scala_version}.tgz"
+  local scala_loc="${_DIR}/scala-${scala_version}.tgz"
+  local scala_bin="${_DIR}/scala-${scala_version}/bin/scala"
+
+  if [ ! -f "${scala_bin}" ]; then
+    # check if we already have the tarball; check if we have curl installed; download `scala`
+    [ ! -f "${scala_loc}" ] && [ -n "`which curl 2>/dev/null`" ] && curl "${scala_url}" > "${scala_loc}"
+    # if the `scala` file still doesn't exist, lets try `wget` and cross our fingers
+    [ ! -f "${scala_loc}" ] && [ -n "`which wget 2>/dev/null`" ] && wget -O "${scala_loc}" "${scala_url}"
+    # if both were unsuccessful, exit
+    [ ! -f "${scala_loc}" ] && \
+      echo "ERROR: Cannot find or download a version of Scala, please install manually and try again." && \
+      exit 2
+    cd "${_DIR}" && tar -xzf "${scala_loc}"
+    rm -rf "${scala_loc}"
+  fi
+  SCALA_COMPILER="$(cd "$(dirname ${scala_bin})/../lib" && pwd)/scala-compiler.jar"
+  SCALA_LIBRARY="$(cd "$(dirname ${scala_bin})/../lib" && pwd)/scala-library.jar"
 }
 
 # Prints the help and usage for this script
 print_help() {
   echo "Spark Build Suite for Maven" && echo
-  echo "Usage: ./build/mvn <options> -- <mvn-parameters>" && echo
+  echo "Usage: build/mvn <options> -- <mvn-parameters>" && echo
   echo "  Options:"
   echo -e "    -p=<port>\t\tSets the port for a local Zinc instance"
   echo -e "    -f\t\t\tForces install of necessary packages"
@@ -95,8 +119,8 @@ print_help() {
   echo "    call. If none are provided the default of 'clean package -DskipTests'"
   echo "    will be executed." && echo
   echo "  Examples:"
-  echo "    ./build/mvn -f -- clean package"
-  echo "    ./build/mvn -p=3031 -- clean"
+  echo "    build/mvn -f -- clean package"
+  echo "    build/mvn -p=3031 -- clean"
 }
 
 # Set a cleaned OS type string based on the $OSTYPE bash variable
@@ -135,7 +159,6 @@ while [ ! "$OPT" = "--" -a ! $# -eq 0 ]; do
       exit 0
       ;;
     *)
-      echo "Unknown option: $OPT"
       shift
       ;;
   esac
@@ -146,10 +169,12 @@ shift
 # Setup healthy defaults for the Zinc port if none were provided
 ZINC_PORT=${ZINC_PORT:-"3030"}
 
-# Check and install all applications necessary to fully build Spark
+# Check and install all applications necessary to build Spark
 check_and_install_app "mvn"
 check_and_install_app "zinc"
-check_and_install_app "scala"
+
+# Check and download the proper version of Scala for the build
+check_and_download_scala
 
 # Reset the current working directory
 cd "${_DIR}/.."
@@ -160,8 +185,9 @@ if [ -n "`${ZINC_BIN} -status`" ]; then
   ${ZINC_BIN} -shutdown
 fi
 
-${ZINC_BIN} -start -port ${ZINC_PORT} -scala-home "${SCALA_HOME}"
-${ZINC_BIN} -status
+${ZINC_BIN} -start -port ${ZINC_PORT} \
+  -scala-compiler "${SCALA_COMPILER}" \
+  -scala-library "${SCALA_LIBRARY}"
 
 # Determine the parameters pushed in from the command line and, if any are
 # present, use those within the maven
