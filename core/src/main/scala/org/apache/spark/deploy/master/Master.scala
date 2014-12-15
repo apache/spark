@@ -510,7 +510,7 @@ private[spark] class Master(
     val shuffledAliveWorkers = Random.shuffle(workers.toSeq.filter(_.state == WorkerState.ALIVE))
     val numWorkersAlive = shuffledAliveWorkers.size
     var curPos = 0
-    
+
     for (driver <- waitingDrivers.toList) { // iterate over a copy of waitingDrivers
       // We assign workers to each waiting driver in a round-robin fashion. For each driver, we
       // start from the last worker that was assigned a driver, and continue onwards until we have
@@ -697,6 +697,11 @@ private[spark] class Master(
       }
       persistenceEngine.removeApplication(app)
       schedule()
+
+      // Tell all workers that the application has finished, so they can clean up any app state.
+      workers.foreach { w =>
+        w.actor ! ApplicationFinished(app.id)
+      }
     }
   }
 

@@ -175,4 +175,9 @@ private[deploy] object DeployMessages {
   // Liveness checks in various places
 
   case object SendHeartbeat
+
+  // Application finished message, used for cleanup
+
+  case class ApplicationFinished(id: String)
+
 }
