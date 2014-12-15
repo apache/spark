@@ -31,11 +31,11 @@ private[spark] object MesosSchedulerBackendUtil extends Logging {
    * Parse a volume spec in the form passed to 'docker run -v'
    * which is [host-dir:][container-dir][:rw|ro]
    */
-  def parseVolumesSpec(volumes:String):List[Volume] = {
-    volumes.split(",").map(_.split(":")).map({ spec:Array[String] =>
-        val vol:Volume.Builder = Volume
-                                .newBuilder()
-                                .setMode(Volume.Mode.RW)
+  def parseVolumesSpec(volumes: String): List[Volume] = {
+    volumes.split(",").map(_.split(":")).map({ spec: Array[String] =>
+        val vol: Volume.Builder = Volume
+          .newBuilder()
+          .setMode(Volume.Mode.RW)
         spec match {
           case Array(container_path) => 
             Some(vol.setContainerPath(container_path))
@@ -75,10 +75,10 @@ private[spark] object MesosSchedulerBackendUtil extends Logging {
    * anticipates the expansion of the docker form to allow for a protocol
    * and leaves open the chance for mesos to begin to accept an 'ip' field
    */
-  def parsePortMappingsSpec(portmaps:String):List[DockerInfo.PortMapping] = {
-    portmaps.split(",").map(_.split(":")).map({ spec:Array[String] =>
-      val portmap:DockerInfo.PortMapping.Builder = DockerInfo.PortMapping
-                                                   .newBuilder()
+  def parsePortMappingsSpec(portmaps: String): List[DockerInfo.PortMapping] = {
+    portmaps.split(",").map(_.split(":")).map({ spec: Array[String] =>
+      val portmap: DockerInfo.PortMapping.Builder = DockerInfo.PortMapping
+        .newBuilder()
       spec match {
         case Array(host_port, container_port) =>
           Some(portmap.setHostPort(host_port.toInt)

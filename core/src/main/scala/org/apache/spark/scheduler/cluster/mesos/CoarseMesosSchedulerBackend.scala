@@ -200,11 +200,11 @@ private[spark] class CoarseMesosSchedulerBackend(
           sc.conf.getOption("spark.executor.docker.image").map { image:String =>
             val container = task.getContainerBuilder()
             val volumes = sc.conf
-                          .getOption("spark.executor.docker.volumes")
-                          .map (MesosSchedulerBackendUtil.parseVolumesSpec _)
+              .getOption("spark.executor.docker.volumes")
+              .map(MesosSchedulerBackendUtil.parseVolumesSpec _)
             val portmaps = sc.conf
-                           .getOption("spark.executor.docker.portmaps")
-                           .map (MesosSchedulerBackendUtil.parsePortMappingsSpec _)
+              .getOption("spark.executor.docker.portmaps")
+              .map(MesosSchedulerBackendUtil.parsePortMappingsSpec _)
             MesosSchedulerBackendUtil.withDockerInfo(container, image,
                                                      volumes  = volumes,
                                                      portmaps = portmaps)
