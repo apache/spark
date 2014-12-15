@@ -110,7 +110,7 @@ if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`${ZINC_BIN} -status`" ]; then
   ${ZINC_BIN} -shutdown
   ${ZINC_BIN} -start -port ${ZINC_PORT} \
     -scala-compiler "${SCALA_COMPILER}" \
-    -scala-library "${SCALA_LIBRARY}"
+    -scala-library "${SCALA_LIBRARY}" &>/dev/null
 fi
 
 # Last, call the `mvn` command as usual
