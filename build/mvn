@@ -49,7 +49,7 @@ install_zinc() {
     "http://downloads.typesafe.com/zinc/0.3.5.3" \
     "zinc-0.3.5.3.tgz" \
     "${zinc_path}"
-  ZINC_BIN="${_DIR}/${ZINC_PATH}"
+  ZINC_BIN="${_DIR}/${zinc_path}"
 }
 
 # Determine the Scala version from the root pom.xml file, set the Scala URL,
