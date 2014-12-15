@@ -44,7 +44,11 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
   before {
     tempDir = Files.createTempDir()
     testDir = tempDir.toString
-    testFile = new File(tempDir, Random.nextString(10)).toString
+    testFile = {
+      val f = File.createTempFile("testFile", null, tempDir)
+      assert(f.delete())
+      f.toString
+    }
     if (manager != null) {
       manager.stop()
       manager = null
