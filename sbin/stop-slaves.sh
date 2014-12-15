@@ -17,8 +17,8 @@
 # limitations under the License.
 #
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+sbin="`dirname "$0"`"
+sbin="`cd "$sbin"; pwd`"
 
 . "$sbin/spark-config.sh"
 
@@ -29,10 +29,4 @@ if [ -e "$sbin"/../tachyon/bin/tachyon ]; then
   "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/../tachyon/bin/tachyon killAll tachyon.worker.Worker
 fi
 
-if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
-  "$sbin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker 1
-else
-  for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
-    "$sbin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
-  done
-fi
+"$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/stop-slave.sh
