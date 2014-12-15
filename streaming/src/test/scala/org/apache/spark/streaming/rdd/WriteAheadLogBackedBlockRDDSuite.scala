@@ -19,6 +19,8 @@ package org.apache.spark.streaming.rdd
 import java.io.File
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.commons.io.FileUtils
+
 import scala.util.Random
 
 import com.google.common.io.Files
@@ -51,7 +53,7 @@ class WriteAheadLogBackedBlockRDDSuite extends FunSuite with BeforeAndAfterAll {
   override def afterAll(): Unit = {
     // Copied from LocalSparkContext, simpler than to introduced test dependencies to core tests.
     sparkContext.stop()
-    dir.delete()
+    FileUtils.deleteDirectory(dir)
     System.clearProperty("spark.driver.port")
   }
 
