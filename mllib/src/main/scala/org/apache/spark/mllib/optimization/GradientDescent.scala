@@ -39,6 +39,7 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
   private var numIterations: Int = 100
   private var regParam: Double = 0.0
   private var miniBatchFraction: Double = 1.0
+  private var sampler: Sampler = new SimpleSampler()
 
   /**
    * Set the initial step size of SGD for the first step. Default 1.0.
@@ -50,13 +51,19 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
   }
 
   /**
-   * :: Experimental ::
    * Set fraction of data to be used for each SGD iteration.
    * Default 1.0 (corresponding to deterministic/classical gradient descent)
    */
-  @Experimental
   def setMiniBatchFraction(fraction: Double): this.type = {
     this.miniBatchFraction = fraction
+    this
+  }
+
+  /**
+   * Set teh Sampler object (used for data sampling).
+   */
+  def setSampler(sampler: Sampler): this.type = {
+    this.sampler = sampler
     this
   }
 
@@ -85,7 +92,6 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
     this
   }
 
-
   /**
    * Set the updater function to actually perform a gradient step in a given direction.
    * The updater is responsible to perform the update from the regularization term as well,
@@ -109,6 +115,7 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
       data,
       gradient,
       updater,
+      sampler,
       stepSize,
       numIterations,
       regParam,
@@ -156,6 +163,43 @@ object GradientDescent extends Logging {
       regParam: Double,
       miniBatchFraction: Double,
       initialWeights: Vector): (Vector, Array[Double]) = {
+    runMiniBatchSGD(data, gradient, updater, new SimpleSampler(), stepSize,
+      numIterations, regParam, miniBatchFraction, initialWeights)
+  }
+
+  /**
+   * Run stochastic gradient descent (SGD) in parallel using mini batches.
+   * In each iteration, we sample a subset (fraction miniBatchFraction) of the total data
+   * in order to compute a gradient estimate.
+   * Sampling, and averaging the subgradients over this subset is performed using one standard
+   * spark map-reduce in each iteration.
+   *
+   * @param data - Input data for SGD. RDD of the set of data examples, each of
+   *             the form (label, [feature values]).
+   * @param gradient - Gradient object (used to compute the gradient of the loss function of
+   *                 one single data example)
+   * @param updater - Updater function to actually perform a gradient step in a given direction.
+   * @param sampler - Sampler object (used for data sampling).
+   * @param stepSize - initial step size for the first step
+   * @param numIterations - number of iterations that SGD should be run.
+   * @param regParam - regularization parameter
+   * @param miniBatchFraction - fraction of the input data set that should be used for
+   *                          one iteration of SGD. Default value 1.0.
+   *
+   * @return A tuple containing two elements. The first element is a column matrix containing
+   *         weights for every feature, and the second element is an array containing the
+   *         stochastic loss computed for every iteration.
+   */
+  def runMiniBatchSGD(
+      data: RDD[(Double, Vector)],
+      gradient: Gradient,
+      updater: Updater,
+      sampler: Sampler,
+      stepSize: Double,
+      numIterations: Int,
+      regParam: Double,
+      miniBatchFraction: Double,
+      initialWeights: Vector): (Vector, Array[Double]) = {
 
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
 
@@ -171,6 +215,8 @@ object GradientDescent extends Logging {
       logWarning("The miniBatchFraction is too small")
     }
 
+    sampler.setMiniBatchFraction(miniBatchFraction)
+    sampler.setData(data)
     // Initialize weights as a column vector
     var weights = Vectors.dense(initialWeights.toArray)
     val n = weights.size
@@ -186,7 +232,7 @@ object GradientDescent extends Logging {
       val bcWeights = data.context.broadcast(weights)
       // Sample a subset (fraction miniBatchFraction) of the total data
       // compute and sum up the subgradients on this subset (this is one map-reduce)
-      val (gradientSum, lossSum, miniBatchSize) = data.sample(false, miniBatchFraction, 42 + i)
+      val (gradientSum, lossSum, miniBatchSize) = sampler.nextBatchSample(i)
         .treeAggregate((BDV.zeros[Double](n), 0.0, 0L))(
           seqOp = (c, v) => {
             // c: (grad, loss, count), v: (label, features)
@@ -217,6 +263,5 @@ object GradientDescent extends Logging {
       stochasticLossHistory.takeRight(10).mkString(", ")))
 
     (weights, stochasticLossHistory.toArray)
-
   }
 }
