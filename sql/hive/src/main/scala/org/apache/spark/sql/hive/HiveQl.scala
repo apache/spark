@@ -1002,7 +1002,8 @@ private[hive] object HiveQl {
       IsNotNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) =>
       IsNull(nodeToExpr(child))
-    case Token("TOK_FUNCTION", Token(IN(), Nil) :: Token("TOK_TABLE_OR_COLLIST", value) :: list) =>
+    case Token("TOK_FUNCTION", Token(IN(), Nil) :: Token("TOK_TABLE_OR_COLLIST", value) :: 
+      Token("TOK_EXPLIST_LIST", list) :: Nil) =>
       val values = value.map { 
          case Token(name, Nil) => UnresolvedAttribute(cleanIdentifier(name)) 
       }
