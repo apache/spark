@@ -32,6 +32,7 @@ install_app() {
   fi
 }
 
+# Install maven under the build/ folder
 install_mvn() {
   install_app \
     "http://apache.claz.org/maven/maven-3/3.2.3/binaries" \
@@ -40,6 +41,7 @@ install_mvn() {
   MVN_BIN="${_DIR}/apache-maven-3.2.3/bin/mvn"
 }
 
+# Install zinc under the build/ folder
 install_zinc() {
   ZINC_INSTALL_FLAG=1
   install_app \
@@ -49,6 +51,9 @@ install_zinc() {
   ZINC_BIN="${_DIR}/zinc-0.3.5.3/bin/zinc"
 }
 
+# Determine the Scala version from the root pom.xml file, set the Scala URL,
+# and, with that, download the specific version of Scala necessary under
+# the build/ folder
 install_scala() {
   [ -z "`which python 2>/dev/null`" ] && \
     echo "ERROR: Found no `python` package; please install one and try again." && \
@@ -107,13 +112,8 @@ if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`${ZINC_BIN} -status`" ]; then
   ${ZINC_BIN} -shutdown
   ${ZINC_BIN} -start -port ${ZINC_PORT} \
     -scala-compiler "${SCALA_COMPILER}" \
-    -scala-library "${SCALA_LIBRARY}"
+    -scala-library "${SCALA_LIBRARY}" &>/dev/null
 fi
 
-# Determine the parameters pushed in from the command line and, if any are
-# present, use those within the maven
-if [ $# -gt 0 ]; then
-  ${MVN_BIN} "$@"
-else
-  ${MVN_BIN} clean package -DskipTests
-fi
+# Last, call the `mvn` command as usual
+${MVN_BIN} "$@"
