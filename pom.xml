@@ -267,7 +267,7 @@
       <version>1.0.0</version>
     </dependency>
     <!--
-         This depndency has been added to provided scope as it is needed for excuting build
+         This depndency has been added to provided scope as it is needed for executing build
          specific groovy scripts using gmaven+ and not required for downstream project building
          with spark.
     -->
