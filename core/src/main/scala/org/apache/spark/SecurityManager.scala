@@ -93,19 +93,19 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  *            Note that SASL is pluggable as to what mechanism it uses.  We currently use
  *            DIGEST-MD5 but this could be changed to use Kerberos or other in the future.
  *            Spark currently supports "auth" for the quality of protection, which means
- *            the connection is not supporting integrity or privacy protection (encryption)
+ *            the connection does not support integrity or privacy protection (encryption)
  *            after authentication. SASL also supports "auth-int" and "auth-conf" which
- *            SPARK could be support in the future to allow the user to specify the quality
+ *            SPARK could support in the future to allow the user to specify the quality
  *            of protection they want. If we support those, the messages will also have to
  *            be wrapped and unwrapped via the SaslServer/SaslClient.wrap/unwrap API's.
  *
  *            Since the NioBlockTransferService does asynchronous messages passing, the SASL
  *            authentication is a bit more complex. A ConnectionManager can be both a client
- *            and a Server, so for a particular connection is has to determine what to do.
+ *            and a Server, so for a particular connection it has to determine what to do.
  *            A ConnectionId was added to be able to track connections and is used to
  *            match up incoming messages with connections waiting for authentication.
- *            The ConnectionManager tracks all the sendingConnections using the ConnectionId
- *            and waits for the response from the server and does the handshake before sending
+ *            The ConnectionManager tracks all the sendingConnections using the ConnectionId,
+ *            waits for the response from the server, and does the handshake before sending
  *            the real message.
  *
  *            The NettyBlockTransferService ensures that SASL authentication is performed
@@ -114,14 +114,14 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  *
  *  - HTTP for the Spark UI -> the UI was changed to use servlets so that javax servlet filters
  *            can be used. Yarn requires a specific AmIpFilter be installed for security to work
- *            properly. For non-Yarn deployments, users can write a filter to go through a
- *            companies normal login service. If an authentication filter is in place then the
+ *            properly. For non-Yarn deployments, users can write a filter to go through their
+ *            organization's normal login service. If an authentication filter is in place then the
  *            SparkUI can be configured to check the logged in user against the list of users who
  *            have view acls to see if that user is authorized.
  *            The filters can also be used for many different purposes. For instance filters
  *            could be used for logging, encryption, or compression.
  *
- *  The exact mechanisms used to generate/distributed the shared secret is deployment specific.
+ *  The exact mechanisms used to generate/distribute the shared secret are deployment-specific.
  *
  *  For Yarn deployments, the secret is automatically generated using the Akka remote
  *  Crypt.generateSecureCookie() API. The secret is placed in the Hadoop UGI which gets passed
@@ -138,7 +138,7 @@ import org.apache.spark.network.sasl.SecretKeyHolder
  *  All the nodes (Master and Workers) and the applications need to have the same shared secret.
  *  This again is not ideal as one user could potentially affect another users application.
  *  This should be enhanced in the future to provide better protection.
- *  If the UI needs to be secured the user needs to install a javax servlet filter to do the
+ *  If the UI needs to be secure, the user needs to install a javax servlet filter to do the
  *  authentication. Spark will then use that user to compare against the view acls to do
  *  authorization. If not filter is in place the user is generally null and no authorization
  *  can take place.

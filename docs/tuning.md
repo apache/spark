@@ -111,7 +111,7 @@ pointer-based data structures and wrapper objects. There are several ways to do 
 3. Consider using numeric IDs or enumeration objects instead of strings for keys.
 4. If you have less than 32 GB of RAM, set the JVM flag `-XX:+UseCompressedOops` to make pointers be
    four bytes instead of eight. You can add these options in
-   [`spark-env.sh`](configuration.html#environment-variables-in-spark-envsh).
+   [`spark-env.sh`](configuration.html#environment-variables).
 
 ## Serialized RDD Storage
 
@@ -154,7 +154,7 @@ By default, Spark uses 60% of the configured executor memory (`spark.executor.me
 cache RDDs. This means that 40% of memory is available for any objects created during task execution.
 
 In case your tasks slow down and you find that your JVM is garbage-collecting frequently or running out of
-memory, lowering this value will help reduce the memory consumption. To change this to say 50%, you can call
+memory, lowering this value will help reduce the memory consumption. To change this to, say, 50%, you can call
 `conf.set("spark.storage.memoryFraction", "0.5")` on your SparkConf. Combined with the use of serialized caching,
 using a smaller cache should be sufficient to mitigate most of the garbage collection problems.
 In case you are interested in further tuning the Java GC, continue reading below.
@@ -190,7 +190,7 @@ temporary objects created during task execution. Some steps which may be useful 
 
 * As an example, if your task is reading data from HDFS, the amount of memory used by the task can be estimated using
   the size of the data block read from HDFS. Note that the size of a decompressed block is often 2 or 3 times the
-  size of the block. So if we wish to have 3 or 4 tasks worth of working space, and the HDFS block size is 64 MB,
+  size of the block. So if we wish to have 3 or 4 tasks' worth of working space, and the HDFS block size is 64 MB,
   we can estimate size of Eden to be `4*3*64MB`.
 
 * Monitor how the frequency and time taken by garbage collection changes with the new settings.
@@ -219,7 +219,7 @@ working set of one of your tasks, such as one of the reduce tasks in `groupByKey
 Spark's shuffle operations (`sortByKey`, `groupByKey`, `reduceByKey`, `join`, etc) build a hash table
 within each task to perform the grouping, which can often be large. The simplest fix here is to
 *increase the level of parallelism*, so that each task's input set is smaller. Spark can efficiently
-support tasks as short as 200 ms, because it reuses one worker JVMs across all tasks and it has
+support tasks as short as 200 ms, because it reuses one executor JVM across many tasks and it has
 a low task launching cost, so you can safely increase the level of parallelism to more than the
 number of cores in your clusters.
 
