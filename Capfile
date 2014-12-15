@@ -28,7 +28,7 @@ end
 
 namespace :deploy do
   task :upload_to_hdfs, :roles => :uploader do
-    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-1.3.0-SNAPSHOT-hadoop2.5.0.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-latest.jar"
+    run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-1.3.0-SNAPSHOT-hadoop2.5.0.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-#{`git rev-parse master`.gsub(/\s/,'')}.jar"
   end
 
   task :prevent_gateway do
