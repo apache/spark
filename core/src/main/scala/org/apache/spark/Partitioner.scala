@@ -62,10 +62,10 @@ object Partitioner {
     if (rdd.context.conf.contains("spark.default.parallelism")) {
       new HashPartitioner(rdd.context.defaultParallelism)
     } else {
-      val numPartitons =
-        rdd.context.conf
-          .getDouble("spark.default.parallelismRatio", 1) * bySize.head.partitions.size
-      new HashPartitioner(Math.max(1, numPartitons.toInt))
+      val ratio = rdd.context.conf.getDouble("spark.default.parallelismRatio", 1)
+      require(ratio > 0, "spark.default.parallelismRatio must be greater than 0!")
+      val numPartitons = (ratio * bySize.head.partitions.size).toInt
+      new HashPartitioner(Math.max(1, numPartitons))
     }
   }
 }
