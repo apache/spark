@@ -22,7 +22,6 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
-import scala.util.Random
 
 import WriteAheadLogSuite._
 import com.google.common.io.Files
