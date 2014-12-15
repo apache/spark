@@ -21,6 +21,8 @@ import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.{Date, HashMap => JHashMap}
 
+import org.apache.hadoop.mapred.lib.MultipleTextOutputFormat
+
 import scala.collection.{Map, mutable}
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
@@ -850,6 +852,30 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * supporting the key and value types K and V in this RDD.
    */
   def saveAsHadoopFile[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
+    saveAsHadoopFile(path, keyClass, valueClass, fm.runtimeClass.asInstanceOf[Class[F]])
+  }
+
+  class RDDMultipleTextOutputFormat extends MultipleTextOutputFormat[Any, Any] {
+    override def generateActualKey(key: Any, value: Any): Any =
+      NullWritable.get()
+
+    override def generateFileNameForKeyValue(key: Any, value: Any, name: String): String =
+      key.asInstanceOf[String]
+  }
+
+  /**
+   * Output the RDD to multiple files by key on any Hadoop-supported file system, using a Hadoop 
+   * `OutputFormat` class supporting the key and value types K and V in this RDD.
+   * 
+   * Example:
+   * [('N', 'Nick'), ('N', 'Nancy'), ('B', 'Bob'), ('B', 'Ben'), ('F', 'Frankie')]
+   * /path/prefix/B [/part-1, /part-2, etc]
+   * /path/prefix/F [/part-1, /part-2, etc]
+   * /path/prefix/N [/part-1, /part-2, etc]
+   */
+  def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
+    val paths = this.keys.map("path/" + "key_" + _.toString)
+    
     saveAsHadoopFile(path, keyClass, valueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
