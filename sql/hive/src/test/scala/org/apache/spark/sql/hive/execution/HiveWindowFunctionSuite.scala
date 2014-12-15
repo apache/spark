@@ -17,10 +17,7 @@
 
 package org.apache.spark.sql.hive.execution
 
-import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{Row, SchemaRDD}
 
 class HiveWindowFunctionSuite extends HiveComparisonTest {
 
@@ -309,14 +306,14 @@ class HiveWindowFunctionSuite extends HiveComparisonTest {
   createQueryTest("38.testPartitioningVariousForms2",
     """
       |SELECT p_mfgr, p_name, p_size,
-      |sum(p_retailprice) OVER (PARTITION BY p_mfgr, p_name ORDER BY p_mfgr, p_name 
+      |sum(p_retailprice) OVER (PARTITION BY p_mfgr, p_name ORDER BY p_mfgr, p_name
       |rows BETWEEN unbounded preceding AND current row) AS s1,
-      |min(p_retailprice) OVER (DISTRIBUTE BY p_mfgr, p_name SORT BY p_mfgr, p_name 
+      |min(p_retailprice) OVER (DISTRIBUTE BY p_mfgr, p_name SORT BY p_mfgr, p_name
       |rows BETWEEN unbounded preceding AND current row) AS s2,
       |max(p_retailprice) OVER (PARTITION BY p_mfgr, p_name ORDER BY p_name) AS s3
       |FROM part
     """.stripMargin, false)
-  
+
   createQueryTest("39.testUDFOnOrderCols",
     """
       |SELECT p_mfgr, p_type, substr(p_type, 2) AS short_ptype,
