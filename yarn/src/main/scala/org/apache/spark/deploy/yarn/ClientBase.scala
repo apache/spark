@@ -360,7 +360,7 @@ private[spark] trait ClientBase extends Logging {
         prefixEnv = Some(Utils.libraryPathEnvPrefix(libraryPaths))
       }
       if (sparkConf.getOption("spark.yarn.am.extraJavaOptions").isDefined) {
-        logWarning("spark.yarn.am.extraJavaOptions will not take effect in driver mode")
+        logWarning("spark.yarn.am.extraJavaOptions will not take effect in cluster mode")
       }
     } else {
       // Validate and include yarn am specific java options in yarn-client mode.
