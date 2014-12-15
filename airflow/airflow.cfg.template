@@ -3,6 +3,7 @@ AIRFLOW_HOME: TO_REPLACE_FROM_OS_ENVIRON
 BASE_LOG_FOLDER:  %(AIRFLOW_HOME)s/logs
 DAGS_FOLDER: %(AIRFLOW_HOME)s/dags
 BASE_FOLDER: %(AIRFLOW_HOME)s/airflow
+BASE_URL: http://localhost:8080
 SQL_ALCHEMY_CONN: mysql://airflow:airflow@localhost:3306/airflow
 
 [server]
