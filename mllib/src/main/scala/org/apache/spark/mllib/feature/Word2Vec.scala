@@ -81,6 +81,13 @@ class Word2Vec extends Serializable with Logging {
   }
 
   /**
+   * @param minCount minimum frequency of  a word considered as in vocabulary
+   */
+  def setMinCount(minCount: Int): this.type = {
+    this.minCount = minCount
+    this
+  }
+  /**
    * Sets initial learning rate (default: 0.025).
    */
   def setLearningRate(learningRate: Double): this.type = {
@@ -123,7 +130,7 @@ class Word2Vec extends Serializable with Logging {
   private val window = 5
 
   /** minimum frequency to consider a vocabulary word */
-  private val minCount = 5
+  private var minCount = 5
 
   private var trainWordsCount = 0
   private var vocabSize = 0
@@ -280,7 +287,11 @@ class Word2Vec extends Serializable with Logging {
         }
       }
     }
-    
+
+    if (vocabSize * vectorSize >= Int.MaxValue / 8) {
+      //decrease the vectorSize to reduce the memorySize of some big data structures (syn0Global&syn1Global)
+      vectorSize = math.floor(8.0 * vocabSize * vectorSize / Int.MaxValue).toInt
+    }
     val newSentences = sentences.repartition(numPartitions).cache()
     val initRandom = new XORShiftRandom(seed)
     val syn0Global =
@@ -378,7 +389,7 @@ class Word2Vec extends Serializable with Logging {
       }
     }
     newSentences.unpersist()
-    
+
     val word2VecMap = mutable.HashMap.empty[String, Array[Float]]
     var i = 0
     while (i < vocabSize) {
