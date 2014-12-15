@@ -3,47 +3,69 @@
 # Determine the current working directory
 _DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Called before any binaries are installed for any unknown operating system.
-# Current checks are as follows:
-# - NA
-prep_install_for_unknown() {
-  echo "ERROR: Forced installation is not available at this time for an"
-  echo "Operating System of type $OSTYPE"
-  exit 1
+# Installs any application tarball given a URL, the expected tarball name,
+# and, optionally, a checkable binary path to determine if the binary has
+# already been installed
+## Arg1 - URL
+## Arg2 - Tarball Name
+## Arg3 - Checkable Binary
+install_app() {
+  local remote_tarball="$1/$2"
+  local local_tarball="${_DIR}/$2"
+  local binary="${_DIR}/$3"
+  if [ -z "$3" -o ! -f "$binary" ]; then
+    # check if we already have the tarball
+    # check if we have curl installed
+    # download application
+    [ ! -f "${local_tarball}" ] && [ -n "`which curl 2>/dev/null`" ] && \
+      curl "${remote_tarball}" > "${local_tarball}"
+    # if the file still doesn't exist, lets try `wget` and cross our fingers
+    [ ! -f "${local_tarball}" ] && [ -n "`which wget 2>/dev/null`" ] && \
+      wget -O "${local_tarball}" "${remote_tarball}"
+    # if both were unsuccessful, exit
+    [ ! -f "${local_tarball}" ] && \
+      echo -n "ERROR: Cannot download $2 with cURL or wget; " && \
+      echo "please install manually and try again." && \
+      exit 2
+    cd "${_DIR}" && tar -xzf "$2"
+    rm -rf "$local_tarball"
+  fi
 }
 
-# Called before any binaries are installed for the Solaris operating system.
-# Current checks are as follows:
-# - NA
-prep_install_for_solaris() {
-  echo "ERROR: Forced installation is not available at this time for"
-  echo "Solaris-based systems."
-  exit 1
+install_mvn() {
+  install_app \
+    "http://apache.claz.org/maven/maven-3/3.2.3/binaries" \
+    "apache-maven-3.2.3-bin.tar.gz" \
+    "apache-maven-3.2.3/bin/mvn"
+  MVN_BIN="${_DIR}/apache-maven-3.2.3/bin/mvn"
 }
 
-# Called before any binaries are installed for the BSD operating system.
-# Current checks are as follows:
-# - NA
-prep_install_for_bsd() {
-  echo "ERROR: Forced installation is not available at this time for BSD-based systems."
-  exit 1
+install_zinc() {
+  ZINC_INSTALL_FLAG=1
+  install_app \
+    "http://downloads.typesafe.com/zinc/0.3.5.3" \
+    "zinc-0.3.5.3.tgz" \
+    "zinc-0.3.5.3/bin/zinc"
+  ZINC_BIN="${_DIR}/zinc-0.3.5.3/bin/zinc"
 }
 
-# Called before any binaries are installed for the Linux operating system.
-# Current checks are as follows:
-# - NA
-prep_install_for_linux() {
-  echo -n ""
-}
-
-# Called before any binaries are installed for the OSX operating system.
-# Current checks are as follows:
-# - 'brew' must be installed
-prep_install_for_osx() {
-  [ -z "`which brew 2>/dev/null`" ] && \
-    echo "ERROR: Must have 'brew' installed for forced installation on OSX." && \
-    echo "       - You can download 'brew' at: http://brew.sh/" && \
+install_scala() {
+  [ -z "`which python 2>/dev/null`" ] && \
+    echo "ERROR: Found no `python` package; please install one and try again." && \
     exit 1
+  # determine the Scala version used in Spark
+  local scala_version=`python -c "
+from xml.dom import minidom
+print(minidom.parse('${_DIR}/../pom.xml').getElementsByTagName('scala.version')[0].firstChild.data)"`
+  local scala_bin="${_DIR}/scala-${scala_version}/bin/scala"
+
+  install_app \
+    "http://downloads.typesafe.com/scala/${scala_version}" \
+    "scala-${scala_version}.tgz" \
+    "scala-${scala_version}/bin/scala"
+
+  SCALA_COMPILER="$(cd "$(dirname ${scala_bin})/../lib" && pwd)/scala-compiler.jar"
+  SCALA_LIBRARY="$(cd "$(dirname ${scala_bin})/../lib" && pwd)/scala-library.jar"
 }
 
 # Determines if a given application is already installed. If not, will attempt
@@ -54,7 +76,6 @@ prep_install_for_osx() {
 # - Current supported operating systems are Linux, Solaris, BSD, and OSX
 ## Arg1 - application name
 check_and_install_app() {
-  local resource="${_DIR}/packages/$1.sh"
   # create the local environment variable in uppercase
   local app_bin="`echo $1 | awk '{print toupper(\$0)}'`_BIN"
   # some black magic to set the generated app variable (i.e. MVN_BIN) into the
@@ -62,111 +83,12 @@ check_and_install_app() {
   eval "${app_bin}=`which $1 2>/dev/null`"
 
   if [ -z "`which $1 2>/dev/null`" ]; then
-    # attempt to force install if flagged
-    if [ -n "${FORCE_INSTALL}" ]; then
-      # Check and source the package build file if present, else error out
-      if [ -f "$resource" ]; then
-        source "${_DIR}/packages/$1.sh"
-        prep_install_for_${_OSTYPE}
-        install_$1_for_${_OSTYPE}
-      else
-        echo "ERROR: Cannot find the $1.sh build file from within ${_DIR}/packages."
-        echo "       Ensure the file exists and is accesible."
-        exit 1
-      fi
-    else
-      echo "ERROR: $1 isn't installed; please install or automatically force install (-f)."
-      exit 2
-    fi
+    install_$1
   fi
 }
 
-check_and_download_scala() {
-  # Using Python's minidom model, parse the pom.xml and retrieve the Scala version
-  local scala_version=`python -c "
-from xml.dom import minidom
-print(minidom.parse('pom.xml').getElementsByTagName('scala.version')[0].firstChild.data)"`
-  local scala_url="http://downloads.typesafe.com/scala/${scala_version}/scala-${scala_version}.tgz"
-  local scala_loc="${_DIR}/scala-${scala_version}.tgz"
-  local scala_bin="${_DIR}/scala-${scala_version}/bin/scala"
-
-  if [ ! -f "${scala_bin}" ]; then
-    # check if we already have the tarball; check if we have curl installed; download `scala`
-    [ ! -f "${scala_loc}" ] && [ -n "`which curl 2>/dev/null`" ] && curl "${scala_url}" > "${scala_loc}"
-    # if the `scala` file still doesn't exist, lets try `wget` and cross our fingers
-    [ ! -f "${scala_loc}" ] && [ -n "`which wget 2>/dev/null`" ] && wget -O "${scala_loc}" "${scala_url}"
-    # if both were unsuccessful, exit
-    [ ! -f "${scala_loc}" ] && \
-      echo "ERROR: Cannot find or download a version of Scala, please install manually and try again." && \
-      exit 2
-    cd "${_DIR}" && tar -xzf "${scala_loc}"
-    rm -rf "${scala_loc}"
-  fi
-  SCALA_COMPILER="$(cd "$(dirname ${scala_bin})/../lib" && pwd)/scala-compiler.jar"
-  SCALA_LIBRARY="$(cd "$(dirname ${scala_bin})/../lib" && pwd)/scala-library.jar"
-}
-
-# Prints the help and usage for this script
-print_help() {
-  echo "Spark Build Suite for Maven" && echo
-  echo "Usage: build/mvn <options> -- <mvn-parameters>" && echo
-  echo "  Options:"
-  echo -e "    -p=<port>\t\tSets the port for a local Zinc instance"
-  echo -e "    -f\t\t\tForces install of necessary packages"
-  echo -e "    -h\t\t\tPrints this help message" && echo
-  echo "  Maven Parameters:"
-  echo "    All parameters after the double-dash (--) will be pushed to the Maven"
-  echo "    call. If none are provided the default of 'clean package -DskipTests'"
-  echo "    will be executed." && echo
-  echo "  Examples:"
-  echo "    build/mvn -f -- clean package"
-  echo "    build/mvn -p=3031 -- clean"
-}
-
-# Set a cleaned OS type string based on the $OSTYPE bash variable
-case "$OSTYPE" in
-  solaris*)
-    _OSTYPE="solaris"
-    ;;
-  darwin*)
-    _OSTYPE="osx"
-    ;;
-  linux*)
-    _OSTYPE="linux"
-    ;;
-  bsd*)
-    _OSTYPE="bsd"
-    ;;
-  *)
-    _OSTYPE="unknown"
-    ;;
-esac
-
-# Here we build our own CLI event loop with the '--' as the stop
-OPT="$1"
-while [ ! "$OPT" = "--" -a ! $# -eq 0 ]; do
-  case $OPT in
-    -f)
-      FORCE_INSTALL=1
-      shift
-      ;;
-    -p=*)
-      ZINC_PORT=${OPT/-p=/}
-      shift
-      ;;
-    -h)
-      print_help
-      exit 0
-      ;;
-    *)
-      shift
-      ;;
-  esac
-  OPT="$1"
-done
-shift
-
-# Setup healthy defaults for the Zinc port if none were provided
+# Setup healthy defaults for the Zinc port if none were provided from
+# the environment
 ZINC_PORT=${ZINC_PORT:-"3030"}
 
 # Check and install all applications necessary to build Spark
@@ -174,20 +96,19 @@ check_and_install_app "mvn"
 check_and_install_app "zinc"
 
 # Check and download the proper version of Scala for the build
-check_and_download_scala
+install_scala
 
 # Reset the current working directory
 cd "${_DIR}/.."
 
 # Now that zinc is ensured to be installed, check its status and, if its
 # not running, start it
-if [ -n "`${ZINC_BIN} -status`" ]; then
+if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`${ZINC_BIN} -status`" ]; then
   ${ZINC_BIN} -shutdown
+  ${ZINC_BIN} -start -port ${ZINC_PORT} \
+    -scala-compiler "${SCALA_COMPILER}" \
+    -scala-library "${SCALA_LIBRARY}"
 fi
-
-${ZINC_BIN} -start -port ${ZINC_PORT} \
-  -scala-compiler "${SCALA_COMPILER}" \
-  -scala-library "${SCALA_LIBRARY}"
 
 # Determine the parameters pushed in from the command line and, if any are
 # present, use those within the maven
