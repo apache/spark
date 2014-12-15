@@ -20,13 +20,13 @@ import java.io.File
 
 import scala.util.Random
 
-import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.util.{WriteAheadLogFileSegment, WriteAheadLogWriter}
+import org.apache.spark.util.Utils
 
 class WriteAheadLogBackedBlockRDDSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
   val conf = new SparkConf()
@@ -39,11 +39,11 @@ class WriteAheadLogBackedBlockRDDSuite extends FunSuite with BeforeAndAfterAll w
   var dir: File = null
 
   override def beforeEach(): Unit = {
-    dir = Files.createTempDir()
+    dir = Utils.createTempDir()
   }
 
   override def afterEach(): Unit = {
-    dir.delete()
+    Utils.deleteRecursively(dir)
   }
 
   override def beforeAll(): Unit = {

@@ -24,8 +24,6 @@ import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
 
 import WriteAheadLogSuite._
-import com.google.common.io.Files
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark.util.Utils
@@ -41,7 +39,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
   var manager: WriteAheadLogManager = null
 
   before {
-    tempDir = Files.createTempDir()
+    tempDir = Utils.createTempDir()
     testDir = tempDir.toString
     testFile = new File(tempDir, "testFile").toString
     if (manager != null) {
@@ -51,7 +49,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
   }
 
   after {
-    FileUtils.deleteQuietly(tempDir)
+    Utils.deleteRecursively(tempDir)
   }
 
   test("WriteAheadLogWriter - writing data") {
