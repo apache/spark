@@ -75,8 +75,8 @@ in the `spark-defaults.conf` file.
 
 The application web UI at `http://<driver>:4040` lists Spark properties in the "Environment" tab.
 This is a useful place to check to make sure that your properties have been set correctly. Note
-that only values explicitly specified through either `spark-defaults.conf` or SparkConf will
-appear. For all other configuration properties, you can assume the default value is used.
+that only values explicitly specified through `spark-defaults.conf`, `SparkConf`, or the command
+line will appear. For all other configuration properties, you can assume the default value is used.
 
 ## Available Properties
 
@@ -310,7 +310,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     Add the environment variable specified by <code>EnvironmentVariableName</code> to the Executor
-    process. The user can specify multiple of these and to set multiple environment variables.
+    process. The user can specify multiple of these to set multiple environment variables.
   </td>
 </tr>
 <tr>

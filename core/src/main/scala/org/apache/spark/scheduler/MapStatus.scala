@@ -122,7 +122,7 @@ private[spark] class CompressedMapStatus(
 
 /**
  * A [[MapStatus]] implementation that only stores the average size of non-empty blocks,
- * plus a bitmap for tracking which blocks are non-empty.  During serialization, this bitmap
+ * plus a bitmap for tracking which blocks are empty.  During serialization, this bitmap
  * is compressed.
  *
  * @param loc location where the task is being executed
