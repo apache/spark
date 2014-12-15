@@ -137,7 +137,8 @@ class WriteAheadLogBackedBlockRDDSuite extends FunSuite with BeforeAndAfterAll {
       blockIds: Seq[BlockId]
     ): Seq[WriteAheadLogFileSegment] = {
     require(blockData.size === blockIds.size)
-    val writer = new WriteAheadLogWriter(new File(dir, Random.nextString(10)).toString, hadoopConf)
+    val writer = new WriteAheadLogWriter(
+      new File(dir, Random.alphanumeric.take(10).mkString).toString, hadoopConf)
     val segments = blockData.zip(blockIds).map { case (data, id) =>
       writer.write(blockManager.dataSerialize(id, data.iterator))
     }
