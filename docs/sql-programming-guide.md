@@ -938,6 +938,18 @@ Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
 You may also use the beeline script that comes with Hive.
 
+Thrift JDBC server also supports sending thrift RPC messages over HTTP transport. 
+Use the following setting to enable HTTP mode as system property or in `hive-site.xml` file in `conf/`: 
+
+    hive.server2.transport.mode - Set this to value: http 
+    hive.server2.thrift.http.port - HTTP port number fo listen on; default is 10001
+    hive.server2.http.endpoint - HTTP endpoint; default is cliservice
+
+To test, use beeline to connect to the JDBC/ODBC server in http mode with:
+
+    beeline> !connect jdbc:hive2://<host>:<port>/<database>?hive.server2.transport.mode=http;hive.server2.thrift.http.path=<http_endpoint>
+
+
 ## Running the Spark SQL CLI
 
 The Spark SQL CLI is a convenient tool to run the Hive metastore service in local mode and execute
