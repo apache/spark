@@ -9,17 +9,24 @@ set :shared_conf_path, "/u/apps/spark/shared/conf"
 set :gateway, nil
 set :keep_releases, 5
 
-MAINTENANCE = ["dn11.chi.shopify.com", "dn14.chi.shopify.com"] # Node is up but should not be part of the production cluster
-DECOMISSIONED = ["dn37.chi.shopify.com"] # Node is down don't try to send code
+MAINTENANCE = (11..15).map {|i| "dn%02d.chi.shopify.com" % i } # Node is up but should not be part of the production cluster
+LOAD_TESTING = (42..44).map {|i| "dn%02d.chi.shopify.com" % i }
+DECOMISSIONED = ["dn37.chi.shopify.com", "dn40.chi.shopify.com"] # Node is down don't try to send code
 BROKEN = MAINTENANCE + DECOMISSIONED
 
 task :production do
-  role :app, *((2..47).map {|i| "dn%02d.chi.shopify.com" % i } - BROKEN)
+  role :app, *((2..47).map {|i| "dn%02d.chi.shopify.com" % i } - (BROKEN + LOAD_TESTING))
   role :master, "hadoop-rm.chi.shopify.com"
   role :history, "hadoop-rm.chi.shopify.com"
   role :code, "hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reports-reportify-etl3.chi.shopify.com", "reports-reportify-skydb4.chi.shopify.com", "platfora2.chi.shopify.com", *MAINTENANCE
   role :uploader, "hadoop-etl1.chi.shopify.com"
 end
+
+task :load_testing do
+  role :app, *((43..44).map {|i| "dn%02d.chi.shopify.com" % i } - BROKEN)
+  role :master, "dn42.chi.shopify.com"
+end
+
 
 task :staging do
   role :app, "54.197.179.141", "107.21.65.199", "54.166.211.228"
@@ -27,7 +34,7 @@ task :staging do
 end
 
 namespace :deploy do
-  task :upload_to_hdfs, :roles => :uploader do
+  task :upload_to_hdfs, :roles => :uploader, :on_no_matching_servers => :continue do
     run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-1.3.0-SNAPSHOT-hadoop2.5.0.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-#{`git rev-parse master`.gsub(/\s/,'')}.jar"
   end
 
