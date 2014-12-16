@@ -17,20 +17,25 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.Logging
-import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.CopyOnWriteArrayList
+
+import scala.collection.JavaConversions._
+import scala.util.control.NonFatal
+
+import org.apache.spark.Logging
+import org.apache.spark.util.Utils
 
 /** Asynchronously passes StreamingListenerEvents to registered StreamingListeners. */
 private[spark] class StreamingListenerBus() extends Logging {
-  private val listeners = new ArrayBuffer[StreamingListener]()
-    with SynchronizedBuffer[StreamingListener]
+  private val listeners = new CopyOnWriteArrayList[StreamingListener]()
 
   /* Cap the capacity of the SparkListenerEvent queue so we get an explicit error (rather than
    * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */
   private val EVENT_QUEUE_CAPACITY = 10000
   private val eventQueue = new LinkedBlockingQueue[StreamingListenerEvent](EVENT_QUEUE_CAPACITY)
-  private var queueFullErrorMessageLogged = false
+  private val queueFullErrorMessageLogged = new AtomicBoolean(false)
 
   val listenerThread = new Thread("StreamingListenerBus") {
     setDaemon(true)
@@ -39,17 +44,17 @@ private[spark] class StreamingListenerBus() extends Logging {
         val event = eventQueue.take
         event match {
           case receiverStarted: StreamingListenerReceiverStarted =>
-            listeners.foreach(_.onReceiverStarted(receiverStarted))
+            foreachListener(_.onReceiverStarted(receiverStarted))
           case receiverError: StreamingListenerReceiverError =>
-            listeners.foreach(_.onReceiverError(receiverError))
+            foreachListener(_.onReceiverError(receiverError))
           case receiverStopped: StreamingListenerReceiverStopped =>
-            listeners.foreach(_.onReceiverStopped(receiverStopped))
+            foreachListener(_.onReceiverStopped(receiverStopped))
           case batchSubmitted: StreamingListenerBatchSubmitted =>
-            listeners.foreach(_.onBatchSubmitted(batchSubmitted))
+            foreachListener(_.onBatchSubmitted(batchSubmitted))
           case batchStarted: StreamingListenerBatchStarted =>
-            listeners.foreach(_.onBatchStarted(batchStarted))
+            foreachListener(_.onBatchStarted(batchStarted))
           case batchCompleted: StreamingListenerBatchCompleted =>
-            listeners.foreach(_.onBatchCompleted(batchCompleted))
+            foreachListener(_.onBatchCompleted(batchCompleted))
           case StreamingListenerShutdown =>
             // Get out of the while loop and shutdown the daemon thread
             return
@@ -64,36 +69,32 @@ private[spark] class StreamingListenerBus() extends Logging {
   }
 
   def addListener(listener: StreamingListener) {
-    listeners += listener
+    listeners.add(listener)
   }
 
   def post(event: StreamingListenerEvent) {
     val eventAdded = eventQueue.offer(event)
-    if (!eventAdded && !queueFullErrorMessageLogged) {
+    if (!eventAdded && queueFullErrorMessageLogged.compareAndSet(false, true)) {
       logError("Dropping StreamingListenerEvent because no remaining room in event queue. " +
         "This likely means one of the StreamingListeners is too slow and cannot keep up with the " +
         "rate at which events are being started by the scheduler.")
-      queueFullErrorMessageLogged = true
     }
   }
 
-  /**
-   * Waits until there are no more events in the queue, or until the specified time has elapsed.
-   * Used for testing only. Returns true if the queue has emptied and false is the specified time
-   * elapsed before the queue emptied.
-   */
-  def waitUntilEmpty(timeoutMillis: Int): Boolean = {
-    val finishTime = System.currentTimeMillis + timeoutMillis
-    while (!eventQueue.isEmpty) {
-      if (System.currentTimeMillis > finishTime) {
-        return false
+  def stop(): Unit = {
+    // Should not call `post`, or `StreamingListenerShutdown` may be dropped.
+    eventQueue.offer(StreamingListenerShutdown)
+    listenerThread.join()
+  }
+
+  private def foreachListener(f: StreamingListener => Unit): Unit = {
+    listeners.foreach { listener =>
+      try {
+        f(listener)
+      } catch {
+        case NonFatal(e) =>
+          logError(s"Listener ${Utils.getFormattedClassName(listener)} threw an exception", e)
       }
-      /* Sleep rather than using wait/notify, because this is used only for testing and wait/notify
-       * add overhead in the general case. */
-      Thread.sleep(10)
     }
-    true
   }
-
-  def stop(): Unit = post(StreamingListenerShutdown)
 }
