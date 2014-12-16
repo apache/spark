@@ -19,7 +19,6 @@ package org.apache.spark.streaming
 
 import java.io.{File, BufferedWriter, OutputStreamWriter}
 import java.net.{InetSocketAddress, SocketException, ServerSocket}
-import java.nio.charset.Charset
 import java.util.concurrent.{Executors, TimeUnit, ArrayBlockingQueue}
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -27,6 +26,7 @@ import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer, SynchronizedQu
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
+import com.google.common.base.Charsets
 import com.google.common.io.Files
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Eventually._
@@ -193,7 +193,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     try {
       val testDir = Utils.createTempDir()
       val existingFile = new File(testDir, "0")
-      Files.write("0\n", existingFile, Charset.forName("UTF-8"))
+      Files.write("0\n", existingFile, Charsets.UTF_8)
 
       Thread.sleep(1000)
       // Set up the streaming context and input streams
@@ -212,7 +212,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       input.foreach { i =>
         Thread.sleep(batchDuration.milliseconds)
         val file = new File(testDir, i.toString)
-        Files.write(i + "\n", file, Charset.forName("UTF-8"))
+        Files.write(i + "\n", file, Charsets.UTF_8)
         logInfo("Created file " + file)
       }
 

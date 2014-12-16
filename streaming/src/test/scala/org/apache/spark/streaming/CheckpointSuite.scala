@@ -18,11 +18,11 @@
 package org.apache.spark.streaming
 
 import java.io.File
-import java.nio.charset.Charset
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
+import com.google.common.base.Charsets
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -305,7 +305,7 @@ class CheckpointSuite extends TestSuiteBase {
     // var clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     Thread.sleep(1000)
     for (i <- Seq(1, 2, 3)) {
-      Files.write(i + "\n", new File(testDir, i.toString), Charset.forName("UTF-8"))
+      Files.write(i + "\n", new File(testDir, i.toString), Charsets.UTF_8)
       // wait to make sure that the file is written such that it gets shown in the file listings
       Thread.sleep(1000)
     }
@@ -322,7 +322,7 @@ class CheckpointSuite extends TestSuiteBase {
 
     // Create files while the master is down
     for (i <- Seq(4, 5, 6)) {
-      Files.write(i + "\n", new File(testDir, i.toString), Charset.forName("UTF-8"))
+      Files.write(i + "\n", new File(testDir, i.toString), Charsets.UTF_8)
       Thread.sleep(1000)
     }
 
@@ -338,7 +338,7 @@ class CheckpointSuite extends TestSuiteBase {
     // Restart stream computation
     ssc.start()
     for (i <- Seq(7, 8, 9)) {
-      Files.write(i + "\n", new File(testDir, i.toString), Charset.forName("UTF-8"))
+      Files.write(i + "\n", new File(testDir, i.toString), Charsets.UTF_8)
       Thread.sleep(1000)
     }
     Thread.sleep(1000)
