@@ -67,7 +67,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
     if (subDir == null) {
       subDir = subDirs(dirId).synchronized {
         val old = subDirs(dirId)(subDirId)
-        if (old != null && old.exists()) {
+        if (old != null) {
           old
         } else {
           val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
