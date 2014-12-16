@@ -23,13 +23,11 @@ import java.util.concurrent.{Executors, TimeUnit, ArrayBlockingQueue}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer, SynchronizedQueue}
-import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 import org.scalatest.BeforeAndAfter
-import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
@@ -195,12 +193,13 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       // Create a file that exists before the StreamingContext is created
       val existingFile = new File(testDir, "0")
       Files.write("0\n", existingFile, Charsets.UTF_8)
+      assert(existingFile.setLastModified(10000))
 
       // Set up the streaming context and input streams
       ssc = new StreamingContext(conf, batchDuration)
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
       // This `setTime` call ensures that the clock is past the creation time of `existingFile`
-      clock.setTime(System.currentTimeMillis() + 1000)
+      clock.setTime(10000 + 1000)
       val waiter = new StreamingTestWaiter(ssc)
       val fileStream = ssc.fileStream[LongWritable, Text, TextInputFormat](
         testDir.toString, (x: Path) => true, newFilesOnly = newFilesOnly).map(_._2.toString)
@@ -215,7 +214,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         clock.addToTime(batchDuration.milliseconds)
         val file = new File(testDir, i.toString)
         Files.write(i + "\n", file, Charsets.UTF_8)
-        assert(file.setLastModified(clock.currentTime() - 50))
+        assert(file.setLastModified(clock.currentTime()))
         logInfo("Created file " + file)
         waiter.waitForTotalBatchesCompleted(i, timeout = Durations.seconds(10))
       }
