@@ -82,10 +82,14 @@ sealed trait Matrix extends Serializable {
   /** A human readable representation of the matrix */
   override def toString: String = toBreeze.toString()
 
-  /** Map the values of this matrix using a function. Generates a new matrix. */
+  /** Map the values of this matrix using a function. Generates a new matrix. Performs the
+    * function on only the backing array. For example, an operation such as addition or
+    * subtraction will only be performed on the non-zero values in a `SparseMatrix`. */
   private[mllib] def map(f: Double => Double): Matrix
 
-  /** Update all the values of this matrix using the function f. Performed in-place. */
+  /** Update all the values of this matrix using the function f. Performed in-place on the
+    * backing array. For example, an operation such as addition or subtraction will only be
+    * performed on the non-zero values in a `SparseMatrix`. */
   private[mllib] def update(f: Double => Double): Matrix
 }
 
@@ -175,7 +179,7 @@ object DenseMatrix {
   def eye(n: Int): DenseMatrix = {
     val identity = DenseMatrix.zeros(n, n)
     var i = 0
-    while (i < n){
+    while (i < n) {
       identity.update(i, i, 1.0)
       i += 1
     }
@@ -286,7 +290,7 @@ class SparseMatrix(
 
   private[mllib] def update(i: Int, j: Int, v: Double): Unit = {
     val ind = index(i, j)
-    if (ind == -1){
+    if (ind == -1) {
       throw new NoSuchElementException("The given row and column indices correspond to a zero " +
         "value. Only non-zero elements in Sparse Matrices can be updated.")
     } else {
@@ -341,10 +345,10 @@ object SparseMatrix {
     raw.foreach { v =>
       val r = i % numRows
       val c = (i - r) / numRows
-      if ( v != 0.0) {
+      if (v != 0.0) {
         sRows.append(r)
         sparseA.append(v)
-        while (c != lastCol){
+        while (c != lastCol) {
           sCols.append(nnz)
           lastCol += 1
         }
@@ -352,7 +356,7 @@ object SparseMatrix {
       }
       i += 1
     }
-    while (numCols > lastCol){
+    while (numCols > lastCol) {
       sCols.append(sparseA.length)
       lastCol += 1
     }
@@ -368,8 +372,8 @@ object SparseMatrix {
    * @return `SparseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
    */
   def sprand(numRows: Int, numCols: Int, density: Double, rng: Random): SparseMatrix = {
-    require(density > 0.0 && density < 1.0, "density must be a double in the range " +
-      s"0.0 < d < 1.0. Currently, density: $density")
+    require(density >= 0.0 && density <= 1.0, "density must be a double in the range " +
+      s"0.0 <= d <= 1.0. Currently, density: $density")
     val length = numRows * numCols
     val rawA = new Array[Double](length)
     var nnz = 0
@@ -392,8 +396,8 @@ object SparseMatrix {
    * @return `SparseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
    */
   def sprandn(numRows: Int, numCols: Int, density: Double, rng: Random): SparseMatrix = {
-    require(density > 0.0 && density < 1.0, "density must be a double in the range " +
-      s"0.0 < d < 1.0. Currently, density: $density")
+    require(density >= 0.0 && density <= 1.0, "density must be a double in the range " +
+      s"0.0 <= d <= 1.0. Currently, density: $density")
     val length = numRows * numCols
     val rawA = new Array[Double](length)
     var nnz = 0
@@ -408,7 +412,7 @@ object SparseMatrix {
   }
 
   /**
-   * Generate a diagonal matrix in `DenseMatrix` format from the supplied values.
+   * Generate a diagonal matrix in `SparseMatrix` format from the supplied values.
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `SparseMatrix` with size `values.length` x `values.length` and non-zero
    *         `values` on the diagonal
@@ -519,7 +523,7 @@ object Matrices {
    * Generate a `DenseMatrix` consisting of zeros.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
-   * @return `DenseMatrix` with size `numRows` x `numCols` and values of zeros
+   * @return `Matrix` with size `numRows` x `numCols` and values of zeros
    */
   def zeros(numRows: Int, numCols: Int): Matrix = DenseMatrix.zeros(numRows, numCols)
 
@@ -527,30 +531,30 @@ object Matrices {
    * Generate a `DenseMatrix` consisting of ones.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
-   * @return `DenseMatrix` with size `numRows` x `numCols` and values of ones
+   * @return `Matrix` with size `numRows` x `numCols` and values of ones
    */
   def ones(numRows: Int, numCols: Int): Matrix = DenseMatrix.ones(numRows, numCols)
 
   /**
    * Generate a dense Identity Matrix in `Matrix` format.
    * @param n number of rows and columns of the matrix
-   * @return `DenseMatrix` with size `n` x `n` and values of ones on the diagonal
+   * @return `Matrix` with size `n` x `n` and values of ones on the diagonal
    */
   def eye(n: Int): Matrix = DenseMatrix.eye(n)
 
   /**
    * Generate a sparse Identity Matrix in `Matrix` format.
    * @param n number of rows and columns of the matrix
-   * @return `SparseMatrix` with size `n` x `n` and values of ones on the diagonal
+   * @return `Matrix` with size `n` x `n` and values of ones on the diagonal
    */
   def speye(n: Int): Matrix = SparseMatrix.speye(n)
 
   /**
-   * Generate a dense `Matrix` consisting of i.i.d. uniform random numbers.
+   * Generate a `DenseMatrix` consisting of i.i.d. uniform random numbers.
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
-   * @return `DenseMatrix` with size `numRows` x `numCols` and values in U(0, 1)
+   * @return `Matrix` with size `numRows` x `numCols` and values in U(0, 1)
    */
   def rand(numRows: Int, numCols: Int, rng: Random): Matrix =
     DenseMatrix.rand(numRows, numCols, rng)
@@ -571,7 +575,7 @@ object Matrices {
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
-   * @return `DenseMatrix` with size `numRows` x `numCols` and values in N(0, 1)
+   * @return `Matrix` with size `numRows` x `numCols` and values in N(0, 1)
    */
   def randn(numRows: Int, numCols: Int, rng: Random): Matrix =
     DenseMatrix.randn(numRows, numCols, rng)
@@ -590,7 +594,7 @@ object Matrices {
   /**
    * Generate a diagonal matrix in `DenseMatrix` format from the supplied values.
    * @param vector a `Vector` tat will form the values on the diagonal of the matrix
-   * @return Square `DenseMatrix` with size `values.length` x `values.length` and `values`
+   * @return Square `Matrix` with size `values.length` x `values.length` and `values`
    *         on the diagonal
    */
   def diag(vector: Vector): Matrix = DenseMatrix.diag(vector)
@@ -653,8 +657,8 @@ object Matrices {
    * Vertically concatenate a sequence of matrices. The returned matrix will be in the format
    * the matrices are supplied in. Supplying a mix of dense and sparse matrices will result in
    * a dense matrix.
-   * @param matrices sequence of matrices
-   * @return a single `Matrix` composed of the matrices that were horizontally concatenated
+   * @param matrices array of matrices
+   * @return a single `Matrix` composed of the matrices that were vertically concatenated
    */
   def vertcat(matrices: Array[Matrix]): Matrix = {
     if (matrices.size == 1) {
