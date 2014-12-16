@@ -60,57 +60,49 @@ mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -DskipTests clean package
 mvn -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
 {% endhighlight %}
 
-For Apache Hadoop 2.x, 0.23.x, Cloudera CDH, and other Hadoop versions with YARN, you can enable the "yarn-alpha" or "yarn" profile and optionally set the "yarn.version" property if it is different from "hadoop.version". The additional build profile required depends on the YARN version:
-
-<table class="table">
-  <thead>
-    <tr><th>YARN version</th><th>Profile required</th></tr>
-  </thead>
-  <tbody>
-    <tr><td>0.23.x to 2.1.x</td><td>yarn-alpha (Deprecated.)</td></tr>
-    <tr><td>2.2.x and later</td><td>yarn</td></tr>
-  </tbody>
-</table>
-
-Note: Support for YARN-alpha API's will be removed in Spark 1.3 (see SPARK-3445).
+For Apache Hadoop 2.x, 0.23.x, Cloudera CDH, and other Hadoop versions with YARN, you can enable the "yarn" profile and optionally set the "yarn.version" property if it is different from "hadoop.version". As of Spark 1.3, Spark only supports YARN versions 2.2.0 and later.
 
 Examples:
 
 {% highlight bash %}
-# Apache Hadoop 2.0.5-alpha
-mvn -Pyarn-alpha -Dhadoop.version=2.0.5-alpha -DskipTests clean package
-
-# Cloudera CDH 4.2.0
-mvn -Pyarn-alpha -Dhadoop.version=2.0.0-cdh4.2.0 -DskipTests clean package
-
-# Apache Hadoop 0.23.x
-mvn -Pyarn-alpha -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
-
 # Apache Hadoop 2.2.X
 mvn -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -DskipTests clean package
 
 # Apache Hadoop 2.3.X
 mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
 
-# Apache Hadoop 2.4.X
-mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
+# Apache Hadoop 2.4.X or 2.5.X
+mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=VERSION -DskipTests clean package
+
+Versions of Hadoop after 2.5.X may or may not work with the -Phadoop-2.4 profile (they were
+released after this version of Spark).
 
 # Different versions of HDFS and YARN.
-mvn -Pyarn-alpha -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=0.23.7 -DskipTests clean package
+mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=2.2.0 -DskipTests clean package
 {% endhighlight %}
 
 # Building With Hive and JDBC Support
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
-add the `-Phive` profile to your existing build options. By default Spark
-will build with Hive 0.13.1 bindings. You can also build for Hive 0.12.0 using
-the `-Phive-0.12.0` profile.
+add the `-Phive` and `Phive-thriftserver` profiles to your existing build options.
+By default Spark will build with Hive 0.13.1 bindings. You can also build for 
+Hive 0.12.0 using the `-Phive-0.12.0` profile.
 {% highlight bash %}
 # Apache Hadoop 2.4.X with Hive 13 support
-mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -DskipTests clean package
+mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-thriftserver -DskipTests clean package
 
 # Apache Hadoop 2.4.X with Hive 12 support
-mvn -Pyarn -Phive-0.12.0 -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -DskipTests clean package
+mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -Phive -Phive-0.12.0 -Phive-thriftserver -DskipTests clean package
 {% endhighlight %}
+
+# Building for Scala 2.11
+To produce a Spark package compiled with Scala 2.11, use the `-Dscala-2.11` property:
+
+    dev/change-version-to-2.11.sh
+    mvn -Pyarn -Phadoop-2.4 -Dscala-2.11 -DskipTests clean package
+
+Scala 2.11 support in Spark is experimental and does not support a few features.
+Specifically, Spark's external Kafka library and JDBC component are not yet
+supported in Scala 2.11 builds.
 
 # Spark Tests in Maven
 
@@ -118,8 +110,8 @@ Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.o
 
 Some of the tests require Spark to be packaged first, so always run `mvn package` with `-DskipTests` the first time.  The following is an example of a correct (build, test) sequence:
 
-    mvn -Pyarn -Phadoop-2.3 -DskipTests -Phive clean package
-    mvn -Pyarn -Phadoop-2.3 -Phive test
+    mvn -Pyarn -Phadoop-2.3 -DskipTests -Phive -Phive-thriftserver clean package
+    mvn -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver test
 
 The ScalaTest plugin also supports running only a specific test suite as follows:
 
@@ -132,7 +124,21 @@ We use the scala-maven-plugin which supports incremental and continuous compilat
 
     mvn scala:cc
 
-should run continuous compilation (i.e. wait for changes). However, this has not been tested extensively.
+should run continuous compilation (i.e. wait for changes). However, this has not been tested 
+extensively. A couple of gotchas to note:
+* it only scans the paths `src/main` and `src/test` (see
+[docs](http://scala-tools.org/mvnsites/maven-scala-plugin/usage_cc.html)), so it will only work
+from within certain submodules that have that structure.
+* you'll typically need to run `mvn install` from the project root for compilation within
+specific submodules to work; this is because submodules that depend on other submodules do so via
+the `spark-parent` module).
+
+Thus, the full flow for running continuous-compilation of the `core` submodule may look more like:
+ ```
+ $ mvn install
+ $ cd core
+ $ mvn scala:cc
+```
 
 # Using With IntelliJ IDEA
 
@@ -182,16 +188,16 @@ can be set to control the SBT build. For example:
 
 Some of the tests require Spark to be packaged first, so always run `sbt/sbt assembly` the first time.  The following is an example of a correct (build, test) sequence:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive assembly
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive test
+    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver assembly
+    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver test
 
 To run only a specific test suite as follows:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive "test-only org.apache.spark.repl.ReplSuite"
+    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver "test-only org.apache.spark.repl.ReplSuite"
 
 To run test suites of a specific sub project as follows:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive core/test
+    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver core/test
 
 # Speeding up Compilation with Zinc
 

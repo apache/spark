@@ -32,6 +32,10 @@ object TestData {
     (1 to 100).map(i => TestData(i, i.toString))).toSchemaRDD
   testData.registerTempTable("testData")
 
+  val negativeData = TestSQLContext.sparkContext.parallelize(
+    (1 to 100).map(i => TestData(-i, (-i).toString))).toSchemaRDD
+  negativeData.registerTempTable("negativeData")
+
   case class LargeAndSmallInts(a: Int, b: Int)
   val largeAndSmallInts =
     TestSQLContext.sparkContext.parallelize(
@@ -54,6 +58,17 @@ object TestData {
       TestData2(3, 2) :: Nil).toSchemaRDD
   testData2.registerTempTable("testData2")
 
+  case class DecimalData(a: BigDecimal, b: BigDecimal)
+  val decimalData =
+    TestSQLContext.sparkContext.parallelize(
+      DecimalData(1, 1) ::
+      DecimalData(1, 2) ::
+      DecimalData(2, 1) ::
+      DecimalData(2, 2) ::
+      DecimalData(3, 1) ::
+      DecimalData(3, 2) :: Nil).toSchemaRDD
+  decimalData.registerTempTable("decimalData")
+
   case class BinaryData(a: Array[Byte], b: Int)
   val binaryData =
     TestSQLContext.sparkContext.parallelize(
@@ -64,11 +79,12 @@ object TestData {
       BinaryData("123".getBytes(), 4) :: Nil).toSchemaRDD
   binaryData.registerTempTable("binaryData")
 
-  // TODO: There is no way to express null primitives as case classes currently...
+  case class TestData3(a: Int, b: Option[Int])
   val testData3 =
-    logical.LocalRelation('a.int, 'b.int).loadData(
-      (1, null) ::
-      (2, 2) :: Nil)
+    TestSQLContext.sparkContext.parallelize(
+      TestData3(1, None) ::
+      TestData3(2, Some(2)) :: Nil).toSchemaRDD
+  testData3.registerTempTable("testData3")
 
   val emptyTableData = logical.LocalRelation('a.int, 'b.int)
 

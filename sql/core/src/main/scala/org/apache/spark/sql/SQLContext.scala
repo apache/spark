@@ -327,7 +327,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     def numPartitions = self.numShufflePartitions
 
-    val strategies: Seq[Strategy] =
+    def strategies: Seq[Strategy] =
       extraStrategies ++ (
       CommandStrategy(self) ::
       DataSourceStrategy ::
@@ -444,7 +444,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
          |${stringOrError(optimizedPlan)}
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
-         |Code Generation: ${executedPlan.codegenEnabled}
+         |Code Generation: ${stringOrError(executedPlan.codegenEnabled)}
          |== RDD ==
       """.stripMargin.trim
   }

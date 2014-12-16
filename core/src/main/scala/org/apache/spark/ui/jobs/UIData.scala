@@ -31,6 +31,7 @@ private[jobs] object UIData {
     var failedTasks : Int = 0
     var succeededTasks : Int = 0
     var inputBytes : Long = 0
+    var outputBytes : Long = 0
     var shuffleRead : Long = 0
     var shuffleWrite : Long = 0
     var memoryBytesSpilled : Long = 0
@@ -39,9 +40,28 @@ private[jobs] object UIData {
 
   class JobUIData(
     var jobId: Int = -1,
+    var startTime: Option[Long] = None,
+    var endTime: Option[Long] = None,
     var stageIds: Seq[Int] = Seq.empty,
     var jobGroup: Option[String] = None,
-    var status: JobExecutionStatus = JobExecutionStatus.UNKNOWN
+    var status: JobExecutionStatus = JobExecutionStatus.UNKNOWN,
+    /* Tasks */
+    // `numTasks` is a potential underestimate of the true number of tasks that this job will run.
+    // This may be an underestimate because the job start event references all of the result
+    // stages's transitive stage dependencies, but some of these stages might be skipped if their
+    // output is available from earlier runs.
+    // See https://github.com/apache/spark/pull/3009 for a more extensive discussion.
+    var numTasks: Int = 0,
+    var numActiveTasks: Int = 0,
+    var numCompletedTasks: Int = 0,
+    var numSkippedTasks: Int = 0,
+    var numFailedTasks: Int = 0,
+    /* Stages */
+    var numActiveStages: Int = 0,
+    // This needs to be a set instead of a simple count to prevent double-counting of rerun stages:
+    var completedStageIndices: OpenHashSet[Int] = new OpenHashSet[Int](),
+    var numSkippedStages: Int = 0,
+    var numFailedStages: Int = 0
   )
 
   class StageUIData {
@@ -53,6 +73,7 @@ private[jobs] object UIData {
     var executorRunTime: Long = _
 
     var inputBytes: Long = _
+    var outputBytes: Long = _
     var shuffleReadBytes: Long = _
     var shuffleWriteBytes: Long = _
     var memoryBytesSpilled: Long = _

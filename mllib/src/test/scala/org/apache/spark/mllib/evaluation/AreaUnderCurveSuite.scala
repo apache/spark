@@ -19,10 +19,10 @@ package org.apache.spark.mllib.evaluation
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
-class AreaUnderCurveSuite extends FunSuite with LocalSparkContext {
+class AreaUnderCurveSuite extends FunSuite with MLlibTestSparkContext {
   test("auc computation") {
     val curve = Seq((0.0, 0.0), (1.0, 1.0), (2.0, 3.0), (3.0, 0.0))
     val auc = 4.0
