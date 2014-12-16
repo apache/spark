@@ -78,7 +78,7 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
     }
 
   protected lazy val options: Parser[Map[String, String]] =
-    "(" ~> repsep(pair, ",") <~ ")" ^^ { case s: Seq[(String, String)] => CaseInsensitiveMap(s) }
+    "(" ~> repsep(pair, ",") <~ ")" ^^ { case s: Seq[(String, String)] => s.toMap }
 
   protected lazy val className: Parser[String] = repsep(ident, ".") ^^ { case s => s.mkString(".")}
 
@@ -100,7 +100,7 @@ private[sql] case class CreateTableUsing(
         }
     }
     val dataSource = clazz.newInstance().asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
-    val relation = dataSource.createRelation(sqlContext, options)
+    val relation = dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
 
     sqlContext.baseRelationToSchemaRDD(relation).registerTempTable(tableName)
     Seq.empty
@@ -110,13 +110,9 @@ private[sql] case class CreateTableUsing(
 /**
  * Builds a map in which keys are case insensitive
  */
-object CaseInsensitiveMap {
-  def apply(kvs: Seq[(String, String)]) = new CaseInsensitiveMap(kvs.toMap)
-}
+protected class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String] {
 
-class CaseInsensitiveMap(_baseMap: Map[String, String]) extends Map[String, String] {
-
-  val baseMap = _baseMap.map(kv => kv.copy(_1 = kv._1.toLowerCase))
+  val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))
 
   override def get(k: String): Option[String] = baseMap.get(k.toLowerCase)
 
