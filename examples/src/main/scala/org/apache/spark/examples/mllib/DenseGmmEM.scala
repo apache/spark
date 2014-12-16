@@ -39,9 +39,9 @@ object DenseGmmEM {
     }.cache
       
     val clusters = new GaussianMixtureModelEM()
-        .setK(k)
-        .setConvergenceTol(convergenceTol)
-        .run(data)
+      .setK(k)
+      .setConvergenceTol(convergenceTol)
+      .run(data)
     
     for (i <- 0 until clusters.k) {
       println("weight=%f mu=%s sigma=\n%s\n" format 
