@@ -94,14 +94,14 @@ private[tree] sealed class TreeEnsembleModel(
    * Classifies a single data point based on (weighted) majority votes.
    */
   private def predictByVoting(features: Vector): Double = {
-    predictByVotingWithWeight(features)._1
+    predictRawByVoting(features)._1
   }
   
   /**
    * Classifies a single data point based on (weighted) majority votes.
    * @return predicted category and number of votes as weight
    */
-  private def predictByVotingWithWeight(features: Vector): (Double, Double) = {
+  private def predictRawByVoting(features: Vector): (Double, Double) = {
     val votes = mutable.Map.empty[Int, Double]
     trees.view.zip(treeWeights).foreach { case (tree, weight) =>
       val prediction = tree.predict(features).toInt
@@ -142,10 +142,10 @@ private[tree] sealed class TreeEnsembleModel(
    * @param features array representing a single data point
    * @return predicted category from the trained model and the number of votes as weight
    */
-  def predictWithWeight(features: Vector): (Double, Double) = {
+  def predictRaw(features: Vector): (Double, Double) = {
     (algo, combiningStrategy) match {
       case (Classification, Vote) =>
-        predictByVotingWithWeight(features)
+        predictRawByVoting(features)
       case _ =>
         throw new IllegalArgumentException(
           "TreeEnsembleModel given unsupported (algo, combiningStrategy) combination: " +
