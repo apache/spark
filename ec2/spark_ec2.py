@@ -311,16 +311,22 @@ def launch_cluster(conn, opts, cluster_name):
     slave_group = get_or_make_group(conn, cluster_name + "-slaves", opts.vpc_id)
     authorized_address = opts.authorized_address
     if master_group.rules == []:  # Group was just now created
-        if opts.vpc_id == None:
+        if opts.vpc_id is None:
             master_group.authorize(src_group=master_group)
             master_group.authorize(src_group=slave_group)
         else:
-            master_group.authorize(ip_protocol='icmp', from_port=-1, to_port=-1, src_group=master_group)
-            master_group.authorize(ip_protocol='tcp', from_port=0, to_port=65535, src_group=master_group)
-            master_group.authorize(ip_protocol='udp', from_port=0, to_port=65535, src_group=master_group)
-            master_group.authorize(ip_protocol='icmp', from_port=-1, to_port=-1, src_group=slave_group)
-            master_group.authorize(ip_protocol='tcp', from_port=0, to_port=65535, src_group=slave_group)
-            master_group.authorize(ip_protocol='udp', from_port=0, to_port=65535, src_group=slave_group)
+            master_group.authorize(ip_protocol='icmp', from_port=-1, to_port=-1,
+                                   src_group=master_group)
+            master_group.authorize(ip_protocol='tcp', from_port=0, to_port=65535,
+                                   src_group=master_group)
+            master_group.authorize(ip_protocol='udp', from_port=0, to_port=65535,
+                                   src_group=master_group)
+            master_group.authorize(ip_protocol='icmp', from_port=-1, to_port=-1,
+                                   src_group=slave_group)
+            master_group.authorize(ip_protocol='tcp', from_port=0, to_port=65535,
+                                   src_group=slave_group)
+            master_group.authorize(ip_protocol='udp', from_port=0, to_port=65535,
+                                   src_group=slave_group)
         master_group.authorize('tcp', 22, 22, authorized_address)
         master_group.authorize('tcp', 8080, 8081, authorized_address)
         master_group.authorize('tcp', 18080, 18080, authorized_address)
@@ -332,16 +338,22 @@ def launch_cluster(conn, opts, cluster_name):
         if opts.ganglia:
             master_group.authorize('tcp', 5080, 5080, authorized_address)
     if slave_group.rules == []:  # Group was just now created
-        if opts.vpc_id == None:
+        if opts.vpc_id is None:
             slave_group.authorize(src_group=master_group)
             slave_group.authorize(src_group=slave_group)
         else:
-            slave_group.authorize(ip_protocol='icmp', from_port=-1, to_port=-1, src_group=master_group)
-            slave_group.authorize(ip_protocol='tcp', from_port=0, to_port=65535, src_group=master_group)
-            slave_group.authorize(ip_protocol='udp', from_port=0, to_port=65535, src_group=master_group)
-            slave_group.authorize(ip_protocol='icmp', from_port=-1, to_port=-1, src_group=slave_group)
-            slave_group.authorize(ip_protocol='tcp', from_port=0, to_port=65535, src_group=slave_group)
-            slave_group.authorize(ip_protocol='udp', from_port=0, to_port=65535, src_group=slave_group)
+            slave_group.authorize(ip_protocol='icmp', from_port=-1, to_port=-1,
+                                  src_group=master_group)
+            slave_group.authorize(ip_protocol='tcp', from_port=0, to_port=65535,
+                                  src_group=master_group)
+            slave_group.authorize(ip_protocol='udp', from_port=0, to_port=65535,
+                                  src_group=master_group)
+            slave_group.authorize(ip_protocol='icmp', from_port=-1, to_port=-1,
+                                  src_group=slave_group)
+            slave_group.authorize(ip_protocol='tcp', from_port=0, to_port=65535,
+                                  src_group=slave_group)
+            slave_group.authorize(ip_protocol='udp', from_port=0, to_port=65535,
+                                  src_group=slave_group)
         slave_group.authorize('tcp', 22, 22, authorized_address)
         slave_group.authorize('tcp', 8080, 8081, authorized_address)
         slave_group.authorize('tcp', 50060, 50060, authorized_address)
