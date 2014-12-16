@@ -20,10 +20,10 @@ package org.apache.spark.sql.hive.execution
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan}
-import org.apache.spark.sql.execution.{SparkPlan, Command, LeafNode}
+import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.MetastoreRelation
 
@@ -44,11 +44,7 @@ case class CreateTableAsSelect(
     tableName: String,
     query: LogicalPlan,
     allowExisting: Boolean,
-    desc: Option[CreateTableDesc]) extends LeafNode with Command {
-
-  def output = Seq.empty
-
-  private[this] def sc = sqlContext.asInstanceOf[HiveContext]
+    desc: Option[CreateTableDesc])(@transient sc: HiveContext) extends RunnableCommand {
 
   // A lazy computing of the metastoreRelation
   private[this] lazy val metastoreRelation: MetastoreRelation = {
@@ -61,7 +57,7 @@ case class CreateTableAsSelect(
     }
   }
 
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
+  override def run(sqlContext: SQLContext) = {
     // TODO ideally, we should get the output data ready first and then
     // add the relation into catalog, just in case of failure occurs while data
     // processing.
@@ -77,14 +73,5 @@ case class CreateTableAsSelect(
     }
 
     Seq.empty[Row]
-  }
-
-  override def execute(): RDD[Row] = {
-    sideEffectResult
-    sparkContext.emptyRDD[Row]
-  }
-
-  override def argString: String = {
-    s"[Database:$database, TableName: $tableName, InsertIntoHiveTable]\n" + query.toString
   }
 }

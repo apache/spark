@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.StringType
-import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan, PhysicalRDD}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
@@ -183,19 +183,19 @@ private[hive] trait HiveStrategies {
           table, partition, planLater(child), overwrite)(hiveContext) :: Nil
       case logical.CreateTableAsSelect(
              Some(database), tableName, child, allowExisting, Some(desc: CreateTableDesc)) =>
-        execution.CreateTableAsSelect(
+        ExecutedCommand(execution.CreateTableAsSelect(
           database,
           tableName,
           child,
           allowExisting,
-          Some(desc)) :: Nil
+          Some(desc))(hiveContext)) :: Nil
       case logical.CreateTableAsSelect(Some(database), tableName, child, allowExisting, None) =>
-        execution.CreateTableAsSelect(
+        ExecutedCommand(execution.CreateTableAsSelect(
           database,
           tableName,
           child,
           allowExisting,
-          None) :: Nil
+          None)(hiveContext)) :: Nil
       case _ => Nil
     }
   }
@@ -226,23 +226,27 @@ private[hive] trait HiveStrategies {
 
   case class HiveCommandStrategy(context: HiveContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.NativeCommand(sql) => NativeCommand(sql, plan.output)(context) :: Nil
+      case hive.NativeCommand(sql) => ExecutedCommand(
+        execution.NativeCommand(sql, plan.output)(context)) :: Nil
 
-      case hive.DropTable(tableName, ifExists) => execution.DropTable(tableName, ifExists) :: Nil
+      case hive.DropTable(tableName, ifExists) => ExecutedCommand(
+        execution.DropTable(tableName, ifExists)(context)) :: Nil
 
-      case hive.AddJar(path) => execution.AddJar(path) :: Nil
+      case hive.AddJar(path) => ExecutedCommand(execution.AddJar(path)(context)) :: Nil
 
-      case hive.AddFile(path) => execution.AddFile(path) :: Nil
+      case hive.AddFile(path) => ExecutedCommand(execution.AddFile(path)(context)) :: Nil
 
-      case hive.AnalyzeTable(tableName) => execution.AnalyzeTable(tableName) :: Nil
+      case hive.AnalyzeTable(tableName) => ExecutedCommand(
+        execution.AnalyzeTable(tableName)(context)) :: Nil
 
       case describe: logical.DescribeCommand =>
         val resolvedTable = context.executePlan(describe.table).analyzed
         resolvedTable match {
           case t: MetastoreRelation =>
-            Seq(DescribeHiveTableCommand(t, describe.output, describe.isExtended)(context))
+            ExecutedCommand(
+              DescribeHiveTableCommand(t, describe.output, describe.isExtended)(context)) :: Nil
           case o: LogicalPlan =>
-            Seq(DescribeCommand(planLater(o), describe.output)(context))
+            ExecutedCommand(DescribeCommand(planLater(o), describe.output)(context)) :: Nil
         }
 
       case _ => Nil

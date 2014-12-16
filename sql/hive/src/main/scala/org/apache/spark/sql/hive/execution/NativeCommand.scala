@@ -18,21 +18,21 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRow, Row}
-import org.apache.spark.sql.execution.{Command, LeafNode}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
+import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.SQLContext
 
 /**
  * :: DeveloperApi ::
  */
 @DeveloperApi
 case class NativeCommand(
-    sql: String, output: Seq[Attribute])(
-    @transient context: HiveContext)
-  extends LeafNode with Command {
+    sql: String,
+    _output: Seq[Attribute])(@transient context: HiveContext)
+  extends RunnableCommand {
 
-  override protected lazy val sideEffectResult: Seq[Row] = context.runSqlHive(sql).map(Row(_))
+  override def output = _output
 
-  override def otherCopyArgs = context :: Nil
+  override def run(sqlContext: SQLContext) = context.runSqlHive(sql).map(Row(_))
 }

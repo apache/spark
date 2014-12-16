@@ -52,6 +52,15 @@ private[hive] case class DropTable(tableName: String, ifExists: Boolean) extends
 
 private[hive] case class AnalyzeTable(tableName: String) extends Command
 
+/**
+ * Returned for commands supported by a given parser, but not catalyst.  In general these are DDL
+ * commands that are passed directly to another system.
+ */
+private[hive] case class NativeCommand(cmd: String) extends Command {
+  override def output =
+    Seq(AttributeReference("result", StringType, nullable = false)())
+}
+
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
   protected val nativeCommands = Seq(
