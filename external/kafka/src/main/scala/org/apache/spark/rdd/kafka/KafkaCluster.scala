@@ -32,7 +32,7 @@ import kafka.consumer.{ConsumerConfig, SimpleConsumer}
   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form
   */
 class KafkaCluster(val kafkaParams: Map[String, String]) {
-  type Err = ArrayBuffer[Throwable]
+  import KafkaCluster.Err
 
   val seedBrokers: Array[(String, Int)] =
     kafkaParams.get("metadata.broker.list")
@@ -287,6 +287,8 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
 }
 
 object KafkaCluster {
+  type Err = ArrayBuffer[Throwable]
+
   /** Make a consumer config without requiring group.id or zookeeper.connect,
     * since communicating with brokers also needs common settings such as timeout
     */

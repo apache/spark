@@ -79,7 +79,7 @@ class KafkaRDD[
   override def compute(thePart: Partition, context: TaskContext) = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     if (part.fromOffset >= part.untilOffset) {
-      log.warn("Beginning offset is same or after ending offset" +
+      log.warn("Beginning offset is same or after ending offset " +
         s"skipping ${part.topic} ${part.partition}")
       Iterator.empty
     } else {
@@ -87,7 +87,7 @@ class KafkaRDD[
         context.addTaskCompletionListener{ context => closeIfNeeded() }
 
         val kc = new KafkaCluster(kafkaParams)
-        log.info(s"Computing topic ${part.topic}, partition ${part.partition}" +
+        log.info(s"Computing topic ${part.topic}, partition ${part.partition} " +
           s"offsets ${part.fromOffset} -> ${part.untilOffset}")
         val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
           .newInstance(kc.config.props)
@@ -97,7 +97,7 @@ class KafkaRDD[
           .asInstanceOf[Decoder[V]]
         val consumer: SimpleConsumer = kc.connectLeader(part.topic, part.partition).fold(
           errs => throw new Exception(
-            s"Couldn't connect to leader for topic ${part.topic} ${part.partition}:" +
+            s"Couldn't connect to leader for topic ${part.topic} ${part.partition}: " +
               errs.mkString("\n")),
           consumer => consumer
         )
