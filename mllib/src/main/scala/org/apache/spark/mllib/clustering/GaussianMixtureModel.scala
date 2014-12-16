@@ -38,7 +38,7 @@ class GaussianMixtureModel(
   val sigma: Array[Matrix]) extends Serializable {
   
   /** Number of gaussians in mixture */
-  def k: Int = weight.length;
+  def k: Int = weight.length
 
   /** Maps given points to their cluster indices. */
   def predict(points: RDD[Vector]): (RDD[Array[Double]],RDD[Int]) = {
