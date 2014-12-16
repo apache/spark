@@ -852,6 +852,59 @@ Apart from these, the following properties are also available, and may be useful
     between nodes leading to flooding the network with those.
   </td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.io.preferDirectBufs</code></td>
+  <td>true</td>
+  <td>
+    (Netty only) Off-heap buffers are used to reduce garbage collection during shuffle and cache 
+    block transfer. For environments where off-heap memory is tightly limited, users may wish to 
+    turn this off to force all allocations from Netty to be on-heap.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.numConnectionsPerPeer</code></td>
+  <td>1</td>
+  <td>
+    (Netty only) Connections between hosts are reused in order to reduce connection buildup for 
+    large clusters. For small clusters with many hard disks, this may result in insufficient
+    concurrency to saturate all disks, and so users may consider increasing this value.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.serverThreads</code></td>
+  <td>min(num-cores, 8)</td>
+  <td>
+    (Netty only) Size of fixed pool of threads to make requests. As each thread gets 16 MB of 
+    off-heap buffer space initially, the default is limited to 8 cores to avoid excessive off-heap 
+    allocation. It has been experimentally determined that this default should be sufficient to 
+    saturate a 10Gb/s network, but in some cases this may have to be adjusted.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.clientThreads</code></td>
+  <td>min(num-cores, 8)</td>
+  <td>
+    (Netty only) Size of fixed pool of threads to make requests. This has the same properties as
+    <code>spark.shuffle.io.serverThreads</code>, above.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.maxRetries</code></td>
+  <td>3</td>
+  <td>
+    (Netty only) Fetches that fail due to IO-related exceptions are automatically retried if this is 
+    set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC 
+    pauses or transient network connectivity issues.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.retryWait</code></td>
+  <td>5</td>
+  <td>
+    (Netty only) Seconds to wait between retries of fetches. The maximum delay caused by retrying
+    is simply <code>maxRetries * retryWait</code>, by default 15 seconds. 
+  </td>
+</tr>
 </table>
 
 #### Scheduling
