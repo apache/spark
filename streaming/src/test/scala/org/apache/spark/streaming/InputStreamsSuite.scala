@@ -192,14 +192,16 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val testDir: File = null
     try {
       val testDir = Utils.createTempDir()
+      // Create a file that exists before the StreamingContext is created
       val existingFile = new File(testDir, "0")
       Files.write("0\n", existingFile, Charsets.UTF_8)
 
-      Thread.sleep(1000)
       // Set up the streaming context and input streams
-      val newConf = conf.clone.set(
-        "spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
-      ssc = new StreamingContext(newConf, batchDuration)
+      ssc = new StreamingContext(conf, batchDuration)
+      val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+      // This `setTime` call ensures that the clock is past the creation time of `existingFile`
+      clock.setTime(System.currentTimeMillis() + 1000)
+      val waiter = new StreamingTestWaiter(ssc)
       val fileStream = ssc.fileStream[LongWritable, Text, TextInputFormat](
         testDir.toString, (x: Path) => true, newFilesOnly = newFilesOnly).map(_._2.toString)
       val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
@@ -207,13 +209,15 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       outputStream.register()
       ssc.start()
 
-      // Create files in the directory
+      // Over time, create files in the directory
       val input = Seq(1, 2, 3, 4, 5)
       input.foreach { i =>
-        Thread.sleep(batchDuration.milliseconds)
+        clock.addToTime(batchDuration.milliseconds)
         val file = new File(testDir, i.toString)
         Files.write(i + "\n", file, Charsets.UTF_8)
+        assert(file.setLastModified(clock.currentTime() - 50))
         logInfo("Created file " + file)
+        waiter.waitForTotalBatchesCompleted(i, timeout = Durations.seconds(10))
       }
 
       // Verify that all the files have been read
@@ -222,9 +226,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       } else {
         (Seq(0) ++ input).map(_.toString).toSet
       }
-      eventually(timeout(maxWaitTimeMillis milliseconds), interval(100 milliseconds)) {
-        assert(outputBuffer.flatten.toSet === expectedOutput)
-      }
+      assert(outputBuffer.flatten.toSet === expectedOutput)
     } finally {
       if (ssc != null) ssc.stop()
       if (testDir != null) Utils.deleteRecursively(testDir)
