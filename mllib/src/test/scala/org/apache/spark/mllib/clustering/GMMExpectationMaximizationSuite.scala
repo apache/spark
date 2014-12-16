@@ -26,10 +26,10 @@ import org.apache.spark.mllib.util.TestingUtils._
 class GMMExpectationMaximizationSuite extends FunSuite with MLlibTestSparkContext {
   test("single cluster") {
     val data = sc.parallelize(Array(
-        Vectors.dense(6.0, 9.0),
-        Vectors.dense(5.0, 10.0),
-        Vectors.dense(4.0, 11.0)
-      ))
+      Vectors.dense(6.0, 9.0),
+      Vectors.dense(5.0, 10.0),
+      Vectors.dense(4.0, 11.0)
+    ))
     
     // expectations
     val Ew = 1.0
