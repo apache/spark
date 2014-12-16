@@ -58,7 +58,6 @@ class Analyzer(catalog: Catalog,
       ResolveSortReferences ::
       NewRelationInstances ::
       ImplicitGenerate ::
-      StarExpansion ::
       ResolveFunctions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
@@ -153,7 +152,34 @@ class Analyzer(catalog: Catalog,
    */
   object ResolveReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case q: LogicalPlan if q.childrenResolved =>
+      case p: LogicalPlan if !p.childrenResolved => p
+
+      // If the projection list contains Stars, expand it.
+      case p@Project(projectList, child) if containsStar(projectList) =>
+        Project(
+          projectList.flatMap {
+            case s: Star => s.expand(child.output, resolver)
+            case o => o :: Nil
+          },
+          child)
+      case t: ScriptTransformation if containsStar(t.input) =>
+        t.copy(
+          input = t.input.flatMap {
+            case s: Star => s.expand(t.child.output, resolver)
+            case o => o :: Nil
+          }
+        )
+
+      // If the aggregate function argument contains Stars, expand it.
+      case a: Aggregate if containsStar(a.aggregateExpressions) =>
+        a.copy(
+          aggregateExpressions = a.aggregateExpressions.flatMap {
+            case s: Star => s.expand(a.child.output, resolver)
+            case o => o :: Nil
+          }
+        )
+
+      case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressions {
           case u @ UnresolvedAttribute(name) =>
@@ -163,6 +189,12 @@ class Analyzer(catalog: Catalog,
             result
         }
     }
+
+    /**
+     * Returns true if `exprs` contains a [[Star]].
+     */
+    protected def containsStar(exprs: Seq[Expression]): Boolean =
+      exprs.collect { case _: Star => true}.nonEmpty
   }
 
   /**
@@ -276,45 +308,6 @@ class Analyzer(catalog: Catalog,
       case Project(Seq(Alias(g: Generator, _)), child) =>
         Generate(g, join = false, outer = false, None, child)
     }
-  }
-
-  /**
-   * Expands any references to [[Star]] (*) in project operators.
-   */
-  object StarExpansion extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      // Wait until children are resolved
-      case p: LogicalPlan if !p.childrenResolved => p
-      // If the projection list contains Stars, expand it.
-      case p @ Project(projectList, child) if containsStar(projectList) =>
-        Project(
-          projectList.flatMap {
-            case s: Star => s.expand(child.output, resolver)
-            case o => o :: Nil
-          },
-          child)
-      case t: ScriptTransformation if containsStar(t.input) =>
-        t.copy(
-          input = t.input.flatMap {
-            case s: Star => s.expand(t.child.output, resolver)
-            case o => o :: Nil
-          }
-        )
-      // If the aggregate function argument contains Stars, expand it.
-      case a: Aggregate if containsStar(a.aggregateExpressions) =>
-        a.copy(
-          aggregateExpressions = a.aggregateExpressions.flatMap {
-            case s: Star => s.expand(a.child.output, resolver)
-            case o => o :: Nil
-          }
-        )
-    }
-
-    /**
-     * Returns true if `exprs` contains a [[Star]].
-     */
-    protected def containsStar(exprs: Seq[Expression]): Boolean =
-      exprs.collect { case _: Star => true }.nonEmpty
   }
 }
 
