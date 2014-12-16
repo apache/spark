@@ -469,8 +469,7 @@ class RDD(object):
     def _reserialize(self, serializer=None):
         serializer = serializer or self.ctx.serializer
         if self._jrdd_deserializer != serializer:
-            if not isinstance(self, PipelinedRDD):
-                self = self.map(lambda x: x, preservesPartitioning=True)
+            self = self.map(lambda x: x, preservesPartitioning=True)
             self._jrdd_deserializer = serializer
         return self
 

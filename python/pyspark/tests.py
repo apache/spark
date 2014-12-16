@@ -538,7 +538,10 @@ class RDDTests(ReusedPySparkTestCase):
         t = self.sc.textFile(path)
         cnt = t.count()
         self.assertEqual(cnt, t.zip(t).count())
-        self.assertEqual(cnt, t.zip(t.map(str)).count())
+        rdd = t.map(str)
+        self.assertEqual(cnt, t.zip(rdd).count())
+        # regression test for bug in _reserializer()
+        self.assertEqual(cnt, t.zip(rdd).count())
 
     def test_zip_with_different_number_of_items(self):
         a = self.sc.parallelize(range(5), 2)
