@@ -19,8 +19,6 @@
 Python package for statistical functions in MLlib.
 """
 
-import numpy as np
-
 from pyspark import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import Matrix, _convert_to_vector
@@ -277,20 +275,10 @@ class Statistics(object):
             return [ChiSqTestResult(m) for m in jmodels]
 
         if isinstance(observed, Matrix):
-            if np.any(observed.toArray() < 0):
-                raise ValueError("Contingency table cannot contain negative entries")
-            elif np.any(observed.toArray().sum(axis=1) == 0):
-                raise ValueError("Chi-squared undefined due to a row sum of 0.0")
-            elif np.any(observed.toArray().sum(axis=0) == 0):
-                raise ValueError("Chi-squared undefined due to a column sum of 0.0")
             jmodel = callMLlibFunc("chiSqTest", observed)
         else:
             if expected and len(expected) != len(observed):
                 raise ValueError("`expected` should have same length with `observed`")
-            elif any([elem < 0 for elem in observed]):
-                raise ValueError("Negative entries disallowed in `observed`")
-            elif any([elem == 0 for elem in observed]) and any([elem == 0 for elem in expected]):
-                raise ValueError("Chi-squared undefined due to 0.0 in `observed` and `expected`")
             jmodel = callMLlibFunc("chiSqTest", _convert_to_vector(observed), expected)
         return ChiSqTestResult(jmodel)
 
