@@ -103,8 +103,7 @@ permissions on your private key file, you can run `launch` with the
     key pair, `<num-slaves>` is the number of slave nodes to launch (try
     1 at first), `<vpc-id>` is the name of your VPC, `<subnet-id>` is the
     name of your subnet, and `<cluster-name>` is the name to give to your
-    cluster, `<vpc-id>` is the name of your VPC, and `<subnet-id>` is the
-    name of your subnet.
+    cluster.
 
     For example:
 
