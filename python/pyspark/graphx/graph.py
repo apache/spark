@@ -164,4 +164,13 @@ class Graph(object):
     def stronglyConnectedComponents(self, iterations):
         return
 
+    def vertexProgram(self):
+        return
+
+    def initialMessage(self):
+        return
+
+    def sendMessage(self):
+        return
+
 

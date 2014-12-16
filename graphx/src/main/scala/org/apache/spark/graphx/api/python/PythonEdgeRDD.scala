@@ -23,8 +23,11 @@ import java.util.{List => JList, Map => JMap}
 import org.apache.spark.Accumulator
 import org.apache.spark.api.python.PythonRDD
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.graphx.EdgeRDD
 import org.apache.spark.graphx.api.java.JavaEdgeRDD
 import org.apache.spark.rdd.RDD
+
+import scala.reflect.ClassTag
 
 private[graphx] class PythonEdgeRDD(
     @transient parent: RDD[_],
@@ -39,7 +42,9 @@ private[graphx] class PythonEdgeRDD(
     pythonIncludes, preservePartitioning,
     pythonExec, broadcastVars, accumulator) {
 
-  val asJavaEdgeRDD = JavaEdgeRDD.fromEdgeRDD(parent.asInstanceOf)
+  def asJavaEdgeRDD[ED, VD: ClassTag]() : JavaEdgeRDD[ED, VD] = {
+    JavaEdgeRDD.fromRDDOfEdges[ED, VD](EdgeRDD.fromEdges[ED, VD](parent.map(x => x.asInstanceOf)))
+  }
 
   def writeToFile[T](items: java.util.Iterator[T], filename: String) {
     import scala.collection.JavaConverters._

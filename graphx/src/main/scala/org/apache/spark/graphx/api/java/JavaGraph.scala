@@ -18,7 +18,6 @@ package org.apache.spark.graphx.api.java
 
 import java.lang.{Double => JDouble, Long => JLong}
 
-import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.lib.PageRank
 import org.apache.spark.rdd.RDD
@@ -27,7 +26,7 @@ import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 class JavaGraph[@specialized VD: ClassTag, @specialized ED: ClassTag]
-  (vertexRDD : RDD[(VertexId, VD)], edgeRDD: RDD[Edge[ED]]) {
+  (vertexRDD : VertexRDD[VD], edgeRDD: EdgeRDD[ED, VD]) {
 
   def vertices: JavaVertexRDD[VD] = JavaVertexRDD(vertexRDD)
   def edges: JavaEdgeRDD[ED, VD] = new JavaEdgeRDD(edgeRDD)
@@ -91,14 +90,9 @@ class JavaGraph[@specialized VD: ClassTag, @specialized ED: ClassTag]
 
 object JavaGraph {
 
-  implicit def fromRDD[VD: ClassTag, ED: ClassTag]
-    (javaVertexRDD: JavaRDD[(VertexId, VD)], javaEdgeRDD: JavaRDD[Edge[ED]]): JavaGraph[VD, ED] = {
-    new JavaGraph[VD, ED](javaVertexRDD, javaEdgeRDD)
-  }
-
   implicit def apply[VD: ClassTag, ED: ClassTag]
     (vertexRDD: RDD[(VertexId, VD)], edgeRDD: RDD[Edge[ED]]): JavaGraph[VD, ED] = {
-    new JavaGraph[VD, ED](vertexRDD, edgeRDD)
+    new JavaGraph[VD, ED](VertexRDD(vertexRDD), EdgeRDD.fromEdges(edgeRDD))
   }
 
   implicit def apply[VD: ClassTag, ED: ClassTag]
@@ -108,8 +102,7 @@ object JavaGraph {
 
   implicit def apply [VD: ClassTag, ED: ClassTag]
     (vertices: JavaVertexRDD[VD], edges: JavaEdgeRDD[ED, VD]): JavaGraph[VD, ED] = {
-
-    new JavaGraph(vertices.toRDD, edges.toRDD)
+    new JavaGraph(VertexRDD(vertices.toRDD), edges.edgeRDD)
   }
 }
 

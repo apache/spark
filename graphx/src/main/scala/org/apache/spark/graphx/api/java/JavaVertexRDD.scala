@@ -68,6 +68,8 @@ class JavaVertexRDD[VD](
   /** Return a new VertexRDD containing only the elements that satisfy a predicate. */
   def filter(f: JFunction[(VertexId, VD), Boolean]): JavaVertexRDD[VD] =
     JavaVertexRDD(vertexRDD.filter(x => f.call(x).booleanValue()))
+
+  def toRDD : RDD[(VertexId, VD)] = vertices
 }
 
 object JavaVertexRDD {

@@ -18,8 +18,6 @@
 package org.apache.spark.graphx.api.python
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.graphx.api.java.{JavaEdgeRDD, JavaVertexRDD, JavaGraph}
 
 @DeveloperApi
 private[graphx] class PythonGraph (
@@ -30,7 +28,7 @@ private[graphx] class PythonGraph (
 
   val vertices = vertexRDD.asJavaVertexRDD
   val edges = edgeRDD.asJavaEdgeRDD
-  val asJavaGraph = JavaGraph(vertices, edges)
+  val asJavaGraph = (vertices, edges)
 
 }
 

@@ -29,6 +29,8 @@ import org.apache.spark.storage.StorageLevel;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import scala.Array;
+import scala.Function1;
 import scala.Tuple2;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
@@ -50,9 +52,9 @@ public class JavaAPISuite implements Serializable {
         this.ssc = new JavaSparkContext("local", "GraphX JavaAPISuite");
 
         this.myList = new ArrayList<Tuple2<Object, VertexProperty<String, String>>>();
-        this.myList.add(new Tuple2(1L, new VertexProperty("abc", "ABC")));
-        this.myList.add(new Tuple2(2L, new VertexProperty("def", "DEF")));
-        this.myList.add(new Tuple2(3L, new VertexProperty("xyz", "XYZ")));
+        this.myList.add(new Tuple2(1L, new VertexProperty("001", "kushal")));
+        this.myList.add(new Tuple2(2L, new VertexProperty("002", "xia")));
+        this.myList.add(new Tuple2(3L, new VertexProperty("003", "briton")));
 
         this.classTag = ClassTag$.MODULE$.apply(VertexProperty.class);
     }
@@ -91,7 +93,7 @@ public class JavaAPISuite implements Serializable {
     }
 
     @Test
-    public void testEdgeRDDMapValues() {
+    public void testEdgeRDDCount() {
 
         List<Edge<String>> edgeList = new ArrayList<Edge<String>>();
         edgeList.add(new Edge<String>(0, 1, "abcd"));
@@ -103,7 +105,8 @@ public class JavaAPISuite implements Serializable {
 
         ClassTag<String> classTag = ClassTag$.MODULE$.apply(String.class);
 
-        JavaEdgeRDD<String, String> javaEdgeRDD = JavaEdgeRDD.apply(javaRDD, classTag);
+        JavaEdgeRDD<String, String> javaEdgeRDD =
+                JavaEdgeRDD.apply(javaRDD, classTag, classTag);
 
         assertEquals(javaEdgeRDD.count(), 4L);
     }
