@@ -267,7 +267,7 @@
       <version>1.0.0</version>
     </dependency>
     <!--
-         This depndency has been added to provided scope as it is needed for excuting build
+         This depndency has been added to provided scope as it is needed for executing build
          specific groovy scripts using gmaven+ and not required for downstream project building
          with spark.
     -->
@@ -958,7 +958,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-            <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
+            <argLine>-ea -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
             <stderr/>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
@@ -1291,13 +1291,6 @@
         <commons.math3.version>3.1.1</commons.math3.version>
         <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
       </properties>
-    </profile>
-
-    <profile>
-      <id>yarn-alpha</id>
-      <modules>
-        <module>yarn</module>
-      </modules>
     </profile>
 
     <profile>
