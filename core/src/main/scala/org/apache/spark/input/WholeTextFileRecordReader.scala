@@ -94,21 +94,23 @@ private[spark] class WholeTextFileRecordReader(
 
 /**
  * A [[org.apache.hadoop.mapreduce.lib.input.CombineFileRecordReader CombineFileRecordReader]]
- * that could pass Hadoop configuration to WholeTextFileRecordReader.
+ * that can pass Hadoop Configuration to [[org.apache.hadoop.conf.Configurable Configurable]]
+ * RecordReaders.
  */
-private[spark] class ConfigurableCombineFileRecordReader(
+private[spark] class ConfigurableCombineFileRecordReader[K, V](
     split: InputSplit,
-    context: TaskAttemptContext)
-  extends CombineFileRecordReader[String, String](
+    context: TaskAttemptContext,
+    recordReaderClass: Class[_ <: RecordReader[K, V] with HConfigurable])
+  extends CombineFileRecordReader[K, V](
     split.asInstanceOf[CombineFileSplit],
     context,
-    classOf[WholeTextFileRecordReader]
+    recordReaderClass
   ) with Configurable {
 
   override def initNextRecordReader(): Boolean = {
     val r = super.initNextRecordReader()
     if (r) {
-      this.curReader.asInstanceOf[WholeTextFileRecordReader].setConf(getConf)
+      this.curReader.asInstanceOf[HConfigurable].setConf(getConf)
     }
     r
   }
