@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.Matrix
 import org.apache.spark.mllib.linalg.Vector
 
@@ -38,4 +39,12 @@ class GaussianMixtureModel(
   
   /** Number of gaussians in mixture */
   def k: Int = weight.length;
+
+  /** Maps given points to their cluster indices. */
+  def predict(points: RDD[Vector]): (RDD[Array[Double]],RDD[Int]) = {
+    val responsibility_matrix = new GaussianMixtureModelEM()
+        .predictClusters(points,mu,sigma,weight,k)
+    val cluster_labels = responsibility_matrix.map(r => r.indexOf(r.max))
+    (responsibility_matrix,cluster_labels)
+  }    
 }
