@@ -17,10 +17,11 @@
 
 package org.apache.spark.mllib.linalg
 
-import breeze.linalg.{Matrix => BM, DenseMatrix => BDM, CSCMatrix => BSM}
+import java.util.{Arrays, Random}
 
-import java.util.{Random, Arrays}
 import scala.collection.mutable.ArrayBuffer
+
+import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
 
 /**
  * Trait for a local matrix.
