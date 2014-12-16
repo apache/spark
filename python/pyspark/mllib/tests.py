@@ -423,25 +423,12 @@ class ChiSqTestTests(PySparkTestCase):
         self.assertEqual(pearson1.degreesOfFreedom, 3)
         self.assertAlmostEqual(pearson1.pValue, 0.002717, 4)
 
-        # Vectors with different sizes
-        observed3 = Vectors.dense([1.0, 2.0, 3.0])
-        expected3 = Vectors.dense([1.0, 2.0, 3.0, 4.0])
-        self.assertRaises(ValueError, Statistics.chiSqTest, observed3, expected3)
-
-        # Negative counts in observed
-        neg_obs = Vectors.dense([1.0, 2.0, 3.0, -4.0])
-        self.assertRaises(ValueError, Statistics.chiSqTest, neg_obs, expected1)
-
         # Count = 0.0 in expected but not observed
         zero_expected = Vectors.dense([1.0, 0.0, 3.0])
         pearson_inf = Statistics.chiSqTest(observed, zero_expected)
         self.assertEqual(pearson_inf.statistic, inf)
         self.assertEqual(pearson_inf.degreesOfFreedom, 2)
         self.assertEqual(pearson_inf.pValue, 0.0)
-
-        # 0.0 in expected and observed simultaneously
-        zero_observed = Vectors.dense([2.0, 0.0, 1.0])
-        self.assertRaises(ValueError, Statistics.chiSqTest, zero_observed, zero_expected)
 
     def test_matrix_independence(self):
         data = [40.0, 24.0, 29.0, 56.0, 32.0, 42.0, 31.0, 10.0, 0.0, 30.0, 15.0, 12.0]
@@ -452,18 +439,6 @@ class ChiSqTestTests(PySparkTestCase):
         self.assertAlmostEqual(chi.statistic, 21.9958, 4)
         self.assertEqual(chi.degreesOfFreedom, 6)
         self.assertAlmostEqual(chi.pValue, 0.001213, 4)
-
-        # Negative counts
-        neg_counts = Matrices.dense(2, 2, [4.0, 5.0, 3.0, -3.0])
-        self.assertRaises(ValueError, Statistics.chiSqTest, neg_counts)
-
-        # Row sum = 0.0
-        row_zero = Matrices.dense(2, 2, [0.0, 1.0, 0.0, 2.0])
-        self.assertRaises(ValueError, Statistics.chiSqTest, row_zero)
-
-        # Column sum = 0.0
-        col_zero = Matrices.dense(2, 2, [0.0, 0.0, 2.0, 2.0])
-        self.assertRaises(ValueError, Statistics.chiSqTest, col_zero)
 
     def test_chi_sq_pearson(self):
         data = [
