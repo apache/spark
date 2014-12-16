@@ -34,10 +34,10 @@ import com.google.common.io.Files
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
-
+import org.scalatest.Assertions
 
 private[streaming]
-object MasterFailureTest extends Logging {
+object MasterFailureTest extends Logging with Assertions {
 
   @volatile var killed = false
   @volatile var killCount = 0
@@ -81,7 +81,7 @@ object MasterFailureTest extends Logging {
 
     // Verify whether all the values of the expected output is present
     // in the output
-    assert(output.distinct.toSet == expectedOutput.toSet)
+    assert(output.distinct.toSet === expectedOutput.toSet)
   }
 
 
@@ -114,7 +114,7 @@ object MasterFailureTest extends Logging {
 
     // Verify whether the last expected output value has been generated, there by
     // confirming that none of the inputs have been missed
-    assert(output.last == expectedOutput.last)
+    assert(output.last === expectedOutput.last)
   }
 
   /**
@@ -130,7 +130,7 @@ object MasterFailureTest extends Logging {
   ): Seq[T] = {
 
     // Just making sure that the expected output does not have duplicates
-    assert(expectedOutput.distinct.toSet == expectedOutput.toSet)
+    assert(expectedOutput.distinct.toSet === expectedOutput.toSet)
 
     // Reset all state
     reset()
