@@ -1149,42 +1149,54 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.dynamicAllocation.enabled</code></td>
   <td>false</td>
   <td>
-    Enabling dynamic resource allocation.
+    Enabling dynamic allocations and removals of executors based on the workload.
+    The add policy depends on whether there are backlogged tasks waiting to be scheduled. If
+    the scheduler queue is not drained in N seconds, then new executors are added.
+    N is configured via spark.dynamicAllocation.schedulerBacklogTimeout and
+    spark.dynamicAllocation.sustainedSchedulerBacklogTimeout.
+    If the queue persists for another M seconds, then more executors are added and so on.
+    M is configured via spark.dynamicAllocation.executorIdleTimeout.
+    The number added in each round increases exponentially from the previous round until an upper bound on the
+    number of executors has been reached. The upper bound is based both on a configured property
+    and on the number of tasks pending: the policy will never increase the number of executor
+    requests past the number needed to handle all pending tasks.
+    To enable this feature, spark.dynamicAllocation.minExecutors and
+    spark.dynamicAllocation.maxExecutors must be configured.
     Note that spark.shuffle.service.enabled need to be also true if cluster mode is YARN.
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.minExecutors</code></td>
-  <td></td>
+  <td>-1</td>
   <td>
     Minimum value of executors when dynamic allocation is enabled.
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.maxExecutors</code></td>
-  <td></td>
+  <td>-1</td>
   <td>
     Maximum value of executors when dynamic allocation is enabled.
   </td>
 </tr>
 <tr>
-  <td><code>spark.dynamicAllocation.schedulerBacklogTimeout </code></td>
-  <td></td>
+  <td><code>spark.dynamicAllocation.schedulerBacklogTimeout</code></td>
+  <td>60</td>
   <td>
     If there are backlogged tasks for this duration, add new executors.
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.sustainedSchedulerBacklogTimeout</code></td>
-  <td></td>
+  <td>60</td>
   <td>
-    If the backlog is sustained for this duration, add more executors
+    If the backlog is sustained for this duration, add more executors.
     This is used only after the initial backlog timeout is exceeded.
   </td>
 </tr>
 <tr>
   <td><code>spark.dynamicAllocation.executorIdleTimeout</code></td>
-  <td></td>
+  <td>600</td>
   <td>
     If an executor has been idle for this duration, remove it.
   </td>
