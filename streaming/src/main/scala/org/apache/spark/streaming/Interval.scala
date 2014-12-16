@@ -47,14 +47,3 @@ class Interval(val beginTime: Time, val endTime: Time) {
 
   override def toString = "[" + beginTime + ", " + endTime + "]"
 }
-
-private[streaming]
-object Interval {
-  def currentInterval(duration: Duration): Interval  = {
-    val time = new Time(System.currentTimeMillis)
-    val intervalBegin = time.floor(duration)
-    new Interval(intervalBegin, intervalBegin + duration)
-  }
-}
-
-
