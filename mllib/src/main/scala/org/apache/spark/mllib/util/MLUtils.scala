@@ -19,7 +19,7 @@ package org.apache.spark.mllib.util
 
 import scala.reflect.ClassTag
 
-import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
+import breeze.linalg.{DenseVector => BDV, SparseVector => BSV,
   squaredDistance => breezeSquaredDistance}
 
 import org.apache.spark.annotation.Experimental
@@ -28,7 +28,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PartitionwiseSampledRDD
 import org.apache.spark.util.random.BernoulliCellSampler
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream.DStream
@@ -281,9 +282,9 @@ object MLUtils {
    * @return squared distance between v1 and v2 within the specified precision
    */
   private[mllib] def fastSquaredDistance(
-      v1: BV[Double],
+      v1: Vector,
       norm1: Double,
-      v2: BV[Double],
+      v2: Vector,
       norm2: Double,
       precision: Double = 1e-6): Double = {
     val n = v1.size
@@ -306,16 +307,19 @@ object MLUtils {
      */
     val precisionBound1 = 2.0 * EPSILON * sumSquaredNorm / (normDiff * normDiff + EPSILON)
     if (precisionBound1 < precision) {
-      sqDist = sumSquaredNorm - 2.0 * v1.dot(v2)
-    } else if (v1.isInstanceOf[BSV[Double]] || v2.isInstanceOf[BSV[Double]]) {
-      val dot = v1.dot(v2)
-      sqDist = math.max(sumSquaredNorm - 2.0 * dot, 0.0)
-      val precisionBound2 = EPSILON * (sumSquaredNorm + 2.0 * math.abs(dot)) / (sqDist + EPSILON)
+      sqDist = sumSquaredNorm - 2.0 * dot(v1, v2)
+    } else if (v1.isInstanceOf[SparseVector] || v2.isInstanceOf[SparseVector]) {
+      val dotValue = dot(v1, v2)
+      sqDist = math.max(sumSquaredNorm - 2.0 * dotValue, 0.0)
+      val precisionBound2 = EPSILON * (sumSquaredNorm + 2.0 * math.abs(dotValue)) /
+        (sqDist + EPSILON)
       if (precisionBound2 > precision) {
-        sqDist = breezeSquaredDistance(v1, v2)
+        // TODO: breezeSquaredDistance is slow,
+        // so we should replace it with our own implementation.
+        sqDist = breezeSquaredDistance(v1.toBreeze, v2.toBreeze)
       }
     } else {
-      sqDist = breezeSquaredDistance(v1, v2)
+      sqDist = breezeSquaredDistance(v1.toBreeze, v2.toBreeze)
     }
     sqDist
   }

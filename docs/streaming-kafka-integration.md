@@ -40,3 +40,20 @@ title: Spark Streaming + Kafka Integration Guide
 	- Multiple Kafka input DStreams can be created with different groups and topics for parallel receiving of data using multiple receivers.
 
 3. **Deploying:** Package `spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}` and its dependencies (except `spark-core_{{site.SCALA_BINARY_VERSION}}` and `spark-streaming_{{site.SCALA_BINARY_VERSION}}` which are provided by `spark-submit`) into the application JAR. Then use `spark-submit` to launch your application (see [Deploying section](streaming-programming-guide.html#deploying-applications) in the main programming guide).
+
+Note that the Kafka receiver used by default is an
+[*unreliable* receiver](streaming-programming-guide.html#receiver-reliability) section in the
+programming guide). In Spark 1.2, we have added an experimental *reliable* Kafka receiver that
+provides stronger
+[fault-tolerance guarantees](streaming-programming-guide.html#fault-tolerance-semantics) of zero
+data loss on failures. This receiver is automatically used when the write ahead log
+(also introduced in Spark 1.2) is enabled
+(see [Deployment](#deploying-applications.html) section in the programming guide). This
+may reduce the receiving throughput of individual Kafka receivers compared to the unreliable
+receivers, but this can be corrected by running
+[more receivers in parallel](streaming-programming-guide.html#level-of-parallelism-in-data-receiving)
+to increase aggregate throughput. Additionally, it is recommended that the replication of the
+received data within Spark be disabled when the write ahead log is enabled as the log is already stored
+in a replicated storage system. This can be done by setting the storage level for the input
+stream to `StorageLevel.MEMORY_AND_DISK_SER` (that is, use
+`KafkaUtils.createStream(..., StorageLevel.MEMORY_AND_DISK_SER)`).
