@@ -193,6 +193,24 @@ class JsonSuite extends QueryTest {
       StringType)
   }
 
+  test("Complex field and type inferring with null in sampling") {
+    val jsonSchemaRDD = jsonRDD(jsonNullStruct)
+    val expectedSchema = StructType(
+      StructField("headers", StructType(
+        StructField("Charset", StringType, true) ::
+          StructField("Host", StringType, true) :: Nil)
+        , true) ::
+        StructField("ip", StringType, true) :: Nil)
+
+    assert(expectedSchema === jsonSchemaRDD.schema)
+    jsonSchemaRDD.registerTempTable("jsonTable")
+
+    checkAnswer(
+      sql("select headers.Host from jsonTable"),
+      Seq(Row("1.abc.com"), Row(null), Row(null))
+    )
+  }
+
   test("Primitive field and type inferring") {
     val jsonSchemaRDD = jsonRDD(primitiveFieldAndType)
 
