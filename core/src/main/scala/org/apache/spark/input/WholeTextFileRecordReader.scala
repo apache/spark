@@ -17,7 +17,7 @@
 
 package org.apache.spark.input
 
-import org.apache.hadoop.conf.{Configuration, Configurable}
+import org.apache.hadoop.conf.{Configuration, Configurable => HConfigurable}
 import com.google.common.io.{ByteStreams, Closeables}
 
 import org.apache.hadoop.io.Text
@@ -26,6 +26,18 @@ import org.apache.hadoop.mapreduce.InputSplit
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, CombineFileRecordReader}
 import org.apache.hadoop.mapreduce.RecordReader
 import org.apache.hadoop.mapreduce.TaskAttemptContext
+
+
+/**
+ * A trait to implement [[org.apache.hadoop.conf.Configurable Configurable]] interface.
+ */
+private[spark] trait Configurable extends HConfigurable {
+  private var conf: Configuration = _
+  def setConf(c: Configuration) {
+    conf = c
+  }
+  def getConf: Configuration = conf
+}
 
 /**
  * A [[org.apache.hadoop.mapreduce.RecordReader RecordReader]] for reading a single whole text file
@@ -37,12 +49,6 @@ private[spark] class WholeTextFileRecordReader(
     context: TaskAttemptContext,
     index: Integer)
   extends RecordReader[String, String] with Configurable {
-
-  private var conf: Configuration = _
-  def setConf(c: Configuration) {
-    conf = c
-  }
-  def getConf: Configuration = conf
 
   private[this] val path = split.getPath(index)
   private[this] val fs = path.getFileSystem(context.getConfiguration)
@@ -90,7 +96,7 @@ private[spark] class WholeTextFileRecordReader(
  * A [[org.apache.hadoop.mapreduce.lib.input.CombineFileRecordReader CombineFileRecordReader]]
  * that could pass Hadoop configuration to WholeTextFileRecordReader.
  */
-private[spark] class WholeCombineFileRecordReader(
+private[spark] class ConfigurableCombineFileRecordReader(
     split: InputSplit,
     context: TaskAttemptContext)
   extends CombineFileRecordReader[String, String](
@@ -99,16 +105,10 @@ private[spark] class WholeCombineFileRecordReader(
     classOf[WholeTextFileRecordReader]
   ) with Configurable {
 
-  private var conf: Configuration = _
-  def setConf(c: Configuration) {
-    conf = c
-  }
-  def getConf: Configuration = conf
-
   override def initNextRecordReader(): Boolean = {
     val r = super.initNextRecordReader()
     if (r) {
-      this.curReader.asInstanceOf[WholeTextFileRecordReader].setConf(conf)
+      this.curReader.asInstanceOf[WholeTextFileRecordReader].setConf(getConf)
     }
     r
   }
