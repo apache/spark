@@ -19,6 +19,8 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
+import org.apache.spark.scheduler.cluster.ExecutorInfo
+
 import scala.collection.Map
 import scala.collection.mutable
 
@@ -84,6 +86,14 @@ case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockMan
 @DeveloperApi
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
+@DeveloperApi
+case class SparkListenerExecutorAdded(executorId: String, executorInfo : ExecutorInfo)
+  extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerExecutorRemoved(executorId: String, executorInfo : ExecutorInfo)
+  extends SparkListenerEvent
+
 /**
  * Periodic updates from executors.
  * @param execId executor id
@@ -109,7 +119,8 @@ private[spark] case object SparkListenerShutdown extends SparkListenerEvent
 /**
  * :: DeveloperApi ::
  * Interface for listening to events from the Spark scheduler. Note that this is an internal
- * interface which might change in different Spark releases.
+ * interface which might change in different Spark releases. Java clients should extend
+ * {@link SparkListenerAdapter}
  */
 @DeveloperApi
 trait SparkListener {
@@ -183,6 +194,16 @@ trait SparkListener {
    * Called when the driver receives task metrics from an executor in a heartbeat.
    */
   def onExecutorMetricsUpdate(executorMetricsUpdate: SparkListenerExecutorMetricsUpdate) { }
+
+  /**
+   * Called when the driver registers a new executor.
+   */
+  def onExecutorAdded(executorAdded: SparkListenerExecutorAdded) { }
+
+  /**
+   * Called when the driver removes an executor.
+   */
+  def onExecutorRemoved(executorRemoved: SparkListenerExecutorRemoved) { }
 }
 
 /**
