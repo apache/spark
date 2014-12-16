@@ -41,7 +41,8 @@ private[spark] class WholeTextFileInputFormat
       split: InputSplit,
       context: TaskAttemptContext): RecordReader[String, String] = {
 
-    val reader = new ConfigurableCombineFileRecordReader(split, context)
+    val reader =
+      new ConfigurableCombineFileRecordReader(split, context, classOf[WholeTextFileRecordReader])
     reader.setConf(getConf)
     reader
   }
