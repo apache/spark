@@ -52,7 +52,8 @@ class KafkaUtils(object):
         jtopics = MapConverter().convert(topics, ssc.sparkContext._gateway._gateway_client)
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
         try:
-            jstream = ssc._jvm.KafkaUtils.createStream(ssc._jssc, zkQuorum, groupId, jtopics, jlevel)
+            jstream = ssc._jvm.KafkaUtils.createStream(ssc._jssc, zkQuorum, groupId, jtopics,
+                                                       jlevel)
         except Py4JError, e:
             if 'call a package' in e.message:
                 print "No kafka package, please build it and add it into classpath:"
