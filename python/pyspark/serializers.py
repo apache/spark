@@ -471,6 +471,9 @@ class CompressedSerializer(FramedSerializer):
     def loads(self, obj):
         return self.serializer.loads(zlib.decompress(obj))
 
+    def __eq__(self, other):
+        return isinstance(other, CompressedSerializer) and self.serializer == other.serializer
+
 
 class UTF8Deserializer(Serializer):
 
@@ -496,6 +499,9 @@ class UTF8Deserializer(Serializer):
             return
         except EOFError:
             return
+
+    def __eq__(self, other):
+        return isinstance(other, UTF8Deserializer) and self.use_unicode == other.use_unicode
 
 
 def read_long(stream):
