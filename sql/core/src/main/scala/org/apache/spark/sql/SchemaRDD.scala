@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.util.{Map => JMap, List => JList}
-import java.io.StringWriter
+
 
 import scala.collection.JavaConversions._
 
@@ -501,7 +501,7 @@ class SchemaRDD(
   }
 
   override def unpersist(blocking: Boolean): this.type = {
-    sqlContext.uncacheQuery(this, blocking)
+    sqlContext.tryUncacheQuery(this, blocking)
     this
   }
 }
