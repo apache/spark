@@ -212,8 +212,8 @@ class GaussianMixtureModelEM private (
    * Given the input vectors, return the membership value of each vector
    * to all mixture components. 
    */
-  def predictClusters(points:RDD[Vector], mu:Array[Vector], sigma:Array[Matrix],
-      weight:Array[Double],k:Int): RDD[Array[Double]] = {
+  def predictClusters(points: RDD[Vector], mu: Array[Vector], sigma: Array[Matrix],
+      weight: Array[Double], k: Int): RDD[Array[Double]] = {
     val ctx = points.sparkContext
     val dists = ctx.broadcast{
       (0 until k).map{ i => 
