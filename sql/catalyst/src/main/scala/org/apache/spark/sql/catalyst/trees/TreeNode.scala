@@ -324,7 +324,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /** Appends the string represent of this node and its children to the given StringBuilder. */
-  protected def generateTreeString(depth: Int, builder: StringBuilder): StringBuilder = {
+  protected[sql] def generateTreeString(depth: Int, builder: StringBuilder): StringBuilder = {
     builder.append(" " * depth)
     builder.append(simpleString)
     builder.append("\n")

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
+import org.apache.spark.sql.catalyst.joins.HashedRelation
+
 import scala.concurrent._
 import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -51,7 +53,7 @@ case class BroadcastHashJoin(
   private val broadcastFuture = future {
     // Note that we use .execute().collect() because we don't want to convert data to Scala types
     val input: Array[Row] = buildPlan.execute().map(_.copy()).collect()
-    val hashed = HashedRelation(input.iterator, buildSideKeyGenerator, input.length)
+    val hashed = HashedRelation(Seq.empty, input.iterator, buildKeys, buildSideKeyGenerator, input.length)
     sparkContext.broadcast(hashed)
   }
 

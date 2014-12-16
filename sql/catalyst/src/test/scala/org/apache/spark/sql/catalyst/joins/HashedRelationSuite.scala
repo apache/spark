@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.joins
-
-import org.scalatest.FunSuite
+package org.apache.spark.sql.catalyst.joins
 
 import org.apache.spark.sql.catalyst.expressions.{Projection, Row}
 import org.apache.spark.util.collection.CompactBuffer
+import org.scalatest.FunSuite
 
 
 class HashedRelationSuite extends FunSuite {
@@ -32,7 +31,7 @@ class HashedRelationSuite extends FunSuite {
 
   test("GeneralHashedRelation") {
     val data = Array(Row(0), Row(1), Row(2), Row(2))
-    val hashed = HashedRelation(data.iterator, keyProjection)
+    val hashed = HashedRelation(Seq.empty, data.iterator, Seq.empty, keyProjection)
     assert(hashed.isInstanceOf[GeneralHashedRelation])
 
     assert(hashed.get(data(0)) == CompactBuffer[Row](data(0)))
@@ -46,7 +45,7 @@ class HashedRelationSuite extends FunSuite {
 
   test("UniqueKeyHashedRelation") {
     val data = Array(Row(0), Row(1), Row(2))
-    val hashed = HashedRelation(data.iterator, keyProjection)
+    val hashed = HashedRelation(Seq.empty, data.iterator, Seq.empty, keyProjection)
     assert(hashed.isInstanceOf[UniqueKeyHashedRelation])
 
     assert(hashed.get(data(0)) == CompactBuffer[Row](data(0)))

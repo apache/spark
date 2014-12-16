@@ -42,6 +42,8 @@ private[spark] object SQLConf {
   // Options that control which operators can be chosen by the query planner.  These should be
   // considered hints and may be ignored by future versions of Spark SQL.
   val EXTERNAL_SORT = "spark.sql.planner.externalSort"
+  val DIMENSION_JOIN = "spark.sql.planner.dimensionJoin"
+  val GENERATED_DIMENSION_JOIN = "spark.sql.planner.generatedDimensionJoin"
 
   // This is only used for the thriftserver
   val THRIFTSERVER_POOL = "spark.sql.thriftserver.scheduler.pool"
@@ -102,6 +104,13 @@ private[sql] trait SQLConf {
 
   /** When true the planner will use the external sort, which may spill to disk. */
   private[spark] def externalSortEnabled: Boolean = getConf(EXTERNAL_SORT, "false").toBoolean
+
+  /** When true the planner will use the multi-way dimension join. */
+  private[spark] def dimensionJoinEnabled: Boolean = getConf(DIMENSION_JOIN, "false").toBoolean
+
+  /** When true the planner will code generate the multi-way dimension join. */
+  private[spark] def generatedDimensionJoinEnabled: Boolean =
+    getConf(GENERATED_DIMENSION_JOIN, "false").toBoolean
 
   /**
    * When set to true, Spark SQL will use the Scala compiler at runtime to generate custom bytecode

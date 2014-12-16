@@ -48,6 +48,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
   protected val mutableRowType = typeOf[MutableRow]
   protected val genericRowType = typeOf[GenericRow]
   protected val genericMutableRowType = typeOf[GenericMutableRow]
+  protected val specificMutableRowType = typeOf[SpecificMutableRow]
 
   protected val projectionType = typeOf[Projection]
   protected val mutableProjectionType = typeOf[MutableProjection]
@@ -579,8 +580,14 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     }
   }
 
-  protected def accessorForType(dt: DataType) = newTermName(s"get${primitiveForType(dt)}")
-  protected def mutatorForType(dt: DataType) = newTermName(s"set${primitiveForType(dt)}")
+  protected def accessorForType(dt: DataType) = dt match {
+    case DecimalType() => newTermName("apply")
+    case _ => newTermName(s"get${primitiveForType(dt)}")
+  }
+  protected def mutatorForType(dt: DataType) = dt match {
+    case DecimalType() => newTermName("update")
+    case _ => newTermName(s"set${primitiveForType(dt)}")
+  }
 
   protected def hashSetForType(dt: DataType) = dt match {
     case IntegerType => typeOf[IntegerHashSet]

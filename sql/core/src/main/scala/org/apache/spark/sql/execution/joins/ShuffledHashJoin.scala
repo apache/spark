@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.joins.HashedRelation
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Partitioning}
 import org.apache.spark.sql.execution.{BinaryNode, SparkPlan}
 
@@ -43,7 +44,7 @@ case class ShuffledHashJoin(
 
   override def execute() = {
     buildPlan.execute().zipPartitions(streamedPlan.execute()) { (buildIter, streamIter) =>
-      val hashed = HashedRelation(buildIter, buildSideKeyGenerator)
+      val hashed = HashedRelation(Seq.empty, buildIter, buildKeys, buildSideKeyGenerator)
       hashJoin(streamIter, hashed)
     }
   }

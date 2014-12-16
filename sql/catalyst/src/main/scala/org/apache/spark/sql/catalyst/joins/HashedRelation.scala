@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.joins
+package org.apache.spark.sql.catalyst.joins
 
 import java.util.{HashMap => JavaHashMap}
 
-import org.apache.spark.sql.catalyst.expressions.{Projection, Row}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Projection, Row}
+import org.apache.spark.sql.catalyst.types.IntegerType
 import org.apache.spark.util.collection.CompactBuffer
 
 
@@ -27,7 +28,7 @@ import org.apache.spark.util.collection.CompactBuffer
  * Interface for a hashed relation by some key. Use [[HashedRelation.apply]] to create a concrete
  * object.
  */
-private[joins] sealed trait HashedRelation {
+private[sql] sealed trait HashedRelation {
   def get(key: Row): CompactBuffer[Row]
 }
 
@@ -57,14 +58,36 @@ private[joins] final class UniqueKeyHashedRelation(hashTable: JavaHashMap[Row, R
   def getValue(key: Row): Row = hashTable.get(key)
 }
 
+/**
+ * A specialized [[HashedRelation]] that maps key into a single value. This implementation
+ * assumes the key is unique.
+ */
+private[sql] final class UniqueIntKeyHashedRelation(
+    hashTable: JavaHashMap[Int, Row])
+  extends HashedRelation with Serializable {
+
+  def get(key: Int): Row = {
+    hashTable.get(key)
+  }
+
+  override def get(key: Row): CompactBuffer[Row] = {
+    if (key.isNullAt(0)) return null
+    val v = hashTable.get(key.getInt(0))
+    if (v eq null) null else CompactBuffer(v)
+  }
+
+  def getValue(key: Row): Row = hashTable.get(key)
+}
 
 // TODO(rxin): a version of [[HashedRelation]] backed by arrays for consecutive integer keys.
 
 
-private[joins] object HashedRelation {
+private[sql] object HashedRelation {
 
   def apply(
+      inputSchema: Seq[Attribute],
       input: Iterator[Row],
+      buildKeys: Seq[Expression],
       keyGenerator: Projection,
       sizeEstimate: Int = 64): HashedRelation = {
 
@@ -94,7 +117,15 @@ private[joins] object HashedRelation {
       }
     }
 
-    if (keyIsUnique) {
+    if (keyIsUnique && buildKeys.size == 1 && buildKeys.head.dataType == IntegerType) {
+      val uniqHashTable = new JavaHashMap[Int, Row](hashTable.size)
+      val iter = hashTable.entrySet().iterator()
+      while (iter.hasNext) {
+        val entry = iter.next()
+        uniqHashTable.put(entry.getKey.getInt(0), entry.getValue()(0))
+      }
+      new UniqueIntKeyHashedRelation(uniqHashTable)
+    } else if (keyIsUnique) {
       val uniqHashTable = new JavaHashMap[Row, Row](hashTable.size)
       val iter = hashTable.entrySet().iterator()
       while (iter.hasNext) {

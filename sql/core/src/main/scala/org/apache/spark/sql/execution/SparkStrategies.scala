@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.catalyst.joins.{GenerateInnerJoin, HashedRelation, UniqueIntKeyHashedRelation}
+import org.apache.spark.sql.execution.joins.SingleHashJoin
 import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -42,6 +44,91 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Join(left, right, LeftSemi, condition) =>
         joins.LeftSemiJoinBNL(planLater(left), planLater(right), condition) :: Nil
       case _ => Nil
+    }
+  }
+
+
+
+  object MultiWayBroadcastJoin extends Strategy with PredicateHelper {
+
+    case class JoinedTables(
+        projections: Seq[Seq[NamedExpression]] = Nil,
+        tables: Seq[InnerJoin] = Nil,
+        streamedTable: LogicalPlan = null)
+
+    case class InnerJoin(
+        table: LogicalPlan,
+        buildKeys: Seq[Expression],
+        streamKeys: Seq[Expression])
+
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = {
+      val joinedTables = findMultiWayJoin(JoinedTables(), plan)
+      val projections = joinedTables.projections
+      val tables = joinedTables.tables
+      val streamedTable = joinedTables.streamedTable
+
+      if ((sqlContext.dimensionJoinEnabled || sqlContext.generatedDimensionJoinEnabled) &&
+          tables.nonEmpty &&
+          // Check that the joins are on keys from the base tables and not other expressions.
+          tables.forall(t => AttributeSet(t.buildKeys).subsetOf(t.table.outputSet)) &&
+          tables.forall(t => AttributeSet(t.streamKeys).subsetOf(streamedTable.outputSet))) {
+        val hashTables = tables.map { t =>
+          val broadcast = sqlContext.getBroadcast(t.buildKeys, t.table)
+          SingleHashJoin(t.table, t.streamKeys, t.buildKeys, t.table.output, broadcast)
+        }
+
+        val uniqueIntHashTables = hashTables.map(_.hashTable.value).collect {
+          case u: UniqueIntKeyHashedRelation => u
+        }
+
+        val requiredReferences = projections.flatMap(_.flatMap(_.references))
+        val streamProjection =
+          AttributeSet(tables.flatMap(_.streamKeys) ++
+          requiredReferences.filter(streamedTable.outputSet.contains(_)))
+        val streamedWithProjection = logical.Project(streamProjection.toSeq, streamedTable)
+
+        if (sqlContext.generatedDimensionJoinEnabled &&
+          hashTables.size == uniqueIntHashTables.size) {
+          joins.OptimizedMultiWayBroadcastInnerHashJoin(
+            plan.output,
+            hashTables,
+            planLater(streamedTable)) :: Nil
+        } else if (sqlContext.dimensionJoinEnabled) {
+          // This could be a lot more efficient...
+          projections.foldRight[SparkPlan](
+            joins.MultiWayBroadcastInnerHashJoin(
+              plan.output,
+              hashTables,
+              planLater(streamedWithProjection)))((a, b) => Project(a, b)) :: Nil
+        } else {
+          Nil
+        }
+      } else {
+        Nil
+      }
+    }
+
+    def findMultiWayJoin(current: JoinedTables, plan: LogicalPlan): JoinedTables = plan match {
+
+      // Collect internal projections as we'll do one global projection at the end.
+      case logical.Project(projectList, child) =>
+        findMultiWayJoin(
+          current.copy(projections = current.projections :+ projectList),
+          child)
+
+      case ExtractEquiJoinKeys(Inner, leftKeys, rightKeys, condition, left, right)
+          if right.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold ||
+             left.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold =>
+
+        if (right.statistics.sizeInBytes < left.statistics.sizeInBytes) {
+          findMultiWayJoin(
+            current.copy(tables = current.tables :+ InnerJoin(right, rightKeys, leftKeys)), left)
+        } else {
+          findMultiWayJoin(
+            current.copy(tables = current.tables :+ InnerJoin(left, leftKeys, rightKeys)), right)
+        }
+
+      case other => current.copy(streamedTable = other)
     }
   }
 

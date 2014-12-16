@@ -19,6 +19,9 @@ package org.apache.spark.sql
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.sql.catalyst.expressions.{BindReferences, Expression, InterpretedProjection}
+import org.apache.spark.sql.catalyst.joins.HashedRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.storage.StorageLevel
@@ -26,6 +29,8 @@ import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
 /** Holds a cached logical plan and its data */
 private case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryRelation)
+
+private case class CachedBroadcast(buildKeys: Seq[Expression], plan: LogicalPlan, cachedRepresentation: Broadcast[HashedRelation])
 
 /**
  * Provides support in a SQLContext for caching query results and automatically using these cached
@@ -38,6 +43,9 @@ private[sql] trait CacheManager {
 
   @transient
   private val cachedData = new scala.collection.mutable.ArrayBuffer[CachedData]
+
+  @transient
+  private val cachedBroadcasts = new scala.collection.mutable.ArrayBuffer[CachedBroadcast]
 
   @transient
   private val cacheLock = new ReentrantReadWriteLock
@@ -66,6 +74,32 @@ private[sql] trait CacheManager {
     lock.lock()
     try f finally {
       lock.unlock()
+    }
+  }
+
+
+  private[sql] def getBroadcast(buildKeys: Seq[Expression], plan: LogicalPlan): Broadcast[HashedRelation] = {
+    val boundKeys = buildKeys.map(BindReferences.bindReference(_, plan.output))
+
+    val alreadyCached = readLock {
+      cachedBroadcasts.find(b => boundKeys == b.buildKeys && plan.sameResult(b.plan))
+    }
+
+    if (alreadyCached.isDefined) {
+      logWarning("Using cached broadcast.")
+      alreadyCached.get.cachedRepresentation
+    } else {
+      logWarning(s"Broadcasting: $buildKeys, ${plan.simpleString}")
+      writeLock {
+        // We need the internal representation of a SchemaRDD here.
+        val input = logicalPlanToSparkQuery(plan).queryExecution.toRdd.map(_.copy()).collect()
+        val keyProjection = new InterpretedProjection(boundKeys)
+        val hashed = HashedRelation(plan.output, input.iterator, buildKeys, keyProjection, input.length)
+        val broadcasted = sparkContext.broadcast(hashed)
+
+        cachedBroadcasts += CachedBroadcast(boundKeys, plan, broadcasted)
+        broadcasted
+      }
     }
   }
 
