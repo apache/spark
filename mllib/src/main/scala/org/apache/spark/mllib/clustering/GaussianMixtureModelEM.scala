@@ -208,27 +208,30 @@ class GaussianMixtureModelEM private (
     cov
   }
   
-  /** 
-  Given the input vectors, return the membership value of each vector
-  to all mixture components.  
-  */
-  def predictClusters(points:RDD[Vector],mu:Array[Vector],sigma:Array[Matrix],
-      weight:Array[Double],k:Int):RDD[Array[Double]]= {
-    val ctx = points.sparkContext
-    val dists = ctx.broadcast((0 until k).map(i => 
-        new MultivariateGaussian(mu(i).toBreeze.toDenseVector,sigma(i).toBreeze.toDenseMatrix))
-        .toArray)
-    val weights = ctx.broadcast((0 until k).map(i => weight(i)).toArray)
-    points.map(x=>compute_log_likelihood(x.toBreeze.toDenseVector,dists.value,weights.value,k))
-
-  }
   /**
-  * Compute the log density of each vector
-  */
-  def compute_log_likelihood(pt:DenseDoubleVector,dists:Array[MultivariateGaussian],
-      weights:Array[Double],k:Int):Array[Double]={
-    val p = (0 until k).map(i => 
-          eps + weights(i) * dists(i).pdf(pt)).toArray
+   * Given the input vectors, return the membership value of each vector
+   * to all mixture components. 
+   */
+  def predictClusters(points:RDD[Vector], mu:Array[Vector], sigma:Array[Matrix],
+      weight:Array[Double],k:Int): RDD[Array[Double]] = {
+    val ctx = points.sparkContext
+    val dists = ctx.broadcast{
+      (0 until k).map{ i => 
+        new MultivariateGaussian(mu(i).toBreeze.toDenseVector, sigma(i).toBreeze.toDenseMatrix)
+      }.toArray
+    }
+    val weights = ctx.broadcast((0 until k).map(i => weight(i)).toArray)
+    points.map{ x => 
+      computeSoftAssignments(x.toBreeze.toDenseVector, dists.value, weights.value, k)
+    }
+  }
+  
+  /**
+   * Compute the partial assignments for each vector
+   */
+  def computeSoftAssignments(pt: DenseDoubleVector, dists: Array[MultivariateGaussian],
+      weights: Array[Double], k: Int): Array[Double] = {
+    val p = (0 until k).map(i => eps + weights(i) * dists(i).pdf(pt)).toArray
     val pSum = p.sum 
     for(i<- 0 until k){
       p(i) /= pSum

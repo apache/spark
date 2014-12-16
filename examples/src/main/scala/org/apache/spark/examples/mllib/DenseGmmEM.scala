@@ -47,9 +47,10 @@ object DenseGmmEM {
       println("weight=%f mu=%s sigma=\n%s\n" format 
         (clusters.weight(i), clusters.mu(i), clusters.sigma(i)))
     }
-    val (responsibility_matrix, cluster_labels) = clusters.predict(data)
-    for(x <- cluster_labels.collect()){
-        print(" " + x)
+    
+    val (responsibilityMatrix, clusterLabels) = clusters.predict(data)
+    for (x <- clusterLabels.collect) {
+      print(" " + x)
     }
   }
 }

@@ -42,9 +42,9 @@ class GaussianMixtureModel(
 
   /** Maps given points to their cluster indices. */
   def predict(points: RDD[Vector]): (RDD[Array[Double]],RDD[Int]) = {
-    val responsibility_matrix = new GaussianMixtureModelEM()
-        .predictClusters(points,mu,sigma,weight,k)
-    val cluster_labels = responsibility_matrix.map(r => r.indexOf(r.max))
-    (responsibility_matrix,cluster_labels)
-  }    
+    val responsibilityMatrix = new GaussianMixtureModelEM()
+      .predictClusters(points,mu,sigma,weight,k)
+    val clusterLabels = responsibilityMatrix.map(r => r.indexOf(r.max))
+    (responsibilityMatrix, clusterLabels)
+  }
 }
