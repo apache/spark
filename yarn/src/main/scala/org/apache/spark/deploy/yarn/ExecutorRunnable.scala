@@ -43,7 +43,7 @@ import org.apache.spark.network.util.JavaUtils
 class ExecutorRunnable(
     container: Container,
     conf: Configuration,
-    spConf: SparkConf,
+    sparkConf: SparkConf,
     masterAddress: String,
     slaveId: String,
     hostname: String,
@@ -57,7 +57,6 @@ class ExecutorRunnable(
 
   var rpc: YarnRPC = YarnRPC.create(conf)
   var nmClient: NMClient = _
-  val sparkConf: SparkConf = spConf
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
 
   def run = {
@@ -209,12 +208,12 @@ class ExecutorRunnable(
   }
 
   private def setupDistributedCache(
-                                     file: String,
-                                     rtype: LocalResourceType,
-                                     localResources: HashMap[String, LocalResource],
-                                     timestamp: String,
-                                     size: String,
-                                     vis: String): Unit = {
+      file: String,
+      rtype: LocalResourceType,
+      localResources: HashMap[String, LocalResource],
+      timestamp: String,
+      size: String,
+      vis: String): Unit = {
     val uri = new URI(file)
     val amJarRsrc = Records.newRecord(classOf[LocalResource])
     amJarRsrc.setType(rtype)
