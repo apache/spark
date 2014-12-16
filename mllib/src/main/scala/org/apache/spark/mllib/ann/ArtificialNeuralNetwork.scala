@@ -128,7 +128,7 @@ class ArtificialNeuralNetwork private[mllib](
   private val updater = new ANNUpdater()
   private val optimizer = new LBFGS(gradient, updater).
     setConvergenceTol(convergenceTol).
-    setMaxNumIterations(maxNumIterations)
+    setNumIterations(maxNumIterations)
 
   /**
    * Trains the ANN model.

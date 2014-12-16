@@ -18,12 +18,12 @@
 package org.apache.spark.mllib.ann
 
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.random.XORShiftRandom
 
 import org.scalatest.FunSuite
 
-class ANNSuite extends FunSuite with LocalSparkContext {
+class ANNSuite extends FunSuite with MLlibTestSparkContext {
 
   test("ANN learns XOR function") {
     val inputs = Array[Array[Double]](
