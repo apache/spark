@@ -231,7 +231,8 @@ object GradientDescent extends Logging {
            */
           stochasticLossHistory.append(lossSum / miniBatchSize + regVal)
           val update = updater.compute(
-            weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble), stepSize, i, regParam)
+            weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble),
+            stepSize, i, regParam)
           weights = update._1
           regVal = update._2
           if (stochasticLossHistory.length > 1) {
