@@ -18,10 +18,12 @@ install_app() {
     # check if we have curl installed
     # download application
     [ ! -f "${local_tarball}" ] && [ -n "`which curl 2>/dev/null`" ] && \
-      curl "${remote_tarball}" > "${local_tarball}"
+      echo "exec: curl -s ${remote_tarball}" && \
+      curl -s "${remote_tarball}" > "${local_tarball}"
     # if the file still doesn't exist, lets try `wget` and cross our fingers
     [ ! -f "${local_tarball}" ] && [ -n "`which wget 2>/dev/null`" ] && \
-      wget -O "${local_tarball}" "${remote_tarball}"
+      echo "exec: wget --quiet ${remote_tarball}" && \
+      wget --quiet -O "${local_tarball}" "${remote_tarball}"
     # if both were unsuccessful, exit
     [ ! -f "${local_tarball}" ] && \
       echo -n "ERROR: Cannot download $2 with cURL or wget; " && \
