@@ -146,27 +146,6 @@ getDependencies <- function(name) {
   binData
 }
 
-# Helper function used to wrap a 'numeric' value to integer bounds.
-# Useful for implementing C-like integer arithmetic
-wrapInt <- function(value) {
-  if (value > .Machine$integer.max) {
-    value <- value - 2 * .Machine$integer.max - 2
-  } else if (value < -1 * .Machine$integer.max) {
-    value <- 2 * .Machine$integer.max + value + 2
-  }
-  value
-}
-
-# Multiply `val` by 31 and add `addVal` to the result. Ensures that
-# integer-overflows are handled at every step.
-mult31AndAdd <- function(val, addVal) {
-  vec <- c(bitwShiftL(val, c(4,3,2,1,0)), addVal)
-  Reduce(function(a, b) {
-          wrapInt(as.numeric(a) + as.numeric(b))
-         },
-         vec)
-}
-
 #' Compute the hashCode of an object
 #'
 #' Java-style function to compute the hashCode for the given object. Returns
@@ -191,17 +170,7 @@ hashCode <- function(key) {
     intBits <- packBits(rawToBits(rawVec), "integer")
     as.integer(bitwXor(intBits[2], intBits[1]))
   } else if (class(key) == "character") {
-    n <- nchar(key)
-    if (n == 0) {
-      0L
-    } else {
-      asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
-      hashC <- 0
-      for (k in 1:length(asciiVals)) {
-        hashC <- mult31AndAdd(hashC, asciiVals[k])
-      }
-      as.integer(hashC)
-    }
+    .Call("stringHashCode", key)
   } else {
     warning(paste("Could not hash object, returning 0", sep=""))
     as.integer(0)
@@ -220,4 +189,27 @@ reserialize <- function(rdd) {
     ser.rdd <- lapply(rdd, function(x) { x })
     return(ser.rdd)
   }
+}
+
+# Fast append to list by using an accumulator.
+# http://stackoverflow.com/questions/17046336/here-we-go-again-append-an-element-to-a-list-in-r
+#
+# The accumulator should has three fields size, counter and data.
+# This function amortizes the allocation cost by doubling
+# the size of the list every time it fills up.
+addItemToAccumulator <- function(acc, item) {
+  if(acc$counter == acc$size) {
+    acc$size <- acc$size * 2
+    length(acc$data) <- acc$size
+  }
+  acc$counter <- acc$counter + 1
+  acc$data[[acc$counter]] <- item
+}
+
+initAccumulator <- function() {
+  acc <- new.env()
+  acc$counter <- 0
+  acc$data <- list(NULL)
+  acc$size <- 1
+  acc
 }

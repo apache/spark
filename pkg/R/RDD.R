@@ -1036,6 +1036,31 @@ setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
             sample(samples)[1:total]
           })
 
+#' Creates tuples of the elements in this RDD by applying a function.
+#'
+#' @param rdd The RDD.
+#' @param func The function to be applied.
+#' @rdname keyBy
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(1, 2, 3))
+#' collect(keyBy(rdd, function(x) { x*x })) # list(list(1, 1), list(4, 2), list(9, 3))
+#'}
+setGeneric("keyBy", function(rdd, func) { standardGeneric("keyBy") })
+
+#' @rdname keyBy
+#' @aliases keyBy,RDD
+setMethod("keyBy",
+          signature(rdd = "RDD", func = "function"),
+          function(rdd, func) {
+            apply.func <- function(x) {
+              list(func(x), x)
+            }
+            lapply(rdd, apply.func)
+          })
+
 #' Return an RDD with the keys of each tuple.
 #'
 #' @param rdd The RDD from which the keys of each tuple is returned.
@@ -1682,4 +1707,64 @@ setMethod("rightOuterJoin",
             joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
           })
 
+#' For each key k in several RDDs, return a resulting RDD that
+#' whose values are a list of values for the key in all RDDs.
+#'
+#' @param ... Several RDDs.
+#' @param numPartitions Number of partitions to create.
+#' @return a new RDD containing all pairs of elements with values in a list
+#' in all RDDs.
+#' @rdname cogroup
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd1 <- parallelize(sc, list(list(1, 1), list(2, 4)))
+#' rdd2 <- parallelize(sc, list(list(1, 2), list(1, 3)))
+#' cogroup(rdd1, rdd2, numPartitions = 2L) 
+#' # list(list(1, list(1, list(2, 3))), list(2, list(list(4), list()))
+#'}
+setGeneric("cogroup", 
+           function(..., numPartitions) { standardGeneric("cogroup") },
+           signature = "...")
 
+#' @rdname cogroup
+#' @aliases cogroup,RDD-method
+setMethod("cogroup",
+          "RDD",
+          function(..., numPartitions) {
+            rdds <- list(...)
+            rddsLen <- length(rdds)
+            for (i in 1:rddsLen) {
+              rdds[[i]] <- lapply(rdds[[i]], 
+                                  function(x) { list(x[[1]], list(i, x[[2]])) })
+              # TODO(hao): As issue [SparkR-142] mentions, the right value of i
+              # will not be captured into UDF if getJRDD is not invoked.
+              # It should be resolved together with that issue.
+              getJRDD(rdds[[i]])  # Capture the closure.
+            }
+            union.rdd <- Reduce(unionRDD, rdds)
+            group.func <- function(vlist) {
+              res <- list()
+              length(res) <- rddsLen
+              for (x in vlist) {
+                i <- x[[1]]
+                acc <- res[[i]]
+                # Create an accumulator.
+                if (is.null(acc)) {
+                  acc <- SparkR:::initAccumulator()
+                }
+                SparkR:::addItemToAccumulator(acc, x[[2]])
+                res[[i]] <- acc
+              }
+              lapply(res, function(acc) {
+                if (is.null(acc)) {
+                  list()
+                } else {
+                  acc$data
+                }
+              })
+            }
+            cogroup.rdd <- mapValues(groupByKey(union.rdd, numPartitions), 
+                                     group.func)
+          })

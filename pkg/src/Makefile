@@ -31,7 +31,7 @@ else
 	MAVEN_YARN_FLAG := 
 endif
 
-all: $(TARGET_NAME)
+all: $(TARGET_NAME) sharelib
 
 $(SBT_TARGET_NAME): build.sbt $(SCALA_FILES) $(RESOURCE_FILES)
 	./sbt/sbt assembly
@@ -41,12 +41,17 @@ $(MAVEN_TARGET_NAME): pom.xml $(SCALA_FILES) $(RESOURCE_FILES)
 	mvn -Dhadoop.version=$(SPARK_HADOOP_VERSION) -Dspark.version=$(SPARK_VERSION) -DskipTests $(MAVEN_YARN_FLAG) -Dyarn.version=$(SPARK_YARN_VERSION) clean package shade:shade
 	cp -f $(MAVEN_TARGET_NAME) ../inst/$(JAR_NAME)
 
+sharelib: string_hash_code.c
+	R CMD SHLIB -o SparkR.so string_hash_code.c
+
 clean:
 	$(BUILD_TOOL) clean
 	rm -rf target
 	rm -rf project/target
 	rm -rf project/project
 	-rm sbt/sbt-launch-*.jar
-	rm -f ../inst/$(JAR_NAME)
-
+	rm -f ../inst/$(JAR_NAME) 
+	rm -f *.o
+	rm -f *.so
+       
 .PHONY: all clean

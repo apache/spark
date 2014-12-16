@@ -5,6 +5,7 @@ exportClasses("Broadcast")
 exportMethods(
               "cache",
               "checkpoint",
+              "cogroup",
               "collect",
               "collectPartition",
               "combineByKey",
@@ -20,6 +21,7 @@ exportMethods(
               "foreachPartition",
               "groupByKey",
               "join",
+              "keyBy",
               "keys",
               "length",
               "lapply",
@@ -59,3 +61,4 @@ export(
        "setCheckpointDir"
       )
 export("sparkR.init")
+useDynLib(SparkR, stringHashCode)
