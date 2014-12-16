@@ -20,7 +20,9 @@ package org.apache.spark.util
 import java.io.NotSerializableException
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.HashMap
+import com.google.common.collect.Sets
+
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
 import org.apache.spark.rdd.RDD
@@ -99,6 +101,30 @@ object SerializationHelper {
     }
     else {
       SerializationState.Failed
+    }
+  }
+
+  /**
+   * When an RDD is identified as un-serializable, use the generic ObjectWalker class to debug 
+   * the references of that RDD
+   * @param closureSerializer - An instance of a serializer (single-threaded) that will be used
+   * @param rdd - The RDD that is known to be un-serializable
+   * @return a Set of ArrayBuffers representing the paths to un-serializable references 
+   */
+  def getPathsToBrokenRefs(closureSerializer: SerializerInstance,
+                           rdd: RDD[_]) : java.util.Set[ArrayBuffer[_]]= {
+    val refGraph : java.util.Set[(AnyRef, AnyRef)] = ObjectWalker.buildRefGraph(rdd)
+    val brokenRefs = Sets.newIdentityHashSet[ArrayBuffer[_]]
+    refGraph.forEach{
+      case (cur : AnyRef, parent : AnyRef) => 
+        try {
+          closureSerializer.serialize(cur)
+        } catch {
+          // If instead, however, the dependencies ALSO fail to serialize then the subsequent stage
+          // of evaluation will help identify which of the dependencies has failed 
+          case e: NotSerializableException => SerializationState.FailedDeps
+          case NonFatal(e) => SerializationState.FailedDeps
+        }
     }
   }
 

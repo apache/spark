@@ -30,7 +30,7 @@ import scala.collection.mutable
  * https://gist.github.com/JoshRosen/d6a8972c99992e97d040
  */
 object ObjectWalker {
-  case class EdgeRef(self : AnyRef, parent : AnyRef)
+  case class EdgeRef(cur : AnyRef, parent : AnyRef)
   case class Edge(from: AnyRef, field: Field, to: AnyRef)
 
   def isTransient(field: Field): Boolean = Modifier.isTransient(field.getModifiers)
