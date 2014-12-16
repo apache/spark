@@ -85,7 +85,7 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
       beanClass: Class[_],
       path: String,
       allowExisting: Boolean = true,
-      conf: Configuration = SparkHadoopUtil.get.conf): JavaSchemaRDD = {
+      conf: Configuration = sqlContext.sparkContext.hadoopConfiguration): JavaSchemaRDD = {
     new JavaSchemaRDD(
       sqlContext,
       ParquetRelation.createEmpty(path, getSchema(beanClass), allowExisting, conf, sqlContext))

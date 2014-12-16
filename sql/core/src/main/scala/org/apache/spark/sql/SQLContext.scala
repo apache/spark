@@ -263,7 +263,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def createParquetFile[A <: Product : TypeTag](
       path: String,
       allowExisting: Boolean = true,
-      conf: Configuration = SparkHadoopUtil.get.conf): SchemaRDD = {
+      conf: Configuration = sparkContext.hadoopConfiguration): SchemaRDD = {
     new SchemaRDD(
       this,
       ParquetRelation.createEmpty(

@@ -144,7 +144,7 @@ class HadoopRDD[K, V](
       // clone can be very expensive.  To avoid unexpected performance regressions for workloads and
       // Hadoop versions that do not suffer from these thread-safety issues, this cloning is
       // disabled by default.
-      HadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
+      SparkHadoopUtil.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
         logDebug("Cloning Hadoop Configuration")
         val newJobConf = new JobConf(conf)
         if (!conf.isInstanceOf[JobConf]) {
@@ -164,7 +164,7 @@ class HadoopRDD[K, V](
         // local process. The local cache is accessed through HadoopRDD.putCachedMetadata().
         // The caching helps minimize GC, since a JobConf can contain ~10KB of temporary objects.
         // Synchronize to prevent ConcurrentModificationException (SPARK-1097, HADOOP-10456).
-        HadoopRDD.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
+        SparkHadoopUtil.CONFIGURATION_INSTANTIATION_LOCK.synchronized {
           logDebug("Creating new JobConf and caching it for later re-use")
           val newJobConf = new JobConf(conf)
           initLocalJobConfFuncOpt.map(f => f(newJobConf))
@@ -322,12 +322,6 @@ class HadoopRDD[K, V](
 }
 
 private[spark] object HadoopRDD extends Logging {
-  /**
-   * Configuration's constructor is not threadsafe (see SPARK-1097 and HADOOP-10456).
-   * Therefore, we synchronize on this lock before calling new JobConf() or new Configuration().
-   */
-  val CONFIGURATION_INSTANTIATION_LOCK = new Object()
-
   /** Update the input bytes read metric each time this number of records has been read */
   val RECORDS_BETWEEN_BYTES_READ_METRIC_UPDATES = 256
 
