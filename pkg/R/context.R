@@ -19,6 +19,10 @@
 #'}
 
 textFile <- function(sc, path, minSplits = NULL) {
+  # Allow the user to have a more flexible definiton of the text file path
+  path <- path.expand(path)
+  if (!(grepl("\\\\", path) | grepl("/", path)))
+    path <- paste(getwd(), path, sep = "/")
   if (is.null(minSplits)) {
     ssc <- .jcall(sc, "Lorg/apache/spark/SparkContext;", "sc")
     defaultParallelism <- .jcall(ssc, "I", "defaultParallelism")
