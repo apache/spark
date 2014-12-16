@@ -261,6 +261,57 @@ object Vectors {
         sys.error("Unsupported Breeze vector type: " + v.getClass.getName)
     }
   }
+
+  /**
+   * Returns the p-norm of this vector.
+   * @param vector input vector.
+   * @param p norm.
+   * @return norm in L^p^ space.
+   */
+  private[spark] def norm(vector: Vector, p: Double): Double = {
+    require(p >= 1.0)
+    val values = vector match {
+      case dv: DenseVector => dv.values
+      case sv: SparseVector => sv.values
+      case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
+    }
+    val size = values.size
+
+    if (p == 1) {
+      var sum = 0.0
+      var i = 0
+      while (i < size) {
+        sum += math.abs(values(i))
+        i += 1
+      }
+      sum
+    } else if (p == 2) {
+      var sum = 0.0
+      var i = 0
+      while (i < size) {
+        sum += values(i) * values(i)
+        i += 1
+      }
+      math.sqrt(sum)
+    } else if (p == Double.PositiveInfinity) {
+      var max = 0.0
+      var i = 0
+      while (i < size) {
+        val value = math.abs(values(i))
+        if (value > max) max = value
+        i += 1
+      }
+      max
+    } else {
+      var sum = 0.0
+      var i = 0
+      while (i < size) {
+        sum += math.pow(math.abs(values(i)), p)
+        i += 1
+      }
+      math.pow(sum, 1.0 / p)
+    }
+  }
 }
 
 /**

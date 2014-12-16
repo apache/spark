@@ -171,6 +171,6 @@ span.additional-metric-title {
 
 /* Hide all additional metrics by default. This is done here rather than using JavaScript to
  * avoid slow page loads for stage pages with large numbers (e.g., thousands) of tasks. */
-.scheduler_delay, .gc_time, .deserialization_time, .serialization_time, .getting_result_time {
+.scheduler_delay, .deserialization_time, .serialization_time, .getting_result_time {
   display: none;
 }

@@ -65,6 +65,17 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     this
   }
 
+  override def checkpoint(): Unit = {
+    vertices.checkpoint()
+    replicatedVertexView.edges.checkpoint()
+  }
+
+  override def unpersist(blocking: Boolean = true): Graph[VD, ED] = {
+    unpersistVertices(blocking)
+    replicatedVertexView.edges.unpersist(blocking)
+    this
+  }
+
   override def unpersistVertices(blocking: Boolean = true): Graph[VD, ED] = {
     vertices.unpersist(blocking)
     // TODO: unpersist the replicated vertices in `replicatedVertexView` but leave the edges alone

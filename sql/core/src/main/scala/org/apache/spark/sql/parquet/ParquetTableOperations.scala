@@ -20,6 +20,7 @@ package org.apache.spark.sql.parquet
 import java.io.IOException
 import java.lang.{Long => JLong}
 import java.text.SimpleDateFormat
+import java.text.NumberFormat
 import java.util.concurrent.{Callable, TimeUnit}
 import java.util.{ArrayList, Collections, Date, List => JList}
 
@@ -302,11 +303,14 @@ case class InsertIntoParquetTable(
       val committer = format.getOutputCommitter(hadoopContext)
       committer.setupTask(hadoopContext)
       val writer = format.getRecordWriter(hadoopContext)
-      while (iter.hasNext) {
-        val row = iter.next()
-        writer.write(null, row)
+      try {
+        while (iter.hasNext) {
+          val row = iter.next()
+          writer.write(null, row)
+        }
+      } finally {
+        writer.close(hadoopContext)
       }
-      writer.close(hadoopContext)
       committer.commitTask(hadoopContext)
       1
     }
@@ -335,9 +339,13 @@ private[parquet] class AppendingParquetOutputFormat(offset: Int)
 
   // override to choose output filename so not overwrite existing ones
   override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
+    val numfmt = NumberFormat.getInstance()
+    numfmt.setMinimumIntegerDigits(5)
+    numfmt.setGroupingUsed(false)
+
     val taskId: TaskID = getTaskAttemptID(context).getTaskID
     val partition: Int = taskId.getId
-    val filename = s"part-r-${partition + offset}.parquet"
+    val filename = "part-r-" + numfmt.format(partition + offset) + ".parquet"
     val committer: FileOutputCommitter =
       getOutputCommitter(context).asInstanceOf[FileOutputCommitter]
     new Path(committer.getWorkPath, filename)
