@@ -161,6 +161,10 @@
       <plugin>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
+        <configuration>
+          <!-- Specially disable assertions since some Hive tests fail them -->
+          <argLine>-da -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
+        </configuration>
       </plugin>
       <plugin>
          <groupId>org.codehaus.mojo</groupId>
