@@ -22,14 +22,18 @@ import java.util.Random
 import scala.math.exp
 
 import breeze.linalg.{Vector, DenseVector}
+import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark._
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.InputFormatInfo
 
 
 /**
  * Logistic regression based classification.
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
+ * org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS based on your needs.
  */
 object SparkHdfsLR {
   val D = 10   // Numer of dimensions
@@ -48,15 +52,27 @@ object SparkHdfsLR {
     DataPoint(new DenseVector(x), y)
   }
 
+  def showWarning() {
+    System.err.println(
+      """WARN: This is a naive implementation of Logistic Regression and is given as an example!
+        |Please use either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
+        |org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
+        |for more conventional use.
+      """.stripMargin)
+  }
+
   def main(args: Array[String]) {
+
     if (args.length < 2) {
       System.err.println("Usage: SparkHdfsLR <file> <iters>")
       System.exit(1)
     }
 
+    showWarning()
+
     val sparkConf = new SparkConf().setAppName("SparkHdfsLR")
     val inputPath = args(0)
-    val conf = SparkHadoopUtil.get.newConfiguration()
+    val conf = new Configuration()
     val sc = new SparkContext(sparkConf,
       InputFormatInfo.computePreferredLocations(
         Seq(new InputFormatInfo(conf, classOf[org.apache.hadoop.mapred.TextInputFormat], inputPath))

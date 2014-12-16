@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import java.util.Properties
 
 import org.apache.spark.TaskContext
+import org.apache.spark.util.CallSite
 
 /**
  * Tracks information about an active job in the DAGScheduler.
@@ -29,7 +30,7 @@ private[spark] class ActiveJob(
     val finalStage: Stage,
     val func: (TaskContext, Iterator[_]) => _,
     val partitions: Array[Int],
-    val callSite: String,
+    val callSite: CallSite,
     val listener: JobListener,
     val properties: Properties) {
 

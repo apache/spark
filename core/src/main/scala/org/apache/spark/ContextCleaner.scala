@@ -65,11 +65,30 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   private val cleaningThread = new Thread() { override def run() { keepCleaning() }}
 
   /**
-   * Whether the cleaning thread will block on cleanup tasks.
-   * This is set to true only for tests.
+   * Whether the cleaning thread will block on cleanup tasks (other than shuffle, which
+   * is controlled by the `spark.cleaner.referenceTracking.blocking.shuffle` parameter).
+   *
+   * Due to SPARK-3015, this is set to true by default. This is intended to be only a temporary
+   * workaround for the issue, which is ultimately caused by the way the BlockManager actors
+   * issue inter-dependent blocking Akka messages to each other at high frequencies. This happens,
+   * for instance, when the driver performs a GC and cleans up all broadcast blocks that are no
+   * longer in scope.
    */
   private val blockOnCleanupTasks = sc.conf.getBoolean(
-    "spark.cleaner.referenceTracking.blocking", false)
+    "spark.cleaner.referenceTracking.blocking", true)
+
+  /**
+   * Whether the cleaning thread will block on shuffle cleanup tasks.
+   *
+   * When context cleaner is configured to block on every delete request, it can throw timeout
+   * exceptions on cleanup of shuffle blocks, as reported in SPARK-3139. To avoid that, this
+   * parameter by default disables blocking on shuffle cleanups. Note that this does not affect
+   * the cleanup of RDDs and broadcasts. This is intended to be a temporary workaround,
+   * until the real Akka issue (referred to in the comment above `blockOnCleanupTasks`) is
+   * resolved.
+   */
+  private val blockOnShuffleCleanupTasks = sc.conf.getBoolean(
+    "spark.cleaner.referenceTracking.blocking.shuffle", false)
 
   @volatile private var stopped = false
 
@@ -96,7 +115,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   }
 
   /** Register a ShuffleDependency for cleanup when it is garbage collected. */
-  def registerShuffleForCleanup(shuffleDependency: ShuffleDependency[_, _]) {
+  def registerShuffleForCleanup(shuffleDependency: ShuffleDependency[_, _, _]) {
     registerForCleanup(shuffleDependency, CleanShuffle(shuffleDependency.shuffleId))
   }
 
@@ -123,7 +142,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
             case CleanRDD(rddId) =>
               doCleanupRDD(rddId, blocking = blockOnCleanupTasks)
             case CleanShuffle(shuffleId) =>
-              doCleanupShuffle(shuffleId, blocking = blockOnCleanupTasks)
+              doCleanupShuffle(shuffleId, blocking = blockOnShuffleCleanupTasks)
             case CleanBroadcast(broadcastId) =>
               doCleanupBroadcast(broadcastId, blocking = blockOnCleanupTasks)
           }
@@ -174,9 +193,6 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   private def blockManagerMaster = sc.env.blockManager.master
   private def broadcastManager = sc.env.broadcastManager
   private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
-
-  // Used for testing. These methods explicitly blocks until cleanup is completed
-  // to ensure that more reliable testing.
 }
 
 private object ContextCleaner {

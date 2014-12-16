@@ -21,7 +21,7 @@ import org.apache.log4j.{Level, Logger}
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.classification.{LogisticRegressionWithSGD, SVMWithSGD}
+import org.apache.spark.mllib.classification.{LogisticRegressionWithLBFGS, SVMWithSGD}
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.mllib.optimization.{SquaredL2Updater, L1Updater}
@@ -55,7 +55,7 @@ object BinaryClassification {
       stepSize: Double = 1.0,
       algorithm: Algorithm = LR,
       regType: RegType = L2,
-      regParam: Double = 0.1)
+      regParam: Double = 0.01) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -66,7 +66,8 @@ object BinaryClassification {
         .text("number of iterations")
         .action((x, c) => c.copy(numIterations = x))
       opt[Double]("stepSize")
-        .text(s"initial step size, default: ${defaultParams.stepSize}")
+        .text("initial step size (ignored by logistic regression), " +
+          s"default: ${defaultParams.stepSize}")
         .action((x, c) => c.copy(stepSize = x))
       opt[String]("algorithm")
         .text(s"algorithm (${Algorithm.values.mkString(",")}), " +
@@ -125,10 +126,9 @@ object BinaryClassification {
 
     val model = params.algorithm match {
       case LR =>
-        val algorithm = new LogisticRegressionWithSGD()
+        val algorithm = new LogisticRegressionWithLBFGS()
         algorithm.optimizer
           .setNumIterations(params.numIterations)
-          .setStepSize(params.stepSize)
           .setUpdater(updater)
           .setRegParam(params.regParam)
         algorithm.run(training).clearThreshold()

@@ -39,7 +39,8 @@ private[spark] abstract class WebUI(
     securityManager: SecurityManager,
     port: Int,
     conf: SparkConf,
-    basePath: String = "")
+    basePath: String = "",
+    name: String = "")
   extends Logging {
 
   protected val tabs = ArrayBuffer[WebUITab]()
@@ -49,8 +50,10 @@ private[spark] abstract class WebUI(
   protected val publicHostName = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(localHostName)
   private val className = Utils.getFormattedClassName(this)
 
+  def getBasePath: String = basePath
   def getTabs: Seq[WebUITab] = tabs.toSeq
   def getHandlers: Seq[ServletContextHandler] = handlers.toSeq
+  def getSecurityManager: SecurityManager = securityManager
 
   /** Attach a tab to this UI, along with all of its attached pages. */
   def attachTab(tab: WebUITab) {
@@ -79,7 +82,7 @@ private[spark] abstract class WebUI(
   }
 
   /** Detach a handler from this UI. */
-  def detachHandler(handler: ServletContextHandler) {
+  protected def detachHandler(handler: ServletContextHandler) {
     handlers -= handler
     serverInfo.foreach { info =>
       info.rootHandler.removeHandler(handler)
@@ -96,7 +99,7 @@ private[spark] abstract class WebUI(
   def bind() {
     assert(!serverInfo.isDefined, "Attempted to bind %s more than once!".format(className))
     try {
-      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, conf))
+      serverInfo = Some(startJettyServer("0.0.0.0", port, handlers, conf, name))
       logInfo("Started %s at http://%s:%d".format(className, publicHostName, boundPort))
     } catch {
       case e: Exception =>
@@ -133,6 +136,8 @@ private[spark] abstract class WebUITab(parent: WebUI, val prefix: String) {
 
   /** Get a list of header tabs from the parent UI. */
   def headerTabs: Seq[WebUITab] = parent.getTabs
+
+  def basePath: String = parent.getBasePath
 }
 
 

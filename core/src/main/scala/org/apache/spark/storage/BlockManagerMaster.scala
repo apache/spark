@@ -21,16 +21,19 @@ import scala.concurrent.{Await, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
 
 import akka.actor._
-import akka.pattern.ask
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.AkkaUtils
 
 private[spark]
-class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Logging {
-  val AKKA_RETRY_ATTEMPTS: Int = conf.getInt("spark.akka.num.retries", 3)
-  val AKKA_RETRY_INTERVAL_MS: Int = conf.getInt("spark.akka.retry.wait", 3000)
+class BlockManagerMaster(
+    var driverActor: ActorRef,
+    conf: SparkConf,
+    isDriver: Boolean)
+  extends Logging {
+  private val AKKA_RETRY_ATTEMPTS: Int = AkkaUtils.numRetries(conf)
+  private val AKKA_RETRY_INTERVAL_MS: Int = AkkaUtils.retryWaitMs(conf)
 
   val DRIVER_AKKA_ACTOR_NAME = "BlockManagerMaster"
 
@@ -40,15 +43,6 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   def removeExecutor(execId: String) {
     tell(RemoveExecutor(execId))
     logInfo("Removed " + execId + " successfully in removeExecutor")
-  }
-
-  /**
-   * Send the driver actor a heart beat from the slave. Returns true if everything works out,
-   * false if the driver does not know about the given block manager, which means the block
-   * manager should re-register.
-   */
-  def sendHeartBeat(blockManagerId: BlockManagerId): Boolean = {
-    askDriverWithReply[Boolean](HeartBeat(blockManagerId))
   }
 
   /** Register the BlockManager's id with the driver. */
@@ -90,13 +84,12 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   }
 
   /** Get ids of other nodes in the cluster from the driver */
-  def getPeers(blockManagerId: BlockManagerId, numPeers: Int): Seq[BlockManagerId] = {
-    val result = askDriverWithReply[Seq[BlockManagerId]](GetPeers(blockManagerId, numPeers))
-    if (result.length != numPeers) {
-      throw new SparkException(
-        "Error getting peers, only got " + result.size + " instead of " + numPeers)
-    }
-    result
+  def getPeers(blockManagerId: BlockManagerId): Seq[BlockManagerId] = {
+    askDriverWithReply[Seq[BlockManagerId]](GetPeers(blockManagerId))
+  }
+
+  def getActorSystemHostPortForExecutor(executorId: String): Option[(String, Int)] = {
+    askDriverWithReply[Option[(String, Int)]](GetActorSystemHostPortForExecutor(executorId))
   }
 
   /**
@@ -111,7 +104,8 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   def removeRdd(rddId: Int, blocking: Boolean) {
     val future = askDriverWithReply[Future[Seq[Int]]](RemoveRdd(rddId))
     future.onFailure {
-      case e: Throwable => logError("Failed to remove RDD " + rddId, e)
+      case e: Exception =>
+        logWarning(s"Failed to remove RDD $rddId - ${e.getMessage}}")
     }
     if (blocking) {
       Await.result(future, timeout)
@@ -122,7 +116,8 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
   def removeShuffle(shuffleId: Int, blocking: Boolean) {
     val future = askDriverWithReply[Future[Seq[Boolean]]](RemoveShuffle(shuffleId))
     future.onFailure {
-      case e: Throwable => logError("Failed to remove shuffle " + shuffleId, e)
+      case e: Exception =>
+        logWarning(s"Failed to remove shuffle $shuffleId - ${e.getMessage}}")
     }
     if (blocking) {
       Await.result(future, timeout)
@@ -134,9 +129,9 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
     val future = askDriverWithReply[Future[Seq[Int]]](
       RemoveBroadcast(broadcastId, removeFromMaster))
     future.onFailure {
-      case e: Throwable =>
-        logError("Failed to remove broadcast " + broadcastId +
-          " with removeFromMaster = " + removeFromMaster, e)
+      case e: Exception =>
+        logWarning(s"Failed to remove broadcast $broadcastId" +
+          s" with removeFromMaster = $removeFromMaster - ${e.getMessage}}")
     }
     if (blocking) {
       Await.result(future, timeout)
@@ -204,7 +199,7 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
 
   /** Stop the driver actor, called only on the Spark driver node */
   def stop() {
-    if (driverActor != null) {
+    if (driverActor != null && isDriver) {
       tell(StopBlockManagerMaster)
       driverActor = null
       logInfo("BlockManagerMaster stopped")
@@ -223,33 +218,8 @@ class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Log
    * throw a SparkException if this fails.
    */
   private def askDriverWithReply[T](message: Any): T = {
-    // TODO: Consider removing multiple attempts
-    if (driverActor == null) {
-      throw new SparkException("Error sending message to BlockManager as driverActor is null " +
-        "[message = " + message + "]")
-    }
-    var attempts = 0
-    var lastException: Exception = null
-    while (attempts < AKKA_RETRY_ATTEMPTS) {
-      attempts += 1
-      try {
-        val future = driverActor.ask(message)(timeout)
-        val result = Await.result(future, timeout)
-        if (result == null) {
-          throw new SparkException("BlockManagerMaster returned null")
-        }
-        return result.asInstanceOf[T]
-      } catch {
-        case ie: InterruptedException => throw ie
-        case e: Exception =>
-          lastException = e
-          logWarning("Error sending message to BlockManagerMaster in " + attempts + " attempts", e)
-      }
-      Thread.sleep(AKKA_RETRY_INTERVAL_MS)
-    }
-
-    throw new SparkException(
-      "Error sending message to BlockManagerMaster [message = " + message + "]", lastException)
+    AkkaUtils.askWithReply(message, driverActor, AKKA_RETRY_ATTEMPTS, AKKA_RETRY_INTERVAL_MS,
+      timeout)
   }
 
 }

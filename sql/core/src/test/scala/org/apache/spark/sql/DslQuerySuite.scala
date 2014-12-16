@@ -19,14 +19,13 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.test._
 
 /* Implicits */
-import TestSQLContext._
+import org.apache.spark.sql.catalyst.dsl._
+import org.apache.spark.sql.test.TestSQLContext._
 
 class DslQuerySuite extends QueryTest {
-  import TestData._
+  import org.apache.spark.sql.TestData._
 
   test("table scan") {
     checkAnswer(
@@ -34,17 +33,23 @@ class DslQuerySuite extends QueryTest {
       testData.collect().toSeq)
   }
 
+  test("repartition") {
+    checkAnswer(
+      testData.select('key).repartition(10).select('key),
+      testData.select('key).collect().toSeq)
+  }
+
   test("agg") {
     checkAnswer(
-      testData2.groupBy('a)('a, Sum('b)),
+      testData2.groupBy('a)('a, sum('b)),
       Seq((1,3),(2,3),(3,3))
     )
     checkAnswer(
-      testData2.groupBy('a)('a, Sum('b) as 'totB).aggregate(Sum('totB)),
+      testData2.groupBy('a)('a, sum('b) as 'totB).aggregate(sum('totB)),
       9
     )
     checkAnswer(
-      testData2.aggregate(Sum('b)),
+      testData2.aggregate(sum('b)),
       9
     )
   }
@@ -59,6 +64,26 @@ class DslQuerySuite extends QueryTest {
     checkAnswer(
       testData.where('key === 1).select('value),
       Seq(Seq("1")))
+  }
+
+  test("select with functions") {
+    checkAnswer(
+      testData.select(sum('value), avg('value), count(1)),
+      Seq(Seq(5050.0, 50.5, 100)))
+
+    checkAnswer(
+      testData2.select('a + 'b, 'a < 'b),
+      Seq(
+        Seq(2, false),
+        Seq(3, true),
+        Seq(3, false),
+        Seq(4, false),
+        Seq(4, false),
+        Seq(5, false)))
+
+    checkAnswer(
+      testData2.select(sumDistinct('a)),
+      Seq(Seq(6)))
   }
 
   test("sorting") {
@@ -79,19 +104,19 @@ class DslQuerySuite extends QueryTest {
       Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
 
     checkAnswer(
-      arrayData.orderBy(GetItem('data, 0).asc),
+      arrayData.orderBy('data.getItem(0).asc),
       arrayData.collect().sortBy(_.data(0)).toSeq)
 
     checkAnswer(
-      arrayData.orderBy(GetItem('data, 0).desc),
+      arrayData.orderBy('data.getItem(0).desc),
       arrayData.collect().sortBy(_.data(0)).reverse.toSeq)
 
     checkAnswer(
-      mapData.orderBy(GetItem('data, 1).asc),
+      mapData.orderBy('data.getItem(1).asc),
       mapData.collect().sortBy(_.data(1)).toSeq)
 
     checkAnswer(
-      mapData.orderBy(GetItem('data, 1).desc),
+      mapData.orderBy('data.getItem(1).desc),
       mapData.collect().sortBy(_.data(1)).reverse.toSeq)
   }
 
@@ -109,142 +134,220 @@ class DslQuerySuite extends QueryTest {
       mapData.take(1).toSeq)
   }
 
+  test("SPARK-3395 limit distinct") {
+    val filtered = TestData.testData2
+      .distinct()
+      .orderBy(SortOrder('a, Ascending), SortOrder('b, Ascending))
+      .limit(1)
+      .registerTempTable("onerow")
+    checkAnswer(
+      sql("select * from onerow inner join testData2 on onerow.a = testData2.a"),
+      (1, 1, 1, 1) ::
+      (1, 1, 1, 2) :: Nil)
+  }
+
+  test("SPARK-3858 generator qualifiers are discarded") {
+    checkAnswer(
+      arrayData.as('ad)
+        .generate(Explode("data" :: Nil, 'data), alias = Some("ex"))
+        .select("ex.data".attr),
+      Seq(1, 2, 3, 2, 3, 4).map(Seq(_)))
+  }
+
   test("average") {
     checkAnswer(
-      testData2.groupBy()(Average('a)),
+      testData2.aggregate(avg('a)),
       2.0)
+
+    checkAnswer(
+      testData2.aggregate(avg('a), sumDistinct('a)), // non-partial
+      (2.0, 6.0) :: Nil)
+
+    checkAnswer(
+      decimalData.aggregate(avg('a)),
+      BigDecimal(2.0))
+    checkAnswer(
+      decimalData.aggregate(avg('a), sumDistinct('a)), // non-partial
+      (BigDecimal(2.0), BigDecimal(6)) :: Nil)
+
+    checkAnswer(
+      decimalData.aggregate(avg('a cast DecimalType(10, 2))),
+      BigDecimal(2.0))
+    checkAnswer(
+      decimalData.aggregate(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))), // non-partial
+      (BigDecimal(2.0), BigDecimal(6)) :: Nil)
   }
 
   test("null average") {
     checkAnswer(
-      testData3.groupBy()(Average('b)),
+      testData3.aggregate(avg('b)),
       2.0)
 
     checkAnswer(
-      testData3.groupBy()(Average('b), CountDistinct('b :: Nil)),
+      testData3.aggregate(avg('b), countDistinct('b)),
       (2.0, 1) :: Nil)
+
+    checkAnswer(
+      testData3.aggregate(avg('b), sumDistinct('b)), // non-partial
+      (2.0, 2.0) :: Nil)
+  }
+
+  test("zero average") {
+    checkAnswer(
+      emptyTableData.aggregate(avg('a)),
+      null)
+
+    checkAnswer(
+      emptyTableData.aggregate(avg('a), sumDistinct('b)), // non-partial
+      (null, null) :: Nil)
   }
 
   test("count") {
     assert(testData2.count() === testData2.map(_ => 1).count())
+
+    checkAnswer(
+      testData2.aggregate(count('a), sumDistinct('a)), // non-partial
+      (6, 6.0) :: Nil)
   }
 
   test("null count") {
     checkAnswer(
-      testData3.groupBy('a)('a, Count('b)),
+      testData3.groupBy('a)('a, count('b)),
       Seq((1,0), (2, 1))
     )
 
     checkAnswer(
-      testData3.groupBy('a)('a, Count('a + 'b)),
+      testData3.groupBy('a)('a, count('a + 'b)),
       Seq((1,0), (2, 1))
     )
 
     checkAnswer(
-      testData3.groupBy()(Count('a), Count('b), Count(1), CountDistinct('a :: Nil), CountDistinct('b :: Nil)),
+      testData3.aggregate(count('a), count('b), count(1), countDistinct('a), countDistinct('b)),
       (2, 1, 2, 2, 1) :: Nil
+    )
+
+    checkAnswer(
+      testData3.aggregate(count('b), countDistinct('b), sumDistinct('b)), // non-partial
+      (1, 1, 2) :: Nil
     )
   }
 
   test("zero count") {
     assert(emptyTableData.count() === 0)
+
+    checkAnswer(
+      emptyTableData.aggregate(count('a), sumDistinct('a)), // non-partial
+      (0, null) :: Nil)
   }
 
-  test("inner join where, one match per row") {
+  test("zero sum") {
     checkAnswer(
-      upperCaseData.join(lowerCaseData, Inner).where('n === 'N),
-      Seq(
-        (1, "A", 1, "a"),
-        (2, "B", 2, "b"),
-        (3, "C", 3, "c"),
-        (4, "D", 4, "d")
-      ))
+      emptyTableData.aggregate(sum('a)),
+      null)
   }
 
-  test("inner join ON, one match per row") {
+  test("zero sum distinct") {
     checkAnswer(
-      upperCaseData.join(lowerCaseData, Inner, Some('n === 'N)),
-      Seq(
-        (1, "A", 1, "a"),
-        (2, "B", 2, "b"),
-        (3, "C", 3, "c"),
-        (4, "D", 4, "d")
-      ))
+      emptyTableData.aggregate(sumDistinct('a)),
+      null)
   }
 
-  test("inner join, where, multiple matches") {
-    val x = testData2.where('a === 1).as('x)
-    val y = testData2.where('a === 1).as('y)
+  test("except") {
     checkAnswer(
-      x.join(y).where("x.a".attr === "y.a".attr),
-      (1,1,1,1) ::
-      (1,1,1,2) ::
-      (1,2,1,1) ::
-      (1,2,1,2) :: Nil
+      lowerCaseData.except(upperCaseData),
+      (1, "a") ::
+      (2, "b") ::
+      (3, "c") ::
+      (4, "d") :: Nil)
+    checkAnswer(lowerCaseData.except(lowerCaseData), Nil)
+    checkAnswer(upperCaseData.except(upperCaseData), Nil)
+  }
+
+  test("intersect") {
+    checkAnswer(
+      lowerCaseData.intersect(lowerCaseData),
+      (1, "a") ::
+      (2, "b") ::
+      (3, "c") ::
+      (4, "d") :: Nil)
+    checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
+  }
+
+  test("udf") {
+    val foo = (a: Int, b: String) => a.toString + b
+
+    checkAnswer(
+      // SELECT *, foo(key, value) FROM testData
+      testData.select(Star(None), foo.call('key, 'value)).limit(3),
+      (1, "1", "11") :: (2, "2", "22") :: (3, "3", "33") :: Nil
     )
   }
 
-  test("inner join, no matches") {
-    val x = testData2.where('a === 1).as('x)
-    val y = testData2.where('a === 2).as('y)
+  test("sqrt") {
     checkAnswer(
-      x.join(y).where("x.a".attr === "y.a".attr),
-      Nil)
+      testData.select(sqrt('key)).orderBy('key asc),
+      (1 to 100).map(n => Seq(math.sqrt(n)))
+    )
+
+    checkAnswer(
+      testData.select(sqrt('value), 'key).orderBy('key asc, 'value asc),
+      (1 to 100).map(n => Seq(math.sqrt(n), n))
+    )
+
+    checkAnswer(
+      testData.select(sqrt(Literal(null))),
+      (1 to 100).map(_ => Seq(null))
+    )
   }
 
-  test("big inner join, 4 matches per row") {
-    val bigData = testData.unionAll(testData).unionAll(testData).unionAll(testData)
-    val bigDataX = bigData.as('x)
-    val bigDataY = bigData.as('y)
+  test("abs") {
+    checkAnswer(
+      testData.select(abs('key)).orderBy('key asc),
+      (1 to 100).map(n => Seq(n))
+    )
 
     checkAnswer(
-      bigDataX.join(bigDataY).where("x.key".attr === "y.key".attr),
-      testData.flatMap(
-        row => Seq.fill(16)((row ++ row).toSeq)).collect().toSeq)
+      negativeData.select(abs('key)).orderBy('key desc),
+      (1 to 100).map(n => Seq(n))
+    )
+
+    checkAnswer(
+      testData.select(abs(Literal(null))),
+      (1 to 100).map(_ => Seq(null))
+    )
   }
 
-  test("cartisian product join") {
+  test("upper") {
     checkAnswer(
-      testData3.join(testData3),
-      (1, null, 1, null) ::
-      (1, null, 2, 2) ::
-      (2, 2, 1, null) ::
-      (2, 2, 2, 2) :: Nil)
+      lowerCaseData.select(upper('l)),
+      ('a' to 'd').map(c => Seq(c.toString.toUpperCase()))
+    )
+
+    checkAnswer(
+      testData.select(upper('value), 'key),
+      (1 to 100).map(n => Seq(n.toString, n))
+    )
+
+    checkAnswer(
+      testData.select(upper(Literal(null))),
+      (1 to 100).map(n => Seq(null))
+    )
   }
 
-  test("left outer join") {
+  test("lower") {
     checkAnswer(
-      upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N)),
-      (1, "A", 1, "a") ::
-      (2, "B", 2, "b") ::
-      (3, "C", 3, "c") ::
-      (4, "D", 4, "d") ::
-      (5, "E", null, null) ::
-      (6, "F", null, null) :: Nil)
-  }
-
-  test("right outer join") {
-    checkAnswer(
-      lowerCaseData.join(upperCaseData, RightOuter, Some('n === 'N)),
-      (1, "a", 1, "A") ::
-      (2, "b", 2, "B") ::
-      (3, "c", 3, "C") ::
-      (4, "d", 4, "D") ::
-      (null, null, 5, "E") ::
-      (null, null, 6, "F") :: Nil)
-  }
-
-  test("full outer join") {
-    val left = upperCaseData.where('N <= 4).as('left)
-    val right = upperCaseData.where('N >= 3).as('right)
+      upperCaseData.select(lower('L)),
+      ('A' to 'F').map(c => Seq(c.toString.toLowerCase()))
+    )
 
     checkAnswer(
-      left.join(right, FullOuter, Some("left.N".attr === "right.N".attr)),
-      (1, "A", null, null) ::
-      (2, "B", null, null) ::
-      (3, "C", 3, "C") ::
-      (4, "D", 4, "D") ::
-      (null, null, 5, "E") ::
-      (null, null, 6, "F") :: Nil)
+      testData.select(lower('value), 'key),
+      (1 to 100).map(n => Seq(n.toString, n))
+    )
+
+    checkAnswer(
+      testData.select(lower(Literal(null))),
+      (1 to 100).map(n => Seq(null))
+    )
   }
 }

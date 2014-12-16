@@ -46,7 +46,7 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
     val blockManager = SparkEnv.get.blockManager
     val blockId = split.asInstanceOf[BlockRDDPartition].blockId
     blockManager.get(blockId) match {
-      case Some(block) => block.asInstanceOf[Iterator[T]]
+      case Some(block) => block.data.asInstanceOf[Iterator[T]]
       case None =>
         throw new Exception("Could not compute split, block " + blockId + " not found")
     }
@@ -83,6 +83,10 @@ class BlockRDD[T: ClassTag](@transient sc: SparkContext, @transient val blockIds
       throw new SparkException(
         "Attempted to use %s after its blocks have been removed!".format(toString))
     }
+  }
+
+  protected def getBlockIdLocations(): Map[BlockId, Seq[String]] = {
+    locations_
   }
 }
 

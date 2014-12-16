@@ -33,10 +33,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from pyspark.resultiterable import ResultIterable
 
+
 def _do_python_join(rdd, other, numPartitions, dispatch):
     vs = rdd.map(lambda (k, v): (k, (1, v)))
     ws = other.map(lambda (k, v): (k, (2, v)))
-    return vs.union(ws).groupByKey(numPartitions).flatMapValues(lambda x : dispatch(x.__iter__()))
+    return vs.union(ws).groupByKey(numPartitions).flatMapValues(lambda x: dispatch(x.__iter__()))
 
 
 def python_join(rdd, other, numPartitions):
@@ -79,9 +80,7 @@ def python_left_outer_join(rdd, other, numPartitions):
     return _do_python_join(rdd, other, numPartitions, dispatch)
 
 
-def python_cogroup(rdd, other, numPartitions):
-    vs = rdd.map(lambda (k, v): (k, (1, v)))
-    ws = other.map(lambda (k, v): (k, (2, v)))
+def python_full_outer_join(rdd, other, numPartitions):
     def dispatch(seq):
         vbuf, wbuf = [], []
         for (n, v) in seq:
@@ -89,5 +88,24 @@ def python_cogroup(rdd, other, numPartitions):
                 vbuf.append(v)
             elif n == 2:
                 wbuf.append(v)
-        return (ResultIterable(vbuf), ResultIterable(wbuf))
-    return vs.union(ws).groupByKey(numPartitions).mapValues(dispatch)
+        if not vbuf:
+            vbuf.append(None)
+        if not wbuf:
+            wbuf.append(None)
+        return [(v, w) for v in vbuf for w in wbuf]
+    return _do_python_join(rdd, other, numPartitions, dispatch)
+
+
+def python_cogroup(rdds, numPartitions):
+    def make_mapper(i):
+        return lambda (k, v): (k, (i, v))
+    vrdds = [rdd.map(make_mapper(i)) for i, rdd in enumerate(rdds)]
+    union_vrdds = reduce(lambda acc, other: acc.union(other), vrdds)
+    rdd_len = len(vrdds)
+
+    def dispatch(seq):
+        bufs = [[] for i in range(rdd_len)]
+        for (n, v) in seq:
+            bufs[n].append(v)
+        return tuple(map(ResultIterable, bufs))
+    return union_vrdds.groupByKey(numPartitions).mapValues(dispatch)

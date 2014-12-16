@@ -17,9 +17,11 @@
 
 package org.apache.spark.mllib.linalg
 
+import breeze.linalg.{DenseMatrix => BDM}
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
+import org.apache.spark.mllib.util.TestingUtils._
 
 class VectorsSuite extends FunSuite {
 
@@ -124,5 +126,99 @@ class VectorsSuite extends FunSuite {
         println(s"Didn't detect malformatted string $s.")
       }
     }
+  }
+
+  test("zeros") {
+    assert(Vectors.zeros(3) === Vectors.dense(0.0, 0.0, 0.0))
+  }
+
+  test("Vector.copy") {
+    val sv = Vectors.sparse(4, Array(0, 2), Array(1.0, 2.0))
+    val svCopy = sv.copy
+    (sv, svCopy) match {
+      case (sv: SparseVector, svCopy: SparseVector) =>
+        assert(sv.size === svCopy.size)
+        assert(sv.indices === svCopy.indices)
+        assert(sv.values === svCopy.values)
+        assert(!sv.indices.eq(svCopy.indices))
+        assert(!sv.values.eq(svCopy.values))
+      case _ =>
+        throw new RuntimeException(s"copy returned ${svCopy.getClass} on ${sv.getClass}.")
+    }
+
+    val dv = Vectors.dense(1.0, 0.0, 2.0)
+    val dvCopy = dv.copy
+    (dv, dvCopy) match {
+      case (dv: DenseVector, dvCopy: DenseVector) =>
+        assert(dv.size === dvCopy.size)
+        assert(dv.values === dvCopy.values)
+        assert(!dv.values.eq(dvCopy.values))
+      case _ =>
+        throw new RuntimeException(s"copy returned ${dvCopy.getClass} on ${dv.getClass}.")
+    }
+  }
+
+  test("VectorUDT") {
+    val dv0 = Vectors.dense(Array.empty[Double])
+    val dv1 = Vectors.dense(1.0, 2.0)
+    val sv0 = Vectors.sparse(2, Array.empty, Array.empty)
+    val sv1 = Vectors.sparse(2, Array(1), Array(2.0))
+    val udt = new VectorUDT()
+    for (v <- Seq(dv0, dv1, sv0, sv1)) {
+      assert(v === udt.deserialize(udt.serialize(v)))
+    }
+  }
+
+  test("fromBreeze") {
+    val x = BDM.zeros[Double](10, 10)
+    val v = Vectors.fromBreeze(x(::, 0))
+    assert(v.size === x.rows)
+  }
+
+  test("foreachActive") {
+    val dv = Vectors.dense(0.0, 1.2, 3.1, 0.0)
+    val sv = Vectors.sparse(4, Seq((1, 1.2), (2, 3.1), (3, 0.0)))
+
+    val dvMap = scala.collection.mutable.Map[Int, Double]()
+    dv.foreachActive { (index, value) =>
+      dvMap.put(index, value)
+    }
+    assert(dvMap.size === 4)
+    assert(dvMap.get(0) === Some(0.0))
+    assert(dvMap.get(1) === Some(1.2))
+    assert(dvMap.get(2) === Some(3.1))
+    assert(dvMap.get(3) === Some(0.0))
+
+    val svMap = scala.collection.mutable.Map[Int, Double]()
+    sv.foreachActive { (index, value) =>
+      svMap.put(index, value)
+    }
+    assert(svMap.size === 3)
+    assert(svMap.get(1) === Some(1.2))
+    assert(svMap.get(2) === Some(3.1))
+    assert(svMap.get(3) === Some(0.0))
+  }
+
+  test("vector p-norm") {
+    val dv = Vectors.dense(0.0, -1.2, 3.1, 0.0, -4.5, 1.9)
+    val sv = Vectors.sparse(6, Seq((1, -1.2), (2, 3.1), (3, 0.0), (4, -4.5), (5, 1.9)))
+
+    assert(Vectors.norm(dv, 1.0) ~== dv.toArray.foldLeft(0.0)((a, v) =>
+      a + math.abs(v)) relTol 1E-8)
+    assert(Vectors.norm(sv, 1.0) ~== sv.toArray.foldLeft(0.0)((a, v) =>
+      a + math.abs(v)) relTol 1E-8)
+
+    assert(Vectors.norm(dv, 2.0) ~== math.sqrt(dv.toArray.foldLeft(0.0)((a, v) =>
+      a + v * v)) relTol 1E-8)
+    assert(Vectors.norm(sv, 2.0) ~== math.sqrt(sv.toArray.foldLeft(0.0)((a, v) =>
+      a + v * v)) relTol 1E-8)
+
+    assert(Vectors.norm(dv, Double.PositiveInfinity) ~== dv.toArray.map(math.abs).max relTol 1E-8)
+    assert(Vectors.norm(sv, Double.PositiveInfinity) ~== sv.toArray.map(math.abs).max relTol 1E-8)
+
+    assert(Vectors.norm(dv, 3.7) ~== math.pow(dv.toArray.foldLeft(0.0)((a, v) =>
+      a + math.pow(math.abs(v), 3.7)), 1.0 / 3.7) relTol 1E-8)
+    assert(Vectors.norm(sv, 3.7) ~== math.pow(sv.toArray.foldLeft(0.0)((a, v) =>
+      a + math.pow(math.abs(v), 3.7)), 1.0 / 3.7) relTol 1E-8)
   }
 }

@@ -20,22 +20,16 @@ package org.apache.spark.storage
 import java.io.IOException
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.ArrayBuffer
-
-import tachyon.client.{WriteType, ReadType}
+import com.google.common.io.ByteStreams
+import tachyon.client.{ReadType, WriteType}
 
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
-import org.apache.spark.serializer.Serializer
-
-
-private class Entry(val size: Long)
-
 
 /**
  * Stores BlockManager blocks on Tachyon.
  */
-private class TachyonStore(
+private[spark] class TachyonStore(
     blockManager: BlockManager,
     tachyonManager: TachyonBlockManager)
   extends BlockStore(blockManager: BlockManager) with Logging {
@@ -46,29 +40,29 @@ private class TachyonStore(
     tachyonManager.getFile(blockId.name).length
   }
 
-  override def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult =  {
-    putToTachyonStore(blockId, bytes, true)
+  override def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel): PutResult = {
+    putIntoTachyonStore(blockId, bytes, returnValues = true)
   }
 
-  override def putValues(
+  override def putArray(
       blockId: BlockId,
-      values: ArrayBuffer[Any],
+      values: Array[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
-    return putValues(blockId, values.toIterator, level, returnValues)
+    putIterator(blockId, values.toIterator, level, returnValues)
   }
 
-  override def putValues(
+  override def putIterator(
       blockId: BlockId,
       values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean): PutResult = {
-    logDebug("Attempting to write values for block " + blockId)
-    val _bytes = blockManager.dataSerialize(blockId, values)
-    putToTachyonStore(blockId, _bytes, returnValues)
+    logDebug(s"Attempting to write values for block $blockId")
+    val bytes = blockManager.dataSerialize(blockId, values)
+    putIntoTachyonStore(blockId, bytes, returnValues)
   }
 
-  private def putToTachyonStore(
+  private def putIntoTachyonStore(
       blockId: BlockId,
       bytes: ByteBuffer,
       returnValues: Boolean): PutResult = {
@@ -76,7 +70,7 @@ private class TachyonStore(
     // duplicate does not copy buffer, so inexpensive
     val byteBuffer = bytes.duplicate()
     byteBuffer.rewind()
-    logDebug("Attempting to put block " + blockId + " into Tachyon")
+    logDebug(s"Attempting to put block $blockId into Tachyon")
     val startTime = System.currentTimeMillis
     val file = tachyonManager.getFile(blockId)
     val os = file.getOutStream(WriteType.TRY_CACHE)
@@ -84,7 +78,7 @@ private class TachyonStore(
     os.close()
     val finishTime = System.currentTimeMillis
     logDebug("Block %s stored as %s file in Tachyon in %d ms".format(
-      blockId, Utils.bytesToString(byteBuffer.limit), (finishTime - startTime)))
+      blockId, Utils.bytesToString(byteBuffer.limit), finishTime - startTime))
 
     if (returnValues) {
       PutResult(bytes.limit(), Right(bytes.duplicate()))
@@ -106,33 +100,25 @@ private class TachyonStore(
     getBytes(blockId).map(buffer => blockManager.dataDeserialize(blockId, buffer))
   }
 
-
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val file = tachyonManager.getFile(blockId)
-    if (file == null || file.getLocationHosts().size == 0) {
+    if (file == null || file.getLocationHosts.size == 0) {
       return None
     }
     val is = file.getInStream(ReadType.CACHE)
-    var buffer: ByteBuffer = null
+    assert (is != null)
     try {
-      if (is != null) {
-        val size = file.length
-        val bs = new Array[Byte](size.asInstanceOf[Int])
-        val fetchSize = is.read(bs, 0, size.asInstanceOf[Int])
-        buffer = ByteBuffer.wrap(bs)
-        if (fetchSize != size) {
-          logWarning("Failed to fetch the block " + blockId + " from Tachyon : Size " + size +
-            " is not equal to fetched size " + fetchSize)
-          return None
-        }
-      }
+      val size = file.length
+      val bs = new Array[Byte](size.asInstanceOf[Int])
+      ByteStreams.readFully(is, bs)
+      Some(ByteBuffer.wrap(bs))
     } catch {
-        case ioe: IOException => {
-          logWarning("Failed to fetch the block " + blockId + " from Tachyon", ioe)
-          return None
-        }
+      case ioe: IOException =>
+        logWarning(s"Failed to fetch the block $blockId from Tachyon", ioe)
+        None
+    } finally {
+      is.close()
     }
-    Some(buffer)
   }
 
   override def contains(blockId: BlockId): Boolean = {

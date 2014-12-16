@@ -5,7 +5,7 @@
 
 create table tmptable(key string, value string);
 
-set hive.stats.dbclass=dummy;
+set hive.stats.dbclass=custom;
 set hive.stats.default.publisher=org.apache.hadoop.hive.ql.stats.DummyStatsPublisher;
 set hive.stats.default.aggregator="";
 

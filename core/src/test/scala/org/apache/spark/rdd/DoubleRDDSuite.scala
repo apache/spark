@@ -20,7 +20,6 @@ package org.apache.spark.rdd
 import org.scalatest.FunSuite
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
 
 class DoubleRDDSuite extends FunSuite with SharedSparkContext {
   // Verify tests on the histogram functionality. We test with both evenly
@@ -243,6 +242,29 @@ class DoubleRDDSuite extends FunSuite with SharedSparkContext {
       Array(1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0)
     assert(histogramResults === expectedHistogramResults)
     assert(histogramBuckets === expectedHistogramBuckets)
+  }
+
+  test("WorksWithoutBucketsForLargerDatasets") {
+    // Verify the case of slighly larger datasets
+    val rdd = sc.parallelize(6 to 99)
+    val (histogramBuckets, histogramResults) = rdd.histogram(8)
+    val expectedHistogramResults =
+      Array(12, 12, 11, 12, 12, 11, 12, 12)
+    val expectedHistogramBuckets =
+      Array(6.0, 17.625, 29.25, 40.875, 52.5, 64.125, 75.75, 87.375, 99.0)
+    assert(histogramResults === expectedHistogramResults)
+    assert(histogramBuckets === expectedHistogramBuckets)
+  }
+
+  test("WorksWithoutBucketsWithIrrationalBucketEdges") {
+    // Verify the case of buckets with irrational edges. See #SPARK-2862.
+    val rdd = sc.parallelize(6 to 99)
+    val (histogramBuckets, histogramResults) = rdd.histogram(9)
+    val expectedHistogramResults =
+      Array(11, 10, 11, 10, 10, 11, 10, 10, 11)
+    assert(histogramResults === expectedHistogramResults)
+    assert(histogramBuckets(0) === 6.0)
+    assert(histogramBuckets(9) === 99.0)
   }
 
   // Test the failure mode with an invalid RDD

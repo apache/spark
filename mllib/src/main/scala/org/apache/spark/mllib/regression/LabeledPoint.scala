@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.regression
 
+import scala.beans.BeanInfo
+
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.SparkException
@@ -27,6 +29,7 @@ import org.apache.spark.SparkException
  * @param label Label for this data point.
  * @param features List of features for this data point.
  */
+@BeanInfo
 case class LabeledPoint(label: Double, features: Vector) {
   override def toString: String = {
     "(%s,%s)".format(label, features)
@@ -36,7 +39,7 @@ case class LabeledPoint(label: Double, features: Vector) {
 /**
  * Parser for [[org.apache.spark.mllib.regression.LabeledPoint]].
  */
-private[mllib] object LabeledPointParser {
+object LabeledPoint {
   /**
    * Parses a string resulted from `LabeledPoint#toString` into
    * an [[org.apache.spark.mllib.regression.LabeledPoint]].

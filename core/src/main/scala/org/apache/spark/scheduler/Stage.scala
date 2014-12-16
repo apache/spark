@@ -17,9 +17,12 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.HashSet
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.CallSite
 
 /**
  * A stage is a set of independent tasks all computing the same function that need to run as part
@@ -35,22 +38,44 @@ import org.apache.spark.storage.BlockManagerId
  * Each Stage also has a jobId, identifying the job that first submitted the stage.  When FIFO
  * scheduling is used, this allows Stages from earlier jobs to be computed first or recovered
  * faster on failure.
+ *
+ * The callSite provides a location in user code which relates to the stage. For a shuffle map
+ * stage, the callSite gives the user code that created the RDD being shuffled. For a result
+ * stage, the callSite gives the user code that executes the associated action (e.g. count()).
+ *
+ * A single stage can consist of multiple attempts. In that case, the latestInfo field will
+ * be updated for each attempt.
+ *
  */
 private[spark] class Stage(
     val id: Int,
     val rdd: RDD[_],
     val numTasks: Int,
-    val shuffleDep: Option[ShuffleDependency[_,_]],  // Output shuffle if stage is a map stage
+    val shuffleDep: Option[ShuffleDependency[_, _, _]],  // Output shuffle if stage is a map stage
     val parents: List[Stage],
     val jobId: Int,
-    callSite: Option[String])
+    val callSite: CallSite)
   extends Logging {
 
   val isShuffleMap = shuffleDep.isDefined
   val numPartitions = rdd.partitions.size
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
   var numAvailableOutputs = 0
+
+  /** Set of jobs that this stage belongs to. */
+  val jobIds = new HashSet[Int]
+
+  /** For stages that are the final (consists of only ResultTasks), link to the ActiveJob. */
+  var resultOfJob: Option[ActiveJob] = None
+  var pendingTasks = new HashSet[Task[_]]
+
   private var nextAttemptId = 0
+
+  val name = callSite.shortForm
+  val details = callSite.longForm
+
+  /** Pointer to the latest [StageInfo] object, set by DAGScheduler. */
+  var latestInfo: StageInfo = StageInfo.fromStage(this)
 
   def isAvailable: Boolean = {
     if (!isShuffleMap) {
@@ -77,6 +102,11 @@ private[spark] class Stage(
     }
   }
 
+  /**
+   * Removes all shuffle outputs associated with this executor. Note that this will also remove
+   * outputs which are served by an external shuffle server (if one exists), as they are still
+   * registered with this execId.
+   */
   def removeOutputsOnExecutor(execId: String) {
     var becameUnavailable = false
     for (partition <- 0 until numPartitions) {
@@ -94,15 +124,21 @@ private[spark] class Stage(
     }
   }
 
+  /** Return a new attempt id, starting with 0. */
   def newAttemptId(): Int = {
     val id = nextAttemptId
     nextAttemptId += 1
     id
   }
 
-  val name = callSite.getOrElse(rdd.getCreationSite)
+  def attemptId: Int = nextAttemptId
 
   override def toString = "Stage " + id
 
   override def hashCode(): Int = id
+
+  override def equals(other: Any): Boolean = other match {
+    case stage: Stage => stage != null && stage.id == id
+    case _ => false
+  }
 }

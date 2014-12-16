@@ -75,7 +75,7 @@ object StronglyConnectedComponents {
         sccWorkGraph, Long.MaxValue, activeDirection = EdgeDirection.Out)(
         (vid, myScc, neighborScc) => (math.min(myScc._1, neighborScc), myScc._2),
         e => {
-          if (e.srcId < e.dstId) {
+          if (e.srcAttr._1 < e.dstAttr._1) {
             Iterator((e.dstId, e.srcAttr._1))
           } else {
             Iterator()

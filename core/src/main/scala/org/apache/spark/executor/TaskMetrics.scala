@@ -17,12 +17,22 @@
 
 package org.apache.spark.executor
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.storage.{BlockId, BlockStatus}
 
 /**
  * :: DeveloperApi ::
  * Metrics tracked during the execution of a task.
+ *
+ * This class is used to house metrics both for in-progress and completed tasks. In executors,
+ * both the task thread and the heartbeat thread write to the TaskMetrics. The heartbeat thread
+ * reads it to send in-progress metrics, and the task thread reads it to send metrics along with
+ * the completed task.
+ *
+ * So, when adding new fields, take into consideration that the whole object can be serialized for
+ * shipping off at any time to consumers of the SparkListener interface.
  */
 @DeveloperApi
 class TaskMetrics extends Serializable {
@@ -67,9 +77,38 @@ class TaskMetrics extends Serializable {
   var diskBytesSpilled: Long = _
 
   /**
-   * If this task reads from shuffle output, metrics on getting shuffle data will be collected here
+   * If this task reads from a HadoopRDD or from persisted data, metrics on how much data was read
+   * are stored here.
    */
-  var shuffleReadMetrics: Option[ShuffleReadMetrics] = None
+  var inputMetrics: Option[InputMetrics] = None
+
+  /**
+   * If this task writes data externally (e.g. to a distributed filesystem), metrics on how much
+   * data was written are stored here.
+   */
+  var outputMetrics: Option[OutputMetrics] = None
+
+  /**
+   * If this task reads from shuffle output, metrics on getting shuffle data will be collected here.
+   * This includes read metrics aggregated over all the task's shuffle dependencies.
+   */
+  private var _shuffleReadMetrics: Option[ShuffleReadMetrics] = None
+
+  def shuffleReadMetrics = _shuffleReadMetrics
+
+  /**
+   * This should only be used when recreating TaskMetrics, not when updating read metrics in
+   * executors.
+   */
+  private[spark] def setShuffleReadMetrics(shuffleReadMetrics: Option[ShuffleReadMetrics]) {
+    _shuffleReadMetrics = shuffleReadMetrics
+  }
+
+  /**
+   * ShuffleReadMetrics per dependency for collecting independently while task is in progress.
+   */
+  @transient private lazy val depsShuffleReadMetrics: ArrayBuffer[ShuffleReadMetrics] =
+    new ArrayBuffer[ShuffleReadMetrics]()
 
   /**
    * If this task writes to shuffle output, metrics on the written shuffle data will be collected
@@ -81,12 +120,82 @@ class TaskMetrics extends Serializable {
    * Storage statuses of any blocks that have been updated as a result of this task.
    */
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
+
+  /**
+   * A task may have multiple shuffle readers for multiple dependencies. To avoid synchronization
+   * issues from readers in different threads, in-progress tasks use a ShuffleReadMetrics for each
+   * dependency, and merge these metrics before reporting them to the driver. This method returns
+   * a ShuffleReadMetrics for a dependency and registers it for merging later.
+   */
+  private [spark] def createShuffleReadMetricsForDependency(): ShuffleReadMetrics = synchronized {
+    val readMetrics = new ShuffleReadMetrics()
+    depsShuffleReadMetrics += readMetrics
+    readMetrics
+  }
+
+  /**
+   * Aggregates shuffle read metrics for all registered dependencies into shuffleReadMetrics.
+   */
+  private[spark] def updateShuffleReadMetrics() = synchronized {
+    val merged = new ShuffleReadMetrics()
+    for (depMetrics <- depsShuffleReadMetrics) {
+      merged.fetchWaitTime += depMetrics.fetchWaitTime
+      merged.localBlocksFetched += depMetrics.localBlocksFetched
+      merged.remoteBlocksFetched += depMetrics.remoteBlocksFetched
+      merged.remoteBytesRead += depMetrics.remoteBytesRead
+    }
+    _shuffleReadMetrics = Some(merged)
+  }
 }
 
 private[spark] object TaskMetrics {
   def empty: TaskMetrics = new TaskMetrics
 }
 
+/**
+ * :: DeveloperApi ::
+ * Method by which input data was read.  Network means that the data was read over the network
+ * from a remote block manager (which may have stored the data on-disk or in-memory).
+ */
+@DeveloperApi
+object DataReadMethod extends Enumeration with Serializable {
+  type DataReadMethod = Value
+  val Memory, Disk, Hadoop, Network = Value
+}
+
+/**
+ * :: DeveloperApi ::
+ * Method by which output data was written.
+ */
+@DeveloperApi
+object DataWriteMethod extends Enumeration with Serializable {
+  type DataWriteMethod = Value
+  val Hadoop = Value
+}
+
+/**
+ * :: DeveloperApi ::
+ * Metrics about reading input data.
+ */
+@DeveloperApi
+case class InputMetrics(readMethod: DataReadMethod.Value) {
+  /**
+   * Total bytes read.
+   */
+  var bytesRead: Long = 0L
+}
+
+/**
+ * :: DeveloperApi ::
+ * Metrics about writing output data.
+ */
+@DeveloperApi
+case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
+  /**
+   * Total bytes written
+   */
+  var bytesWritten: Long = 0L
+}
 
 /**
  * :: DeveloperApi ::
@@ -95,14 +204,9 @@ private[spark] object TaskMetrics {
 @DeveloperApi
 class ShuffleReadMetrics extends Serializable {
   /**
-   * Absolute time when this task finished reading shuffle data
-   */
-  var shuffleFinishTime: Long = _
-
-  /**
    * Number of blocks fetched in this shuffle by this task (remote or local)
    */
-  var totalBlocksFetched: Int = _
+  def totalBlocksFetched: Int = remoteBlocksFetched + localBlocksFetched
 
   /**
    * Number of remote blocks fetched in this shuffle by this task
@@ -136,10 +240,10 @@ class ShuffleWriteMetrics extends Serializable {
   /**
    * Number of bytes written for the shuffle by this task
    */
-  var shuffleBytesWritten: Long = _
+  @volatile var shuffleBytesWritten: Long = _
 
   /**
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds
    */
-  var shuffleWriteTime: Long = _
+  @volatile var shuffleWriteTime: Long = _
 }

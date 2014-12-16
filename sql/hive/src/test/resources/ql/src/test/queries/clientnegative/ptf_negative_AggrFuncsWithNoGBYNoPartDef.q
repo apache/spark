@@ -12,7 +12,7 @@ CREATE TABLE part(
     p_comment STRING
 );
 
-LOAD DATA LOCAL INPATH '../data/files/part_tiny.txt' overwrite into table part;
+LOAD DATA LOCAL INPATH '../../data/files/part_tiny.txt' overwrite into table part;
 
 -- testAggrFuncsWithNoGBYNoPartDef
 select p_mfgr, 

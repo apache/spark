@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import org.scalatest.{Assertions, FunSuite}
+import org.apache.spark.storage.StorageLevel
 
 class SparkContextInfoSuite extends FunSuite with LocalSparkContext {
   test("getPersistentRDDs only returns RDDs that are marked as cached") {
@@ -35,26 +36,33 @@ class SparkContextInfoSuite extends FunSuite with LocalSparkContext {
   test("getPersistentRDDs returns an immutable map") {
     sc = new SparkContext("local", "test")
     val rdd1 = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
-
     val myRdds = sc.getPersistentRDDs
     assert(myRdds.size === 1)
-    assert(myRdds.values.head === rdd1)
+    assert(myRdds(0) === rdd1)
+    assert(myRdds(0).getStorageLevel === StorageLevel.MEMORY_ONLY)
 
+    // myRdds2 should have 2 RDDs, but myRdds should not change
     val rdd2 = sc.makeRDD(Array(5, 6, 7, 8), 1).cache()
-
-    // getPersistentRDDs should have 2 RDDs, but myRdds should not change
-    assert(sc.getPersistentRDDs.size === 2)
+    val myRdds2 = sc.getPersistentRDDs
+    assert(myRdds2.size === 2)
+    assert(myRdds2(0) === rdd1)
+    assert(myRdds2(1) === rdd2)
+    assert(myRdds2(0).getStorageLevel === StorageLevel.MEMORY_ONLY)
+    assert(myRdds2(1).getStorageLevel === StorageLevel.MEMORY_ONLY)
     assert(myRdds.size === 1)
+    assert(myRdds(0) === rdd1)
+    assert(myRdds(0).getStorageLevel === StorageLevel.MEMORY_ONLY)
   }
 
   test("getRDDStorageInfo only reports on RDDs that actually persist data") {
     sc = new SparkContext("local", "test")
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2).cache()
-
     assert(sc.getRDDStorageInfo.size === 0)
-
     rdd.collect()
     assert(sc.getRDDStorageInfo.size === 1)
+    assert(sc.getRDDStorageInfo.head.isCached)
+    assert(sc.getRDDStorageInfo.head.memSize > 0)
+    assert(sc.getRDDStorageInfo.head.storageLevel === StorageLevel.MEMORY_ONLY)
   }
 
   test("call sites report correct locations") {
@@ -70,7 +78,7 @@ package object testPackage extends Assertions {
   def runCallSiteTest(sc: SparkContext) {
     val rdd = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val rddCreationSite = rdd.getCreationSite
-    val curCallSite = sc.getCallSite() // note: 2 lines after definition of "rdd"
+    val curCallSite = sc.getCallSite().shortForm // note: 2 lines after definition of "rdd"
 
     val rddCreationLine = rddCreationSite match {
       case CALL_SITE_REGEX(func, file, line) => {

@@ -56,7 +56,6 @@ private[spark] object JsonProtocol {
     ("cores" -> obj.maxCores) ~
     ("memoryperslave" -> obj.memoryPerSlave) ~
     ("user" -> obj.user) ~
-    ("sparkhome" -> obj.sparkHome) ~
     ("command" -> obj.command.toString)
   }
 

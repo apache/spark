@@ -19,11 +19,6 @@ package org.apache.spark.sql.catalyst.trees
 
 import org.apache.spark.sql.catalyst.errors._
 
-object TreeNode {
-  private val currentId = new java.util.concurrent.atomic.AtomicLong
-  protected def nextId() = currentId.getAndIncrement()
-}
-
 /** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
 
@@ -34,28 +29,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def children: Seq[BaseType]
 
   /**
-   * A globally unique id for this specific instance. Not preserved across copies.
-   * Unlike `equals`, `id` can be used to differentiate distinct but structurally
-   * identical branches of a tree.
-   */
-  val id = TreeNode.nextId()
-
-  /**
-   * Returns true if other is the same [[catalyst.trees.TreeNode TreeNode]] instance.  Unlike
-   * `equals` this function will return false for different instances of structurally identical
-   * trees.
-   */
-  def sameInstance(other: TreeNode[_]): Boolean = {
-    this.id == other.id
-  }
-
-  /**
    * Faster version of equality which short-circuits when two treeNodes are the same instance.
    * We don't just override Object.Equals, as doing so prevents the scala compiler from from
    * generating case class `equals` methods
    */
   def fastEquals(other: TreeNode[_]): Boolean = {
-    sameInstance(other) || this == other
+    this.eq(other) || this == other
   }
 
   /**
@@ -187,6 +166,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         } else {
           arg
         }
+      case Some(arg: TreeNode[_]) if children contains arg =>
+        val newChild = arg.asInstanceOf[BaseType].transformDown(rule)
+        if (!(newChild fastEquals arg)) {
+          changed = true
+          Some(newChild)
+        } else {
+          Some(arg)
+        }
       case m: Map[_,_] => m
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if children contains arg =>
@@ -231,6 +218,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         } else {
           arg
         }
+      case Some(arg: TreeNode[_]) if children contains arg =>
+        val newChild = arg.asInstanceOf[BaseType].transformUp(rule)
+        if (!(newChild fastEquals arg)) {
+          changed = true
+          Some(newChild)
+        } else {
+          Some(arg)
+        }
       case m: Map[_,_] => m
       case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if children contains arg =>
@@ -264,7 +259,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    */
   def makeCopy(newArgs: Array[AnyRef]): this.type = attachTree(this, "makeCopy") {
     try {
-      val defaultCtor = getClass.getConstructors.head
+      // Skip no-arg constructors that are just there for kryo.
+      val defaultCtor = getClass.getConstructors.find(_.getParameterTypes.size != 0).head
       if (otherCopyArgs.isEmpty) {
         defaultCtor.newInstance(newArgs: _*).asInstanceOf[this.type]
       } else {
@@ -273,7 +269,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     } catch {
       case e: java.lang.IllegalArgumentException =>
         throw new TreeNodeException(
-          this, s"Failed to copy node.  Is otherCopyArgs specified correctly for $nodeName?")
+          this, s"Failed to copy node.  Is otherCopyArgs specified correctly for $nodeName? "
+            + s"Exception message: ${e.getMessage}.")
     }
   }
 
@@ -375,3 +372,4 @@ trait UnaryNode[BaseType <: TreeNode[BaseType]] {
   def child: BaseType
   def children = child :: Nil
 }
+

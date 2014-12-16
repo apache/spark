@@ -20,8 +20,10 @@ package org.apache.spark.tools
 import java.util.concurrent.{CountDownLatch, Executors}
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.SparkContext
 import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.util.Utils
 
 /**
@@ -49,22 +51,23 @@ object StoragePerfTester {
 
     System.setProperty("spark.shuffle.compress", "false")
     System.setProperty("spark.shuffle.sync", "true")
+    System.setProperty("spark.shuffle.manager",
+      "org.apache.spark.shuffle.hash.HashShuffleManager")
 
     // This is only used to instantiate a BlockManager. All thread scheduling is done manually.
     val sc = new SparkContext("local[4]", "Write Tester")
-    val blockManager = sc.env.blockManager
+    val hashShuffleManager = sc.env.shuffleManager.asInstanceOf[HashShuffleManager]
 
     def writeOutputBytes(mapId: Int, total: AtomicLong) = {
-      val shuffle = blockManager.shuffleBlockManager.forMapTask(1, mapId, numOutputSplits,
-        new KryoSerializer(sc.conf))
+      val shuffle = hashShuffleManager.shuffleBlockManager.forMapTask(1, mapId, numOutputSplits,
+        new KryoSerializer(sc.conf), new ShuffleWriteMetrics())
       val writers = shuffle.writers
       for (i <- 1 to recordsPerMap) {
         writers(i % numOutputSplits).write(writeData)
       }
-      writers.map {w =>
-        w.commit()
+      writers.map { w =>
+        w.commitAndClose()
         total.addAndGet(w.fileSegment().length)
-        w.close()
       }
 
       shuffle.releaseWriters(true)

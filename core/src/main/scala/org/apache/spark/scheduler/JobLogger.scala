@@ -20,7 +20,6 @@ package org.apache.spark.scheduler
 import java.io.{File, FileNotFoundException, IOException, PrintWriter}
 import java.text.SimpleDateFormat
 import java.util.{Date, Properties}
-import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable.HashMap
 
@@ -60,16 +59,8 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
     override def initialValue() = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   }
-  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent]
 
   createLogDir()
-
-  // The following 5 functions are used only in testing.
-  private[scheduler] def getLogDir = logDir
-  private[scheduler] def getJobIdToPrintWriter = jobIdToPrintWriter
-  private[scheduler] def getStageIdToJobId = stageIdToJobId
-  private[scheduler] def getJobIdToStageIds = jobIdToStageIds
-  private[scheduler] def getEventQueue = eventQueue
 
   /** Create a folder for log files, the folder's name is the creation time of jobLogger */
   protected def createLogDir() {
@@ -77,7 +68,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
     if (dir.exists()) {
       return
     }
-    if (dir.mkdirs() == false) {
+    if (!dir.mkdirs()) {
       // JobLogger should throw a exception rather than continue to construct this object.
       throw new IOException("create log directory error:" + logDir + "/" + logDirName + "/")
     }
@@ -160,9 +151,20 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
                " START_TIME=" + taskInfo.launchTime + " FINISH_TIME=" + taskInfo.finishTime +
                " EXECUTOR_ID=" + taskInfo.executorId +  " HOST=" + taskMetrics.hostname
     val executorRunTime = " EXECUTOR_RUN_TIME=" + taskMetrics.executorRunTime
-    val readMetrics = taskMetrics.shuffleReadMetrics match {
+    val gcTime = " GC_TIME=" + taskMetrics.jvmGCTime
+    val inputMetrics = taskMetrics.inputMetrics match {
       case Some(metrics) =>
-        " SHUFFLE_FINISH_TIME=" + metrics.shuffleFinishTime +
+        " READ_METHOD=" + metrics.readMethod.toString +
+        " INPUT_BYTES=" + metrics.bytesRead
+      case None => ""
+    }
+    val outputMetrics = taskMetrics.outputMetrics match {
+      case Some(metrics) =>
+        " OUTPUT_BYTES=" + metrics.bytesWritten
+      case None => ""
+    }
+    val shuffleReadMetrics = taskMetrics.shuffleReadMetrics match {
+      case Some(metrics) =>
         " BLOCK_FETCHED_TOTAL=" + metrics.totalBlocksFetched +
         " BLOCK_FETCHED_LOCAL=" + metrics.localBlocksFetched +
         " BLOCK_FETCHED_REMOTE=" + metrics.remoteBlocksFetched +
@@ -171,10 +173,13 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
       case None => ""
     }
     val writeMetrics = taskMetrics.shuffleWriteMetrics match {
-      case Some(metrics) => " SHUFFLE_BYTES_WRITTEN=" + metrics.shuffleBytesWritten
+      case Some(metrics) =>
+        " SHUFFLE_BYTES_WRITTEN=" + metrics.shuffleBytesWritten +
+        " SHUFFLE_WRITE_TIME=" + metrics.shuffleWriteTime
       case None => ""
     }
-    stageLogInfo(stageId, status + info + executorRunTime + readMetrics + writeMetrics)
+    stageLogInfo(stageId, status + info + executorRunTime + gcTime + inputMetrics + outputMetrics +
+      shuffleReadMetrics + writeMetrics)
   }
 
   /**
@@ -215,7 +220,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
         taskStatus += " STATUS=RESUBMITTED TID=" + taskInfo.taskId +
                       " STAGE_ID=" + taskEnd.stageId
         stageLogInfo(taskEnd.stageId, taskStatus)
-      case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
+      case FetchFailed(bmAddress, shuffleId, mapId, reduceId, message) =>
         taskStatus += " STATUS=FETCHFAILED TID=" + taskInfo.taskId + " STAGE_ID=" +
                       taskEnd.stageId + " SHUFFLE_ID=" + shuffleId + " MAP_ID=" +
                       mapId + " REDUCE_ID=" + reduceId
@@ -250,7 +255,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
   protected def recordJobProperties(jobId: Int, properties: Properties) {
     if (properties != null) {
       val description = properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION, "")
-      jobLogInfo(jobId, description, false)
+      jobLogInfo(jobId, description, withTime = false)
     }
   }
 

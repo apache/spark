@@ -1,6 +1,6 @@
 CREATE TABLE T1(key INT, value INT) STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../data/files/groupby_groupingid.txt' INTO TABLE T1;
+LOAD DATA LOCAL INPATH '../../data/files/groupby_groupingid.txt' INTO TABLE T1;
 
 set hive.groupby.skewindata = true;
 

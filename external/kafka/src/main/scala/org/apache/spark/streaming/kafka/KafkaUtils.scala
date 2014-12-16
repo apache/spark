@@ -17,19 +17,18 @@
 
 package org.apache.spark.streaming.kafka
 
-import scala.reflect.ClassTag
-import scala.collection.JavaConversions._
-
 import java.lang.{Integer => JInt}
 import java.util.{Map => JMap}
+
+import scala.reflect.ClassTag
+import scala.collection.JavaConversions._
 
 import kafka.serializer.{Decoder, StringDecoder}
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.api.java.{JavaPairReceiverInputDStream, JavaStreamingContext, JavaPairDStream}
-import org.apache.spark.streaming.dstream.{ReceiverInputDStream, DStream}
-
+import org.apache.spark.streaming.api.java.{JavaPairReceiverInputDStream, JavaStreamingContext}
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
 
 object KafkaUtils {
   /**
@@ -65,17 +64,18 @@ object KafkaUtils {
    *                    in its own thread.
    * @param storageLevel Storage level to use for storing the received objects
    */
-  def createStream[K: ClassTag, V: ClassTag, U <: Decoder[_]: Manifest, T <: Decoder[_]: Manifest](
+  def createStream[K: ClassTag, V: ClassTag, U <: Decoder[_]: ClassTag, T <: Decoder[_]: ClassTag](
       ssc: StreamingContext,
       kafkaParams: Map[String, String],
       topics: Map[String, Int],
       storageLevel: StorageLevel
     ): ReceiverInputDStream[(K, V)] = {
-    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, storageLevel)
+    val walEnabled = ssc.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)
+    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, walEnabled, storageLevel)
   }
 
   /**
-   * Create an input stream that pulls messages form a Kafka Broker.
+   * Create an input stream that pulls messages from a Kafka Broker.
    * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
    * @param jssc      JavaStreamingContext object
    * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..)
@@ -89,20 +89,17 @@ object KafkaUtils {
       groupId: String,
       topics: JMap[String, JInt]
     ): JavaPairReceiverInputDStream[String, String] = {
-    implicit val cmt: ClassTag[String] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
     createStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*))
   }
 
   /**
-   * Create an input stream that pulls messages form a Kafka Broker.
+   * Create an input stream that pulls messages from a Kafka Broker.
    * @param jssc      JavaStreamingContext object
    * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..).
    * @param groupId   The group id for this consumer.
    * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    *                  in its own thread.
    * @param storageLevel RDD storage level.
-   *
    */
   def createStream(
       jssc: JavaStreamingContext,
@@ -111,14 +108,12 @@ object KafkaUtils {
       topics: JMap[String, JInt],
       storageLevel: StorageLevel
     ): JavaPairReceiverInputDStream[String, String] = {
-    implicit val cmt: ClassTag[String] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
     createStream(jssc.ssc, zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
       storageLevel)
   }
 
   /**
-   * Create an input stream that pulls messages form a Kafka Broker.
+   * Create an input stream that pulls messages from a Kafka Broker.
    * @param jssc      JavaStreamingContext object
    * @param keyTypeClass Key type of RDD
    * @param valueTypeClass value type of RDD
@@ -140,13 +135,11 @@ object KafkaUtils {
       topics: JMap[String, JInt],
       storageLevel: StorageLevel
     ): JavaPairReceiverInputDStream[K, V] = {
-    implicit val keyCmt: ClassTag[K] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K]]
-    implicit val valueCmt: ClassTag[V] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
+    implicit val keyCmt: ClassTag[K] = ClassTag(keyTypeClass)
+    implicit val valueCmt: ClassTag[V] = ClassTag(valueTypeClass)
 
-    implicit val keyCmd: Manifest[U] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[U]]
-    implicit val valueCmd: Manifest[T] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[T]]
+    implicit val keyCmd: ClassTag[U] = ClassTag(keyDecoderClass)
+    implicit val valueCmd: ClassTag[T] = ClassTag(valueDecoderClass)
 
     createStream[K, V, U, T](
       jssc.ssc, kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)

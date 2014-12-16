@@ -17,12 +17,31 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.FunSuite
-
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.columnar.InMemoryRelation
 
-class QueryTest extends FunSuite {
+class QueryTest extends PlanTest {
+
+  /**
+   * Runs the plan and makes sure the answer contains all of the keywords, or the
+   * none of keywords are listed in the answer
+   * @param rdd the [[SchemaRDD]] to be executed
+   * @param exists true for make sure the keywords are listed in the output, otherwise
+   *               to make sure none of the keyword are not listed in the output
+   * @param keywords keyword in string array
+   */
+  def checkExistence(rdd: SchemaRDD, exists: Boolean, keywords: String*) {
+    val outputs = rdd.collect().map(_.mkString).mkString
+    for (key <- keywords) {
+      if (exists) {
+        assert(outputs.contains(key), s"Failed for $rdd ($key doens't exist in result)")
+      } else {
+        assert(!outputs.contains(key), s"Failed for $rdd ($key existed in the result)")
+      }
+    }
+  }
+
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param rdd the [[SchemaRDD]] to be executed
@@ -37,7 +56,7 @@ class QueryTest extends FunSuite {
       case singleItem => Seq(Seq(singleItem))
     }
 
-    val isSorted = rdd.logicalPlan.collect { case s: logical.Sort => s}.nonEmpty
+    val isSorted = rdd.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
     def prepareAnswer(answer: Seq[Any]) = if (!isSorted) answer.sortBy(_.toString) else answer
     val sparkAnswer = try rdd.collect().toSeq catch {
       case e: Exception =>
@@ -47,10 +66,11 @@ class QueryTest extends FunSuite {
             |${rdd.queryExecution}
             |== Exception ==
             |$e
+            |${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
           """.stripMargin)
     }
 
-    if(prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {
+    if (prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {
       fail(s"""
         |Results do not match for query:
         |${rdd.logicalPlan}
@@ -60,11 +80,31 @@ class QueryTest extends FunSuite {
         |${rdd.queryExecution.executedPlan}
         |== Results ==
         |${sideBySide(
-            s"== Correct Answer - ${convertedAnswer.size} ==" +:
-              prepareAnswer(convertedAnswer).map(_.toString),
-            s"== Spark Answer - ${sparkAnswer.size} ==" +:
-              prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
+        s"== Correct Answer - ${convertedAnswer.size} ==" +:
+          prepareAnswer(convertedAnswer).map(_.toString),
+        s"== Spark Answer - ${sparkAnswer.size} ==" +:
+          prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
       """.stripMargin)
     }
   }
+
+  def sqlTest(sqlString: String, expectedAnswer: Any)(implicit sqlContext: SQLContext): Unit = {
+    test(sqlString) {
+      checkAnswer(sqlContext.sql(sqlString), expectedAnswer)
+    }
+  }
+
+  /** Asserts that a given SchemaRDD will be executed using the given number of cached results. */
+  def assertCached(query: SchemaRDD, numCachedTables: Int = 1): Unit = {
+    val planWithCaching = query.queryExecution.withCachedData
+    val cachedData = planWithCaching collect {
+      case cached: InMemoryRelation => cached
+    }
+
+    assert(
+      cachedData.size == numCachedTables,
+      s"Expected query to contain $numCachedTables, but it actually had ${cachedData.size}\n" +
+        planWithCaching)
+  }
+
 }

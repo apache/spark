@@ -21,6 +21,7 @@ import java.util.Random
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
+import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
@@ -28,11 +29,11 @@ import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
+import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.TextOutputFormat
 
 import org.apache.spark._
 import org.apache.spark.Partitioner._
-import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
@@ -42,7 +43,8 @@ import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.OpenHashMap
-import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler}
+import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, BernoulliCellSampler,
+  SamplingUtils}
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
@@ -54,8 +56,9 @@ import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler}
  * Doubles; and
  * [[org.apache.spark.rdd.SequenceFileRDDFunctions]] contains operations available on RDDs that
  * can be saved as SequenceFiles.
- * These operations are automatically available on any RDD of the right type (e.g. RDD[(Int, Int)]
- * through implicit conversions when you `import org.apache.spark.SparkContext._`.
+ * All operations are automatically available on any RDD of the right type (e.g. RDD[(Int, Int)]
+ * through implicit conversions except `saveAsSequenceFile`. You need to
+ * `import org.apache.spark.SparkContext._` to make `saveAsSequenceFile` work.
  *
  * Internally, each RDD is characterized by five main properties:
  *
@@ -207,7 +210,7 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Get the preferred locations of a partition (as hostnames), taking into account whether the
+   * Get the preferred locations of a partition, taking into account whether the
    * RDD is checkpointed.
    */
   final def preferredLocations(split: Partition): Seq[String] = {
@@ -266,19 +269,30 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a new RDD by applying a function to all elements of this RDD.
    */
-  def map[U: ClassTag](f: T => U): RDD[U] = new MappedRDD(this, sc.clean(f))
+  def map[U: ClassTag](f: T => U): RDD[U] = {
+    val cleanF = sc.clean(f)
+    new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.map(cleanF))
+  }
 
   /**
    *  Return a new RDD by first applying a function to all elements of this
    *  RDD, and then flattening the results.
    */
-  def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] =
-    new FlatMappedRDD(this, sc.clean(f))
+  def flatMap[U: ClassTag](f: T => TraversableOnce[U]): RDD[U] = {
+    val cleanF = sc.clean(f)
+    new MapPartitionsRDD[U, T](this, (context, pid, iter) => iter.flatMap(cleanF))
+  }
 
   /**
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
-  def filter(f: T => Boolean): RDD[T] = new FilteredRDD(this, sc.clean(f))
+  def filter(f: T => Boolean): RDD[T] = {
+    val cleanF = sc.clean(f)
+    new MapPartitionsRDD[T, T](
+      this,
+      (context, pid, iter) => iter.filter(cleanF),
+      preservesPartitioning = true)
+  }
 
   /**
    * Return a new RDD containing the distinct elements in this RDD.
@@ -328,19 +342,19 @@ abstract class RDD[T: ClassTag](
       : RDD[T] = {
     if (shuffle) {
       /** Distributes elements evenly across output partitions, starting from a random partition. */
-      def distributePartition(index: Int, items: Iterator[T]): Iterator[(Int, T)] = {
+      val distributePartition = (index: Int, items: Iterator[T]) => {
         var position = (new Random(index)).nextInt(numPartitions)
         items.map { t =>
-          // Note that the hash code of the key will just be the key itself. The HashPartitioner 
+          // Note that the hash code of the key will just be the key itself. The HashPartitioner
           // will mod it with the number of total partitions.
           position = position + 1
           (position, t)
         }
-      }
+      } : Iterator[(Int, T)]
 
       // include a shuffle step so that our upstream tasks are still distributed
       new CoalescedRDD(
-        new ShuffledRDD[Int, T, (Int, T)](mapPartitionsWithIndex(distributePartition),
+        new ShuffledRDD[Int, T, T](mapPartitionsWithIndex(distributePartition),
         new HashPartitioner(numPartitions)),
         numPartitions).values
     } else {
@@ -351,14 +365,14 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a sampled subset of this RDD.
    */
-  def sample(withReplacement: Boolean, 
-      fraction: Double, 
+  def sample(withReplacement: Boolean,
+      fraction: Double,
       seed: Long = Utils.random.nextLong): RDD[T] = {
-    require(fraction >= 0.0, "Invalid fraction value: " + fraction)
+    require(fraction >= 0.0, "Negative fraction value: " + fraction)
     if (withReplacement) {
-      new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), seed)
+      new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), true, seed)
     } else {
-      new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](fraction), seed)
+      new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](fraction), true, seed)
     }
   }
 
@@ -374,50 +388,61 @@ abstract class RDD[T: ClassTag](
     val sum = weights.sum
     val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
     normalizedCumWeights.sliding(2).map { x =>
-      new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](x(0), x(1)), seed)
+      new PartitionwiseSampledRDD[T, T](
+        this, new BernoulliCellSampler[T](x(0), x(1)), true, seed)
     }.toArray
   }
 
-  def takeSample(withReplacement: Boolean, num: Int, seed: Long = Utils.random.nextLong): Array[T] =
-  {
-    var fraction = 0.0
-    var total = 0
-    val multiplier = 3.0
-    val initialCount = this.count()
-    var maxSelected = 0
+  /**
+   * Return a fixed-size sampled subset of this RDD in an array
+   *
+   * @param withReplacement whether sampling is done with replacement
+   * @param num size of the returned sample
+   * @param seed seed for the random number generator
+   * @return sample of specified size in an array
+   */
+  def takeSample(withReplacement: Boolean,
+      num: Int,
+      seed: Long = Utils.random.nextLong): Array[T] = {
+    val numStDev =  10.0
 
     if (num < 0) {
       throw new IllegalArgumentException("Negative number of elements requested")
+    } else if (num == 0) {
+      return new Array[T](0)
     }
 
+    val initialCount = this.count()
     if (initialCount == 0) {
       return new Array[T](0)
     }
 
-    if (initialCount > Integer.MAX_VALUE - 1) {
-      maxSelected = Integer.MAX_VALUE - 1
-    } else {
-      maxSelected = initialCount.toInt
-    }
-
-    if (num > initialCount && !withReplacement) {
-      total = maxSelected
-      fraction = multiplier * (maxSelected + 1) / initialCount
-    } else {
-      fraction = multiplier * (num + 1) / initialCount
-      total = num
+    val maxSampleSize = Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt
+    if (num > maxSampleSize) {
+      throw new IllegalArgumentException("Cannot support a sample size > Int.MaxValue - " +
+        s"$numStDev * math.sqrt(Int.MaxValue)")
     }
 
     val rand = new Random(seed)
+    if (!withReplacement && num >= initialCount) {
+      return Utils.randomizeInPlace(this.collect(), rand)
+    }
+
+    val fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount,
+      withReplacement)
+
     var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
 
     // If the first sample didn't turn out large enough, keep trying to take samples;
     // this shouldn't happen often because we use a big multiplier for the initial size
-    while (samples.length < total) {
+    var numIters = 0
+    while (samples.length < num) {
+      logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
       samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+      numIters += 1
     }
 
-    Utils.randomizeInPlace(samples, rand).take(total)
+    Utils.randomizeInPlace(samples, rand).take(num)
   }
 
   /**
@@ -431,6 +456,18 @@ abstract class RDD[T: ClassTag](
    * times (use `.distinct()` to eliminate them).
    */
   def ++(other: RDD[T]): RDD[T] = this.union(other)
+
+  /**
+   * Return this RDD sorted by the given key function.
+   */
+  def sortBy[K](
+      f: (T) => K,
+      ascending: Boolean = true,
+      numPartitions: Int = this.partitions.size)
+      (implicit ord: Ordering[K], ctag: ClassTag[K]): RDD[T] =
+    this.keyBy[K](f)
+        .sortByKey(ascending, numPartitions)
+        .values
 
   /**
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
@@ -476,7 +513,9 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an RDD created by coalescing all elements within each partition into an array.
    */
-  def glom(): RDD[Array[T]] = new GlommedRDD(this)
+  def glom(): RDD[Array[T]] = {
+    new MapPartitionsRDD[Array[T], T](this, (context, pid, iter) => Iterator(iter.toArray))
+  }
 
   /**
    * Return the Cartesian product of this RDD and another one, that is, the RDD of all pairs of
@@ -486,21 +525,36 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return an RDD of grouped items. Each group consists of a key and a sequence of elements
-   * mapping to that key.
+   * mapping to that key. The ordering of elements within each group is not guaranteed, and
+   * may even differ each time the resulting RDD is evaluated.
+   *
+   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
+   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupBy[K](f: T => K)(implicit kt: ClassTag[K]): RDD[(K, Iterable[T])] =
     groupBy[K](f, defaultPartitioner(this))
 
   /**
    * Return an RDD of grouped elements. Each group consists of a key and a sequence of elements
-   * mapping to that key.
+   * mapping to that key. The ordering of elements within each group is not guaranteed, and
+   * may even differ each time the resulting RDD is evaluated.
+   *
+   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
+   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupBy[K](f: T => K, numPartitions: Int)(implicit kt: ClassTag[K]): RDD[(K, Iterable[T])] =
     groupBy(f, new HashPartitioner(numPartitions))
 
   /**
    * Return an RDD of grouped items. Each group consists of a key and a sequence of elements
-   * mapping to that key.
+   * mapping to that key. The ordering of elements within each group is not guaranteed, and
+   * may even differ each time the resulting RDD is evaluated.
+   *
+   * Note: This operation may be very expensive. If you are grouping in order to perform an
+   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
+   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupBy[K](f: T => K, p: Partitioner)(implicit kt: ClassTag[K], ord: Ordering[K] = null)
       : RDD[(K, Iterable[T])] = {
@@ -552,6 +606,9 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Return a new RDD by applying a function to each partition of this RDD.
+   *
+   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
+   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   def mapPartitions[U: ClassTag](
       f: Iterator[T] => Iterator[U], preservesPartitioning: Boolean = false): RDD[U] = {
@@ -562,6 +619,9 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
+   *
+   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
+   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   def mapPartitionsWithIndex[U: ClassTag](
       f: (Int, Iterator[T]) => Iterator[U], preservesPartitioning: Boolean = false): RDD[U] = {
@@ -573,8 +633,12 @@ abstract class RDD[T: ClassTag](
    * :: DeveloperApi ::
    * Return a new RDD by applying a function to each partition of this RDD. This is a variant of
    * mapPartitions that also passes the TaskContext into the closure.
+   *
+   * `preservesPartitioning` indicates whether the input function preserves the partitioner, which
+   * should be `false` unless this is a pair RDD and the input function doesn't modify the keys.
    */
   @DeveloperApi
+  @deprecated("use TaskContext.get", "1.2.0")
   def mapPartitionsWithContext[U: ClassTag](
       f: (TaskContext, Iterator[T]) => Iterator[U],
       preservesPartitioning: Boolean = false): RDD[U] = {
@@ -655,7 +719,7 @@ abstract class RDD[T: ClassTag](
    * a map on the other).
    */
   def zip[U: ClassTag](other: RDD[U]): RDD[(T, U)] = {
-    zipPartitions(other, true) { (thisIter, otherIter) =>
+    zipPartitions(other, preservesPartitioning = false) { (thisIter, otherIter) =>
       new Iterator[(T, U)] {
         def hasNext = (thisIter.hasNext, otherIter.hasNext) match {
           case (true, true) => true
@@ -711,14 +775,16 @@ abstract class RDD[T: ClassTag](
    * Applies a function f to all elements of this RDD.
    */
   def foreach(f: T => Unit) {
-    sc.runJob(this, (iter: Iterator[T]) => iter.foreach(f))
+    val cleanF = sc.clean(f)
+    sc.runJob(this, (iter: Iterator[T]) => iter.foreach(cleanF))
   }
 
   /**
    * Applies a function f to each partition of this RDD.
    */
   def foreachPartition(f: Iterator[T] => Unit) {
-    sc.runJob(this, (iter: Iterator[T]) => f(iter))
+    val cleanF = sc.clean(f)
+    sc.runJob(this, (iter: Iterator[T]) => cleanF(iter))
   }
 
   /**
@@ -877,32 +943,15 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Return the count of each unique value in this RDD as a map of (value, count) pairs. The final
-   * combine step happens locally on the master, equivalent to running a single reduce task.
+   * Return the count of each unique value in this RDD as a local map of (value, count) pairs.
+   *
+   * Note that this method should only be used if the resulting map is expected to be small, as
+   * the whole thing is loaded into the driver's memory.
+   * To handle very large results, consider using rdd.map(x => (x, 1L)).reduceByKey(_ + _), which
+   * returns an RDD[T, Long] instead of a map.
    */
   def countByValue()(implicit ord: Ordering[T] = null): Map[T, Long] = {
-    if (elementClassTag.runtimeClass.isArray) {
-      throw new SparkException("countByValue() does not support arrays")
-    }
-    // TODO: This should perhaps be distributed by default.
-    def countPartition(iter: Iterator[T]): Iterator[OpenHashMap[T,Long]] = {
-      val map = new OpenHashMap[T,Long]
-      iter.foreach {
-        t => map.changeValue(t, 1L, _ + 1L)
-      }
-      Iterator(map)
-    }
-    def mergeMaps(m1: OpenHashMap[T,Long], m2: OpenHashMap[T,Long]): OpenHashMap[T,Long] = {
-      m2.foreach { case (key, value) =>
-        m1.changeValue(key, value, _ + value)
-      }
-      m1
-    }
-    val myResult = mapPartitions(countPartition).reduce(mergeMaps)
-    // Convert to a Scala mutable map
-    val mutableResult = scala.collection.mutable.Map[T,Long]()
-    myResult.foreach { case (k, v) => mutableResult.put(k, v) }
-    mutableResult
+    map(value => (value, null)).countByKey()
   }
 
   /**
@@ -947,7 +996,7 @@ abstract class RDD[T: ClassTag](
    */
   @Experimental
   def countApproxDistinct(p: Int, sp: Int): Long = {
-    require(p >= 4, s"p ($p) must be greater than 0")
+    require(p >= 4, s"p ($p) must be at least 4")
     require(sp <= 32, s"sp ($sp) cannot be greater than 32")
     require(sp == 0 || p <= sp, s"p ($p) cannot be greater than sp ($sp)")
     val zeroCounter = new HyperLogLogPlus(p, sp)
@@ -958,7 +1007,7 @@ abstract class RDD[T: ClassTag](
       },
       (h1: HyperLogLogPlus, h2: HyperLogLogPlus) => {
         h1.addAll(h2)
-        h2
+        h1
       }).cardinality()
   }
 
@@ -981,8 +1030,14 @@ abstract class RDD[T: ClassTag](
    * Zips this RDD with its element indices. The ordering is first based on the partition index
    * and then the ordering of items within each partition. So the first item in the first
    * partition gets index 0, and the last item in the last partition receives the largest index.
+   *
    * This is similar to Scala's zipWithIndex but it uses Long instead of Int as the index type.
    * This method needs to trigger a spark job when this RDD contains more than one partitions.
+   *
+   * Note that some RDDs, such as those returned by groupBy(), do not guarantee order of
+   * elements in a partition. The index assigned to each element is therefore not guaranteed,
+   * and may even change if the RDD is reevaluated. If a fixed ordering is required to guarantee
+   * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
    */
   def zipWithIndex(): RDD[(T, Long)] = new ZippedWithIndexRDD(this)
 
@@ -990,6 +1045,11 @@ abstract class RDD[T: ClassTag](
    * Zips this RDD with generated unique Long ids. Items in the kth partition will get ids k, n+k,
    * 2*n+k, ..., where n is the number of partitions. So there may exist gaps, but this method
    * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
+   *
+   * Note that some RDDs, such as those returned by groupBy(), do not guarantee order of
+   * elements in a partition. The unique ID assigned to each element is therefore not guaranteed,
+   * and may even change if the RDD is reevaluated. If a fixed ordering is required to guarantee
+   * the same index assignments, you should sort the RDD with sortByKey() or save it to a file.
    */
   def zipWithUniqueId(): RDD[(T, Long)] = {
     val n = this.partitions.size.toLong
@@ -1018,16 +1078,17 @@ abstract class RDD[T: ClassTag](
       // greater than totalParts because we actually cap it at totalParts in runJob.
       var numPartsToTry = 1
       if (partsScanned > 0) {
-        // If we didn't find any rows after the first iteration, just try all partitions next.
-        // Otherwise, interpolate the number of partitions we need to try, but overestimate it
-        // by 50%.
+        // If we didn't find any rows after the previous iteration, quadruple and retry. Otherwise,
+        // interpolate the number of partitions we need to try, but overestimate it by 50%.
+        // We also cap the estimation in the end.
         if (buf.size == 0) {
-          numPartsToTry = totalParts - 1
+          numPartsToTry = partsScanned * 4
         } else {
-          numPartsToTry = (1.5 * num * partsScanned / buf.size).toInt
+          // the left side of max is >=1 whenever partsScanned >= 2
+          numPartsToTry = Math.max((1.5 * num * partsScanned / buf.size).toInt - partsScanned, 1)
+          numPartsToTry = Math.min(numPartsToTry, partsScanned * 4) 
         }
       }
-      numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
 
       val left = num - buf.size
       val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
@@ -1049,48 +1110,52 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Returns the top K (largest) elements from this RDD as defined by the specified
+   * Returns the top k (largest) elements from this RDD as defined by the specified
    * implicit Ordering[T]. This does the opposite of [[takeOrdered]]. For example:
    * {{{
-   *   sc.parallelize([10, 4, 2, 12, 3]).top(1)
-   *   // returns [12]
+   *   sc.parallelize(Seq(10, 4, 2, 12, 3)).top(1)
+   *   // returns Array(12)
    *
-   *   sc.parallelize([2, 3, 4, 5, 6]).top(2)
-   *   // returns [6, 5]
+   *   sc.parallelize(Seq(2, 3, 4, 5, 6)).top(2)
+   *   // returns Array(6, 5)
    * }}}
    *
-   * @param num the number of top elements to return
+   * @param num k, the number of top elements to return
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
   def top(num: Int)(implicit ord: Ordering[T]): Array[T] = takeOrdered(num)(ord.reverse)
 
   /**
-   * Returns the first K (smallest) elements from this RDD as defined by the specified
+   * Returns the first k (smallest) elements from this RDD as defined by the specified
    * implicit Ordering[T] and maintains the ordering. This does the opposite of [[top]].
    * For example:
    * {{{
-   *   sc.parallelize([10, 4, 2, 12, 3]).takeOrdered(1)
-   *   // returns [12]
+   *   sc.parallelize(Seq(10, 4, 2, 12, 3)).takeOrdered(1)
+   *   // returns Array(2)
    *
-   *   sc.parallelize([2, 3, 4, 5, 6]).takeOrdered(2)
-   *   // returns [2, 3]
+   *   sc.parallelize(Seq(2, 3, 4, 5, 6)).takeOrdered(2)
+   *   // returns Array(2, 3)
    * }}}
    *
-   * @param num the number of top elements to return
+   * @param num k, the number of elements to return
    * @param ord the implicit ordering for T
    * @return an array of top elements
    */
   def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = {
-    mapPartitions { items =>
-      // Priority keeps the largest elements, so let's reverse the ordering.
-      val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
-      queue ++= util.collection.Utils.takeOrdered(items, num)(ord)
-      Iterator.single(queue)
-    }.reduce { (queue1, queue2) =>
-      queue1 ++= queue2
-      queue1
-    }.toArray.sorted(ord)
+    if (num == 0) {
+      Array.empty
+    } else {
+      mapPartitions { items =>
+        // Priority keeps the largest elements, so let's reverse the ordering.
+        val queue = new BoundedPriorityQueue[T](num)(ord.reverse)
+        queue ++= util.collection.Utils.takeOrdered(items, num)(ord)
+        Iterator.single(queue)
+      }.reduce { (queue1, queue2) =>
+        queue1 ++= queue2
+        queue1
+      }.toArray.sorted(ord)
+    }
   }
 
   /**
@@ -1151,7 +1216,7 @@ abstract class RDD[T: ClassTag](
    */
   def checkpoint() {
     if (context.checkpointDir.isEmpty) {
-      throw new Exception("Checkpoint directory has not been set in the SparkContext")
+      throw new SparkException("Checkpoint directory has not been set in the SparkContext")
     } else if (checkpointData.isEmpty) {
       checkpointData = Some(new RDDCheckpointData(this))
       checkpointData.get.markForCheckpoint()
@@ -1161,16 +1226,12 @@ abstract class RDD[T: ClassTag](
   /**
    * Return whether this RDD has been checkpointed or not
    */
-  def isCheckpointed: Boolean = {
-    checkpointData.map(_.isCheckpointed).getOrElse(false)
-  }
+  def isCheckpointed: Boolean = checkpointData.exists(_.isCheckpointed)
 
   /**
    * Gets the name of the file to which this RDD was checkpointed
    */
-  def getCheckpointFile: Option[String] = {
-    checkpointData.flatMap(_.getCheckpointFile)
-  }
+  def getCheckpointFile: Option[String] = checkpointData.flatMap(_.getCheckpointFile)
 
   // =======================================================================
   // Other internal methods and fields
@@ -1179,8 +1240,9 @@ abstract class RDD[T: ClassTag](
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
-  @transient private[spark] val creationSiteInfo = Utils.getCallSiteInfo
-  private[spark] def getCreationSite: String = creationSiteInfo.toString
+  @transient private[spark] val creationSite = sc.getCallSite()
+
+  private[spark] def getCreationSite: String = Option(creationSite).map(_.shortForm).getOrElse("")
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
 
@@ -1191,8 +1253,30 @@ abstract class RDD[T: ClassTag](
     dependencies.head.rdd.asInstanceOf[RDD[U]]
   }
 
+  /** Returns the jth parent RDD: e.g. rdd.parent[T](0) is equivalent to rdd.firstParent[T] */
+  protected[spark] def parent[U: ClassTag](j: Int) = {
+    dependencies(j).rdd.asInstanceOf[RDD[U]]
+  }
+
   /** The [[org.apache.spark.SparkContext]] that this RDD was created on. */
   def context = sc
+
+  /**
+   * Private API for changing an RDD's ClassTag.
+   * Used for internal Java <-> Scala API compatibility.
+   */
+  private[spark] def retag(cls: Class[T]): RDD[T] = {
+    val classTag: ClassTag[T] = ClassTag.apply(cls)
+    this.retag(classTag)
+  }
+
+  /**
+   * Private API for changing an RDD's ClassTag.
+   * Used for internal Java <-> Scala API compatibility.
+   */
+  private[spark] def retag(implicit classTag: ClassTag[T]): RDD[T] = {
+    this.mapPartitions(identity, preservesPartitioning = true)(classTag)
+  }
 
   // Avoid handling doCheckpoint multiple times to prevent excessive recursion
   @transient private var doCheckpointCalled = false
@@ -1235,11 +1319,75 @@ abstract class RDD[T: ClassTag](
 
   /** A description of this RDD and its recursive dependencies for debugging. */
   def toDebugString: String = {
-    def debugString(rdd: RDD[_], prefix: String = ""): Seq[String] = {
-      Seq(prefix + rdd + " (" + rdd.partitions.size + " partitions)") ++
-        rdd.dependencies.flatMap(d => debugString(d.rdd, prefix + "  "))
+    // Get a debug description of an rdd without its children
+    def debugSelf (rdd: RDD[_]): Seq[String] = {
+      import Utils.bytesToString
+
+      val persistence = if (storageLevel != StorageLevel.NONE) storageLevel.description else ""
+      val storageInfo = rdd.context.getRDDStorageInfo.filter(_.id == rdd.id).map(info =>
+        "    CachedPartitions: %d; MemorySize: %s; TachyonSize: %s; DiskSize: %s".format(
+          info.numCachedPartitions, bytesToString(info.memSize),
+          bytesToString(info.tachyonSize), bytesToString(info.diskSize)))
+
+      s"$rdd [$persistence]" +: storageInfo
     }
-    debugString(this).mkString("\n")
+
+    // Apply a different rule to the last child
+    def debugChildren(rdd: RDD[_], prefix: String): Seq[String] = {
+      val len = rdd.dependencies.length
+      len match {
+        case 0 => Seq.empty
+        case 1 =>
+          val d = rdd.dependencies.head
+          debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_,_,_]], true)
+        case _ =>
+          val frontDeps = rdd.dependencies.take(len - 1)
+          val frontDepStrings = frontDeps.flatMap(
+            d => debugString(d.rdd, prefix, d.isInstanceOf[ShuffleDependency[_,_,_]]))
+
+          val lastDep = rdd.dependencies.last
+          val lastDepStrings =
+            debugString(lastDep.rdd, prefix, lastDep.isInstanceOf[ShuffleDependency[_,_,_]], true)
+
+          (frontDepStrings ++ lastDepStrings)
+      }
+    }
+    // The first RDD in the dependency stack has no parents, so no need for a +-
+    def firstDebugString(rdd: RDD[_]): Seq[String] = {
+      val partitionStr = "(" + rdd.partitions.size + ")"
+      val leftOffset = (partitionStr.length - 1) / 2
+      val nextPrefix = (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset))
+
+      debugSelf(rdd).zipWithIndex.map{
+        case (desc: String, 0) => s"$partitionStr $desc"
+        case (desc: String, _) => s"$nextPrefix $desc"
+      } ++ debugChildren(rdd, nextPrefix)
+    }
+    def shuffleDebugString(rdd: RDD[_], prefix: String = "", isLastChild: Boolean): Seq[String] = {
+      val partitionStr = "(" + rdd.partitions.size + ")"
+      val leftOffset = (partitionStr.length - 1) / 2
+      val thisPrefix = prefix.replaceAll("\\|\\s+$", "")
+      val nextPrefix = (
+        thisPrefix
+        + (if (isLastChild) "  " else "| ")
+        + (" " * leftOffset) + "|" + (" " * (partitionStr.length - leftOffset)))
+
+      debugSelf(rdd).zipWithIndex.map{
+        case (desc: String, 0) => s"$thisPrefix+-$partitionStr $desc"
+        case (desc: String, _) => s"$nextPrefix$desc"
+      } ++ debugChildren(rdd, nextPrefix)
+    }
+    def debugString(rdd: RDD[_],
+                    prefix: String = "",
+                    isShuffle: Boolean = true,
+                    isLastChild: Boolean = false): Seq[String] = {
+      if (isShuffle) {
+        shuffleDebugString(rdd, prefix, isLastChild)
+      } else {
+        debugSelf(rdd).map(prefix + _) ++ debugChildren(rdd, prefix)
+      }
+    }
+    firstDebugString(this).mkString("\n")
   }
 
   override def toString: String = "%s%s[%d] at %s".format(
@@ -1247,5 +1395,48 @@ abstract class RDD[T: ClassTag](
 
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)
+  }
+}
+
+
+/**
+ * Defines implicit functions that provide extra functionalities on RDDs of specific types.
+ *
+ * For example, [[RDD.rddToPairRDDFunctions]] converts an RDD into a [[PairRDDFunctions]] for
+ * key-value-pair RDDs, and enabling extra functionalities such as [[PairRDDFunctions.reduceByKey]].
+ */
+object RDD {
+
+  // The following implicit functions were in SparkContext before 1.2 and users had to
+  // `import SparkContext._` to enable them. Now we move them here to make the compiler find
+  // them automatically. However, we still keep the old functions in SparkContext for backward
+  // compatibility and forward to the following functions directly.
+
+  implicit def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
+    (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null): PairRDDFunctions[K, V] = {
+    new PairRDDFunctions(rdd)
+  }
+
+  implicit def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]): AsyncRDDActions[T] = {
+    new AsyncRDDActions(rdd)
+  }
+
+  implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
+      rdd: RDD[(K, V)]): SequenceFileRDDFunctions[K, V] = {
+    new SequenceFileRDDFunctions(rdd)
+  }
+
+  implicit def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](rdd: RDD[(K, V)])
+    : OrderedRDDFunctions[K, V, (K, V)] = {
+    new OrderedRDDFunctions[K, V, (K, V)](rdd)
+  }
+
+  implicit def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]): DoubleRDDFunctions = {
+    new DoubleRDDFunctions(rdd)
+  }
+
+  implicit def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T])
+    : DoubleRDDFunctions = {
+    new DoubleRDDFunctions(rdd.map(x => num.toDouble(x)))
   }
 }

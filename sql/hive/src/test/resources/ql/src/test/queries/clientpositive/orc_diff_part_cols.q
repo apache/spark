@@ -10,7 +10,7 @@ set hive.input.format=org.apache.hadoop.hive.ql.io.CombineHiveInputFormat;
 -- to another partition
 -- This can produce unexpected results with CombineHiveInputFormat
 
-INSERT OVERWRITE TABLE test_orc PARTITION (part = '1') SELECT key FROM src LIMIT 5;
+INSERT OVERWRITE TABLE test_orc PARTITION (part = '1') SELECT key FROM src tablesample (5 rows);
 
 ALTER TABLE test_orc ADD COLUMNS (cnt INT);
 

@@ -17,97 +17,91 @@
 
 package org.apache.spark.examples
 
-import scala.math.sqrt
-
-import cern.colt.matrix._
-import cern.colt.matrix.linalg._
-import cern.jet.math._
+import org.apache.commons.math3.linear._
 
 /**
  * Alternating least squares matrix factorization.
+ *
+ * This is an example implementation for learning how to use Spark. For more conventional use,
+ * please refer to org.apache.spark.mllib.recommendation.ALS
  */
 object LocalALS {
+
   // Parameters set through command line arguments
   var M = 0 // Number of movies
   var U = 0 // Number of users
   var F = 0 // Number of features
   var ITERATIONS = 0
-
   val LAMBDA = 0.01 // Regularization coefficient
 
-  // Some COLT objects
-  val factory2D = DoubleFactory2D.dense
-  val factory1D = DoubleFactory1D.dense
-  val algebra = Algebra.DEFAULT
-  val blas = SeqBlas.seqBlas
-
-  def generateR(): DoubleMatrix2D = {
-    val mh = factory2D.random(M, F)
-    val uh = factory2D.random(U, F)
-    algebra.mult(mh, algebra.transpose(uh))
+  def generateR(): RealMatrix = {
+    val mh = randomMatrix(M, F)
+    val uh = randomMatrix(U, F)
+    mh.multiply(uh.transpose())
   }
 
-  def rmse(targetR: DoubleMatrix2D, ms: Array[DoubleMatrix1D],
-    us: Array[DoubleMatrix1D]): Double =
-  {
-    val r = factory2D.make(M, U)
+  def rmse(targetR: RealMatrix, ms: Array[RealVector], us: Array[RealVector]): Double = {
+    val r = new Array2DRowRealMatrix(M, U)
     for (i <- 0 until M; j <- 0 until U) {
-      r.set(i, j, blas.ddot(ms(i), us(j)))
+      r.setEntry(i, j, ms(i).dotProduct(us(j)))
     }
-    blas.daxpy(-1, targetR, r)
-    val sumSqs = r.aggregate(Functions.plus, Functions.square)
-    sqrt(sumSqs / (M * U))
+    val diffs = r.subtract(targetR)
+    var sumSqs = 0.0
+    for (i <- 0 until M; j <- 0 until U) {
+      val diff = diffs.getEntry(i, j)
+      sumSqs += diff * diff
+    }
+    math.sqrt(sumSqs / (M.toDouble * U.toDouble))
   }
 
-  def updateMovie(i: Int, m: DoubleMatrix1D, us: Array[DoubleMatrix1D],
-    R: DoubleMatrix2D) : DoubleMatrix1D =
-  {
-    val XtX = factory2D.make(F, F)
-    val Xty = factory1D.make(F)
+  def updateMovie(i: Int, m: RealVector, us: Array[RealVector], R: RealMatrix) : RealVector = {
+    var XtX: RealMatrix = new Array2DRowRealMatrix(F, F)
+    var Xty: RealVector = new ArrayRealVector(F)
     // For each user that rated the movie
     for (j <- 0 until U) {
       val u = us(j)
       // Add u * u^t to XtX
-      blas.dger(1, u, u, XtX)
+      XtX = XtX.add(u.outerProduct(u))
       // Add u * rating to Xty
-      blas.daxpy(R.get(i, j), u, Xty)
+      Xty = Xty.add(u.mapMultiply(R.getEntry(i, j)))
     }
-    // Add regularization coefs to diagonal terms
+    // Add regularization coefficients to diagonal terms
     for (d <- 0 until F) {
-      XtX.set(d, d, XtX.get(d, d) + LAMBDA * U)
+      XtX.addToEntry(d, d, LAMBDA * U)
     }
     // Solve it with Cholesky
-    val ch = new CholeskyDecomposition(XtX)
-    val Xty2D = factory2D.make(Xty.toArray, F)
-    val solved2D = ch.solve(Xty2D)
-    solved2D.viewColumn(0)
+    new CholeskyDecomposition(XtX).getSolver.solve(Xty)
   }
 
-  def updateUser(j: Int, u: DoubleMatrix1D, ms: Array[DoubleMatrix1D],
-    R: DoubleMatrix2D) : DoubleMatrix1D =
-  {
-    val XtX = factory2D.make(F, F)
-    val Xty = factory1D.make(F)
+  def updateUser(j: Int, u: RealVector, ms: Array[RealVector], R: RealMatrix) : RealVector = {
+    var XtX: RealMatrix = new Array2DRowRealMatrix(F, F)
+    var Xty: RealVector = new ArrayRealVector(F)
     // For each movie that the user rated
     for (i <- 0 until M) {
       val m = ms(i)
       // Add m * m^t to XtX
-      blas.dger(1, m, m, XtX)
+      XtX = XtX.add(m.outerProduct(m))
       // Add m * rating to Xty
-      blas.daxpy(R.get(i, j), m, Xty)
+      Xty = Xty.add(m.mapMultiply(R.getEntry(i, j)))
     }
-    // Add regularization coefs to diagonal terms
+    // Add regularization coefficients to diagonal terms
     for (d <- 0 until F) {
-      XtX.set(d, d, XtX.get(d, d) + LAMBDA * M)
+      XtX.addToEntry(d, d, LAMBDA * M)
     }
     // Solve it with Cholesky
-    val ch = new CholeskyDecomposition(XtX)
-    val Xty2D = factory2D.make(Xty.toArray, F)
-    val solved2D = ch.solve(Xty2D)
-    solved2D.viewColumn(0)
+    new CholeskyDecomposition(XtX).getSolver.solve(Xty)
+  }
+
+  def showWarning() {
+    System.err.println(
+      """WARN: This is a naive implementation of ALS and is given as an example!
+        |Please use the ALS method found in org.apache.spark.mllib.recommendation
+        |for more conventional use.
+      """.stripMargin)
   }
 
   def main(args: Array[String]) {
+
     args match {
       case Array(m, u, f, iters) => {
         M = m.toInt
@@ -120,21 +114,31 @@ object LocalALS {
         System.exit(1)
       }
     }
-    printf("Running with M=%d, U=%d, F=%d, iters=%d\n", M, U, F, ITERATIONS)
+
+    showWarning()
+
+    println(s"Running with M=$M, U=$U, F=$F, iters=$ITERATIONS")
 
     val R = generateR()
 
     // Initialize m and u randomly
-    var ms = Array.fill(M)(factory1D.random(F))
-    var us = Array.fill(U)(factory1D.random(F))
+    var ms = Array.fill(M)(randomVector(F))
+    var us = Array.fill(U)(randomVector(F))
 
     // Iteratively update movies then users
     for (iter <- 1 to ITERATIONS) {
-      println("Iteration " + iter + ":")
+      println(s"Iteration $iter:")
       ms = (0 until M).map(i => updateMovie(i, ms(i), us, R)).toArray
       us = (0 until U).map(j => updateUser(j, us(j), ms, R)).toArray
       println("RMSE = " + rmse(R, ms, us))
       println()
     }
   }
+
+  private def randomVector(n: Int): RealVector =
+    new ArrayRealVector(Array.fill(n)(math.random))
+
+  private def randomMatrix(rows: Int, cols: Int): RealMatrix =
+    new Array2DRowRealMatrix(Array.fill(rows, cols)(math.random))
+
 }

@@ -17,9 +17,13 @@
 
 package org.apache.spark.deploy
 
+import java.net.{URI, URISyntaxException}
+
 import scala.collection.mutable.ListBuffer
 
 import org.apache.log4j.Level
+
+import org.apache.spark.util.MemoryParam
 
 /**
  * Command-line parser for the driver client.
@@ -51,8 +55,8 @@ private[spark] class ClientArguments(args: Array[String]) {
       cores = value.toInt
       parse(tail)
 
-    case ("--memory" | "-m") :: value :: tail =>
-      memory = value.toInt
+    case ("--memory" | "-m") :: MemoryParam(value) :: tail =>
+      memory = value
       parse(tail)
 
     case ("--supervise" | "-s") :: tail =>
@@ -71,7 +75,8 @@ private[spark] class ClientArguments(args: Array[String]) {
 
       if (!ClientArguments.isValidJarUrl(_jarUrl)) {
         println(s"Jar url '${_jarUrl}' is not in valid format.")
-        println(s"Must be a jar file path in URL format (e.g. hdfs://XX.jar, file://XX.jar)")
+        println(s"Must be a jar file path in URL format " +
+          "(e.g. hdfs://host:port/XX.jar, file:///XX.jar)")
         printUsageAndExit(-1)
       }
 
@@ -112,5 +117,12 @@ private[spark] class ClientArguments(args: Array[String]) {
 }
 
 object ClientArguments {
-  def isValidJarUrl(s: String): Boolean = s.matches("(.+):(.+)jar")
+  def isValidJarUrl(s: String): Boolean = {
+    try {
+      val uri = new URI(s)
+      uri.getScheme != null && uri.getPath != null && uri.getPath.endsWith(".jar")
+    } catch {
+      case _: URISyntaxException => false
+    }
+  }
 }

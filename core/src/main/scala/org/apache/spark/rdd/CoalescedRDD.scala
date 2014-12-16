@@ -25,6 +25,7 @@ import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.spark._
+import org.apache.spark.util.Utils
 
 /**
  * Class that captures a coalesced RDD by essentially keeping track of parent partitions
@@ -34,29 +35,29 @@ import org.apache.spark._
  * @param preferredLocation the preferred location for this partition
  */
 private[spark] case class CoalescedRDDPartition(
-                                  index: Int,
-                                  @transient rdd: RDD[_],
-                                  parentsIndices: Array[Int],
-                                  @transient preferredLocation: String = ""
-                                  ) extends Partition {
+    index: Int,
+    @transient rdd: RDD[_],
+    parentsIndices: Array[Int],
+    @transient preferredLocation: Option[String] = None) extends Partition {
   var parents: Seq[Partition] = parentsIndices.map(rdd.partitions(_))
 
   @throws(classOf[IOException])
-  private def writeObject(oos: ObjectOutputStream) {
+  private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     // Update the reference to parent partition at the time of task serialization
     parents = parentsIndices.map(rdd.partitions(_))
     oos.defaultWriteObject()
   }
 
   /**
-   * Computes how many of the parents partitions have getPreferredLocation
-   * as one of their preferredLocations
+   * Computes the fraction of the parents' partitions containing preferredLocation within
+   * their getPreferredLocs.
    * @return locality of this coalesced partition between 0 and 1
    */
   def localFraction: Double = {
-    val loc = parents.count(p =>
-      rdd.context.getPreferredLocs(rdd, p.index).map(tl => tl.host).contains(preferredLocation))
-
+    val loc = parents.count { p =>
+      val parentPreferredLocations = rdd.context.getPreferredLocs(rdd, p.index).map(_.host)
+      preferredLocation.exists(parentPreferredLocations.contains)
+    }
     if (parents.size == 0) 0.0 else (loc.toDouble / parents.size.toDouble)
   }
 }
@@ -72,9 +73,9 @@ private[spark] case class CoalescedRDDPartition(
  * @param balanceSlack used to trade-off balance and locality. 1.0 is all locality, 0 is all balance
  */
 private[spark] class CoalescedRDD[T: ClassTag](
-                                      @transient var prev: RDD[T],
-                                      maxPartitions: Int,
-                                      balanceSlack: Double = 0.10)
+    @transient var prev: RDD[T],
+    maxPartitions: Int,
+    balanceSlack: Double = 0.10)
   extends RDD[T](prev.context, Nil) {  // Nil since we implement getDependencies
 
   override def getPartitions: Array[Partition] = {
@@ -112,7 +113,7 @@ private[spark] class CoalescedRDD[T: ClassTag](
    * @return the machine most preferred by split
    */
   override def getPreferredLocations(partition: Partition): Seq[String] = {
-    List(partition.asInstanceOf[CoalescedRDDPartition].preferredLocation)
+    partition.asInstanceOf[CoalescedRDDPartition].preferredLocation.toSeq
   }
 }
 
@@ -146,7 +147,7 @@ private[spark] class CoalescedRDD[T: ClassTag](
  *
  */
 
-private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack: Double) {
+private class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanceSlack: Double) {
 
   def compare(o1: PartitionGroup, o2: PartitionGroup): Boolean = o1.size < o2.size
   def compare(o1: Option[PartitionGroup], o2: Option[PartitionGroup]): Boolean =
@@ -258,7 +259,7 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
         val pgroup = PartitionGroup(nxt_replica)
         groupArr += pgroup
         addPartToPGroup(nxt_part, pgroup)
-        groupHash += (nxt_replica -> (ArrayBuffer(pgroup))) // list in case we have multiple
+        groupHash.put(nxt_replica, ArrayBuffer(pgroup)) // list in case we have multiple
         numCreated += 1
       }
     }
@@ -267,7 +268,7 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
       var (nxt_replica, nxt_part) = rotIt.next()
       val pgroup = PartitionGroup(nxt_replica)
       groupArr += pgroup
-      groupHash.get(nxt_replica).get += pgroup
+      groupHash.getOrElseUpdate(nxt_replica, ArrayBuffer()) += pgroup
       var tries = 0
       while (!addPartToPGroup(nxt_part, pgroup) && tries < targetLen) { // ensure at least one part
         nxt_part = rotIt.next()._2
@@ -340,8 +341,14 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
   }
 }
 
-private[spark] case class PartitionGroup(prefLoc: String = "") {
+private case class PartitionGroup(prefLoc: Option[String] = None) {
   var arr = mutable.ArrayBuffer[Partition]()
-
   def size = arr.size
+}
+
+private object PartitionGroup {
+  def apply(prefLoc: String): PartitionGroup = {
+    require(prefLoc != "", "Preferred location must not be empty")
+    PartitionGroup(Some(prefLoc))
+  }
 }

@@ -17,22 +17,29 @@
 
 package org.apache.spark.deploy
 
+import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.{Logging, SparkContext, SparkConf, SparkException}
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.Utils
 
 import scala.collection.JavaConversions._
 
 /**
+ * :: DeveloperApi ::
  * Contains util methods to interact with Hadoop from Spark.
  */
+@DeveloperApi
 class SparkHadoopUtil extends Logging {
-  val conf: Configuration = newConfiguration()
+  val conf: Configuration = newConfiguration(new SparkConf())
   UserGroupInformation.setConfiguration(conf)
 
   /**
@@ -64,11 +71,39 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
+  @Deprecated
+  def newConfiguration(): Configuration = newConfiguration(null)
+
   /**
    * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
    * subsystems.
    */
-  def newConfiguration(): Configuration = new Configuration()
+  def newConfiguration(conf: SparkConf): Configuration = {
+    val hadoopConf = new Configuration()
+
+    // Note: this null check is around more than just access to the "conf" object to maintain
+    // the behavior of the old implementation of this code, for backwards compatibility.
+    if (conf != null) {
+      // Explicitly check for S3 environment variables
+      if (System.getenv("AWS_ACCESS_KEY_ID") != null &&
+          System.getenv("AWS_SECRET_ACCESS_KEY") != null) {
+        hadoopConf.set("fs.s3.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
+        hadoopConf.set("fs.s3n.awsAccessKeyId", System.getenv("AWS_ACCESS_KEY_ID"))
+        hadoopConf.set("fs.s3.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
+        hadoopConf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
+      }
+      // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
+      conf.getAll.foreach { case (key, value) =>
+        if (key.startsWith("spark.hadoop.")) {
+          hadoopConf.set(key.substring("spark.hadoop.".length), value)
+        }
+      }
+      val bufferSize = conf.get("spark.buffer.size", "65536")
+      hadoopConf.set("io.file.buffer.size", bufferSize)
+    }
+
+    hadoopConf
+  }
 
   /**
    * Add any user credentials to the job conf which are necessary for running on a secure Hadoop
@@ -86,10 +121,68 @@ class SparkHadoopUtil extends Logging {
 
   def getSecretKeyFromUserCredentials(key: String): Array[Byte] = { null }
 
-  def loginUserFromKeytab(principalName: String, keytabFilename: String) { 
+  def loginUserFromKeytab(principalName: String, keytabFilename: String) {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
   }
 
+  /**
+   * Returns a function that can be called to find Hadoop FileSystem bytes read. If
+   * getFSBytesReadOnThreadCallback is called from thread r at time t, the returned callback will
+   * return the bytes read on r since t.  Reflection is required because thread-level FileSystem
+   * statistics are only available as of Hadoop 2.5 (see HADOOP-10688).
+   * Returns None if the required method can't be found.
+   */
+  private[spark] def getFSBytesReadOnThreadCallback(path: Path, conf: Configuration)
+    : Option[() => Long] = {
+    try {
+      val threadStats = getFileSystemThreadStatistics(path, conf)
+      val getBytesReadMethod = getFileSystemThreadStatisticsMethod("getBytesRead")
+      val f = () => threadStats.map(getBytesReadMethod.invoke(_).asInstanceOf[Long]).sum
+      val baselineBytesRead = f()
+      Some(() => f() - baselineBytesRead)
+    } catch {
+      case e: NoSuchMethodException => {
+        logDebug("Couldn't find method for retrieving thread-level FileSystem input data", e)
+        None
+      }
+    }
+  }
+
+  /**
+   * Returns a function that can be called to find Hadoop FileSystem bytes written. If
+   * getFSBytesWrittenOnThreadCallback is called from thread r at time t, the returned callback will
+   * return the bytes written on r since t.  Reflection is required because thread-level FileSystem
+   * statistics are only available as of Hadoop 2.5 (see HADOOP-10688).
+   * Returns None if the required method can't be found.
+   */
+  private[spark] def getFSBytesWrittenOnThreadCallback(path: Path, conf: Configuration)
+    : Option[() => Long] = {
+    try {
+      val threadStats = getFileSystemThreadStatistics(path, conf)
+      val getBytesWrittenMethod = getFileSystemThreadStatisticsMethod("getBytesWritten")
+      val f = () => threadStats.map(getBytesWrittenMethod.invoke(_).asInstanceOf[Long]).sum
+      val baselineBytesWritten = f()
+      Some(() => f() - baselineBytesWritten)
+    } catch {
+      case e: NoSuchMethodException => {
+        logDebug("Couldn't find method for retrieving thread-level FileSystem output data", e)
+        None
+      }
+    }
+  }
+
+  private def getFileSystemThreadStatistics(path: Path, conf: Configuration): Seq[AnyRef] = {
+    val qualifiedPath = path.getFileSystem(conf).makeQualified(path)
+    val scheme = qualifiedPath.toUri().getScheme()
+    val stats = FileSystem.getAllStatistics().filter(_.getScheme().equals(scheme))
+    stats.map(Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
+  }
+
+  private def getFileSystemThreadStatisticsMethod(methodName: String): Method = {
+    val statisticsDataClass =
+      Class.forName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
+    statisticsDataClass.getDeclaredMethod(methodName)
+  }
 }
 
 object SparkHadoopUtil {

@@ -109,7 +109,7 @@ private[spark] class SizeBasedRollingPolicy(
   }
 
   @volatile private var bytesWrittenSinceRollover = 0L
-  val formatter = new SimpleDateFormat("--YYYY-MM-dd--HH-mm-ss--SSSS")
+  val formatter = new SimpleDateFormat("--yyyy-MM-dd--HH-mm-ss--SSSS")
 
   /** Should rollover if the next set of bytes is going to exceed the size limit */
   def shouldRollover(bytesToBeWritten: Long): Boolean = {
