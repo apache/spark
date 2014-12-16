@@ -264,7 +264,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
 
     val baseRdd = new MyRDD(sc, 1, Nil)
     val midRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
-    val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(midRdd))){
+    val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(midRdd))) {
       class UnserializableClass
       val unserializable = new UnserializableClass
     }
@@ -277,19 +277,19 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       (true, SerializationState.Success))
     
     val zipped : Array[(SerializedRdd, Int)] = scheduler.tryToSerialize(finalRdd).zipWithIndex
-    zipped.map({
+    zipped.map {
        case (serializationState : SerializedRdd, idx : Int) => 
          serializationState match {
            case Right(r) => assert(results(idx)._1) //Success
            case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
          }
-    })
+    }
   }
 
   test("Serialization trace for serializable task and nested unserializable dependency") {
     // The trace should show which nested dependency is unserializable
     
-    val baseRdd = new MyRDD(sc, 1, Nil){
+    val baseRdd = new MyRDD(sc, 1, Nil) {
       class UnserializableClass
       val unserializable = new UnserializableClass
     }
@@ -303,13 +303,13 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       (false, SerializationState.Failed))
 
     val zipped : Array[(SerializedRdd, Int)] = scheduler.tryToSerialize(finalRdd).zipWithIndex
-    zipped.map({
+    zipped.map {
       case (serializationState : SerializedRdd, idx : Int) =>
         serializationState match {
           case Right(r) => assert(results(idx)._1) //Success
           case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
         }
-    })
+    }
     
   }
   
@@ -317,7 +317,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     // The trace should show which nested dependency is unserializable
 
     val baseRdd = new MyRDD(sc, 1, Nil)
-    val midRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd))){
+    val midRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd))) {
       class UnserializableClass
       val unserializable = new UnserializableClass
     }
@@ -329,13 +329,13 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       (true, SerializationState.Success))
 
     val zipped : Array[(SerializedRdd, Int)] = scheduler.tryToSerialize(finalRdd).zipWithIndex
-    zipped.map({
+    zipped.map {
       case (serializationState : SerializedRdd, idx : Int) =>
         serializationState match {
           case Right(r) => assert(results(idx)._1) //Success
           case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
         }
-    })
+    }
   }
 
   test("Serialization trace for serializable task and nested dependencies") {
@@ -348,9 +348,9 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(midRdd)))
 
     val zipped : Array[(SerializedRdd,Int)] = scheduler.tryToSerialize(finalRdd).zipWithIndex
-    zipped.map({
+    zipped.map {
       case (serializationState : SerializedRdd, idx : Int) => assert(serializationState.isRight)
-    })
+    }
   }
 
 

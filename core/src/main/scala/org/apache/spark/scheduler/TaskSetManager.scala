@@ -463,12 +463,6 @@ private[spark] class TaskSetManager(
           val debugSerialization: Boolean = sched.sc.getConf.
             getBoolean("spark.serializer.debug", false)
           
-          // If enabled, print out the added JARs and files (as part of the context)
-          if(debugSerialization) {
-            logDebug(SerializationHelper.taskDebugString(task, sched.sc.addedFiles, 
-              sched.sc.addedJars))
-          }
-
           val serializedTask = Task.serializeWithDependencies(
             task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&

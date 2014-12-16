@@ -17,14 +17,11 @@
 
 package org.apache.spark.scheduler
 
-
 import java.io.NotSerializableException
 import java.nio.ByteBuffer
 import java.util
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
-
-
 
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
@@ -813,9 +810,9 @@ class DAGScheduler(
    */
   def tryToSerialize(rdd: RDD[_]): Array[SerializedRdd] = {
     val traversal : Array[(RDD[_], Int)] = RDDWalker.walk(rdd)
-    traversal.map({
+    traversal.map {
       case (curRdd, depth) => SerializationHelper.tryToSerialize(closureSerializer, curRdd)
-    })
+    }
   }
 
   /**
@@ -841,7 +838,7 @@ class DAGScheduler(
     var trace = "Serialization trace:\n"
     
     val it = results.iterator
-    while(it.hasNext){
+    while (it.hasNext) {
       trace += rdd.name + ": " + it.next().fold(l => l, r=> SerializationState.Success) + "\n"
     }
     trace
@@ -894,7 +891,7 @@ class DAGScheduler(
       // For ResultTask, serialize and broadcast (rdd, func).
       
       // Before serialization print out the RDD and its references.
-      if(debugSerialization) {
+      if (debugSerialization) {
         logDebug("RDD Dependencies:\n" + stage.rdd.toDebugString + "\n")
         logDebug(getSerializationAsString(stage.rdd))
       }
@@ -943,10 +940,6 @@ class DAGScheduler(
       // We've already serialized RDDs and closures in taskBinary, but here we check for all other
       // objects such as Partition.
       try {
-        if(debugSerialization)
-        {
-          logDebug(SerializationHelper.taskDebugString(tasks.head, sc.addedFiles, sc.addedJars))
-        }
         closureSerializer.serialize(tasks.head)
       } catch {
         case e: NotSerializableException =>

@@ -30,8 +30,8 @@ import org.apache.spark.serializer.SerializerInstance
 object SerializationState extends Enumeration {
   // Define vars to standardize debugging output
   type SerializationState = String
-  var Failed = "Failed to serialize parent."
-  var FailedDeps = "Failed to serialize dependencies."
+  val Failed = "Failed to serialize parent."
+  val FailedDeps = "Failed to serialize dependencies."
   val Success = "Success"
 }
 
