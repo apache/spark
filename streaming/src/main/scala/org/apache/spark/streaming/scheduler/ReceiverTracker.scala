@@ -150,9 +150,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         logWarning("No prior receiver info")
         ReceiverInfo(streamId, "", null, false, "", lastErrorMessage = message, lastError = error)
     }
-    receiverInfo(streamId) = newReceiverInfo
-    listenerBus.post(StreamingListenerReceiverStopped(receiverInfo(streamId)))
-    receiverInfo.remove(streamId)
+    receiverInfo -= streamId
+    listenerBus.post(StreamingListenerReceiverStopped(newReceiverInfo))
     val messageWithError = if (error != null && !error.isEmpty) {
       s"$message - $error"
     } else {
