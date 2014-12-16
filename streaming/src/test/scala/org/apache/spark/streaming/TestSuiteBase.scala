@@ -111,7 +111,7 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
  * Internally, this is implemented using a StreamingListener.  Constructing a new instance of this
  * class automatically registers a StreamingListener on the given StreamingContext.
  */
-  class StreamingTestWaiter(ssc: StreamingContext) {
+class StreamingTestWaiter(ssc: StreamingContext) {
 
   // All access to this state should be guarded by `StreamingListener.this.synchronized`
   private var numCompletedBatches = 0
@@ -143,7 +143,7 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
     }
     if (!successful && timedOut) {
       throw new TimeoutException(s"Waited for $targetNumBatches completed batches, but only" +
-      s" $numCompletedBatches have completed after $timeout")
+        s" $numCompletedBatches have completed after $timeout")
     }
   }
 }
