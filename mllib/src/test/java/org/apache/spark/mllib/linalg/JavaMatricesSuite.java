@@ -82,8 +82,8 @@ public class JavaMatricesSuite implements Serializable {
         assertArrayEquals(s.values(), ss.values(), 0.0);
         assert(s.values().length == 2);
         assert(ss.values().length == 2);
-        assert(s.colPtrs().length == 2);
-        assert(ss.colPtrs().length == 2);
+        assert(s.colPtrs().length == 4);
+        assert(ss.colPtrs().length == 4);
     }
 
     @Test
