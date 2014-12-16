@@ -144,6 +144,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     hiveDevHome
       .map(new File(_, stripped))
       .filter(_.exists)
+
       .getOrElse(new File(inRepoTests, stripped))
   }
 
@@ -351,7 +352,12 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         INSERT OVERWRITE TABLE episodes_part PARTITION (doctor_pt=1)
         SELECT title, air_date, doctor FROM episodes
       """.cmd
-      )
+      ),
+
+    TestTable("hashouterjoinsrc",
+      "CREATE TABLE hashouterjoinsrc (key INT, value STRING)".cmd,
+      s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv10.txt")}'
+       |INTO TABLE hashouterjoinsrc""".stripMargin.cmd)
   )
 
   hiveQTestUtilTables.foreach(registerTestTable)

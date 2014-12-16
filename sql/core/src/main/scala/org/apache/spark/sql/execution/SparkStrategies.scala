@@ -57,6 +57,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    * ''broadcasted'' to all of the executors involved in the join, as a
    * [[org.apache.spark.broadcast.Broadcast]] object.  If both estimates exceed the threshold, they
    * will instead be used to decide the build side in a [[joins.ShuffledHashJoin]].
+   *
+   *  When planning a [[joins.BroadcastHashOuterJoin]].
+   *  In left(right) outer join ,if the right(left) side has an estimated physical size smaller 
+   *  than the user-settable threshold
+   *  [[org.apache.spark.sql.SQLConf.AUTO_BROADCASTJOIN_THRESHOLD]],
+   *  the planner would mark it as the ''broadcast'' relation and mark the other relation as the
+   *  ''stream'' side.  The build table will be ''broadcasted'' to all of the executors involved
+   *  in the join, as a [[org.apache.spark.broadcast.Broadcast]] object. They will use
+   *  [[joins.BroadcastHashOuterJoin]] else still use [[joins.HashOuterJoin]]
+   *
    */
   object HashJoin extends Strategy with PredicateHelper {
 
@@ -95,8 +105,20 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         condition.map(Filter(_, hashJoin)).getOrElse(hashJoin) :: Nil
 
       case ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, condition, left, right) =>
-        joins.HashOuterJoin(
-          leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+        joinType match {
+          case LeftOuter
+            if sqlContext.autoBroadcastJoinThreshold > 0 &&
+              right.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold =>
+            joins.BroadcastHashOuterJoin(
+              leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+          case RightOuter
+            if sqlContext.autoBroadcastJoinThreshold > 0 &&
+              left.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold =>
+            joins.BroadcastHashOuterJoin(
+              leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+          case _ => joins.HashOuterJoin(
+            leftKeys, rightKeys, joinType, condition, planLater(left), planLater(right)) :: Nil
+        }
 
       case _ => Nil
     }
