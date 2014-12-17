@@ -449,12 +449,12 @@ class CheckpointSuite extends TestSuiteBase {
   def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Int): Seq[Seq[V]] = {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     val waiter = new StreamingTestWaiter(ssc)
-    logInfo("Manual clock before advancing = " + clock.time)
+    logInfo("Manual clock before advancing = " + clock.currentTime())
     for (i <- 1 to numBatches) {
       clock.addToTime(batchDuration.milliseconds)
       waiter.waitForTotalBatchesCompleted(i, timeout = Durations.seconds(10))
     }
-    logInfo("Manual clock after advancing = " + clock.time)
+    logInfo("Manual clock after advancing = " + clock.currentTime())
 
     val outputStream = ssc.graph.getOutputStreams.filter { dstream =>
       dstream.isInstanceOf[TestOutputStreamWithPartitions[V]]
