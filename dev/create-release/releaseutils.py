@@ -57,11 +57,11 @@ def yesOrNoPrompt(msg):
 
 # Utility functions run git commands (written with Git 1.8.5)
 def run_cmd(cmd): return Popen(cmd, stdout=PIPE).communicate()[0]
-def run_cmd_error(cmd): return Popen(cmd, stderr=PIPE).communicate()[1]
+def run_cmd_error(cmd): return Popen(cmd, stdout=PIPE, stderr=PIPE).communicate()[1]
 def get_date(commit_hash):
     return run_cmd(["git", "show", "--quiet", "--pretty=format:%cd", commit_hash])
 def tag_exists(tag):
-    stderr = run_cmd_error(["git", "checkout", tag])
+    stderr = run_cmd_error(["git", "show", tag])
     return "error" not in stderr
 
 # A type-safe representation of a commit

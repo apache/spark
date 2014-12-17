@@ -26,8 +26,8 @@ from releaseutils import *
 
 # You must set the following before use!
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
-RELEASE_TAG = os.environ.get("START_COMMIT", "v1.2.0-rc2")
-PREVIOUS_RELEASE_TAG = os.environ.get("END_COMMIT", "v1.1.0")
+RELEASE_TAG = os.environ.get("RELEASE_TAG", "v1.2.0-rc2")
+PREVIOUS_RELEASE_TAG = os.environ.get("PREVIOUS_RELEASE_TAG", "v1.1.0")
 
 # If the release tags are not provided, prompt the user to provide them
 while not tag_exists(RELEASE_TAG):
@@ -35,7 +35,7 @@ while not tag_exists(RELEASE_TAG):
 while not tag_exists(PREVIOUS_RELEASE_TAG):
     print "Please specify the previous release tag."
     PREVIOUS_RELEASE_TAG = raw_input(\
-        "For instance, if you are releasing v1.2.0, you should specify v1.1.0: ")
+      "For instance, if you are releasing v1.2.0, you should specify v1.1.0: ")
 
 # Gather commits found in the new tag but not in the old tag.
 # This filters commits based on both the git hash and the PR number.
@@ -84,9 +84,9 @@ nojiras = []
 filtered_commits = []
 def is_release(commit_title):
     return re.findall("\[release\]", commit_title.lower()) or\
-        "preparing spark release" in commit_title.lower() or\
-        "preparing development version" in commit_title.lower() or\
-        "CHANGES.txt" in commit_title
+      "preparing spark release" in commit_title.lower() or\
+      "preparing development version" in commit_title.lower() or\
+      "CHANGES.txt" in commit_title
 def is_maintenance(commit_title):
     return "maintenance" in commit_title.lower() or\
       "manually close" in commit_title.lower()
@@ -96,7 +96,7 @@ def is_revert(commit_title):
     return "revert" in commit_title.lower()
 def is_docs(commit_title):
     return re.findall("docs*", commit_title.lower()) or\
-        "programming guide" in commit_title.lower()
+      "programming guide" in commit_title.lower()
 for c in new_commits:
     t = c.get_title()
     if not t: continue
@@ -182,7 +182,7 @@ for commit in filtered_commits:
         jira_type = jira_issue.fields.issuetype.name
         jira_type = translate_issue_type(jira_type, issue, warnings)
         jira_components = [translate_component(c.name, _hash, warnings)\
-            for c in jira_issue.fields.components]
+          for c in jira_issue.fields.components]
         all_components = set(jira_components + commit_components)
         populate(jira_type, all_components)
     # For docs without an associated JIRA, manually add it ourselves
@@ -213,7 +213,7 @@ for author in authors:
     # e.g. Bug fixes in MLlib, Core, and Streaming; documentation in YARN
     else:
         contributions = ["%s in %s" % (issue_type, nice_join(comps)) \
-            for issue_type, comps in author_info[author].items()]
+          for issue_type, comps in author_info[author].items()]
         contribution = "; ".join(contributions)
     # Do not use python's capitalize() on the whole string to preserve case
     assert contribution
