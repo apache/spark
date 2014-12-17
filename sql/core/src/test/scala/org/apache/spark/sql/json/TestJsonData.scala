@@ -29,7 +29,8 @@ object TestJsonData {
           "bigInteger":92233720368547758070,
           "double":1.7976931348623157E308,
           "boolean":true,
-          "null":null
+          "null":null,
+          "time":"2014-11-11 12:00:00.0"
       }"""  :: Nil)
 
   val primitiveFieldValueTypeConflict =
