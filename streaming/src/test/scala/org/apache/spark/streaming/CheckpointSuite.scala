@@ -276,7 +276,7 @@ class CheckpointSuite extends TestSuiteBase {
   // the master failure and uses them again to process a large window operation.
   // It also tests whether batches, whose processing was incomplete due to the
   // failure, are re-processed or not.
-  test("recovery with file input ztream") {
+  test("recovery with file input stream") {
     // Set up the streaming context and input streams
     val batchDuration = Seconds(2)  // Due to 1-second resolution of setLastModified() on some OS's.
     val testDir = Utils.createTempDir()
