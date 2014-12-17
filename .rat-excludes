@@ -64,3 +64,4 @@ dist/*
 logs
 .*scalastyle-output.xml
 .*dependency-reduced-pom.xml
+dev/create-release/known_translations
