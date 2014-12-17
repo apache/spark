@@ -37,7 +37,7 @@ case class ParquetDataWithKey(p: Int, intField: Int, stringField: String)
  * A suite to test the automatic conversion of metastore tables with parquet data to use the
  * built in parquet support.
  */
-class ParquetMetastoreSuite extends ParquetTest {
+class ParquetMetastoreSuite extends ParquetPartitioningTest {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -112,7 +112,7 @@ class ParquetMetastoreSuite extends ParquetTest {
 /**
  * A suite of tests for the Parquet support through the data sources API.
  */
-class ParquetSourceSuite extends ParquetTest {
+class ParquetSourceSuite extends ParquetPartitioningTest {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
@@ -145,7 +145,7 @@ class ParquetSourceSuite extends ParquetTest {
 /**
  * A collection of tests for parquet data with various forms of partitioning.
  */
-abstract class ParquetTest extends QueryTest with BeforeAndAfterAll {
+abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll {
   var partitionedTableDir: File = null
   var partitionedTableDirWithKey: File = null
 
