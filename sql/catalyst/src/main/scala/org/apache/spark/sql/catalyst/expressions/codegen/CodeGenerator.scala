@@ -314,20 +314,20 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         val eval1 = expressionEvaluator(e1)
         val eval2 = expressionEvaluator(e2)
 
-        eval1.code ++ eval2.code ++
         q"""
+          ..${eval1.code}
           var $nullTerm = false
           var $primitiveTerm: ${termForType(BooleanType)} = false
 
-          if ((!${eval1.nullTerm} && !${eval1.primitiveTerm}) ||
-              (!${eval2.nullTerm} && !${eval2.primitiveTerm})) {
-            $nullTerm = false
-            $primitiveTerm = false
-          } else if (${eval1.nullTerm} || ${eval2.nullTerm} ) {
-            $nullTerm = true
+          if (!${eval1.nullTerm} && ${eval1.primitiveTerm} == false) {
           } else {
-            $nullTerm = false
-            $primitiveTerm = true
+            ..${eval2.code}
+            if (!${eval2.nullTerm} && ${eval2.primitiveTerm} == false) {
+            } else if (!${eval1.nullTerm} && !${eval2.nullTerm}) {
+              $primitiveTerm = true
+            } else {
+              $nullTerm = true
+            }
           }
          """.children
 
@@ -335,20 +335,22 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         val eval1 = expressionEvaluator(e1)
         val eval2 = expressionEvaluator(e2)
 
-        eval1.code ++ eval2.code ++
         q"""
+          ..${eval1.code}
           var $nullTerm = false
           var $primitiveTerm: ${termForType(BooleanType)} = false
 
-          if ((!${eval1.nullTerm} && ${eval1.primitiveTerm}) ||
-              (!${eval2.nullTerm} && ${eval2.primitiveTerm})) {
-            $nullTerm = false
+          if (!${eval1.nullTerm} && ${eval1.primitiveTerm}) {
             $primitiveTerm = true
-          } else if (${eval1.nullTerm} || ${eval2.nullTerm} ) {
-            $nullTerm = true
           } else {
-            $nullTerm = false
-            $primitiveTerm = false
+            ..${eval2.code}
+            if (!${eval2.nullTerm} && ${eval2.primitiveTerm}) {
+              $primitiveTerm = true
+            } else if (!${eval1.nullTerm} && !${eval2.nullTerm}) {
+              $primitiveTerm = false
+            } else {
+              $nullTerm = true
+            }
           }
          """.children
 
@@ -373,7 +375,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
           } else if (${eval2.primitiveTerm} == 0)
             $nullTerm = true
           else {
-            $nullTerm = false
             $primitiveTerm = ${eval1.primitiveTerm} / ${eval2.primitiveTerm}
           }
          """.children
@@ -494,7 +495,6 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
             $nullTerm = ${eval1.nullTerm}
             $primitiveTerm = ${eval1.primitiveTerm}
           } else {
-            $nullTerm = false
             if (${eval1.primitiveTerm} > ${eval2.primitiveTerm}) {
               $primitiveTerm = ${eval1.primitiveTerm}
             } else {
