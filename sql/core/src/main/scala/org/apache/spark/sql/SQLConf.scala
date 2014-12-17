@@ -188,6 +188,10 @@ private[sql] trait SQLConf {
    */
   def getAllConfs: immutable.Map[String, String] = settings.synchronized { settings.toMap }
 
+  private[spark] def unsetConf(key: String) {
+    settings -= key
+  }
+
   private[spark] def clear() {
     settings.clear()
   }
