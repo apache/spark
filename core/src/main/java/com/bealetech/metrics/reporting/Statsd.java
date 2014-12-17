@@ -23,6 +23,12 @@ public class Statsd implements Closeable {
 
     private static final Pattern WHITESPACE = Pattern.compile("[\\s]+");
 
+    private static final String DRIVER = "driver";
+    private static final String EXECUTOR = "executor";
+
+    private static final String DRIVER_MATCH = ".driver.";
+    private static final String EXECUTOR_MATCH = ".executor.";
+
     public static enum StatType { COUNTER, TIMER, GAUGE }
 
     private final String host;
@@ -30,6 +36,7 @@ public class Statsd implements Closeable {
 
     private String prefix = "spark";
     private String appPrefix = "spark.app-";
+    private String yarnAppPrefix = "spark.application_";
 
     private boolean prependNewline = false;
 
@@ -60,36 +67,52 @@ public class Statsd implements Closeable {
     public void setNamePrefix(String namePrefix) {
         prefix = namePrefix;
         appPrefix = namePrefix + ".app-";
+        yarnAppPrefix = namePrefix + ".application_";
     }
 
     private String buildMetricName(String rawName) throws IllegalArgumentException {
         rawName = WHITESPACE.matcher(rawName).replaceAll("-");
 
-        // e.g. spark.worker.executors
-        if (!rawName.startsWith(appPrefix)) {
-            return rawName;
+        // Non-yarn worker metrics
+        if (rawName.startsWith(appPrefix)) {
+            String[] parts = rawName.split("\\.");
+            if (parts.length < 5) {
+                throw new IllegalArgumentException("A spark app metric name must contain at least 4 parts: " + rawName);
+            }
+
+            StringBuilder stringBuilder = new StringBuilder(prefix);
+            if (DRIVER.equals(parts[2])) {
+                // e.g. spark.app-20141209201233-0145.driver.BlockManager.memory.maxMem_MB
+                stringBuilder.append(rawName.substring(rawName.indexOf(DRIVER_MATCH)));
+            } else if (EXECUTOR.equals(parts[3])) {
+                // e.g. spark.app-20141209201027-0139.31.executor.filesystem.file.read_bytes
+                stringBuilder.append(rawName.substring(rawName.indexOf(EXECUTOR_MATCH)));
+            } else if ("jvm".equals(parts[3])) {
+                // spark.app-20141212193256-0012.15.jvm.total.max
+                stringBuilder.append(rawName.substring(rawName.indexOf(".jvm.")));
+            } else {
+                throw new IllegalArgumentException("Unrecognized metric name pattern: " + rawName);
+            }
+
+            return stringBuilder.toString();
+        } else if (rawName.startsWith(yarnAppPrefix)) {
+            String[] parts = rawName.split("\\.");
+
+            StringBuilder stringBuilder = new StringBuilder(prefix);
+
+            if (DRIVER.equals(parts[2])) {
+                // e.g. spark.application_1418834509223_0044.driver.jvm.non-heap.used
+                stringBuilder.append(rawName.substring(rawName.indexOf(DRIVER_MATCH)));
+            } else if (EXECUTOR.equals(parts[2])) {
+                stringBuilder.append(rawName.substring(rawName.indexOf(EXECUTOR_MATCH)));
+            } else {
+                throw new IllegalArgumentException("Unrecognized metric name pattern: " + rawName);
+            }
+
+            return stringBuilder.toString();
         }
 
-        String[] parts = rawName.split("\\.");
-        if (parts.length < 5) {
-            throw new IllegalArgumentException("A spark app metric name must contain at least 4 parts: " + rawName);
-        }
-
-        StringBuilder stringBuilder = new StringBuilder(prefix);
-        if ("driver".equals(parts[2])) {
-            // e.g. spark.app-20141209201233-0145.driver.BlockManager.memory.maxMem_MB
-            stringBuilder.append(rawName.substring(rawName.indexOf(".driver.")));
-        } else if ("executor".equals(parts[3])) {
-            // e.g. spark.app-20141209201027-0139.31.executor.filesystem.file.read_bytes
-            stringBuilder.append(rawName.substring(rawName.indexOf(".executor.")));
-        } else if ("jvm".equals(parts[3])) {
-            // spark.app-20141212193256-0012.15.jvm.total.max
-            stringBuilder.append(rawName.substring(rawName.indexOf(".jvm.")));
-        } else {
-            throw new IllegalArgumentException("Unrecognized metric name pattern: " + rawName);
-        }
-
-        return stringBuilder.toString();
+        return rawName;
     }
 
     public void send(String name, String value, StatType statType) throws IOException {
