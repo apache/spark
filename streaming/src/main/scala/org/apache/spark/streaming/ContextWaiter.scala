@@ -31,7 +31,7 @@ private[streaming] class ContextWaiter {
   // Guarded by "lock"
   private var stopped: Boolean = false
 
-  def notifyError(e: Throwable) = {
+  def notifyError(e: Throwable): Unit = {
     lock.lock()
     try {
       error = e
@@ -41,7 +41,7 @@ private[streaming] class ContextWaiter {
     }
   }
 
-  def notifyStop() = {
+  def notifyStop(): Unit = {
     lock.lock()
     try {
       stopped = true
