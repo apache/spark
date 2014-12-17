@@ -18,6 +18,7 @@
 package org.apache.spark.streaming
 
 import java.io.File
+import java.util.concurrent.{TimeUnit, Semaphore}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
@@ -46,8 +47,6 @@ class CheckpointSuite extends TestSuiteBase {
 
   override def batchDuration = Milliseconds(500)
 
-  override def actuallyWait = true // to allow checkpoints to be written
-
   override def beforeFunction() {
     super.beforeFunction()
     Utils.deleteRecursively(new File(checkpointDir))
@@ -61,9 +60,7 @@ class CheckpointSuite extends TestSuiteBase {
 
   test("basic rdd checkpoints + dstream graph checkpoint recovery") {
 
-    assert(batchDuration === Milliseconds(500), "batchDuration for this test must be 1 second")
-
-    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+    assert(batchDuration === Milliseconds(500), "batchDuration for this test must be 500 ms")
 
     val stateStreamCheckpointInterval = Seconds(1)
     val fs = FileSystem.getLocal(new Configuration())
@@ -154,6 +151,7 @@ class CheckpointSuite extends TestSuiteBase {
     val key = "spark.mykey"
     val value = "myvalue"
     System.setProperty(key, value)
+    // This purposely doesn't use the `conf` from this test suite:
     ssc = new StreamingContext(master, framework, batchDuration)
     val originalConf = ssc.conf
 
@@ -282,8 +280,10 @@ class CheckpointSuite extends TestSuiteBase {
   test("recovery with file input stream") {
     // Set up the streaming context and input streams
     val testDir = Utils.createTempDir()
-    var ssc = new StreamingContext(master, framework, Seconds(1))
+    var ssc = new StreamingContext(conf, Seconds(1))
     ssc.checkpoint(checkpointDir)
+    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    val waiter = new StreamingTestWaiter(ssc)
     val fileStream = ssc.textFileStream(testDir.toString)
     // Making value 3 take large time to process, to ensure that the master
     // shuts down in the middle of processing the 3rd batch
@@ -302,13 +302,19 @@ class CheckpointSuite extends TestSuiteBase {
     ssc.start()
 
     // Create files and advance manual clock to process them
-    // var clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    Thread.sleep(1000)
+    clock.addToTime(1000)
     for (i <- Seq(1, 2, 3)) {
-      Files.write(i + "\n", new File(testDir, i.toString), Charsets.UTF_8)
-      // wait to make sure that the file is written such that it gets shown in the file listings
-      Thread.sleep(1000)
+      val file = new File(testDir, i.toString)
+      Files.write(i + "\n", file, Charsets.UTF_8)
+      assert(file.setLastModified(clock.currentTime()))
+      clock.addToTime(batchDuration.milliseconds)
+      if (i != 3) {  // Since we want to shut down while the 3rd batch is processing
+        waiter.waitForTotalBatchesCompleted(i, Seconds(10))
+      }
     }
+    clock.addToTime(batchDuration.milliseconds)
+    waiter.waitForTotalBatchesStarted(3, Seconds(10))
+    Thread.sleep(100)
     logInfo("Output = " + outputStream.output.mkString(","))
     assert(outputStream.output.size > 0, "No files processed before restart")
     ssc.stop()
@@ -316,14 +322,16 @@ class CheckpointSuite extends TestSuiteBase {
     // Verify whether files created have been recorded correctly or not
     var fileInputDStream = ssc.graph.getInputStreams().head.asInstanceOf[FileInputDStream[_, _, _]]
     def recordedFiles = fileInputDStream.batchTimeToSelectedFiles.values.flatten
-    assert(!recordedFiles.filter(_.endsWith("1")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("2")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("3")).isEmpty)
+    assert(recordedFiles.exists(_.endsWith("1")))
+    assert(recordedFiles.exists(_.endsWith("2")))
+    assert(recordedFiles.exists(_.endsWith("3")))
 
     // Create files while the master is down
     for (i <- Seq(4, 5, 6)) {
-      Files.write(i + "\n", new File(testDir, i.toString), Charsets.UTF_8)
-      Thread.sleep(1000)
+      val file = new File(testDir, i.toString)
+      Files.write(i + "\n", file, Charsets.UTF_8)
+      assert(file.setLastModified(clock.currentTime()))
+      clock.addToTime(1000)
     }
 
     // Recover context from checkpoint file and verify whether the files that were
@@ -331,30 +339,35 @@ class CheckpointSuite extends TestSuiteBase {
     logInfo("*********** RESTARTING ************")
     ssc = new StreamingContext(checkpointDir)
     fileInputDStream = ssc.graph.getInputStreams().head.asInstanceOf[FileInputDStream[_, _, _]]
-    assert(!recordedFiles.filter(_.endsWith("1")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("2")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("3")).isEmpty)
+    assert(recordedFiles.exists(_.endsWith("1")))
+    assert(recordedFiles.exists(_.endsWith("2")))
+    assert(recordedFiles.exists(_.endsWith("3")))
 
     // Restart stream computation
+    val postRestartWaiter = new StreamingTestWaiter(ssc)
     ssc.start()
-    for (i <- Seq(7, 8, 9)) {
-      Files.write(i + "\n", new File(testDir, i.toString), Charsets.UTF_8)
-      Thread.sleep(1000)
+    clock.addToTime(1000)
+    for ((i, index) <- Seq(7, 8, 9).zipWithIndex) {
+      val file = new File(testDir, i.toString)
+      Files.write(i + "\n", file, Charsets.UTF_8)
+      assert(file.setLastModified(clock.currentTime()))
+      clock.addToTime(batchDuration.milliseconds)
+      postRestartWaiter.waitForTotalBatchesCompleted(index + 1, Seconds(10))
     }
-    Thread.sleep(1000)
+    clock.addToTime(batchDuration.milliseconds)
     logInfo("Output = " + outputStream.output.mkString("[", ", ", "]"))
     assert(outputStream.output.size > 0, "No files processed after restart")
     ssc.stop()
 
     // Verify whether files created while the driver was down have been recorded or not
-    assert(!recordedFiles.filter(_.endsWith("4")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("5")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("6")).isEmpty)
+    assert(recordedFiles.exists(_.endsWith("4")))
+    assert(recordedFiles.exists(_.endsWith("5")))
+    assert(recordedFiles.exists(_.endsWith("6")))
 
     // Verify whether new files created after recover have been recorded or not
-    assert(!recordedFiles.filter(_.endsWith("7")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("8")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("9")).isEmpty)
+    assert(recordedFiles.exists(_.endsWith("7")))
+    assert(recordedFiles.exists(_.endsWith("8")))
+    assert(recordedFiles.exists(_.endsWith("9")))
 
     // Append the new output to the old buffer
     outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]
