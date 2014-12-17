@@ -200,14 +200,15 @@ class JsonSuite extends QueryTest {
         StructField("Charset", StringType, true) ::
           StructField("Host", StringType, true) :: Nil)
         , true) ::
-        StructField("ip", StringType, true) :: Nil)
+        StructField("ip", StringType, true) ::
+        StructField("nullstr", StringType, true):: Nil)
 
     assert(expectedSchema === jsonSchemaRDD.schema)
     jsonSchemaRDD.registerTempTable("jsonTable")
 
     checkAnswer(
-      sql("select headers.Host from jsonTable"),
-      Seq(Row("1.abc.com"), Row(null), Row(null))
+      sql("select nullstr, headers.Host from jsonTable"),
+      Seq(Row("", "1.abc.com"), Row("", null), Row("", null), Row(null, null))
     )
   }
 
