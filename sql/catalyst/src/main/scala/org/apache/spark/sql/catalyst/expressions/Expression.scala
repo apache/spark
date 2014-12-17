@@ -287,8 +287,9 @@ abstract class UnaryExpression extends Expression with trees.UnaryNode[Expressio
 }
 
 // TODO Semantically we probably not need GroupExpression
-// It is supposed to be replaced by Projection, all we need is wrapping the
-// Seq[Expression]
+// All we need is holding the Seq[Expression], and ONLY used in doing the
+// expressions transformation correctly. Probably will be removed since it's
+// not like a real expressions.
 case class GroupExpression(children: Seq[Expression]) extends Expression {
   self: Product =>
   type EvaluatedType = Seq[Any]

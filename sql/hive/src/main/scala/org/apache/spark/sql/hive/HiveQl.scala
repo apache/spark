@@ -658,7 +658,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
             groupingSetsClause.map(e => e match {
               case Token("TOK_GROUPING_SETS", children) =>
                 val(groupByExprs, masks) = extractGroupingSet(children)
-                GroupingSet(masks, groupByExprs, withLateralView, selectExpressions)
+                GroupingSets(masks, groupByExprs, withLateralView, selectExpressions)
               case _ => sys.error("Expect GROUPING SETS")
             }),
             rollupGroupByClause.map(e => e match {

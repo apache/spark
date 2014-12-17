@@ -24,39 +24,49 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{UnknownPartitioning, Partitioning}
 
 @DeveloperApi
-case class Explosive(
+case class Expand(
     projections: Seq[GroupExpression],
-    output: Seq[Attribute],
-    child: SparkPlan)(@transient sqlContext: SQLContext)
+    gid: Attribute,
+    child: SparkPlan)
   extends UnaryNode {
 
-  override def outputPartitioning: Partitioning = UnknownPartitioning(0)
+  // the output schema is quite same with input, but followed by the Grouping ID
+  def output = child.output :+ gid
 
-  override def otherCopyArgs = sqlContext :: Nil
+  // We change the output data partitioning in the analytics function (GroupingSets)
+  // The output partitioning does not conform to its child, set it as UNKNOWN
+  override def outputPartitioning: Partitioning = UnknownPartitioning(0)
 
   override def execute() = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
-      // TODO InterpretProjection is not Serializable
-      val projs = projections.map(ee => newProjection(ee.children, output)).toArray
+      val input = child.output
+
+      // For each input row, we will project to couple of different rows as
+      // output, according to the projections.
+      // TODO Move out projection objects creation and transfer to
+      // workers via closure. However we can't assume the Projection
+      // is serializable because of the code gen, so we have to
+      // create the projections within each of the partition.
+      val groups = projections.map(ee => newProjection(ee.children, input)).toArray
 
       new Iterator[Row] {
         private[this] var result: Row = _
-        private[this] var idx = -1  // initial value is set as -1
+        private[this] var idx = -1  // -1 means the initial state
         private[this] var input: Row = _
 
-        override final def hasNext = (-1 < idx && idx < projs.length) || iter.hasNext
+        override final def hasNext = (-1 < idx && idx < groups.length) || iter.hasNext
 
         override final def next(): Row = {
           if (idx <= 0) {
-            // in the beginning or end of iteration, fetch the next input tuple
+            // in the initial (-1) or beginning(0) of a new input row, fetch the next input tuple
             input = iter.next()
             idx = 0
           }
 
-          result = projs(idx)(input)
+          result = groups(idx)(input)
           idx += 1
 
-          if (idx == projs.length && iter.hasNext) {
+          if (idx == groups.length && iter.hasNext) {
             idx = 0
           }
 

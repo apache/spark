@@ -58,7 +58,7 @@ class Analyzer(catalog: Catalog,
     Batch("Resolution", fixedPoint,
       ResolveReferences ::
       ResolveRelations ::
-      ResolveGroupingSet ::
+      ResolveGroupingAnalytics ::
       ResolveSortReferences ::
       NewRelationInstances ::
       ImplicitGenerate ::
@@ -105,14 +105,14 @@ class Analyzer(catalog: Catalog,
     }
   }
 
-  object ResolveGroupingSet extends Rule[LogicalPlan] {
+  object ResolveGroupingAnalytics extends Rule[LogicalPlan] {
     /**
      * Extract attribute set according to the grouping id
-     * @param bitmask bitmask to represent the validity of the attribute sequence
+     * @param bitmask bitmask to represent the selected of the attribute sequence
      * @param exprs the attributes in sequence
-     * @return the attributes set of invalid specified via bitmask
+     * @return the attributes of non selected specified via bitmask (with the bit set to 1)
      */
-    private def buildInvalidExprSet(bitmask: Int, exprs: Seq[Expression])
+    private def buildNonSelectExprSet(bitmask: Int, exprs: Seq[Expression])
     : OpenHashSet[Expression] = {
       val set = new OpenHashSet[Expression](2)
 
@@ -156,15 +156,15 @@ class Analyzer(catalog: Catalog,
      * expressions which equal GroupBy expressions with Literal(null), if those expressions
      * are not set for this grouping set (according to the bit mask).
      */
-    private[this] def expand(g: GroupingSet): Seq[GroupExpression] = {
+    private[this] def expand(g: GroupingSets): Seq[GroupExpression] = {
       val result = new scala.collection.mutable.ArrayBuffer[GroupExpression]
 
       g.bitmasks.foreach { bitmask =>
-        // get the invalid grouping attributes according to the bit mask
-        val invalidGroupExprSet = buildInvalidExprSet(bitmask, g.groupByExprs)
+        // get the non selected grouping attributes according to the bit mask
+        val nonSelectedGroupExprSet = buildNonSelectExprSet(bitmask, g.groupByExprs)
 
         val substitution = (g.child.output :+ g.gid).map(expr => expr transformDown {
-          case x: Expression if invalidGroupExprSet.contains(x) =>
+          case x: Expression if nonSelectedGroupExprSet.contains(x) =>
             // if the input attribute in the Invalid Grouping Expression set of for this group
             // replace it with constant null
             Literal(null, expr.dataType)
@@ -181,14 +181,14 @@ class Analyzer(catalog: Catalog,
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case a: Cube if a.resolved =>
-        GroupingSet(bitmasks(a), a.groupByExprs, a.child, a.aggregations, a.gid)
+        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations, a.gid)
       case a: Rollup if a.resolved =>
-        GroupingSet(bitmasks(a), a.groupByExprs, a.child, a.aggregations, a.gid)
-      case x: GroupingSet if x.resolved =>
+        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations, a.gid)
+      case x: GroupingSets if x.resolved =>
         Aggregate(
           x.groupByExprs :+ x.gid,
           x.aggregations,
-          Explosive(expand(x), x.child.output :+ x.gid, x.child))
+          Expand(expand(x), x.gid, x.child))
     }
   }
 
@@ -274,9 +274,10 @@ class Analyzer(catalog: Catalog,
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressions {
           case u @ UnresolvedAttribute(name)
-            if resolver(name, VirtualColumn.groupingIdName) && q.isInstanceOf[GroupingSets] =>
-            // Resolve the GROUPING__ID
-            q.asInstanceOf[GroupingSets].gid
+              if resolver(name, VirtualColumn.groupingIdName) &&
+                q.isInstanceOf[GroupingAnalytics] =>
+              // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
+            q.asInstanceOf[GroupingAnalytics].gid
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result = q.resolveChildren(name, resolver).getOrElse(u)
