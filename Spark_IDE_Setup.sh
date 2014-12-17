@@ -18,3 +18,4 @@ lib_path <- c(lib_path,"/home/cloudera/SparkR-pkg/lib")
 
 rm(lib_path)
 EOT
+
