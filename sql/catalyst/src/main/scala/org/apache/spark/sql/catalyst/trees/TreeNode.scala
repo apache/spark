@@ -184,6 +184,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
           } else {
             arg
           }
+        case subargs: Traversable[_] => subargs.map {
+         case sarg: TreeNode[_] if children contains sarg =>
+          val newChild = sarg.asInstanceOf[BaseType].transformDown(rule)
+          if (!(newChild fastEquals sarg)) {
+            changed = true
+            newChild
+          } else {
+            sarg
+          }
+         case other => other
+        }
         case other => other
       }
       case nonChild: AnyRef => nonChild
