@@ -457,7 +457,7 @@ abstract class RDD[T: ClassTag](
     // RDD in place before returning
     Utils.randomizeInPlace(sampleByCount(withReplacement, num, seed).collect(), new Random(seed))
   }
-
+  
   /**
    * Randomly splits this RDD with the provided weights.
    *
