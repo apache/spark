@@ -248,6 +248,7 @@ class BackfillJob(BaseJob):
             dag, start_date=None, end_date=None, mark_success=False,
             *args, **kwargs):
         self.dag = dag
+        dag.override_start_date(start_date)
         self.dag_id = dag.dag_id
         self.bf_start_date = start_date
         self.bf_end_date = end_date

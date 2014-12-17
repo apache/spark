@@ -5,6 +5,7 @@ from datetime import datetime
 default_args = {
     'owner': 'mistercrunch',
     'start_date': datetime(2014, 10, 1),
+    'depends_on_past': True,
 }
 
 dag = DAG(dag_id='example_2')
@@ -21,8 +22,8 @@ for i in range(10):
     i = str(i)
     task = BashOperator(
             task_id='runme_'+i,
-            bash_command='echo "'+str(i)+': {{ ti.execution_date }}"',
-            **default_args)
+            bash_command='sleep 10',
+            default_args=default_args)
     task.set_downstream(run_this)
     dag.add_task(task)
 

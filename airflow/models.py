@@ -392,15 +392,13 @@ class TaskInstance(Base):
                     self.execution_date-task.schedule_interval,
                 TI.state == State.SUCCESS,
             ).first()
-            if previous_ti:
-                previous_ti.task = task
-                if previous_ti.state != State.SUCCESS:
-                    return False
+            if not previous_ti:
+                return False
 
-                # Applying wait_for_downstream
-                if task.wait_for_downstream and not \
-                        previous_ti.are_dependents_done(session):
-                    return False
+            # Applying wait_for_downstream
+            if task.wait_for_downstream and not \
+                    previous_ti.are_dependents_done(session):
+                return False
 
         # Checking that all upstream dependencies have succeeded
         if task._upstream_list:
@@ -956,6 +954,15 @@ class DAG(Base):
 
     def pickle(self):
         return pickle.dumps(self)
+
+    def override_start_date(self, start_date):
+        """
+        Sets start_date of all tasks and of the DAG itself to a certain date.
+        This is used by BackfillJob.
+        """
+        for t in self.tasks:
+            t.start_date = start_date
+        self.start_date = start_date
 
     def set_dependency(self, upstream_task_id, downstream_task_id):
         """
