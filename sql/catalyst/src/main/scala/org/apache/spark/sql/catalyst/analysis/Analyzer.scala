@@ -54,6 +54,7 @@ class Analyzer(catalog: Catalog,
       NewRelationInstances),
     Batch("Resolution", fixedPoint,
       ResolveReferences ::
+      ResolveGetField ::
       ResolveRelations ::
       ResolveSortReferences ::
       NewRelationInstances ::
@@ -195,6 +196,19 @@ class Analyzer(catalog: Catalog,
      */
     protected def containsStar(exprs: Seq[Expression]): Boolean =
       exprs.collect { case _: Star => true}.nonEmpty
+  }
+
+  /**
+   * Replaces [[UnresolvedGetField]]s with concrete [[GetField]]
+   */
+  object ResolveGetField extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case q: LogicalPlan if q.childrenResolved =>
+        q transformExpressionsUp {
+          case u @ UnresolvedGetField(child, fieldName) if child.resolved =>
+            GetField(u.child, u.fieldName, resolver)
+        }
+    }
   }
 
   /**
