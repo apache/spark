@@ -113,7 +113,9 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
  */
 case class CreateArray(children: Seq[Expression]) extends Expression {
   override type EvaluatedType = Any
-
+  
+  override def foldable = !children.exists(!_.foldable)
+  
   lazy val childTypes = children.map(_.dataType).distinct
 
   override lazy val resolved =
