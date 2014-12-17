@@ -18,14 +18,18 @@
 #'  lines <- textFile(sc, "myfile.txt")
 #'}
 
-textFile <- function(sc, path, minSplits = NULL) {
+getMinSplits <- function(sc, minSplits) {
   if (is.null(minSplits)) {
     ssc <- .jcall(sc, "Lorg/apache/spark/SparkContext;", "sc")
     defaultParallelism <- .jcall(ssc, "I", "defaultParallelism")
     minSplits <- min(defaultParallelism, 2)
   }
+  as.integer(minSplits)
+}
+
+textFile <- function(sc, path, minSplits = NULL) {
   jrdd <- .jcall(sc, "Lorg/apache/spark/api/java/JavaRDD;", "textFile", path,
-                 as.integer(minSplits))
+                 getMinSplits(sc, minSplits))
   RDD(jrdd, FALSE)
 }
 
@@ -39,6 +43,7 @@ textFile <- function(sc, path, minSplits = NULL) {
 #' @param minSplits Minimum number of splits to be created. If NULL, the default
 #'  value is chosen based on available parallelism.
 #' @return RDD containing serialized R objects.
+#' @seealso saveAsObjectFile
 #' @export
 #' @examples
 #'\dontrun{
@@ -47,13 +52,8 @@ textFile <- function(sc, path, minSplits = NULL) {
 #'}
 
 objectFile <- function(sc, path, minSplits = NULL) {
-  if (is.null(minSplits)) {
-    ssc <- .jcall(sc, "Lorg/apache/spark/SparkContext;", "sc")
-    defaultParallelism <- .jcall(ssc, "I", "defaultParallelism")
-    minSplits <- min(defaultParallelism, 2)
-  }
   jrdd <- .jcall(sc, "Lorg/apache/spark/api/java/JavaRDD;", "objectFile", path,
-                 as.integer(minSplits))
+                 getMinSplits(sc, minSplits))
   # Assume the RDD contains serialized R objects.
   RDD(jrdd, TRUE)
 }

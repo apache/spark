@@ -25,4 +25,7 @@ rdd <- parallelize(sc, 1:3)
 saveAsObjectFile(rdd, "/tmp/sparkR-tmp")
 }
 }
+\seealso{
+objectFile
+}
 

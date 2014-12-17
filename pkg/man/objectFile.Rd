@@ -26,4 +26,7 @@ saveAsObjectFile() of the RDD class.
  rdd <- objectFile(sc, "myfile")
 }
 }
+\seealso{
+saveAsObjectFile
+}
 

@@ -1066,6 +1066,7 @@ setMethod("keyBy",
 #' @param rdd The RDD to save
 #' @param path The directory where the file is saved
 #' @rdname saveAsObjectFile
+#' @seealso objectFile
 #' @export
 #' @examples
 #'\dontrun{
