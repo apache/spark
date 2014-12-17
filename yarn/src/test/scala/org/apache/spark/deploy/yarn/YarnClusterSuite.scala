@@ -20,6 +20,9 @@ package org.apache.spark.deploy.yarn
 import java.io.File
 import java.util.concurrent.TimeUnit
 
+import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.scheduler.{SparkListener, SparkListenerExecutorAdded}
+
 import scala.collection.JavaConversions._
 
 import com.google.common.base.Charsets
@@ -30,8 +33,9 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.MiniYARNCluster
 
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkException}
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
+
+import scala.collection.mutable
 
 class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers with Logging {
 
@@ -143,6 +147,11 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
     var result = File.createTempFile("result", null, tempDir)
     YarnClusterDriver.main(Array("yarn-client", result.getAbsolutePath()))
     checkResult(result)
+
+    // verify log urls are present
+    YarnClusterDriver.listener.addedExecutorInfos.foreach(e => {
+      assert(e._2.logUrlMap.nonEmpty)
+    })
   }
 
   test("run Spark in yarn-cluster mode") {
@@ -156,6 +165,11 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
       "--num-executors", "1")
     Client.main(args)
     checkResult(result)
+
+    // verify log urls are present.
+    YarnClusterDriver.listener.addedExecutorInfos.foreach(e => {
+      assert(e._2.logUrlMap.nonEmpty)
+    })
   }
 
   test("run Spark in yarn-cluster mode unsuccessfully") {
@@ -203,7 +217,18 @@ class YarnClusterSuite extends FunSuite with BeforeAndAfterAll with Matchers wit
 
 }
 
+private class SaveExecutorInfo extends SparkListener {
+  val addedExecutorInfos = mutable.Map[String, ExecutorInfo]()
+
+  override def onExecutorAdded(executor : SparkListenerExecutorAdded) {
+    addedExecutorInfos(executor.executorId) = executor.executorInfo
+  }
+}
+
 private object YarnClusterDriver extends Logging with Matchers {
+
+  val WAIT_TIMEOUT_MILLIS = 10000
+  val listener = new SaveExecutorInfo
 
   def main(args: Array[String]) = {
     if (args.length != 2) {
@@ -216,12 +241,15 @@ private object YarnClusterDriver extends Logging with Matchers {
       System.exit(1)
     }
 
+
     val sc = new SparkContext(new SparkConf().setMaster(args(0))
       .setAppName("yarn \"test app\" 'with quotes' and \\back\\slashes and $dollarSigns"))
+    sc.addSparkListener(listener)
     val status = new File(args(1))
     var result = "failure"
     try {
       val data = sc.parallelize(1 to 4, 4).collect().toSet
+      assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
       data should be (Set(1, 2, 3, 4))
       result = "success"
     } finally {

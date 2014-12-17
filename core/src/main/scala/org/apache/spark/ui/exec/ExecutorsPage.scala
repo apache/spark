@@ -26,7 +26,7 @@ import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 /** Summary information about an executor to display in the UI. */
-private case class ExecutorSummaryInfo(
+private[ui] case class ExecutorSummaryInfo(
     id: String,
     hostPort: String,
     rddBlocks: Int,
@@ -40,7 +40,8 @@ private case class ExecutorSummaryInfo(
     totalInputBytes: Long,
     totalShuffleRead: Long,
     totalShuffleWrite: Long,
-    maxMemory: Long)
+    maxMemory: Long,
+    executorLogs : Map[String, String])
 
 private[ui] class ExecutorsPage(
     parent: ExecutorsTab,
@@ -79,6 +80,7 @@ private[ui] class ExecutorsPage(
               Shuffle Write
             </span>
           </th>
+          <th class="sorttable_nosort">Logs</th>
           {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
         </thead>
         <tbody>
@@ -138,6 +140,13 @@ private[ui] class ExecutorsPage(
       <td sorttable_customkey={info.totalShuffleWrite.toString}>
         {Utils.bytesToString(info.totalShuffleWrite)}
       </td>
+      <td>
+      {
+        info.executorLogs.map(entry => {
+          <div><a href={s"${entry._2}"}>{entry._1}</a></div>
+        })
+      }
+      </td>
       {
         if (threadDumpEnabled) {
           val encodedId = URLEncoder.encode(info.id, "UTF-8")
@@ -168,6 +177,7 @@ private[ui] class ExecutorsPage(
     val totalInputBytes = listener.executorToInputBytes.getOrElse(execId, 0L)
     val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0L)
     val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0L)
+    val executorLogs = listener.executorToLogUrls.getOrElse(execId, Map.empty)
 
     new ExecutorSummaryInfo(
       execId,
@@ -183,7 +193,8 @@ private[ui] class ExecutorsPage(
       totalInputBytes,
       totalShuffleRead,
       totalShuffleWrite,
-      maxMem
+      maxMem,
+      executorLogs
     )
   }
 }
