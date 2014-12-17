@@ -27,6 +27,7 @@ import org.apache.hive.service.cli.session.SessionManager
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
+import org.apache.hive.service.cli.SessionHandle
 
 private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
   extends SessionManager
@@ -45,5 +46,10 @@ private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
     addService(sparkSqlOperationManager)
 
     initCompositeService(hiveConf)
+  }
+
+  override def closeSession(sessionHandle: SessionHandle) {
+    super.closeSession(sessionHandle)
+    hiveContext.currentSessionState.remove()
   }
 }
