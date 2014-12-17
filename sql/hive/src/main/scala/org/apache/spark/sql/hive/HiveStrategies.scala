@@ -180,21 +180,6 @@ private[hive] trait HiveStrategies {
       case hive.InsertIntoHiveTable(table: MetastoreRelation, partition, child, overwrite) =>
         execution.InsertIntoHiveTable(
           table, partition, planLater(child), overwrite)(hiveContext) :: Nil
-      case logical.CreateTableAsSelect(
-             Some(database), tableName, child, allowExisting, Some(desc: CreateTableDesc)) =>
-        ExecutedCommand(execution.CreateTableAsSelect(
-          database,
-          tableName,
-          child,
-          allowExisting,
-          Some(desc))(hiveContext)) :: Nil
-      case logical.CreateTableAsSelect(Some(database), tableName, child, allowExisting, None) =>
-        ExecutedCommand(execution.CreateTableAsSelect(
-          database,
-          tableName,
-          child,
-          allowExisting,
-          None)(hiveContext)) :: Nil
       case _ => Nil
     }
   }
