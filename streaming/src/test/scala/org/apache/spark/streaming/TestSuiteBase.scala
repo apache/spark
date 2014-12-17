@@ -27,7 +27,7 @@ import scala.reflect.ClassTag
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
-import org.apache.spark.streaming.scheduler.{StreamingListenerBatchCompleted, StreamingListener}
+import org.apache.spark.streaming.scheduler.{StreamingListenerBatchStarted, StreamingListenerBatchCompleted, StreamingListener}
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.rdd.RDD
@@ -115,8 +115,14 @@ class StreamingTestWaiter(ssc: StreamingContext) {
 
   // All access to this state should be guarded by `StreamingListener.this.synchronized`
   private var numCompletedBatches = 0
+  private var numStartedBatches = 0
 
   private val listener = new StreamingListener {
+    override def onBatchStarted(batchStarted: StreamingListenerBatchStarted): Unit =
+      StreamingTestWaiter.this.synchronized {
+        numStartedBatches += 1
+        StreamingTestWaiter.this.notifyAll()
+      }
     override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit =
       StreamingTestWaiter.this.synchronized {
         numCompletedBatches += 1
@@ -127,6 +133,10 @@ class StreamingTestWaiter(ssc: StreamingContext) {
 
   def getNumCompletedBatches: Int = this.synchronized {
     numCompletedBatches
+  }
+
+  def getNumStartedBatches: Int = this.synchronized {
+    numStartedBatches
   }
 
   /**
@@ -144,6 +154,24 @@ class StreamingTestWaiter(ssc: StreamingContext) {
     if (!successful && timedOut) {
       throw new TimeoutException(s"Waited for $targetNumBatches completed batches, but only" +
         s" $numCompletedBatches have completed after $timeout")
+    }
+  }
+
+  /**
+   * Block until the number of started batches reaches the given threshold.
+   */
+  def waitForTotalBatchesStarted(
+    targetNumBatches: Int,
+    timeout: Duration): Unit = this.synchronized {
+    val startTime = System.currentTimeMillis()
+    def successful = getNumStartedBatches >= targetNumBatches
+    def timedOut = (System.currentTimeMillis() - startTime) >= timeout.milliseconds
+    while (!timedOut && !successful) {
+      this.wait(timeout.milliseconds)
+    }
+    if (!successful && timedOut) {
+      throw new TimeoutException(s"Waited for $targetNumBatches started batches, but only" +
+        s" $numStartedBatches have started after $timeout")
     }
   }
 }
