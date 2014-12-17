@@ -192,9 +192,9 @@ for commit in filtered_commits:
 print "==================================================================================\n"
 
 # Write to contributors file ordered by author names
-# Each line takes the format "Author name - semi-colon delimited contributions"
-# e.g. Andrew Or - Bug fixes in Windows, Core, and Web UI; improvements in Core
-# e.g. Tathagata Das - Bug fixes and new features in Streaming
+# Each line takes the format " * Author name -- semi-colon delimited contributions"
+# e.g. * Andrew Or -- Bug fixes in Windows, Core, and Web UI; improvements in Core
+# e.g. * Tathagata Das -- Bug fixes and new features in Streaming
 contributors_file = open(contributors_file_name, "w")
 authors = author_info.keys()
 authors.sort()
@@ -223,7 +223,7 @@ for author in authors:
     # E.g. andrewor14/SPARK-3425/SPARK-1157/SPARK-6672
     if author in invalid_authors and invalid_authors[author]:
         author = author + "/" + "/".join(invalid_authors[author])
-    line = "%s - %s" % (author, contribution)
+    line = " * %s -- %s" % (author, contribution)
     contributors_file.write(line + "\n")
 contributors_file.close()
 print "Contributors list is successfully written to %s!" % contributors_file_name
