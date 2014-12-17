@@ -54,6 +54,7 @@ class StandaloneWorkerShuffleService(sparkConf: SparkConf, securityManager: Secu
       logInfo(s"Starting shuffle service on port $port with useSasl = $useSasl")
       server = transportContext.createServer(port)
     }
+    logInfo(s"Skip launching shuffle service as it's not enabled.")
   }
 
   def stop() {

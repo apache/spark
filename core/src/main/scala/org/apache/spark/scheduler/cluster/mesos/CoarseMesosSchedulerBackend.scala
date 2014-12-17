@@ -140,6 +140,12 @@ private[spark] class CoarseMesosSchedulerBackend(
         .setValue(extraJavaOpts)
         .build())
 
+    environment.addVariables(
+      Environment.Variable.newBuilder()
+        .setName("spark.shuffle.service.enabled")
+        .setValue(conf.getBoolean("spark.shuffle.service.enabled", false).toString)
+        .build())
+
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
         .setName(key)
