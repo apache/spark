@@ -143,12 +143,6 @@ class GaussianMixtureModelEM private (
       }
     }
     
-    /*var gaussians = (0 until k).map{ i => 
-      (1.0 / k,
-        vectorMean(samples.slice(i * nSamples, (i + 1) * nSamples)),
-        initCovariance(samples.slice(i * nSamples, (i + 1) * nSamples)))
-    }.toArray
-    */
     val accW     = new Array[Accumulator[Double]](k)
     val accMu    = new Array[Accumulator[DenseDoubleVector]](k)
     val accSigma = new Array[Accumulator[DenseDoubleMatrix]](k)
