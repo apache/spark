@@ -1061,6 +1061,35 @@ setMethod("keyBy",
             lapply(rdd, apply.func)
           })
 
+#' Save this RDD as a SequenceFile of serialized objects.
+#'
+#' @param rdd The RDD to save
+#' @param path The directory where the file is saved
+#' @rdname saveAsObjectFile
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:3)
+#' saveAsObjectFile(rdd, "/tmp/sparkR-tmp")
+#'}
+setGeneric("saveAsObjectFile", function(rdd, path) { standardGeneric("saveAsObjectFile") })
+
+#' @rdname saveAsObjectFile
+#' @aliases saveAsObjectFile,RDD
+setMethod("saveAsObjectFile",
+          signature(rdd = "RDD", path = "character"),
+          function(rdd, path) {
+            # If the RDD is in string format, need to serialize it before saving it because when
+            # objectFile() is invoked to load the saved file, only serialized format is assumed.
+            if (!rdd@env$serialized) {
+              rdd <- reserialize(rdd)
+            }
+            .jcall(getJRDD(rdd), "V", "saveAsObjectFile", path)
+            # Return nothing
+            invisible(NULL)
+          })
+
 #' Return an RDD with the keys of each tuple.
 #'
 #' @param rdd The RDD from which the keys of each tuple is returned.
