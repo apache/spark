@@ -19,9 +19,11 @@ package org.apache.spark.sql.catalyst.expressions
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.util.collection.ExternalSet
 import org.apache.spark.util.collection.OpenHashSet
 
 abstract class AggregateExpression extends Expression {
@@ -176,9 +178,16 @@ case class CountDistinct(expressions: Seq[Expression]) extends PartialAggregate 
 
   override def asPartial = {
     val partialSet = Alias(CollectHashSet(expressions), "partialSets")()
-    SplitEvaluation(
-      CombineSetsAndCount(partialSet.toAttribute),
-      partialSet :: Nil)
+    val externalDistinct = SparkEnv.get.conf.getBoolean("spark.sql.distinct.external", false)
+    if (externalDistinct) {
+      SplitEvaluation(
+        CombineSetsAndCountExternal(partialSet.toAttribute),
+        partialSet :: Nil)
+    } else { 
+      SplitEvaluation(
+        CombineSetsAndCount(partialSet.toAttribute),
+        partialSet :: Nil)
+    }
   }
 }
 
@@ -244,6 +253,44 @@ case class CombineSetsAndCountFunction(
   }
 
   override def eval(input: Row): Any = seen.size.toLong
+}
+
+case class CombineSetsAndCountExternal(inputSet: Expression) extends AggregateExpression {
+  def this() = this(null)
+
+  override def children = inputSet :: Nil
+  override def nullable = false
+  override def dataType = LongType
+  override def toString = s"CombineAndCountExternal($inputSet)"
+  override def newInstance() = new CombineSetsAndCountFunction(inputSet, this)
+}
+
+case class CombineSetsAndCountExternalFunction(
+    @transient inputSet: Expression,
+    @transient base: AggregateExpression)
+  extends AggregateFunction {
+
+  def this() = this(null, null) // Required for serialization.
+
+  val seen = new ExternalSet[Any]
+
+  override def update(input: Row): Unit = {
+    val inputSetEval = inputSet.eval(input).asInstanceOf[OpenHashSet[Any]]
+    val inputIterator = inputSetEval.iterator
+    while (inputIterator.hasNext) {
+      seen.add(inputIterator.next)
+    }
+  }
+
+  override def eval(input: Row): Any = {
+    var num: Int = 0
+    val iter = seen.iterator
+    while (iter.hasNext) {
+      iter.next
+      num += 1
+    }
+    num
+  }
 }
 
 case class ApproxCountDistinctPartition(child: Expression, relativeSD: Double)
