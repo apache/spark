@@ -67,6 +67,19 @@ jira_options = { "server": JIRA_API_BASE }
 jira_client = JIRA(options = jira_options, basic_auth = (JIRA_USERNAME, JIRA_PASSWORD))
 github_client = Github(GITHUB_API_TOKEN)
 
+# Load known author translations that are cached locally
+known_translations = {}
+known_translations_file_name = "known_translations"
+known_translations_file = open(known_translations_file_name, "r")
+for line in known_translations_file:
+    if line.startswith("#"): continue
+    [old_name, new_name] = line.split(" - ")
+    known_translations[old_name] = new_name
+known_translations_file.close()
+
+# Open again in case the user adds new mappings
+known_translations_file = open(known_translations_file_name, "a")
+
 # Generate candidates for the given author. This should only be called if the given author
 # name does not represent a full name as this operation is somewhat expensive. Under the
 # hood, it makes several calls to the Github and JIRA API servers to find the candidates.
@@ -83,17 +96,17 @@ NOT_FOUND = "Not found"
 def generate_candidates(author, issues):
     candidates = []
     # First check for full name of Github user
-    github_name = get_github_name(new_author, github_client)
+    github_name = get_github_name(author, github_client)
     if github_name:
-        candidates.append((github_name, "Full name of Github user %s" % new_author))
+        candidates.append((github_name, "Full name of Github user %s" % author))
     else:
-        candidates.append((NOT_FOUND, "No full name found for Github user %s" % new_author))
+        candidates.append((NOT_FOUND, "No full name found for Github user %s" % author))
     # Then do the same for JIRA user
-    jira_name = get_jira_name(new_author, jira_client)
+    jira_name = get_jira_name(author, jira_client)
     if jira_name:
-        candidates.append((jira_name, "Full name of JIRA user %s" % new_author))
+        candidates.append((jira_name, "Full name of JIRA user %s" % author))
     else:
-        candidates.append((NOT_FOUND, "No full name found for JIRA user %s" % new_author))
+        candidates.append((NOT_FOUND, "No full name found for JIRA user %s" % author))
     # Then do the same for the assignee of each of the associated JIRAs
     # Note that a given issue may not have an assignee, or the assignee may not have a full name
     for issue in issues:
@@ -135,15 +148,24 @@ def generate_candidates(author, issues):
 print "\n========================== Translating contributor list =========================="
 lines = contributors_file.readlines()
 for i, line in enumerate(lines):
-    author = line.split(" - ")[0]
-    print "Processing author %s (%d/%d)" % (author, i + 1, len(lines))
-    if not author:
-        print "    ERROR: Expected the following format <author> - <contributions>"
-        print "    ERROR: Actual = %s" % line
-    if not is_valid_author(author):
-        new_author = author.split("/")[0]
-        issues = author.split("/")[1:]
-        candidates = generate_candidates(new_author, issues)
+    temp_author = line.split(" - ")[0]
+    print "Processing author %s (%d/%d)" % (temp_author, i + 1, len(lines))
+    if not temp_author:
+        error_msg = "    ERROR: Expected the following format <author> - <contributions>\n"
+        error_msg += "    ERROR: Actual = %s" % line
+        print error_msg
+        warnings.append(error_msg)
+        new_contributors_file.write(line)
+        new_contributors_file.flush()
+        continue
+    author = temp_author.split("/")[0]
+    # Use the local copy of known translations where possible
+    if author in known_translations:
+        line = line.replace(temp_author, known_translations[author])
+    elif not is_valid_author(author):
+        new_author = author
+        issues = temp_author.split("/")[1:]
+        candidates = generate_candidates(author, issues)
         # Print out potential replacement candidates along with the sources, e.g.
         #   [X] No full name found for Github user andrewor14
         #   [X] No assignee found for SPARK-1763
@@ -169,7 +191,7 @@ for i, line in enumerate(lines):
         for p in good_prompts: print p
         # In interactive mode, additionally provide "custom" option and await user response
         if INTERACTIVE_MODE:
-            print "    [%d] %s - Raw Github username" % (raw_index, new_author)
+            print "    [%d] %s - Raw Github username" % (raw_index, author)
             print "    [%d] Custom" % custom_index
             response = raw_input("    Your choice: ")
             last_index = custom_index
@@ -191,9 +213,15 @@ for i, line in enumerate(lines):
         if is_valid_author(new_author):
             new_author = capitalize_author(new_author)
         else:
-            warnings.append("Unable to find a valid name %s for author %s" % (new_author, author))
+            warnings.append("Unable to find a valid name %s for author %s" % (author, temp_author))
         print "    * Replacing %s with %s" % (author, new_author)
-        line = line.replace(author, new_author)
+        # If we are in interactive mode, prompt the user whether we want to remember this new mapping
+        if INTERACTIVE_MODE and\
+          author not in known_translations and\
+          yesOrNoPrompt("    Add mapping %s -> %s to known translations file?" % (author, new_author)):
+            known_translations_file.write("%s - %s\n" % (author, new_author))
+            known_translations_file.flush()
+        line = line.replace(temp_author, author)
     new_contributors_file.write(line)
     new_contributors_file.flush()
 print "==================================================================================\n"
