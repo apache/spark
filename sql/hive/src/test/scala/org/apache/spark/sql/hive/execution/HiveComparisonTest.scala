@@ -19,7 +19,6 @@ package org.apache.spark.sql.hive.execution
 
 import java.io._
 
-import org.apache.spark.sql.hive
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
 import org.apache.spark.Logging
@@ -142,14 +141,14 @@ abstract class HiveComparisonTest
       // Hack: Hive simply prints the result of a SET command to screen,
       // and does not return it as a query answer.
       case _: SetCommand => Seq("0")
-      case hive.NativeCommand(c) if c.toLowerCase.contains("desc") =>
+      case HiveNativeCommand(c) if c.toLowerCase.contains("desc") =>
         answer
           .filterNot(nonDeterministicLine)
           .map(_.replaceAll("from deserializer", ""))
           .map(_.replaceAll("None", ""))
           .map(_.trim)
           .filterNot(_ == "")
-      case _: hive.NativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
+      case _: HiveNativeCommand => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _: ExplainCommand => answer
       case _: DescribeCommand =>
         // Filter out non-deterministic lines and lines which do not have actual results but

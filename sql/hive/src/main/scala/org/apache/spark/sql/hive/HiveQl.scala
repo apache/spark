@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable}
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -43,23 +44,6 @@ import scala.collection.JavaConversions._
  * cmd string.
  */
 private[hive] case object NativePlaceholder extends Command
-
-private[hive] case class AddFile(filePath: String) extends Command
-
-private[hive] case class AddJar(path: String) extends Command
-
-private[hive] case class DropTable(tableName: String, ifExists: Boolean) extends Command
-
-private[hive] case class AnalyzeTable(tableName: String) extends Command
-
-/**
- * Returned for commands supported by a given parser, but not catalyst.  In general these are DDL
- * commands that are passed directly to another system.
- */
-private[hive] case class NativeCommand(cmd: String) extends Command {
-  override def output =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
@@ -248,10 +232,10 @@ private[hive] object HiveQl {
     try {
       val tree = getAst(sql)
       if (nativeCommands contains tree.getText) {
-        NativeCommand(sql)
+        HiveNativeCommand(sql)
       } else {
         nodeToPlan(tree) match {
-          case NativePlaceholder => NativeCommand(sql)
+          case NativePlaceholder => HiveNativeCommand(sql)
           case other => other
         }
       }

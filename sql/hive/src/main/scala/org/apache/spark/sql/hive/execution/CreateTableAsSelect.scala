@@ -74,4 +74,8 @@ case class CreateTableAsSelect(
 
     Seq.empty[Row]
   }
+
+  override def argString: String = {
+    s"[Database:$database, TableName: $tableName, InsertIntoHiveTable]\n" + query.toString
+  }
 }

@@ -40,7 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DecimalType
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, QueryExecutionException}
-import org.apache.spark.sql.hive.execution.{NativeCommand, DescribeHiveTableCommand}
+import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTableCommand}
 import org.apache.spark.sql.sources.DataSourceStrategy
 
 /**
@@ -340,7 +340,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     override val strategies: Seq[Strategy] = extraStrategies ++ Seq(
       DataSourceStrategy,
-      CommandStrategy(self),
+      CommandStrategy,
       HiveCommandStrategy(self),
       TakeOrdered,
       ParquetOperations,
@@ -386,7 +386,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     override def simpleString: String =
       logical match {
-        case _: NativeCommand => "<Native command: executed by Hive>"
+        case _: HiveNativeCommand => "<Native command: executed by Hive>"
         case _: SetCommand => "<SET command: executed by Hive, and noted by SQLContext>"
         case _ => super.simpleString
       }

@@ -23,7 +23,7 @@ import org.apache.hadoop.hive.metastore.api.FieldSchema
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
-import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.execution.{SparkPlan, RunnableCommand}
 import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
 import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.sql.SQLContext
@@ -36,21 +36,17 @@ import org.apache.spark.sql.SQLContext
 @DeveloperApi
 case class DescribeHiveTableCommand(
     table: MetastoreRelation,
-    _output: Seq[Attribute],
-    isExtended: Boolean)(
-    @transient context: HiveContext)
-  extends RunnableCommand {
+    override val output: Seq[Attribute],
+    isExtended: Boolean) extends RunnableCommand {
 
   // Strings with the format like Hive. It is used for result comparison in our unit tests.
-  lazy val hiveString: Seq[String] = run(context).map {
+  lazy val hiveString: Seq[String] = run(SparkPlan.currentContext.get()).map {
     case Row(name: String, dataType: String, comment) =>
       Seq(name, dataType,
         Option(comment.asInstanceOf[String]).getOrElse(""))
         .map(s => String.format(s"%-20s", s))
         .mkString("\t")
   }
-
-  override def output = _output
 
   override def run(sqlContext: SQLContext) = {
     // Trying to mimic the format of Hive's output. But not exactly the same.

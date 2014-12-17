@@ -32,10 +32,10 @@ import org.apache.spark.sql.SQLContext
  * in the Hive metastore.
  */
 @DeveloperApi
-case class AnalyzeTable(tableName: String)(hiveContext: HiveContext) extends RunnableCommand {
+case class AnalyzeTable(tableName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    hiveContext.analyze(tableName)
+    sqlContext.asInstanceOf[HiveContext].analyze(tableName)
     Seq.empty[Row]
   }
 }
@@ -47,9 +47,10 @@ case class AnalyzeTable(tableName: String)(hiveContext: HiveContext) extends Run
 @DeveloperApi
 case class DropTable(
     tableName: String,
-    ifExists: Boolean)(hiveContext: HiveContext) extends RunnableCommand {
+    ifExists: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
+    val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
     hiveContext.catalog.unregisterTable(None, tableName)
@@ -61,9 +62,10 @@ case class DropTable(
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class AddJar(path: String)(hiveContext: HiveContext) extends RunnableCommand {
+case class AddJar(path: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
+    val hiveContext = sqlContext.asInstanceOf[HiveContext]
     hiveContext.runSqlHive(s"ADD JAR $path")
     hiveContext.sparkContext.addJar(path)
     Seq.empty[Row]
@@ -74,9 +76,10 @@ case class AddJar(path: String)(hiveContext: HiveContext) extends RunnableComman
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class AddFile(path: String)(hiveContext: HiveContext) extends RunnableCommand {
+case class AddFile(path: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
+    val hiveContext = sqlContext.asInstanceOf[HiveContext]
     hiveContext.runSqlHive(s"ADD FILE $path")
     hiveContext.sparkContext.addFile(path)
     Seq.empty[Row]

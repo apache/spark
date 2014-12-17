@@ -329,7 +329,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     val strategies: Seq[Strategy] =
       extraStrategies ++ (
-      CommandStrategy(self) ::
+      CommandStrategy ::
       DataSourceStrategy ::
       TakeOrdered ::
       HashAggregation ::
