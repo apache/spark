@@ -53,10 +53,10 @@ class Normalizer(VectorTransformer):
     """
     :: Experimental ::
 
-    Normalizes samples individually to unit L\ :sup:`p`\ norm
+    Normalizes samples individually to unit L\ :sup:`p`\  norm
 
-    For any 1 <= `p` <= float('inf'), normalizes samples using
-    sum(abs(vector). :sup:`p`) :sup:`(1/p)` as norm.
+    For any 1 <= `p` < float('inf'), normalizes samples using
+    sum(abs(vector) :sup:`p`) :sup:`(1/p)` as norm.
 
     For `p` = float('inf'), max(abs(vector)) will be used as norm for normalization.
 
