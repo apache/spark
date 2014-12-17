@@ -540,7 +540,6 @@ class TaskInstance(Base):
                     self.state = State.FAILED
                     if task.email_on_failure and task.email:
                         self.email_alert(e, is_retry=False)
-                        self.send_failure_email(e)
                 session.merge(self)
                 session.commit()
                 logging.error(str(e))
