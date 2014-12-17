@@ -163,6 +163,8 @@ private[spark] class Worker(
 
     metricsSystem.registerSource(workerSource)
     metricsSystem.start()
+    // Attach the worker metrics servlet handler to the web ui after the metrics system is started.
+    metricsSystem.getServletHandlers.foreach(webUi.attachHandler)
   }
 
   def changeMaster(url: String, uiUrl: String) {

@@ -344,6 +344,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // The metrics system for Driver need to be set spark.app.id to app ID.
   // So it should start after we get app ID from the task scheduler and set spark.app.id.
   metricsSystem.start()
+  // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
+  metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
   // Optionally log Spark events
   private[spark] val eventLogger: Option[EventLoggingListener] = {
