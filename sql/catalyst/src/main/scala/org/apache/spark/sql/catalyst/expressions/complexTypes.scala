@@ -92,7 +92,13 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
 
   lazy val ordinal = structType.fields.indexOf(field)
 
-  override lazy val resolved = childrenResolved && child.dataType.isInstanceOf[StructType]
+  override lazy val resolved = childrenResolved && fieldResolved
+
+  /** Returns true only if the fieldName is found in the child struct. */
+  private def fieldResolved = child.dataType match {
+    case StructType(fields) => fields.map(_.name).contains(fieldName)
+    case _ => false
+  }
 
   override def eval(input: Row): Any = {
     val baseValue = child.eval(input).asInstanceOf[Row]
