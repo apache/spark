@@ -139,14 +139,22 @@ private[streaming] class ReceivedBlockTracker(
     getReceivedBlockQueue(streamId).toSeq
   }
 
-  /** Clean up block information of old batches. */
+  /** Clean up block information of old batches asynchronously. */
   def cleanupOldBatches(cleanupThreshTime: Time): Unit = synchronized {
+    cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
+  }
+
+  /**
+   * Clean up block information of old batches. If waitForCompletion is true, this method
+   * returns only after the files are cleaned up.
+   */
+  def cleanupOldBatches(cleanupThreshTime: Time, waitForCompletion: Boolean): Unit = synchronized {
     assert(cleanupThreshTime.milliseconds < clock.currentTime())
     val timesToCleanup = timeToAllocatedBlocks.keys.filter { _ < cleanupThreshTime }.toSeq
     logInfo("Deleting batches " + timesToCleanup)
     writeToLog(BatchCleanupEvent(timesToCleanup))
     timeToAllocatedBlocks --= timesToCleanup
-    logManagerOption.foreach(_.cleanupOldLogs(cleanupThreshTime.milliseconds))
+    logManagerOption.foreach(_.cleanupOldLogs(cleanupThreshTime.milliseconds, waitForCompletion))
     log
   }
 
