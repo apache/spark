@@ -199,6 +199,10 @@ Several external tools can be used to help profile the performance of Spark jobs
 insight into overall cluster utilization and resource bottlenecks. For instance, a Ganglia 
 dashboard can quickly reveal whether a particular workload is disk bound, network bound, or 
 CPU bound.
+
+* [SPM for Spark](http://www.sematext.com/spm) performance monitoring, alerting, and anomaly detection monitors all Spark
+metrics for all Spark components (master, workers, driver, and executor) as well as a number of OS and JVM metrics. It supports custom dashboards, custom metrics, subscription emails, chart embedding, filtering by server, node, etc.  In addition to monitoring Spark, SPM can monitor Cassandra, Solr, Hadoop, Kafka, Storm, ZooKeeper, Elasticsearch, generic Java applications and a number of other types of applications.
+
 * OS profiling tools such as [dstat](http://dag.wieers.com/home-made/dstat/), 
 [iostat](http://linux.die.net/man/1/iostat), and [iotop](http://linux.die.net/man/1/iotop) 
 can provide fine-grained profiling on individual nodes.
