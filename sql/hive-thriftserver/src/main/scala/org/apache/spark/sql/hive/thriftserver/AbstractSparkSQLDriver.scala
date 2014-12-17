@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import scala.collection.JavaConversions._
+import scala.math._
 
 import org.apache.commons.lang.exception.ExceptionUtils
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
