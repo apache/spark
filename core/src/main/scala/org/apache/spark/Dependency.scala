@@ -61,8 +61,8 @@ abstract class NarrowDependency[T](_rdd: RDD[T]) extends Dependency[T] {
  *                   the default serializer, as specified by `spark.serializer` config option, will
  *                   be used.
  * @param keyOrdering key ordering for RDD's shuffles
- * @param aggregator map-side aggregator for RDD's shuffle
- * @param mapSideCombine map-side aggregation flag
+ * @param aggregator map/reduce-side aggregator for RDD's shuffle
+ * @param mapSideCombine whether to perform partial aggregation (also known as map-side combine)
  */
 @DeveloperApi
 class ShuffleDependency[K, V, C](
