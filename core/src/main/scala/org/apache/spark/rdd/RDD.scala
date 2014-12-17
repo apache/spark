@@ -375,6 +375,23 @@ abstract class RDD[T: ClassTag](
       new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](fraction), true, seed)
     }
   }
+
+  /**
+   * Randomly splits this RDD with the provided weights.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1
+   * @param seed random seed
+   *
+   * @return split RDDs in an array
+   */
+  def randomSplit(weights: Array[Double], seed: Long = Utils.random.nextLong): Array[RDD[T]] = {
+    val sum = weights.sum
+    val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
+    normalizedCumWeights.sliding(2).map { x =>
+      new PartitionwiseSampledRDD[T, T](
+        this, new BernoulliCellSampler[T](x(0), x(1)), true, seed)
+    }.toArray
+  }
   
   /**
    * Returns a fixed-size sampled subset of this RDD as an RDD
@@ -456,23 +473,6 @@ abstract class RDD[T: ClassTag](
     // To maintain functionality of the previous implementation, randomize the returned 
     // RDD in place before returning
     Utils.randomizeInPlace(sampleByCount(withReplacement, num, seed).collect(), new Random(seed))
-  }
-  
-  /**
-   * Randomly splits this RDD with the provided weights.
-   *
-   * @param weights weights for splits, will be normalized if they don't sum to 1
-   * @param seed random seed
-   *
-   * @return split RDDs in an array
-   */
-  def randomSplit(weights: Array[Double], seed: Long = Utils.random.nextLong): Array[RDD[T]] = {
-    val sum = weights.sum
-    val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
-    normalizedCumWeights.sliding(2).map { x =>
-      new PartitionwiseSampledRDD[T, T](
-        this, new BernoulliCellSampler[T](x(0), x(1)), true, seed)
-    }.toArray
   }
   
   /**
