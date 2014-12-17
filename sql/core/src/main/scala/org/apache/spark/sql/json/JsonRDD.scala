@@ -263,6 +263,8 @@ private[sql] object JsonRDD extends Logging {
         val elementType = typeOfArray(array)
         buildKeyPathForInnerStructs(array, elementType) :+ (key, elementType)
       }
+      // we couldn't tell what the type is if the value is null or empty string
+      case (key: String, value) if value == "" || value == null => (key, NullType) :: Nil
       case (key: String, value) => (key, typeOfPrimitiveValue(value)) :: Nil
     }
   }
@@ -400,13 +402,13 @@ private[sql] object JsonRDD extends Logging {
     } else {
       desiredType match {
         case StringType => toString(value)
+        case _ if value == null || value == "" => null // guard the non string type
         case IntegerType => value.asInstanceOf[IntegerType.JvmType]
         case LongType => toLong(value)
         case DoubleType => toDouble(value)
         case DecimalType() => toDecimal(value)
         case BooleanType => value.asInstanceOf[BooleanType.JvmType]
         case NullType => null
-
         case ArrayType(elementType, _) =>
           value.asInstanceOf[Seq[Any]].map(enforceCorrectType(_, elementType))
         case struct: StructType => asRow(value.asInstanceOf[Map[String, Any]], struct)
