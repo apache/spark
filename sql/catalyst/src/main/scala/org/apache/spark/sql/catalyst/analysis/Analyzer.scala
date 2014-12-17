@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.types.StructType
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -187,6 +188,15 @@ class Analyzer(catalog: Catalog,
             val result = q.resolveChildren(name, resolver).getOrElse(u)
             logDebug(s"Resolving $u to $result")
             result
+
+          // Resolve field names using the resolver.
+          case f @ GetField(child, fieldName) if !f.resolved && child.resolved =>
+            child.dataType match {
+              case StructType(fields) =>
+                val resolvedFieldName = fields.map(_.name).find(resolver(_, fieldName))
+                resolvedFieldName.map(n => f.copy(fieldName = n)).getOrElse(f)
+              case _ => f
+            }
         }
     }
 
