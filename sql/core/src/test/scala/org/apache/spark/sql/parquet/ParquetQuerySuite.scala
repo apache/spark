@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.parquet
 
-import _root_.parquet.filter2.predicate.{FilterPredicate, Operators}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
 import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
+import parquet.filter2.predicate.{FilterPredicate, Operators}
 import parquet.hadoop.ParquetFileWriter
 import parquet.hadoop.util.ContextUtil
+import parquet.io.api.Binary
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
@@ -84,7 +85,8 @@ case class NumericData(i: Int, d: Double)
 class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   TestData // Load test data tables.
 
-  var testRDD: SchemaRDD = null
+  private var testRDD: SchemaRDD = null
+  private val originalParquetFilterPushdownEnabled = TestSQLContext.parquetFilterPushDown
 
   override def beforeAll() {
     ParquetTestData.writeFile()
@@ -109,13 +111,17 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     Utils.deleteRecursively(ParquetTestData.testNestedDir3)
     Utils.deleteRecursively(ParquetTestData.testNestedDir4)
     // here we should also unregister the table??
+
+    setConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED, originalParquetFilterPushdownEnabled.toString)
   }
 
   test("Read/Write All Types") {
     val tempDir = getTempFilePath("parquetTest").getCanonicalPath
     val range = (0 to 255)
-    val data = sparkContext.parallelize(range)
-      .map(x => AllDataTypes(s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0))
+    val data = sparkContext.parallelize(range).map { x =>
+      parquet.AllDataTypes(
+        s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0)
+    }
 
     data.saveAsParquetFile(tempDir)
 
@@ -260,14 +266,15 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   test("Read/Write All Types with non-primitive type") {
     val tempDir = getTempFilePath("parquetTest").getCanonicalPath
     val range = (0 to 255)
-    val data = sparkContext.parallelize(range)
-      .map(x => AllDataTypesWithNonPrimitiveType(
+    val data = sparkContext.parallelize(range).map { x =>
+      parquet.AllDataTypesWithNonPrimitiveType(
         s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0,
         (0 until x),
         (0 until x).map(Option(_).filter(_ % 3 == 0)),
         (0 until x).map(i => i -> i.toLong).toMap,
         (0 until x).map(i => i -> Option(i.toLong)).toMap + (x -> None),
-        Data((0 until x), Nested(x, s"$x"))))
+        parquet.Data((0 until x), parquet.Nested(x, s"$x")))
+    }
     data.saveAsParquetFile(tempDir)
 
     checkAnswer(
@@ -420,7 +427,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("save and load case class RDD with nulls as parquet") {
-    val data = NullReflectData(null, null, null, null, null)
+    val data = parquet.NullReflectData(null, null, null, null, null)
     val rdd = sparkContext.parallelize(data :: Nil)
 
     val file = getTempFilePath("parquet")
@@ -435,7 +442,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("save and load case class RDD with Nones as parquet") {
-    val data = OptionalReflectData(None, None, None, None, None)
+    val data = parquet.OptionalReflectData(None, None, None, None, None)
     val rdd = sparkContext.parallelize(data :: Nil)
 
     val file = getTempFilePath("parquet")
@@ -936,6 +943,110 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
         .select('i, 'd cast DecimalType.Unlimited)
       data.saveAsParquetFile(tempDir)
       checkAnswer(parquetFile(tempDir), data.toSchemaRDD.collect().toSeq)
+    }
+  }
+
+  def checkFilter(predicate: Predicate, filterClass: Class[_ <: FilterPredicate]): Unit = {
+    val filter = ParquetFilters.createFilter(predicate)
+    assert(filter.isDefined)
+    assert(filter.get.getClass == filterClass)
+  }
+
+  test("Pushdown IsNull predicate") {
+    checkFilter('a.int.isNull,    classOf[Operators.Eq[Integer]])
+    checkFilter('a.long.isNull,   classOf[Operators.Eq[java.lang.Long]])
+    checkFilter('a.float.isNull,  classOf[Operators.Eq[java.lang.Float]])
+    checkFilter('a.double.isNull, classOf[Operators.Eq[java.lang.Double]])
+    checkFilter('a.string.isNull, classOf[Operators.Eq[Binary]])
+    checkFilter('a.binary.isNull, classOf[Operators.Eq[Binary]])
+  }
+
+  test("Pushdown IsNotNull predicate") {
+    checkFilter('a.int.isNotNull,    classOf[Operators.NotEq[Integer]])
+    checkFilter('a.long.isNotNull,   classOf[Operators.NotEq[java.lang.Long]])
+    checkFilter('a.float.isNotNull,  classOf[Operators.NotEq[java.lang.Float]])
+    checkFilter('a.double.isNotNull, classOf[Operators.NotEq[java.lang.Double]])
+    checkFilter('a.string.isNotNull, classOf[Operators.NotEq[Binary]])
+    checkFilter('a.binary.isNotNull, classOf[Operators.NotEq[Binary]])
+  }
+
+  test("Pushdown EqualTo predicate") {
+    checkFilter('a.int === 0,                 classOf[Operators.Eq[Integer]])
+    checkFilter('a.long === 0.toLong,         classOf[Operators.Eq[java.lang.Long]])
+    checkFilter('a.float === 0.toFloat,       classOf[Operators.Eq[java.lang.Float]])
+    checkFilter('a.double === 0.toDouble,     classOf[Operators.Eq[java.lang.Double]])
+    checkFilter('a.string === "foo",          classOf[Operators.Eq[Binary]])
+    checkFilter('a.binary === "foo".getBytes, classOf[Operators.Eq[Binary]])
+  }
+
+  test("Pushdown Not(EqualTo) predicate") {
+    checkFilter(!('a.int === 0),                 classOf[Operators.NotEq[Integer]])
+    checkFilter(!('a.long === 0.toLong),         classOf[Operators.NotEq[java.lang.Long]])
+    checkFilter(!('a.float === 0.toFloat),       classOf[Operators.NotEq[java.lang.Float]])
+    checkFilter(!('a.double === 0.toDouble),     classOf[Operators.NotEq[java.lang.Double]])
+    checkFilter(!('a.string === "foo"),          classOf[Operators.NotEq[Binary]])
+    checkFilter(!('a.binary === "foo".getBytes), classOf[Operators.NotEq[Binary]])
+  }
+
+  test("Pushdown LessThan predicate") {
+    checkFilter('a.int < 0,                 classOf[Operators.Lt[Integer]])
+    checkFilter('a.long < 0.toLong,         classOf[Operators.Lt[java.lang.Long]])
+    checkFilter('a.float < 0.toFloat,       classOf[Operators.Lt[java.lang.Float]])
+    checkFilter('a.double < 0.toDouble,     classOf[Operators.Lt[java.lang.Double]])
+    checkFilter('a.string < "foo",          classOf[Operators.Lt[Binary]])
+    checkFilter('a.binary < "foo".getBytes, classOf[Operators.Lt[Binary]])
+  }
+
+  test("Pushdown LessThanOrEqual predicate") {
+    checkFilter('a.int <= 0,                 classOf[Operators.LtEq[Integer]])
+    checkFilter('a.long <= 0.toLong,         classOf[Operators.LtEq[java.lang.Long]])
+    checkFilter('a.float <= 0.toFloat,       classOf[Operators.LtEq[java.lang.Float]])
+    checkFilter('a.double <= 0.toDouble,     classOf[Operators.LtEq[java.lang.Double]])
+    checkFilter('a.string <= "foo",          classOf[Operators.LtEq[Binary]])
+    checkFilter('a.binary <= "foo".getBytes, classOf[Operators.LtEq[Binary]])
+  }
+
+  test("Pushdown GreaterThan predicate") {
+    checkFilter('a.int > 0,                 classOf[Operators.Gt[Integer]])
+    checkFilter('a.long > 0.toLong,         classOf[Operators.Gt[java.lang.Long]])
+    checkFilter('a.float > 0.toFloat,       classOf[Operators.Gt[java.lang.Float]])
+    checkFilter('a.double > 0.toDouble,     classOf[Operators.Gt[java.lang.Double]])
+    checkFilter('a.string > "foo",          classOf[Operators.Gt[Binary]])
+    checkFilter('a.binary > "foo".getBytes, classOf[Operators.Gt[Binary]])
+  }
+
+  test("Pushdown GreaterThanOrEqual predicate") {
+    checkFilter('a.int >= 0,                 classOf[Operators.GtEq[Integer]])
+    checkFilter('a.long >= 0.toLong,         classOf[Operators.GtEq[java.lang.Long]])
+    checkFilter('a.float >= 0.toFloat,       classOf[Operators.GtEq[java.lang.Float]])
+    checkFilter('a.double >= 0.toDouble,     classOf[Operators.GtEq[java.lang.Double]])
+    checkFilter('a.string >= "foo",          classOf[Operators.GtEq[Binary]])
+    checkFilter('a.binary >= "foo".getBytes, classOf[Operators.GtEq[Binary]])
+  }
+
+  test("Comparison with null should not be pushed down") {
+    val predicates = Seq(
+      'a.int === null,
+      !('a.int === null),
+
+      Literal(null) === 'a.int,
+      !(Literal(null) === 'a.int),
+
+      'a.int < null,
+      'a.int <= null,
+      'a.int > null,
+      'a.int >= null,
+
+      Literal(null) < 'a.int,
+      Literal(null) <= 'a.int,
+      Literal(null) > 'a.int,
+      Literal(null) >= 'a.int
+    )
+
+    predicates.foreach { p =>
+      assert(
+        ParquetFilters.createFilter(p).isEmpty,
+        "Comparison predicate with null shouldn't be pushed down")
     }
   }
 }
