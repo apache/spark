@@ -289,7 +289,7 @@ object MLUtils {
           } else if (kv1 >= nnzv1 || (kv2 < nnzv2 && v2Indices(kv2) < v1Indices(kv1))) {
             score = v2Values(kv2)
             kv2 += 1
-          } else if ((kv1 < nnzv1 && kv2 < nnzv2) && v1Indices(kv1) == v2Indices(kv2)) {
+          } else if (v1Indices(kv1) == v2Indices(kv2)) {
             score = v1Values(kv1) - v2Values(kv2)
             kv1 += 1
             kv2 += 1
@@ -297,15 +297,15 @@ object MLUtils {
           squaredDistance += score * score
         }
 
-      // The following two cases are used to handle dense and approximately dense vectors
       case (v1: SparseVector, v2: DenseVector) if v1.indices.length / v1.size < 0.5 =>
         squaredDistance = vectorSquaredDistance(v1, v2)
 
       case (v1: DenseVector, v2: SparseVector) if v2.indices.length / v2.size < 0.5 =>
         squaredDistance = vectorSquaredDistance(v2, v1)
 
+      // When a SparseVector is approximately dense, we treat it as a DenseVector
       case (v1, v2) =>
-        squaredDistance = v1.toArray.zip(v2.toArray).foldLeft(0.0){(distance, elems) =>
+        squaredDistance = v1.toArray.zip(v2.toArray).foldLeft(0.0){ (distance, elems) =>
           val score = elems._1 - elems._2
           distance + score * score
         }
@@ -319,25 +319,23 @@ object MLUtils {
   private[util] def vectorSquaredDistance(v1: SparseVector, v2: DenseVector): Double = {
     var kv1 = 0
     var kv2 = 0
-    var indices = v1.indices
+    val indices = v1.indices
     var squaredDistance = 0.0
     var iv1 = indices(kv1)
     val nnzv2 = v2.size
 
     while (kv2 < nnzv2) {
       var score = 0.0
-      if (kv2 < iv1 || kv2 > iv1) {
+      if (kv2 != iv1) {
         score = v2(kv2)
-        squaredDistance += score * score
-      }
-      if (kv2 == iv1 && kv1 < indices.length) {
+      } else {
         score = v1.values(iv1) - v2(kv2)
-        squaredDistance += score * score
         if (kv1 < indices.length - 1) {
           kv1 += 1
           iv1 = indices(kv1)
         }
       }
+      squaredDistance += score * score
       kv2 += 1
     }
     squaredDistance
