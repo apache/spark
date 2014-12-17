@@ -797,7 +797,7 @@ admin.add_link(
         url='https://github.com/mistercrunch/Airflow'))
 
 
-def chart_link(v, c, m, p):
+def label_link(v, c, m, p):
     try:
         default_params = eval(m.default_params)
     except:
@@ -805,9 +805,10 @@ def chart_link(v, c, m, p):
     url = url_for('airflow.chart', chart_id=m.id, **default_params)
     return Markup("<a href='{url}'>{m.label}</a>".format(**locals()))
 
+
 class ChartModelView(ModelView):
-    column_list = ('label', 'db_id', 'chart_type', 'show_datatable', )
-    column_formatters = dict(label=chart_link)
+    column_list = ('label', 'id', 'db_id', 'chart_type', 'show_datatable', )
+    column_formatters = dict(label=label_link)
     form_choices = {
         'chart_type': [
             ('line', 'Line Chart'),

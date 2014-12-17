@@ -10,7 +10,13 @@
 {% block body %}
 {{ super() }}
 <div id="container">
-    <h2>{{ label }}</h2>
+    <h2>
+        {{ label }}
+        <a href="/admin/chartview/edit/?url=%2Fadmin%2Fchartview%2F&id={{ chart.id }}">
+            <i class="icon-edit" 
+                style="vertical-align:middle;"></i>
+        </a>
+    </h2>
     <div id="hc" style="height:{{ chart.height }}px;">
         <img src="{{ url_for('static', filename='loading.gif') }}" width="50px">
     </div>
