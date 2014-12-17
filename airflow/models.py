@@ -396,6 +396,7 @@ class TaskInstance(Base):
                 return False
 
             # Applying wait_for_downstream
+            previous_ti.task = self.task
             if task.wait_for_downstream and not \
                     previous_ti.are_dependents_done(session):
                 return False
