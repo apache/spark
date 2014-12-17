@@ -55,8 +55,25 @@ class GaussianMixtureModelEM private (
   // number of samples per cluster to use when initializing Gaussians
   private val nSamples = 5
   
+  // an initializing GMM can be provided rather than using the 
+  // default random starting point
+  private var initialGmm: Option[GaussianMixtureModel] = None
+  
   /** A default instance, 2 Gaussians, 100 iterations, 0.01 log-likelihood threshold */
   def this() = this(2, 0.01, 100)
+  
+  /** Set the initial GMM starting point, bypassing the random initialization */
+  def setInitialGmm(gmm: GaussianMixtureModel): this.type = {
+    if (gmm.k == k) {
+      initialGmm = Some(gmm)
+    } else {
+      throw new IllegalArgumentException("initialing GMM has mismatched cluster count (gmm.k != k)")
+    }
+    this
+  }
+  
+  /** Return the user supplied initial GMM, if supplied */
+  def getInitialiGmm: Option[GaussianMixtureModel] = initialGmm
   
   /** Set the number of Gaussians in the mixture model.  Default: 2 */
   def setK(k: Int): this.type = {
@@ -103,20 +120,35 @@ class GaussianMixtureModelEM private (
     // Get length of the input vectors
     val d = breezeData.first.length 
     
-    // For each Gaussian, we will initialize the mean as the average
-    // of some random samples from the data
-    val samples = breezeData.takeSample(true, k * nSamples, scala.util.Random.nextInt)
-    
-    // gaussians will be array of (weight, mean, covariance) tuples
+    // gaussians will be array of (weight, mean, covariance) tuples.
+    // If the user supplied an initial GMM, we use those values, otherwise
     // we start with uniform weights, a random mean from the data, and
     // diagonal covariance matrices using component variances
     // derived from the samples 
-    var gaussians = (0 until k).map{ i => 
+    var gaussians = initialGmm match {
+      case Some(gmm) => (0 until k).map{ i =>
+        (gmm.weight(i), gmm.mu(i).toBreeze.toDenseVector, gmm.sigma(i).toBreeze.toDenseMatrix)
+      }.toArray
+      
+      case None => {
+        // For each Gaussian, we will initialize the mean as the average
+        // of some random samples from the data
+        val samples = breezeData.takeSample(true, k * nSamples, scala.util.Random.nextInt)
+          
+        (0 until k).map{ i => 
+          (1.0 / k, 
+            vectorMean(samples.slice(i * nSamples, (i + 1) * nSamples)), 
+            initCovariance(samples.slice(i * nSamples, (i + 1) * nSamples)))
+        }.toArray
+      }
+    }
+    
+    /*var gaussians = (0 until k).map{ i => 
       (1.0 / k,
         vectorMean(samples.slice(i * nSamples, (i + 1) * nSamples)),
         initCovariance(samples.slice(i * nSamples, (i + 1) * nSamples)))
     }.toArray
-    
+    */
     val accW     = new Array[Accumulator[Double]](k)
     val accMu    = new Array[Accumulator[DenseDoubleVector]](k)
     val accSigma = new Array[Accumulator[DenseDoubleMatrix]](k)
