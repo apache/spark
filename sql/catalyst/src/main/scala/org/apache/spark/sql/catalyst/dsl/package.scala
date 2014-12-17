@@ -246,6 +246,8 @@ package object dsl {
 
     def orderBy(sortExprs: SortOrder*) = Sort(sortExprs, logicalPlan)
 
+    def sortBy(sortExprs: SortOrder*) = SortPartitions(sortExprs, logicalPlan)
+
     def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*) = {
       val aliasedExprs = aggregateExprs.map {
         case ne: NamedExpression => ne
