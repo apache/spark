@@ -147,6 +147,8 @@ package object dsl {
     def max(e: Expression) = Max(e)
     def upper(e: Expression) = Upper(e)
     def lower(e: Expression) = Lower(e)
+    def sqrt(e: Expression) = Sqrt(e)
+    def abs(e: Expression) = Abs(e)
 
     implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s = sym.name }
     // TODO more implicit class for literal?
