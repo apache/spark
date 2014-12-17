@@ -25,35 +25,21 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
 import org.netlib.util.intW
 
-import org.apache.spark.{HashPartitioner, Partitioner, SparkContext}
-import org.apache.spark.SparkContext._
+import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLContext, SchemaRDD, StructType}
+import org.apache.spark.sql.{SchemaRDD, StructType}
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.dsl._
-import org.apache.spark.sql.catalyst.expressions.{Cast, Row}
+import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.types.{DoubleType, FloatType, IntegerType, StructField}
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
 import org.apache.spark.util.random.XORShiftRandom
 
-case class Rating(user: Int, product: Int, rating: Float)
-
-object Rating {
-  def parseRating(str: String, delimiter: String): Rating = {
-    val fields = str.split(delimiter)
-    assert(fields.size >= 3)
-    val user = java.lang.Integer.parseInt(fields(0))
-    val product = java.lang.Integer.parseInt(fields(1))
-    val rating = java.lang.Float.parseFloat(fields(2))
-    new Rating(user, product, rating)
-  }
-}
-
 /**
- * Params for ALS.
+ * Common params for ALS.
  */
 private[recommendation] trait ALSParams extends Params with HasMaxIter with HasRegParam
   with HasPredictionCol {
@@ -147,6 +133,8 @@ private object ALSModel {
 
 class ALS extends Estimator[ALSModel] with ALSParams {
 
+  import ALS.Rating
+
   def setRank(value: Int): this.type = set(rank, value)
   def setNumUserBlocks(value: Int): this.type = set(numUserBlocks, value)
   def setNumProductBlocks(value: Int): this.type = set(numProductBlocks, value)
@@ -190,35 +178,7 @@ class ALS extends Estimator[ALSModel] with ALSParams {
 
 object ALS {
 
-  def main(args: Array[String]): Unit = {
-    val sc = new SparkContext("local", "ALS")
-    val sql = new SQLContext(sc)
-    import sql._
-    val ratings = sc.textFile("/Users/meng/share/data/movielens/ml-1m/ratings.dat", 2)
-        .map(s => Rating.parseRating(s, "::"))
-    val Array(training, test) = ratings.randomSplit(Array(0.8, 0.2), 0L)
-    val als = new ALS()
-        .setRank(10)
-        .setNumBlocks(2)
-        .setMaxIter(10)
-        .setRegParam(0.1)
-    val start = System.nanoTime()
-    val model = als.fit(training)
-    val end = System.nanoTime()
-    println("Time: " + (end - start) / 1e9)
-    val predictions = model.transform(test).select('rating, 'prediction)
-    val mse = predictions.flatMap { case Row(rating: Float, prediction: Float) =>
-      val err = prediction.toDouble - rating
-      val err2 = err * err
-      if (!err2.isNaN) {
-        Iterator.single(err2)
-      } else {
-        Iterator.empty
-      }
-    }.mean()
-    val rmse = math.sqrt(mse)
-    println(s"Test RMSE: $rmse.")
-  }
+  private case class Rating(user: Int, product: Int, rating: Float)
 
   private class CholeskySolver(val k: Int) {
 
