@@ -252,8 +252,10 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       val unserializable = new UnserializableClass
     }
     
+    throw new Exception(scheduler.getSerializationAsString(unserializableRdd))
+    
     val trace : Array[SerializedRdd] = scheduler.tryToSerialize(unserializableRdd)
-
+    
     assert(trace.length == 1)
     assert(trace(0).isLeft) //Failed to serialize
   }

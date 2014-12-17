@@ -832,16 +832,7 @@ class DAGScheduler(
    *              
    */
   def getSerializationAsString(rdd : RDD[_]): String = {
-    // Next, if there are dependencies, attempt to serialize those
-    val results : Array[SerializedRdd] = tryToSerialize(rdd)
-    
-    var trace = "Serialization trace:\n"
-    
-    val it = results.iterator
-    while (it.hasNext) {
-      trace += rdd.name + ": " + it.next().fold(l => l, r=> SerializationState.Success) + "\n"
-    }
-    trace
+    SerializationHelper.getSerializationTrace(closureSerializer, rdd, tryToSerialize(rdd))
   }
 
   /** Called when stage's parents are available and we can now do its task. */
