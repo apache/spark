@@ -5,6 +5,8 @@ This tutorial provides a quick introduction to using SparkR. We will first intro
 
 To follow along with this guide, you'll need to install and configure both Spark and SparkR. If you're just starting out, we recommend [setting up a development environment] based on Cloudera's QuickStart VM. The VM approach will provide you with working versions of Hadoop, Spark, and SparkR while requiring minimal configuration.
 
+NOTE:  This tutorial draws heavily from the original [Spark Quick Start Guide].
+
 Interactive Analysis with the SparkR Shell
 ===
 
@@ -158,6 +160,8 @@ In addition, SparkR includes several samples in the `examples` directory.  To ru
 ```sh
 ./sparkR examples/pi.R local[2]
 ```
+
+[Spark Quick Start Guide]: http://spark.apache.org/docs/latest/quick-start.html
 
 [setting up a development environment]: http://adventures.putler.org/blog/2014/12/08/Setting-Up-a-Virtual-Machine-with-SparkR/
 
