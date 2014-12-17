@@ -74,7 +74,8 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     newFilesOnly: Boolean = true)
   extends InputDStream[(K, V)](ssc_) {
 
-  @transient private val clock = ssc.scheduler.clock
+  // This is a def so that it works during checkpoint recovery:
+  private def clock = ssc.scheduler.clock
 
   // Data to be saved as part of the streaming checkpoints
   protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
