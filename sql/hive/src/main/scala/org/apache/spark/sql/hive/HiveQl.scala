@@ -886,6 +886,10 @@ private[hive] object HiveQl {
   val MIN = "(?i)MIN".r
   val UPPER = "(?i)UPPER".r
   val LOWER = "(?i)LOWER".r
+  val TRIM = "(?i)TRIM".r
+  val LTRIM = "(?i)LTRIM".r
+  val RTRIM = "(?i)RTRIM".r
+  val LENGTH = "(?i)LENGTH".r
   val RAND = "(?i)RAND".r
   val AND = "(?i)AND".r
   val OR = "(?i)OR".r
@@ -935,6 +939,10 @@ private[hive] object HiveQl {
     /* System functions about string operations */
     case Token("TOK_FUNCTION", Token(UPPER(), Nil) :: arg :: Nil) => Upper(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token(LOWER(), Nil) :: arg :: Nil) => Lower(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token(TRIM(), Nil) :: arg :: Nil) => Trim(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token(LTRIM(), Nil) :: arg :: Nil) => Ltrim(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token(RTRIM(), Nil) :: arg :: Nil) => Rtrim(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token(LENGTH(), Nil) :: arg :: Nil) => Length(nodeToExpr(arg))
 
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
