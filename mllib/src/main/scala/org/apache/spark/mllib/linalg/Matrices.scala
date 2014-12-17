@@ -603,7 +603,7 @@ object Matrices {
   /**
    * Horizontally concatenate a sequence of matrices. The returned matrix will be in the format
    * the matrices are supplied in. Supplying a mix of dense and sparse matrices will result in
-   * a dense matrix.
+   * a sparse matrix.
    * @param matrices array of matrices
    * @return a single `Matrix` composed of the matrices that were horizontally concatenated
    */
@@ -621,17 +621,42 @@ object Matrices {
       mat match {
         case sparse: SparseMatrix => isSparse = true
         case dense: DenseMatrix => isDense = true
+        case _ => throw new IllegalArgumentException("Unsupported matrix format. Expected " +
+          s"SparseMatrix or DenseMatrix. Instead got: ${mat.getClass}")
       }
       numCols += mat.numCols
     }
     require(rowsMatch, "The number of rows of the matrices in this sequence, don't match!")
 
-    if (isSparse && !isDense) {
+    if (!isSparse && isDense) {
+      new DenseMatrix(numRows, numCols, matrices.flatMap(_.toArray).toArray)
+    } else {
       val allColPtrs: Array[(Int, Int)] = Array((0, 0)) ++
         matrices.zipWithIndex.flatMap { case (mat, ind) =>
-          val ptr = mat.asInstanceOf[SparseMatrix].colPtrs
-          ptr.slice(1, ptr.length).map(p => (ind, p))
-      }
+          mat match {
+            case spMat: SparseMatrix =>
+              val ptr = spMat.colPtrs
+              ptr.slice(1, ptr.length).map(p => (ind, p))
+            case dnMat: DenseMatrix =>
+              val colSize = dnMat.numCols
+              var j = 0
+              val rowSize = dnMat.numRows
+              val ptr = new ArrayBuffer[(Int, Int)](colSize)
+              var nnz = 0
+              val vals = dnMat.values
+              while (j < colSize) {
+                var i = j * rowSize
+                val indEnd = (j + 1) * rowSize
+                while (i < indEnd) {
+                  if (vals(i) != 0.0) nnz += 1
+                  i += 1
+                }
+                j += 1
+                ptr.append((ind, nnz))
+              }
+              ptr
+          }
+        }
       var counter = 0
       var lastIndex = 0
       var lastPtr = 0
@@ -643,21 +668,36 @@ object Matrices {
         lastPtr = p
         counter + p
       }
+      val valsAndIndices: Array[(Int, Double)] = matrices.flatMap {
+        case spMat: SparseMatrix =>
+          spMat.rowIndices.zip(spMat.values)
+        case dnMat: DenseMatrix =>
+          val colSize = dnMat.numCols
+          var j = 0
+          val rowSize = dnMat.numRows
+          val data = new ArrayBuffer[(Int, Double)]()
+          val vals = dnMat.values
+          while (j < colSize) {
+            val indStart = j * rowSize
+            var i = 0
+            while (i < rowSize) {
+              val index = indStart + i
+              if (vals(index) != 0.0) data.append((i, vals(index)))
+              i += 1
+            }
+            j += 1
+          }
+          data
+      }
       new SparseMatrix(numRows, numCols, adjustedPtrs,
-        matrices.flatMap(_.asInstanceOf[SparseMatrix].rowIndices).toArray,
-        matrices.flatMap(_.asInstanceOf[SparseMatrix].values).toArray)
-    } else if (!isSparse && !isDense) {
-      throw new IllegalArgumentException("The supplied matrices are neither in SparseMatrix or" +
-        " DenseMatrix format!")
-    }else {
-      new DenseMatrix(numRows, numCols, matrices.flatMap(_.toArray).toArray)
+        valsAndIndices.map(_._1), valsAndIndices.map(_._2))
     }
   }
 
   /**
    * Vertically concatenate a sequence of matrices. The returned matrix will be in the format
    * the matrices are supplied in. Supplying a mix of dense and sparse matrices will result in
-   * a dense matrix.
+   * a sparse matrix.
    * @param matrices array of matrices
    * @return a single `Matrix` composed of the matrices that were vertically concatenated
    */
@@ -680,27 +720,58 @@ object Matrices {
         case dense: DenseMatrix =>
           isDense = true
           valsLength += dense.values.length
+        case _ => throw new IllegalArgumentException("Unsupported matrix format. Expected " +
+          s"SparseMatrix or DenseMatrix. Instead got: ${mat.getClass}")
       }
       numRows += mat.numRows
 
     }
     require(colsMatch, "The number of rows of the matrices in this sequence, don't match!")
 
-    if (isSparse && !isDense) {
-      val matMap = matrices.zipWithIndex.map(d => (d._2, d._1.asInstanceOf[SparseMatrix])).toMap
-      // (matrixInd, colInd, colStart, colEnd, numRows)
-      val allColPtrs: Seq[(Int, Int, Int, Int, Int)] =
-        matMap.flatMap { case (ind, mat) =>
-          val ptr = mat.colPtrs
-          var colStart = 0
-          var j = 0
-          ptr.slice(1, ptr.length).map { p =>
-            j += 1
-            val oldColStart = colStart
-            colStart = p
-            (j - 1, ind, oldColStart, p, mat.numRows)
-          }
-        }.toSeq
+    if (!isSparse && isDense) {
+      val matData = matrices.zipWithIndex.flatMap { case (mat, ind) =>
+        val values = mat.toArray
+        for (j <- 0 until numCols) yield (j, ind,
+          values.slice(j * mat.numRows, (j + 1) * mat.numRows))
+      }.sortBy(x => (x._1, x._2))
+      new DenseMatrix(numRows, numCols, matData.flatMap(_._3).toArray)
+    } else {
+      val matMap = matrices.zipWithIndex.map(d => (d._2, d._1)).toMap
+      // (colInd, matrixInd, colStart, colEnd, numRows)
+      val allColPtrs: Seq[(Int, Int, Int, Int, Int)] = matMap.flatMap { case (ind, mat) =>
+        mat match {
+          case spMat: SparseMatrix =>
+            val ptr = spMat.colPtrs
+            var colStart = 0
+            var j = 0
+            ptr.slice(1, ptr.length).map { p =>
+              j += 1
+              val oldColStart = colStart
+              colStart = p
+              (j - 1, ind, oldColStart, p, spMat.numRows)
+            }
+          case dnMat: DenseMatrix =>
+            val colSize = dnMat.numCols
+            var j = 0
+            val rowSize = dnMat.numRows
+            val ptr = new ArrayBuffer[(Int, Int, Int, Int, Int)](colSize)
+            var nnz = 0
+            val vals = dnMat.values
+            var colStart = 0
+            while (j < colSize) {
+              var i = j * rowSize
+              val indEnd = (j + 1) * rowSize
+              while (i < indEnd) {
+                if (vals(i) != 0.0) nnz += 1
+                i += 1
+              }
+              ptr.append((j, ind, colStart, nnz, dnMat.numRows))
+              j += 1
+              colStart = nnz
+            }
+            ptr
+        }
+      }.toSeq
       val values = new ArrayBuffer[Double](valsLength)
       val rowInd = new ArrayBuffer[Int](valsLength)
       val newColPtrs = new Array[Int](numCols)
@@ -712,31 +783,38 @@ object Matrices {
         var startRow = 0
         sortedPtrs.foreach { case (colIdx, matrixInd, colStart, colEnd, nRows) =>
           val selectedMatrix = matMap(matrixInd)
-          val selectedValues = selectedMatrix.values.slice(colStart, colEnd)
-          val selectedRowIdx = selectedMatrix.rowIndices.slice(colStart, colEnd)
-          val len = selectedValues.length
-          newColPtrs(colIdx) += len
-          var i = 0
-          while (i < len) {
-            values.append(selectedValues(i))
-            rowInd.append(selectedRowIdx(i) + startRow)
-            i += 1
+          selectedMatrix match {
+            case spMat: SparseMatrix =>
+              val selectedValues = spMat.values
+              val selectedRowIdx = spMat.rowIndices
+              val len = colEnd - colStart
+              newColPtrs(colIdx) += len
+              var i = colStart
+              while (i < colEnd) {
+                values.append(selectedValues(i))
+                rowInd.append(selectedRowIdx(i) + startRow)
+                i += 1
+              }
+            case dnMat: DenseMatrix =>
+              val selectedValues = dnMat.values
+              val len = colEnd - colStart
+              newColPtrs(colIdx) += len
+              val indStart = colIdx * nRows
+              var i = 0
+              while (i < nRows) {
+                val v = selectedValues(indStart + i)
+                if (v != 0) {
+                  values.append(v)
+                  rowInd.append(i + startRow)
+                }
+                i += 1
+              }
           }
           startRow += nRows
         }
       }
       val adjustedPtrs = newColPtrs.scanLeft(0)(_ + _)
       new SparseMatrix(numRows, numCols, adjustedPtrs, rowInd.toArray, values.toArray)
-    } else if (!isSparse && !isDense) {
-      throw new IllegalArgumentException("The supplied matrices are neither in SparseMatrix or" +
-        " DenseMatrix format!")
-    }else {
-      val matData = matrices.zipWithIndex.flatMap { case (mat, ind) =>
-        val values = mat.toArray
-        for (j <- 0 until numCols) yield (j, ind,
-          values.slice(j * mat.numRows, (j + 1) * mat.numRows))
-      }.sortBy(x => (x._1, x._2))
-      new DenseMatrix(numRows, numCols, matData.flatMap(_._3).toArray)
     }
   }
 }
