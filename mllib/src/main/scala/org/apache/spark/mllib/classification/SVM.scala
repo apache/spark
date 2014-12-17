@@ -90,7 +90,7 @@ class SVMWithSGD private (
     .setNumIterations(numIterations)
     .setRegParam(regParam)
     .setMiniBatchFraction(miniBatchFraction)
-  override protected val validators = List(DataValidators.binaryLabelValidator)
+  validators = List(DataValidators.binaryLabelValidator)
 
   /**
    * Construct a SVM object with default parameters: {stepSize: 1.0, numIterations: 100,
