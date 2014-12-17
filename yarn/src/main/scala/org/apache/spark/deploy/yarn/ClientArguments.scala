@@ -67,7 +67,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
     if (!isClusterMode) {
       amMemory = Utils.memoryStringToMb(sparkConf.get("spark.yarn.am.memory", "512m"))
     } else {
-      println("spark.yarn.am.memory is set but does not apply in client mode, " +
+      println("spark.yarn.am.memory is set but does not apply in cluster mode, " +
           "use spark.driver.memory instead.")
     }
     // For backward compatibility, SPARK_YARN_DIST_{ARCHIVES/FILES} should be resolved to hdfs://,
