@@ -26,75 +26,103 @@ from releaseutils import *
 
 # You must set the following before use!
 JIRA_API_BASE = os.environ.get("JIRA_API_BASE", "https://issues.apache.org/jira")
-START_COMMIT = os.environ.get("START_COMMIT", "37b100")
-END_COMMIT = os.environ.get("END_COMMIT", "3693ae")
+RELEASE_TAG = os.environ.get("START_COMMIT", "v1.2.0-rc2")
+PREVIOUS_RELEASE_TAG = os.environ.get("END_COMMIT", "v1.1.0")
 
-# If commit range is not specified, prompt the user to provide it
-if not START_COMMIT or not END_COMMIT:
-    print "A commit range is required to proceed."
-    if not START_COMMIT:
-        START_COMMIT = raw_input("Please specify starting commit hash (inclusive): ")
-    if not END_COMMIT:
-        END_COMMIT = raw_input("Please specify ending commit hash (non-inclusive): ")
+# If the release tags are not provided, prompt the user to provide them
+while not tag_exists(RELEASE_TAG):
+    RELEASE_TAG = raw_input("Please provide a valid release tag: ")
+while not tag_exists(PREVIOUS_RELEASE_TAG):
+    print "Please specify the previous release tag."
+    PREVIOUS_RELEASE_TAG = raw_input(\
+        "For instance, if you are releasing v1.2.0, you should specify v1.1.0: ")
 
-# Verify provided arguments
-start_commit_line = get_one_line(START_COMMIT)
-end_commit_line = get_one_line(END_COMMIT)
-num_commits = num_commits_in_range(START_COMMIT, END_COMMIT)
-if not start_commit_line: sys.exit("Start commit %s not found!" % START_COMMIT)
-if not end_commit_line: sys.exit("End commit %s not found!" % END_COMMIT)
-if num_commits == 0:
-    sys.exit("There are no commits in the provided range [%s, %s)" % (START_COMMIT, END_COMMIT))
+# Gather commits found in the new tag but not in the old tag.
+# This filters commits based on both the git hash and the PR number.
+# If either is present in the old tag, then we ignore the commit.
+print "Gathering new commits between tags %s and %s" % (PREVIOUS_RELEASE_TAG, RELEASE_TAG)
+release_commits = get_commits(RELEASE_TAG)
+previous_release_commits = get_commits(PREVIOUS_RELEASE_TAG)
+previous_release_hashes = set()
+previous_release_prs = set()
+for old_commit in previous_release_commits:
+    previous_release_hashes.add(old_commit.get_hash())
+    if old_commit.get_pr_number():
+        previous_release_prs.add(old_commit.get_pr_number())
+new_commits = []
+for this_commit in release_commits:
+    this_hash = this_commit.get_hash()
+    this_pr_number = this_commit.get_pr_number()
+    if this_hash in previous_release_hashes:
+        continue
+    if this_pr_number and this_pr_number in previous_release_prs:
+        continue
+    new_commits.append(this_commit)
+if not new_commits:
+    sys.exit("There are no new commits between %s and %s!" % (PREVIOUS_RELEASE_TAG, RELEASE_TAG))
+
+# Prompt the user for confirmation that the commit range is correct
 print "\n=================================================================================="
 print "JIRA server: %s" % JIRA_API_BASE
-print "Start commit (inclusive): %s" % start_commit_line
-print "End commit (non-inclusive): %s" % end_commit_line
-print "Number of commits in this range: %s" % num_commits
+print "Release tag: %s" % RELEASE_TAG
+print "Previous release tag: %s" % PREVIOUS_RELEASE_TAG
+print "Number of commits in this range: %s" % len(new_commits)
 print
-response = raw_input("Is this correct? [Y/n] ")
-if response.lower() != "y" and response:
-    sys.exit("Ok, exiting")
+def print_indented(_list):
+    for x in _list: print "  %s" % x
+if yesOrNoPrompt("Show all commits?"):
+    print_indented(new_commits)
 print "==================================================================================\n"
-
-# Find all commits within this range
-print "Gathering commits within range [%s..%s)" % (START_COMMIT, END_COMMIT)
-commits = get_one_line_commits(START_COMMIT, END_COMMIT)
-if not commits: sys.exit("Error: No commits found within this range!")
-commits = commits.split("\n")
+if not yesOrNoPrompt("Does this look correct?"):
+    sys.exit("Ok, exiting")
 
 # Filter out special commits
 releases = []
+maintenance = []
 reverts = []
 nojiras = []
 filtered_commits = []
-def is_release(commit):
-    return re.findall("\[release\]", commit.lower()) or\
-        "maven-release-plugin" in commit or "CHANGES.txt" in commit
-def has_no_jira(commit):
-    return not re.findall("SPARK-[0-9]+", commit.upper())
-def is_revert(commit):
-    return "revert" in commit.lower()
-def is_docs(commit):
-    return re.findall("docs*", commit.lower()) or "programming guide" in commit.lower()
-for c in commits:
-    if not c: continue
-    elif is_release(c): releases.append(c)
-    elif is_revert(c): reverts.append(c)
-    elif is_docs(c): filtered_commits.append(c) # docs may not have JIRA numbers
-    elif has_no_jira(c): nojiras.append(c)
+def is_release(commit_title):
+    return re.findall("\[release\]", commit_title.lower()) or\
+        "preparing spark release" in commit_title.lower() or\
+        "preparing development version" in commit_title.lower() or\
+        "CHANGES.txt" in commit_title
+def is_maintenance(commit_title):
+    return "maintenance" in commit_title.lower() or\
+      "manually close" in commit_title.lower()
+def has_no_jira(commit_title):
+    return not re.findall("SPARK-[0-9]+", commit_title.upper())
+def is_revert(commit_title):
+    return "revert" in commit_title.lower()
+def is_docs(commit_title):
+    return re.findall("docs*", commit_title.lower()) or\
+        "programming guide" in commit_title.lower()
+for c in new_commits:
+    t = c.get_title()
+    if not t: continue
+    elif is_release(t): releases.append(c)
+    elif is_maintenance(t): maintenance.append(c)
+    elif is_revert(t): reverts.append(c)
+    elif is_docs(t): filtered_commits.append(c) # docs may not have JIRA numbers
+    elif has_no_jira(t): nojiras.append(c)
     else: filtered_commits.append(c)
 
 # Warn against ignored commits
-def print_indented(_list):
-    for x in _list: print "  %s" % x
-if releases or reverts or nojiras:
+if releases or maintenance or reverts or nojiras:
     print "\n=================================================================================="
-    if releases: print "Releases (%d)" % len(releases); print_indented(releases)
-    if reverts: print "Reverts (%d)" % len(reverts); print_indented(reverts)
-    if nojiras: print "No JIRA (%d)" % len(nojiras); print_indented(nojiras)
+    if releases: print "Found %d release commits" % len(releases)
+    if maintenance: print "Found %d maintenance commits" % len(maintenance)
+    if reverts: print "Found %d revert commits" % len(reverts)
+    if nojiras: print "Found %d commits with no JIRA" % len(nojiras)
+    print "* Warning: these commits will be ignored.\n"
+    if yesOrNoPrompt("Show ignored commits?"):
+        if releases: print "Release (%d)" % len(releases); print_indented(releases)
+        if maintenance: print "Maintenance (%d)" % len(maintenance); print_indented(maintenance)
+        if reverts: print "Revert (%d)" % len(reverts); print_indented(reverts)
+        if nojiras: print "No JIRA (%d)" % len(nojiras); print_indented(nojiras)
     print "==================== Warning: the above commits will be ignored ==================\n"
-response = raw_input("%d commits left to process. Ok to proceed? [Y/n] " % len(filtered_commits))
-if response.lower() != "y" and response:
+prompt_msg = "%d commits left to process after filtering. Ok to proceed?" % len(filtered_commits)
+if not yesOrNoPrompt(prompt_msg):
     sys.exit("Ok, exiting.")
 
 # Keep track of warnings to tell the user at the end
@@ -123,10 +151,11 @@ jira_options = { "server": JIRA_API_BASE }
 jira_client = JIRA(options = jira_options)
 print "\n=========================== Compiling contributor list ==========================="
 for commit in filtered_commits:
-    commit_hash = re.findall("^[a-z0-9]+", commit)[0]
-    issues = re.findall("SPARK-[0-9]+", commit.upper())
-    author = get_author(commit_hash)
-    author = unidecode.unidecode(unicode(author, "UTF-8")).strip() # guard against special characters
+    _hash = commit.get_hash()
+    title = commit.get_title()
+    issues = re.findall("SPARK-[0-9]+", title.upper())
+    author = commit.get_author()
+    date = get_date(_hash)
     # If the author name is invalid, keep track of it along
     # with all associated issues so we can translate it later
     if is_valid_author(author):
@@ -136,9 +165,8 @@ for commit in filtered_commits:
             invalid_authors[author] = set()
         for issue in issues:
             invalid_authors[author].add(issue)
-    date = get_date(commit_hash)
-    # Parse components from the commit message, if any
-    commit_components = find_components(commit, commit_hash)
+    # Parse components from the commit title, if any
+    commit_components = find_components(title, _hash)
     # Populate or merge an issue into author_info[author]
     def populate(issue_type, components):
         components = components or [CORE_COMPONENT] # assume core if no components provided
@@ -153,14 +181,14 @@ for commit in filtered_commits:
         jira_issue = jira_client.issue(issue)
         jira_type = jira_issue.fields.issuetype.name
         jira_type = translate_issue_type(jira_type, issue, warnings)
-        jira_components = [translate_component(c.name, commit_hash, warnings)\
+        jira_components = [translate_component(c.name, _hash, warnings)\
             for c in jira_issue.fields.components]
         all_components = set(jira_components + commit_components)
         populate(jira_type, all_components)
     # For docs without an associated JIRA, manually add it ourselves
-    if is_docs(commit) and not issues:
+    if is_docs(title) and not issues:
         populate("documentation", commit_components)
-    print "  Processed commit %s authored by %s on %s" % (commit_hash, author, date)
+    print "  Processed commit %s authored by %s on %s" % (_hash, author, date)
 print "==================================================================================\n"
 
 # Write to contributors file ordered by author names
