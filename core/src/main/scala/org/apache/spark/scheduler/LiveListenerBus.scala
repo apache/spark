@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.{LinkedBlockingQueue, Semaphore}
 
 import org.apache.spark.Logging
@@ -35,7 +36,7 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
    * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */
   private val EVENT_QUEUE_CAPACITY = 10000
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
-  private var queueFullErrorMessageLogged = false
+  private val queueFullErrorMessageLogged = new AtomicBoolean(false)
   private var started = false
 
   // A counter that represents the number of events produced and consumed in the queue
@@ -118,7 +119,7 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
    * Log an error message to indicate that the event queue is full. Do this only once.
    */
   private def logQueueFullErrorMessage(): Unit = {
-    if (!queueFullErrorMessageLogged) {
+    if (queueFullErrorMessageLogged.compareAndSet(false, true)) {
       if (listenerThread.isAlive) {
         logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
           "This likely means one of the SparkListeners is too slow and cannot keep up with" +
@@ -127,7 +128,6 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
         logError("SparkListenerBus thread is dead! This means SparkListenerEvents have not" +
           "been (and will no longer be) propagated to listeners for some time.")
       }
-      queueFullErrorMessageLogged = true
     }
   }
 
