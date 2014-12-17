@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import scala.collection.JavaConversions._
-
 import java.io._
 import java.util.{ArrayList => JArrayList}
 
@@ -27,19 +25,17 @@ import org.apache.commons.lang.StringUtils
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.cli.{CliDriver, CliSessionState, OptionsProcessor}
-import org.apache.hadoop.hive.common.LogUtils.LogInitializationException
-import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils, LogUtils}
+import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.processors.{SetProcessor, CommandProcessor, CommandProcessorFactory}
+import org.apache.hadoop.hive.ql.processors.{CommandProcessor, SetProcessor}
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.shims.ShimLoader
-import org.apache.thrift.transport.TSocket
-
 import org.apache.spark.Logging
 import org.apache.spark.sql.hive.HiveShim
-import org.apache.spark.sql.hive.thriftserver.HiveThriftServerShim
+import org.apache.thrift.transport.TSocket
+
+import scala.collection.JavaConversions._
 
 private[hive] object SparkSQLCLIDriver {
   private var prompt = "spark-sql"
@@ -190,7 +186,6 @@ private[hive] object SparkSQLCLIDriver {
     transport = clientTransportTSocketField.get(sessionState).asInstanceOf[TSocket]
 
     var ret = 0
-    var prefix = ""
     val currentDB = ReflectionUtils.invokeStatic(classOf[CliDriver], "getFormattedDb",
       classOf[HiveConf] -> conf, classOf[CliSessionState] -> sessionState)
 
@@ -201,26 +196,30 @@ private[hive] object SparkSQLCLIDriver {
     var currentPrompt = promptWithCurrentDB
     var line = reader.readLine(currentPrompt + "> ")
 
-    while (line != null) {
-      if (prefix.nonEmpty) {
-        prefix += '\n'
-      }
+    val filterCommentResult = FilterCommentResult("", false,
+      new scala.collection.mutable.Stack[String])
 
-      if (line.trim().endsWith(";") && !line.trim().endsWith("\\;")) {
-        line = prefix + line
-        ret = cli.processLine(line, true)
-        prefix = ""
+    while (line != null) {
+
+      // filter the comments in the line
+      SQLCommentUtils.filterComment(line, filterCommentResult)
+
+      if (filterCommentResult.isCmdEnded) {
+        ret = cli.processLine(filterCommentResult.cmd, true)
+        filterCommentResult.cmd = ""
         currentPrompt = promptWithCurrentDB
       } else {
-        prefix = prefix + line
         currentPrompt = continuedPromptWithDBSpaces
+      }
+
+      if (filterCommentResult.cmd.trim.nonEmpty) {
+        filterCommentResult.cmd += "\n"
       }
 
       line = reader.readLine(currentPrompt + "> ")
     }
 
     sessionState.close()
-
     System.exit(ret)
   }
 }
@@ -324,5 +323,39 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       ret
     }
   }
-}
 
+  // override for comment support when using spark-sql with CLI option -f
+  override def processReader(r: BufferedReader): Int = {
+
+    var line = r.readLine()
+    val filterCommentResult = FilterCommentResult("", false,
+      new scala.collection.mutable.Stack[String])
+
+    while (line != null) {
+      // filter the comments in the line
+      SQLCommentUtils.filterComment(line, filterCommentResult)
+      LOG.debug("filterCommentResult=" + filterCommentResult)
+
+      if (filterCommentResult.cmd.trim.nonEmpty) {
+        filterCommentResult.cmd += "\n"
+      }
+
+      line = r.readLine()
+    }
+
+    if (!filterCommentResult.isCmdEnded) {
+      if (filterCommentResult.commentStack.nonEmpty
+        || !filterCommentResult.cmd.trim.endsWith(";")) {
+        val filename = sessionState.fileName
+        throw new Exception(s"WARN: sqls in $filename is not completed.")
+      } else {
+        filterCommentResult.isCmdEnded = true
+      }
+    }
+
+    LOG.debug("filterCommentResult.cmd=" + filterCommentResult.cmd)
+    val ret = processLine(filterCommentResult.cmd)
+    return (ret);
+  }
+
+}
