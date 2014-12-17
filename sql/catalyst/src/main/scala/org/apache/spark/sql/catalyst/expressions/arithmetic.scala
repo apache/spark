@@ -122,9 +122,16 @@ case class Divide(left: Expression, right: Expression) extends BinaryArithmetic 
 case class Remainder(left: Expression, right: Expression) extends BinaryArithmetic {
   def symbol = "%"
 
-  override def nullable = left.nullable || right.nullable || dataType.isInstanceOf[DecimalType]
+  override def nullable = true
 
-  override def eval(input: Row): Any = i2(input, left, right, _.rem(_, _))
+  override def eval(input: Row): Any = {
+    val evalE2 = right.eval(input)
+    dataType match {
+      case _ if evalE2 == null => null
+      case _ if evalE2 == 0 => null
+      case nt: NumericType => i1(input, left, _.rem(_, evalE2.asInstanceOf[nt.JvmType]))
+    }
+  }
 }
 
 /**
