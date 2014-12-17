@@ -78,3 +78,4 @@ res5: res17: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan =
 Project [key#10,value#11]
  MetastoreRelation default, src, None
 ```
+Activate Hive tests.
