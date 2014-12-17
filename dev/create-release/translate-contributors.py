@@ -43,14 +43,12 @@ if not JIRA_USERNAME or not JIRA_PASSWORD:
 if not GITHUB_API_TOKEN:
     sys.exit("GITHUB_API_TOKEN must be set")
 
-# Write new contributors list to <old_file_name>.new
+# Write new contributors list to <old_file_name>.final
 if not os.path.isfile(contributors_file_name):
     print "Contributors file %s does not exist!" % contributors_file_name
     print "Have you run ./generate-contributors.py yet?"
     sys.exit(1)
 contributors_file = open(contributors_file_name, "r")
-new_contributors_file_name = contributors_file_name + ".new"
-new_contributors_file = open(new_contributors_file_name, "w")
 warnings = []
 
 # In non-interactive mode, this script will choose the first replacement that is valid
@@ -73,7 +71,7 @@ known_translations_file_name = "known_translations"
 known_translations_file = open(known_translations_file_name, "r")
 for line in known_translations_file:
     if line.startswith("#"): continue
-    [old_name, new_name] = line.split(" - ")
+    [old_name, new_name] = line.strip("\n").split(" - ")
     known_translations[old_name] = new_name
 known_translations_file.close()
 
@@ -147,16 +145,16 @@ def generate_candidates(author, issues):
 # If no such name exists, the original name is used (without the JIRA numbers).
 print "\n========================== Translating contributor list =========================="
 lines = contributors_file.readlines()
+contributions = []
 for i, line in enumerate(lines):
-    temp_author = line.split(" - ")[0]
+    temp_author = line.strip(" * ").split(" -- ")[0]
     print "Processing author %s (%d/%d)" % (temp_author, i + 1, len(lines))
     if not temp_author:
-        error_msg = "    ERROR: Expected the following format <author> - <contributions>\n"
+        error_msg = "    ERROR: Expected the following format \" * <author> -- <contributions>\"\n"
         error_msg += "    ERROR: Actual = %s" % line
         print error_msg
         warnings.append(error_msg)
-        new_contributors_file.write(line)
-        new_contributors_file.flush()
+        contributions.append(line)
         continue
     author = temp_author.split("/")[0]
     # Use the local copy of known translations where possible
@@ -222,10 +220,26 @@ for i, line in enumerate(lines):
             known_translations_file.write("%s - %s\n" % (author, new_author))
             known_translations_file.flush()
         line = line.replace(temp_author, author)
-    new_contributors_file.write(line)
-    new_contributors_file.flush()
+    contributions.append(line)
 print "==================================================================================\n"
 contributors_file.close()
+known_translations_file.close()
+
+# Sort the contributions before writing them to the new file.
+# Additionally, check if there are any duplicate author rows.
+# This could happen if the same user has both a valid full
+# name (e.g. Andrew Or) and an invalid one (andrewor14).
+# If so, warn the user about this at the end.
+contributions.sort()
+all_authors = set()
+new_contributors_file_name = contributors_file_name + ".final"
+new_contributors_file = open(new_contributors_file_name, "w")
+for line in contributions:
+    author = line.strip(" * ").split(" -- ")[0]
+    if author in all_authors:
+        warnings.append("Detected duplicate author name %s. Please merge these manually." % author)
+    all_authors.add(author)
+    new_contributors_file.write(line)
 new_contributors_file.close()
 
 print "Translated contributors list successfully written to %s!" % new_contributors_file_name
