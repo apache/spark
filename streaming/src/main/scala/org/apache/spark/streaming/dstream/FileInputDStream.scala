@@ -118,7 +118,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
 
   // Set of files that were selected in the remembered batches
   @transient private var recentlySelectedFiles = new mutable.HashSet[String]()
-  @transient private val lastFoundDirs = new mutable.HashSet[Path]()
+  @transient private var lastFoundDirs = new mutable.HashSet[Path]()
 
   // Read-through cache of file mod times, used to speed up mod time lookups
   @transient private var fileToModTime = new TimeStampedHashMap[String, Long](true)
@@ -186,11 +186,10 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
       val filter = new PathFilter {
         def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
       }
-      val directoryDepth = directoryPath.depth()
+      val directoryDepth = fs.getFileStatus(directoryPath).getPath.depth()
 
       // nested directories
       def dfs(status: FileStatus, currentDepth: Int): List[FileStatus] = {
-        val modTime = status.getModificationTime
         status match {
           case _ if currentDepth < 0 => Nil
           case _ if !status.isDirectory => {
@@ -365,6 +364,7 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
       new mutable.HashMap[Time, Array[String]] with mutable.SynchronizedMap[Time, Array[String]]
     recentlySelectedFiles = new mutable.HashSet[String]()
     fileToModTime = new TimeStampedHashMap[String, Long](true)
+    lastFoundDirs =  new mutable.HashSet[Path]()
   }
 
   /**
