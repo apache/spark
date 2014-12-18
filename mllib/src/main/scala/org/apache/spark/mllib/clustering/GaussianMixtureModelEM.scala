@@ -21,7 +21,7 @@ import breeze.linalg.{DenseVector => BreezeVector, DenseMatrix => BreezeMatrix}
 import breeze.linalg.Transpose
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors}
 import org.apache.spark.mllib.stat.impl.MultivariateGaussian
 
 import scala.collection.mutable.IndexedSeqView
