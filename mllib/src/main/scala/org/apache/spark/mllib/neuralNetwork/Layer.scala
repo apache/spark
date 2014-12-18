@@ -19,8 +19,6 @@ package org.apache.spark.mllib.neuralNetwork
 
 import java.util.Random
 
-import scala.collection.JavaConversions._
-
 import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, max => brzmax}
 
 import org.apache.spark.Logging
@@ -43,10 +41,6 @@ private[mllib] trait Layer extends Serializable {
   def setSeed(seed: Long): Unit = {
     rand.setSeed(seed)
   }
-
-  def setBias(bias: BDV[Double])
-
-  def setWeight(weight: BDM[Double])
 
   def forward(input: BDM[Double]): BDM[Double] = {
     assert(input.rows == weight.cols)
@@ -91,20 +85,12 @@ private[mllib] trait Layer extends Serializable {
 }
 
 private[mllib] class SigmoidLayer(
-  var weight: BDM[Double] = null,
-  var bias: BDV[Double] = null) extends Layer with Logging {
+  val weight: BDM[Double],
+  val bias: BDV[Double]) extends Layer with Logging {
 
   def this(numIn: Int, numOut: Int) {
     this(initUniformDistWeight(numIn, numOut, 4D * math.sqrt(6D / (numIn + numOut))),
       initializeBias(numOut))
-  }
-
-  def setBias(bias: BDV[Double]): Unit = {
-    this.bias = bias
-  }
-
-  def setWeight(weight: BDM[Double]): Unit = {
-    this.weight = weight
   }
 
   def computeNeuron(temp: BDM[Double]): Unit = {
@@ -132,20 +118,12 @@ private[mllib] class SigmoidLayer(
 
 
 private[mllib] class TanhLayer(
-  var weight: BDM[Double] = null,
-  var bias: BDV[Double] = null) extends Layer with Logging {
+  val weight: BDM[Double],
+  val bias: BDV[Double]) extends Layer with Logging {
 
   def this(numIn: Int, numOut: Int) {
     this(initUniformDistWeight(numIn, numOut, math.sqrt(6D / (numIn + numOut))),
       initializeBias(numOut))
-  }
-
-  def setBias(bias: BDV[Double]): Unit = {
-    this.bias = bias
-  }
-
-  def setWeight(weight: BDM[Double]): Unit = {
-    this.weight = weight
   }
 
   def computeNeuron(temp: BDM[Double]): Unit = {
@@ -171,19 +149,12 @@ private[mllib] class TanhLayer(
   }
 }
 
-private[mllib] class SoftmaxLayer(var weight: BDM[Double] = null,
-  var bias: BDV[Double] = null) extends Layer with Logging {
+private[mllib] class SoftmaxLayer(
+  val weight: BDM[Double],
+  val bias: BDV[Double]) extends Layer with Logging {
 
   def this(numIn: Int, numOut: Int) {
     this(initializeWeight(numIn, numOut), initializeBias(numOut))
-  }
-
-  def setBias(bias: BDV[Double]): Unit = {
-    this.bias = bias
-  }
-
-  def setWeight(weight: BDM[Double]): Unit = {
-    this.weight = weight
   }
 
   def computeNeuron(temp: BDM[Double]): Unit = {
@@ -209,19 +180,11 @@ private[mllib] class SoftmaxLayer(var weight: BDM[Double] = null,
 }
 
 private[mllib] class NReLuLayer(
-  var weight: BDM[Double] = null,
-  var bias: BDV[Double] = null) extends Layer with Logging {
+  val weight: BDM[Double],
+  val bias: BDV[Double]) extends Layer with Logging {
   def this(numIn: Int, numOut: Int) {
     this(initUniformDistWeight(numIn, numOut, 0D, 0.01),
       initializeBias(numOut))
-  }
-
-  def setBias(bias: BDV[Double]): Unit = {
-    this.bias = bias
-  }
-
-  def setWeight(weight: BDM[Double]): Unit = {
-    this.weight = weight
   }
 
   private def nReLu(tmp: BDM[Double]): Unit = {
@@ -252,19 +215,11 @@ private[mllib] class NReLuLayer(
 }
 
 private[mllib] class ReLuLayer(
-  var weight: BDM[Double] = null,
-  var bias: BDV[Double] = null) extends Layer with Logging {
+  val weight: BDM[Double],
+  val bias: BDV[Double]) extends Layer with Logging {
   def this(numIn: Int, numOut: Int) {
     this(initUniformDistWeight(numIn, numOut, 0.0, 0.01),
       initializeBias(numOut))
-  }
-
-  def setBias(bias: BDV[Double]): Unit = {
-    this.bias = bias
-  }
-
-  def setWeight(weight: BDM[Double]): Unit = {
-    this.weight = weight
   }
 
   private def relu(tmp: BDM[Double]): Unit = {
@@ -300,19 +255,11 @@ private[mllib] class ReLuLayer(
 }
 
 private[mllib] class SoftPlusLayer(
-  var weight: BDM[Double] = null,
-  var bias: BDV[Double] = null) extends Layer with Logging {
+  val weight: BDM[Double],
+  val bias: BDV[Double]) extends Layer with Logging {
   def this(numIn: Int, numOut: Int) {
     this(initUniformDistWeight(numIn, numOut, 0D, 0.01),
       initializeBias(numOut))
-  }
-
-  def setBias(bias: BDV[Double]): Unit = {
-    this.bias = bias
-  }
-
-  def setWeight(weight: BDM[Double]): Unit = {
-    this.weight = weight
   }
 
   def computeNeuron(temp: BDM[Double]): Unit = {
@@ -345,18 +292,10 @@ private[mllib] class SoftPlusLayer(
 }
 
 private[mllib] class GaussianLayer(
-  var weight: BDM[Double] = null,
-  var bias: BDV[Double] = null) extends Layer with Logging {
+  val weight: BDM[Double],
+  val bias: BDV[Double]) extends Layer with Logging {
   def this(numIn: Int, numOut: Int) {
     this(initGaussianDistWeight(numIn, numOut), initializeBias(numOut))
-  }
-
-  def setBias(bias: BDV[Double]): Unit = {
-    this.bias = bias
-  }
-
-  def setWeight(weight: BDM[Double]): Unit = {
-    this.weight = weight
   }
 
   def computeNeuron(tmp: BDM[Double]): Unit = {

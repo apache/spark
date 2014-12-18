@@ -36,9 +36,10 @@ class MLP(
   val inputLayerDropoutRate: Double = 0.2) extends Logging with Serializable {
 
   def this(topology: Array[Int]) {
-    this(MLP.initializeLayers(topology))
+    this(MLP.initLayers(topology))
   }
 
+  require(innerLayers.length > 0)
   require(hiddenLayersDropoutRate >= 0 && hiddenLayersDropoutRate < 1)
   require(inputLayerDropoutRate >= 0 && inputLayerDropoutRate < 1)
 
@@ -236,7 +237,8 @@ object MLP extends Logging {
     weightCost: Double,
     rho: Double,
     epsilon: Double): MLP = {
-    val gradient = new MLPGradient(nn)
+    val gradient = new MLPGradient(nn.topology, nn.hiddenLayersDropoutRate,
+      nn.inputLayerDropoutRate)
     val updater = new MLPAdaDeltaUpdater(nn.topology, rho, epsilon)
     val optimizer = new GradientDescent(gradient, updater).
       setMiniBatchFraction(fraction).
@@ -273,7 +275,8 @@ object MLP extends Logging {
     maxNumIterations: Int,
     convergenceTol: Double,
     weightCost: Double): MLP = {
-    val gradient = new MLPGradient(nn, batchSize)
+    val gradient = new MLPGradient(nn.topology, nn.hiddenLayersDropoutRate,
+      nn.inputLayerDropoutRate)
     val updater = new MLPUpdater(nn.topology)
     val optimizer = new LBFGS(gradient, updater).
       setConvergenceTol(convergenceTol).
@@ -292,8 +295,8 @@ object MLP extends Logging {
     for (i <- 0 until structure.length) {
       val (weight, bias) = structure(i)
       val layer = layers(i)
-      layer.setWeight(weight)
-      layer.setBias(bias)
+      layer.weight := weight
+      layer.bias := bias
 
     }
   }
@@ -413,19 +416,35 @@ object MLP extends Logging {
     }
   }
 
-  private[mllib] def initializeLayers(topology: Array[Int]): Array[Layer] = {
+  private[mllib] def initLayers(topology: Array[Int]): Array[Layer] = {
     val numLayer = topology.length - 1
-    val layers = new Array[Layer](numLayer)
-    var nextLayer: Layer = null
+    val layers = new Array[(BDM[Double], BDV[Double])](numLayer)
     for (layer <- (0 until numLayer).reverse) {
+      val numIn = topology(layer)
+      val numOut = topology(layer + 1)
       layers(layer) = if (layer == numLayer - 1) {
-        new SoftmaxLayer(topology(layer), topology(layer + 1))
+        (Layer.initializeWeight(numIn, numOut), Layer.initializeBias(numOut))
       }
       else {
-        new ReLuLayer(topology(layer), topology(layer + 1))
+        (Layer.initUniformDistWeight(numIn, numOut, 0.0, 0.01),
+          Layer.initializeBias(numOut))
       }
-      nextLayer = layers(layer)
-      println(s"layers($layer) = ${layers(layer).numIn} * ${layers(layer).numOut}")
+      println(s"layers($layer) = ${numIn} * ${numOut}")
+    }
+    initLayers(layers)
+  }
+
+  private[mllib] def initLayers(w: Array[(BDM[Double], BDV[Double])]): Array[Layer] = {
+    val numLayer = w.length
+    val layers = new Array[Layer](numLayer)
+    for (layer <- 0 until numLayer) {
+      val (weight, bias) = w(layer)
+      layers(layer) = if (layer == numLayer - 1) {
+        new SoftmaxLayer(weight, bias)
+      }
+      else {
+        new ReLuLayer(weight, bias)
+      }
     }
     layers
   }
@@ -458,13 +477,15 @@ object MLP extends Logging {
 }
 
 private[mllib] class MLPGradient(
-  val nn: MLP,
-  batchSize: Int = 1) extends Gradient {
-
-  val numIn = nn.numInput
-  val numLabel = nn.numOut
+  val topology: Array[Int],
+  val hiddenLayersDropoutRate: Double,
+  val inputLayerDropoutRate: Double) extends Gradient {
 
   override def compute(data: SV, label: Double, weights: SV): (SV, Double) = {
+    val layers = MLP.initLayers(MLP.vectorToStructure(topology, weights))
+    val mlp = new MLP(layers, hiddenLayersDropoutRate, inputLayerDropoutRate)
+    val numIn = mlp.numInput
+    val numLabel = mlp.numOut
 
     var input: BDM[Double] = null
     var label: BDM[Double] = null
@@ -478,9 +499,7 @@ private[mllib] class MLPGradient(
       input = new BDV(batchedData, 0, 1, numIn).toDenseMatrix.t
       label = new BDV(batchedData, numIn, 1, numLabel).toDenseMatrix.t
     }
-
-    MLP.fromVector(nn, weights)
-    var (grads, error, numCol) = nn.learn(input, label)
+    var (grads, error, numCol) = mlp.learn(input, label)
     if (numCol != 1D) {
       val scale = 1D / numCol
       grads.foreach { t =>

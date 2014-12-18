@@ -28,47 +28,32 @@ import org.apache.spark.util.Utils
 import org.apache.spark.rdd.RDD
 
 class RBM(
-  var weight: BDM[Double],
-  var visibleBias: BDV[Double],
-  var hiddenBias: BDV[Double],
-  val dropoutRate: Double,
-  val visibleLayer: Layer,
-  val hiddenLayer: Layer) extends Logging with Serializable {
+  val weight: BDM[Double],
+  val visibleBias: BDV[Double],
+  val hiddenBias: BDV[Double],
+  val dropoutRate: Double) extends Logging with Serializable {
 
   def this(
     numIn: Int,
     numOut: Int,
-    dropoutRate: Double = 0.2D) {
+    dropoutRate: Double = 0.5D) {
     this(Layer.initUniformDistWeight(numIn, numOut, 0D, 0.001),
       Layer.initializeBias(numIn),
       Layer.initializeBias(numOut),
-      dropoutRate,
-      new ReLuLayer(),
-      new ReLuLayer())
+      dropoutRate)
   }
 
   require(dropoutRate >= 0 && dropoutRate < 1)
   protected lazy val rand = new JDKRandomGenerator()
 
   setSeed(Utils.random.nextInt())
-  setWeight(weight)
-  setHiddenBias(hiddenBias)
-  setVisibleBias(visibleBias)
 
-  def setWeight(w: BDM[Double]): Unit = {
-    weight = w
-    visibleLayer.setWeight(weight.t)
-    hiddenLayer.setWeight(weight)
+  def visibleLayer: Layer = {
+    new ReLuLayer(weight.t, visibleBias)
   }
 
-  def setVisibleBias(bias: BDV[Double]): Unit = {
-    this.visibleBias = bias
-    visibleLayer.setBias(visibleBias)
-  }
-
-  def setHiddenBias(bias: BDV[Double]): Unit = {
-    this.hiddenBias = bias
-    hiddenLayer.setBias(hiddenBias)
+  def hiddenLayer: Layer = {
+    new ReLuLayer(weight, hiddenBias)
   }
 
   def setSeed(seed: Long): Unit = {
@@ -245,7 +230,7 @@ object RBM extends Logging {
     epsilon: Double): RBM = {
     val numVisible = rbm.numIn
     val numHidden = rbm.numOut
-    val gradient = new RBMGradient(rbm)
+    val gradient = new RBMGradient(rbm.numIn, rbm.numOut, rbm.dropoutRate)
     val updater = new RBMAdaDeltaUpdater(numVisible, numHidden, rho, epsilon)
     val optimizer = new GradientDescent(gradient, updater).
       setMiniBatchFraction(fraction).
@@ -292,9 +277,9 @@ object RBM extends Logging {
 
   private[mllib] def fromVector(rbm: RBM, weights: SV): Unit = {
     val (weight, visibleBias, hiddenBias) = vectorToStructure(rbm.numIn, rbm.numOut, weights)
-    rbm.setWeight(weight)
-    rbm.setHiddenBias(hiddenBias)
-    rbm.setVisibleBias(visibleBias)
+    rbm.weight := weight
+    rbm.visibleBias := visibleBias
+    rbm.hiddenBias := hiddenBias
   }
 
   private[mllib] def toVector(rbm: RBM): SV = {
@@ -368,11 +353,14 @@ object RBM extends Logging {
   }
 }
 
-private[mllib] class RBMGradient(val rbm: RBM) extends Gradient {
-
-  val numIn = rbm.numIn
-
+private[mllib] class RBMGradient(
+  val numIn: Int,
+  val numOut: Int,
+  val dropoutRate: Double) extends Gradient {
   override def compute(data: SV, label: Double, weights: SV): (SV, Double) = {
+    val (weight, visibleBias, hiddenBias) = RBM.vectorToStructure(numIn, numOut, weights)
+    val rbm = new RBM(weight, visibleBias, hiddenBias, dropoutRate)
+
     val input = if (data.size > numIn) {
       val numCol = data.size / numIn
       new BDM[Double](numIn, numCol, data.toArray)
@@ -407,8 +395,8 @@ private[mllib] class RBMGradient(val rbm: RBM) extends Gradient {
 
 @Experimental
 private[mllib] class RBMAdaGradUpdater(
-  numVisible: Int,
-  numHidden: Int,
+  val numIn: Int,
+  val numOut: Int,
   rho: Double = 0,
   epsilon: Double = 1e-8,
   gamma: Double = 1e-1,
@@ -420,13 +408,13 @@ private[mllib] class RBMAdaGradUpdater(
     stepSize: Double,
     iter: Int,
     regParam: Double): Double = {
-    RBM.l2(numVisible, numHidden, weightsOld, gradient, stepSize, iter, regParam)
+    RBM.l2(numIn, numOut, weightsOld, gradient, stepSize, iter, regParam)
   }
 }
 
 private[mllib] class RBMAdaDeltaUpdater(
-  numVisible: Int,
-  numHidden: Int,
+  val numIn: Int,
+  val numOut: Int,
   rho: Double = 0.99,
   epsilon: Double = 1e-8,
   momentum: Double = 0.9) extends AdaDeltaUpdater(rho, epsilon, momentum) {
@@ -437,13 +425,13 @@ private[mllib] class RBMAdaDeltaUpdater(
     stepSize: Double,
     iter: Int,
     regParam: Double): Double = {
-    RBM.l2(numVisible, numHidden, weightsOld, gradient, stepSize, iter, regParam)
+    RBM.l2(numIn, numOut, weightsOld, gradient, stepSize, iter, regParam)
   }
 }
 
 private[mllib] class RBMMomentumUpdater(
-  numVisible: Int,
-  numHidden: Int,
+  val numIn: Int,
+  val numOut: Int,
   momentum: Double = 0.9) extends MomentumUpdater(momentum) {
   override protected def l2(
     weightsOld: SV,
@@ -451,6 +439,6 @@ private[mllib] class RBMMomentumUpdater(
     stepSize: Double,
     iter: Int,
     regParam: Double): Double = {
-    RBM.l2(numVisible, numHidden, weightsOld, gradient, stepSize, iter, regParam)
+    RBM.l2(numIn, numOut, weightsOld, gradient, stepSize, iter, regParam)
   }
 }

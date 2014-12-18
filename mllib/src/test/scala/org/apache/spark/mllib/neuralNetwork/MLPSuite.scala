@@ -17,11 +17,8 @@
 
 package org.apache.spark.mllib.neuralNetwork
 
-import scala.collection.JavaConversions._
-
 import org.scalatest.{Matchers, FunSuite}
 import org.apache.spark.mllib.util.MnistDatasetSuite
-
 
 class MLPSuite extends FunSuite with MnistDatasetSuite with Matchers {
 
@@ -29,7 +26,7 @@ class MLPSuite extends FunSuite with MnistDatasetSuite with Matchers {
     val (data, numVisible) = mnistTrainDataset(2000)
     data.cache()
     val topology = Array(numVisible, 500, 10)
-    val nn = MLP.train(data, 20, 1000, topology, 0.1, 0.05, 0.0)
+    val nn = MLP.train(data, 20, 2000, topology, 0.1, 0.05, 0.0)
 
     // val nn = MLP.runLBFGS(data, topology, 100, 4000, 1e-8, 0.0)
     // MLP.runSGD(data, nn, 37, 6000, 0.1, 0.5, 0.0)

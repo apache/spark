@@ -17,19 +17,15 @@
 
 package org.apache.spark.mllib.neuralNetwork
 
-
-import scala.collection.JavaConversions._
-
 import org.scalatest.{Matchers, FunSuite}
 import org.apache.spark.mllib.util.MnistDatasetSuite
-import org.apache.spark.mllib.linalg.{DenseVector => SDV, Vector => SV}
 
 class RBMSuite extends FunSuite with MnistDatasetSuite with Matchers {
 
   ignore("RBM") {
     val (data, numVisible) = mnistTrainDataset(2500)
     data.cache()
-    val rbm = RBM.train(data.map(_._1), 23, 4000, numVisible, 256, 0.1, 0.5, 0.0)
+    val rbm = RBM.train(data.map(_._1), 23, 4000, numVisible, 256, 0.1, 0.05, 0.0)
   }
 
 }

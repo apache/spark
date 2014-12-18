@@ -36,7 +36,7 @@ class StackedRBM(val innerRBMs: Array[RBM])
 
   def numOut = innerRBMs.last.numOut
 
-  def feedforward(visible: BDM[Double], toLayer: Int): BDM[Double] = {
+  def forward(visible: BDM[Double], toLayer: Int): BDM[Double] = {
     var x = visible
     for (layer <- 0 until toLayer) {
       x = innerRBMs(layer).forward(x)
@@ -44,8 +44,8 @@ class StackedRBM(val innerRBMs: Array[RBM])
     x
   }
 
-  def feedforward(visible: BDM[Double]): BDM[Double] = {
-    feedforward(visible, numLayer)
+  def forward(visible: BDM[Double]): BDM[Double] = {
+    forward(visible, numLayer)
   }
 }
 
@@ -108,7 +108,7 @@ object StackedRBM extends Logging {
         seq.zipWithIndex.foreach { case (v, i) =>
           x(::, i) :+= v.toBreeze
         }
-        x = stackedRBM.feedforward(x, toLayer)
+        x = stackedRBM.forward(x, toLayer)
         (0 until seq.size).map { i =>
           Vectors.fromBreeze(x(::, i))
         }
