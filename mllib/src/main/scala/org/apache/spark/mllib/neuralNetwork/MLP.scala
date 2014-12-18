@@ -39,8 +39,8 @@ class MLP(
     this(MLP.initializeLayers(topology))
   }
 
-  assert(hiddenLayersDropoutRate >= 0 && hiddenLayersDropoutRate < 1)
-  assert(inputLayerDropoutRate >= 0 && inputLayerDropoutRate < 1)
+  require(hiddenLayersDropoutRate >= 0 && hiddenLayersDropoutRate < 1)
+  require(inputLayerDropoutRate >= 0 && inputLayerDropoutRate < 1)
 
   val topology: Array[Int] = {
     val topology = new Array[Int](numLayer + 1)

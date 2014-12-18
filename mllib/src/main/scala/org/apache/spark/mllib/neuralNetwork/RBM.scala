@@ -47,7 +47,7 @@ class RBM(
       new ReLuLayer())
   }
 
-  assert(dropoutRate >= 0 && dropoutRate < 1)
+  require(dropoutRate >= 0 && dropoutRate < 1)
   protected lazy val rand = new JDKRandomGenerator()
 
   setSeed(Utils.random.nextInt())
