@@ -22,6 +22,7 @@ import java.io.FileNotFoundException
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.permission.AccessControlException
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -161,12 +162,20 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       var newLastModifiedTime = lastModifiedTime
       val logInfos = logDirs
         .filter { dir =>
-          if (fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))) {
-            val modTime = getModificationTime(dir)
-            newLastModifiedTime = math.max(newLastModifiedTime, modTime)
-            modTime > lastModifiedTime
-          } else {
-            false
+          try {
+            if (fs.isFile(new Path(dir.getPath(), EventLoggingListener.APPLICATION_COMPLETE))) {
+              val modTime = getModificationTime(dir)
+              newLastModifiedTime = math.max(newLastModifiedTime, modTime)
+              modTime > lastModifiedTime
+            } else {
+              false
+            }
+          } catch {
+            case e: AccessControlException =>
+              // Do not use "logInfo" since these messages can get pretty noisy if printed on
+              // every poll.
+              logDebug(s"No permission to read $dir, ignoring.")
+              false
           }
         }
         .flatMap { dir =>
