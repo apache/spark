@@ -360,8 +360,8 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
   override def newInstance() = new SumFunction(child, this)
 }
 
-case class SumDistinct(child: Expression) 
-  extends PartialAggregate with trees.UnaryNode[Expression]{
+case class SumDistinct(child: Expression)
+  extends PartialAggregate with trees.UnaryNode[Expression] {
 
   def this() = this(null)
   override def nullable = true
