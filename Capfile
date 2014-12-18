@@ -34,6 +34,11 @@ task :staging do
 end
 
 namespace :deploy do
+  task :cleanup, :except => {:no_release => true} do
+    count = fetch(:keep_releases, 5).to_i
+    run "ls -1dt /u/apps/spark/releases/* | tail -n +#{count + 1} | xargs rm -rf"
+  end
+
   task :upload_to_hdfs, :roles => :uploader, :on_no_matching_servers => :continue do
     run "hdfs dfs -copyFromLocal -f /u/apps/spark/current/lib/spark-assembly-1.3.0-SNAPSHOT-hadoop2.5.0.jar hdfs://nn01.chi.shopify.com/user/sparkles/spark-assembly-#{`git rev-parse master`.gsub(/\s/,'')}.jar"
   end
@@ -65,4 +70,5 @@ namespace :deploy do
   before  'deploy:symlink_current', 'deploy:symlink_shared'
   before 'deploy:restart', 'deploy:restart_master', 'deploy:restart_history'
   after  'deploy:download', 'deploy:upload_to_hdfs'
+  after 'deploy:restart', 'deploy:cleanup'
 end
