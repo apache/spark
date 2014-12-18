@@ -36,7 +36,7 @@ __all__ = ['Normalizer', 'StandardScalerModel', 'StandardScaler',
 
 class VectorTransformer(object):
     """
-    :: DeveloperApi ::
+    .. note:: DeveloperApi
 
     Base class for transformation of a vector or RDD of vector
     """
@@ -51,7 +51,7 @@ class VectorTransformer(object):
 
 class Normalizer(VectorTransformer):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
     Normalizes samples individually to unit L\ :sup:`p`\  norm
 
@@ -112,7 +112,7 @@ class JavaVectorTransformer(JavaModelWrapper, VectorTransformer):
 
 class StandardScalerModel(JavaVectorTransformer):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
     Represents a StandardScaler model that can transform vectors.
     """
@@ -129,7 +129,7 @@ class StandardScalerModel(JavaVectorTransformer):
 
 class StandardScaler(object):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
     Standardizes features by removing the mean and scaling to unit
     variance using column summary statistics on the samples in the
@@ -172,7 +172,7 @@ class StandardScaler(object):
 
 class HashingTF(object):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
     Maps a sequence of terms to their term frequencies using the hashing trick.
 
@@ -232,7 +232,7 @@ class IDFModel(JavaVectorTransformer):
 
 class IDF(object):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
     Inverse document frequency (IDF).
 

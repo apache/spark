@@ -420,7 +420,7 @@ class StructType(DataType):
 
 class UserDefinedType(DataType):
     """
-    :: WARN: Spark Internal Use Only ::
+    .. note:: WARN: Spark Internal Use Only
     SQL User-Defined Type (UDT).
     """
 
