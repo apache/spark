@@ -12,125 +12,38 @@ import org.apache.spark.api.java.{JavaSparkContext, JavaRDD, JavaPairRDD}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
-/**
- * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from R.
- * This is used by SparkR's shuffle operations.
- */
-private class PairwiseRRDD[T: ClassTag](
+private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
     parent: RDD[T],
     numPartitions: Int,
-    hashFunc: Array[Byte],
-    parentSerialized: Boolean,
-    functionDependencies: Array[Byte],
-    packageNames: Array[Byte],
-    rLibDir: String,
-    broadcastVars: Array[Broadcast[Object]])
-  extends RDD[(Int, Array[Byte])](parent) {
-
-  override def getPartitions = parent.partitions
-
-  override def compute(split: Partition, context: TaskContext): Iterator[(Int, Array[Byte])] = {
-
-    val parentIterator = firstParent[T].iterator(split, context)
-
-    val pb = RRDD.rWorkerProcessBuilder(rLibDir)
-    val proc = pb.start()
-
-    RRDD.startStderrThread(proc)
-
-    val tempFile = RRDD.startStdinThread(rLibDir, proc, hashFunc, parentSerialized,
-      true, functionDependencies, packageNames, broadcastVars,
-      parentIterator, numPartitions,
-      split.index)
-
-    // Return an iterator that read lines from the process's stdout
-    val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
-    val stdOutFileName = inputStream.readLine().trim()
-
-    val dataStream = new DataInputStream(new FileInputStream(stdOutFileName))
-
-    return new Iterator[(Int, Array[Byte])] {
-      def next(): (Int, Array[Byte]) = {
-        val obj = _nextObj
-        if (hasNext) {
-          _nextObj = read()
-        }
-        obj
-      }
-
-      private def read(): (Int, Array[Byte]) = {
-        try {
-          val length = dataStream.readInt()
-
-          length match {
-            case length if length == 2 =>
-              val hashedKey = dataStream.readInt()
-              val contentPairsLength = dataStream.readInt()
-              val contentPairs = new Array[Byte](contentPairsLength)
-              dataStream.read(contentPairs, 0, contentPairsLength)
-              (hashedKey, contentPairs)
-            case _ => (0, new Array[Byte](0))   // End of input
-          }
-        } catch {
-          case eof: EOFException => {
-            throw new SparkException("R worker exited unexpectedly (crashed)", eof)
-          }
-        }
-      }
-      var _nextObj = read()
-
-      def hasNext(): Boolean = {
-        val hasMore = !(_nextObj._1 == 0 && _nextObj._2.length == 0)
-        if (!hasMore) {
-          // Delete the temporary file we created as we are done reading it
-          dataStream.close()
-          tempFile.delete()
-        }
-        hasMore
-      }
-    }
-  }
-
-  lazy val asJavaPairRDD : JavaPairRDD[Int, Array[Byte]] = JavaPairRDD.fromRDD(this)
-}
-
-/**
- * An RDD that stores serialized R objects as Array[Byte].
- */
-class RRDD[T: ClassTag](
-    parent: RDD[T],
     func: Array[Byte],
     parentSerialized: Boolean,
+    dataSerialized: Boolean,
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Broadcast[Object]])
-  extends RDD[Array[Byte]](parent) {
-
+  extends RDD[U](parent) {
   override def getPartitions = parent.partitions
 
-  override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[U] = {
 
     val parentIterator = firstParent[T].iterator(split, context)
 
-    val pb = RRDD.rWorkerProcessBuilder(rLibDir)
+    val pb = rWorkerProcessBuilder()
     val proc = pb.start()
 
-    RRDD.startStderrThread(proc)
+    startStderrThread(proc)
 
-    // Write -1 in numPartitions to indicate this is a normal RDD
-    val tempFile = RRDD.startStdinThread(rLibDir, proc, func, parentSerialized,
-      true, functionDependencies, packageNames, broadcastVars,
-      parentIterator, numPartitions = -1, split.index)
+    val tempFile = startStdinThread(proc, parentIterator, split.index)
 
     // Return an iterator that read lines from the process's stdout
     val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
     val stdOutFileName = inputStream.readLine().trim()
 
-    val dataStream = new DataInputStream(new FileInputStream(stdOutFileName))
+    val dataStream = openDataStream(stdOutFileName)
 
-    return new Iterator[Array[Byte]] {
-      def next(): Array[Byte] = {
+    return new Iterator[U] {
+      def next(): U = {
         val obj = _nextObj
         if (hasNext) {
           _nextObj = read()
@@ -138,28 +51,10 @@ class RRDD[T: ClassTag](
         obj
       }
 
-      private def read(): Array[Byte] = {
-        try {
-          val length = dataStream.readInt()
-
-          length match {
-            case length if length > 0 =>
-              val obj = new Array[Byte](length)
-              dataStream.read(obj, 0, length)
-              obj
-            case _ =>
-              new Array[Byte](0)
-          }
-        } catch {
-          case eof: EOFException => {
-            throw new SparkException("R worker exited unexpectedly (crashed)", eof)
-          }
-        }
-      }
       var _nextObj = read()
 
       def hasNext(): Boolean = {
-        val hasMore = _nextObj.length != 0
+        val hasMore = (_nextObj != null)
         if (!hasMore) {
           // Delete the temporary file we created as we are done reading it
           dataStream.close()
@@ -168,117 +63,12 @@ class RRDD[T: ClassTag](
         hasMore
       }
     }
-  }
-
-  val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
-}
-
-/**
- * An RDD that stores R objects as Array[String].
- */
-class StringRRDD[T: ClassTag](
-    parent: RDD[T],
-    func: Array[Byte],
-    parentSerialized: Boolean,
-    functionDependencies: Array[Byte],
-    packageNames: Array[Byte],
-    rLibDir: String,
-    broadcastVars: Array[Broadcast[Object]])
-  extends RDD[String](parent) {
-
-  override def getPartitions = parent.partitions
-
-  override def compute(split: Partition, context: TaskContext): Iterator[String] = {
-
-    val parentIterator = firstParent[T].iterator(split, context)
-
-    val pb = RRDD.rWorkerProcessBuilder(rLibDir)
-    val proc = pb.start()
-
-    RRDD.startStderrThread(proc)
-
-    // Write -1 in numPartitions to indicate this is a normal RDD
-    val tempFile = RRDD.startStdinThread(rLibDir, proc, func, parentSerialized,
-      false, functionDependencies, packageNames, broadcastVars,
-      parentIterator, numPartitions = -1, split.index)
-
-    // Return an iterator that read lines from the process's stdout
-    val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
-    val stdOutFileName = inputStream.readLine().trim()
-
-    val dataStream = new BufferedReader(
-                           new InputStreamReader(new FileInputStream(stdOutFileName)))
-
-    return new Iterator[String] {
-      def next(): String = {
-        val obj = _nextObj
-        if (hasNext) {
-          _nextObj = read()
-        }
-        obj
-      }
-
-      private def read(): String = {
-        try {
-          dataStream.readLine()
-        } catch {
-          case e: IOException => {
-            throw new SparkException("R worker exited unexpectedly (crashed)", e)
-          }
-        }
-      }
-      var _nextObj = read()
-
-      def hasNext(): Boolean = {
-        val hasMore = _nextObj != null
-        if (!hasMore) {
-          // Delete the temporary file we created as we are done reading it
-          dataStream.close()
-          tempFile.delete()
-        }
-        hasMore
-      }
-    }
-  }
-
-  val asJavaRDD : JavaRDD[String] = JavaRDD.fromRDD(this)
-}
-
-object RRDD {
-
-  def createSparkContext(
-      master: String,
-      appName: String,
-      sparkHome: String,
-      jars: Array[String],
-      sparkEnvirMap: JMap[Object, Object],
-      sparkExecutorEnvMap: JMap[Object, Object]): JavaSparkContext = {
-
-    val sparkConf = new SparkConf().setMaster(master)
-                                   .setAppName(appName)
-                                   .setSparkHome(sparkHome)
-                                   .setJars(jars)
-    for ((name, value) <- sparkEnvirMap) {
-      sparkConf.set(name.asInstanceOf[String], value.asInstanceOf[String])
-    }
-    for ((name, value) <- sparkExecutorEnvMap) {
-      sparkConf.setExecutorEnv(name.asInstanceOf[String], value.asInstanceOf[String])
-    }
-    new JavaSparkContext(sparkConf)
-  }
-
-  /**
-   * Create an RRDD given a sequence of byte arrays. Used to create RRDD when `parallelize` is
-   * called from R.
-   */
-  def createRDDFromArray(jsc: JavaSparkContext, arr: Array[Array[Byte]]): JavaRDD[Array[Byte]] = {
-    JavaRDD.fromRDD(jsc.sc.parallelize(arr, arr.length))
   }
 
   /**
    * ProcessBuilder used to launch worker R processes.
    */
-  def rWorkerProcessBuilder(rLibDir: String) = {
+  private def rWorkerProcessBuilder() = {
     val rCommand = "Rscript"
     val rOptions = "--vanilla"
     val rExecScript = rLibDir + "/SparkR/worker/worker.R"
@@ -294,7 +84,7 @@ object RRDD {
   /**
    * Start a thread to print the process's stderr to ours
    */
-  def startStderrThread(proc: Process) {
+  private def startStderrThread(proc: Process) {
     new Thread("stderr reader for R") {
       override def run() {
         for (line <- Source.fromInputStream(proc.getErrorStream).getLines) {
@@ -304,26 +94,17 @@ object RRDD {
     }.start()
   }
 
-
   /**
    * Start a thread to write RDD data to the R process.
    */
-  def startStdinThread[T](
-      rLibDir: String,
-      proc: Process,
-      func: Array[Byte],
-      parentSerialized: Boolean,
-      dataSerialization: Boolean,
-      functionDependencies: Array[Byte],
-      packageNames: Array[Byte],
-      broadcastVars: Array[Broadcast[Object]],
-      iter: Iterator[T],
-      numPartitions: Int,
-      splitIndex: Int) : File = {
+  private def startStdinThread[T](
+    proc: Process,
+    iter: Iterator[T],
+    splitIndex: Int) : File = {
 
     val env = SparkEnv.get
     val conf = env.conf
-    val tempDir = getLocalDir(conf)
+    val tempDir = RRDD.getLocalDir(conf)
     val tempFile = File.createTempFile("rSpark", "out", new File(tempDir))
     val tempFileIn = File.createTempFile("rSpark", "in", new File(tempDir))
 
@@ -352,8 +133,10 @@ object RRDD {
         dataOut.writeInt(func.length)
         dataOut.write(func, 0, func.length)
 
+        // R worker process input serialization flag
         dataOut.writeInt(if (parentSerialized) 1 else 0)
-        dataOut.writeInt(if (dataSerialization) 1 else 0)
+        // R worker process output serialization flag
+        dataOut.writeInt(if (dataSerialized) 1 else 0)
 
         dataOut.writeInt(functionDependencies.length)
         dataOut.write(functionDependencies, 0, functionDependencies.length)
@@ -397,6 +180,167 @@ object RRDD {
     }.start()
 
     tempFile
+  }
+
+  protected def openDataStream(stdOutFileName: String): Closeable
+  protected def read(): U
+}
+
+/**
+ * Form an RDD[Int, Array[Byte])] from key-value pairs returned from R.
+ * This is used by SparkR's shuffle operations.
+ */
+private class PairwiseRRDD[T: ClassTag](
+    parent: RDD[T],
+    numPartitions: Int,
+    hashFunc: Array[Byte],
+    parentSerialized: Boolean,
+    functionDependencies: Array[Byte],
+    packageNames: Array[Byte],
+    rLibDir: String,
+    broadcastVars: Array[Broadcast[Object]])
+  extends BaseRRDD[T, (Int, Array[Byte])](parent, numPartitions, hashFunc, parentSerialized,
+                                          true, functionDependencies, packageNames, rLibDir,
+                                          broadcastVars) {
+
+  private var dataStream: DataInputStream = _
+  
+  override protected def openDataStream(stdOutFileName: String) = {
+    dataStream = new DataInputStream(new FileInputStream(stdOutFileName))
+    dataStream
+  }
+
+  override protected def read(): (Int, Array[Byte]) = {
+    try {
+      val length = dataStream.readInt()
+
+      length match {
+        case length if length == 2 =>
+          val hashedKey = dataStream.readInt()
+          val contentPairsLength = dataStream.readInt()
+          val contentPairs = new Array[Byte](contentPairsLength)
+          dataStream.read(contentPairs, 0, contentPairsLength)
+          (hashedKey, contentPairs)
+        case _ => null   // End of input
+      }
+    } catch {
+      case eof: EOFException => {
+        throw new SparkException("R worker exited unexpectedly (crashed)", eof)
+      }
+    }
+  }
+
+  lazy val asJavaPairRDD : JavaPairRDD[Int, Array[Byte]] = JavaPairRDD.fromRDD(this)
+}
+
+/**
+ * An RDD that stores serialized R objects as Array[Byte].
+ */
+private class RRDD[T: ClassTag](
+    parent: RDD[T],
+    func: Array[Byte],
+    parentSerialized: Boolean,
+    functionDependencies: Array[Byte],
+    packageNames: Array[Byte],
+    rLibDir: String,
+    broadcastVars: Array[Broadcast[Object]])
+  extends BaseRRDD[T, Array[Byte]](parent, -1, func, parentSerialized,
+                                true, functionDependencies, packageNames, rLibDir,
+                                broadcastVars) {
+
+  private var dataStream: DataInputStream = _
+  
+  override protected def openDataStream(stdOutFileName: String) = {
+    dataStream = new DataInputStream(new FileInputStream(stdOutFileName))
+    dataStream
+  }
+
+  override protected def read(): Array[Byte] = {
+    try {
+      val length = dataStream.readInt()
+
+      length match {
+        case length if length > 0 =>
+          val obj = new Array[Byte](length)
+          dataStream.read(obj, 0, length)
+          obj
+        case _ => null
+      }
+    } catch {
+      case eof: EOFException => {
+        throw new SparkException("R worker exited unexpectedly (crashed)", eof)
+      }
+    }
+  }
+
+  lazy val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
+}
+
+/**
+ * An RDD that stores R objects as Array[String].
+ */
+private class StringRRDD[T: ClassTag](
+    parent: RDD[T],
+    func: Array[Byte],
+    parentSerialized: Boolean,
+    functionDependencies: Array[Byte],
+    packageNames: Array[Byte],
+    rLibDir: String,
+    broadcastVars: Array[Broadcast[Object]])
+  extends BaseRRDD[T, String](parent, -1, func, parentSerialized,
+                           false, functionDependencies, packageNames, rLibDir,
+                           broadcastVars) {
+
+  private var dataStream: BufferedReader = _
+
+  override protected def openDataStream(stdOutFileName: String) = {
+    dataStream = new BufferedReader(
+                     new InputStreamReader(new FileInputStream(stdOutFileName)))
+    dataStream
+  }
+
+  override protected def read(): String = {
+    try {
+      dataStream.readLine()
+    } catch {
+      case e: IOException => {
+        throw new SparkException("R worker exited unexpectedly (crashed)", e)
+      }
+    }
+  }
+
+  lazy val asJavaRDD : JavaRDD[String] = JavaRDD.fromRDD(this)
+}
+
+object RRDD {
+
+  def createSparkContext(
+      master: String,
+      appName: String,
+      sparkHome: String,
+      jars: Array[String],
+      sparkEnvirMap: JMap[Object, Object],
+      sparkExecutorEnvMap: JMap[Object, Object]): JavaSparkContext = {
+
+    val sparkConf = new SparkConf().setMaster(master)
+                                   .setAppName(appName)
+                                   .setSparkHome(sparkHome)
+                                   .setJars(jars)
+    for ((name, value) <- sparkEnvirMap) {
+      sparkConf.set(name.asInstanceOf[String], value.asInstanceOf[String])
+    }
+    for ((name, value) <- sparkExecutorEnvMap) {
+      sparkConf.setExecutorEnv(name.asInstanceOf[String], value.asInstanceOf[String])
+    }
+    new JavaSparkContext(sparkConf)
+  }
+
+  /**
+   * Create an RRDD given a sequence of byte arrays. Used to create RRDD when `parallelize` is
+   * called from R.
+   */
+  def createRDDFromArray(jsc: JavaSparkContext, arr: Array[Array[Byte]]): JavaRDD[Array[Byte]] = {
+    JavaRDD.fromRDD(jsc.sc.parallelize(arr, arr.length))
   }
 
   def isRunningInYarnContainer(conf: SparkConf): Boolean = {
@@ -464,6 +408,4 @@ object RRDD {
     }
     localDirs
   }
-
-
 }
