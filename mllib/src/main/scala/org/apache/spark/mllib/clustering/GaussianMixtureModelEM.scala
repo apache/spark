@@ -23,8 +23,6 @@ import breeze.linalg.Transpose
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.stat.impl.MultivariateGaussian
-import org.apache.spark.{Accumulator, AccumulatorParam, SparkContext}
-import org.apache.spark.SparkContext.DoubleAccumulatorParam
 
 import scala.collection.mutable.IndexedSeqView
 
@@ -86,19 +84,19 @@ class GaussianMixtureModelEM private (
   private def computeExpectation(
       weights: Array[Double], 
       dists: Array[MultivariateGaussian])
-      (model: ExpectationSum, x: DenseDoubleVector): ExpectationSum = {
-    val k = model._2.length
+      (sums: ExpectationSum, x: DenseDoubleVector): ExpectationSum = {
+    val k = sums._2.length
     val p = weights.zip(dists).map { case (weight, dist) => eps + weight * dist.pdf(x) }
     val pSum = p.sum
-    model._1(0) += math.log(pSum)
+    sums._1(0) += math.log(pSum)
     val xxt = x * new Transpose(x)
     for (i <- 0 until k) {
       p(i) /= pSum
-      model._2(i) += p(i)
-      model._3(i) += x * p(i)
-      model._4(i) += xxt * p(i)
+      sums._2(i) += p(i)
+      sums._3(i) += x * p(i)
+      sums._4(i) += xxt * p(i)
     }
-    model
+    sums
   }
   
   // number of samples per cluster to use when initializing Gaussians
@@ -242,42 +240,5 @@ class GaussianMixtureModelEM private (
     x.map(xi => (xi - mu) :^ 2.0).foreach(u => ss += u)
     (0 until ss.length).foreach(i => cov(i,i) = ss(i) / x.length)
     cov
-  }
-  
-  /**
-   * Given the input vectors, return the membership value of each vector
-   * to all mixture components. 
-   */
-  def predictClusters(
-      points: RDD[Vector], 
-      mu: Array[Vector], 
-      sigma: Array[Matrix],
-      weight: Array[Double], k: Int): RDD[Array[Double]] = {
-    val sc = points.sparkContext
-    val dists = sc.broadcast{
-      (0 until k).map{ i => 
-        new MultivariateGaussian(mu(i).toBreeze.toDenseVector, sigma(i).toBreeze.toDenseMatrix)
-      }.toArray
-    }
-    val weights = sc.broadcast((0 until k).map(i => weight(i)).toArray)
-    points.map{ x => 
-      computeSoftAssignments(x.toBreeze.toDenseVector, dists.value, weights.value, k)
-    }
-  }
-  
-  /**
-   * Compute the partial assignments for each vector
-   */
-  private def computeSoftAssignments(
-      pt: DenseDoubleVector,
-      dists: Array[MultivariateGaussian],
-      weights: Array[Double],
-      k: Int): Array[Double] = {
-    val p = weights.zip(dists).map { case (weight, dist) => eps + weight * dist.pdf(pt) }
-    val pSum = p.sum 
-    for (i <- 0 until k){
-      p(i) /= pSum
-    }
-    p
   }
 }

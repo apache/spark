@@ -17,9 +17,12 @@
 
 package org.apache.spark.mllib.clustering
 
+import breeze.linalg.{DenseVector => BreezeVector}
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.Matrix
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.stat.impl.MultivariateGaussian
 
 /**
  * Multivariate Gaussian Mixture Model (GMM) consisting of k Gaussians, where points 
@@ -42,9 +45,50 @@ class GaussianMixtureModel(
 
   /** Maps given points to their cluster indices. */
   def predict(points: RDD[Vector]): (RDD[Array[Double]],RDD[Int]) = {
-    val responsibilityMatrix = new GaussianMixtureModelEM()
-      .predictClusters(points,mu,sigma,weight,k)
+    val responsibilityMatrix = predictMembership(points,mu,sigma,weight,k)
     val clusterLabels = responsibilityMatrix.map(r => r.indexOf(r.max))
     (responsibilityMatrix, clusterLabels)
   }
+  
+  /**
+   * Given the input vectors, return the membership value of each vector
+   * to all mixture components. 
+   */
+  def predictMembership(
+      points: RDD[Vector], 
+      mu: Array[Vector], 
+      sigma: Array[Matrix],
+      weight: Array[Double], k: Int): RDD[Array[Double]] = {
+    val sc = points.sparkContext
+    val dists = sc.broadcast{
+      (0 until k).map{ i => 
+        new MultivariateGaussian(mu(i).toBreeze.toDenseVector, sigma(i).toBreeze.toDenseMatrix)
+      }.toArray
+    }
+    val weights = sc.broadcast((0 until k).map(i => weight(i)).toArray)
+    points.map{ x => 
+      computeSoftAssignments(x.toBreeze.toDenseVector, dists.value, weights.value, k)
+    }
+  }
+  
+  // We use "eps" as the minimum likelihood density for any given point
+  // in every cluster; this prevents any divide by zero conditions for
+  // outlier points.
+  private val eps = math.pow(2.0, -52)
+  
+  /**
+   * Compute the partial assignments for each vector
+   */
+  private def computeSoftAssignments(
+      pt: BreezeVector[Double],
+      dists: Array[MultivariateGaussian],
+      weights: Array[Double],
+      k: Int): Array[Double] = {
+    val p = weights.zip(dists).map { case (weight, dist) => eps + weight * dist.pdf(pt) }
+    val pSum = p.sum 
+    for (i <- 0 until k){
+      p(i) /= pSum
+    }
+    p
+  }  
 }
