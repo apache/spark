@@ -46,7 +46,7 @@ object Analytics extends Logging {
     }
     val options = mutable.Map(optionsList: _*)
 
-    val conf = new SparkConf().set("spark.locality.wait", "100000")
+    val conf = new SparkConf()
     GraphXUtils.registerKryoClasses(conf)
 
     val numEPart = options.remove("numEPart").map(_.toInt).getOrElse {
