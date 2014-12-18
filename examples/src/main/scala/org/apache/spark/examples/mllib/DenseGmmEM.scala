@@ -21,6 +21,13 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.mllib.clustering.GaussianMixtureModelEM
 import org.apache.spark.mllib.linalg.Vectors
 
+/**
+ * An example Gaussian Mixture Model EM app. Run with
+ * {{{
+ * ./bin/run-example org.apache.spark.examples.mllib.DenseGmmEM <input> <k> <covergenceTol>
+ * }}}
+ * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
+ */
 object DenseGmmEM {
   def main(args: Array[String]): Unit = {
     if (args.length != 3) {
@@ -44,13 +51,15 @@ object DenseGmmEM {
       .run(data)
     
     for (i <- 0 until clusters.k) {
-      println("weight=%f mu=%s sigma=\n%s\n" format 
+      println("weight=%f\nmu=%s\nsigma=\n%s\n" format 
         (clusters.weight(i), clusters.mu(i), clusters.sigma(i)))
     }
     
+    println("Cluster labels:")
     val (responsibilityMatrix, clusterLabels) = clusters.predict(data)
     for (x <- clusterLabels.collect) {
       print(" " + x)
     }
+    println
   }
 }
