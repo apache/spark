@@ -165,9 +165,6 @@ class HistoryServer(
  *   export SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=/tmp/spark-events"
  *   ./sbin/start-history-server.sh
  *
- *   export SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=hdfs://1.2.3.4:9000/spark-events"
- *   ./sbin/start-history-server.sh
- *
  * This launches the HistoryServer as a Spark daemon.
  */
 object HistoryServer extends Logging {
