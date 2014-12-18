@@ -159,13 +159,13 @@ class HistoryServer(
 /**
  * The recommended way of starting and stopping a HistoryServer is through the scripts
  * start-history-server.sh and stop-history-server.sh. The path to a base log directory,
- * as well as any other relevant history-server configuration, should be specified via
+ * as well as any other relevant history server configuration, should be specified via
  * the $SPARK_HISTORY_OPTS environment variable. For example:
  *
- *   export SPARK_HiSTORY_OPTS="-Dspark.history.fs.logDirectory=/tmp/spark-events"
+ *   export SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=/tmp/spark-events"
  *   ./sbin/start-history-server.sh
  *
- *   export SPARK_HiSTORY_OPTS="-Dspark.history.fs.logDirectory=hdfs://1.2.3.4:9000/spark-events"
+ *   export SPARK_HISTORY_OPTS="-Dspark.history.fs.logDirectory=hdfs://1.2.3.4:9000/spark-events"
  *   ./sbin/start-history-server.sh
  *
  * This launches the HistoryServer as a Spark daemon.
