@@ -230,30 +230,6 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
-    <repository>
-      <!-- This is temporarily included to fix issues with Hive 0.12 -->
-      <id>spark-staging</id>
-      <name>Spring Staging Repository</name>
-      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1085</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <!-- This is temporarily included to fix issues with Hive 0.13 -->
-      <id>spark-staging-hive13</id>
-      <name>Spring Staging Repository Hive 13</name>
-      <url>https://oss.sonatype.org/content/repositories/orgspark-project-1089/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
     <!-- TODO: remove this as soon as 1.2.0 is published on Maven central -->
     <repository>
       <id>spark-staging-1038</id>
@@ -291,7 +267,7 @@
       <version>1.0.0</version>
     </dependency>
     <!--
-         This depndency has been added to provided scope as it is needed for excuting build
+         This depndency has been added to provided scope as it is needed for executing build
          specific groovy scripts using gmaven+ and not required for downstream project building
          with spark.
     -->
@@ -982,7 +958,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-            <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
+            <argLine>-ea -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
             <stderr/>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
@@ -1048,6 +1024,11 @@
               </fileset>
             </filesets>
           </configuration>
+        </plugin>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-javadoc-plugin</artifactId>
+          <version>2.10.1</version>
         </plugin>
       </plugins>
     </pluginManagement>
@@ -1242,6 +1223,25 @@
 
     </profile>
 
+    <profile>
+      <id>doclint-java8-disable</id>
+      <activation>
+        <jdk>[1.8,)</jdk>
+      </activation>
+
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-javadoc-plugin</artifactId>
+            <configuration>
+              <additionalparam>-Xdoclint:all -Xdoclint:-missing</additionalparam>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+
     <!-- A series of build profiles where customizations for particular Hadoop releases can be made -->
 
     <!-- Hadoop-a.b.c dependencies can be found at
@@ -1291,13 +1291,6 @@
         <commons.math3.version>3.1.1</commons.math3.version>
         <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
       </properties>
-    </profile>
-
-    <profile>
-      <id>yarn-alpha</id>
-      <modules>
-        <module>yarn</module>
-      </modules>
     </profile>
 
     <profile>

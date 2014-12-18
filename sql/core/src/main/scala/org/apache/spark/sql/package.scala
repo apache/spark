@@ -266,6 +266,16 @@ package object sql {
   /**
    * :: DeveloperApi ::
    *
+   * The data type representing `NULL` values.
+   *
+   * @group dataType
+   */
+  @DeveloperApi
+  val NullType = catalyst.types.NullType
+  
+  /**
+   * :: DeveloperApi ::
+   *
    * The data type for collections of multiple values.
    * Internally these are represented as columns that contain a ``scala.collection.Seq``.
    *

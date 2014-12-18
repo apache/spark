@@ -934,6 +934,12 @@ for details.
   <td> Reshuffle the data in the RDD randomly to create either more or fewer partitions and balance it across them.
     This always shuffles all data over the network. </td>
 </tr>
+<tr>
+  <td> <b>repartitionAndSortWithinPartitions</b>(<i>partitioner</i>) </td>
+  <td> Repartition the RDD according to the given partitioner and, within each resulting partition,
+  sort records by their keys. This is more efficient than calling <code>repartition</code> and then sorting within 
+  each partition because it can push the sorting down into the shuffle machinery. </td>
+</tr>
 </table>
 
 ### Actions
@@ -1177,7 +1183,7 @@ Accumulators are variables that are only "added" to through an associative opera
 therefore be efficiently supported in parallel. They can be used to implement counters (as in
 MapReduce) or sums. Spark natively supports accumulators of numeric types, and programmers
 can add support for new types. If accumulators are created with a name, they will be
-displayed in Spark's UI. This can can be useful for understanding the progress of 
+displayed in Spark's UI. This can be useful for understanding the progress of 
 running stages (NOTE: this is not yet supported in Python).
 
 An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks
@@ -1305,6 +1311,12 @@ vecAccum = sc.accumulator(Vector(...), VectorAccumulatorParam())
 </div>
 
 </div>
+
+For accumulator updates performed inside <b>actions only</b>, Spark guarantees that each task's update to the accumulator 
+will only be applied once, i.e. restarted tasks will not update the value. In transformations, users should be aware 
+of that each task's update may be applied more than once if tasks or job stages are re-executed.
+
+
 
 # Deploying to a Cluster
 

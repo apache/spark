@@ -127,7 +127,13 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
         makeOffers()
 
       case KillTask(taskId, executorId, interruptThread) =>
-        executorDataMap(executorId).executorActor ! KillTask(taskId, executorId, interruptThread)
+        executorDataMap.get(executorId) match {
+          case Some(executorInfo) =>
+            executorInfo.executorActor ! KillTask(taskId, executorId, interruptThread)
+          case None =>
+            // Ignoring the task kill since the executor is not registered.
+            logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
+        }
 
       case StopDriver =>
         sender ! true
@@ -328,7 +334,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
    * Request that the cluster manager kill the specified executors.
    * Return whether the kill request is acknowledged.
    */
-  final def killExecutors(executorIds: Seq[String]): Boolean = {
+  final def killExecutors(executorIds: Seq[String]): Boolean = synchronized {
     logInfo(s"Requesting to kill executor(s) ${executorIds.mkString(", ")}")
     val filteredExecutorIds = new ArrayBuffer[String]
     executorIds.foreach { id =>
