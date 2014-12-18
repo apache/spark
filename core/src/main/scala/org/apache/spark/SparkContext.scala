@@ -320,8 +320,10 @@ class SparkContext(config: SparkConf) extends Logging {
   // Create and start the scheduler
   private[spark] var (schedulerBackend, taskScheduler) =
     SparkContext.createTaskScheduler(this, master)
-  private val heartbeatReceiver = env.actorSystem.actorOf(
-    Props(new HeartbeatReceiver(taskScheduler)), "HeartbeatReceiver")
+
+  private val heartbeatReceiver =
+    env.rpcEnv.setupEndPoint("HeartbeatReceiver", new HeartbeatReceiver(taskScheduler, conf))
+
   @volatile private[spark] var dagScheduler: DAGScheduler = _
   try {
     dagScheduler = new DAGScheduler(this)
@@ -1205,7 +1207,7 @@ class SparkContext(config: SparkConf) extends Logging {
       if (dagSchedulerCopy != null) {
         env.metricsSystem.report()
         metadataCleaner.cancel()
-        env.actorSystem.stop(heartbeatReceiver)
+        env.rpcEnv.stop(heartbeatReceiver)
         cleaner.foreach(_.stop())
         dagSchedulerCopy.stop()
         taskScheduler = null

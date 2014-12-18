@@ -34,6 +34,7 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
+import org.apache.spark.rpc.{AkkaRpcEnv, RpcEnv}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
@@ -54,6 +55,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
 class SparkEnv (
     val executorId: String,
     val actorSystem: ActorSystem,
+    val rpcEnv: RpcEnv,
     val serializer: Serializer,
     val closureSerializer: Serializer,
     val cacheManager: CacheManager,
@@ -87,6 +89,7 @@ class SparkEnv (
     blockManager.master.stop()
     metricsSystem.stop()
     actorSystem.shutdown()
+    rpcEnv.stopAll()
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
     // UPDATE: In Akka 2.1.x, this hangs if there are remote actors, so we can't call it.
@@ -222,6 +225,8 @@ object SparkEnv extends Logging {
           AkkaUtils.createActorSystem(actorSystemName, hostname, port, conf, securityManager)
       }
 
+    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+
     // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
     // This is so that we tell the executors the correct port to connect to.
     if (isDriver) {
@@ -353,6 +358,7 @@ object SparkEnv extends Logging {
     new SparkEnv(
       executorId,
       actorSystem,
+      rpcEnv,
       serializer,
       closureSerializer,
       cacheManager,

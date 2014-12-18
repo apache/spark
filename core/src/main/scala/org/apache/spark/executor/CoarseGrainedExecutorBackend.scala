@@ -19,11 +19,12 @@ package org.apache.spark.executor
 
 import java.nio.ByteBuffer
 
+import org.apache.spark.rpc.{AkkaRpcEnv, RpcEnv, RpcEndPointRef, RpcEndPoint}
+
 import scala.concurrent.Await
 
-import akka.actor.{Actor, ActorSelection, ActorSystem, Props}
+import akka.actor.{ActorSystem, Props}
 import akka.pattern.Patterns
-import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
@@ -31,7 +32,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
+import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     driverUrl: String,
@@ -40,29 +41,36 @@ private[spark] class CoarseGrainedExecutorBackend(
     cores: Int,
     sparkProperties: Seq[(String, String)],
     actorSystem: ActorSystem)
-  extends Actor with ActorLogReceive with ExecutorBackend with Logging {
+  extends RpcEndPoint with ExecutorBackend with Logging {
 
   Utils.checkHostPort(hostPort, "Expected hostport")
 
   var executor: Executor = null
-  var driver: ActorSelection = null
+  var driver: RpcEndPointRef = null
 
-  override def preStart() {
+  preStart()
+
+  def preStart() {
     logInfo("Connecting to driver: " + driverUrl)
-    driver = context.actorSelection(driverUrl)
-    driver ! RegisterExecutor(executorId, hostPort, cores)
-    context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+    driver = rpcEnv.setupEndPointRefByUrl(driverUrl)
+    driver.send(RegisterExecutor(executorId, hostPort, cores))
   }
 
-  override def receiveWithLogging = {
+  override def remoteConnectionTerminated(remoteAddress: String): Unit = {
+    logError(s"Driver $remoteAddress disassociated! Shutting down.")
+    System.exit(1)
+  }
+
+  override def receive(sender: RpcEndPointRef, message: Any): Unit = message match {
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
       val (hostname, _) = Utils.parseHostPort(hostPort)
       executor = new Executor(executorId, hostname, sparkProperties, cores, isLocal = false,
         actorSystem)
 
-    case RegisterExecutorFailed(message) =>
-      logError("Slave registration failed: " + message)
+    case RegisterExecutorFailed(failureMessage) =>
+      logError("Slave registration failed: " + failureMessage)
       System.exit(1)
 
     case LaunchTask(data) =>
@@ -84,19 +92,15 @@ private[spark] class CoarseGrainedExecutorBackend(
         executor.killTask(taskId, interruptThread)
       }
 
-    case x: DisassociatedEvent =>
-      logError(s"Driver $x disassociated! Shutting down.")
-      System.exit(1)
-
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
       executor.stop()
-      context.stop(self)
-      context.system.shutdown()
+      //rpcEnv.stop(this)
+      // TODO(rxin): Stop this properly.
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
-    driver ! StatusUpdate(executorId, taskId, state, data)
+    driver.send(StatusUpdate(executorId, taskId, state, data))
   }
 }
 
