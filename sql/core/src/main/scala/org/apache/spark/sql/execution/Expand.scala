@@ -23,31 +23,32 @@ import org.apache.spark.sql.catalyst.errors._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.{UnknownPartitioning, Partitioning}
 
+/**
+ * Apply the all of the GroupExpressions to every input row, hence we will get
+ * multiple output rows for a input row.
+ * @param projections The group of expressions, all of the group expressions should
+ *                    output the same schema specified bye the parameter `output`
+ * @param output      The output Schema
+ * @param child       Child operator
+ */
 @DeveloperApi
 case class Expand(
     projections: Seq[GroupExpression],
-    gid: Attribute,
+    output: Seq[Attribute],
     child: SparkPlan)
   extends UnaryNode {
 
-  // the output schema is quite same with input, but followed by the Grouping ID
-  def output = child.output :+ gid
-
-  // We change the output data partitioning in the analytics function (GroupingSets)
-  // The output partitioning does not conform to its child, set it as UNKNOWN
+  // The GroupExpressions can output data with arbitrary partitioning, so set it
+  // as UNKNOWN partitioning
   override def outputPartitioning: Partitioning = UnknownPartitioning(0)
 
   override def execute() = attachTree(this, "execute") {
     child.execute().mapPartitions { iter =>
-      val input = child.output
-
-      // For each input row, we will project to couple of different rows as
-      // output, according to the projections.
       // TODO Move out projection objects creation and transfer to
       // workers via closure. However we can't assume the Projection
       // is serializable because of the code gen, so we have to
-      // create the projections within each of the partition.
-      val groups = projections.map(ee => newProjection(ee.children, input)).toArray
+      // create the projections within each of the partition processing.
+      val groups = projections.map(ee => newProjection(ee.children, child.output)).toArray
 
       new Iterator[Row] {
         private[this] var result: Row = _

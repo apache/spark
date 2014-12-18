@@ -188,7 +188,7 @@ class Analyzer(catalog: Catalog,
         Aggregate(
           x.groupByExprs :+ x.gid,
           x.aggregations,
-          Expand(expand(x), x.gid, x.child))
+          Expand(expand(x), x.child.output :+ x.gid, x.child))
     }
   }
 
