@@ -17,7 +17,8 @@
 
 package org.apache.spark.mllib.random
 
-import org.apache.commons.math3.distribution.{ExponentialDistribution, GammaDistribution, LogNormalDistribution, PoissonDistribution}
+import org.apache.commons.math3.distribution.{ExponentialDistribution,
+  GammaDistribution, LogNormalDistribution, PoissonDistribution}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.random.{XORShiftRandom, Pseudorandom}
@@ -88,12 +89,11 @@ class StandardNormalGenerator extends RandomDataGenerator[Double] {
 @DeveloperApi
 class PoissonGenerator(val mean: Double) extends RandomDataGenerator[Double] {
 
-  private var rng = new PoissonDistribution(mean)
+  private val rng = new PoissonDistribution(mean)
 
   override def nextValue(): Double = rng.sample()
 
   override def setSeed(seed: Long) {
-    rng = new PoissonDistribution(mean)
     rng.reseedRandomGenerator(seed)
   }
 
@@ -109,12 +109,11 @@ class PoissonGenerator(val mean: Double) extends RandomDataGenerator[Double] {
 @DeveloperApi
 class ExponentialGenerator(val mean: Double) extends RandomDataGenerator[Double] {
 
-  private var rng = new ExponentialDistribution(mean)
+  private val rng = new ExponentialDistribution(mean)
 
   override def nextValue(): Double = rng.sample()
 
   override def setSeed(seed: Long) {
-    rng = new ExponentialDistribution(mean)
     rng.reseedRandomGenerator(seed)
   }
 
@@ -131,12 +130,11 @@ class ExponentialGenerator(val mean: Double) extends RandomDataGenerator[Double]
 @DeveloperApi
 class GammaGenerator(val shape: Double, val scale: Double) extends RandomDataGenerator[Double] {
 
-  private var rng = new GammaDistribution(shape, scale)
+  private val rng = new GammaDistribution(shape, scale)
 
   override def nextValue(): Double = rng.sample()
 
   override def setSeed(seed: Long) {
-    rng = new GammaDistribution(shape, scale)
     rng.reseedRandomGenerator(seed)
   }
 
@@ -154,12 +152,11 @@ class GammaGenerator(val shape: Double, val scale: Double) extends RandomDataGen
 @DeveloperApi
 class LogNormalGenerator(val mean: Double, val std: Double) extends RandomDataGenerator[Double] {
 
-  private var rng = new LogNormalDistribution(mean, std)
+  private val rng = new LogNormalDistribution(mean, std)
 
   override def nextValue(): Double = rng.sample()
 
   override def setSeed(seed: Long) {
-    rng = new LogNormalDistribution(mean, std)
     rng.reseedRandomGenerator(seed)
   }
 
