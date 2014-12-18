@@ -112,11 +112,6 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
-    <dependency>
-        <groupId>colt</groupId>
-        <artifactId>colt</artifactId>
-        <version>1.2.0</version>
-    </dependency>
   </dependencies>
   <profiles>
     <profile>

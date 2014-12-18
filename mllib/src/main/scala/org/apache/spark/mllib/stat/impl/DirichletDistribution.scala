@@ -19,7 +19,7 @@
 
 package org.apache.spark.mllib.stat.impl
 
-import cern.jet.stat.Gamma
+import org.apache.commons.math3.special.Gamma
 
 private[mllib] class DirichletDistribution(private[mllib] val alpha: Float) extends Serializable {
   private def logBeta(x: Array[Float]) = {
