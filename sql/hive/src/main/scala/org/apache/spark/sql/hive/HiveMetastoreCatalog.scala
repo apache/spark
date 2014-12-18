@@ -293,7 +293,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           tableName,
           child,
           allowExisting,
-          desc)(SparkPlan.currentContext.get().asInstanceOf[HiveContext])
+          desc)
 
       case p: LogicalPlan if p.resolved => p
 
@@ -305,7 +305,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           tableName,
           child,
           allowExisting,
-          None)(SparkPlan.currentContext.get().asInstanceOf[HiveContext])
+          None)
     }
   }
 

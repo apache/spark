@@ -28,8 +28,7 @@ import org.apache.spark.sql.catalyst.types.StringType
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class HiveNativeCommand(
-    sql: String) extends RunnableCommand {
+case class HiveNativeCommand(sql: String) extends RunnableCommand {
 
   override def output =
     Seq(AttributeReference("result", StringType, nullable = false)())

@@ -39,15 +39,6 @@ case class DescribeHiveTableCommand(
     override val output: Seq[Attribute],
     isExtended: Boolean) extends RunnableCommand {
 
-  // Strings with the format like Hive. It is used for result comparison in our unit tests.
-  lazy val hiveString: Seq[String] = run(SparkPlan.currentContext.get()).map {
-    case Row(name: String, dataType: String, comment) =>
-      Seq(name, dataType,
-        Option(comment.asInstanceOf[String]).getOrElse(""))
-        .map(s => String.format(s"%-20s", s))
-        .mkString("\t")
-  }
-
   override def run(sqlContext: SQLContext) = {
     // Trying to mimic the format of Hive's output. But not exactly the same.
     var results: Seq[(String, String, String)] = Nil

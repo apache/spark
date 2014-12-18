@@ -49,8 +49,9 @@ case class InsertIntoHiveTable(
     table: MetastoreRelation,
     partition: Map[String, Option[String]],
     child: SparkPlan,
-    overwrite: Boolean)(@transient sc: HiveContext) extends UnaryNode with HiveInspectors {
+    overwrite: Boolean) extends UnaryNode with HiveInspectors {
 
+  @transient val sc: HiveContext = sqlContext.asInstanceOf[HiveContext]
   @transient lazy val outputClass = newSerializer(table.tableDesc).getSerializedClass
   @transient private lazy val hiveContext = new Context(sc.hiveconf)
   @transient private lazy val db = Hive.get(sc.hiveconf)
@@ -60,8 +61,6 @@ case class InsertIntoHiveTable(
     serializer.initialize(null, tableDesc.getProperties)
     serializer
   }
-
-  override def otherCopyArgs = sc :: Nil
 
   def output = child.output
 

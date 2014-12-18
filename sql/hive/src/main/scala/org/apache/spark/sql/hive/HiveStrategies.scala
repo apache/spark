@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.hadoop.hive.ql.plan.CreateTableDesc
-
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
@@ -176,10 +174,10 @@ private[hive] trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
         execution.InsertIntoHiveTable(
-          table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+          table, partition, planLater(child), overwrite) :: Nil
       case hive.InsertIntoHiveTable(table: MetastoreRelation, partition, child, overwrite) =>
         execution.InsertIntoHiveTable(
-          table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+          table, partition, planLater(child), overwrite) :: Nil
       case _ => Nil
     }
   }
