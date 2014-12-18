@@ -30,8 +30,7 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.{SerializationState, SerializationHelper, CallSite}
-import org.apache.spark.util.SerializationHelper.SerializedRef
+import org.apache.spark.util.{CallSite, RDDTrace, SerializationState}
 
 import org.apache.spark.executor.TaskMetrics
 
@@ -252,10 +251,10 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       val unserializable = new UnserializableClass
     }
     
-    val trace : Array[SerializedRef] = scheduler.tryToSerializeRdd(unserializableRdd)
-
+    val trace : Array[RDDTrace] = scheduler.tryToSerializeRddDeps(unserializableRdd)
+    
     assert(trace.length == 1)
-    assert(trace(0).isLeft) //Failed to serialize
+    assert(trace(0).result.isLeft) //Failed to serialize
   }
 
   test("Serialization trace for un-serializable task with serializable dependencies") {
@@ -267,18 +266,16 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       class UnserializableClass
       val unserializable = new UnserializableClass
     }
-
-    val trace : Array[SerializedRef] = scheduler.tryToSerializeRdd(finalRdd)
-
+    
     // Generate results array as (Success/Failure (Boolean) , ResultString (String))
     val results = Array((false, SerializationState.Failed),
       (true, SerializationState.Success),
       (true, SerializationState.Success))
 
-    val zipped : Array[(SerializedRef, Int)] = scheduler.tryToSerializeRdd(finalRdd).zipWithIndex
+    val zipped : Array[(RDDTrace, Int)] = scheduler.tryToSerializeRddDeps(finalRdd).zipWithIndex
     zipped.map {
-      case (serializationState : SerializedRef, idx : Int) =>
-        serializationState match {
+      case (trace : RDDTrace, idx : Int) =>
+        trace.result match {
           case Right(r) => assert(results(idx)._1) //Success
           case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
         }
@@ -301,10 +298,10 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
       (false, SerializationState.FailedDeps),
       (false, SerializationState.Failed))
 
-    val zipped : Array[(SerializedRef, Int)] = scheduler.tryToSerializeRdd(finalRdd).zipWithIndex
+    val zipped : Array[(RDDTrace, Int)] = scheduler.tryToSerializeRddDeps(finalRdd).zipWithIndex
     zipped.map {
-      case (serializationState : SerializedRef, idx : Int) =>
-        serializationState match {
+      case (trace : RDDTrace, idx : Int) =>
+        trace.result match {
           case Right(r) => assert(results(idx)._1) //Success
           case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
         }
@@ -326,11 +323,11 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     val results = Array((false, SerializationState.FailedDeps),
       (false, SerializationState.Failed),
       (true, SerializationState.Success))
-
-    val zipped : Array[(SerializedRef, Int)] = scheduler.tryToSerializeRdd(finalRdd).zipWithIndex
+    
+    val zipped : Array[(RDDTrace, Int)] = scheduler.tryToSerializeRddDeps(finalRdd).zipWithIndex
     zipped.map {
-      case (serializationState : SerializedRef, idx : Int) =>
-        serializationState match {
+      case (trace : RDDTrace, idx : Int) =>
+        trace.result match {
           case Right(r) => assert(results(idx)._1) //Success
           case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
         }
@@ -345,10 +342,11 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     val baseRdd = new MyRDD(sc, 1, Nil)
     val midRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
     val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(midRdd)))
-
-    val zipped : Array[(SerializedRef,Int)] = scheduler.tryToSerializeRdd(finalRdd).zipWithIndex
+    
+    val zipped : Array[(RDDTrace, Int)] = scheduler.tryToSerializeRddDeps(finalRdd).zipWithIndex
+    
     zipped.map {
-      case (serializationState : SerializedRef, idx : Int) => assert(serializationState.isRight)
+      case (trace : RDDTrace, idx : Int) => assert(trace.result.isRight)
     }
   }
   

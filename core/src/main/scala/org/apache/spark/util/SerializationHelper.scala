@@ -28,13 +28,17 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.Task
 import org.apache.spark.serializer.SerializerInstance
 
+/**
+ * This enumeration defines variables use to standardize debugging output
+ */
 object SerializationState extends Enumeration {
-  // Define vars to standardize debugging output
   type SerializationState = String
   val Failed = "Failed to serialize parent."
   val FailedDeps = "Failed to serialize dependencies."
   val Success = "Success"
 }
+
+case class RDDTrace (rdd : RDD[_], depth : Int, result : SerializationHelper.SerializedRef)
 
 /**
  * This class is designed to encapsulate some utilities to facilitate debugging serialization 
@@ -44,59 +48,146 @@ object SerializationHelper {
   type PathToRef = mutable.LinkedList[AnyRef]
   type BrokenRef = (AnyRef, PathToRef)
   type SerializedRef = Either[String, ByteBuffer]
-
+  
   /**
-   * Helper function to check whether a reference is serializable.
+   * Check whether a reference is serializable.
    *
    * If any dependency of an a reference is un-serializable, a NotSerializableException will be 
    * thrown and then we can execute a serialization trace to identify the problem reference.
    *
+   * The stack trace is returned in the Left side
+   *
    * @param closureSerializer - An instance of a serializer (single-threaded) that will be used
    * @param ref - The top-level reference that we are attempting to serialize 
    * @return SerializedRef - If serialization is successful, return success, else 
-   *                         return a String, which clarifies why things failed.
+   *         return a String, which clarifies why things failed.
    */
   def tryToSerialize(closureSerializer: SerializerInstance,
                      ref: AnyRef): SerializedRef = {
     val result: SerializedRef = try {
       Right(closureSerializer.serialize(ref))
     } catch {
-      case e: NotSerializableException => Left(handleFailure(closureSerializer, ref))
-      case NonFatal(e) => Left(handleFailure(closureSerializer, ref))
+      case e: NotSerializableException => Left(getSerializationTrace(closureSerializer, ref))
+      case NonFatal(e) => Left(getSerializationTrace(closureSerializer, ref))
     }
 
     result
   }
 
   /**
-   * Handle failures differently whether the passed reference is an RDD or something else since for 
-   * RDDs we want to explicitly identify failures in dependencies
+   * Check whether the serialization of the RDD or its dependencies was successful.
    * 
    * @param closureSerializer - An instance of a serializer (single-threaded) that will be used
-   * @param ref - The top-level reference that we are attempting to serialize
-   * @return String - Return a String which clarifies why the serialization failed. Either a 
-   *         SerializationState for an RDD or the reference trace for all other references
+   * @param serialized - Results of attempting to serialize the rdd and its dependencies
+   * @return the serialized parent rdd if successful
+   * @throws java.io.NotSerializableException if rdd or its dependencies didn't serialize         
    */
-  def handleFailure(closureSerializer: SerializerInstance,
-                    ref: AnyRef) : String = {
-    ref match {
-      case rdd: RDD[_] =>
-        handleFailedRdd(closureSerializer, rdd)
-      case _ =>
-        getSerializationTrace(closureSerializer,ref)
+  @throws(classOf[NotSerializableException])
+  def tryToSerializeRddAndDeps(closureSerializer: SerializerInstance,
+                               serialized : Array[RDDTrace]) : ByteBuffer = {
+    if (serialized.filter(trace => trace.result.isLeft).length > 0) {
+      throw new NotSerializableException("Failed to serialize dependencies.")
     }
+    
+    // If we get here we know that this (the serialization of the parent rdd) was successful 
+    serialized(0).result.right.get
+  }
+  
+  /**
+   * When debugging RDD serialization failures generate the trace differently. 
+   * This is because when RDDs have nested un-serializable dependencies the reference graph becomes
+   * much harder to trace. Thus, generate a reference trace only for the un-serializable RDDs and
+   * their parents - not their ancestors. We can still see ancestry from the initially logged 
+   * output. 
+
+   * @param closureSerializer - An instance of a serializer (single-threaded) that will be used
+   * @param rdd - Rdd to attempt to serialize
+   */
+  def tryToSerializeRdd(closureSerializer: SerializerInstance,
+                        rdd: RDD[_]): SerializedRef = {
+    val serialized: Array[RDDTrace] = tryToSerializeRddAndDeps(closureSerializer, rdd)
+    
+    def handleException: Left[String, Nothing] = {
+      var failedString = ""
+
+      // For convenience, first output a trace by depth of whether each dependency serialized
+      serialized.map {
+        case trace: RDDTrace =>
+          val out = ("Depth " + trace.depth + ": "
+            + trace.rdd.toString + " - "
+            + trace.result.fold(l => l, r => SerializationState.Success))
+          failedString += out + "\n"
+      }
+
+      // Next, print a specific reference trace for each un-serializable RDD
+      serialized.map {
+        case trace: RDDTrace =>
+          trace.result.fold(l => {
+            failedString += ("" + getSerializationTrace(closureSerializer, trace.rdd) + "\n")
+          }, r => {})
+      }
+      Left(failedString)
+    }   
+    
+    val result: SerializedRef = try {
+      Right(tryToSerializeRddAndDeps(closureSerializer,serialized))
+    } catch {
+      case e: NotSerializableException => handleException
+      case NonFatal(e) => handleException
+    }
+    
+    result
   }
 
   /**
-   * Helper function to separate an un-serializable parent rdd from un-serializable dependencies
+   * Attempt to serialize an rdd and its dependencies and on a per-rdd basis provide a result. 
    * 
+   * The reason we want to do this is because for RDDs with nested un-serializable dependencies, it
+   * becomes challenging to read the serialization trace to identify failures. This approach lets us
+   * only print out the failed RDDs specifically. 
+   *
+   * @param closureSerializer - An instance of a serializer (single-threaded) that will be used
+   * @param rdd - Rdd to attempt to serialize
+   * @return new Array[RDDTrace] where each entry represents one of the RDDs in the tree of the 
+   *         parent RDDs dependencies. Each entry provides a reference to the rdd, its depth in the
+   *         tree and the result of serialization.
+   */
+  def tryToSerializeRddAndDeps(closureSerializer: SerializerInstance,
+                            rdd: RDD[_]): Array[RDDTrace] = {
+    // Walk the RDD so that we can display a trace on a per-dependency basis
+    val traversal: Array[(RDD[_], Int)] = RDDWalker.walk(rdd)
+
+    def handleException(curRdd: RDD[_]): Left[String, Nothing] = {
+      Left(handleFailedRdd(closureSerializer, curRdd))
+    }
+
+    // Attempt to serialize each dependency of the RDD (track depth information to facilitate 
+    // debugging).
+    val serialized = traversal.map {
+      case (curRdd, depth) =>
+        val result: SerializedRef = try {
+          Right(closureSerializer.serialize(curRdd))
+        } catch {
+          case e: NotSerializableException => handleException(curRdd) 
+          case NonFatal(e) => handleException(curRdd)
+        }
+        
+        RDDTrace(curRdd, depth, result)
+    }
+    
+    serialized
+  }
+  
+  /**
+   * Helper function to separate an un-serializable parent rdd from un-serializable dependencies
+   *
    * @param closureSerializer - An instance of a serializer (single-threaded) that will be used
    * @param rdd - Rdd to attempt to serialize
    * @return String - Return a String (SerializationFailure), which clarifies why the serialization 
-   *                 failed.
+   *         failed.
    */
-  def handleFailedRdd(closureSerializer: SerializerInstance,
-                    rdd: RDD[_]): String = {
+  private def handleFailedRdd(closureSerializer: SerializerInstance,
+                      rdd: RDD[_]): String = {
     if (rdd.dependencies.nonEmpty) {
       try {
         rdd.dependencies.foreach(dep => closureSerializer.serialize(dep: AnyRef))
@@ -114,7 +205,7 @@ object SerializationHelper {
       SerializationState.Failed
     }
   }
-  
+
   /**
    * When an RDD is identified as un-serializable, use the generic ObjectWalker class to debug 
    * the references of that RDD and generate a set of paths to broken references
@@ -124,13 +215,13 @@ object SerializationHelper {
    * @return a Set of (AnyRef, LinkedList) - a tuple of the un-serialiazble reference and the 
    *         path to that reference
    */
-  def getPathsToBrokenRefs(closureSerializer: SerializerInstance,
-                           ref: AnyRef) : mutable.Set[BrokenRef] = {
-    val refGraph : mutable.LinkedList[AnyRef] = ObjectWalker.buildRefGraph(ref)
+  private def getPathsToBrokenRefs(closureSerializer: SerializerInstance,
+                           ref: AnyRef): mutable.Set[BrokenRef] = {
+    val refGraph: mutable.LinkedList[AnyRef] = ObjectWalker.buildRefGraph(ref)
     val brokenRefs = mutable.Set[BrokenRef]()
 
     refGraph.foreach {
-      case ref : AnyRef =>
+      case ref: AnyRef =>
         try {
           closureSerializer.serialize(ref)
         } catch {
@@ -141,22 +232,22 @@ object SerializationHelper {
 
     brokenRefs
   }
-  
+
   /**
    * Returns nicely formatted text representing the trace of the failed serialization
-   * 
+   *
    * @param closureSerializer - An instance of a serializer (single-threaded) that will be used
    * @param ref - The top-level reference that we are attempting to serialize 
    * @return
    */
   def getSerializationTrace(closureSerializer: SerializerInstance,
-                              ref : AnyRef) : String = {
+                            ref: AnyRef): String = {
     var trace = "Un-serializable reference trace for " + ref.toString + ":\n"
     trace += brokenRefsToString(getPathsToBrokenRefs(closureSerializer, ref))
     trace
   }
 
-  def refString(ref : AnyRef) : String = {
+  def refString(ref: AnyRef): String = {
     val refCode = System.identityHashCode(ref)
     "Ref (" + ref.toString + ", Hash: " + refCode + ")"
   }
@@ -164,30 +255,30 @@ object SerializationHelper {
   /**
    * Given a set of reference and the paths to those references (as a dependency tree), return 
    * a cleanly formatted string showing these paths.
-   * 
+   *
    * @param brokenRefPath - a tuple of the un-serialiazble reference and the path to that reference
    */
-  def brokenRefsToString(brokenRefPath : mutable.Set[BrokenRef]) : String = {
-    var trace = "**********************\n"  
-    
+  private def brokenRefsToString(brokenRefPath: mutable.Set[BrokenRef]): String = {
+    var trace = "**********************\n"
+
     brokenRefPath.foreach(s => trace += brokenRefToString(s) + "**********************\n")
     trace
   }
-  
+
   /**
    * Given a reference and a path to that reference (as a dependency tree), return a cleanly 
    * formatted string showing this path. 
    * @param brokenRefPath - a tuple of the un-serialiazble reference and the path to that reference
    */
-  def brokenRefToString(brokenRefPath : (AnyRef, mutable.LinkedList[AnyRef])) : String = {
+  private def brokenRefToString(brokenRefPath: (AnyRef, mutable.LinkedList[AnyRef])): String = {
     val ref = brokenRefPath._1
     val path = brokenRefPath._2
-    
+
     var trace = ref + ":\n"
     path.foreach(s => {
-      trace += "--- " + refString(s) +  "\n"  
+      trace += "--- " + refString(s) + "\n"
     })
-    
+
     trace
   }
 
@@ -199,7 +290,7 @@ object SerializationHelper {
    * @param addedJars - The JAR dependencies
    * @return String - The task and dependencies as a string
    */
-  def taskDebugString(task: Task[_],
+  private def taskDebugString(task: Task[_],
                       addedFiles: HashMap[String, Long],
                       addedJars: HashMap[String, Long]): String = {
     val taskStr = "[" + task.toString + "] \n"
