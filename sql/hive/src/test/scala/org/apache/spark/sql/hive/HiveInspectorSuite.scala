@@ -53,11 +53,11 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     val sfCounts = soi.getStructFieldRef("counts")
     val sfPercentiles = soi.getStructFieldRef("percentiles")
 
-    assert(2 == soi.getStructFieldData(b, sfCounts)
+    assert(2 === soi.getStructFieldData(b, sfCounts)
       .asInstanceOf[util.Map[LongWritable, LongWritable]]
       .get(new LongWritable(1L))
       .get())
-    assert(0.1 == soi.getStructFieldData(b, sfPercentiles)
+    assert(0.1 === soi.getStructFieldData(b, sfPercentiles)
       .asInstanceOf[util.ArrayList[DoubleWritable]]
       .get(0)
       .get())
@@ -115,7 +115,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
   def checkDataType(dt1: Seq[DataType], dt2: Seq[DataType]): Unit = {
     dt1.zip(dt2).map {
       case (dd1, dd2) =>
-        assert(dd1.getClass == dd2.getClass)  // DecimalType doesn't has the default precision info
+        assert(dd1.getClass === dd2.getClass)  // DecimalType doesn't has the default precision info
     }
   }
 
@@ -129,12 +129,12 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     (v1, v2) match {
       case (r1: Decimal, r2: Decimal) =>
         // Ignore the Decimal precision
-        assert(r1.compare(r2) == 0)
+        assert(r1.compare(r2) === 0)
       case (r1: Array[Byte], r2: Array[Byte])
         if r1 != null && r2 != null && r1.length == r2.length =>
-        r1.zip(r2).map { case (b1, b2) => assert(b1 == b2) }
-      case (r1: Date, r2: Date) => assert(r1.compareTo(r2) == 0)
-      case (r1, r2) => assert(r1 == r2)
+        r1.zip(r2).map { case (b1, b2) => assert(b1 === b2) }
+      case (r1: Date, r2: Date) => assert(r1.compareTo(r2) === 0)
+      case (r1, r2) => assert(r1 === r2)
     }
   }
 

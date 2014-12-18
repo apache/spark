@@ -47,15 +47,13 @@ import scala.collection.JavaConversions._
  *     Array[Byte]
  *     java.sql.Date
  *     java.sql.Timestamp
- *  Complicated Types =>
+ *  Complex Types =>
  *    Map: scala.collection.immutable.Map
  *    List: scala.collection.immutable.Seq
  *    Struct:
  *           org.apache.spark.sql.catalyst.expression.Row
- *           org.apache.spark.sql.catalyst.expression.GenericRow
- *           scala.collection.immutable.Seq
  *    Union: NOT SUPPORTED YET
- *  The Complicated types plays as a container, which can hold arbitrary data types.
+ *  The Complex types plays as a container, which can hold arbitrary data types.
  *
  * In Hive, the native data types are various, in UDF/UDAF/UDTF, and associated with
  * Object Inspectors, in Hive expression evaluation framework, the underlying data are
@@ -88,7 +86,7 @@ import scala.collection.JavaConversions._
  *       org.apache.hadoop.hive.serde2.io.DateWritable
  *       org.apache.hadoop.hive.serde2.io.TimestampWritable
  *       org.apache.hadoop.hive.serde2.io.HiveDecimalWritable
- * Complicated Type
+ * Complex Type
  *   List: Object[] / java.util.List
  *   Map: java.util.Map
  *   Struct: Object[] / java.util.List / java POJO
@@ -117,7 +115,7 @@ import scala.collection.JavaConversions._
    }
   }}}
 
- * 2) Complicated Types:
+ * 2) Complex Types:
  *   ListObjectInspector: inspects java array or [[java.util.List]]
  *   MapObjectInspector: inspects [[java.util.Map]]
  *   Struct.StructObjectInspector: inspects java array, [[java.util.List]] and
@@ -125,7 +123,7 @@ import scala.collection.JavaConversions._
  *   UnionObjectInspector: (tag: Int, object data) (TODO: not supported by SparkSQL yet)
  *
  * 3) ConstantObjectInspector: 
- * Constant object inspector can be either primitive type or complicated type, and it bundles a 
+ * Constant object inspector can be either primitive type or Complex type, and it bundles a
  * constant value as its property, usually the value is created when the constant object inspector
  * constructed.
  * {{{
@@ -291,7 +289,7 @@ private[hive] trait HiveInspectors {
       case x: StringObjectInspector if x.preferWritable() =>
         x.getPrimitiveWritableObject(data).toString
       case x: IntObjectInspector if x.preferWritable() => x.get(data)
-      case x: BooleanObjectInspector if x.preferWritable() =>x.get(data)
+      case x: BooleanObjectInspector if x.preferWritable() => x.get(data)
       case x: FloatObjectInspector if x.preferWritable() => x.get(data)
       case x: DoubleObjectInspector if x.preferWritable() => x.get(data)
       case x: LongObjectInspector if x.preferWritable() => x.get(data)
