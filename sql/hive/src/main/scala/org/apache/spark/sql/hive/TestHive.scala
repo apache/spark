@@ -426,6 +426,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       // other sql exec here.
       runSqlHive("RESET")
       // For some reason, RESET does not reset the following variables...
+      // https://issues.apache.org/jira/browse/HIVE-9004
+      runSqlHive("set hive.table.parameters.default=")
       runSqlHive("set datanucleus.cache.collections=true")
       runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.

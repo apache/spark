@@ -788,8 +788,9 @@ def _create_converter(dataType):
         return lambda row: map(conv, row)
 
     elif isinstance(dataType, MapType):
-        conv = _create_converter(dataType.valueType)
-        return lambda row: dict((k, conv(v)) for k, v in row.iteritems())
+        kconv = _create_converter(dataType.keyType)
+        vconv = _create_converter(dataType.valueType)
+        return lambda row: dict((kconv(k), vconv(v)) for k, v in row.iteritems())
 
     elif isinstance(dataType, NullType):
         return lambda x: None
@@ -944,7 +945,7 @@ def _infer_schema_type(obj, dataType):
 
     elif isinstance(dataType, MapType):
         k, v = obj.iteritems().next()
-        return MapType(_infer_type(k),
+        return MapType(_infer_schema_type(k, dataType.keyType),
                        _infer_schema_type(v, dataType.valueType))
 
     elif isinstance(dataType, StructType):
@@ -1085,7 +1086,7 @@ def _has_struct_or_date(dt):
     elif isinstance(dt, ArrayType):
         return _has_struct_or_date(dt.elementType)
     elif isinstance(dt, MapType):
-        return _has_struct_or_date(dt.valueType)
+        return _has_struct_or_date(dt.keyType) or _has_struct_or_date(dt.valueType)
     elif isinstance(dt, DateType):
         return True
     elif isinstance(dt, UserDefinedType):
@@ -1148,12 +1149,13 @@ def _create_cls(dataType):
         return List
 
     elif isinstance(dataType, MapType):
-        cls = _create_cls(dataType.valueType)
+        kcls = _create_cls(dataType.keyType)
+        vcls = _create_cls(dataType.valueType)
 
         def Dict(d):
             if d is None:
                 return
-            return dict((k, _create_object(cls, v)) for k, v in d.items())
+            return dict((_create_object(kcls, k), _create_object(vcls, v)) for k, v in d.items())
 
         return Dict
 
@@ -1164,7 +1166,8 @@ def _create_cls(dataType):
         return lambda datum: dataType.deserialize(datum)
 
     elif not isinstance(dataType, StructType):
-        raise Exception("unexpected data type: %s" % dataType)
+        # no wrapper for primitive types
+        return lambda x: x
 
     class Row(tuple):
 
