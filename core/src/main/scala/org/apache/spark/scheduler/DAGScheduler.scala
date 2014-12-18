@@ -809,13 +809,39 @@ class DAGScheduler(
    *             Failure: String - The reason for the failure.
    *                                      
    */
-  def tryToSerialize(rdd: RDD[_]): Array[SerializedRef] = {
+  def tryToSerializeRdd(rdd: RDD[_]): Array[SerializedRef] = {
     // Walk the RDD so that we can display a trace on a per-dependency basis
     val traversal : Array[(RDD[_], Int)] = RDDWalker.walk(rdd)
     
-    traversal.map {
-      case (curRdd, depth) => SerializationHelper.tryToSerialize(closureSerializer, curRdd)
+    // Attempt to serialize each dependency of the RDD (track depth information to facilitate 
+    // debugging)
+    val serialized = traversal.map {
+      case (curRdd, depth) => 
+        (curRdd, depth, SerializationHelper.tryToSerialize(closureSerializer, curRdd))
     }
+
+    // If serialization was unsuccessful print failures
+    val anyFailed = serialized.filter(_._3.isLeft).length > 0
+    
+    if (anyFailed) {
+      // For convenience, first output a trace by depth of whether each dependency was serializable
+      serialized.map {
+        case (curRdd, depth, result) =>
+          val out = "Depth " + depth + ": " + curRdd.toString + " - " + result.fold(l => l,
+            r => SerializationState.Success)
+          logDebug(out)
+      }
+
+      // Next, print a specific reference trace for the unserializable RDD
+      serialized.map {
+        case (curRdd, depth, result) =>
+          result.fold (l => logDebug(traceBrokenRef(curRdd)), r => {})
+      }
+      
+    }
+    
+    // Lastly return only the results of the attempted serialization for testing purposes
+    serialized.map(_._3)
   }
 
   /**
@@ -897,15 +923,7 @@ class DAGScheduler(
       
       // Before serialization print out the RDD and its references.
       if (debugSerialization) {
-        logDebug("RDD Dependencies:\n" + stage.rdd.toDebugString + "\n")
-        
-        val serialization = tryToSerialize(stage.rdd)
-        
-        // If we failed to serialize the RDD or any of its dependencies then print the serialization 
-        // trace which will identify these failures
-        if (serialization.filter(s=>s.isLeft).length > 0) {
-          logDebug(traceBrokenRef(stage.rdd))
-        }
+        tryToSerializeRdd(stage.rdd)
       }
        
       val taskBinaryBytes: Array[Byte] =
@@ -944,7 +962,7 @@ class DAGScheduler(
     }
 
     if (tasks.size > 0) {
-      // Preemptively serialize a task to make sure it can be serialized. We are catching this
+      // Pre-emptively serialize a task to make sure it can be serialized. We are catching this
       // exception here because it would be fairly hard to catch the non-serializable exception
       // down the road, where we have several different implementations for local scheduler and
       // cluster schedulers.
@@ -953,8 +971,11 @@ class DAGScheduler(
       // objects such as Partition.
       try {
         if (debugSerialization) {
-          logDebug("RDD Dependencies:\n" + stage.rdd.toDebugString + "\n")
-          logDebug(traceBrokenRef(stage.rdd))
+          SerializationHelper.tryToSerialize(closureSerializer, tasks.head).fold (
+            l => logDebug("Un-serializable reference trace for " + 
+              tasks.head.toString + ":\n" + l), 
+            r => {}
+          )
         }
 
         closureSerializer.serialize(tasks.head)

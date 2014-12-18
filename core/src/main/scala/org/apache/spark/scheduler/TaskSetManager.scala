@@ -462,6 +462,14 @@ private[spark] class TaskSetManager(
           // Check if serialization debugging is enabled
           val debugSerialization: Boolean = sched.sc.getConf.
             getBoolean("spark.serializer.debug", false)
+
+          if (debugSerialization) {
+            SerializationHelper.tryToSerialize(ser, task).fold (
+              l => logDebug("Un-serializable reference trace for " +
+                task.toString + ":\n" + l),
+              r => {}
+            )
+          }
           
           val serializedTask = Task.serializeWithDependencies(
             task, sched.sc.addedFiles, sched.sc.addedJars, ser)
