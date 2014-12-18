@@ -44,7 +44,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 import org.apache.spark.util.{CallSite, Clock, RDDWalker, SerializationHelper, 
                               SerializationState, SystemClock, Utils}
-import org.apache.spark.util.SerializationHelper.SerializedRdd
+import org.apache.spark.util.SerializationHelper.{BrokenRef, SerializedRef}
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 
 /**
@@ -794,7 +794,7 @@ class DAGScheduler(
   }
 
   /**
-   * Helper function to check whether an RDD is serializable. 
+   * Helper function to check whether an RDD and its dependencies are serializable. 
    * 
    * Note: This function is defined separately from the SerializationHelper.isSerializable()
    * since DAGScheduler.isSerializable() is passed as a parameter to the RDDWalker class's graph
@@ -803,39 +803,53 @@ class DAGScheduler(
    * 
    * @param rdd - Rdd to attempt to serialize
    * @return Array[SerializedRdd] - 
-   *           Return an array of Either objects indicating if serialization is successful:
+   *           Return an array of Either objects indicating if serialization is successful.
+   *           Each object represents the RDD or a dependency of the RDD
    *             Success: ByteBuffer - The serialized RDD
    *             Failure: String - The reason for the failure.
    *                                      
    */
-  def tryToSerialize(rdd: RDD[_]): Array[SerializedRdd] = {
+  def tryToSerialize(rdd: RDD[_]): Array[SerializedRef] = {
+    // Walk the RDD so that we can display a trace on a per-dependency basis
     val traversal : Array[(RDD[_], Int)] = RDDWalker.walk(rdd)
+    
     traversal.map {
       case (curRdd, depth) => SerializationHelper.tryToSerialize(closureSerializer, curRdd)
     }
   }
 
   /**
-   * Use the RDDWalker class to execute a graph traversal of an RDD and its dependencies to help 
-   * identify which RDDs are not serializable. In short, attempt to serialize the RDD and catch 
-   * any Exceptions thrown (this is the same mechanism used within submitMissingTasks() to deal with
-   * serialization failures). 
-   * 
-   * Note: This is defined here since it uses the tryToSerialize function which in turn uses 
-   * the closure serializer. Although the better place for the serializer would be in the 
-   * SerializationHelper, the Helper is not guaranteed to run in a single thread unlike the 
-   * DAGScheduler.
-   * 
-   * @param rdd - The rdd for which to print the serialization trace to identify un-serializable 
-   *              components
-   * @return - String - The serialization trace
-   *              
+   * Returns nicely formatted text representing the trace of the failed serialization
+   *
+   * Note: This is defined here since it uses the closure serializer. Although the better place for 
+   * the serializer would be in the SerializationHelper, the Helper is not guaranteed to run in a 
+   * single thread unlike the DAGScheduler.
+   *
+   * @param ref - The top-level reference that we are attempting to serialize 
+   * @return
    */
-  def getSerializationAsString(rdd : RDD[_]): String = {
-    SerializationHelper.getSerializationTrace(closureSerializer, rdd, tryToSerialize(rdd))
+  def traceBrokenRef(ref: AnyRef): String = {
+    SerializationHelper.getSerializationTrace(closureSerializer, ref)
   }
 
-  /** Called when stage's parents are available and we can now do its task. */
+  /**
+   * Use the SerializationHelper to execute a graph traversal of a broken reference to identify 
+   * failures.
+   *
+   * Note: This is defined here since it uses the closure serializer. Although the better place for 
+   * the serializer would be in the SerializationHelper, the Helper is not guaranteed to run in a 
+   * single thread unlike the DAGScheduler.
+   *
+   * @param ref - The broken ref for which to generate a trace
+   * @return a Set of BrokenRef - a tuple of the un-serialiazble reference and the 
+   *         path to that reference
+   *
+   */
+  def getBrokenRefs(ref : AnyRef): mutable.Set[BrokenRef] = {
+    SerializationHelper.getPathsToBrokenRefs(closureSerializer, ref)
+  }
+    
+    /** Called when stage's parents are available and we can now do its task. */
   private def submitMissingTasks(stage: Stage, jobId: Int) {
     logDebug("submitMissingTasks(" + stage + ")")
     // Get our pending tasks and remember them in our pendingTasks entry
@@ -884,7 +898,14 @@ class DAGScheduler(
       // Before serialization print out the RDD and its references.
       if (debugSerialization) {
         logDebug("RDD Dependencies:\n" + stage.rdd.toDebugString + "\n")
-        logDebug(getSerializationAsString(stage.rdd))
+        
+        val serialization = tryToSerialize(stage.rdd)
+        
+        // If we failed to serialize the RDD or any of its dependencies then print the serialization 
+        // trace which will identify these failures
+        if (serialization.filter(s=>s.isLeft).length > 0) {
+          logDebug(traceBrokenRef(stage.rdd))
+        }
       }
        
       val taskBinaryBytes: Array[Byte] =
@@ -931,6 +952,11 @@ class DAGScheduler(
       // We've already serialized RDDs and closures in taskBinary, but here we check for all other
       // objects such as Partition.
       try {
+        if (debugSerialization) {
+          logDebug("RDD Dependencies:\n" + stage.rdd.toDebugString + "\n")
+          logDebug(traceBrokenRef(stage.rdd))
+        }
+
         closureSerializer.serialize(tasks.head)
       } catch {
         case e: NotSerializableException =>

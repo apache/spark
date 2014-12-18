@@ -21,7 +21,7 @@ import java.lang.reflect.{Modifier, Field}
 import com.google.common.collect.Queues
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+
 
 /**
  * This class permits traversing a generic Object's reference graph. This is useful for debugging 
@@ -54,67 +54,45 @@ object ObjectWalker {
    * @return a new Set containing the 2-tuple of references from the traversal of the 
    *         reference graph along with their parent references. (self, parent)
    */
-  def buildRefGraph(rootObj: AnyRef): mutable.DoubleLinkedList[AnyRef] = {
+  def buildRefGraph(rootObj: AnyRef): mutable.LinkedList[AnyRef] = {
     val visitedRefs = mutable.Set[AnyRef]()
     val toVisit = Queues.newArrayDeque[AnyRef]()
-    val results = mutable.DoubleLinkedList[AnyRef]
+    var results = mutable.LinkedList[AnyRef]()
     
     toVisit.add(rootObj)
     
     while (!toVisit.isEmpty) {
       val obj : AnyRef = toVisit.pollFirst()
-      println("Visting " + obj)
       // Store the last parent reference to enable quick retrieval of the path to a broken node
-      var lastParent : AnyRef = null
       
       if (!visitedRefs.contains(obj)) {
+        results = mutable.LinkedList(obj).append(results)
         visitedRefs.add(obj)
-        results += (obj)
-        lastParent = obj
-        println("Length of visited = " + visited.size)  
+          
         // Extract all the fields from the object that would be serialized. Transient and 
         // static references are not serialized and primitive variables will always be serializable
         // and will not contain further references.
         
-        for (field <- getAllFields(obj.cur.getClass)
+        for (field <- getAllFields(obj.getClass)
           .filterNot(isStatic)
           .filterNot(isTransient)
           .filterNot(isPrimitive)) {
           // Extract the field object and pass to the visitor
           val originalAccessibility = field.isAccessible
           field.setAccessible(true)
-          val fieldObj = field.get(obj.cur)
+          val fieldObj = field.get(obj)
           field.setAccessible(originalAccessibility)
           
           if (fieldObj != null) {
-            println("Adding " + fieldObj + " to visit.")
-            toVisit.add(EdgeRef(fieldObj, lastParent))
+            toVisit.add(fieldObj)
           }
         }  
       }
       
     }
-    visited
+    results
   }
 
-  /**
-   * Traverse the links from each reference to its parent and return this traversal to generate
-   * the path of references to the unserializable reference
-   * @param brokenRef - The EdgeRef object which identifies the broken reference
-   * @return a new ArrayBuffer containing the path to the broken reference
-   */
-  def pathToBrokenRef(brokenRef : EdgeRef) : ArrayBuffer[AnyRef] = {
-    val path = new ArrayBuffer[AnyRef]()
-    var ref = brokenRef
-    
-    while (ref != null) {
-        path.prepend(ref.cur)
-        ref = ref.parent
-    }
-    
-    path
-  }
-  
   /**
    * Get all fields (including private ones) from this class and its superclasses.
    * @param cls - The class from which to retrieve fields
@@ -128,9 +106,7 @@ object ObjectWalker {
       fields ++= _cls.getFields
       _cls = _cls.getSuperclass
     }
-
-    println("Length of fields = " + fields.size)
-    println(fields.map(_.getName).toSeq)
+    
     fields
   }
 }

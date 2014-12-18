@@ -21,7 +21,7 @@ import java.io.NotSerializableException
 import java.nio.ByteBuffer
 
 import scala.collection.mutable
-import scala.collection.mutable.{ArrayBuffer, HashMap}
+import scala.collection.mutable.HashMap
 import scala.util.control.NonFatal
 
 import org.apache.spark.rdd.RDD
@@ -41,129 +41,80 @@ object SerializationState extends Enumeration {
  * problems in the DAGScheduler and the TaskSetManager. See SPARK-3694.
  */
 object SerializationHelper {
-  type SerializedRdd = Either[String, ByteBuffer]
+  type PathToRef = mutable.LinkedList[AnyRef]
+  type BrokenRef = (AnyRef, PathToRef)
+  type SerializedRef = Either[String, ByteBuffer]
 
   /**
-   * Helper function to check whether an RDD is serializable.
+   * Helper function to check whether a reference is serializable.
    *
-   * If any dependency of an RDD is un-serializable, a NotSerializableException will be thrown
-   * and the entire RDD will be deemed un-serializable if done with a single try-catch.
-   *
-   * Therefore, split the evaluation into two stages, in the first stage attempt to serialize 
-   * the rdd. If it fails, attempt to serialize its dependencies in the failure handler and see 
-   * if those also fail.
-   *
-   * This approach will show if any of the dependencies are un-serializable and will not 
-   * incorrectly identify the parent RDD as being serializable.
+   * If any dependency of an a reference is un-serializable, a NotSerializableException will be 
+   * thrown and then we can execute a serialization trace to identify the problem reference.
    *
    * @param closureSerializer - An instance of a serializer (single-threaded) that will be used
-   * @param rdd - Rdd to attempt to serialize
+   * @param ref - The top-level reference that we are attempting to serialize 
    * @return SerializedRdd - If serialization is successful, return the serialized bytes, else 
    *                         return a String, which clarifies why things failed. 
    *
    *
    */
   def tryToSerialize(closureSerializer: SerializerInstance,
-                     rdd: RDD[_]): SerializedRdd = {
-    val result: SerializedRdd = try {
-      Right(closureSerializer.serialize(rdd: AnyRef))
+                     ref: AnyRef): SerializedRef = {
+    val result: SerializedRef = try {
+      Right(closureSerializer.serialize(ref))
     } catch {
-      case e: NotSerializableException => Left(handleFailure(closureSerializer, rdd))
+      case e: NotSerializableException => Left(getSerializationTrace(closureSerializer, ref))
 
-      case NonFatal(e) => Left(handleFailure(closureSerializer, rdd))
+      case NonFatal(e) => Left(getSerializationTrace(closureSerializer, ref))
     }
 
     result
   }
 
   /**
-   * Returns an array of SerializedRdd objects (which are either the successfully serialized RDD and 
-   * its dependencies or a failure description), as nicely formatted text. 
-   *
+   * Returns nicely formatted text representing the trace of the failed serialization
+   * 
    * @param closureSerializer - An instance of a serializer (single-threaded) that will be used
-   * @param rdd - The top-level rdd that we are attempting to serialize 
-   * @param results - The result of attempting to serialize that rdd
-  
+   * @param ref - The top-level reference that we are attempting to serialize 
    * @return
    */
   def getSerializationTrace(closureSerializer: SerializerInstance,
-                              rdd : RDD[_], 
-                              results : Array[SerializedRdd]) = {
-    var trace = "RDD serialization trace:\n"
-    val it = results.iterator
-    
-    while (it.hasNext) {
-      trace += rdd.name + ": " + it.next().fold(l => {
-        // When we know that this RDD was explicitly the one that failed, print out the 
-        // path to the broken refs
-        if (l.equals(SerializationState.Failed)) {
-          l + "\n" + brokenRefsToString(getPathsToBrokenRefs(closureSerializer, rdd)) 
-        } else {
-          l
-        }
-         
-      }, r=> SerializationState.Success) + "\n"
-    }
+                              ref : AnyRef) : String = {
+    var trace = "Reference serialization trace for " + ref.toString + ":\n"
+    trace += brokenRefsToString(getPathsToBrokenRefs(closureSerializer, ref))
     trace
   }
 
-  /**
-   * Helper function to separate an un-serializable parent rdd from un-serializable dependencies 
-   * @param closureSerializer - An instance of a serializer (single-threaded) that will be used
-   * @param rdd - Rdd to attempt to serialize
-   * @return String - Return a String (SerializationFailure), which clarifies why the serialization 
-   *                 failed.
-   */
-  def handleFailure(closureSerializer: SerializerInstance,
-                    rdd: RDD[_]): String = {
-    if (rdd.dependencies.nonEmpty) {
-      try {
-        rdd.dependencies.foreach(dep => closureSerializer.serialize(dep: AnyRef))
-        
-        // By default return a parent failure since we now know that the dependency is serializable
-        SerializationState.Failed
-      } catch {
-        // If instead, however, the dependencies ALSO fail to serialize then the subsequent stage
-        // of evaluation will help identify which of the dependencies has failed 
-        case e: NotSerializableException => SerializationState.FailedDeps
-        case NonFatal(e) => SerializationState.FailedDeps
-      }
-    }
-    else {
-      SerializationState.Failed
-    }
+  def refString(ref : AnyRef) : String = {
+    val refCode = System.identityHashCode(ref)
+    "Ref (" + ref.toString + ", Hash: " + refCode + ")"
   }
 
   /**
    * When an RDD is identified as un-serializable, use the generic ObjectWalker class to debug 
    * the references of that RDD and generate a set of paths to broken references
    * @param closureSerializer - An instance of a serializer (single-threaded) that will be used
-   * @param rdd - The RDD that is known to be un-serializable
-   * @return a Set of (AnyRef, ArrayBuffer) - a tuple of the unserialiazble reference and the 
+   * @param ref - The reference known to be un-serializable
+   * @return a Set of (AnyRef, LinkedList) - a tuple of the un-serialiazble reference and the 
    *         path to that reference
    */
   def getPathsToBrokenRefs(closureSerializer: SerializerInstance,
-                           rdd: RDD[_]) : mutable.Set[(AnyRef, ArrayBuffer[AnyRef])]= {
-    val refGraph : mutable.Set[ObjectWalker.EdgeRef] = ObjectWalker.buildRefGraph(rdd)
-    val brokenRefs = mutable.Set[(AnyRef, ArrayBuffer[AnyRef])]()
-    
+                           ref: AnyRef) : mutable.Set[BrokenRef] = {
+    val refGraph : mutable.LinkedList[AnyRef] = ObjectWalker.buildRefGraph(ref)
+    val brokenRefs = mutable.Set[BrokenRef]()
+
     refGraph.foreach {
-      case ref : ObjectWalker.EdgeRef => 
+      case ref : AnyRef =>
         try {
-          closureSerializer.serialize(ref.cur)
+          closureSerializer.serialize(ref)
         } catch {
           // If instead, however, the dependencies ALSO fail to serialize then the subsequent stage
           // of evaluation will help identify which of the dependencies has failed 
-          case e: NotSerializableException => brokenRefs.add(ref, ObjectWalker.pathToBrokenRef(ref))
-          case NonFatal(e) => brokenRefs.add(ref, ObjectWalker.pathToBrokenRef(ref))
+          case e: NotSerializableException => brokenRefs.add(ref, ObjectWalker.buildRefGraph(ref))
+          case NonFatal(e) => brokenRefs.add(ref, ObjectWalker.buildRefGraph(ref))
         }
     }
     brokenRefs
-  }
-
-  def refString(ref : AnyRef) : String= {
-    val refCode = System.identityHashCode(ref)
-    "Ref (" + ref.getClass + ", " + refCode + ")"
   }
 
   /**
@@ -171,8 +122,8 @@ object SerializationHelper {
    * a cleanly formatted string showing these path. 
    * @param brokenRefPath - a tuple of the un-serialiazble reference and the path to that reference
    */
-  def brokenRefsToString(brokenRefPath : mutable.Set[(AnyRef, ArrayBuffer[AnyRef])]) : String = {
-    var trace = "**********************"  
+  def brokenRefsToString(brokenRefPath : mutable.Set[BrokenRef]) : String = {
+    var trace = "**********************\n"  
     brokenRefPath.foreach(trace += brokenRefToString(_) + "**********************\n")
     trace
   }
@@ -182,11 +133,11 @@ object SerializationHelper {
    * formatted string showing this path. 
    * @param brokenRefPath - a tuple of the un-serialiazble reference and the path to that reference
    */
-  def brokenRefToString(brokenRefPath : (AnyRef, ArrayBuffer[AnyRef])) : String = {
+  def brokenRefToString(brokenRefPath : (AnyRef, mutable.LinkedList[AnyRef])) : String = {
     val ref = brokenRefPath._1
     val path = brokenRefPath._2
     
-    var trace = "Un-serializable reference trace for " + ref + " :\n"
+    var trace = "Un-serializable reference trace for " + ref + ":\n"
     path.foreach(s => {
       trace += "--- " + refString(s) +  "\n"  
     })
