@@ -72,14 +72,13 @@ object DBN extends Logging {
   def initializeDBN(topology: Array[Int]): DBN = {
     val numLayer = topology.length - 1
     val stackedRBM = new StackedRBM(topology)
-    val lastRBM = stackedRBM.innerRBMs.last
-    Layer.initUniformDistWeight(lastRBM.weight, 0)
     val innerLayers = new Array[Layer](numLayer)
     for (layer <- 0 until numLayer) {
       val rbmLayer = stackedRBM.innerRBMs(layer).hiddenLayer
       innerLayers(layer) = if (layer < numLayer - 1) {
         rbmLayer
       } else {
+        Layer.initUniformDistWeight(rbmLayer.weight, 0.01)
         new SoftmaxLayer(rbmLayer.weight, rbmLayer.bias)
       }
     }

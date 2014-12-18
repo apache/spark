@@ -33,8 +33,8 @@ trait MnistDatasetSuite extends MLlibTestSparkContext {
 
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
 
-    val labelsFile = s"${sparkHome}/data/mllib/minst/train-labels-idx1-ubyte.gz"
-    val imagesFile = s"${sparkHome}/data/mllib/minst/train-images-idx3-ubyte.gz"
+    val labelsFile = s"${sparkHome}/data/mllib/mnist/train-labels-idx1-ubyte.gz"
+    val imagesFile = s"${sparkHome}/data/mllib/mnist/train-images-idx3-ubyte.gz"
     val minstReader = new MinstDatasetReader(labelsFile, imagesFile)
     val numVisible = minstReader.rows * minstReader.cols
     val minstData = minstReader.drop(dropN).take(size).map { case m@MinstItem(label, data) =>
