@@ -43,9 +43,9 @@ class MatricesSuite extends FunSuite {
 
   test("sparse matrix construction") {
     val m = 3
-    val n = 2
+    val n = 4
     val values = Array(1.0, 2.0, 4.0, 5.0)
-    val colPtrs = Array(0, 2, 4)
+    val colPtrs = Array(0, 2, 2, 4, 4)
     val rowIndices = Array(1, 2, 1, 2)
     val mat = Matrices.sparse(m, n, colPtrs, rowIndices, values).asInstanceOf[SparseMatrix]
     assert(mat.numRows === m)
@@ -53,6 +53,12 @@ class MatricesSuite extends FunSuite {
     assert(mat.values.eq(values), "should not copy data")
     assert(mat.colPtrs.eq(colPtrs), "should not copy data")
     assert(mat.rowIndices.eq(rowIndices), "should not copy data")
+
+    val entries: Array[((Int, Int), Double)] = Array(((1, 0), 1.0), ((2, 0), 2.0),
+        ((1, 2), 4.0), ((2, 2), 5.0))
+
+    val mat2 = SparseMatrix.fromCOO(m, n, entries)
+    assert(mat.toBreeze === mat2.toBreeze)
   }
 
   test("sparse matrix construction with wrong number of elements") {
@@ -270,5 +276,27 @@ class MatricesSuite extends FunSuite {
     assert(mat.numRows === 2)
     assert(mat.numCols === 2)
     assert(mat.values.toSeq === Seq(1.0, 0.0, 0.0, 2.0))
+  }
+
+  test("sprand") {
+    val rng = mock[Random]
+    when(rng.nextInt(4)).thenReturn(0, 1, 1, 3, 2, 2, 0, 1, 3, 0)
+    when(rng.nextDouble()).thenReturn(1.0, 2.0, 3.0, 4.0)
+    val mat = SparseMatrix.sprand(4, 4, 0.25, rng)
+    assert(mat.numRows === 4)
+    assert(mat.numCols === 4)
+    assert(mat.rowIndices.toSeq === Seq(3, 0, 2, 1))
+    assert(mat.values.toSeq === Seq(4.0, 1.0, 3.0, 2.0))
+  }
+
+  test("sprandn") {
+    val rng = mock[Random]
+    when(rng.nextInt(4)).thenReturn(0, 1, 1, 3, 2, 2, 0, 1, 3, 0)
+    when(rng.nextGaussian()).thenReturn(1.0, 2.0, 3.0, 4.0)
+    val mat = SparseMatrix.sprandn(4, 4, 0.25, rng)
+    assert(mat.numRows === 4)
+    assert(mat.numCols === 4)
+    assert(mat.rowIndices.toSeq === Seq(3, 0, 2, 1))
+    assert(mat.values.toSeq === Seq(4.0, 1.0, 3.0, 2.0))
   }
 }
