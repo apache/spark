@@ -48,7 +48,7 @@ case class CreateTableAsSelect(
 
   override def run(sqlContext: SQLContext) = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    val metastoreRelation: MetastoreRelation = {
+    lazy val metastoreRelation: MetastoreRelation = {
       // Create Hive Table
       hiveContext.catalog.createTable(database, tableName, query.output, allowExisting, desc)
 
