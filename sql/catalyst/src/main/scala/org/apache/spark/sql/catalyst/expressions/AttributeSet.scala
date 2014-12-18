@@ -113,5 +113,5 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
 
   override def toString = "{" + baseSet.map(_.a).mkString(", ") + "}"
 
-	def isEmpty: Boolean = baseSet.isEmpty
+  def isEmpty: Boolean = baseSet.isEmpty
 }
