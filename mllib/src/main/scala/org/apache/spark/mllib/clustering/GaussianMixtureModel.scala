@@ -65,7 +65,7 @@ class GaussianMixtureModel(
         new MultivariateGaussian(mu(i).toBreeze.toDenseVector, sigma(i).toBreeze.toDenseMatrix)
       }.toArray
     }
-    val weights = sc.broadcast((0 until k).map(i => weight(i)).toArray)
+    val weights = sc.broadcast(weight)
     points.map{ x => 
       computeSoftAssignments(x.toBreeze.toDenseVector, dists.value, weights.value, k)
     }
