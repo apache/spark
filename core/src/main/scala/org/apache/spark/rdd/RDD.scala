@@ -1281,12 +1281,14 @@ abstract class RDD[T: ClassTag](
   /**
    * Performs the checkpointing of this RDD by saving this. It is called after a job using this RDD
    * has completed (therefore the RDD has been materialized and potentially stored in memory).
-   * If the RDD is already checkPointed, just return.
-   * doCheckpoint() is called recursively on the parent RDDs. If the parent RDDs has already done
-   * checkpoint, just return. This is to avoid one RDD traversed for multiple times. Especially for
-   * lineage like A -- B -- C -- D, A and B might be visited for twice when doCheckpoint on D.
+   * If RDD is already checkpointed, do nothing here, just return. Otherwise, traverse the lineage
+   * to check whether there is any RDD need to be checkpointed. If the parent RDDs has already done
+   * checkpoint or has been traversed, then the current branch in lineage is finished traversing, 
+   * and continue traverse other branches until all RDD in lineage are traversed. For
+   * lineage like A -- B -- C -- D, make sure A and B not be visited twice when doCheckpoint on D.
    *                    \       /
    *                     `- E -'
+   *                     
    * O(n) for each call, n is RDD number in lineage.
    */
   private[spark] def doCheckpoint() {
