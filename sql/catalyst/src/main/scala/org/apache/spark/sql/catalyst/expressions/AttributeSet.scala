@@ -112,4 +112,6 @@ class AttributeSet private (val baseSet: Set[AttributeEquals])
   override def toSeq: Seq[Attribute] = baseSet.map(_.a).toArray.toSeq
 
   override def toString = "{" + baseSet.map(_.a).mkString(", ") + "}"
+
+	def isEmpty: Boolean = baseSet.isEmpty
 }
