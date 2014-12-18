@@ -18,7 +18,6 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import scala.collection.JavaConversions._
-import scala.math._
 
 import org.apache.commons.lang.exception.ExceptionUtils
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Schema}
@@ -54,8 +53,7 @@ private[hive] abstract class AbstractSparkSQLDriver(
   override def run(command: String): CommandProcessorResponse = {
     // TODO unify the error code
     try {
-      val groupId = round(random * 1000000).toString
-      context.sparkContext.setJobGroup(groupId, command)
+      context.sparkContext.setJobDescription(command)
       val execution = context.executePlan(context.sql(command).logicalPlan)
       hiveResponse = execution.stringResult()
       tableSchema = getResultSetSchema(execution)
