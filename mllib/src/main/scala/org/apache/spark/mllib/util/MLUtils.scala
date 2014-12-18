@@ -289,7 +289,7 @@ object MLUtils {
           } else if (kv1 >= nnzv1 || (kv2 < nnzv2 && v2Indices(kv2) < v1Indices(kv1))) {
             score = v2Values(kv2)
             kv2 += 1
-          } else if (v1Indices(kv1) == v2Indices(kv2)) {
+          } else {
             score = v1Values(kv1) - v2Values(kv2)
             kv1 += 1
             kv2 += 1
