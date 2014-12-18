@@ -411,7 +411,7 @@ class SparkContext(object):
 
     def binaryFiles(self, path, minPartitions=None):
         """
-        :: Experimental ::
+        .. note:: Experimental
 
         Read a directory of binary files from HDFS, a local file system
         (available on all nodes), or any Hadoop-supported file system URI
@@ -428,7 +428,7 @@ class SparkContext(object):
 
     def binaryRecords(self, path, recordLength):
         """
-        :: Experimental ::
+        .. note:: Experimental
 
         Load data from a flat binary file, assuming each record is a set of numbers
         with the specified numerical format (see ByteBuffer), and the number of
