@@ -190,5 +190,5 @@ case class AttributeReference(
 
 object VirtualColumn {
   val groupingIdName = "grouping__id"
-  def newGroupingId = AttributeReference (groupingIdName, IntegerType, false)()
+  def newGroupingId = AttributeReference(groupingIdName, IntegerType, false)()
 }
