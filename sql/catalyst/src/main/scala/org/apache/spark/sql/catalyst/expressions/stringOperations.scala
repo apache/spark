@@ -297,6 +297,4 @@ case class Concat(left: Expression, right: Expression) extends BinaryExpression 
   }
 
   def symbol: String = "||"
-
-  override def toString() = s"$left $nodeName $right"
 }
