@@ -58,7 +58,7 @@ RDD actions and transformations can be used for more complex computations. Let�
 [1] 36
 ```
 
-There are two functions here: `lapply` and `reduce`.  The inner function (`lapply`) maps a line to an integer value, creating a new RDD.  The outer function (`reduce`) is called on the new RDD to find the largest line count.  In this case, the arguments to both functions are passed as anonymous functions, but we can also define R functions beforehand as pass them as arguments to the RDD functions. For example, we’ll define a max function to make this code easier to understand:   
+There are two functions here: `lapply` and `reduce`.  The inner function (`lapply`) maps a line to an integer value, creating a new RDD.  The outer function (`reduce`) is called on the new RDD to find the largest line count.  In this case, the arguments to both functions are passed as anonymous functions, but we can also define R functions beforehand and pass them as arguments to the RDD functions. For example, we’ll define a max function to make this code easier to understand:   
 
 ```R
 > max <- function(a, b) {if (a > b) { a } else { b }}
@@ -122,7 +122,7 @@ It may seem silly to use Spark to explore and cache a 100-line text file. The in
 Standalone Applications
 ===
 
-Now we'll walk through the process of writing and executing a standalone in application in SparkR.  As an example, we'll create a simple R script, `SimpleApp.R`:
+Now we'll walk through the process of writing and executing a standalone application in SparkR.  As an example, we'll create a simple R script, `SimpleApp.R`:
 
 ```R
 library(SparkR)
