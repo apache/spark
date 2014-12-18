@@ -21,7 +21,7 @@ import java.io.{DataOutputStream, FileOutputStream}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import org.apache.spark.Accumulator
-import org.apache.spark.api.python.PythonRDD
+import org.apache.spark.api.python.{PythonBroadcast, PythonRDD}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.graphx.VertexRDD
 import org.apache.spark.graphx.api.java.JavaVertexRDD
@@ -34,7 +34,7 @@ private[graphx] class PythonVertexRDD(
     pythonIncludes: JList[String],
     preservePartitioning: Boolean,
     pythonExec: String,
-    broadcastVars: JList[Broadcast[Array[Byte]]],
+    broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]])
   extends PythonRDD (parent, command, envVars,
                      pythonIncludes, preservePartitioning,
@@ -74,14 +74,3 @@ object PythonVertexRDD {
   val DEFAULT_SPARK_BUFFER_SIZE = 65536
 }
 
-class VertexProperty(val schemaString: String) {
-  val schema : List[Any] = fromString(schemaString)
-
-  /**
-   * The vertex property schema is
-   * @param schemaString
-   * @return
-   */
-  def fromString(schemaString: String) : List[String] =
-    schemaString.split(" ").toList
-}

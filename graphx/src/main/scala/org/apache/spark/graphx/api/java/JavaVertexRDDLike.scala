@@ -23,7 +23,7 @@ import java.util.{List => JList}
 import org.apache.spark.api.java.JavaRDDLike
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, Function3 => JFunction3}
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.impl.ShippableVertexPartition
+import org.apache.spark.graphx.impl.{EdgeRDDImpl, ShippableVertexPartition}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{Partition, TaskContext}
 
@@ -117,8 +117,8 @@ trait JavaVertexRDDLike[VD, This <: JavaVertexRDDLike[VD, This, R],
     JavaVertexRDD(vertexRDD.aggregateUsingIndex(messages, reduceFunc))
   }
 
-  def fromEdges[VD: ClassTag]
-    (edges: EdgeRDD[_, _], numPartitions: Int, defaultVal: VD): JavaVertexRDD[VD] = {
-    JavaVertexRDD(VertexRDD.fromEdges(edges, numPartitions, defaultVal))
+  def fromEdges[ED: ClassTag, VD: ClassTag]
+    (edges: EdgeRDDImpl[ED, VD], numPartitions: Int, defaultVal: VD): JavaVertexRDD[VD] = {
+    JavaVertexRDD(VertexRDD.fromEdges[VD](EdgeRDD.fromEdges[ED, VD](edges), numPartitions, defaultVal))
   }
 }

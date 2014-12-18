@@ -19,6 +19,7 @@ package org.apache.spark.graphx.api.java
 import java.lang.{Double => JDouble, Long => JLong}
 
 import org.apache.spark.graphx._
+import org.apache.spark.graphx.impl.EdgeRDDImpl
 import org.apache.spark.graphx.lib.PageRank
 import org.apache.spark.rdd.RDD
 
@@ -26,10 +27,10 @@ import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 class JavaGraph[@specialized VD: ClassTag, @specialized ED: ClassTag]
-  (vertexRDD : VertexRDD[VD], edgeRDD: EdgeRDD[ED, VD]) {
+  (vertexRDD : VertexRDD[VD], edgeRDD: EdgeRDDImpl[ED, VD]) {
 
   def vertices: JavaVertexRDD[VD] = JavaVertexRDD(vertexRDD)
-  def edges: JavaEdgeRDD[ED, VD] = new JavaEdgeRDD(edgeRDD)
+  def edges: JavaEdgeRDD[ED, VD] = JavaEdgeRDD(edgeRDD)
   @transient lazy val graph : Graph[VD, ED] = Graph(vertexRDD, edgeRDD)
 
   def partitionBy(partitionStrategy: PartitionStrategy, numPartitions: Int): JavaGraph[VD, ED] = {
@@ -71,12 +72,19 @@ class JavaGraph[@specialized VD: ClassTag, @specialized ED: ClassTag]
     JavaGraph(graph.groupEdges(merge))
   }
 
+  @deprecated("use aggregateMessages", "1.2.0")
   def mapReduceTriplets[A: ClassTag](
     mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
     reduceFunc: (A, A) => A,
-    activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None)
-  : JavaVertexRDD[A] = {
+    activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None) : JavaVertexRDD[A] = {
     JavaVertexRDD(graph.mapReduceTriplets(mapFunc, reduceFunc, activeSetOpt))
+  }
+
+  def aggregateMessages[A: ClassTag](
+    sendMsg: EdgeContext[VD, ED, A] => Unit,
+    mergeMsg: (A, A) => A,
+    tripletFields: TripletFields = TripletFields.All) : JavaVertexRDD[A] = {
+    JavaVertexRDD(graph.aggregateMessages(sendMsg, mergeMsg, tripletFields))
   }
 
   def outerJoinVertices[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
@@ -97,7 +105,7 @@ object JavaGraph {
 
   implicit def apply[VD: ClassTag, ED: ClassTag]
     (graph: Graph[VD, ED]): JavaGraph[VD, ED] = {
-    new JavaGraph[VD, ED](graph.vertices, graph.edges)
+    new JavaGraph[VD, ED](graph.vertices, EdgeRDD.fromEdges(graph.edges))
   }
 
   implicit def apply [VD: ClassTag, ED: ClassTag]

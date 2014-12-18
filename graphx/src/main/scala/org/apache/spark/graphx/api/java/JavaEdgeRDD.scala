@@ -20,7 +20,7 @@ import java.lang.{Long => JLong}
 
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.impl.EdgePartition
+import org.apache.spark.graphx.impl.{EdgePartition, EdgeRDDImpl}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -31,13 +31,21 @@ import scala.reflect.ClassTag
  * EdgeRDD['ED', 'VD'] is a column-oriented edge partition RDD created from RDD[Edge[ED]].
  * JavaEdgeRDD class provides a Java API to access implementations of the EdgeRDD class
  *
- * @param edges
+ * @param partitionsRDD
+ * @param targetStorageLevel
  * @tparam ED
  * @tparam VD
  */
 class JavaEdgeRDD[ED: ClassTag, VD: ClassTag]
-  (edges: EdgeRDD[ED, VD])
-  extends JavaEdgeRDDLike[ED, VD, JavaEdgeRDD[ED, VD], Edge[ED]] {
+  (val partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])],
+    val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
+  extends JavaEdgeRDDLike[ED, VD, JavaEdgeRDD[ED, VD],
+    JavaRDD[(PartitionID, EdgePartition[ED, VD])]] {
+
+  /* Convert RDD[(PartitionID, EdgePartition[ED, VD])] to EdgeRDD[ED, VD] */
+  override def edgeRDD: EdgeRDDImpl[ED, VD] = {
+    new EdgeRDDImpl(partitionsRDD, targetStorageLevel)
+  }
 
   /**
    * Java Wrapper for RDD of Edges
@@ -45,65 +53,69 @@ class JavaEdgeRDD[ED: ClassTag, VD: ClassTag]
    * @param edgeRDD
    * @return
    */
-  def wrapRDD(edgeRDD: EdgeRDD[ED, VD]): JavaEdgeRDD[ED, VD] = new JavaEdgeRDD(edgeRDD)
-
-  def edgeRDD = edges
-
-  def count(): Long = edgeRDD.count()
-
-  /** Persist RDDs of this EdgeRDD with the default storage level (MEMORY_ONLY_SER) */
-  def cache(): JavaEdgeRDD[ED, VD] = edges.cache().asInstanceOf[JavaEdgeRDD[ED, VD]]
-
-  /** Persist RDDs of this EdgeRDD with the default storage level (MEMORY_ONLY_SER) */
-  def persist(): JavaEdgeRDD[ED, VD] = edges.persist().asInstanceOf[JavaEdgeRDD[ED, VD]]
-
-  /** Persist the RDDs of this DStream with the given storage level */
-  def persist(storageLevel: StorageLevel): JavaEdgeRDD[ED, VD] =
-    edges.persist(storageLevel).asInstanceOf[JavaEdgeRDD[ED, VD]]
-
-  def unpersist(blocking: Boolean = true) : JavaEdgeRDD[ED, VD] =
-    JavaEdgeRDD(edgeRDD.unpersist(blocking))
-
-  def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): JavaEdgeRDD[ED2, VD] = {
-    JavaEdgeRDD[ED2, VD](edgeRDD.mapValues(f))
+  override def wrapRDD(edgeRDD: RDD[(PartitionID, EdgePartition[ED, VD])]) :
+    JavaRDD[(PartitionID, EdgePartition[ED, VD])] = {
+    JavaRDD.fromRDD(edgeRDD)
   }
 
-  def reverse: JavaEdgeRDD[ED, VD] = edges.reverse.asInstanceOf[JavaEdgeRDD[ED, VD]]
+  /** Persist RDDs of this JavaEdgeRDD with the default storage level (MEMORY_ONLY_SER) */
+  def cache(): this.type = {
+    partitionsRDD.persist(StorageLevel.MEMORY_ONLY)
+    this
+  }
 
-  def filter
+  /** Persist the RDDs of this JavaEdgeRDD with the given storage level */
+  def persist(newLevel: StorageLevel): this.type = {
+    partitionsRDD.persist(newLevel)
+    this
+  }
+
+  def unpersist(blocking: Boolean = true) : this.type = {
+    edgeRDD.unpersist(blocking)
+    this
+  }
+
+  override def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): JavaEdgeRDD[ED2, VD] = {
+    edgeRDD.mapValues(f)
+  }
+
+  override def reverse: JavaEdgeRDD[ED, VD] = edgeRDD.reverse
+
+  override def filter
     (epred: EdgeTriplet[VD, ED] => Boolean,
     vpred: (VertexId, VD) => Boolean): JavaEdgeRDD[ED, VD] = {
-    JavaEdgeRDD(edgeRDD.filter(epred, vpred))
+    edgeRDD.filter(epred, vpred)
   }
 
-  def innerJoin[ED2: ClassTag, ED3: ClassTag]
-    (other: EdgeRDD[ED2, _])
+  override def innerJoin[ED2: ClassTag, ED3: ClassTag]
+    (other: EdgeRDD[ED2])
     (f: (VertexId, VertexId, ED, ED2) => ED3): JavaEdgeRDD[ED3, VD] = {
-    JavaEdgeRDD(edgeRDD.innerJoin(other)(f))
+    edgeRDD.innerJoin(other)(f)
   }
 
-  def mapEdgePartitions[ED2: ClassTag, VD2: ClassTag]
+  override def mapEdgePartitions[ED2: ClassTag, VD2: ClassTag]
   (f: (PartitionID, EdgePartition[ED, VD]) => EdgePartition[ED2, VD2]): JavaEdgeRDD[ED2, VD2] = {
-    edges.mapEdgePartitions(f).asInstanceOf[JavaEdgeRDD[ED2, VD2]]
+    edgeRDD.mapEdgePartitions(f)
   }
 }
 
 object JavaEdgeRDD {
 
   implicit def apply[ED: ClassTag, VD: ClassTag]
-    (edges: EdgeRDD[ED, VD]): JavaEdgeRDD[ED, VD] =
-      new JavaEdgeRDD(edges)
-
-  implicit def apply[ED: ClassTag, VD: ClassTag](edges: JavaRDD[Edge[ED]]) : JavaEdgeRDD[ED, VD] = {
-    new JavaEdgeRDD[ED, VD](EdgeRDD.fromEdges(edges.rdd))
+    (edges: EdgeRDDImpl[ED, VD]): JavaEdgeRDD[ED, VD] = {
+    new JavaEdgeRDD(edges.partitionsRDD)
   }
 
-  def toEdgeRDD[ED: ClassTag, VD: ClassTag](edges: JavaEdgeRDD[ED, VD]): EdgeRDD[ED, VD] = {
+  implicit def apply[ED: ClassTag, VD: ClassTag](edges: JavaRDD[Edge[ED]]) : JavaEdgeRDD[ED, VD] = {
+    JavaEdgeRDD(EdgeRDD.fromEdges[ED, VD](edges.rdd))
+  }
+
+  def toEdgeRDD[ED: ClassTag, VD: ClassTag](edges: JavaEdgeRDD[ED, VD]): EdgeRDDImpl[ED, VD] = {
     edges.edgeRDD
   }
 
   def fromRDDOfEdges[ED: ClassTag, VD: ClassTag](edges: RDD[Edge[ED]]) : JavaEdgeRDD[ED, VD] = {
-    new JavaEdgeRDD[ED, VD](EdgeRDD.fromEdges(edges))
+    JavaEdgeRDD[ED, VD](EdgeRDD.fromEdges[ED, VD](edges))
   }
 }
 
