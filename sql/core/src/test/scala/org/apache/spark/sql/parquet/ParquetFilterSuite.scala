@@ -87,12 +87,19 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
   test("filter pushdown - boolean") {
     withParquetRDD((true :: false :: Nil).map(Tuple1.apply)) { rdd =>
       checkFilterPushdown(rdd, '_1)('_1 === true, classOf[Eq[java.lang.Boolean]])(true)
-      checkFilterPushdown(rdd, '_1)('_1 !== true, classOf[Operators.NotEq[java.lang.Boolean]])(false)
+      checkFilterPushdown(rdd, '_1)('_1 !== true, classOf[Operators.NotEq[java.lang.Boolean]]) {
+        false
+      }
     }
   }
 
   test("filter pushdown - integer") {
-    withParquetRDD((1 to 4).map(Tuple1.apply)) { rdd =>
+    withParquetRDD((1 to 4).map(i => Tuple1(Option(i)))) { rdd =>
+      checkFilterPushdown(rdd, '_1)('_1.isNull, classOf[Eq[Integer]])(Seq.empty[Row])
+      checkFilterPushdown(rdd, '_1)('_1.isNotNull, classOf[NotEq[Integer]]) {
+        (1 to 4).map(Row.apply(_))
+      }
+
       checkFilterPushdown(rdd, '_1)('_1 === 1, classOf[Eq[Integer]])(1)
       checkFilterPushdown(rdd, '_1)('_1 !== 1, classOf[Operators.NotEq[Integer]]) {
         (2 to 4).map(Row.apply(_))
@@ -118,7 +125,12 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
   }
 
   test("filter pushdown - long") {
-    withParquetRDD((1 to 4).map(i => Tuple1(i.toLong))) { rdd =>
+    withParquetRDD((1 to 4).map(i => Tuple1(Option(i.toLong)))) { rdd =>
+      checkFilterPushdown(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.Long]])(Seq.empty[Row])
+      checkFilterPushdown(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.Long]]) {
+        (1 to 4).map(Row.apply(_))
+      }
+
       checkFilterPushdown(rdd, '_1)('_1 === 1, classOf[Eq[java.lang.Long]])(1)
       checkFilterPushdown(rdd, '_1)('_1 !== 1, classOf[Operators.NotEq[java.lang.Long]]) {
         (2 to 4).map(Row.apply(_))
@@ -144,7 +156,12 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
   }
 
   test("filter pushdown - float") {
-    withParquetRDD((1 to 4).map(i => Tuple1(i.toFloat))) { rdd =>
+    withParquetRDD((1 to 4).map(i => Tuple1(Option(i.toFloat)))) { rdd =>
+      checkFilterPushdown(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.Float]])(Seq.empty[Row])
+      checkFilterPushdown(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.Float]]) {
+        (1 to 4).map(Row.apply(_))
+      }
+
       checkFilterPushdown(rdd, '_1)('_1 === 1, classOf[Eq[java.lang.Float]])(1)
       checkFilterPushdown(rdd, '_1)('_1 !== 1, classOf[Operators.NotEq[java.lang.Float]]) {
         (2 to 4).map(Row.apply(_))
@@ -170,7 +187,12 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
   }
 
   test("filter pushdown - double") {
-    withParquetRDD((1 to 4).map(i => Tuple1(i.toDouble))) { rdd =>
+    withParquetRDD((1 to 4).map(i => Tuple1(Option(i.toDouble)))) { rdd =>
+      checkFilterPushdown(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.Double]])(Seq.empty[Row])
+      checkFilterPushdown(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.Double]]) {
+        (1 to 4).map(Row.apply(_))
+      }
+
       checkFilterPushdown(rdd, '_1)('_1 === 1, classOf[Eq[java.lang.Double]])(1)
       checkFilterPushdown(rdd, '_1)('_1 !== 1, classOf[Operators.NotEq[java.lang.Double]]) {
         (2 to 4).map(Row.apply(_))
@@ -197,6 +219,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
 
   test("filter pushdown - string") {
     withParquetRDD((1 to 4).map(i => Tuple1(i.toString))) { rdd =>
+      checkFilterPushdown(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.String]])(Seq.empty[Row])
+      checkFilterPushdown(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.String]]) {
+        (1 to 4).map(i => Row.apply(i.toString))
+      }
+
       checkFilterPushdown(rdd, '_1)('_1 === "1", classOf[Eq[String]])("1")
       checkFilterPushdown(rdd, '_1)('_1 !== "1", classOf[Operators.NotEq[String]]) {
         (2 to 4).map(i => Row.apply(i.toString))
@@ -227,6 +254,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
     }
 
     withParquetRDD((1 to 4).map(i => Tuple1(i.b))) { rdd =>
+      checkBinaryFilterPushdown(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.String]])(Seq.empty[Row])
+      checkBinaryFilterPushdown(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.String]]) {
+        (1 to 4).map(i => Row.apply(i.b)).toSeq
+      }
+
       checkBinaryFilterPushdown(rdd, '_1)('_1 === 1.b, classOf[Eq[Array[Byte]]])(1.b)
       checkBinaryFilterPushdown(rdd, '_1)('_1 !== 1.b, classOf[Operators.NotEq[Array[Byte]]]) {
         (2 to 4).map(i => Row.apply(i.b)).toSeq
