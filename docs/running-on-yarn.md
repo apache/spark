@@ -22,10 +22,12 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.yarn.applicationMaster.waitTries</code></td>
-  <td>10</td>
+  <td><code>spark.yarn.am.waitTime</code></td>
+  <td>100000</td>
   <td>
-    Set the number of times the ApplicationMaster waits for the the Spark master and then also the number of tries it waits for the SparkContext to be initialized
+    In yarn-cluster mode, time in milliseconds for the application master to wait for the
+    SparkContext to be initialized. In yarn-client mode, time for the application master to wait
+    for the driver to connect to it.
   </td>
 </tr>
 <tr>
