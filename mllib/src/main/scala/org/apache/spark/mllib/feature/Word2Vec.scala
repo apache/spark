@@ -133,8 +133,8 @@ class Word2Vec extends Serializable with Logging {
    * model's vocabulary (default: 5).
    */
   def setMinCount(minCount: Int): this.type = {
-  this.minCount = minCount
-  this
+    this.minCount = minCount
+    this
   }
 
   private var trainWordsCount = 0
