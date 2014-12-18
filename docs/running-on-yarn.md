@@ -139,6 +139,14 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
     The maximum number of threads to use in the application master for launching executor containers.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.am.extraJavaOptions</code></td>
+  <td>(none)</td>
+  <td>
+  A string of extra JVM options to pass to the Yarn ApplicationMaster in client mode.
+  In cluster mode, use spark.driver.extraJavaOptions instead.
+  </td>
+</tr>
 </table>
 
 # Launching Spark on YARN
