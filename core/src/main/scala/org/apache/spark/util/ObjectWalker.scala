@@ -31,12 +31,6 @@ import scala.collection.mutable
  * https://gist.github.com/JoshRosen/d6a8972c99992e97d040
  */
 object ObjectWalker {
-  case class EdgeRef(cur : AnyRef, parent : EdgeRef) {
-    def equals(other : EdgeRef) : Boolean = {
-      cur.equals(other.cur)
-    }
-  }
-
   def isTransient(field: Field): Boolean = Modifier.isTransient(field.getModifiers)
   def isStatic(field: Field): Boolean = Modifier.isStatic(field.getModifiers)
   def isPrimitive(field: Field): Boolean = field.getType.isPrimitive
@@ -88,7 +82,6 @@ object ObjectWalker {
           }
         }  
       }
-      
     }
     results
   }
