@@ -11,7 +11,7 @@ set :keep_releases, 5
 
 MAINTENANCE = (11..15).map {|i| "dn%02d.chi.shopify.com" % i } # Node is up but should not be part of the production cluster
 LOAD_TESTING = (42..44).map {|i| "dn%02d.chi.shopify.com" % i }
-DECOMISSIONED = ["dn37.chi.shopify.com", "dn40.chi.shopify.com"] # Node is down don't try to send code
+DECOMISSIONED = ["dn37.chi.shopify.com", "dn40.chi.shopify.com", "dn09.chi.shopify.com", "dn46.chi.shopify.com", "dn17.chi.shopify.com"] # Node is down don't try to send code
 BROKEN = MAINTENANCE + DECOMISSIONED
 
 task :production do
@@ -34,7 +34,7 @@ task :staging do
 end
 
 namespace :deploy do
-  task :cleanup, :except => {:no_release => true} do
+  task :cleanup do
     count = fetch(:keep_releases, 5).to_i
     run "ls -1dt /u/apps/spark/releases/* | tail -n +#{count + 1} | xargs rm -rf"
   end
