@@ -75,8 +75,13 @@ object DBN extends Logging {
     val lastRBM = stackedRBM.innerRBMs.last
     Layer.initUniformDistWeight(lastRBM.weight, 0)
     val innerLayers = new Array[Layer](numLayer)
-    stackedRBM.innerRBMs.zipWithIndex.foreach { case (rbm, index) =>
-      innerLayers(index) = rbm.hiddenLayer
+    for (layer <- 0 until numLayer) {
+      val rbmLayer = stackedRBM.innerRBMs(layer).hiddenLayer
+      innerLayers(layer) = if (layer < numLayer - 1) {
+        rbmLayer
+      } else {
+        new SoftmaxLayer(rbmLayer.weight, rbmLayer.bias)
+      }
     }
     val mlp = new MLP(innerLayers)
     new DBN(stackedRBM, mlp)

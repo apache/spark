@@ -22,7 +22,6 @@ import java.util.Random
 import scala.collection.JavaConversions._
 
 import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, max => brzmax}
-import breeze.numerics.{sigmoid => brzSigmoid, exp => brzExp}
 
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
@@ -293,7 +292,7 @@ private[mllib] class ReLuLayer(
 
   override def sample(input: BDM[Double]): BDM[Double] = {
     input.mapValues { v =>
-      val sd = sigmoid(v)
+      val sd = sigmoid(v, 32)
       val x = v + sd * rand.nextGaussian()
       math.max(0, x)
     }
@@ -476,6 +475,16 @@ private[mllib] object Layer {
 
   @inline def sigmoid(x: Double): Double = {
     1d / (1d + math.exp(-x))
+  }
+
+  @inline def sigmoid(x: Double, expThreshold: Double): Double = {
+    if (x > expThreshold) {
+      1D
+    } else if (x < -expThreshold) {
+      0D
+    } else {
+      sigmoid(x)
+    }
   }
 
   @inline def sigmoidPrimitive(y: Double): Double = {
