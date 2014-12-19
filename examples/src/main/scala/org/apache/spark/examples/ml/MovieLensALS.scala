@@ -29,40 +29,52 @@ import org.apache.spark.sql.catalyst.expressions.Row
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
  * Run with
  * {{{
- * bin/run-example org.apache.spark.examples.ml.MovieLensALS
+ * bin/run-example ml.MovieLensALS
  * }}}
- * A synthetic dataset in MovieLens format can be found at `data/mllib/sample_movielens_data.txt`.
- * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
 object MovieLensALS {
 
-  case class Rating(user: Int, item: Int, rating: Float)
+  case class Rating(userId: Int, movieId: Int, rating: Float, timestamp: Long)
 
   object Rating {
     def parseRating(str: String): Rating = {
       val fields = str.split("::")
-      assert(fields.size >= 3)
-      // We use parseInt/parseFloat directly because toInt/toFloat generates extra assembly code.
-      val user = java.lang.Integer.parseInt(fields(0))
-      val item = java.lang.Integer.parseInt(fields(1))
-      val rating = java.lang.Float.parseFloat(fields(2))
-      Rating(user, item, rating)
+      assert(fields.size == 4)
+      Rating(fields(0).toInt, fields(1).toInt, fields(2).toFloat, fields(3).toLong)
+    }
+  }
+
+  case class Movie(movieId: Int, title: String, genres: Seq[String])
+
+  object Movie {
+    def parseMovie(str: String): Movie = {
+      val fields = str.split("::")
+      assert(fields.size == 3)
+      Movie(fields(0).toInt, fields(1), fields(2).split("|"))
     }
   }
 
   case class Params(
-      input: String = null,
+      ratings: String = null,
+      movies: String = null,
       maxIter: Int = 10,
       regParam: Double = 0.1,
       rank: Int = 10,
-      numUserBlocks: Int = 10,
-      numItemBlocks: Int = 10) extends AbstractParams[Params]
+      numBlocks: Int = 10) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("MovieLensALS") {
       head("MovieLensALS: an example app for ALS on MovieLens data.")
+      opt[String]("ratings")
+        .required()
+        .text("path to a MovieLens dataset of ratings")
+        .action((x, c) => c.copy(ratings = x))
+      opt[String]("movies")
+        .required()
+        .text("path to a MovieLens dataset of movies")
+        .action((x, c) => c.copy(movies = x))
       opt[Int]("rank")
         .text(s"rank, default: ${defaultParams.rank}}")
         .action((x, c) => c.copy(rank = x))
@@ -72,24 +84,18 @@ object MovieLensALS {
       opt[Double]("regParam")
         .text(s"regularization parameter, default: ${defaultParams.regParam}")
         .action((x, c) => c.copy(regParam = x))
-      opt[Int]("numUserBlocks")
-        .text(s"number of user blocks, default: ${defaultParams.numUserBlocks}")
-        .action((x, c) => c.copy(numUserBlocks = x))
-      opt[Int]("numItemBlocks")
-        .text(s"number of item blocks, default: ${defaultParams.numItemBlocks}")
-        .action((x, c) => c.copy(numItemBlocks = x))
-      arg[String]("<input>")
-        .required()
-        .text("input paths to a MovieLens dataset of ratings")
-        .action((x, c) => c.copy(input = x))
+      opt[Int]("numBlocks")
+        .text(s"number of blocks, default: ${defaultParams.numBlocks}")
+        .action((x, c) => c.copy(numBlocks = x))
       note(
         """
-          |For example, the following command runs this app on a synthetic dataset:
+          |Example command line to run this app:
           |
           | bin/spark-submit --class org.apache.spark.examples.ml.MovieLensALS \
           |  examples/target/scala-*/spark-examples-*.jar \
-          |  --rank 5 --numIterations 20 --lambda 1.0 \
-          |  data/mllib/sample_movielens_data.txt
+          |  --rank 10 --maxIter 15 --regParam 0.1 \
+          |  --movies path/to/movielens/movies.dat \
+          |  --ratings path/to/movielens/ratings.dat
         """.stripMargin)
     }
 
@@ -106,11 +112,11 @@ object MovieLensALS {
     val sqlContext = new SQLContext(sc)
     import sqlContext._
 
-    val ratings = sc.textFile(params.input).map(Rating.parseRating).cache()
+    val ratings = sc.textFile(params.ratings).map(Rating.parseRating).cache()
 
     val numRatings = ratings.count()
-    val numUsers = ratings.map(_.user).distinct().count()
-    val numMovies = ratings.map(_.item).distinct().count()
+    val numUsers = ratings.map(_.userId).distinct().count()
+    val numMovies = ratings.map(_.movieId).distinct().count()
 
     println(s"Got $numRatings ratings from $numUsers users on $numMovies movies.")
 
@@ -125,16 +131,19 @@ object MovieLensALS {
     ratings.unpersist(blocking = false)
 
     val als = new ALS()
+      .setUserCol("userId")
+      .setItemCol("movieId")
       .setRank(params.rank)
       .setMaxIter(params.maxIter)
       .setRegParam(params.regParam)
-      .setNumUserBlocks(params.numUserBlocks)
-      .setNumItemBlocks(params.numItemBlocks)
+      .setNumBlocks(params.numBlocks)
 
     val model = als.fit(training)
 
-    val mse = model.transform(test)
-      .select('rating, 'prediction)
+    val predictions = model.transform(test).cache()
+
+    // Evaluate the model.
+    val mse = predictions.select('rating, 'prediction)
       .flatMap { case Row(rating: Float, prediction: Float) =>
         val err = rating.toDouble - prediction
         val err2 = err * err
@@ -145,8 +154,20 @@ object MovieLensALS {
         }
       }.mean()
     val rmse = math.sqrt(mse)
-
     println(s"Test RMSE = $rmse.")
+
+    // Inspect false positives.
+    predictions.registerTempTable("prediction")
+    sc.textFile(params.movies).map(Movie.parseMovie).registerTempTable("movie")
+    sqlContext.sql(
+      """
+        |SELECT userId, prediction.movieId, title, rating, prediction
+        |  FROM prediction JOIN movie ON prediction.movieId = movie.movieId
+        |  WHERE rating <= 1 AND prediction >= 4
+        |  LIMIT 100
+      """.stripMargin)
+      .collect()
+      .foreach(println)
 
     sc.stop()
   }
