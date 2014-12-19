@@ -31,10 +31,11 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   @transient var tmpFile: File = _
   @transient var tmpJarUrl: String = _
 
-  override def beforeEach() {
-    super.beforeEach()
+  override def withFixture(test: NoArgTest) = {
     resetSparkContext()
-    System.setProperty("spark.authenticate", "false")
+    TestUtils.withSystemProperty("spark.authenticate", "false") {
+      super.withFixture(test)
+    }
   }
 
   override def beforeAll() {
@@ -52,7 +53,6 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     val jarFile = new File(testTempDir, "test.jar")
     val jarStream = new FileOutputStream(jarFile)
     val jar = new JarOutputStream(jarStream, new java.util.jar.Manifest())
-    System.setProperty("spark.authenticate", "false")
 
     val jarEntry = new JarEntry(textFile.getName)
     jar.putNextEntry(jarEntry)
