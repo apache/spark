@@ -185,9 +185,14 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT case when ~1=-2 then 1 else 0 end FROM src"),
       sql("SELECT 1 FROM src").collect().toSeq)
   }
-  
- test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
-    checkAnswer(sql("SELECT key FROM src WHERE key not between 0 and 10 order by key"), 
-        sql("SELECT key FROM src WHERE key between 11 and 500 order by key").collect().toSeq)
+
+  test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
+    checkAnswer(sql("SELECT key FROM src WHERE key not between 0 and 10 order by key"),
+      sql("SELECT key FROM src WHERE key between 11 and 500 order by key").collect().toSeq)
+  }
+
+  test("SPARK-2554 SumDistinct partial aggregation") {
+    checkAnswer(sql("SELECT sum( distinct key) FROM src group by key order by key"),
+      sql("SELECT distinct key FROM src order by key").collect().toSeq)
   }
 }
