@@ -125,6 +125,8 @@ private[spark] class Executor(
     threadPool.shutdown()
   }
 
+  private def gcTime = ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
+
   class TaskRunner(
       execBackend: ExecutorBackend, val taskId: Long, taskName: String, serializedTask: ByteBuffer)
     extends Runnable {
@@ -132,6 +134,7 @@ private[spark] class Executor(
     @volatile private var killed = false
     @volatile var task: Task[Any] = _
     @volatile var attemptedTask: Option[Task[Any]] = None
+    @volatile var startGCTime: Long = _
 
     def kill(interruptThread: Boolean) {
       logInfo(s"Executor is trying to kill $taskName (TID $taskId)")
@@ -149,8 +152,7 @@ private[spark] class Executor(
       logInfo(s"Running $taskName (TID $taskId)")
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
       var taskStart: Long = 0
-      def gcTime = ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
-      val startGCTime = gcTime
+      startGCTime = gcTime
 
       try {
         SparkEnv.set(env)
@@ -351,10 +353,13 @@ private[spark] class Executor(
 
         while (!isStopped) {
           val tasksMetrics = new ArrayBuffer[(Long, TaskMetrics)]()
+          val curGCTime = gcTime
+
           for (taskRunner <- runningTasks.values()) {
             if (!taskRunner.attemptedTask.isEmpty) {
               Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
                 metrics.updateShuffleReadMetrics
+                metrics.jvmGCTime = curGCTime - taskRunner.startGCTime
                 if (isLocal) {
                   // JobProgressListener will hold an reference of it during
                   // onExecutorMetricsUpdate(), then JobProgressListener can not see
