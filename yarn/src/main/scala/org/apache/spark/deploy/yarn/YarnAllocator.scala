@@ -17,14 +17,14 @@
 
 package org.apache.spark.deploy.yarn
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder
-
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.regex.Pattern
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+
+import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
@@ -52,7 +52,6 @@ object AllocationType extends Enumeration {
 // Note that right now, we assume all node asks as uniform in terms of capabilities and priority
 // Refer to http://developer.yahoo.com/blogs/hadoop/posts/2011/03/mapreduce-nextgen-scheduler/ for
 // more info on how we are requesting for containers.
-
 
 /**
  * Acquires resources for executors from a ResourceManager and launches executors in new containers.
@@ -505,8 +504,7 @@ private[yarn] class YarnAllocator(
     amClient.allocate(progressIndicator)
   }
 
-  private def createRackResourceRequests(
-      hostContainers: ArrayBuffer[ContainerRequest])
+  private def createRackResourceRequests(hostContainers: ArrayBuffer[ContainerRequest])
     : ArrayBuffer[ContainerRequest] = {
     // Generate modified racks and new set of hosts under it before issuing requests.
     val rackToCounts = new HashMap[String, Int]()
@@ -602,8 +600,7 @@ private[yarn] class YarnAllocator(
       requestType: AllocationType.AllocationType,
       resource: String,
       numExecutors: Int,
-      priority: Int)
-    : ArrayBuffer[ContainerRequest] = {
+      priority: Int): ArrayBuffer[ContainerRequest] = {
     // If hostname is specified, then we need at least two requests - node local and rack local.
     // There must be a third request, which is ANY. That will be specially handled.
     requestType match {

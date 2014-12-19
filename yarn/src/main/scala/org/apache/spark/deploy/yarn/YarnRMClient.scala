@@ -19,6 +19,10 @@ package org.apache.spark.deploy.yarn
 
 import java.util.{List => JList}
 
+import scala.collection.JavaConversions._
+import scala.collection.{Map, Set}
+import scala.util.Try
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records._
@@ -31,10 +35,6 @@ import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.scheduler.SplitInfo
 import org.apache.spark.util.Utils
-
-import scala.collection.JavaConversions._
-import scala.collection.{Map, Set}
-import scala.util.Try
 
 /**
  * Handles registering and unregistering the application with the YARN ResourceManager.
@@ -120,7 +120,7 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
   }
 
   /** Returns the maximum number of attempts to register the AM. */
-  def getMaxRegAttempts(conf: YarnConfiguration) =
+  def getMaxRegAttempts(conf: YarnConfiguration): Int =
     conf.getInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS)
 
 }
