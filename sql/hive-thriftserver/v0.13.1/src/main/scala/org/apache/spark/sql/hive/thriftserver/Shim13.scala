@@ -165,9 +165,8 @@ private[hive] class SparkExecuteStatementOperation(
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
       }
-
-        hiveContext.sparkContext.setJobDescription(statement)
-        sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
+      hiveContext.sparkContext.setJobDescription(statement)
+      sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
         hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }
       iter = {
