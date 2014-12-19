@@ -17,7 +17,11 @@
 
 package org.apache.spark.mllib.ann
 
-import breeze.linalg.{DenseVector, Vector => BV, axpy => brzAxpy}
+import breeze.linalg.{axpy => brzAxpy, Vector => BV, DenseVector => BDV,
+DenseMatrix => BDM, sum => Bsum, argmax => Bargmax, norm => Bnorm}
+import breeze.numerics.{sigmoid => Bsigmoid}
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.mllib.linalg
 
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.optimization._
@@ -82,7 +86,9 @@ import org.apache.spark.util.random.XORShiftRandom
  * the nodes in the input and output layer, but excluding the bias nodes.
  */
 class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topology: Array[Int])
-  extends Serializable with ANNHelper {
+  extends Serializable with NeuralHelper {
+
+  val (weightMatrices, bias) = unrollWeights(weights)
 
   /**
    * Predicts values for a single data point using the trained model.
@@ -91,7 +97,7 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
    * @return prediction using the trained model.
    */
   def predict(testData: Vector): Vector = {
-    Vectors.dense(computeValues(testData.toArray, weights.toArray))
+    Vectors.dense(computeValues(testData))
   }
 
   /**
@@ -104,9 +110,10 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
     testDataRDD.map(T => (T, predict(T)) )
   }
 
-  private def computeValues(arrData: Array[Double], arrWeights: Array[Double]): Array[Double] = {
-    val arrNodes = forwardRun(arrData, arrWeights)
-    arrNodes.slice(arrNodes.size - topology(L), arrNodes.size)
+  private def computeValues(testData: Vector): Array[Double] = {
+    /* TODO: BDM */
+    val outputs = forwardRun(testData.toBreeze.toDenseVector.toDenseMatrix.t, weightMatrices, bias)
+    outputs(topology.length - 1).toArray
   }
 }
 
@@ -119,9 +126,9 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
  * @param convergenceTol Convergence tolerance for LBFGS. Smaller value for closer convergence.
  */
 class ArtificialNeuralNetwork private[mllib](
-    topology: Array[Int],
-    maxNumIterations: Int,
-    convergenceTol: Double)
+                                              topology: Array[Int],
+                                              maxNumIterations: Int,
+                                              convergenceTol: Double)
   extends Serializable {
 
   private val gradient = new ANNLeastSquaresGradient(topology)
@@ -139,10 +146,10 @@ class ArtificialNeuralNetwork private[mllib](
    * @return ANN model.
    */
   private def run(trainingRDD: RDD[(Vector, Vector)], initialWeights: Vector):
-      ArtificialNeuralNetworkModel = {
+  ArtificialNeuralNetworkModel = {
     val data = trainingRDD.map(v =>
       (0.0,
-        Vectors.fromBreeze(DenseVector.vertcat(
+        Vectors.fromBreeze(BDV.vertcat(
           v._1.toBreeze.toDenseVector,
           v._2.toBreeze.toDenseVector))
         ))
@@ -168,9 +175,9 @@ object ArtificialNeuralNetwork {
    * @return ANN model.
    */
   def train(
-      trainingRDD: RDD[(Vector, Vector)],
-      hiddenLayersTopology: Array[Int],
-      maxNumIterations: Int): ArtificialNeuralNetworkModel = {
+             trainingRDD: RDD[(Vector, Vector)],
+             hiddenLayersTopology: Array[Int],
+             maxNumIterations: Int): ArtificialNeuralNetworkModel = {
     train(trainingRDD, hiddenLayersTopology, maxNumIterations, defaultTolerance)
   }
 
@@ -184,9 +191,9 @@ object ArtificialNeuralNetwork {
    * @return ANN model.
    */
   def train(
-      trainingRDD: RDD[(Vector,Vector)],
-      model: ArtificialNeuralNetworkModel,
-      maxNumIterations: Int): ArtificialNeuralNetworkModel = {
+             trainingRDD: RDD[(Vector,Vector)],
+             model: ArtificialNeuralNetworkModel,
+             maxNumIterations: Int): ArtificialNeuralNetworkModel = {
     train(trainingRDD, model, maxNumIterations, defaultTolerance)
   }
 
@@ -200,10 +207,10 @@ object ArtificialNeuralNetwork {
    * @return ANN model.
    */
   def train(
-      trainingRDD: RDD[(Vector,Vector)],
-      hiddenLayersTopology: Array[Int],
-      initialWeights: Vector,
-      maxNumIterations: Int): ArtificialNeuralNetworkModel = {
+             trainingRDD: RDD[(Vector,Vector)],
+             hiddenLayersTopology: Array[Int],
+             initialWeights: Vector,
+             maxNumIterations: Int): ArtificialNeuralNetworkModel = {
     train(trainingRDD, hiddenLayersTopology, initialWeights, maxNumIterations, defaultTolerance)
   }
 
@@ -217,10 +224,10 @@ object ArtificialNeuralNetwork {
    * @return ANN model.
    */
   def train(
-      trainingRDD: RDD[(Vector,Vector)],
-      model: ArtificialNeuralNetworkModel,
-      maxNumIterations: Int,
-      convergenceTol: Double): ArtificialNeuralNetworkModel = {
+             trainingRDD: RDD[(Vector,Vector)],
+             model: ArtificialNeuralNetworkModel,
+             maxNumIterations: Int,
+             convergenceTol: Double): ArtificialNeuralNetworkModel = {
     new ArtificialNeuralNetwork(model.topology, maxNumIterations, convergenceTol).
       run(trainingRDD, model.weights)
   }
@@ -235,10 +242,10 @@ object ArtificialNeuralNetwork {
    * @return ANN model.
    */
   def train(
-      trainingRDD: RDD[(Vector, Vector)],
-      hiddenLayersTopology: Array[Int],
-      maxNumIterations: Int,
-      convergenceTol: Double): ArtificialNeuralNetworkModel = {
+             trainingRDD: RDD[(Vector, Vector)],
+             hiddenLayersTopology: Array[Int],
+             maxNumIterations: Int,
+             convergenceTol: Double): ArtificialNeuralNetworkModel = {
     val topology = convertTopology(trainingRDD, hiddenLayersTopology)
     new ArtificialNeuralNetwork(topology, maxNumIterations, convergenceTol).
       run(trainingRDD, randomWeights(topology, false))
@@ -254,11 +261,11 @@ object ArtificialNeuralNetwork {
    * @return ANN model.
    */
   def train(
-      trainingRDD: RDD[(Vector,Vector)],
-      hiddenLayersTopology: Array[Int],
-      initialWeights: Vector,
-      maxNumIterations: Int,
-      convergenceTol: Double): ArtificialNeuralNetworkModel = {
+             trainingRDD: RDD[(Vector,Vector)],
+             hiddenLayersTopology: Array[Int],
+             initialWeights: Vector,
+             maxNumIterations: Int,
+             convergenceTol: Double): ArtificialNeuralNetworkModel = {
     val topology = convertTopology(trainingRDD, hiddenLayersTopology)
     new ArtificialNeuralNetwork(topology, maxNumIterations, convergenceTol).
       run(trainingRDD, initialWeights)
@@ -272,8 +279,8 @@ object ArtificialNeuralNetwork {
    * @return random weights vector.
    */
   def randomWeights(
-      trainingRDD: RDD[(Vector,Vector)],
-      hiddenLayersTopology: Array[Int]): Vector = {
+                     trainingRDD: RDD[(Vector,Vector)],
+                     hiddenLayersTopology: Array[Int]): Vector = {
     val topology = convertTopology(trainingRDD, hiddenLayersTopology)
     return randomWeights(topology, false)
   }
@@ -287,9 +294,9 @@ object ArtificialNeuralNetwork {
    * @return random weights vector.
    */
   def randomWeights(
-      trainingRDD: RDD[(Vector,Vector)],
-      hiddenLayersTopology: Array[Int],
-      seed: Int): Vector = {
+                     trainingRDD: RDD[(Vector,Vector)],
+                     hiddenLayersTopology: Array[Int],
+                     seed: Int): Vector = {
     val topology = convertTopology(trainingRDD, hiddenLayersTopology)
     return randomWeights(topology, true, seed)
   }
@@ -304,17 +311,18 @@ object ArtificialNeuralNetwork {
    * @return random weights vector.
    */
   def randomWeights(
-      inputLayerSize: Int,
-      outputLayerSize: Int,
-      hiddenLayersTopology: Array[Int],
-      seed: Int): Vector = {
+                     inputLayerSize: Int,
+                     outputLayerSize: Int,
+                     hiddenLayersTopology: Array[Int],
+                     seed: Int): Vector = {
+
     val topology = inputLayerSize +: hiddenLayersTopology :+ outputLayerSize
     return randomWeights(topology, true, seed)
   }
 
   private def convertTopology(
-      input: RDD[(Vector,Vector)],
-      hiddenLayersTopology: Array[Int] ): Array[Int] = {
+                               input: RDD[(Vector,Vector)],
+                               hiddenLayersTopology: Array[Int] ): Array[Int] = {
     val firstElt = input.first
     firstElt._1.size +: hiddenLayersTopology :+ firstElt._2.size
   }
@@ -349,163 +357,116 @@ object ArtificialNeuralNetwork {
   }
 }
 
+
 /**
- * Helper methods for ANN
+ * ::Experimental::
+ * Trait for roll/unroll weights and forward/back propagation in neural network
  */
-private[ann] trait ANNHelper {
+@Experimental
+private[ann] trait NeuralHelper {
   protected val topology: Array[Int]
-  protected def g(x: Double) = 1.0 / (1.0 + math.exp(-x))
-  protected val L = topology.length - 1
-  protected val noWeights = {
-    var tmp = 0
-    var l = 1
-    while (l <= L) {
-      tmp = tmp + topology(l) * (topology(l - 1) + 1)
-      l += 1
+  protected val weightCount =
+    (for(i <- 1 until topology.size) yield (topology(i) * topology(i - 1))).sum +
+      topology.sum - topology(0)
+
+  protected def unrollWeights(weights: linalg.Vector): (Array[BDM[Double]], Array[BDM[Double]]) = {
+    require(weights.size == weightCount)
+    val weightsCopy = weights.toArray
+    val weightMatrices = new Array[BDM[Double]](topology.size)
+    var offset = 0
+    for(i <- 1 until topology.size){
+      weightMatrices(i) = new BDM[Double](topology(i), topology(i - 1), weightsCopy, offset)
+      offset += topology(i) * topology(i - 1)
     }
-    tmp
-  }
-  protected val ofsWeight: Array[Int] = {
-    val tmp = new Array[Int](L + 1)
-    var curPos = 0
-    tmp(0) = 0
-    var l = 1
-    while (l <= L) {
-      tmp(l) = curPos
-      curPos = curPos + (topology(l - 1) + 1) * topology(l)
-      l += 1
+    val bias = new Array[BDM[Double]](topology.size)
+    for(i <- 1 until topology.size){
+      /* TODO: BDM */
+      bias(i) = (new BDV[Double](weightsCopy, offset, 1, topology(i))).toDenseMatrix.t
+      offset += topology(i)
     }
-    tmp
-  }
-  protected val noNodes: Int = {
-    var tmp: Integer = 0
-    var l = 0
-    while (l < topology.size) {
-      tmp = tmp + topology(l)
-      l += 1
-    }
-    tmp
-  }
-  protected val ofsNode: Array[Int] = {
-    val tmp = new Array[Int](L + 1)
-    tmp(0) = 0
-    var l = 1
-    while (l <= L) {
-      tmp(l) = tmp(l - 1) + topology(l - 1)
-      l += 1
-    }
-    tmp
+    (weightMatrices, bias)
   }
 
-  protected def forwardRun(arrData: Array[Double], arrWeights: Array[Double]): Array[Double] = {
-    val arrNodes = new Array[Double](noNodes)
-    var i: Int = 0
-    var j: Int = 0
-    var l: Int = 0
-    i = 0
-    while (i < topology(0)) {
-      arrNodes(i) = arrData(i)
-      i += 1
-    }
-    l = 1
-    while (l <= L) {
-      j = 0
-      while (j < topology(l)) {
-        var cum: Double = 0.0
-        i = 0
-        while (i < topology(l - 1)) {
-          cum = cum +
-            arrWeights(ofsWeight(l) + (topology(l - 1) + 1) * j + i) *
-              arrNodes(ofsNode(l - 1) + i)
-          i += 1
-        }
-        cum = cum + arrWeights(ofsWeight(l) + (topology(l - 1) + 1) * j + topology(l - 1))
-        arrNodes(ofsNode(l) + j) = g(cum)
-        j += 1
+  protected def rollWeights(weightMatricesUpdate: Array[BDM[Double]],
+                            biasUpdate: Array[BDM[Double]]) = {
+    val wu = BDV.zeros[Double](weightCount)
+    var offset = 0
+    for(i <- 1 until topology.size){
+      for(j <- 0 until weightMatricesUpdate(i).cols){
+        wu(offset until (offset + weightMatricesUpdate(i).rows)) := weightMatricesUpdate(i)(::, j)
+        offset += weightMatricesUpdate(i).rows
       }
-      l += 1
     }
-    arrNodes
+    for(i <- 1 until topology.size){
+      wu(offset until offset + topology(i)) := biasUpdate(i)(::, 0)
+      offset += topology(i)
+    }
+    wu
+  }
+
+  protected def forwardRun(data: BDM[Double], weightMatrices: Array[BDM[Double]],
+                           bias: Array[BDM[Double]]): Array[BDM[Double]] = {
+    val outArray = new Array[BDM[Double]](topology.size)
+    outArray(0) = data
+    for(i <- 1 until topology.size) {
+      outArray(i) = weightMatrices(i) * outArray(i - 1) :+ bias(i)
+      Bsigmoid.inPlace(outArray(i))
+    }
+    outArray
+  }
+
+  protected def wGradient(weightMatrices: Array[BDM[Double]],
+                          targetOutput: BDM[Double],
+                          outputs: Array[BDM[Double]]):
+  (Array[BDM[Double]], Array[BDM[Double]]) = {
+    /* error back propagation */
+    val deltas = new Array[BDM[Double]](topology.size)
+    for(i <- (topology.size - 1) until (0, -1)){
+      /* TODO: DBM */
+      val onesVector = BDV.ones[Double](outputs(i).rows).toDenseMatrix.t
+      val outPrime = (onesVector :- outputs(i)) :* outputs(i)
+      if(i == topology.size - 1){
+        deltas(i) = (outputs(i) :- targetOutput) :* outPrime
+      }else{
+        deltas(i) = (weightMatrices(i + 1).t * deltas(i + 1)) :* outPrime
+      }
+    }
+    /* gradient */
+    val gradientMatrices = new Array[BDM[Double]](topology.size)
+    for(i <- (topology.size - 1) until (0, -1)) {
+      gradientMatrices(i) = deltas(i) * outputs(i - 1).t
+    }
+    (gradientMatrices, deltas)
   }
 }
 
-private class ANNLeastSquaresGradient(val topology: Array[Int]) extends Gradient with ANNHelper {
+
+private class ANNLeastSquaresGradient(val topology: Array[Int]) extends Gradient with NeuralHelper {
 
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val arrData = data.toArray
-    val arrWeights = weights.toArray
-    var i: Int = 0
-    var j: Int = 0
-    var l: Int = 0
-    // forward run
-    val arrNodes = forwardRun(arrData, arrWeights)
-    val arrDiff = new Array[Double](topology(L))
-    j = 0
-    while (j < topology(L)) {
-      arrDiff(j) = arrNodes(ofsNode(L) + j) - arrData(topology(0) + j)
-      j += 1
-    }
-    var err: Double = 0
-    j = 0
-    while (j < topology(L)) {
-      err = err + arrDiff(j) * arrDiff(j)
-      j += 1
-    }
-    err = err * .5
-    // back propagation
-    val arrDelta = new Array[Double](noNodes)
-    j = 0
-    while (j < topology(L)) {
-      arrDelta(ofsNode(L) + j) =
-        arrDiff(j) *
-          arrNodes(ofsNode(L) + j) * (1 - arrNodes(ofsNode(L) + j))
-      j += 1
-    }
-    l = L - 1
-    while (l > 0) {
-      j = 0
-      while (j < topology(l)) {
-        var cum: Double = 0.0
-        i = 0
-        while (i < topology(l + 1)) {
-          cum = cum +
-            arrWeights(ofsWeight(l + 1) + (topology(l) + 1) * i + j) *
-              arrDelta(ofsNode(l + 1) + i) *
-              arrNodes(ofsNode(l) + j) * (1 - arrNodes(ofsNode(l) + j))
-          i += 1
-        }
-        arrDelta(ofsNode(l) + j) = cum
-        j += 1
-      }
-      l -= 1
-    }
-    // gradient
-    val arrGrad = new Array[Double](noWeights)
-    l = 1
-    while (l <= L) {
-      j = 0
-      while (j < topology(l)) {
-        i = 0
-        while (i < topology(l - 1)) {
-          arrGrad(ofsWeight(l) + (topology(l - 1) + 1) * j + i) =
-            arrNodes(ofsNode(l - 1) + i) *
-              arrDelta(ofsNode(l) + j)
-          i += 1
-        }
-        arrGrad(ofsWeight(l) + (topology(l - 1) + 1) * j + topology(l - 1)) =
-          arrDelta(ofsNode(l) + j)
-        j += 1
-      }
-      l += 1
-    }
-    (Vectors.dense(arrGrad), err)
+    val input = new BDV(arrData, 0, 1, topology(0)).toDenseMatrix.t
+    val targetVector =
+      new BDV(arrData, topology(0), 1, arrData.length - topology(0)).toDenseMatrix.t
+    val (weightMatrices, bias) = unrollWeights(weights)
+    /* forward run */
+    val outputs = forwardRun(input, weightMatrices, bias)
+    /* error back propagation */
+    val (gradientMatrices, errors) = wGradient(weightMatrices, targetVector, outputs)
+    val weightsGradient = rollWeights(gradientMatrices, errors)
+
+    /* error */
+    val delta = targetVector :- outputs(topology.size - 1)
+    val outerError = Bsum(delta :* delta) / 2
+    val result = (Vectors.fromBreeze(weightsGradient), outerError)
+    result
   }
 
   override def compute(
-      data: Vector,
-      label: Double,
-      weights: Vector,
-      cumGradient: Vector): Double = {
+                        data: Vector,
+                        label: Double,
+                        weights: Vector,
+                        cumGradient: Vector): Double = {
     val (grad, err) = compute(data, label, weights)
     cumGradient.toBreeze += grad.toBreeze
     err
@@ -515,11 +476,11 @@ private class ANNLeastSquaresGradient(val topology: Array[Int]) extends Gradient
 private class ANNUpdater extends Updater {
 
   override def compute(
-      weightsOld: Vector,
-      gradient: Vector,
-      stepSize: Double,
-      iter: Int,
-      regParam: Double): (Vector, Double) = {
+                        weightsOld: Vector,
+                        gradient: Vector,
+                        stepSize: Double,
+                        iter: Int,
+                        regParam: Double): (Vector, Double) = {
     val thisIterStepSize = stepSize
     val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
     brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
