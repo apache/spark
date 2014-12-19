@@ -99,23 +99,23 @@ else:
 def islambda(func):
     return getattr(func,'func_name') == '<lambda>'
 
-def xrange_params(xrangeobj):
-    """Returns a 3 element tuple describing the xrange start, step, and len
+def range_params(rangeobj):
+    """Returns a 3 element tuple describing the range start, step, and len
     respectively
 
-    Note: Only guarentees that elements of xrange are the same. parameters may
+    Note: Only guarentees that elements of range are the same. parameters may
     be different.
-    e.g. xrange(1,1) is interpretted as xrange(0,0); both behave the same
+    e.g. range(1,1) is interpretted as range(0,0); both behave the same
     though w/ iteration
     """
 
-    xrange_len = len(xrangeobj)
-    if not xrange_len: #empty
+    range_len = len(rangeobj)
+    if not range_len: #empty
         return (0,1,0)
-    start = xrangeobj[0]
-    if xrange_len == 1: #one element
+    start = rangeobj[0]
+    if range_len == 1: #one element
         return start, 1, 1
-    return (start, xrangeobj[1] - xrangeobj[0], xrange_len)
+    return (start, rangeobj[1] - rangeobj[0], range_len)
 
 #debug variables intended for developer use:
 printSerialization = False
@@ -666,18 +666,18 @@ class CloudPickler(pickle.Pickler):
             write(pickle.BUILD)
 
 
-    def save_xrange(self, obj):
+    def save_range(self, obj):
         """Save an xrange object in python 2.5
         Python 2.6 supports this natively
         """
-        range_params = xrange_params(obj)
-        self.save_reduce(_build_xrange,range_params)
+        _range_params = range_params(obj)
+        self.save_reduce(_build_range, _range_params)
 
     #python2.6+ supports xrange pickling. some py2.5 extensions might as well.  We just test it
     try:
-        xrange(0).__reduce__()
+        range(0).__reduce__()
     except TypeError: #can't pickle -- use PiCloud pickler
-        dispatch[xrange] = save_xrange
+        dispatch[range] = save_range
 
     def save_partial(self, obj):
         """Partial objects do not serialize correctly in python2.x -- this fixes the bugs"""
@@ -895,9 +895,9 @@ A version mismatch is likely.  Specific error was:\n' % modname)
             setattr(main,modname.__name__, modname)
 
 #object generators:
-def _build_xrange(start, step, len):
+def _build_range(start, step, len):
     """Built xrange explicitly"""
-    return xrange(start, start + step*len, step)
+    return range(start, start + step*len, step)
 
 def _genpartial(func, args, kwds):
     if not args:
