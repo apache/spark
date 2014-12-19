@@ -20,6 +20,8 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.util.{List => JList}
 
+import org.apache.spark.sql.execution.SparkPlan
+
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.hadoop.util.ReflectionUtils
@@ -286,14 +288,24 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           Some(sa.getQB().getTableDesc)
         }
 
-        CreateTableAsSelect(Some(databaseName), tblName, child, allowExisting, desc)
+        execution.CreateTableAsSelect(
+          databaseName,
+          tableName,
+          child,
+          allowExisting,
+          desc)
 
       case p: LogicalPlan if p.resolved => p
 
       case p @ CreateTableAsSelect(db, tableName, child, allowExisting, None) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
-        CreateTableAsSelect(Some(databaseName), tblName, child, allowExisting, None)
+        execution.CreateTableAsSelect(
+          databaseName,
+          tableName,
+          child,
+          allowExisting,
+          None)
     }
   }
 

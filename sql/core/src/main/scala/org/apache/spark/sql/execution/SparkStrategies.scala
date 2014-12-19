@@ -304,17 +304,20 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  case class CommandStrategy(context: SQLContext) extends Strategy {
+  case object CommandStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
       case logical.SetCommand(kv) =>
-        Seq(execution.SetCommand(kv, plan.output)(context))
+        Seq(ExecutedCommand(execution.SetCommand(kv, plan.output)))
       case logical.ExplainCommand(logicalPlan, extended) =>
-        Seq(execution.ExplainCommand(logicalPlan, plan.output, extended)(context))
+        Seq(ExecutedCommand(
+          execution.ExplainCommand(logicalPlan, plan.output, extended)))
       case logical.CacheTableCommand(tableName, optPlan, isLazy) =>
-        Seq(execution.CacheTableCommand(tableName, optPlan, isLazy))
+        Seq(ExecutedCommand(
+          execution.CacheTableCommand(tableName, optPlan, isLazy)))
       case logical.UncacheTableCommand(tableName) =>
-        Seq(execution.UncacheTableCommand(tableName))
+        Seq(ExecutedCommand(
+          execution.UncacheTableCommand(tableName)))
       case _ => Nil
     }
   }

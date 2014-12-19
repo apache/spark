@@ -22,10 +22,10 @@ import org.scalatest.BeforeAndAfterAll
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.{SQLConf, QueryTest}
-import org.apache.spark.sql.catalyst.plans.logical.NativeCommand
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.hive.execution._
 
 class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
   TestHive.reset()
@@ -51,19 +51,19 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 COMPUTE STATISTICS",
-      classOf[NativeCommand])
+      classOf[HiveNativeCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
-      classOf[NativeCommand])
+      classOf[HiveNativeCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
-      classOf[NativeCommand])
+      classOf[HiveNativeCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS",
-      classOf[NativeCommand])
+      classOf[HiveNativeCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-      classOf[NativeCommand])
+      classOf[HiveNativeCommand])
 
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 COMPUTE STATISTICS nOscAn",
