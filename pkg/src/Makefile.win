@@ -18,11 +18,14 @@ SPARK_YARN_VERSION ?= 2.4.0
 
 TARGET_NAME := $(MAVEN_TARGET_NAME)
 
-all: $(TARGET_NAME)
+all: $(TARGET_NAME) sharelib
 
 $(MAVEN_TARGET_NAME): $(SCALA_FILES) $(RESOURCE_FILES)
 	mvn.bat -Dhadoop.version=$(SPARK_HADOOP_VERSION) -Dspark.version=$(SPARK_VERSION) -Dyarn.version=$(SPARK_YARN_VERSION) -DskipTests clean package shade:shade
 	cp -f $(MAVEN_TARGET_NAME) ../inst/$(JAR_NAME)
+
+sharelib: string_hash_code.c
+	R CMD SHLIB -o SparkR.dll string_hash_code.c
 
 clean:
 	mvn.bat clean
@@ -30,6 +33,8 @@ clean:
 	rm -rf project/target
 	rm -rf project/project
 	-rm sbt/sbt-launch-*.jar
-	rm -f ../inst/$(JAR_NAME)
-
+	rm -f ../inst/$(JAR_NAME) 
+	rm -f *.o
+	rm -f *.dll
+       
 .PHONY: all clean

@@ -246,6 +246,13 @@ test_that("minimum() on RDDs", {
   expect_equal(min, 1)
 })
 
+test_that("keyBy on RDDs", {
+  func <- function(x) { x*x }
+  keys <- keyBy(rdd, func)
+  actual <- collect(keys)
+  expect_equal(actual, lapply(nums, function(x) { list(func(x), x) }))
+})
+
 test_that("keys() on RDDs", {
   keys <- keys(intRdd)
   actual <- collect(keys)

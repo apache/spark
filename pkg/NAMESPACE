@@ -5,6 +5,7 @@ exportClasses("Broadcast")
 exportMethods(
               "cache",
               "checkpoint",
+              "cogroup",
               "collect",
               "collectPartition",
               "combineByKey",
@@ -20,6 +21,7 @@ exportMethods(
               "foreachPartition",
               "groupByKey",
               "join",
+              "keyBy",
               "keys",
               "length",
               "lapply",
@@ -41,6 +43,7 @@ exportMethods(
               "rightOuterJoin",
               "sampleRDD",
               "saveAsTextFile",
+              "saveAsObjectFile",
               "take",
               "takeSample",
               "unionRDD",
@@ -52,6 +55,7 @@ exportMethods(
 # S3 methods exported
 export(
        "textFile",
+       "objectFile",
        "parallelize",
        "hashCode",
        "includePackage",
@@ -60,3 +64,4 @@ export(
        "setCheckpointDir"
       )
 export("sparkR.init")
+useDynLib(SparkR, stringHashCode)
