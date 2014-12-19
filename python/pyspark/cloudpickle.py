@@ -45,6 +45,7 @@ from __future__ import print_function
 
 import operator
 import os
+import io
 import pickle
 import struct
 import sys
@@ -730,7 +731,7 @@ class CloudPickler(pickle.Pickler):
         self.save(retval)  #save stringIO
         self.memoize(obj)
 
-    dispatch[file] = save_file
+    dispatch[io.TextIOWrapper] = save_file
     """Special functions for Add-on libraries"""
 
     def inject_numpy(self):
