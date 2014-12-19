@@ -177,8 +177,7 @@ object SparkEnv extends Logging {
       hostname: String,
       port: Int,
       numCores: Int,
-      isLocal: Boolean,
-      actorSystem: ActorSystem = null): SparkEnv = {
+      isLocal: Boolean): SparkEnv = {
     create(
       conf,
       executorId,
@@ -186,7 +185,6 @@ object SparkEnv extends Logging {
       port,
       isDriver = false,
       isLocal = isLocal,
-      defaultActorSystem = actorSystem,
       numUsableCores = numCores
     )
   }
@@ -202,7 +200,6 @@ object SparkEnv extends Logging {
       isDriver: Boolean,
       isLocal: Boolean,
       listenerBus: LiveListenerBus = null,
-      defaultActorSystem: ActorSystem = null,
       numUsableCores: Int = 0): SparkEnv = {
 
     // Listener bus is only used on the driver
@@ -214,13 +211,10 @@ object SparkEnv extends Logging {
 
     // If an existing actor system is already provided, use it.
     // This is the case when an executor is launched in coarse-grained mode.
-    val (actorSystem, boundPort) =
-      Option(defaultActorSystem) match {
-        case Some(as) => (as, port)
-        case None =>
-          val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
-          AkkaUtils.createActorSystem(actorSystemName, hostname, port, conf, securityManager)
-      }
+    val (actorSystem, boundPort) = {
+      val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
+      AkkaUtils.createActorSystem(actorSystemName, hostname, port, conf, securityManager)
+    }
 
     // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
     // This is so that we tell the executors the correct port to connect to.
