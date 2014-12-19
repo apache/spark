@@ -398,7 +398,7 @@ private[mllib] class RBMAdaGradUpdater(
   val numIn: Int,
   val numOut: Int,
   rho: Double = 0,
-  epsilon: Double = 1e-8,
+  epsilon: Double = 1e-2,
   gamma: Double = 1e-1,
   momentum: Double = 0) extends AdaGradUpdater(rho, epsilon, gamma, momentum) {
 
