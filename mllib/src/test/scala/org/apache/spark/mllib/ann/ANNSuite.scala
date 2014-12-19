@@ -17,9 +17,10 @@
 
 package org.apache.spark.mllib.ann
 
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{DenseVector, Vectors, Vector}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.util.random.XORShiftRandom
+import breeze.linalg.{DenseVector => BDV}
 
 import org.scalatest.FunSuite
 
@@ -55,15 +56,15 @@ class ANNSuite extends FunSuite with MLlibTestSparkContext {
     val rnd = new XORShiftRandom(0)
     var cnt = 0
     while( cnt<topologyArr.length ) {
-      val topology = topologyArr(cnt)
-      val L = topology.length - 1
-      val noInp = topology(0)
-      val noOut = topology(L)
-      val annGradient = new ANNLeastSquaresGradient(topology)
+      val nextTopology = topologyArr(cnt)
+      val L = nextTopology.length - 1
+      val noInp = nextTopology(0)
+      val noOut = nextTopology(L)
+      val annGradient = new ANNLeastSquaresGradient(nextTopology)
       var noWeights = 0
       var l = 1
       while(l <= L) {
-        noWeights += (topology(l - 1) + 1) * topology(l)
+        noWeights += (nextTopology(l - 1) + 1) * nextTopology(l)
         l += 1
       }
       val arrWeights = new Array[Double](noWeights)
@@ -98,10 +99,11 @@ class ANNSuite extends FunSuite with MLlibTestSparkContext {
       while(w < noWeights)
       {
         arrTmpWeights(w) = arrTmpWeights(w) + eps
-        val annModel1 = new ArtificialNeuralNetworkModel(weights, topology)
-        val brzO1 = annModel1.predict(data).toBreeze
-        val annModel2 = new ArtificialNeuralNetworkModel(tmpWeights, topology)
-        val brzO2 = annModel2.predict(data).toBreeze
+        val iData = Vectors.dense(arrData.slice(0, noInp))
+        val annModel1 = new ArtificialNeuralNetworkModel(weights, nextTopology)
+        val brzO1 = annModel1.predict(iData).toBreeze
+        val annModel2 = new ArtificialNeuralNetworkModel(tmpWeights, nextTopology)
+        val brzO2 = annModel2.predict(iData).toBreeze
         val E1 = .5* (brzO1 - brzOut).dot(brzO1 - brzOut)
         val E2 = .5* (brzO2 - brzOut).dot(brzO2 - brzOut)
         val dEdW = ( E2 - E1 ) / eps

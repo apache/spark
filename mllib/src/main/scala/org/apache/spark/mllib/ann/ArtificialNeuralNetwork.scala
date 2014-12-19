@@ -454,7 +454,6 @@ private class ANNLeastSquaresGradient(val topology: Array[Int]) extends Gradient
     /* error back propagation */
     val (gradientMatrices, errors) = wGradient(weightMatrices, targetVector, outputs)
     val weightsGradient = rollWeights(gradientMatrices, errors)
-
     /* error */
     val delta = targetVector :- outputs(topology.size - 1)
     val outerError = Bsum(delta :* delta) / 2
