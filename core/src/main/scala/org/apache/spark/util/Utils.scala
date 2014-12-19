@@ -1024,13 +1024,6 @@ private[spark] object Utils extends Logging {
    * @param skipClass Function that is used to exclude non-user-code classes.
    */
   def getCallSite(skipClass: String => Boolean = coreExclusionFunction): CallSite = {
-    val trace = Thread.currentThread.getStackTrace().filterNot { ste: StackTraceElement =>
-      // When running under some profilers, the current stack trace might contain some bogus
-      // frames. This is intended to ensure that we don't crash in these situations by
-      // ignoring any frames that we can't examine.
-      ste == null || ste.getMethodName == null || ste.getMethodName.contains("getStackTrace")
-    }
-
     // Keep crawling up the stack trace until we find the first function not inside of the spark
     // package. We track the last (shallowest) contiguous Spark method. This might be an RDD
     // transformation, a SparkContext function (such as parallelize), or anything else that leads
@@ -1040,27 +1033,34 @@ private[spark] object Utils extends Logging {
     var firstUserLine = 0
     var insideSpark = true
     var callStack = new ArrayBuffer[String]() :+ "<unknown>"
-
-    for (el <- trace) {
-      if (insideSpark) {
-        if (skipClass(el.getClassName)) {
-          lastSparkMethod = if (el.getMethodName == "<init>") {
-            // Spark method is a constructor; get its class name
-            el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)
+ 
+    Thread.currentThread.getStackTrace().foreach { ste: StackTraceElement =>
+      // When running under some profilers, the current stack trace might contain some bogus
+      // frames. This is intended to ensure that we don't crash in these situations by
+      // ignoring any frames that we can't examine.
+      if (ste != null && ste.getMethodName != null
+        && !ste.getMethodName.contains("getStackTrace")) {
+        if (insideSpark) {
+          if (skipClass(ste.getClassName)) {
+            lastSparkMethod = if (ste.getMethodName == "<init>") {
+              // Spark method is a constructor; get its class name
+              ste.getClassName.substring(ste.getClassName.lastIndexOf('.') + 1)
+            } else {
+              ste.getMethodName
+            }
+            callStack(0) = ste.toString // Put last Spark method on top of the stack trace.
           } else {
-            el.getMethodName
+            firstUserLine = ste.getLineNumber
+            firstUserFile = ste.getFileName
+            callStack += ste.toString
+            insideSpark = false
           }
-          callStack(0) = el.toString // Put last Spark method on top of the stack trace.
         } else {
-          firstUserLine = el.getLineNumber
-          firstUserFile = el.getFileName
-          callStack += el.toString
-          insideSpark = false
+          callStack += ste.toString
         }
-      } else {
-        callStack += el.toString
       }
     }
+
     val callStackDepth = System.getProperty("spark.callstack.depth", "20").toInt
     CallSite(
       shortForm = s"$lastSparkMethod at $firstUserFile:$firstUserLine",
