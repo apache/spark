@@ -23,9 +23,11 @@ import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, TaskSchedule
 import org.apache.spark.scheduler.cluster.{SimrSchedulerBackend, SparkDeploySchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
+import org.apache.spark.util.ResetSystemProperties
 
 class SparkContextSchedulerCreationSuite
-  extends FunSuite with LocalSparkContext with PrivateMethodTester with Logging {
+  extends FunSuite with LocalSparkContext with PrivateMethodTester with Logging
+  with ResetSystemProperties {
 
   def createTaskScheduler(master: String): TaskSchedulerImpl = {
     // Create local SparkContext to setup a SparkEnv. We don't actually want to start() the
@@ -102,18 +104,12 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("local-default-parallelism") {
-    val defaultParallelism = System.getProperty("spark.default.parallelism")
     System.setProperty("spark.default.parallelism", "16")
     val sched = createTaskScheduler("local")
 
     sched.backend match {
       case s: LocalBackend => assert(s.defaultParallelism() === 16)
       case _ => fail()
-    }
-
-    Option(defaultParallelism) match {
-      case Some(v) => System.setProperty("spark.default.parallelism", v)
-      case _ => System.clearProperty("spark.default.parallelism")
     }
   }
 
