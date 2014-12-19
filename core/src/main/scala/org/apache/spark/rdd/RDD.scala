@@ -1174,6 +1174,14 @@ abstract class RDD[T: ClassTag](
    * Save this RDD as a text file, using string representations of elements.
    */
   def saveAsTextFile(path: String) {
+    // https://issues.apache.org/jira/browse/SPARK-2075
+    // NullWritable is a Comparable rather than Comparable[NullWritable] in Hadoop 1.+,
+    // so the compiler cannot find an implicit Ordering for it. It will generate different
+    // anonymous classes for `saveAsTextFile` in Hadoop 1.+ and Hadoop 2.+. Therefore, here we
+    // provide an Ordering for NullWritable so that the compiler will generate same codes.
+    implicit val nullWritableOrdering = new Ordering[NullWritable] {
+      override def compare(x: NullWritable, y: NullWritable): Int = 0
+    }
     this.map(x => (NullWritable.get(), new Text(x.toString)))
       .saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path)
   }
@@ -1182,6 +1190,10 @@ abstract class RDD[T: ClassTag](
    * Save this RDD as a compressed text file, using string representations of elements.
    */
   def saveAsTextFile(path: String, codec: Class[_ <: CompressionCodec]) {
+    // https://issues.apache.org/jira/browse/SPARK-2075
+    implicit val nullWritableOrdering = new Ordering[NullWritable] {
+      override def compare(x: NullWritable, y: NullWritable): Int = 0
+    }
     this.map(x => (NullWritable.get(), new Text(x.toString)))
       .saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path, codec)
   }
