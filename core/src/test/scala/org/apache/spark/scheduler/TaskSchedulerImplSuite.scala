@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
+import org.apache.spark.util.ResetSystemProperties
 import org.scalatest.FunSuite
 
 import org.apache.spark._
@@ -109,7 +110,8 @@ class FakeTaskSetManager(
   }
 }
 
-class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Logging {
+class TaskSchedulerImplSuite extends FunSuite with ResetSystemProperties with LocalSparkContext
+  with Logging {
 
   def createDummyTaskSetManager(priority: Int, stage: Int, numTasks: Int, cs: TaskSchedulerImpl,
       taskSet: TaskSet): FakeTaskSetManager = {
