@@ -54,8 +54,8 @@ class MatricesSuite extends FunSuite {
     assert(mat.colPtrs.eq(colPtrs), "should not copy data")
     assert(mat.rowIndices.eq(rowIndices), "should not copy data")
 
-    val entries: Array[((Int, Int), Double)] = Array(((1, 0), 1.0), ((2, 0), 2.0),
-        ((1, 2), 4.0), ((2, 2), 5.0))
+    val entries: Array[(Int, Int, Double)] = Array((1, 0, 1.0), (2, 0, 2.0),
+        (1, 2, 4.0), (2, 2, 5.0))
 
     val mat2 = SparseMatrix.fromCOO(m, n, entries)
     assert(mat.toBreeze === mat2.toBreeze)
@@ -123,6 +123,24 @@ class MatricesSuite extends FunSuite {
     assert(sparseMat.values(2) === 10.0)
   }
 
+  test("toSparse, toDense") {
+    val m = 3
+    val n = 2
+    val values = Array(1.0, 2.0, 4.0, 5.0)
+    val allValues = Array(1.0, 2.0, 0.0, 0.0, 4.0, 5.0)
+    val colPtrs = Array(0, 2, 4)
+    val rowIndices = Array(0, 1, 1, 2)
+
+    val spMat1 = new SparseMatrix(m, n, colPtrs, rowIndices, values)
+    val deMat1 = new DenseMatrix(m, n, allValues)
+
+    val spMat2 = deMat1.toSparse()
+    val deMat2 = spMat1.toDense()
+
+    assert(spMat1.toBreeze === spMat2.toBreeze)
+    assert(deMat1.toBreeze === deMat2.toBreeze)
+  }
+
   test("map, update") {
     val m = 3
     val n = 2
@@ -162,6 +180,8 @@ class MatricesSuite extends FunSuite {
     val spHorz3 = Matrices.horzcat(Array(deMat1, spMat2))
     val deHorz1 = Matrices.horzcat(Array(deMat1, deMat2))
 
+    val deHorz2 = Matrices.horzcat(Array[Matrix]())
+
     assert(deHorz1.numRows === 3)
     assert(spHorz2.numRows === 3)
     assert(spHorz3.numRows === 3)
@@ -170,6 +190,9 @@ class MatricesSuite extends FunSuite {
     assert(spHorz2.numCols === 5)
     assert(spHorz3.numCols === 5)
     assert(spHorz.numCols === 5)
+    assert(deHorz2.numRows === 0)
+    assert(deHorz2.numCols === 0)
+    assert(deHorz2.toArray.length === 0)
 
     assert(deHorz1.toBreeze.toDenseMatrix === spHorz2.toBreeze.toDenseMatrix)
     assert(spHorz2.toBreeze === spHorz3.toBreeze)
@@ -200,6 +223,7 @@ class MatricesSuite extends FunSuite {
     val deVert1 = Matrices.vertcat(Array(deMat1, deMat3))
     val spVert2 = Matrices.vertcat(Array(spMat1, deMat3))
     val spVert3 = Matrices.vertcat(Array(deMat1, spMat3))
+    val deVert2 = Matrices.vertcat(Array[Matrix]())
 
     assert(deVert1.numRows === 5)
     assert(spVert2.numRows === 5)
@@ -209,6 +233,9 @@ class MatricesSuite extends FunSuite {
     assert(spVert2.numCols === 2)
     assert(spVert3.numCols === 2)
     assert(spVert.numCols === 2)
+    assert(deVert2.numRows === 0)
+    assert(deVert2.numCols === 0)
+    assert(deVert2.toArray.length === 0)
 
     assert(deVert1.toBreeze.toDenseMatrix === spVert2.toBreeze.toDenseMatrix)
     assert(spVert2.toBreeze === spVert3.toBreeze)

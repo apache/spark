@@ -100,6 +100,25 @@ public class JavaMatricesSuite implements Serializable {
     }
 
     @Test
+    public void sparseDenseConversion() {
+        int m = 3;
+        int n = 2;
+        double[] values = new double[]{1.0, 2.0, 4.0, 5.0};
+        double[] allValues = new double[]{1.0, 2.0, 0.0, 0.0, 4.0, 5.0};
+        int[] colPtrs = new int[]{0, 2, 4};
+        int[] rowIndices = new int[]{0, 1, 1, 2};
+
+        SparseMatrix spMat1 = new SparseMatrix(m, n, colPtrs, rowIndices, values);
+        DenseMatrix deMat1 = new DenseMatrix(m, n, allValues);
+
+        SparseMatrix spMat2 = deMat1.toSparse();
+        DenseMatrix deMat2 = spMat1.toDense();
+
+        assertArrayEquals(spMat1.toArray(), spMat2.toArray(), 0.0);
+        assertArrayEquals(deMat1.toArray(), deMat2.toArray(), 0.0);
+    }
+
+    @Test
     public void concatenateMatrices() {
         int m = 3;
         int n = 2;
