@@ -1,3 +1,4 @@
+from __future__ import print_function
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -157,7 +158,7 @@ class StreamingContext(object):
         try:
             jssc = gw.jvm.JavaStreamingContext(checkpointPath)
         except Exception:
-            print >>sys.stderr, "failed to load StreamingContext from checkpoint"
+            print("failed to load StreamingContext from checkpoint", file=sys.stderr)
             raise
 
         jsc = jssc.sparkContext()

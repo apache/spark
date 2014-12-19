@@ -69,8 +69,8 @@ def _get_local_dirs(sub):
 
 
 # global stats
-MemoryBytesSpilled = 0L
-DiskBytesSpilled = 0L
+MemoryBytesSpilled = 0
+DiskBytesSpilled = 0
 
 
 class Aggregator(object):

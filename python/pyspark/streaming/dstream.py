@@ -1,3 +1,4 @@
+from __future__ import print_function
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -150,7 +151,7 @@ class DStream(object):
         """
         Apply a function to each RDD in this DStream.
         """
-        if func.func_code.co_argcount == 1:
+        if func.__code__.co_argcount == 1:
             old_func = func
             func = lambda t, rdd: old_func(rdd)
         jfunc = TransformFunction(self._sc, func, self._jrdd_deserializer)
@@ -165,14 +166,14 @@ class DStream(object):
         """
         def takeAndPrint(time, rdd):
             taken = rdd.take(num + 1)
-            print "-------------------------------------------"
-            print "Time: %s" % time
-            print "-------------------------------------------"
+            print("-------------------------------------------")
+            print("Time: %s" % time)
+            print("-------------------------------------------")
             for record in taken[:num]:
-                print record
+                print(record)
             if len(taken) > num:
-                print "..."
-            print
+                print("...")
+            print()
 
         self.foreachRDD(takeAndPrint)
 
@@ -181,7 +182,7 @@ class DStream(object):
         Return a new DStream by applying a map function to the value of
         each key-value pairs in this DStream without changing the key.
         """
-        map_values_fn = lambda (k, v): (k, f(v))
+        map_values_fn = lambda k_v3: (k_v3[0], f(k_v3[1]))
         return self.map(map_values_fn, preservesPartitioning=True)
 
     def flatMapValues(self, f):
@@ -189,7 +190,7 @@ class DStream(object):
         Return a new DStream by applying a flatmap function to the value
         of each key-value pairs in this DStream without changing the key.
         """
-        flat_map_fn = lambda (k, v): ((k, x) for x in f(v))
+        flat_map_fn = lambda k_v4: ((k_v4[0], x) for x in f(k_v4[1]))
         return self.flatMap(flat_map_fn, preservesPartitioning=True)
 
     def glom(self):
@@ -286,10 +287,10 @@ class DStream(object):
         `func` can have one argument of `rdd`, or have two arguments of
         (`time`, `rdd`)
         """
-        if func.func_code.co_argcount == 1:
+        if func.__code__.co_argcount == 1:
             oldfunc = func
             func = lambda t, rdd: oldfunc(rdd)
-        assert func.func_code.co_argcount == 2, "func should take one or two arguments"
+        assert func.__code__.co_argcount == 2, "func should take one or two arguments"
         return TransformedDStream(self, func)
 
     def transformWith(self, func, other, keepSerializer=False):
@@ -300,10 +301,10 @@ class DStream(object):
         `func` can have two arguments of (`rdd_a`, `rdd_b`) or have three
         arguments of (`time`, `rdd_a`, `rdd_b`)
         """
-        if func.func_code.co_argcount == 2:
+        if func.__code__.co_argcount == 2:
             oldfunc = func
             func = lambda t, a, b: oldfunc(a, b)
-        assert func.func_code.co_argcount == 3, "func should take two or three arguments"
+        assert func.__code__.co_argcount == 3, "func should take two or three arguments"
         jfunc = TransformFunction(self._sc, func, self._jrdd_deserializer, other._jrdd_deserializer)
         dstream = self._sc._jvm.PythonTransformed2DStream(self._jdstream.dstream(),
                                                           other._jdstream.dstream(), jfunc)
@@ -460,7 +461,7 @@ class DStream(object):
         keyed = self.map(lambda x: (1, x))
         reduced = keyed.reduceByKeyAndWindow(reduceFunc, invReduceFunc,
                                              windowDuration, slideDuration, 1)
-        return reduced.map(lambda (k, v): v)
+        return reduced.map(lambda k_v1: k_v1[1])
 
     def countByWindow(self, windowDuration, slideDuration):
         """
@@ -489,7 +490,7 @@ class DStream(object):
         keyed = self.map(lambda x: (x, 1))
         counted = keyed.reduceByKeyAndWindow(operator.add, operator.sub,
                                              windowDuration, slideDuration, numPartitions)
-        return counted.filter(lambda (k, v): v > 0).count()
+        return counted.filter(lambda k_v2: k_v2[1] > 0).count()
 
     def groupByKeyAndWindow(self, windowDuration, slideDuration, numPartitions=None):
         """
@@ -548,7 +549,7 @@ class DStream(object):
         def invReduceFunc(t, a, b):
             b = b.reduceByKey(func, numPartitions)
             joined = a.leftOuterJoin(b, numPartitions)
-            return joined.mapValues(lambda (v1, v2): invFunc(v1, v2) if v2 is not None else v1)
+            return joined.mapValues(lambda v1_v2: invFunc(v1_v2[0], v1_v2[1]) if v1_v2[1] is not None else v1_v2[0])
 
         jreduceFunc = TransformFunction(self._sc, reduceFunc, reduced._jrdd_deserializer)
         if invReduceFunc:
@@ -579,9 +580,10 @@ class DStream(object):
                 g = b.groupByKey(numPartitions).mapValues(lambda vs: (list(vs), None))
             else:
                 g = a.cogroup(b.partitionBy(numPartitions), numPartitions)
-                g = g.mapValues(lambda (va, vb): (list(vb), list(va)[0] if len(va) else None))
-            state = g.mapValues(lambda (vs, s): updateFunc(vs, s))
-            return state.filter(lambda (k, v): v is not None)
+                g = g.mapValues(lambda va_vb: (list(va_vb[1]), list(va_vb[0])[0]
+                                                               if len(va_vb[0]) else None))
+            state = g.mapValues(lambda vs_s: updateFunc(vs_s[0], vs_s[1]))
+            return state.filter(lambda k_v: k_v[1] is not None)
 
         jreduceFunc = TransformFunction(self._sc, reduceFunc,
                                         self._sc.serializer, self._jrdd_deserializer)

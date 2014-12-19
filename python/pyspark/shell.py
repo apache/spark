@@ -20,6 +20,7 @@ An interactive shell.
 
 This file is designed to be launched as a PYTHONSTARTUP script.
 """
+from __future__ import print_function
 
 import atexit
 import os

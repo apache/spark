@@ -19,6 +19,7 @@
 Unit tests for PySpark; additional tests are implemented as doctests in
 individual modules.
 """
+from __future__ import print_function
 from array import array
 from fileinput import input
 from glob import glob
@@ -90,7 +91,7 @@ class MergerTests(unittest.TestCase):
                          sum(xrange(self.N)))
 
         m = InMemoryMerger(self.agg)
-        m.mergeCombiners(map(lambda (x, y): (x, [y]), self.data))
+        m.mergeCombiners(map(lambda x_y: (x_y[0], [x_y[1]]), self.data))
         self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
                          sum(xrange(self.N)))
 
@@ -102,7 +103,7 @@ class MergerTests(unittest.TestCase):
                          sum(xrange(self.N)))
 
         m = ExternalMerger(self.agg, 1000)
-        m.mergeCombiners(map(lambda (x, y): (x, [y]), self.data))
+        m.mergeCombiners(map(lambda x_y1: (x_y1[0], [x_y1[1]]), self.data))
         self.assertEqual(m.spills, 0)
         self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
                          sum(xrange(self.N)))
@@ -115,14 +116,14 @@ class MergerTests(unittest.TestCase):
                          sum(xrange(self.N)))
 
         m = ExternalMerger(self.agg, 10)
-        m.mergeCombiners(map(lambda (x, y): (x, [y]), self.data * 3))
+        m.mergeCombiners(map(lambda x_y2: (x_y2[0], [x_y2[1]]), self.data * 3))
         self.assertTrue(m.spills >= 1)
         self.assertEqual(sum(sum(v) for k, v in m.iteritems()),
                          sum(xrange(self.N)) * 3)
 
     def test_huge_dataset(self):
         m = ExternalMerger(self.agg, 10, partitions=3)
-        m.mergeCombiners(map(lambda (k, v): (k, [str(v)]), self.data * 10))
+        m.mergeCombiners(map(lambda k_v: (k_v[0], [str(k_v[1])]), self.data * 10))
         self.assertTrue(m.spills >= 1)
         self.assertEqual(sum(len(v) for k, v in m._recursive_merged_items(0)),
                          self.N * 10)
@@ -234,7 +235,7 @@ class SerializationTestCase(unittest.TestCase):
         def foo():
             sys.exit(0)
 
-        self.assertTrue("exit" in foo.func_code.co_names)
+        self.assertTrue("exit" in foo.__code__.co_names)
         ser.dumps(foo)
 
     def test_compressed_serializer(self):
@@ -415,7 +416,7 @@ class RDDTests(ReusedPySparkTestCase):
         rdd1 = self.sc.parallelize([1, 2])
         rdd2 = self.sc.parallelize([3, 4])
         cart = rdd1.cartesian(rdd2)
-        result = cart.map(lambda (x, y): x + y).collect()
+        result = cart.map(lambda x_y3: x_y3[0] + x_y3[1]).collect()
 
     def test_transforming_pickle_file(self):
         # Regression test for SPARK-2601
@@ -1719,11 +1720,11 @@ class NumPyTests(PySparkTestCase):
 
 if __name__ == "__main__":
     if not _have_scipy:
-        print "NOTE: Skipping SciPy tests as it does not seem to be installed"
+        print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     if not _have_numpy:
-        print "NOTE: Skipping NumPy tests as it does not seem to be installed"
+        print("NOTE: Skipping NumPy tests as it does not seem to be installed")
     unittest.main()
     if not _have_scipy:
-        print "NOTE: SciPy tests were skipped as it does not seem to be installed"
+        print("NOTE: SciPy tests were skipped as it does not seem to be installed")
     if not _have_numpy:
-        print "NOTE: NumPy tests were skipped as it does not seem to be installed"
+        print("NOTE: NumPy tests were skipped as it does not seem to be installed")

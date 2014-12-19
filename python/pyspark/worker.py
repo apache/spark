@@ -18,6 +18,7 @@
 """
 Worker that receives input from Piped RDD.
 """
+from __future__ import print_function
 import os
 import sys
 import time
@@ -108,8 +109,8 @@ def main(infile, outfile):
             pass
         except Exception:
             # Write the error to stderr if it happened while serializing
-            print >> sys.stderr, "PySpark worker failed with exception:"
-            print >> sys.stderr, traceback.format_exc()
+            print("PySpark worker failed with exception:", file=sys.stderr)
+            print(traceback.format_exc(), file=sys.stderr)
         exit(-1)
     finish_time = time.time()
     report_times(outfile, boot_time, init_time, finish_time)

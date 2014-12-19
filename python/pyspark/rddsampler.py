@@ -23,7 +23,7 @@ import math
 class RDDSamplerBase(object):
 
     def __init__(self, withReplacement, seed=None):
-        self._seed = seed if seed is not None else random.randint(0, sys.maxint)
+        self._seed = seed if seed is not None else random.randint(0, sys.maxsize)
         self._withReplacement = withReplacement
         self._random = None
 

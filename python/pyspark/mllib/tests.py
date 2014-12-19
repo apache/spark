@@ -18,6 +18,7 @@
 """
 Fuller unit tests for Python MLlib.
 """
+from __future__ import print_function
 
 import os
 import sys
@@ -615,7 +616,7 @@ class ChiSqTestTests(PySparkTestCase):
 
 if __name__ == "__main__":
     if not _have_scipy:
-        print "NOTE: Skipping SciPy tests as it does not seem to be installed"
+        print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     unittest.main()
     if not _have_scipy:
-        print "NOTE: SciPy tests were skipped as it does not seem to be installed"
+        print("NOTE: SciPy tests were skipped as it does not seem to be installed")
