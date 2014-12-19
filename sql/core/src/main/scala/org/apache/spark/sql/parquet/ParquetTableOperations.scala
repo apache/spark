@@ -621,7 +621,9 @@ private[parquet] object FileSystemHelper {
       throw new IllegalArgumentException(
         s"ParquetTableOperations: path $path does not exist or is not a directory")
     }
-    fs.listStatus(path).map(_.getPath)
+    fs.globStatus(path)
+      .flatMap { status => if(status.isDir) fs.listStatus(status.getPath) else List(status) }
+      .map(_.getPath)
   }
 
     /**
