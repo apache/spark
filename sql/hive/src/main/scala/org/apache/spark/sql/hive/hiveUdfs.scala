@@ -159,6 +159,11 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
     isUDFDeterministic && returnInspector.isInstanceOf[ConstantObjectInspector]
 
   @transient
+  protected def constantReturnValue = unwrap(
+    returnInspector.asInstanceOf[ConstantObjectInspector].getWritableConstantValue(),
+    returnInspector)
+  
+  @transient
   protected lazy val deferedObjects =
     argumentInspectors.map(new DeferredObjectAdapter(_)).toArray[DeferredObject]
 
@@ -166,6 +171,8 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
 
   override def eval(input: Row): Any = {
     returnInspector // Make sure initialized.
+    if(foldable) return constantReturnValue
+
     var i = 0
     while (i < children.length) {
       val idx = i
@@ -193,12 +200,13 @@ private[hive] case class HiveGenericUdaf(
 
   @transient
   protected lazy val objectInspector  = {
-    resolver.getEvaluator(children.map(_.dataType.toTypeInfo).toArray)
+    val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors.toArray, false, false)
+    resolver.getEvaluator(parameterInfo)
       .init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors.toArray)
   }
 
   @transient
-  protected lazy val inspectors = children.map(_.dataType).map(toInspector)
+  protected lazy val inspectors = children.map(toInspector)
 
   def dataType: DataType = inspectorToDataType(objectInspector)
 
@@ -223,12 +231,13 @@ private[hive] case class HiveUdaf(
 
   @transient
   protected lazy val objectInspector  = {
-    resolver.getEvaluator(children.map(_.dataType.toTypeInfo).toArray)
+    val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors.toArray, false, false)
+    resolver.getEvaluator(parameterInfo)
       .init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors.toArray)
   }
 
   @transient
-  protected lazy val inspectors = children.map(_.dataType).map(toInspector)
+  protected lazy val inspectors = children.map(toInspector)
 
   def dataType: DataType = inspectorToDataType(objectInspector)
 
@@ -261,7 +270,7 @@ private[hive] case class HiveGenericUdtf(
   protected lazy val function: GenericUDTF = funcWrapper.createFunction()
 
   @transient
-  protected lazy val inputInspectors = children.map(_.dataType).map(toInspector)
+  protected lazy val inputInspectors = children.map(toInspector)
 
   @transient
   protected lazy val outputInspector = function.initialize(inputInspectors.toArray)
@@ -334,10 +343,13 @@ private[hive] case class HiveUdafFunction(
     } else {
       funcWrapper.createFunction[AbstractGenericUDAFResolver]()
     }
-
-  private val inspectors = exprs.map(_.dataType).map(toInspector).toArray
-
-  private val function = resolver.getEvaluator(exprs.map(_.dataType.toTypeInfo).toArray)
+  
+  private val inspectors = exprs.map(toInspector).toArray
+    
+  private val function = { 
+    val parameterInfo = new SimpleGenericUDAFParameterInfo(inspectors, false, false)
+    resolver.getEvaluator(parameterInfo) 
+  }
 
   private val returnInspector = function.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
 
@@ -350,9 +362,12 @@ private[hive] case class HiveUdafFunction(
   @transient
   val inputProjection = new InterpretedProjection(exprs)
 
+  @transient
+  protected lazy val cached = new Array[AnyRef](exprs.length)
+  
   def update(input: Row): Unit = {
     val inputs = inputProjection(input).asInstanceOf[Seq[AnyRef]].toArray
-    function.iterate(buffer, inputs)
+    function.iterate(buffer, wrap(inputs, inspectors, cached))
   }
 }
 

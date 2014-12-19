@@ -625,6 +625,10 @@ This conversion can be done using one of two methods in a SQLContext:
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
 * `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
 
+Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
+line must contain a separate, self-contained valid JSON object. As a consequence,
+a regular multi-line JSON file will most often fail.
+
 {% highlight scala %}
 // sc is an existing SparkContext.
 val sqlContext = new org.apache.spark.sql.SQLContext(sc)
@@ -663,6 +667,10 @@ This conversion can be done using one of two methods in a JavaSQLContext :
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
 * `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
 
+Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
+line must contain a separate, self-contained valid JSON object. As a consequence,
+a regular multi-line JSON file will most often fail.
+
 {% highlight java %}
 // sc is an existing JavaSparkContext.
 JavaSQLContext sqlContext = new org.apache.spark.sql.api.java.JavaSQLContext(sc);
@@ -700,6 +708,10 @@ This conversion can be done using one of two methods in a SQLContext:
 
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
 * `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
+
+Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
+line must contain a separate, self-contained valid JSON object. As a consequence,
+a regular multi-line JSON file will most often fail.
 
 {% highlight python %}
 # sc is an existing SparkContext.
@@ -937,6 +949,18 @@ your machine and a blank password. For secure mode, please follow the instructio
 Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
 You may also use the beeline script that comes with Hive.
+
+Thrift JDBC server also supports sending thrift RPC messages over HTTP transport. 
+Use the following setting to enable HTTP mode as system property or in `hive-site.xml` file in `conf/`: 
+
+    hive.server2.transport.mode - Set this to value: http 
+    hive.server2.thrift.http.port - HTTP port number fo listen on; default is 10001
+    hive.server2.http.endpoint - HTTP endpoint; default is cliservice
+
+To test, use beeline to connect to the JDBC/ODBC server in http mode with:
+
+    beeline> !connect jdbc:hive2://<host>:<port>/<database>?hive.server2.transport.mode=http;hive.server2.thrift.http.path=<http_endpoint>
+
 
 ## Running the Spark SQL CLI
 
