@@ -71,7 +71,8 @@ class Word2Vec extends Serializable with Logging {
   private var numPartitions = 1
   private var numIterations = 1
   private var seed = Utils.random.nextLong()
-
+  private var minCount = 5
+  
   /**
    * Sets vector size (default: 100).
    */
@@ -114,20 +115,6 @@ class Word2Vec extends Serializable with Logging {
     this
   }
 
-  private val EXP_TABLE_SIZE = 1000
-  private val MAX_EXP = 6
-  private val MAX_CODE_LENGTH = 40
-  private val MAX_SENTENCE_LENGTH = 1000
-
-  /** context words from [-window, window] */
-  private val window = 5
-  
-  /** 
-   * The minimum number of times a token must occur in the training corpus to be 
-   * included in the word2vec model (default: 5). 
-   */
-  private var minCount = 5
-
   /** 
    * Sets minCount, the minimum number of times a token must appear to be included in the word2vec 
    * model's vocabulary (default: 5).
@@ -136,6 +123,14 @@ class Word2Vec extends Serializable with Logging {
     this.minCount = minCount
     this
   }
+  
+  private val EXP_TABLE_SIZE = 1000
+  private val MAX_EXP = 6
+  private val MAX_CODE_LENGTH = 40
+  private val MAX_SENTENCE_LENGTH = 1000
+
+  /** context words from [-window, window] */
+  private val window = 5
 
   private var trainWordsCount = 0
   private var vocabSize = 0
