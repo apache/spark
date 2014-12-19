@@ -19,6 +19,8 @@ package org.apache.spark.input
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
+import org.apache.spark.deploy.SparkHadoopUtil
+
 import scala.collection.JavaConversions._
 
 import com.google.common.io.ByteStreams
@@ -145,7 +147,8 @@ class PortableDataStream(
 
   private val confBytes = {
     val baos = new ByteArrayOutputStream()
-    context.getConfiguration.write(new DataOutputStream(baos))
+    SparkHadoopUtil.get.getConfigurationFromJobContext(context).
+      write(new DataOutputStream(baos))
     baos.toByteArray
   }
 
