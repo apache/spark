@@ -77,8 +77,8 @@
 #   sample    false      Whether to show entire set of samples for histograms ('false' or 'true')
 #
 # * Default path is /metrics/json for all instances except the master. The master has two paths:
-#     /metrics/aplications/json # App information
-#     /metrics/master/json      # Master information
+#     /metrics/applications/json # App information
+#     /metrics/master/json       # Master information
 
 # org.apache.spark.metrics.sink.GraphiteSink
 #   Name:     Default:      Description:
