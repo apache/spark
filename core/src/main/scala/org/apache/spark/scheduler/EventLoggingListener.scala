@@ -202,7 +202,10 @@ private[spark] object EventLoggingListener extends Logging {
 
   // Marker for the end of header data in a log file. After this marker, log data, potentially
   // compressed, will be found.
-  private val HEADER_END_MARKER = "=== LOG_HEADER_END ===\n"
+  private val HEADER_END_MARKER = "=== LOG_HEADER_END ==="
+
+  // To avoid corrupted files causing the heap to fill up. Value is arbitrary.
+  private val MAX_HEADER_LINE_LENGTH = 4096
 
   // A cache for compression codecs to avoid creating the same codec many times
   private val codecMap = new mutable.HashMap[String, CompressionCodec]
@@ -211,14 +214,11 @@ private[spark] object EventLoggingListener extends Logging {
    * Write metadata about the event log to the given stream.
    *
    * The header is a serialized version of a map, except it does not use Java serialization to
-   * avoid incompatibilities between different JDKs. It writes map entries in a simple format:
+   * avoid incompatibilities between different JDKs. It writes one map entry per line, in
+   * "key=value" format.
    *
-   *   [len][bytes]
-   *
-   * Where `len` is a 4-byte integer (encoded in Java's DataOutputStream format, which is
-   * big-endian), and `bytes` is the UTF-8 encoded version of "key=value" followed by a new line.
-   * The very last entry in the header is the `HEADER_END_MARKER` marker, encoded like the above, so
-   * that the parsing code can know when to stop.
+   * The very last entry in the header is the `HEADER_END_MARKER` marker, so that the parsing code
+   * can know when to stop.
    *
    * The format needs to be kept in sync with the openEventLog() method below. Also, it cannot
    * change in new Spark versions without some other way of detecting the change (like some
@@ -237,17 +237,16 @@ private[spark] object EventLoggingListener extends Logging {
       meta += ("compressionCodec" -> codec.getClass().getName())
     }
 
-    val header = new DataOutputStream(logStream)
     def write(entry: String) = {
       val bytes = entry.getBytes(Charsets.UTF_8)
-      header.writeInt(bytes.length)
-      header.write(bytes, 0, bytes.length)
+      if (bytes.length > MAX_HEADER_LINE_LENGTH) {
+        throw new IOException(s"Header entry too long: ${entry}")
+      }
+      logStream.write(bytes, 0, bytes.length)
     }
 
     meta.foreach { case (k, v) => write(s"$k=$v\n") }
-    write(EventLoggingListener.HEADER_END_MARKER)
-    header.flush()
-
+    write(s"$HEADER_END_MARKER\n")
     compressionCodec.map(_.compressedOutputStream(logStream)).getOrElse(logStream)
   }
 
@@ -275,25 +274,34 @@ private[spark] object EventLoggingListener extends Logging {
       throw new FileNotFoundException(s"File $log does not exist.")
     }
 
-    val in = new DataInputStream(new BufferedInputStream(fs.open(log)))
-    def read() = {
-      // TODO: a corrupted / malicious file can cause this code to load lots of data into
-      // memory. Better to have a limit on the size of the header?
-      val len = in.readInt()
-      val bytes = new Array[Byte](len)
-      in.readFully(bytes)
-      new String(bytes, Charsets.UTF_8)
+    val in = new BufferedInputStream(fs.open(log))
+    def readLine() = {
+      val bytes = new ByteArrayOutputStream()
+      var next = in.read()
+      var count = 0
+      while (next != '\n') {
+        if (next == -1) {
+          throw new IOException("Unexpected end of file.")
+        }
+        bytes.write(next)
+        count = count + 1
+        if (count > MAX_HEADER_LINE_LENGTH) {
+          throw new IOException("Maximum header line length exceeeded.")
+        }
+        next = in.read()
+      }
+      new String(bytes.toByteArray(), Charsets.UTF_8)
     }
 
     try {
       val meta = new mutable.HashMap[String, String]()
       var foundEndMarker = false
       while (!foundEndMarker) {
-        read() match {
+        readLine() match {
           case HEADER_END_MARKER =>
             foundEndMarker = true
           case entry =>
-            val prop = entry.stripSuffix("\n").split("=", 2)
+            val prop = entry.split("=", 2)
             if (prop.length != 2) {
               throw new IllegalArgumentException("Invalid metadata in log file.")
             }
