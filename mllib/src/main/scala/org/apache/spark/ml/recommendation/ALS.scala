@@ -30,7 +30,6 @@ import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SchemaRDD, StructType}
-import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.LeftOuter
@@ -44,30 +43,38 @@ import org.apache.spark.util.random.XORShiftRandom
 private[recommendation] trait ALSParams extends Params with HasMaxIter with HasRegParam
   with HasPredictionCol {
 
+  /** Param for rank of the matrix factorization. */
   val rank = new IntParam(this, "rank", "rank of the factorization", Some(10))
   def getRank: Int = get(rank)
 
+  /** Param for number of user blocks. */
   val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks", Some(10))
   def getNumUserBlocks: Int = get(numUserBlocks)
 
+  /** Param for number of product blocks. */
   val numProductBlocks =
     new IntParam(this, "numProductBlocks", "number of product blocks", Some(10))
   def getNumProductBlocks: Int = get(numProductBlocks)
 
+  /** Param to decide whether to use implicit preference. */
   val implicitPrefs =
     new BooleanParam(this, "implicitPrefs", "whether to use implicit preference", Some(false))
   def getImplicitPrefs: Boolean = get(implicitPrefs)
 
+  /** Param for the alpha parameter in the implicit preference formulation. */
   val alpha = new DoubleParam(this, "alpha", "alpha for implicit preference", Some(1.0))
   def getAlpha: Double = get(alpha)
 
+  /** Param for the column name for user ids. */
   val userCol = new Param[String](this, "userCol", "column name for user ids", Some("user"))
   def getUserCol: String = get(userCol)
 
+  /** Param for the column name for product ids. */
   val productCol =
     new Param[String](this, "productCol", "column name for product ids", Some("product"))
   def getProductCol: String = get(productCol)
 
+  /** Param for the column name for ratings. */
   val ratingCol = new Param[String](this, "ratingCol", "column name for ratings", Some("rating"))
   def getRatingCol: String = get(ratingCol)
 
@@ -108,8 +115,11 @@ class ALSModel private[ml] (
     import dataset.sqlContext._
     import org.apache.spark.ml.recommendation.ALSModel.Factor
     val map = this.paramMap ++ paramMap
-    val userTable = s"user-$uid"
-    val prodTable = s"prod-$uid"
+    // TODO: Add DSL to simplify the code here.
+    val instanceTable = s"instance_$uid"
+    val userTable = s"user_$uid"
+    val prodTable = s"prod_$uid"
+    val instances = dataset.as(Symbol(instanceTable))
     val users = userFactors.map { case (id, features) =>
       Factor(id, features)
     }.as(Symbol(userTable))
@@ -123,11 +133,14 @@ class ALSModel private[ml] (
         Float.NaN
       }
     }
-    dataset.join(users, LeftOuter, Some(map(userCol).attr === s"$userTable.id".attr))
+    val inputColumns = dataset.schema.fieldNames
+    val prediction =
+      predict.call(s"$userTable.features".attr, s"$prodTable.features".attr) as map(predictionCol)
+    val outputColumns = inputColumns.map(f => s"$instanceTable.$f".attr as f) :+ prediction
+    instances
+      .join(users, LeftOuter, Some(map(userCol).attr === s"$userTable.id".attr))
       .join(prods, LeftOuter, Some(map(productCol).attr === s"$prodTable.id".attr))
-      .select(Star(None),
-        predict.call(s"$userTable.features".attr, s"$prodTable.features".attr)
-          as map(predictionCol))
+      .select(outputColumns: _*)
   }
 
   override private[ml] def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
