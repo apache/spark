@@ -393,6 +393,42 @@ private[hive] object HiveQl {
     (db, tableName)
   }
 
+  /**
+   * SELECT MAX(value) FROM src GROUP BY k1, k2, k3 GROUPING SETS((k1, k2), (k2)) 
+   * is equivalent to 
+   * SELECT MAX(value) FROM src GROUP BY k1, k2 UNION SELECT MAX(value) FROM src GROUP BY k2
+   * Check the following link for details.
+   * 
+https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C+Grouping+and+Rollup
+   *
+   * The bitmask denotes the grouping expressions validity for a grouping set,
+   * the bitmask also be called as grouping id (`GROUPING__ID`, the virtual column in Hive)
+   * e.g. In superset (k1, k2, k3), (bit 0: k1, bit 1: k2, and bit 2: k3), the grouping id of 
+   * GROUPING SETS (k1, k2) and (k2) should be 3 and 2 respectively.
+   */
+  protected def extractGroupingSet(children: Seq[ASTNode]): (Seq[Expression], Seq[Int]) = {
+    val (keyASTs, setASTs) = children.partition( n => n match {
+        case Token("TOK_GROUPING_SETS_EXPRESSION", children) => false // grouping sets
+        case _ => true // grouping keys
+      })
+
+    val keys = keyASTs.map(nodeToExpr).toSeq
+    val keyMap = keyASTs.map(_.toStringTree).zipWithIndex.toMap
+
+    val bitmasks: Seq[Int] = setASTs.map(set => set match {
+      case Token("TOK_GROUPING_SETS_EXPRESSION", null) => 0
+      case Token("TOK_GROUPING_SETS_EXPRESSION", children) => 
+        children.foldLeft(0)((bitmap, col) => {
+          val colString = col.asInstanceOf[ASTNode].toStringTree()
+          require(keyMap.contains(colString), s"$colString doens't show up in the GROUP BY list")
+          bitmap | 1 << keyMap(colString)
+        })
+      case _ => sys.error("Expect GROUPING SETS clause")
+    })
+
+    (keys, bitmasks)
+  }
+
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
     // Special drop table that also uncaches.
     case Token("TOK_DROPTABLE",
@@ -520,6 +556,9 @@ private[hive] object HiveQl {
             selectDistinctClause ::
             whereClause ::
             groupByClause ::
+            rollupGroupByClause ::
+            cubeGroupByClause ::
+            groupingSetsClause ::
             orderByClause ::
             havingClause ::
             sortByClause ::
@@ -535,6 +574,9 @@ private[hive] object HiveQl {
               "TOK_SELECTDI",
               "TOK_WHERE",
               "TOK_GROUPBY",
+              "TOK_ROLLUP_GROUPBY",
+              "TOK_CUBE_GROUPBY",
+              "TOK_GROUPING_SETS",
               "TOK_ORDERBY",
               "TOK_HAVING",
               "TOK_SORTBY",
@@ -603,16 +645,33 @@ private[hive] object HiveQl {
 
         // The projection of the query can either be a normal projection, an aggregation
         // (if there is a group by) or a script transformation.
-        val withProject = transformation.getOrElse {
-          // Not a transformation so must be either project or aggregation.
-          val selectExpressions = nameExpressions(select.getChildren.flatMap(selExprNodeToExpr))
-
-          groupByClause match {
-            case Some(groupBy) =>
-              Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withLateralView)
-            case None =>
-              Project(selectExpressions, withLateralView)
-          }
+        val withProject: LogicalPlan = transformation.getOrElse {
+          val selectExpressions = 
+            nameExpressions(select.getChildren.flatMap(selExprNodeToExpr).toSeq)
+          Seq(
+            groupByClause.map(e => e match {
+              case Token("TOK_GROUPBY", children) =>
+                // Not a transformation so must be either project or aggregation.
+                Aggregate(children.map(nodeToExpr), selectExpressions, withLateralView)
+              case _ => sys.error("Expect GROUP BY")
+            }),
+            groupingSetsClause.map(e => e match {
+              case Token("TOK_GROUPING_SETS", children) =>
+                val(groupByExprs, masks) = extractGroupingSet(children)
+                GroupingSets(masks, groupByExprs, withLateralView, selectExpressions)
+              case _ => sys.error("Expect GROUPING SETS")
+            }),
+            rollupGroupByClause.map(e => e match {
+              case Token("TOK_ROLLUP_GROUPBY", children) =>
+                Rollup(children.map(nodeToExpr), withLateralView, selectExpressions)
+              case _ => sys.error("Expect WITH ROLLUP")
+            }),
+            cubeGroupByClause.map(e => e match {
+              case Token("TOK_CUBE_GROUPBY", children) =>
+                Cube(children.map(nodeToExpr), withLateralView, selectExpressions)
+              case _ => sys.error("Expect WITH CUBE")
+            }), 
+            Some(Project(selectExpressions, withLateralView))).flatten.head
         }
 
         val withDistinct =
