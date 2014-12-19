@@ -36,26 +36,27 @@ import org.apache.spark.sql.catalyst.expressions.Row
  */
 object MovieLensALS {
 
-  case class Rating(user: Int, product: Int, rating: Float)
+  case class Rating(user: Int, item: Int, rating: Float)
 
   object Rating {
     def parseRating(str: String): Rating = {
       val fields = str.split("::")
       assert(fields.size >= 3)
+      // We use parseInt/parseFloat directly because toInt/toFloat generates extra assembly code.
       val user = java.lang.Integer.parseInt(fields(0))
-      val product = java.lang.Integer.parseInt(fields(1))
+      val item = java.lang.Integer.parseInt(fields(1))
       val rating = java.lang.Float.parseFloat(fields(2))
-      Rating(user, product, rating)
+      Rating(user, item, rating)
     }
   }
 
   case class Params(
       input: String = null,
       maxIter: Int = 10,
-      regParam: Double = 1.0,
+      regParam: Double = 0.1,
       rank: Int = 10,
       numUserBlocks: Int = 10,
-      numProductBlocks: Int = 10) extends AbstractParams[Params]
+      numItemBlocks: Int = 10) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -74,9 +75,9 @@ object MovieLensALS {
       opt[Int]("numUserBlocks")
         .text(s"number of user blocks, default: ${defaultParams.numUserBlocks}")
         .action((x, c) => c.copy(numUserBlocks = x))
-      opt[Int]("numProductBlocks")
-        .text(s"number of product blocks, default: ${defaultParams.numProductBlocks}")
-        .action((x, c) => c.copy(numProductBlocks = x))
+      opt[Int]("numItemBlocks")
+        .text(s"number of item blocks, default: ${defaultParams.numItemBlocks}")
+        .action((x, c) => c.copy(numItemBlocks = x))
       arg[String]("<input>")
         .required()
         .text("input paths to a MovieLens dataset of ratings")
@@ -109,7 +110,7 @@ object MovieLensALS {
 
     val numRatings = ratings.count()
     val numUsers = ratings.map(_.user).distinct().count()
-    val numMovies = ratings.map(_.product).distinct().count()
+    val numMovies = ratings.map(_.item).distinct().count()
 
     println(s"Got $numRatings ratings from $numUsers users on $numMovies movies.")
 
@@ -128,7 +129,7 @@ object MovieLensALS {
       .setMaxIter(params.maxIter)
       .setRegParam(params.regParam)
       .setNumUserBlocks(params.numUserBlocks)
-      .setNumProductBlocks(params.numProductBlocks)
+      .setNumItemBlocks(params.numItemBlocks)
 
     val model = als.fit(training)
 

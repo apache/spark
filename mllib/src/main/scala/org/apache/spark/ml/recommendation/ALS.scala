@@ -51,10 +51,10 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
   val numUserBlocks = new IntParam(this, "numUserBlocks", "number of user blocks", Some(10))
   def getNumUserBlocks: Int = get(numUserBlocks)
 
-  /** Param for number of product blocks. */
-  val numProductBlocks =
-    new IntParam(this, "numProductBlocks", "number of product blocks", Some(10))
-  def getNumProductBlocks: Int = get(numProductBlocks)
+  /** Param for number of item blocks. */
+  val numItemBlocks =
+    new IntParam(this, "numItemBlocks", "number of item blocks", Some(10))
+  def getNumItemBlocks: Int = get(numItemBlocks)
 
   /** Param to decide whether to use implicit preference. */
   val implicitPrefs =
@@ -69,10 +69,10 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
   val userCol = new Param[String](this, "userCol", "column name for user ids", Some("user"))
   def getUserCol: String = get(userCol)
 
-  /** Param for the column name for product ids. */
-  val productCol =
-    new Param[String](this, "productCol", "column name for product ids", Some("product"))
-  def getProductCol: String = get(productCol)
+  /** Param for the column name for item ids. */
+  val itemCol =
+    new Param[String](this, "itemCol", "column name for item ids", Some("item"))
+  def getItemCol: String = get(itemCol)
 
   /** Param for the column name for ratings. */
   val ratingCol = new Param[String](this, "ratingCol", "column name for ratings", Some("rating"))
@@ -87,7 +87,7 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
   protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     val map = this.paramMap ++ paramMap
     assert(schema(map(userCol)).dataType == IntegerType)
-    assert(schema(map(productCol)).dataType== IntegerType)
+    assert(schema(map(itemCol)).dataType== IntegerType)
     val ratingType = schema(map(ratingCol)).dataType
     assert(ratingType == FloatType || ratingType == DoubleType)
     val predictionColName = map(predictionCol)
@@ -106,7 +106,7 @@ class ALSModel private[ml] (
     override val fittingParamMap: ParamMap,
     k: Int,
     userFactors: RDD[(Int, Array[Float])],
-    prodFactors: RDD[(Int, Array[Float])])
+    itemFactors: RDD[(Int, Array[Float])])
   extends Model[ALSModel] with ALSParams {
 
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
@@ -118,28 +118,28 @@ class ALSModel private[ml] (
     // TODO: Add DSL to simplify the code here.
     val instanceTable = s"instance_$uid"
     val userTable = s"user_$uid"
-    val prodTable = s"prod_$uid"
+    val itemTable = s"item_$uid"
     val instances = dataset.as(Symbol(instanceTable))
     val users = userFactors.map { case (id, features) =>
       Factor(id, features)
     }.as(Symbol(userTable))
-    val prods = prodFactors.map { case (id, features) =>
+    val items = itemFactors.map { case (id, features) =>
       Factor(id, features)
-    }.as(Symbol(prodTable))
-    val predict: (Seq[Float], Seq[Float]) => Float = (userFeatures, prodFeatures) => {
-      if (userFeatures != null && prodFeatures != null) {
-        blas.sdot(k, userFeatures.toArray, 1, prodFeatures.toArray, 1)
+    }.as(Symbol(itemTable))
+    val predict: (Seq[Float], Seq[Float]) => Float = (userFeatures, itemFeatures) => {
+      if (userFeatures != null && itemFeatures != null) {
+        blas.sdot(k, userFeatures.toArray, 1, itemFeatures.toArray, 1)
       } else {
         Float.NaN
       }
     }
     val inputColumns = dataset.schema.fieldNames
     val prediction =
-      predict.call(s"$userTable.features".attr, s"$prodTable.features".attr) as map(predictionCol)
+      predict.call(s"$userTable.features".attr, s"$itemTable.features".attr) as map(predictionCol)
     val outputColumns = inputColumns.map(f => s"$instanceTable.$f".attr as f) :+ prediction
     instances
       .join(users, LeftOuter, Some(map(userCol).attr === s"$userTable.id".attr))
-      .join(prods, LeftOuter, Some(map(productCol).attr === s"$prodTable.id".attr))
+      .join(items, LeftOuter, Some(map(itemCol).attr === s"$itemTable.id".attr))
       .select(outputColumns: _*)
   }
 
@@ -162,20 +162,20 @@ class ALS extends Estimator[ALSModel] with ALSParams {
 
   def setRank(value: Int): this.type = set(rank, value)
   def setNumUserBlocks(value: Int): this.type = set(numUserBlocks, value)
-  def setNumProductBlocks(value: Int): this.type = set(numProductBlocks, value)
+  def setNumItemBlocks(value: Int): this.type = set(numItemBlocks, value)
   def setImplicitPrefs(value: Boolean): this.type = set(implicitPrefs, value)
   def setAlpha(value: Double): this.type = set(alpha, value)
   def setUserCol(value: String): this.type = set(userCol, value)
-  def setProductCol(value: String): this.type = set(productCol, value)
+  def setItemCol(value: String): this.type = set(itemCol, value)
   def setRatingCol(value: String): this.type = set(ratingCol, value)
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
   def setMaxIter(value: Int): this.type = set(maxIter, value)
   def setRegParam(value: Double): this.type = set(regParam, value)
 
-  /** Sets both numUserBlocks and numProductBlocks to the specific value. */
+  /** Sets both numUserBlocks and numItemBlocks to the specific value. */
   def setNumBlocks(value: Int): this.type = {
     setNumUserBlocks(value)
-    setNumProductBlocks(value)
+    setNumItemBlocks(value)
     this
   }
 
@@ -186,15 +186,15 @@ class ALS extends Estimator[ALSModel] with ALSParams {
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
     val ratings =
-      dataset.select(map(userCol).attr, map(productCol).attr, Cast(map(ratingCol).attr, FloatType))
+      dataset.select(map(userCol).attr, map(itemCol).attr, Cast(map(ratingCol).attr, FloatType))
         .map { row =>
           new Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
         }
-    val (userFactors, prodFactors) = ALS.train(ratings, rank = map(rank),
-      numUserBlocks = map(numUserBlocks), numProductBlocks = map(numProductBlocks),
+    val (userFactors, itemFactors) = ALS.train(ratings, rank = map(rank),
+      numUserBlocks = map(numUserBlocks), numItemBlocks = map(numItemBlocks),
       maxIter = map(maxIter), regParam = map(regParam), implicitPrefs = map(implicitPrefs),
       alpha = map(alpha))
-    val model = new ALSModel(this, map, map(rank), userFactors, prodFactors)
+    val model = new ALSModel(this, map, map(rank), userFactors, itemFactors)
     Params.inheritValues(map, this, model)
     model
   }
@@ -207,7 +207,7 @@ class ALS extends Estimator[ALSModel] with ALSParams {
 private object ALS extends Logging {
 
   /** Rating class for better code readability. */
-  private case class Rating(user: Int, product: Int, rating: Float)
+  private case class Rating(user: Int, item: Int, rating: Float)
 
   /** Cholesky solver for least square problems. */
   private class CholeskySolver(val k: Int) {
@@ -294,49 +294,49 @@ private object ALS extends Logging {
       ratings: RDD[Rating],
       rank: Int = 10,
       numUserBlocks: Int = 10,
-      numProductBlocks: Int = 10,
+      numItemBlocks: Int = 10,
       maxIter: Int = 10,
       regParam: Double = 1.0,
       implicitPrefs: Boolean = false,
       alpha: Double = 1.0): (RDD[(Int, Array[Float])], RDD[(Int, Array[Float])]) = {
     val userPart = new HashPartitioner(numUserBlocks)
-    val prodPart = new HashPartitioner(numProductBlocks)
+    val itemPart = new HashPartitioner(numItemBlocks)
     val userLocalIndexEncoder = new LocalIndexEncoder(userPart.numPartitions)
-    val prodLocalIndexEncoder = new LocalIndexEncoder(prodPart.numPartitions)
-    val blockRatings = blockifyRatings(ratings, userPart, prodPart).cache()
-    val (userInBlocks, userOutBlocks) = makeBlocks("user", blockRatings, userPart, prodPart)
+    val itemLocalIndexEncoder = new LocalIndexEncoder(itemPart.numPartitions)
+    val blockRatings = blockifyRatings(ratings, userPart, itemPart).cache()
+    val (userInBlocks, userOutBlocks) = makeBlocks("user", blockRatings, userPart, itemPart)
     // materialize blockRatings and user blocks
     userOutBlocks.count()
     val swappedBlockRatings = blockRatings.map {
-      case ((userBlockId, prodBlockId), RatingBlock(userIds, prodIds, localRatings)) =>
-        ((prodBlockId, userBlockId), RatingBlock(prodIds, userIds, localRatings))
+      case ((userBlockId, itemBlockId), RatingBlock(userIds, itemIds, localRatings)) =>
+        ((itemBlockId, userBlockId), RatingBlock(itemIds, userIds, localRatings))
     }
-    val (prodInBlocks, prodOutBlocks) = makeBlocks("prod", swappedBlockRatings, prodPart, userPart)
-    // materialize prod blocks
-    prodOutBlocks.count()
+    val (itemInBlocks, itemOutBlocks) = makeBlocks("item", swappedBlockRatings, itemPart, userPart)
+    // materialize item blocks
+    itemOutBlocks.count()
     var userFactors = initialize(userInBlocks, rank)
-    var prodFactors = initialize(prodInBlocks, rank)
+    var itemFactors = initialize(itemInBlocks, rank)
     if (implicitPrefs) {
       for (iter <- 1 to maxIter) {
         userFactors.setName(s"userFactors-$iter").persist()
         val YtY = Some(computeYtY(userFactors, rank))
-        val previousProdFactors = prodFactors
-        prodFactors = computeFactors(userFactors, userOutBlocks, prodInBlocks, rank, regParam,
+        val previousItemFactors = itemFactors
+        itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder, implicitPrefs, alpha, YtY)
-        previousProdFactors.unpersist()
-        prodFactors.setName(s"prodFactors-$iter").persist()
-        val XtX = Some(computeYtY(prodFactors, rank))
+        previousItemFactors.unpersist()
+        itemFactors.setName(s"itemFactors-$iter").persist()
+        val XtX = Some(computeYtY(itemFactors, rank))
         val previousUserFactors = userFactors
-        userFactors = computeFactors(prodFactors, prodOutBlocks, userInBlocks, rank, regParam,
-          prodLocalIndexEncoder, implicitPrefs, alpha, XtX)
+        userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
+          itemLocalIndexEncoder, implicitPrefs, alpha, XtX)
         previousUserFactors.unpersist()
       }
     } else {
       for (iter <- 0 until maxIter) {
-        prodFactors = computeFactors(userFactors, userOutBlocks, prodInBlocks, rank, regParam,
+        itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
           userLocalIndexEncoder)
-        userFactors = computeFactors(prodFactors, prodOutBlocks, userInBlocks, rank, regParam,
-          prodLocalIndexEncoder)
+        userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
+          itemLocalIndexEncoder)
       }
     }
     val userIdAndFactors = userInBlocks
@@ -346,26 +346,26 @@ private object ALS extends Logging {
       .setName("userFactors")
       .cache()
     userIdAndFactors.count()
-    prodFactors.unpersist()
-    val prodIdAndFactors = prodInBlocks
+    itemFactors.unpersist()
+    val itemIdAndFactors = itemInBlocks
       .mapValues(_.srcIds)
-      .join(prodFactors)
+      .join(itemFactors)
       .values
-      .setName("prodFactors")
+      .setName("itemFactors")
       .cache()
-    prodIdAndFactors.count()
+    itemIdAndFactors.count()
     userInBlocks.unpersist()
     userOutBlocks.unpersist()
-    prodInBlocks.unpersist()
-    prodOutBlocks.unpersist()
+    itemInBlocks.unpersist()
+    itemOutBlocks.unpersist()
     blockRatings.unpersist()
     val userOutput = userIdAndFactors.flatMap { case (ids, factors) =>
       ids.view.zip(factors)
     }
-    val prodOutput = prodIdAndFactors.flatMap { case (ids, factors) =>
+    val itemOutput = itemIdAndFactors.flatMap { case (ids, factors) =>
       ids.view.zip(factors)
     }
-    (userOutput, prodOutput)
+    (userOutput, itemOutput)
   }
 
   /**
@@ -440,7 +440,7 @@ private object ALS extends Logging {
     def add(r: Rating): this.type = {
       size += 1
       srcIds += r.user
-      dstIds += r.product
+      dstIds += r.item
       ratings += r.rating
       this
     }
@@ -470,7 +470,7 @@ private object ALS extends Logging {
       val blocks = Array.fill(numPartitions)(new RatingBlockBuilder)
       iter.flatMap { r =>
         val srcBlockId = srcPart.getPartition(r.user)
-        val dstBlockId = dstPart.getPartition(r.product)
+        val dstBlockId = dstPart.getPartition(r.item)
         val idx = srcBlockId + srcPart.numPartitions * dstBlockId
         val block = blocks(idx)
         block.add(r)
@@ -784,7 +784,7 @@ private object ALS extends Logging {
    * Encoder for storing (blockId, localIndex) into a single integer.
    *
    * We use the leading bits (including the sign bit) to store the block id and the rest to store
-   * the local index. This is based on the assumption that users/products are approximately evenly
+   * the local index. This is based on the assumption that users/items are approximately evenly
    * partitioned. With this assumption, we should be able to encode two billion distinct values.
    *
    * @param numBlocks number of blocks
