@@ -25,7 +25,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.am.memory</code></td>
   <td>512m</td>
   <td>
-    Amount of memory to use for the Yarn ApplicationMaster in client mode, in the same format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>).
+    Amount of memory to use for the YARN Application Master in client mode, in the same format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>).
     In cluster mode, use `spark.driver.memory` instead.
   </td>
 </tr>
@@ -105,7 +105,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.am.memoryOverhead</code></td>
   <td>AM memory * 0.07, with minimum of 384 </td>
   <td>
-    Same as `spark.yarn.driver.memoryOverhead`, but for the ApplicationMaster in client mode.
+    Same as `spark.yarn.driver.memoryOverhead`, but for the Application Master in client mode.
   </td>
 </tr>
 <tr>
@@ -160,7 +160,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td><code>spark.yarn.am.extraJavaOptions</code></td>
   <td>(none)</td>
   <td>
-  A string of extra JVM options to pass to the Yarn ApplicationMaster in client mode.
+  A string of extra JVM options to pass to the YARN Application Master in client mode.
   In cluster mode, use spark.driver.extraJavaOptions instead.
   </td>
 </tr>
