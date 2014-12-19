@@ -179,9 +179,9 @@ class RobustPLSA(@transient protected val sc: SparkContext,
       parameters,
       collectionLength,
       par => (word,num) =>
-        num * math.log(probabilityOfWordGivenTopic(word, par, topicsBC) +
+        num * math.log((probabilityOfWordGivenTopic(word, par, topicsBC) +
           gamma * backgroundBC.value(word) +
-          eps * par.noise(word) / (1 + eps + gamma)).toFloat)
+          eps * par.noise(word)) / (1 + eps + gamma)).toFloat)
 
 }
 
