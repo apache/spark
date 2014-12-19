@@ -484,7 +484,7 @@ def launch_cluster(conn, opts, cluster_name):
                         active_instance_ids.append(id_to_req[i].instance_id)
                 if len(active_instance_ids) == opts.slaves:
                     print "All %d slaves granted" % opts.slaves
-                    reservations = conn.get_all_instances(active_instance_ids)
+                    reservations = conn.get_all_reservations(active_instance_ids)
                     slave_nodes = []
                     for r in reservations:
                         slave_nodes += r.instances
@@ -573,7 +573,7 @@ def launch_cluster(conn, opts, cluster_name):
 
 def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
     print "Searching for existing cluster " + cluster_name + "..."
-    reservations = conn.get_all_instances()
+    reservations = conn.get_all_reservations()
     master_nodes = []
     slave_nodes = []
     for res in reservations:
