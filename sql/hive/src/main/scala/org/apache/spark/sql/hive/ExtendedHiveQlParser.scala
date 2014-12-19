@@ -21,6 +21,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.{AbstractSparkSQLParser, SqlLexical}
+import org.apache.spark.sql.hive.execution.{AddJar, AddFile, HiveNativeCommand}
 
 /**
  * A parser that recognizes all HiveQL constructs together with Spark SQL specific extensions.
@@ -52,7 +53,7 @@ private[hive] class ExtendedHiveQlParser extends AbstractSparkSQLParser {
 
   protected lazy val dfs: Parser[LogicalPlan] =
     DFS ~> wholeInput ^^ {
-      case command => NativeCommand(command.trim)
+      case command => HiveNativeCommand(command.trim)
     }
 
   private lazy val addFile: Parser[LogicalPlan] =
