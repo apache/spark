@@ -187,7 +187,7 @@ class CloudPickler(pickle.Pickler):
             self.save_reduce(_get_module_builtins, (), obj=obj)
         else:
             pickle.Pickler.save_dict(self, obj)
-    dispatch[pickle.DictionaryType] = save_dict
+    dispatch[dict] = save_dict
 
 
     def save_module(self, obj, pack=struct.pack):
