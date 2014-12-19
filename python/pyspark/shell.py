@@ -21,13 +21,6 @@ An interactive shell.
 This file is designed to be launched as a PYTHONSTARTUP script.
 """
 
-import sys
-if sys.version_info[0] != 2:
-    print("Error: Default Python used is Python%s" % sys.version_info.major)
-    print("\tSet env variable PYSPARK_PYTHON to Python2 binary and re-run it.")
-    sys.exit(1)
-
-
 import atexit
 import os
 import platform
