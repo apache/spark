@@ -51,8 +51,10 @@ import sys
 import types
 from functools import partial
 import itertools
-from copy_reg import _extension_registry, _inverted_registry, _extension_cache
-import new
+if sys.version < '3':
+    from copy_reg import _extension_registry, _inverted_registry, _extension_cache
+else:
+    from copyreg import _extension_registry, _inverted_registry, _extension_cache
 import dis
 import traceback
 import platform
@@ -73,13 +75,17 @@ HAVE_ARGUMENT = chr(dis.HAVE_ARGUMENT)
 EXTENDED_ARG = chr(dis.EXTENDED_ARG)
 
 if PyImp == "PyPy":
+    import new
     # register builtin type in `new`
     new.method = types.MethodType
 
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from StringIO import StringIO
+if sys.version < '3':
+    try:
+        from cStringIO import StringIO
+    except ImportError:
+        from StringIO import StringIO
+else:
+    from io import StringIO
 
 # These helper functions were copied from PiCloud's util module.
 def islambda(func):

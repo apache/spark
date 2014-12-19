@@ -86,9 +86,13 @@ Traceback (most recent call last):
 Exception:...
 """
 
+import sys
 import select
 import struct
-import SocketServer
+if sys.version < '3':
+    import SocketServer
+else:
+    import socketserver as SocketServer
 import threading
 from pyspark.cloudpickle import CloudPickler
 from pyspark.serializers import read_int, PickleSerializer
