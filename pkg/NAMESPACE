@@ -42,6 +42,7 @@ exportMethods(
               "reduceByKey",
               "rightOuterJoin",
               "sampleRDD",
+              "saveAsTextFile",
               "saveAsObjectFile",
               "take",
               "takeSample",

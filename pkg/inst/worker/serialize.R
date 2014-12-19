@@ -46,6 +46,10 @@ writeInt <- function(con, value) {
   writeBin(as.integer(value), con, endian="big")
 }
 
+writeStrings <- function(con, stringList) {
+  writeLines(unlist(stringList), con)
+}
+
 writeRaw <- function(con, batch, serialized = FALSE) {
   if (serialized) {
     outputSer <- batch
