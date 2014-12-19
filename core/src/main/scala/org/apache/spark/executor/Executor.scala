@@ -26,7 +26,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
-import akka.actor.{Props, ActorSystem}
+import akka.actor.Props
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -42,10 +42,8 @@ import org.apache.spark.util.{SparkUncaughtExceptionHandler, AkkaUtils, Utils}
 private[spark] class Executor(
     executorId: String,
     slaveHostname: String,
-    properties: Seq[(String, String)],
-    numCores: Int,
-    isLocal: Boolean = false,
-    actorSystem: ActorSystem = null)
+    env: SparkEnv,
+    isLocal: Boolean = false)
   extends Logging
 {
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
@@ -54,6 +52,8 @@ private[spark] class Executor(
   private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
+
+  private val conf = env.conf
 
   @volatile private var isStopped = false
 
@@ -65,10 +65,6 @@ private[spark] class Executor(
   // Make sure the local hostname we report matches the cluster scheduler's name for this host
   Utils.setCustomHostname(slaveHostname)
 
-  // Set spark.* properties from executor arg
-  val conf = new SparkConf(true)
-  conf.setAll(properties)
-
   if (!isLocal) {
     // Setup an uncaught exception handler for non-local mode.
     // Make any thread terminations due to uncaught exceptions kill the entire
@@ -77,21 +73,11 @@ private[spark] class Executor(
   }
 
   val executorSource = new ExecutorSource(this, executorId)
-
-  // Initialize Spark environment (using system properties read above)
   conf.set("spark.executor.id", executorId)
-  private val env = {
-    if (!isLocal) {
-      val port = conf.getInt("spark.executor.port", 0)
-      val _env = SparkEnv.createExecutorEnv(
-        conf, executorId, slaveHostname, port, numCores, isLocal, actorSystem)
-      SparkEnv.set(_env)
-      _env.metricsSystem.registerSource(executorSource)
-      _env.blockManager.initialize(conf.getAppId)
-      _env
-    } else {
-      SparkEnv.get
-    }
+
+  if (!isLocal) {
+    env.metricsSystem.registerSource(executorSource)
+    env.blockManager.initialize(conf.getAppId)
   }
 
   // Create an actor for receiving RPCs from the driver
@@ -167,7 +153,7 @@ private[spark] class Executor(
     override def run() {
       val deserializeStartTime = System.currentTimeMillis()
       Thread.currentThread.setContextClassLoader(replClassLoader)
-      val ser = SparkEnv.get.closureSerializer.newInstance()
+      val ser = env.closureSerializer.newInstance()
       logInfo(s"Running $taskName (TID $taskId)")
       execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
       var taskStart: Long = 0
@@ -202,7 +188,7 @@ private[spark] class Executor(
           throw new TaskKilledException
         }
 
-        val resultSer = SparkEnv.get.serializer.newInstance()
+        val resultSer = env.serializer.newInstance()
         val beforeSerialization = System.currentTimeMillis()
         val valueBytes = resultSer.serialize(value)
         val afterSerialization = System.currentTimeMillis()

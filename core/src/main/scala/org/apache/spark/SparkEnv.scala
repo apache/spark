@@ -177,18 +177,18 @@ object SparkEnv extends Logging {
       hostname: String,
       port: Int,
       numCores: Int,
-      isLocal: Boolean,
-      actorSystem: ActorSystem = null): SparkEnv = {
-    create(
+      isLocal: Boolean): SparkEnv = {
+    val env = create(
       conf,
       executorId,
       hostname,
       port,
       isDriver = false,
       isLocal = isLocal,
-      defaultActorSystem = actorSystem,
       numUsableCores = numCores
     )
+    SparkEnv.set(env)
+    env
   }
 
   /**
@@ -202,7 +202,6 @@ object SparkEnv extends Logging {
       isDriver: Boolean,
       isLocal: Boolean,
       listenerBus: LiveListenerBus = null,
-      defaultActorSystem: ActorSystem = null,
       numUsableCores: Int = 0): SparkEnv = {
 
     // Listener bus is only used on the driver
@@ -212,20 +211,17 @@ object SparkEnv extends Logging {
 
     val securityManager = new SecurityManager(conf)
 
-    // If an existing actor system is already provided, use it.
-    // This is the case when an executor is launched in coarse-grained mode.
-    val (actorSystem, boundPort) =
-      Option(defaultActorSystem) match {
-        case Some(as) => (as, port)
-        case None =>
-          val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
-          AkkaUtils.createActorSystem(actorSystemName, hostname, port, conf, securityManager)
-      }
+    // Create the ActorSystem for Akka and get the port it binds to.
+    val (actorSystem, boundPort) = {
+      val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
+      AkkaUtils.createActorSystem(actorSystemName, hostname, port, conf, securityManager)
+    }
 
     // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
-    // This is so that we tell the executors the correct port to connect to.
     if (isDriver) {
       conf.set("spark.driver.port", boundPort.toString)
+    } else {
+      conf.set("spark.executor.port", boundPort.toString)
     }
 
     // Create an instance of the class with the given name, possibly initializing it with our conf
