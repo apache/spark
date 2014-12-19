@@ -73,8 +73,6 @@ private[spark] class Executor(
   }
 
   val executorSource = new ExecutorSource(this, executorId)
-
-  // Initialize Spark environment (using system properties read above)
   conf.set("spark.executor.id", executorId)
 
   if (!isLocal) {

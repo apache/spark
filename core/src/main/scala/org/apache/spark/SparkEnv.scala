@@ -209,8 +209,7 @@ object SparkEnv extends Logging {
 
     val securityManager = new SecurityManager(conf)
 
-    // If an existing actor system is already provided, use it.
-    // This is the case when an executor is launched in coarse-grained mode.
+    // Create the ActorSystem for Akka and get the port it binds to.
     val (actorSystem, boundPort) = {
       val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
       AkkaUtils.createActorSystem(actorSystemName, hostname, port, conf, securityManager)
