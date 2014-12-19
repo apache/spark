@@ -230,18 +230,6 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
-    <!-- TODO: remove this as soon as 1.2.0 is published on Maven central -->
-    <repository>
-      <id>spark-staging-1038</id>
-      <name>Spark 1.2.0 Staging (1038)</name>
-      <url>https://repository.apache.org/content/repositories/orgapachespark-1038/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
