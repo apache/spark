@@ -38,6 +38,8 @@ test_that("cogroup on two RDDs", {
   rdd2 <- parallelize(sc, list(list("b", 2), list("a", 3)))
   cogroup.rdd <- cogroup(rdd1, rdd2, numPartitions = 2L) 
   actual <- collect(cogroup.rdd)
-  expect_equal(actual, 
-               list(list("b", list(list(), list(2))), list("a", list(list(1, 4), list(3)))))
+
+  expected <- list(list("b", list(list(), list(2))), list("a", list(list(1, 4), list(3))))
+  expect_equal(sortKeyValueList(actual),
+               sortKeyValueList(expected))
 })

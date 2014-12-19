@@ -49,7 +49,7 @@ test_that("saveAsObjectFile()/objectFile() following RDD transformations works",
   output <- collect(counts)
   expected <- list(list("awesome.", 1), list("Spark", 2), list("pretty.", 1),
                     list("is", 2))
-  expect_equal(output, expected)
+  expect_equal(sortKeyValueList(output), sortKeyValueList(expected))
   
   unlink(fileName1)
   unlink(fileName2, recursive = TRUE)

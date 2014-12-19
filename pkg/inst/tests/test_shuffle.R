@@ -24,7 +24,7 @@ test_that("groupByKey for integers", {
   actual <- collect(grouped)
 
   expected <- list(list(2L, list(100, 1)), list(1L, list(-1, 200)))
-  expect_equal(actual, expected)
+  expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
 })
 
 test_that("groupByKey for doubles", {
@@ -33,7 +33,7 @@ test_that("groupByKey for doubles", {
   actual <- collect(grouped)
 
   expected <- list(list(1.5, list(-1, 200)), list(2.5, list(100, 1)))
-  expect_equal(actual, expected)
+  expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
 })
 
 test_that("reduceByKey for ints", {
@@ -42,7 +42,7 @@ test_that("reduceByKey for ints", {
   actual <- collect(reduced)
 
   expected <- list(list(2L, 101), list(1L, 199))
-  expect_equal(actual, expected)
+  expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
 })
 
 test_that("reduceByKey for doubles", {
@@ -50,7 +50,7 @@ test_that("reduceByKey for doubles", {
   actual <- collect(reduced)
 
   expected <- list(list(1.5, 199), list(2.5, 101))
-  expect_equal(actual, expected)
+  expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
 })
 
 test_that("combineByKey for ints", {
@@ -59,7 +59,7 @@ test_that("combineByKey for ints", {
   actual <- collect(reduced)
 
   expected <- list(list(2L, 101), list(1L, 199))
-  expect_equal(actual, expected)
+  expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
 })
 
 test_that("combineByKey for doubles", {
@@ -67,7 +67,7 @@ test_that("combineByKey for doubles", {
   actual <- collect(reduced)
 
   expected <- list(list(1.5, 199), list(2.5, 101))
-  expect_equal(actual, expected)
+  expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
 })
 
 test_that("partitionBy() partitions data correctly", {
@@ -81,8 +81,8 @@ test_that("partitionBy() partitions data correctly", {
   actual_first <- collectPartition(resultRDD, 0L)
   actual_second <- collectPartition(resultRDD, 1L)
 
-  expect_equal(actual_first, expected_first)
-  expect_equal(actual_second, expected_second)
+  expect_equal(sortKeyValueList(actual_first), sortKeyValueList(expected_first))
+  expect_equal(sortKeyValueList(actual_second), sortKeyValueList(expected_second))
 })
 
 test_that("partitionBy works with dependencies", {
@@ -99,8 +99,8 @@ test_that("partitionBy works with dependencies", {
   actual_first <- collectPartition(resultRDD, 0L)
   actual_second <- collectPartition(resultRDD, 1L)
 
-  expect_equal(actual_first, expected_first)
-  expect_equal(actual_second, expected_second)
+  expect_equal(sortKeyValueList(actual_first), sortKeyValueList(expected_first))
+  expect_equal(sortKeyValueList(actual_second), sortKeyValueList(expected_second))
 })
 
 test_that("test partitionBy with string keys", {
@@ -116,6 +116,6 @@ test_that("test partitionBy with string keys", {
   actual_second <- Filter(function(item) { item[[1]] == "and" },
                           collectPartition(resultRDD, 1L))
 
-  expect_equal(actual_first, expected_first)
-  expect_equal(actual_second, expected_second)
+  expect_equal(sortKeyValueList(actual_first), sortKeyValueList(expected_first))
+  expect_equal(sortKeyValueList(actual_second), sortKeyValueList(expected_second))
 })
