@@ -156,10 +156,10 @@ class CloudPickler(pickle.Pickler):
             if new_recurse == recurse_limit:
                 sys.setrecursionlimit(base_recurse)
 
-    def save_buffer(self, obj):
+    def save_memoryview(self, obj):
         """Fallback to save_string"""
         pickle.Pickler.save_string(self,str(obj))
-    dispatch[buffer] = save_buffer
+    dispatch[memoryview] = save_memoryview
 
     #block broken objects
     def save_unsupported(self, obj, pack=None):
