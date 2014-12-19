@@ -297,7 +297,13 @@ private[hive] trait HiveInspectors {
       case x: ByteObjectInspector if x.preferWritable() => x.get(data)
       case x: HiveDecimalObjectInspector => HiveShim.toCatalystDecimal(x, data)
       case x: BinaryObjectInspector if x.preferWritable() =>
-        x.getPrimitiveWritableObject(data).copyBytes()
+        // BytesWritable.copyBytes() only available since Hadoop2
+        // In order to keep backward-compatible, we have to copy the
+        // bytes with old apis
+        val bw = x.getPrimitiveWritableObject(data)
+        val result = new Array[Byte](bw.getLength()) 
+        System.arraycopy(bw.getBytes(), 0, result, 0, bw.getLength())
+        result
       case x: DateObjectInspector if x.preferWritable() =>
         x.getPrimitiveWritableObject(data).get()
       // org.apache.hadoop.hive.serde2.io.TimestampWritable.set will reset current time object
