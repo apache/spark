@@ -107,4 +107,19 @@ private[spark] object TestUtils {
     assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath())
     out
   }
+
+  /** Allows system properties to be changed in tests */
+  def withSystemProperty[T](property: String, value: String)(block: => T): T = {
+    val originalValue = System.getProperty(property)
+    try {
+      System.setProperty(property, value)
+      block
+    } finally {
+      if (originalValue == null) {
+        System.clearProperty(property)
+      } else {
+        System.setProperty(property, originalValue)
+      }
+    }
+  }
 }

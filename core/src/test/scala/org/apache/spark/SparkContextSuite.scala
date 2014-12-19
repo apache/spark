@@ -23,24 +23,9 @@ import org.apache.hadoop.io.BytesWritable
 
 class SparkContextSuite extends FunSuite with LocalSparkContext {
 
-  /** Allows system properties to be changed in tests */
-  private def withSystemProperty[T](property: String, value: String)(block: => T): T = {
-    val originalValue = System.getProperty(property)
-    try {
-      System.setProperty(property, value)
-      block
-    } finally {
-      if (originalValue == null) {
-        System.clearProperty(property)
-      } else {
-        System.setProperty(property, originalValue)
-      }
-    }
-  }
-
   test("Only one SparkContext may be active at a time") {
     // Regression test for SPARK-4180
-    withSystemProperty("spark.driver.allowMultipleContexts", "false") {
+    TestUtils.withSystemProperty("spark.driver.allowMultipleContexts", "false") {
       val conf = new SparkConf().setAppName("test").setMaster("local")
       sc = new SparkContext(conf)
       // A SparkContext is already running, so we shouldn't be able to create a second one
@@ -52,7 +37,7 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Can still construct a new SparkContext after failing to construct a previous one") {
-    withSystemProperty("spark.driver.allowMultipleContexts", "false") {
+    TestUtils.withSystemProperty("spark.driver.allowMultipleContexts", "false") {
       // This is an invalid configuration (no app name or master URL)
       intercept[SparkException] {
         new SparkContext(new SparkConf())
@@ -63,7 +48,7 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Check for multiple SparkContexts can be disabled via undocumented debug option") {
-    withSystemProperty("spark.driver.allowMultipleContexts", "true") {
+    TestUtils.withSystemProperty("spark.driver.allowMultipleContexts", "true") {
       var secondSparkContext: SparkContext = null
       try {
         val conf = new SparkConf().setAppName("test").setMaster("local")
