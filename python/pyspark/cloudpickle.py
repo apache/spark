@@ -127,7 +127,7 @@ useForcedImports = True #Should I use forced imports for tracking?
 
 class CloudPickler(pickle.Pickler):
 
-    dispatch = pickle.Pickler.dispatch.copy()
+    dispatch = pickle._Pickler.dispatch.copy()
     savedForceImports = False
     savedDjangoEnv = False #hack tro transport django environment
 
