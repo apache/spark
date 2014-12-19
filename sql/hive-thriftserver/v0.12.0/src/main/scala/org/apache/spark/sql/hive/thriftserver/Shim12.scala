@@ -69,7 +69,7 @@ private[hive] class SparkExecuteStatementOperation(
     statement: String,
     confOverlay: JMap[String, String])(
     hiveContext: HiveContext,
-    sessionToActivePool: SMap[HiveSession, String])
+    sessionToActivePool: SMap[SessionHandle, String])
   extends ExecuteStatementOperation(parentSession, statement, confOverlay) with Logging {
 
   private var result: SchemaRDD = _
@@ -191,14 +191,14 @@ private[hive] class SparkExecuteStatementOperation(
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
         case SetCommand(Some((SQLConf.THRIFTSERVER_POOL, Some(value)))) =>
-          sessionToActivePool(parentSession) = value
+          sessionToActivePool(parentSession.getSessionHandle) = value
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
       }
 
       val groupId = round(random * 1000000).toString
       hiveContext.sparkContext.setJobGroup(groupId, statement)
-      sessionToActivePool.get(parentSession).foreach { pool =>
+      sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
         hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }
       iter = {
