@@ -38,23 +38,22 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var amMemory: Int = 512 // MB
   var appName: String = "Spark"
   var priority = 0
+  var isClusterMode = false
+
+  private val driverMemKey = "spark.driver.memory"
+  private val driverMemOverheadKey = "spark.yarn.driver.memoryOverhead"
+  private val amMemKey = "spark.yarn.am.memory"
+  private val amMemOverheadKey = "spark.yarn.am.memoryOverhead"
 
   private val isDynamicAllocationEnabled =
     sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
 
   parseArgs(args.toList)
-
-  val isClusterMode = userClass != null
-
   loadEnvironmentArgs()
   validateArgs()
 
   // Additional memory to allocate to containers. In different modes, we use different configs.
-  val amMemoryOverheadConf = if (isClusterMode) {
-    "spark.yarn.driver.memoryOverhead"
-  } else {
-    "spark.yarn.am.memoryOverhead"
-  }
+  val amMemoryOverheadConf = if (isClusterMode) driverMemOverheadKey else amMemOverheadKey
   val amMemoryOverhead = sparkConf.getInt(amMemoryOverheadConf,
     math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
 
@@ -63,13 +62,6 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
   /** Load any default arguments provided through environment variables and Spark properties. */
   private def loadEnvironmentArgs(): Unit = {
-    // In cluster mode, the driver and the AM live in the same JVM, so this does not apply
-    if (!isClusterMode) {
-      amMemory = Utils.memoryStringToMb(sparkConf.get("spark.yarn.am.memory", "512m"))
-    } else {
-      println("spark.yarn.am.memory is set but does not apply in cluster mode, " +
-          "use spark.driver.memory instead.")
-    }
     // For backward compatibility, SPARK_YARN_DIST_{ARCHIVES/FILES} should be resolved to hdfs://,
     // while spark.yarn.dist.{archives/files} should be resolved to file:// (SPARK-2051).
     files = Option(files)
@@ -99,6 +91,21 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
     if (numExecutors <= 0) {
       throw new IllegalArgumentException(
         "You must specify at least 1 executor!\n" + getUsageMessage())
+    }
+    isClusterMode = userClass != null
+    if (isClusterMode) {
+      for (key <- Seq(amMemKey, amMemOverheadKey)) {
+        if (sparkConf.getOption(key).isDefined) {
+          println(s"$key is set but does not apply in cluster mode.")
+        }
+      }
+    } else {
+      // In cluster mode, the driver and the AM live in the same JVM, so this does not apply
+      amMemory = Utils.memoryStringToMb(sparkConf.get(amMemKey, "512m"))
+      if (sparkConf.getOption(driverMemKey) || sparkConf.getOption(driverMemOverheadKey)) {
+        println(s"$driverMemKey, $driverMemOverheadKey or --driver-memory does not apply" +
+            s"in client mode, please use $amMemKey and $amMemOverheadKey instead.")
+      }
     }
   }
 

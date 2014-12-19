@@ -56,7 +56,7 @@ private[spark] trait ClientBase extends Logging {
   protected val amMemoryOverhead = args.amMemoryOverhead // MB
   protected val executorMemoryOverhead = args.executorMemoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
-  private val isLaunchingDriver = args.userClass != null
+  private val isLaunchingDriver = args.isClusterMode
 
   /**
    * Fail fast if we have requested more resources per container than is available in the cluster.
