@@ -361,10 +361,10 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
 }
 
 case class SumDistinct(child: Expression)
-  extends AggregateExpression with trees.UnaryNode[Expression] {
+  extends PartialAggregate with trees.UnaryNode[Expression] {
 
+  def this() = this(null)
   override def nullable = true
-
   override def dataType = child.dataType match {
     case DecimalType.Fixed(precision, scale) =>
       DecimalType(precision + 10, scale)  // Add 10 digits left of decimal point, like Hive
@@ -373,10 +373,55 @@ case class SumDistinct(child: Expression)
     case _ =>
       child.dataType
   }
-
-  override def toString = s"SUM(DISTINCT $child)"
-
+  override def toString = s"SUM(DISTINCT ${child})"
   override def newInstance() = new SumDistinctFunction(child, this)
+
+  override def asPartial = {
+    val partialSet = Alias(CollectHashSet(child :: Nil), "partialSets")()
+    SplitEvaluation(
+      CombineSetsAndSum(partialSet.toAttribute, this),
+      partialSet :: Nil)
+  }
+}
+
+case class CombineSetsAndSum(inputSet: Expression, base: Expression) extends AggregateExpression {
+  def this() = this(null, null)
+
+  override def children = inputSet :: Nil
+  override def nullable = true
+  override def dataType = base.dataType
+  override def toString = s"CombineAndSum($inputSet)"
+  override def newInstance() = new CombineSetsAndSumFunction(inputSet, this)
+}
+
+case class CombineSetsAndSumFunction(
+    @transient inputSet: Expression,
+    @transient base: AggregateExpression)
+  extends AggregateFunction {
+
+  def this() = this(null, null) // Required for serialization.
+
+  val seen = new OpenHashSet[Any]()
+
+  override def update(input: Row): Unit = {
+    val inputSetEval = inputSet.eval(input).asInstanceOf[OpenHashSet[Any]]
+    val inputIterator = inputSetEval.iterator
+    while (inputIterator.hasNext) {
+      seen.add(inputIterator.next)
+    }
+  }
+
+  override def eval(input: Row): Any = {
+    val casted = seen.asInstanceOf[OpenHashSet[Row]]
+    if (casted.size == 0) {
+      null
+    } else {
+      Cast(Literal(
+        casted.iterator.map(f => f.apply(0)).reduceLeft(
+          base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)),
+        base.dataType).eval(null)
+    }
+  }
 }
 
 case class First(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
