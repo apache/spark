@@ -60,6 +60,13 @@ import dis
 import traceback
 import platform
 
+# But see http://bugs.python.org/issue8206
+try:
+  from types import InstanceType
+except ImportError:
+  InstanceType = object
+
+
 PyImp = platform.python_implementation()
 
 
@@ -553,7 +560,7 @@ class CloudPickler(pickle.Pickler):
             self.save_image(obj)
         else:
             self.save_inst_logic(obj)
-    dispatch[types.InstanceType] = save_inst
+    dispatch[InstanceType] = save_inst
 
     def save_property(self, obj):
         # properties not correctly saved in python
