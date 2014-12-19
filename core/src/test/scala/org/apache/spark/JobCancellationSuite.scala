@@ -28,6 +28,7 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.Matchers
 
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
+import org.apache.spark.util.ResetSystemProperties
 
 /**
  * Test suite for cancelling running jobs. We run the cancellation tasks for single job action
@@ -35,12 +36,11 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
  * in both FIFO and fair scheduling modes.
  */
 class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
-  with LocalSparkContext {
+  with ResetSystemProperties with LocalSparkContext {
 
   override def afterEach() {
     super.afterEach()
     resetSparkContext()
-    System.clearProperty("spark.scheduler.mode")
   }
 
   test("local mode, FIFO scheduler") {
