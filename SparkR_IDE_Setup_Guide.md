@@ -8,7 +8,7 @@ To make things easier, I've written a small [shell script] that will handle all 
 ```sh
 > wget https://raw.githubusercontent.com/cafreeman/SparkR-pkg/master/Spark_IDE_Setup.sh
 
-> sudo sh Spark_IDE_Setup.sh
+> sh Spark_IDE_Setup.sh
 ```
 
 This shell script will download and install Rstudio and also configure R to include SparkR in the list of importable packages by default.
