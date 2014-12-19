@@ -32,7 +32,9 @@ import org.apache.spark.util.JsonProtocol
 private[spark] class ReplayListenerBus extends SparkListenerBus with Logging {
 
   /**
-   * Replay each event in the order maintained in the given stream.
+   * Replay each event in the order maintained in the given stream. The stream is expected to
+   * contain one JSON-encoded SparkListenerEvent per line.
+   *
    * This method can be called multiple times, but the listener behavior is undefined after any
    * error is thrown by this method.
    *
