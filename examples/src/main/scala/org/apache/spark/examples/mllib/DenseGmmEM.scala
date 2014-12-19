@@ -37,13 +37,13 @@ object DenseGmmEM {
     }
   }
 
-  def run(inputFile: String, k: Int, convergenceTol: Double) {
+  private def run(inputFile: String, k: Int, convergenceTol: Double) {
     val conf = new SparkConf().setAppName("Spark EM Sample")
     val ctx  = new SparkContext(conf)
     
     val data = ctx.textFile(inputFile).map{ line =>
       Vectors.dense(line.trim.split(' ').map(_.toDouble))
-    }.cache
+    }.cache()
       
     val clusters = new GaussianMixtureModelEM()
       .setK(k)
@@ -55,11 +55,11 @@ object DenseGmmEM {
         (clusters.weight(i), clusters.mu(i), clusters.sigma(i)))
     }
     
-    println("Cluster labels:")
+    println("Cluster labels (first <= 100):")
     val (responsibilityMatrix, clusterLabels) = clusters.predict(data)
-    for (x <- clusterLabels.collect) {
+    clusterLabels.take(100).foreach{ x =>
       print(" " + x)
     }
-    println
+    println()
   }
 }
