@@ -178,7 +178,7 @@ object SparkEnv extends Logging {
       port: Int,
       numCores: Int,
       isLocal: Boolean): SparkEnv = {
-    create(
+    val env = create(
       conf,
       executorId,
       hostname,
@@ -187,6 +187,8 @@ object SparkEnv extends Logging {
       isLocal = isLocal,
       numUsableCores = numCores
     )
+    SparkEnv.set(env)
+    env
   }
 
   /**
@@ -216,9 +218,10 @@ object SparkEnv extends Logging {
     }
 
     // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
-    // This is so that we tell the executors the correct port to connect to.
     if (isDriver) {
       conf.set("spark.driver.port", boundPort.toString)
+    } else {
+      conf.set("spark.executor.port", boundPort.toString)
     }
 
     // Create an instance of the class with the given name, possibly initializing it with our conf
