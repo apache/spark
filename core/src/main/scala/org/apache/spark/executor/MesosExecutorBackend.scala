@@ -110,11 +110,8 @@ private[spark] class MesosExecutorBackend
 private[spark] object MesosExecutorBackend extends Logging {
   def main(args: Array[String]) {
     SignalLogger.register(log)
-//    SparkHadoopUtil.get.runAsSparkUser { () =>
-//        MesosNativeLibrary.load()
-        // Create a new Executor and start it running
-        val runner = new MesosExecutorBackend()
-        new MesosExecutorDriver(runner).run()
-//    }
+    // Create a new Executor and start it running
+    val runner = new MesosExecutorBackend()
+    new MesosExecutorDriver(runner).run()
   }
 }
