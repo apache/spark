@@ -210,8 +210,9 @@ private[hive] trait HiveStrategies {
         // Filter out all predicates that only deal with partition keys, these are given to the
         // hive table scan operator to be used for partition pruning.
         val partitionKeyIds = AttributeSet(relation.partitionKeys)
-        val (pruningPredicates, otherPredicates) = predicates.partition {
-          _.references.subsetOf(partitionKeyIds)
+        val (pruningPredicates, otherPredicates) = predicates.partition { predicate =>
+          !predicate.references.isEmpty &&
+          predicate.references.subsetOf(partitionKeyIds)
         }
 
         pruneFilterProject(
