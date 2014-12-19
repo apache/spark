@@ -129,6 +129,10 @@ private[spark] class Master(
     masterMetricsSystem.registerSource(masterSource)
     masterMetricsSystem.start()
     applicationMetricsSystem.start()
+    // Attach the master and app metrics servlet handler to the web ui after the metrics systems are
+    // started.
+    masterMetricsSystem.getServletHandlers.foreach(webUi.attachHandler)
+    applicationMetricsSystem.getServletHandlers.foreach(webUi.attachHandler)
 
     val (persistenceEngine_, leaderElectionAgent_) = RECOVERY_MODE match {
       case "ZOOKEEPER" =>

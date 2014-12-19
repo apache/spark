@@ -30,10 +30,12 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.applicationMaster.waitTries</code></td>
-  <td>10</td>
+  <td><code>spark.yarn.am.waitTime</code></td>
+  <td>100000</td>
   <td>
-    Set the number of times the ApplicationMaster waits for the the Spark master and then also the number of tries it waits for the SparkContext to be initialized
+    In yarn-cluster mode, time in milliseconds for the application master to wait for the
+    SparkContext to be initialized. In yarn-client mode, time for the application master to wait
+    for the driver to connect to it.
   </td>
 </tr>
 <tr>
@@ -152,6 +154,14 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>25</td>
   <td>
     The maximum number of threads to use in the application master for launching executor containers.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.am.extraJavaOptions</code></td>
+  <td>(none)</td>
+  <td>
+  A string of extra JVM options to pass to the Yarn ApplicationMaster in client mode.
+  In cluster mode, use spark.driver.extraJavaOptions instead.
   </td>
 </tr>
 </table>

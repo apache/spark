@@ -174,6 +174,7 @@ private[hive] object HiveShim {
 
   def compatibilityBlackList = Seq(
     "decimal_.*",
+    "udf7",
     "drop_partitions_filter2",
     "show_.*",
     "serde_regex",
