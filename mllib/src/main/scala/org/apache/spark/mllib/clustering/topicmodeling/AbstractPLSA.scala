@@ -49,7 +49,7 @@ private[topicmodeling] trait AbstractPLSA[DocumentParameterType <: DocumentParam
   protected def getAlphabetSize(documents: RDD[Document]) = documents.first().alphabetSize
 
   protected def getCollectionLength(documents: RDD[Document]) =
-    documents.map(_.tokens.activeSize).reduce(_ + _)
+    documents.map(doc => sum(doc.tokens)).reduce(_ + _)
 
   protected def singleDocumentLikelihood(parameter: DocumentParameters,
       topicsBC: Broadcast[Array[Array[Float]]],
