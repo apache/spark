@@ -213,3 +213,10 @@ initAccumulator <- function() {
   acc$size <- 1
   acc
 }
+
+# Utility function to sort a list of key value pairs
+# Used in unit tests
+sortKeyValueList <- function(kv_list) {
+  keys <- sapply(kv_list, function(x) x[[1]])
+  kv_list[order(keys)]
+}
