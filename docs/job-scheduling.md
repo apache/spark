@@ -74,12 +74,6 @@ Mesos already has a similar notion of dynamic resource sharing in fine-grained m
 dynamic allocation allows your Mesos application to take advantage of coarse-grained low-latency
 scheduling while sharing cluster resources efficiently.
 
-Lastly, it is worth noting that Spark's dynamic resource allocation mechanism is cooperative.
-This means if a Spark application enables this feature, other applications on the same cluster
-are also expected to do so. Otherwise, the cluster's resources will end up being unfairly
-distributed to the applications that do not voluntarily give up unused resources they have
-acquired.
-
 ### Configuration and Setup
 
 All configurations used by this feature live under the `spark.dynamicAllocation.*` namespace.
@@ -89,9 +83,11 @@ provide lower and upper bounds for the number of executors through
 configurations are described on the [configurations page](configuration.html#dynamic-allocation)
 and in the subsequent sections in detail.
 
-Additionally, your application must use an external shuffle service (described below). To enable
-this, set `spark.shuffle.service.enabled` to `true`. In YARN, this external shuffle service is
-implemented in `org.apache.spark.yarn.network.YarnShuffleService` that runs in each `NodeManager`
+Additionally, your application must use an external shuffle service. The purpose of the service is
+to preserve the shuffle files written by executors so the executors can be safely removed (more
+detail described [below](job-scheduling.html#graceful-decommission-of-executors)). To enable
+this service, set `spark.shuffle.service.enabled` to `true`. In YARN, this external shuffle service
+is implemented in `org.apache.spark.yarn.network.YarnShuffleService` that runs in each `NodeManager`
 in your cluster. To start this service, follow these steps:
 
 1. Build Spark with the [YARN profile](building-spark.html). Skip this step if you are using a
@@ -108,7 +104,7 @@ then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
 
 ### Resource Allocation Policy
 
-On a high level, Spark should relinquish executors when they are no longer used and acquire
+At a high level, Spark should relinquish executors when they are no longer used and acquire
 executors when they are needed. Since there is no definitive way to predict whether an executor
 that is about to be removed will run a task in the near future, or whether a new executor that is
 about to be added will actually be idle, we need a set of heuristics to determine when to remove
@@ -162,6 +158,12 @@ in Spark 1.2. This service refers to a long-running process that runs on each no
 independently of your Spark applications and their executors. If the service is enabled, Spark
 executors will fetch shuffle files from the service instead of from each other. This means any
 shuffle state written by an executor may continue to be served beyond the executor's lifetime.
+
+In addition to writing shuffle files, executors also cache data either on disk or in memory.
+When an executor is removed, however, all cached data will no longer be accessible. There is
+currently not yet a solution for this in Spark 1.2. In future releases, the cached data may be
+preserved through an off-heap storage similar in spirit to how shuffle files are preserved through
+the external shuffle service.
 
 # Scheduling Within an Application
 
