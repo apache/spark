@@ -20,13 +20,15 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Subquery}
+import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.sql.catalyst.EmptyConf
 
 /**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
  */
 trait Catalog {
 
-  def caseSensitive: Boolean
+  val conf: CatalystConf
 
   def tableExists(db: Option[String], tableName: String): Boolean
 
@@ -44,7 +46,7 @@ trait Catalog {
   protected def processDatabaseAndTableName(
       databaseName: Option[String],
       tableName: String): (Option[String], String) = {
-    if (!caseSensitive) {
+    if (!conf.getConf(CatalystConf.CASE_SENSITIVE, "true").toBoolean) {
       (databaseName.map(_.toLowerCase), tableName.toLowerCase)
     } else {
       (databaseName, tableName)
@@ -54,7 +56,7 @@ trait Catalog {
   protected def processDatabaseAndTableName(
       databaseName: String,
       tableName: String): (String, String) = {
-    if (!caseSensitive) {
+    if (!conf.getConf(CatalystConf.CASE_SENSITIVE, "true").toBoolean) {
       (databaseName.toLowerCase, tableName.toLowerCase)
     } else {
       (databaseName, tableName)
@@ -62,7 +64,7 @@ trait Catalog {
   }
 }
 
-class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
+class SimpleCatalog(val conf: CatalystConf) extends Catalog {
   val tables = new mutable.HashMap[String, LogicalPlan]()
 
   override def registerTable(
@@ -165,7 +167,7 @@ trait OverrideCatalog extends Catalog {
  */
 object EmptyCatalog extends Catalog {
 
-  val caseSensitive: Boolean = true
+  override val conf: CatalystConf = EmptyConf
 
   def tableExists(db: Option[String], tableName: String): Boolean = {
     throw new UnsupportedOperationException

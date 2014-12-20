@@ -24,13 +24,15 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.catalyst.types.IntegerType
+import org.apache.spark.sql.catalyst.CatalystConf
+import org.apache.spark.sql.catalyst.EmptyConf
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
  * when all relations are already filled in and the analyser needs only to resolve attribute
  * references.
  */
-object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true)
+object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, EmptyConf)
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
@@ -39,11 +41,15 @@ object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true
  */
 class Analyzer(catalog: Catalog,
                registry: FunctionRegistry,
-               caseSensitive: Boolean,
+               conf: CatalystConf,
                maxIterations: Int = 100)
   extends RuleExecutor[LogicalPlan] with HiveTypeCoercion {
 
-  val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
+  val resolver = if (conf.getConf(CatalystConf.CASE_SENSITIVE, "true").toBoolean) {
+                  caseSensitiveResolution
+                } else {
+                  caseInsensitiveResolution
+                }
 
   val fixedPoint = FixedPoint(maxIterations)
 

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.catalyst.CatalystConf
+
 import scala.collection.immutable
 import scala.collection.JavaConversions._
 
@@ -61,7 +63,7 @@ private[spark] object SQLConf {
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */
-private[sql] trait SQLConf {
+private[sql] trait SQLConf extends CatalystConf {
   import SQLConf._
 
   /** Only low degree of contention is expected for conf, thus NOT using ConcurrentHashMap. */
@@ -196,4 +198,3 @@ private[sql] trait SQLConf {
     settings.clear()
   }
 }
-
