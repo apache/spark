@@ -121,6 +121,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     // This supports env vars in older versions of Spark
     master = Option(master).orElse(env.get("MASTER")).orNull
     deployMode = Option(deployMode).orElse(env.get("DEPLOY_MODE")).orNull
+    numExecutors = Option(numExecutors)
+      .getOrElse(defaultProperties.get("spark.executor.instances").orNull)
 
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && primaryResource != null) {
