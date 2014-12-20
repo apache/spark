@@ -531,14 +531,20 @@ class TaskInstance(Base):
                 self.end_date = datetime.now()
                 self.set_duration()
                 session.add(Log(State.FAILED, self))
-                if self.try_number <= task.retries:
-                    self.state = State.UP_FOR_RETRY
-                    if task.email_on_retry and task.email:
-                        self.email_alert(e, is_retry=True)
-                else:
-                    self.state = State.FAILED
-                    if task.email_on_failure and task.email:
-                        self.email_alert(e, is_retry=False)
+
+                # Let's go deeper
+                try:
+                    if self.try_number <= task.retries:
+                        self.state = State.UP_FOR_RETRY
+                        if task.email_on_retry and task.email:
+                            self.email_alert(e, is_retry=True)
+                    else:
+                        self.state = State.FAILED
+                        if task.email_on_failure and task.email:
+                            self.email_alert(e, is_retry=False)
+                except Exception as e2:
+                    logging.error('Failed to send email to: ' + task.email)
+
                 session.merge(self)
                 session.commit()
                 logging.error(str(e))

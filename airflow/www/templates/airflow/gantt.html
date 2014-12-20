@@ -2,7 +2,7 @@
 
 {% block head_css %}
 {{ super() }}
-<link href="{{ admin_static.url(filename='datetimepicker/bootstrap-datetimepicker.css') }}" rel="stylesheet">
+<link href="{{ admin_static.url(filename='vendor/bootstrap-daterangepicker/daterangepicker-bs2.css') }}" rel="stylesheet">
 {% endblock %}
 
 {% block body %}
@@ -22,7 +22,8 @@
     <script src="{{ url_for('static', filename='highcharts-more.js') }}">
     </script>
     <script src="{{ admin_static.url(
-      filename='datetimepicker/bootstrap-datetimepicker.js') }}"></script>
+      filename='vendor/bootstrap-daterangepicker/daterangepicker.js') }}"></script>
+    <script src="{{ admin_static.url(filename='admin/js/form-1.0.0.js') }}"></script>
     <script>
       execution_date = '{{ execution_date }}';
       hc = {{ hc|safe }};
@@ -46,9 +47,6 @@
         }
       }
       $('#container').highcharts(hc);
-
-      // Activating the date time picker widget
-      $('#execution_date').datetimepicker();
     </script>
 
 {% endblock %}

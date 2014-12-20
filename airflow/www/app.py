@@ -5,6 +5,7 @@ import logging
 
 from flask import Flask, url_for, Markup, Blueprint, redirect, flash
 from flask.ext.admin import Admin, BaseView, expose, AdminIndexView
+from flask.ext.admin.form import DateTimePickerWidget
 from flask.ext.admin import base
 from flask.ext.admin.contrib.sqla import ModelView
 from flask import request
@@ -44,11 +45,11 @@ app.jinja_env.add_extension("chartkick.ext.charts")
 
 # Date filter form needed for gantt and graph view
 class DateTimeForm(Form):
-    execution_date = DateTimeField("Execution date")
+    execution_date = DateTimeField("Execution date", widget=DateTimePickerWidget())
 
 
 class GraphForm(Form):
-    execution_date = DateTimeField("Execution date")
+    execution_date = DateTimeField("Execution date", widget=DateTimePickerWidget())
     arrange = SelectField("Layout", choices=(
         ('LR', "Left->Right"),
         ('RL', "Right->Left"),
@@ -725,7 +726,7 @@ def duration_f(v, c, m, p):
     if m.end_date:
         return timedelta(seconds=m.duration)
 
-class TaskInstanceModelView(ModelViewOnly):
+class TaskInstanceModelView(ModelView):
     column_filters = ('dag_id', 'task_id', 'state', 'execution_date')
     column_formatters = dict(
         log=log_link, task_id=task_link, dag_id=dag_link, duration=duration_f)
