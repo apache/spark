@@ -22,6 +22,7 @@ import java.io.{File, PrintWriter}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
+import org.apache.spark.{SparkConf, SparkContext, SPARK_VERSION}
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.io.CompressionCodec
@@ -33,7 +34,6 @@ import org.apache.spark.util.{JsonProtocol, Utils}
 class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
   private val fileSystem = Utils.getHadoopFileSystem("/",
     SparkHadoopUtil.get.newConfiguration(new SparkConf()))
-  private val allCompressionCodecs = CompressionCodec.ALL_COMPRESSION_CODECS
   private var testDir: File = _
 
   before {
@@ -45,13 +45,29 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("Simple replay") {
-    testSimpleReplay()
-  }
+    val logFilePath = Utils.getFilePath(testDir, "events.txt")
+    val fstream = fileSystem.create(logFilePath)
+    val writer = new PrintWriter(fstream)
+    val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
+      125L, "Mickey")
+    val applicationEnd = SparkListenerApplicationEnd(1000L)
+    writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
+    writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
+    writer.close()
 
-  test("Simple replay with compression") {
-    allCompressionCodecs.foreach { codec =>
-      testSimpleReplay(Some(codec))
+    val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath)
+    val logData = fileSystem.open(logFilePath)
+    val eventMonster = new EventMonster(conf)
+    try {
+      val replayer = new ReplayListenerBus()
+      replayer.addListener(eventMonster)
+      replayer.replay(logData, SPARK_VERSION)
+    } finally {
+      logData.close()
     }
+    assert(eventMonster.loggedEvents.size === 2)
+    assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJson(applicationStart))
+    assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJson(applicationEnd))
   }
 
   // This assumes the correctness of EventLoggingListener
@@ -61,7 +77,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
 
   // This assumes the correctness of EventLoggingListener
   test("End-to-end replay with compression") {
-    allCompressionCodecs.foreach { codec =>
+    CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
       testApplicationReplay(Some(codec))
     }
   }
@@ -72,31 +88,6 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
    * ----------------- */
 
   /**
-   * Test simple replaying of events.
-   */
-  private def testSimpleReplay(codecName: Option[String] = None) {
-    val logFilePath = Utils.getFilePath(testDir, "events.txt")
-    val codec = codecName.map(getCompressionCodec)
-    val fstream = fileSystem.create(logFilePath)
-    val cstream = codec.map(_.compressedOutputStream(fstream)).getOrElse(fstream)
-    val writer = new PrintWriter(cstream)
-    val applicationStart = SparkListenerApplicationStart("Greatest App (N)ever", None,
-      125L, "Mickey")
-    val applicationEnd = SparkListenerApplicationEnd(1000L)
-    writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationStart))))
-    writer.println(compact(render(JsonProtocol.sparkEventToJson(applicationEnd))))
-    writer.close()
-    val replayer = new ReplayListenerBus(Seq(logFilePath), fileSystem, codec)
-    val conf = EventLoggingListenerSuite.getLoggingConf(logFilePath, codecName)
-    val eventMonster = new EventMonster(conf)
-    replayer.addListener(eventMonster)
-    replayer.replay()
-    assert(eventMonster.loggedEvents.size === 2)
-    assert(eventMonster.loggedEvents(0) === JsonProtocol.sparkEventToJson(applicationStart))
-    assert(eventMonster.loggedEvents(1) === JsonProtocol.sparkEventToJson(applicationEnd))
-  }
-
-  /**
    * Test end-to-end replaying of events.
    *
    * This test runs a few simple jobs with event logging enabled, and compares each emitted
@@ -105,6 +96,8 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
    */
   private def testApplicationReplay(codecName: Option[String] = None) {
     val logDirPath = Utils.getFilePath(testDir, "test-replay")
+    fileSystem.mkdirs(logDirPath)
+
     val conf = EventLoggingListenerSuite.getLoggingConf(logDirPath, codecName)
     val sc = new SparkContext("local-cluster[2,1,512]", "Test replay", conf)
 
@@ -116,22 +109,21 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     sc.stop()
 
     // Prepare information needed for replay
-    val codec = codecName.map(getCompressionCodec)
     val applications = fileSystem.listStatus(logDirPath)
     assert(applications != null && applications.size > 0)
-    val eventLogDir = applications.sortBy(_.getAccessTime).last
-    assert(eventLogDir.isDir)
-    val logFiles = fileSystem.listStatus(eventLogDir.getPath)
-    assert(logFiles != null && logFiles.size > 0)
-    val logFile = logFiles.find(_.getPath.getName.startsWith("EVENT_LOG_"))
-    assert(logFile.isDefined)
-    val logFilePath = logFile.get.getPath
+    val eventLog = applications.sortBy(_.getModificationTime).last
+    assert(eventLog.isFile)
 
     // Replay events
-    val replayer = new ReplayListenerBus(Seq(logFilePath), fileSystem, codec)
+    val (logData, version) = EventLoggingListener.openEventLog(eventLog.getPath(), fileSystem)
     val eventMonster = new EventMonster(conf)
-    replayer.addListener(eventMonster)
-    replayer.replay()
+    try {
+      val replayer = new ReplayListenerBus()
+      replayer.addListener(eventMonster)
+      replayer.replay(logData, version)
+    } finally {
+      logData.close()
+    }
 
     // Verify the same events are replayed in the same order
     assert(sc.eventLogger.isDefined)
@@ -154,7 +146,9 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
    */
   private class EventMonster(conf: SparkConf)
     extends EventLoggingListener("test", "testdir", conf) {
-    logger.close()
+
+    override def start() { }
+
   }
 
   private def getCompressionCodec(codecName: String) = {
