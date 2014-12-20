@@ -65,7 +65,7 @@ class GMMExpectationMaximizationSuite extends FunSuite with MLlibTestSparkContex
     
     val gmm = new GaussianMixtureModelEM()
       .setK(2)
-      .setInitialGmm(initialGmm)
+      .setInitialModel(initialGmm)
       .run(data)
       
     assert(gmm.weight(0) ~== Ew(0) absTol 1E-3)

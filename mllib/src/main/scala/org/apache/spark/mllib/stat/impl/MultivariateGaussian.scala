@@ -17,8 +17,7 @@
 
 package org.apache.spark.mllib.stat.impl
 
-import breeze.linalg.{DenseVector => BreezeVector, DenseMatrix => BreezeMatrix}
-import breeze.linalg.{Transpose, det, pinv}
+import breeze.linalg.{DenseVector => DBV, DenseMatrix => DBM, Transpose, det, pinv}
 
 /** 
    * Utility class to implement the density function for multivariate Gaussian distribution.
@@ -26,12 +25,13 @@ import breeze.linalg.{Transpose, det, pinv}
    * so this class is here so-as to not introduce a new dependency in Spark.
    */
 private[mllib] class MultivariateGaussian(
-    val mu: BreezeVector[Double], 
-    val sigma: BreezeMatrix[Double]) extends Serializable {
+    val mu: DBV[Double], 
+    val sigma: DBM[Double]) extends Serializable {
   private val sigmaInv2 = pinv(sigma) * -0.5
   private val U = math.pow(2.0 * math.Pi, -mu.length / 2.0) * math.pow(det(sigma), -0.5)
     
-  def pdf(x: BreezeVector[Double]): Double = {
+  /** Returns density of this multivariate Gaussian at given point, x */
+  def pdf(x: DBV[Double]): Double = {
     val delta = x - mu
     val deltaTranspose = new Transpose(delta)
     U * math.exp(deltaTranspose * sigmaInv2 * delta)
