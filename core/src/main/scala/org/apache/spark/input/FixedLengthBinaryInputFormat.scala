@@ -34,8 +34,7 @@ private[spark] object FixedLengthBinaryInputFormat {
 
   /** Retrieves the record length property from a Hadoop configuration */
   def getRecordLength(context: JobContext): Int = {
-    SparkHadoopUtil.get.getConfigurationFromJobContext(context).
-      get(RECORD_LENGTH_PROPERTY).toInt
+    SparkHadoopUtil.get.getConfigurationFromJobContext(context).get(RECORD_LENGTH_PROPERTY).toInt
   }
 }
 
