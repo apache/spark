@@ -97,7 +97,7 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
    * @return prediction using the trained model.
    */
   def predict(testData: Vector): Vector = {
-    Vectors.dense(computeValues(testData))
+    Vectors.dense(computeValues(testData, topology.length - 1))
   }
 
   /**
@@ -110,10 +110,35 @@ class ArtificialNeuralNetworkModel private[mllib](val weights: Vector, val topol
     testDataRDD.map(T => (T, predict(T)) )
   }
 
-  private def computeValues(testData: Vector): Array[Double] = {
+  private def computeValues(testData: Vector, layer: Int): Array[Double] = {
+    require(layer >=0 && layer < topology.length)
     /* TODO: BDM */
     val outputs = forwardRun(testData.toBreeze.toDenseVector.toDenseMatrix.t, weightMatrices, bias)
-    outputs(topology.length - 1).toArray
+    outputs(layer).toArray
+  }
+
+  /**
+   * Returns output values of a given layer for a single data point using the trained model.
+   *
+   * @param testData RDD represents a single data point.
+   * @param layer index of a network layer
+   * @return output of a given layer.
+   */
+  def output(testData: Vector, layer: Int): Vector = {
+    Vectors.dense(computeValues(testData, layer))
+  }
+
+  /**
+   * Returns weights for a given layer in vector form.
+   *
+   * @param index index of a layer: ranges from 1 until topology.length.
+   *              (no weights for the 0 layer)
+   * @return weights.
+   */
+  def weightsByLayer(index: Int): Vector = {
+    require(index > 0 && index < topology.length)
+    val layerWeight = BDV.vertcat(weightMatrices(index).toDenseVector, bias(index).toDenseVector)
+    Vectors.dense(layerWeight.toArray)
   }
 }
 
@@ -373,13 +398,11 @@ private[ann] trait NeuralHelper {
     require(weights.size == weightCount)
     val weightsCopy = weights.toArray
     val weightMatrices = new Array[BDM[Double]](topology.size)
+    val bias = new Array[BDM[Double]](topology.size)
     var offset = 0
     for(i <- 1 until topology.size){
       weightMatrices(i) = new BDM[Double](topology(i), topology(i - 1), weightsCopy, offset)
       offset += topology(i) * topology(i - 1)
-    }
-    val bias = new Array[BDM[Double]](topology.size)
-    for(i <- 1 until topology.size){
       /* TODO: BDM */
       bias(i) = (new BDV[Double](weightsCopy, offset, 1, topology(i))).toDenseMatrix.t
       offset += topology(i)
@@ -396,8 +419,6 @@ private[ann] trait NeuralHelper {
         wu(offset until (offset + weightMatricesUpdate(i).rows)) := weightMatricesUpdate(i)(::, j)
         offset += weightMatricesUpdate(i).rows
       }
-    }
-    for(i <- 1 until topology.size){
       wu(offset until offset + topology(i)) := biasUpdate(i)(::, 0)
       offset += topology(i)
     }
