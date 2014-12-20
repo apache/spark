@@ -238,7 +238,6 @@ class SchemaRDD(
    * {{{
    *   schemaRDD.limit(10)
    * }}}
-   * o
    * @group Query
    */
   def limit(limitNum: Int): SchemaRDD =
