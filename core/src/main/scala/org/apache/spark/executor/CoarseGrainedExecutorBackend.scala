@@ -46,13 +46,10 @@ private[spark] class CoarseGrainedExecutorBackend(
   var executor: Executor = null
   var driver: RpcEndPointRef = null
 
-  preStart()
-
-  def preStart() {
+  def notifyDriver(driverUrl: String, selfRef: RpcEndPointRef): Unit = {
     logInfo("Connecting to driver: " + driverUrl)
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
-    driver = rpcEnv.setupEndPointRefByUrl(driverUrl)
-    driver.send(RegisterExecutor(executorId, hostPort, cores))
+    driver = env.rpcEnv.setupEndPointRefByUrl(driverUrl)
+    driver.send(RegisterExecutor(executorId, hostPort, cores, selfRef))
   }
 
   override def remoteConnectionTerminated(remoteAddress: String): Unit = {
@@ -60,7 +57,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     System.exit(1)
   }
 
-  override def receive(sender: RpcEndPointRef, message: Any): Unit = message match {
+  override def receive(sender: RpcEndPointRef) = {
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
       val (hostname, _) = Utils.parseHostPort(hostPort)
@@ -122,12 +119,12 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val port = executorConf.getInt("spark.executor.port", 0)
       val (fetcher, _) = AkkaUtils.createActorSystem(
         "driverPropsFetcher", hostname, port, executorConf, new SecurityManager(executorConf))
-      val driver = fetcher.actorSelection(driverUrl)
+      val driverActor = fetcher.actorSelection(driverUrl)
       val timeout = AkkaUtils.askTimeout(executorConf)
-      val fut = Patterns.ask(driver, RetrieveSparkProps, timeout)
+      val fut = Patterns.ask(driverActor, RetrieveSparkProps, timeout)
       val props = Await.result(fut, timeout).asInstanceOf[Seq[(String, String)]] ++
         Seq[(String, String)](("spark.app.id", appId))
-      fetcher.shutdown()
+      //fetcher.shutdown()
 
       // Create SparkEnv using properties we fetched from the driver.
       val driverConf = new SparkConf().setAll(props)
@@ -138,12 +135,15 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val boundPort = env.conf.getInt("spark.executor.port", 0)
       assert(boundPort != 0)
 
-      // Start the CoarseGrainedExecutorBackend actor.
+      // Start the CoarseGrainedExecutorBackend RPC end point.
       val sparkHostPort = hostname + ":" + boundPort
-      env.actorSystem.actorOf(
-        Props(classOf[CoarseGrainedExecutorBackend],
-          driverUrl, executorId, sparkHostPort, cores, env),
-        name = "Executor")
+      val rpc = new CoarseGrainedExecutorBackend(driverUrl, executorId, sparkHostPort, cores, env)
+      val rpcRef = env.rpcEnv.setupEndPoint("Executor", rpc)
+
+      rpc.notifyDriver(driverUrl, rpcRef)
+
+      // Notify the driver of our existence.
+
       workerUrl.foreach { url =>
         env.actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
       }

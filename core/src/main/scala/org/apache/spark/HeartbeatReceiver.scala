@@ -39,7 +39,7 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 private[spark] class HeartbeatReceiver(scheduler: TaskScheduler, conf: SparkConf)
   extends RpcEndPoint with Logging {
 
-  override def receive(sender: RpcEndPointRef, message: Any): Unit = message match {
+  override def receive(sender: RpcEndPointRef) = {
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>
       val response = HeartbeatResponse(
         !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId))

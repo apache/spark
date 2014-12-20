@@ -71,7 +71,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor with ActorLogReceive {
     override protected def log = CoarseGrainedSchedulerBackend.this.log
-    private val addressToExecutorId = new HashMap[Address, String]
+    private val addressToExecutorId = new HashMap[String, String]
 
     override def preStart() {
       // Listen for remote client disconnection events, since they don't go through Akka's watch()
@@ -84,19 +84,19 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     }
 
     def receiveWithLogging = {
-      case RegisterExecutor(executorId, hostPort, cores) =>
+      case RegisterExecutor(executorId, hostPort, cores, executorRpcRef) =>
         Utils.checkHostPort(hostPort, "Host port expected " + hostPort)
         if (executorDataMap.contains(executorId)) {
-          sender ! RegisterExecutorFailed("Duplicate executor ID: " + executorId)
+          executorRpcRef.send(RegisterExecutorFailed("Duplicate executor ID: " + executorId))
         } else {
-          logInfo("Registered executor: " + sender + " with ID " + executorId)
-          sender ! RegisteredExecutor
+          logInfo("Registered executor: " + executorRpcRef + " with ID " + executorId)
+          executorRpcRef.send(RegisteredExecutor)
 
-          addressToExecutorId(sender.path.address) = executorId
+          addressToExecutorId(executorRpcRef.address) = executorId
           totalCoreCount.addAndGet(cores)
           totalRegisteredExecutors.addAndGet(1)
           val (host, _) = Utils.parseHostPort(hostPort)
-          val data = new ExecutorData(sender, sender.path.address, host, cores, cores)
+          val data = new ExecutorData(executorRpcRef, executorRpcRef.address, host, cores, cores)
           // This must be synchronized because variables mutated
           // in this block are read when requesting executors
           CoarseGrainedSchedulerBackend.this.synchronized {
@@ -129,7 +129,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
       case KillTask(taskId, executorId, interruptThread) =>
         executorDataMap.get(executorId) match {
           case Some(executorInfo) =>
-            executorInfo.executorActor ! KillTask(taskId, executorId, interruptThread)
+            executorInfo.executorActor.send(KillTask(taskId, executorId, interruptThread))
           case None =>
             // Ignoring the task kill since the executor is not registered.
             logWarning(s"Attempted to kill task $taskId for unknown executor $executorId.")
@@ -142,7 +142,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
       case StopExecutors =>
         logInfo("Asking each executor to shut down")
         for ((_, executorData) <- executorDataMap) {
-          executorData.executorActor ! StopExecutor
+          executorData.executorActor.send(StopExecutor)
         }
         sender ! true
 
@@ -150,11 +150,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
         removeExecutor(executorId, reason)
         sender ! true
 
-      case DisassociatedEvent(_, address, _) =>
-        addressToExecutorId.get(address).foreach(removeExecutor(_,
-          "remote Akka client disassociated"))
+//      case DisassociatedEvent(_, address, _) =>
+//        addressToExecutorId.get(address).foreach(removeExecutor(_,
+//          "remote Akka client disassociated"))
 
       case RetrieveSparkProps =>
+        println("sending the other side properties RetrieveSparkProps")
         sender ! sparkProperties
     }
 
@@ -195,7 +196,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
         else {
           val executorData = executorDataMap(task.executorId)
           executorData.freeCores -= scheduler.CPUS_PER_TASK
-          executorData.executorActor ! LaunchTask(new SerializableBuffer(serializedTask))
+          executorData.executorActor.send(LaunchTask(new SerializableBuffer(serializedTask)))
         }
       }
     }

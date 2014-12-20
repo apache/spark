@@ -32,7 +32,7 @@ private[spark] case object TriggerThreadDump
 private[spark]
 class ExecutorActor(executorId: String) extends RpcEndPoint with Logging {
 
-  override def receive(sender: RpcEndPointRef, message: Any): Unit = message match {
+  override def receive(sender: RpcEndPointRef) = {
     case TriggerThreadDump =>
       sender.send(Utils.getThreadDump())
   }

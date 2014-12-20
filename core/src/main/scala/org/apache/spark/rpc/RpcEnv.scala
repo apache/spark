@@ -29,6 +29,9 @@ import org.apache.spark.{Logging, SparkException, SparkConf}
 import org.apache.spark.util.AkkaUtils
 
 
+/**
+ * An RPC environment.
+ */
 abstract class RpcEnv {
   def setupEndPoint(name: String, endpoint: RpcEndPoint): RpcEndPointRef
 
@@ -42,8 +45,12 @@ abstract class RpcEnv {
 }
 
 
+/**
+ * An end point for the RPC that defines what functions to trigger given a message.
+ */
 abstract class RpcEndPoint {
-  def receive(sender: RpcEndPointRef, message: Any): Unit
+
+  def receive(sender: RpcEndPointRef): PartialFunction[Any, Unit]
 
   def remoteConnectionTerminated(remoteAddress: String): Unit = {
     // By default, do nothing.
@@ -51,12 +58,18 @@ abstract class RpcEndPoint {
 }
 
 
+/**
+ * A reference for a remote [[RpcEndPoint]].
+ */
 abstract class RpcEndPointRef {
 
   def address: String
 
   def askWithReply[T](message: Any): T
 
+  /**
+   * Send a message to the remote end point asynchronously. No delivery guarantee is provided.
+   */
   def send(message: Any): Unit
 }
 
@@ -75,7 +88,11 @@ class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
           endpoint.remoteConnectionTerminated(remoteAddress.toString)
 
         case message: Any =>
-          endpoint.receive(new AkkaRpcEndPointRef(sender(), conf), message)
+          println("got message " + name + " : " + message)
+          val pf = endpoint.receive(new AkkaRpcEndPointRef(sender(), conf))
+          if (pf.isDefinedAt(message)) {
+            pf.apply(message)
+          }
       }
     }), name = name)
     new AkkaRpcEndPointRef(actorRef, conf)
@@ -140,4 +157,6 @@ class AkkaRpcEndPointRef(private[rpc] val actorRef: ActorRef, conf: SparkConf)
   override def send(message: Any): Unit = {
     actorRef ! message
   }
+
+  override def toString: String = s"${getClass.getSimpleName}($actorRef)"
 }
