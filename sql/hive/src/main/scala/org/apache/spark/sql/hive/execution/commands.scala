@@ -52,6 +52,8 @@ case class DropTable(
   override def run(sqlContext: SQLContext) = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
+    hiveContext.tryUncacheQuery(hiveContext.table(tableName))
+    hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
     hiveContext.catalog.unregisterTable(None, tableName)
     Seq.empty[Row]
@@ -82,6 +84,19 @@ case class AddFile(path: String) extends RunnableCommand {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     hiveContext.runSqlHive(s"ADD FILE $path")
     hiveContext.sparkContext.addFile(path)
+    Seq.empty[Row]
+  }
+}
+
+case class CreateMetastoreDataSource(
+    tableName: String,
+    provider: String,
+    options: Map[String, String]) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext) = {
+    val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    hiveContext.catalog.createDataSourceTable(tableName, provider, options)
+
     Seq.empty[Row]
   }
 }

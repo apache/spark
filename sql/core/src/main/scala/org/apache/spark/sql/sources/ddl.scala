@@ -72,9 +72,9 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")
    */
   protected lazy val createTable: Parser[LogicalPlan] =
-    CREATE ~ TEMPORARY ~ TABLE ~> ident ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
-      case tableName ~ provider ~ opts =>
-        CreateTableUsing(tableName, provider, opts)
+    (CREATE ~> TEMPORARY.? <~ TABLE) ~ ident ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
+      case temp ~ tableName ~ provider ~ opts =>
+        CreateTableUsing(tableName, provider, temp.isDefined, opts)
     }
 
   protected lazy val options: Parser[Map[String, String]] =
@@ -85,12 +85,11 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected lazy val pair: Parser[(String, String)] = ident ~ stringLit ^^ { case k ~ v => (k,v) }
 }
 
-private[sql] case class CreateTableUsing(
-    tableName: String,
-    provider: String,
-    options: Map[String, String]) extends RunnableCommand {
-
-  def run(sqlContext: SQLContext) = {
+object ResolvedDataSource {
+  def apply(
+      sqlContext: SQLContext,
+      provider: String,
+      options: Map[String, String]): ResolvedDataSource = {
     val loader = Utils.getContextOrSparkClassLoader
     val clazz: Class[_] = try loader.loadClass(provider) catch {
       case cnf: java.lang.ClassNotFoundException =>
@@ -102,7 +101,27 @@ private[sql] case class CreateTableUsing(
     val dataSource = clazz.newInstance().asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
     val relation = dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
 
-    sqlContext.baseRelationToSchemaRDD(relation).registerTempTable(tableName)
+    new ResolvedDataSource(clazz, relation)
+  }
+}
+
+private[sql] case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
+
+private[sql] case class CreateTableUsing(
+    tableName: String,
+    provider: String,
+    temporary: Boolean,
+    options: Map[String, String]) extends Command
+
+private [sql] case class CreateTempTableUsing(
+    tableName: String,
+    provider: String,
+    options: Map[String, String])  extends RunnableCommand {
+
+  def run(sqlContext: SQLContext) = {
+    val resolved = ResolvedDataSource(sqlContext, provider, options)
+
+    sqlContext.baseRelationToSchemaRDD(resolved.relation).registerTempTable(tableName)
     Seq.empty
   }
 }
