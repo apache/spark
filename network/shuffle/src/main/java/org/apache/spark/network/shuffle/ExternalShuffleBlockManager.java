@@ -63,7 +63,7 @@ public class ExternalShuffleBlockManager {
   public ExternalShuffleBlockManager(TransportConf conf) {
     this(conf, Executors.newSingleThreadExecutor(
         // Add `spark` prefix because it will run in NM in Yarn mode.
-        NettyUtils.createThreadFactory("spark-shuffle-directory-clean")));
+        NettyUtils.createThreadFactory("spark-shuffle-directory-cleaner")));
   }
 
   // Allows tests to have more control over when directories are cleaned up.
