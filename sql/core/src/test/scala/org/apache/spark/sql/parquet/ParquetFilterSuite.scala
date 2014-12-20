@@ -28,11 +28,14 @@ import org.apache.spark.sql.{QueryTest, SQLConf, SchemaRDD}
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
  *
- * Notice that `!(a cmp b)` are always transformed to its negated form `a cmp' b` by the
- * `BooleanSimplification` optimization rule whenever possible. As a result, predicate `!(a < 1)`
- * results a `GtEq` filter predicate rather than a `Not`.
+ * NOTE:
  *
- * @todo Add test cases for `IsNull` and `IsNotNull` after merging PR #3367
+ * 1. `!(a cmp b)` is always transformed to its negated form `a cmp' b` by the
+ *    `BooleanSimplification` optimization rule whenever possible. As a result, predicate `!(a < 1)`
+ *    results in a `GtEq` filter predicate rather than a `Not`.
+ *
+ * 2. `Tuple1(Option(x))` is used together with `AnyVal` types like `Int` to ensure the inferred
+ *    data type is nullable.
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest {
   val sqlContext = TestSQLContext
@@ -85,7 +88,12 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
   }
 
   test("filter pushdown - boolean") {
-    withParquetRDD((true :: false :: Nil).map(Tuple1.apply)) { rdd =>
+    withParquetRDD((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { rdd =>
+      checkFilterPushdown(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.Boolean]])(Seq.empty[Row])
+      checkFilterPushdown(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.Boolean]]) {
+        Seq(Row(true), Row(false))
+      }
+
       checkFilterPushdown(rdd, '_1)('_1 === true, classOf[Eq[java.lang.Boolean]])(true)
       checkFilterPushdown(rdd, '_1)('_1 !== true, classOf[Operators.NotEq[java.lang.Boolean]]) {
         false
