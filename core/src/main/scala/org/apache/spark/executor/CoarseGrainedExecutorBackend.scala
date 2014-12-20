@@ -33,7 +33,7 @@ import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 
-protected[spark] class CoarseGrainedExecutorBackend(
+private[spark] class CoarseGrainedExecutorBackend(
     driverUrl: String,
     executorId: String,
     hostPort: String,
@@ -99,15 +99,15 @@ protected[spark] class CoarseGrainedExecutorBackend(
   }
 }
 
-trait CoarseGrainedExecutorBackendRunner extends Logging {
-  def run[T <: CoarseGrainedExecutorBackend](
+private[spark] object CoarseGrainedExecutorBackend extends Logging {
+
+  private def run(
       driverUrl: String,
       executorId: String,
       hostname: String,
       cores: Int,
       appId: String,
-      workerUrl: Option[String],
-      klass: Class[T]) {
+      workerUrl: Option[String]) {
 
     SignalLogger.register(log)
 
@@ -148,10 +148,6 @@ trait CoarseGrainedExecutorBackendRunner extends Logging {
       env.actorSystem.awaitTermination()
     }
   }
-}
-
-protected[spark] object CoarseGrainedExecutorBackend
-  extends CoarseGrainedExecutorBackendRunner {
 
   def main(args: Array[String]) {
     args.length match {
@@ -165,11 +161,9 @@ protected[spark] object CoarseGrainedExecutorBackend
       // NB: These arguments are provided by SparkDeploySchedulerBackend (for standalone mode)
       // and CoarseMesosSchedulerBackend (for mesos mode).
       case 5 =>
-        run(args(0), args(1), args(2), args(3).toInt, args(4), None,
-          classOf[CoarseGrainedExecutorBackend])
+        run(args(0), args(1), args(2), args(3).toInt, args(4), None)
       case x if x > 5 =>
-        run(args(0), args(1), args(2), args(3).toInt, args(4), Some(args(5)),
-          classOf[CoarseGrainedExecutorBackend])
+        run(args(0), args(1), args(2), args(3).toInt, args(4), Some(args(5)))
     }
   }
 }

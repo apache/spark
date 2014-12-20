@@ -33,6 +33,7 @@ import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
 import com.google.common.collect.{BiMap, HashBiMap}
+import org.apache.mesos.protobuf.ByteString
 
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
@@ -52,7 +53,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   with MScheduler
   with Logging {
 
-  val MAX_SLAVE_FAILURES = 2     // Blacklist a slave after this many failures
+  val MAX_SLAVE_FAILURES = 2 // Blacklist a slave after this many failures
 
   // Lock used to wait for scheduler to be registered
   var isRegistered = false
@@ -62,13 +63,13 @@ private[spark] class CoarseMesosSchedulerBackend(
   var driver: SchedulerDriver = null
 
   // Maximum number of cores to acquire (TODO: we'll need more flexible controls here)
-  val maxCores = conf.get("spark.cores.max",  Int.MaxValue.toString).toInt
+  val maxCores = conf.get("spark.cores.max", Int.MaxValue.toString).toInt
 
   // Cores we have acquired with each Mesos task ID
   val coresByTaskId = new HashMap[Int, Int]
   var totalCoresAcquired = 0
 
-  val slaveIdsWithExecutors = new HashSet[String]
+  val slaveIdsWithTasks = new HashSet[String]
 
   val taskIdToSlaveId = HashBiMap.create[Int, String]()
 
@@ -96,6 +97,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     synchronized {
       new Thread("CoarseMesosSchedulerBackend driver") {
         setDaemon(true)
+
         override def run() {
           val scheduler = CoarseMesosSchedulerBackend.this
           val fwInfo = FrameworkInfo.newBuilder().setUser(sc.sparkUser).setName(sc.appName).build()
@@ -114,12 +116,27 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
   }
 
-  def createCommand(offer: Offer, numCores: Int): CommandInfo = {
-    val executorSparkHome = conf.getOption("spark.mesos.executor.home")
-      .orElse(sc.getSparkHome())
-      .getOrElse {
-        throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
-      }
+  // Set the environment variable through a command prefix
+  // to append to the existing value of the variable
+  lazy val prefixEnv = conf.getOption("spark.executor.extraLibraryPath").map { p =>
+    Utils.libraryPathEnvPrefix(Seq(p))
+  }.getOrElse("")
+
+  lazy val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
+    SparkEnv.driverActorSystemName,
+    conf.get("spark.driver.host"),
+    conf.get("spark.driver.port"),
+    CoarseGrainedSchedulerBackend.ACTOR_NAME)
+
+  lazy val executorUri = conf.get("spark.executor.uri", null)
+
+  lazy val executorSparkHome = conf.getOption("spark.mesos.executor.home")
+    .orElse(sc.getSparkHome())
+    .getOrElse {
+    throw new SparkException("Executor Spark home `spark.mesos.executor.home` is not set!")
+  }
+
+  def createBaseCommand(offer: Offer): CommandInfo.Builder = {
     val environment = Environment.newBuilder()
     val extraClassPath = conf.getOption("spark.executor.extraClassPath")
     extraClassPath.foreach { cp =>
@@ -128,22 +145,10 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
     val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
 
-    // Set the environment variable through a command prefix
-    // to append to the existing value of the variable
-    val prefixEnv = conf.getOption("spark.executor.extraLibraryPath").map { p =>
-      Utils.libraryPathEnvPrefix(Seq(p))
-    }.getOrElse("")
-
     environment.addVariables(
       Environment.Variable.newBuilder()
         .setName("SPARK_EXECUTOR_OPTS")
         .setValue(extraJavaOpts)
-        .build())
-
-    environment.addVariables(
-      Environment.Variable.newBuilder()
-        .setName("spark.shuffle.service.enabled")
-        .setValue(conf.getBoolean("spark.shuffle.service.enabled", false).toString)
         .build())
 
     sc.executorEnvs.foreach { case (key, value) =>
@@ -154,32 +159,56 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
-    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
-      SparkEnv.driverActorSystemName,
-      conf.get("spark.driver.host"),
-      conf.get("spark.driver.port"),
-      CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
-    val uri = conf.get("spark.executor.uri", null)
-    if (uri == null) {
+    if (executorUri != null) {
+      command.addUris(CommandInfo.URI.newBuilder().setValue(executorUri))
+    }
+
+    command
+  }
+
+  def createTaskCommandString(offer: Offer, numCores: Int) = {
+    if (executorUri == null) {
       val runScript = new File(executorSparkHome, "./bin/spark-class").getCanonicalPath
-      command.setValue(
-        ("%s \"%s\" org.apache.spark.executor.CoarseGrainedMesosExecutorBackend " +
+      ("%s \"%s\" org.apache.spark.executor.CoarseGrainedExecutorBackend " +
         "%s %s %s %d %s").format(
           prefixEnv, runScript, driverUrl, offer.getSlaveId.getValue,
-          offer.getHostname, numCores, appId))
+          offer.getHostname, numCores, appId)
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
-      val basename = uri.split('/').last.split('.').head
+      val basename = executorUri.split('/').last.split('.').head
+      ("cd %s*; %s " +
+        "./bin/spark-class org.apache.spark.executor.CoarseGrainedExecutorBackend " +
+        "%s %s %s %d %s").format(
+          basename, prefixEnv, driverUrl, offer.getSlaveId.getValue,
+          offer.getHostname, numCores, appId)
+    }
+  }
+
+  def createTaskCommand(offer: Offer, numCores: Int): CommandInfo = {
+    val command = createBaseCommand(offer)
+    command.setValue(createTaskCommandString(offer, numCores)).build
+  }
+
+  def createExecutorCommand(offer: Offer): CommandInfo = {
+    val command = createBaseCommand(offer)
+
+    if (executorUri == null) {
+      val runScript = new File(executorSparkHome, "./bin/spark-class").getCanonicalPath
+      command.setValue(
+        ("%s \"%s\" org.apache.spark.executor.CoarseGrainedMesosExecutorBackend").format(
+          prefixEnv, runScript))
+    } else {
+      // Grab everything to the first '.'. We'll use that and '*' to
+      // glob the directory "correctly".
+      val basename = executorUri.split('/').last.split('.').head
       command.setValue(
         ("cd %s*; %s " +
-          "./bin/spark-class org.apache.spark.executor.CoarseGrainedMesosExecutorBackend " +
-          "%s %s %s %d %s").format(
-            basename, prefixEnv, driverUrl, offer.getSlaveId.getValue,
-            offer.getHostname, numCores, appId))
-      command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
+          "./bin/spark-class org.apache.spark.executor.CoarseGrainedMesosExecutorBackend ")
+          .format(basename, prefixEnv))
     }
+
     command.build()
   }
 
@@ -206,6 +235,25 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   override def reregistered(d: SchedulerDriver, masterInfo: MasterInfo) {}
 
+  lazy val shuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
+
+  lazy val shuffleServiceMem = if (shuffleServiceEnabled) {
+    conf.getInt("spark.mesos.shuffle.service.mem", 1024)
+  } else {
+    0
+  }
+
+  lazy val shuffleServiceCpu = if (shuffleServiceEnabled) {
+    conf.getInt("spark.mesos.shuffle.service.cpu", 1)
+  } else {
+    0
+  }
+
+  def minMemRequired = MemoryUtils.calculateTotalMemory(sc) + shuffleServiceMem.toDouble
+
+
+  def minCpuRequired = 1 + shuffleServiceCpu
+
   /**
    * Method called by Mesos to offer resources on slaves. We respond by launching an executor,
    * unless we've already launched more than we wanted to.
@@ -219,29 +267,43 @@ private[spark] class CoarseMesosSchedulerBackend(
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
         if (taskIdToSlaveId.size < executorLimit.getOrElse(Int.MaxValue) &&
-            totalCoresAcquired < maxCores &&
-            mem >= MemoryUtils.calculateTotalMemory(sc) &&
-            cpus >= 1 &&
-            failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
-            !slaveIdsWithExecutors.contains(slaveId)) {
+          totalCoresAcquired < maxCores &&
+          mem >= minMemRequired &&
+          cpus >= minCpuRequired &&
+          failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
+          !slaveIdsWithTasks.contains(slaveId)) {
           // Launch an executor on the slave
           val cpusToUse = math.min(cpus, maxCores - totalCoresAcquired)
           totalCoresAcquired += cpusToUse
           val taskId = newMesosTaskId()
           taskIdToSlaveId(taskId) = slaveId
-          slaveIdsWithExecutors += slaveId
+          slaveIdsWithTasks += slaveId
           coresByTaskId(taskId) = cpusToUse
-          val task = MesosTaskInfo.newBuilder()
+          val builder = MesosTaskInfo.newBuilder()
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
             .setSlaveId(offer.getSlaveId)
-            .setCommand(createCommand(offer, cpusToUse + extraCoresPerSlave))
             .setName("Task " + taskId)
-            .addResources(createResource("cpus", cpusToUse))
-            .addResources(createResource("mem",
+
+          if (!shuffleServiceEnabled) {
+            builder.setCommand(createTaskCommand(offer, cpusToUse + extraCoresPerSlave))
+              .addResources(createResource("cpus", cpusToUse))
+              .addResources(createResource("mem",
               MemoryUtils.calculateTotalMemory(sc)))
-            .build()
+          } else {
+            builder.setExecutor(
+              ExecutorInfo.newBuilder()
+                .addResources(createResource("cpus", shuffleServiceCpu))
+                .addResources(createResource("mem", shuffleServiceMem))
+                .setCommand(createExecutorCommand(offer)).build()
+            )
+
+            builder.setData(
+              ByteString.copyFrom(
+                Utils.serialize(createTaskCommandString(offer, cpusToUse - shuffleServiceCpu))))
+          }
+
           d.launchTasks(
-            Collections.singleton(offer.getId),  Collections.singletonList(task), filters)
+            Collections.singleton(offer.getId), Collections.singletonList(builder.build()), filters)
         } else {
           d.declineOffer(offer.getId)
         }
@@ -281,7 +343,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     synchronized {
       if (isFinished(state)) {
         val slaveId = taskIdToSlaveId(taskId)
-        slaveIdsWithExecutors -= slaveId
+        slaveIdsWithTasks -= slaveId
         taskIdToSlaveId -= taskId
         pendingRemovedSlaveIds -= slaveId
         // Remove the cores we have remembered for this task, if it's in the hashmap
@@ -294,7 +356,7 @@ private[spark] class CoarseMesosSchedulerBackend(
           failuresBySlaveId(slaveId) = failuresBySlaveId.getOrElse(slaveId, 0) + 1
           if (failuresBySlaveId(slaveId) >= MAX_SLAVE_FAILURES) {
             logInfo("Blacklisting Mesos slave " + slaveId + " due to too many failures; " +
-                "is Spark installed on it?")
+              "is Spark installed on it?")
           }
         }
         driver.reviveOffers() // In case we'd rejected everything before but have now lost a node
@@ -319,9 +381,9 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def slaveLost(d: SchedulerDriver, slaveId: SlaveID) {
     logInfo("Mesos slave lost: " + slaveId.getValue)
     synchronized {
-      if (slaveIdsWithExecutors.contains(slaveId.getValue)) {
+      if (slaveIdsWithTasks.contains(slaveId.getValue)) {
         // Note that the slave ID corresponds to the executor ID on that slave
-        slaveIdsWithExecutors -= slaveId.getValue
+        slaveIdsWithTasks -= slaveId.getValue
         val slaveIdToTaskId: BiMap[String, Int] = taskIdToSlaveId.inverse()
         if (slaveIdToTaskId.contains(slaveId.getValue)) {
           taskIdToSlaveId.remove(slaveIdToTaskId.get(slaveId.getValue))

@@ -100,14 +100,14 @@ class CoarseMesosSchedulerBackendSuite extends FunSuite with LocalSparkContext w
     mesosOffers2.add(createOffer(2, minMem, minCpu))
     backend.resourceOffers(driver, mesosOffers)
     // Verify we didn't launch any new executor
-    assert(backend.slaveIdsWithExecutors.size.equals(1))
+    assert(backend.slaveIdsWithTasks.size.equals(1))
     assert(backend.pendingRemovedSlaveIds.size.equals(1))
 
     backend.doRequestTotalExecutors(2)
     backend.resourceOffers(driver, mesosOffers)
-    assert(backend.slaveIdsWithExecutors.size.equals(2))
+    assert(backend.slaveIdsWithTasks.size.equals(2))
     backend.slaveLost(driver, SlaveID.newBuilder().setValue("s1").build())
-    assert(backend.slaveIdsWithExecutors.size.equals(1))
+    assert(backend.slaveIdsWithTasks.size.equals(1))
     assert(backend.pendingRemovedSlaveIds.size.equals(0))
   }
 }

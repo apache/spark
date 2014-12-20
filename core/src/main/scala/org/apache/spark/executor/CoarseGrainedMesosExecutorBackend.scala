@@ -17,57 +17,173 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.executor.{CoarseGrainedExecutorBackendRunner, CoarseGrainedExecutorBackend}
-import org.apache.spark.SecurityManager
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, Logging, SecurityManager}
+import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver, MesosNativeLibrary}
+import org.apache.spark.util.{Utils, SignalLogger}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.mesos.Protos._
 import org.apache.spark.deploy.worker.StandaloneWorkerShuffleService
-import akka.actor.ActorSystem
+import scala.collection.JavaConversions._
+import scala.io.Source
+import java.io.PrintWriter
 
-private[spark] class CoarseGrainedMesosExecutorBackend(
-    driverUrl: String,
-    executorId: String,
-    hostPort: String,
-    cores: Int,
-    sparkProperties: Seq[(String, String)],
-    actorSystem: ActorSystem)
-  extends CoarseGrainedExecutorBackend(driverUrl, executorId, hostPort,
-                                       cores, sparkProperties, actorSystem) {
+/**
+ * The Coarse grained Mesos executor backend is responsible for launching the shuffle service
+ * and the CoarseGrainedExecutorBackend actor.
+ * This is assuming the scheduler detected that the shuffle service is enabled and launches
+ * this class instead of CoarseGrainedExecutorBackend directly.
+ */
+private[spark] class CoarseGrainedMesosExecutorBackend(val sparkConf: SparkConf)
+  extends MesosExecutor
+  with Logging {
 
-  lazy val shuffleService: StandaloneWorkerShuffleService = {
-    val executorConf = new SparkConf
-    new StandaloneWorkerShuffleService(executorConf, new SecurityManager(executorConf))
+  private var shuffleService: StandaloneWorkerShuffleService = null
+  private var driver: ExecutorDriver = null
+  private var executorProc: Process = null
+  private var taskId: TaskID = null
+
+  override def registered(
+      driver: ExecutorDriver,
+      executorInfo: ExecutorInfo,
+      frameworkInfo: FrameworkInfo,
+      slaveInfo: SlaveInfo) {
+
+    this.driver = driver
+    logInfo("Coarse Grain Mesos Executor '" + executorInfo.getExecutorId.getValue +
+            "' is registered.")
+
+    if (shuffleService == null) {
+      sparkConf.set("spark.shuffle.service.enabled", "true")
+      shuffleService = new StandaloneWorkerShuffleService(sparkConf, new SecurityManager(sparkConf))
+      shuffleService.startIfEnabled()
+    }
   }
 
-  override def preStart() {
-    shuffleService.startIfEnabled()
-    super.preStart()
+  override def launchTask(d: ExecutorDriver, taskInfo: TaskInfo) {
+    if (executorProc != null) {
+      logError("Received LaunchTask while executor is already running")
+      val status = TaskStatus.newBuilder()
+        .setState(TaskState.TASK_FAILED)
+        .setMessage("Received LaunchTask while executor is already running")
+        .build()
+      d.sendStatusUpdate(status)
+      return
+    }
+
+    // We are launching the CoarseGrainedExecutorBackend via subprocess
+    // because the backend is designed to run in its own process.
+    // Since it's a shared class we are preserving the existing behavior
+    // and launching it as a subprocess here.
+    val command = Utils.deserialize[String](taskInfo.getData().toByteArray)
+    val pb = new ProcessBuilder(command)
+
+    val currentEnvVars = pb.environment()
+    for (variable <- taskInfo.getExecutor.getCommand.getEnvironment.getVariablesList()) {
+      currentEnvVars.put(variable.getName, variable.getValue)
+    }
+
+    executorProc = pb.start()
+
+    new Thread("stderr reader for task " + taskInfo.getTaskId.getValue) {
+      override def run() {
+        for (line <- Source.fromInputStream(executorProc.getErrorStream).getLines) {
+          System.err.println(line)
+        }
+      }
+    }.start()
+
+    new Thread("stdout reader for task " + taskInfo.getTaskId.getValue) {
+      override def run() {
+        for (line <- Source.fromInputStream(executorProc.getInputStream).getLines) {
+          System.out.println(line)
+        }
+      }
+    }.start()
+
+    new Thread("process waiter for mesos executor for task " + taskInfo.getTaskId.getValue) {
+      override def run() {
+        executorProc.waitFor()
+        val (state, msg) = if (executorProc.exitValue() == 0) {
+          (TaskState.TASK_FINISHED, "")
+        } else {
+          (TaskState.TASK_FAILED, "Exited with status: " + executorProc.exitValue().toString)
+        }
+
+        // We leave the shuffle service running after the task.
+        cleanup(state, msg)
+      }
+    }.start()
+
+    taskId = taskInfo.getTaskId
   }
 
-  override def postStop() {
-    shuffleService.stop()
-    super.postStop()
+  override def error(d: ExecutorDriver, message: String) {
+    logError("Error from Mesos: " + message)
+  }
+
+  override def killTask(d: ExecutorDriver, t: TaskID) {
+    if (executorProc == null) {
+      logError("Received killtask when no process is initialized")
+      return
+    }
+
+    // We only destroy the coarse grained executor but leave the shuffle
+    // service running for other tasks that might be reusing this executor.
+    // This is no-op if the process already finished.
+    executorProc.destroy()
+    cleanup(TaskState.TASK_KILLED)
+  }
+
+  def cleanup(state: TaskState, msg: String = ""): Unit = synchronized {
+    if (driver == null) {
+      logError("Cleaning up process but driver is not initialized")
+      return
+    }
+
+    if (executorProc == null) {
+      logDebug("Process is not started or already cleaned up")
+      return
+    }
+
+    assert(taskId != null)
+
+    driver.sendStatusUpdate(TaskStatus.newBuilder()
+      .setState(state)
+      .setMessage(msg)
+      .setTaskId(taskId)
+      .build)
+
+    executorProc = null
+    taskId = null
+  }
+
+  override def reregistered(d: ExecutorDriver, p2: SlaveInfo) {}
+
+  override def disconnected(d: ExecutorDriver) {}
+
+  override def frameworkMessage(d: ExecutorDriver, data: Array[Byte]) {}
+
+  override def shutdown(d: ExecutorDriver) {
+    if (executorProc != null) {
+      killTask(d, taskId)
+    }
+
+    if (shuffleService != null) {
+      shuffleService.stop()
+      shuffleService = null
+    }
   }
 }
 
-private[spark] object CoarseGrainedMesosExecutorBackend
-  extends CoarseGrainedExecutorBackendRunner {
-
+private[spark] object CoarseGrainedMesosExecutorBackend extends Logging {
   def main(args: Array[String]) {
-    args.length match {
-      case x if x < 5 =>
-        System.err.println(
-          // Worker url is used in spark standalone mode to enforce fate-sharing with worker
-          "Usage: CoarseGrainedMesosExecutorBackend <driverUrl> <executorId> <hostname> " +
-            "<cores> <appid> [<workerUrl>] ")
-        System.exit(1)
-
-      // NB: These arguments are provided by CoarseMesosSchedulerBackend (for mesos mode).
-      case 5 =>
-        run(args(0), args(1), args(2), args(3).toInt, args(4), None,
-          classOf[CoarseGrainedMesosExecutorBackend])
-      case x if x > 5 =>
-        run(args(0), args(1), args(2), args(3).toInt, args(4), Some(args(5)),
-          classOf[CoarseGrainedMesosExecutorBackend])
+    SignalLogger.register(log)
+    SparkHadoopUtil.get.runAsSparkUser { () =>
+      MesosNativeLibrary.load()
+      val sparkConf = new SparkConf()
+      // Create a new Executor and start it running
+      val runner = new CoarseGrainedMesosExecutorBackend(sparkConf)
+      new MesosExecutorDriver(runner).run()
     }
   }
 }
