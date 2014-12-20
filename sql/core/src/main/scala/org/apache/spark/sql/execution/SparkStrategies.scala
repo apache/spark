@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.sources.{CreateTempTableUsing, CreateTableUsing}
 import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -312,6 +313,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   case object CommandStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
+
+      case CreateTableUsing(tableName, provider, true, options) =>
+        ExecutedCommand(
+          CreateTempTableUsing(tableName, provider, options)) :: Nil
+
+      case CreateTableUsing(tableName, provider, false, options) =>
+        sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
+
       case logical.SetCommand(kv) =>
         Seq(ExecutedCommand(execution.SetCommand(kv, plan.output)))
       case logical.ExplainCommand(logicalPlan, extended) =>
