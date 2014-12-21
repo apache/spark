@@ -112,7 +112,7 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
     val applications = fileSystem.listStatus(logDirPath)
     assert(applications != null && applications.size > 0)
     val eventLog = applications.sortBy(_.getModificationTime).last
-    assert(eventLog.isFile)
+    assert(!eventLog.isDir)
 
     // Replay events
     val (logData, version) = EventLoggingListener.openEventLog(eventLog.getPath(), fileSystem)
