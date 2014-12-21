@@ -1211,7 +1211,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                    Token("TOK_SUBQUERY_OP",
                        Token("in", Nil) :: Nil) ::
                        query :: exprsn :: Nil) =>
-      SubqueryExpression(nodeToExpr(exprsn),nodeToPlan(query))
+      In(nodeToExpr(exprsn), Seq(SubqueryExpression(nodeToPlan(query))))
     // This code is adapted from
     // /ql/src/java/org/apache/hadoop/hive/ql/parse/TypeCheckProcFactory.java#L223
     case ast: ASTNode if numericAstTypes contains ast.getType =>

@@ -22,18 +22,17 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 /**
  * Evaluates whether `subquery` result contains `value`. 
  * For example : 'SELECT * FROM src a WHERE a.key in (SELECT b.key FROM src b)'
- * @param value   In the above example 'a.key' is 'value'
  * @param subquery  In the above example 'SELECT b.key FROM src b' is 'subquery'
  */
-case class SubqueryExpression(value: Expression, subquery: LogicalPlan) extends Expression {
+case class SubqueryExpression(subquery: LogicalPlan) extends Expression {
 
   type EvaluatedType = Any
-  def dataType = value.dataType
-  override def foldable = value.foldable
-  def nullable = value.nullable
-  override def toString = s"SubqueryExpression($value, $subquery)"
-  override lazy val resolved = childrenResolved
-  def children = value :: Nil
+  def dataType = subquery.output.head.dataType
+  override def foldable = false
+  def nullable = true
+  override def toString = s"SubqueryExpression($subquery)"
+  override lazy val resolved = false
+  def children = Nil
   override def eval(input: Row): Any =
     sys.error(s"SubqueryExpression eval should not be called since it will be converted"
         + " to join query")

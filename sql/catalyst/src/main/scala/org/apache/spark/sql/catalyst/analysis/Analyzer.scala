@@ -444,23 +444,29 @@ class Analyzer(catalog: Catalog,
   object SubQueryExpressions extends Rule[LogicalPlan] {
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p: LogicalPlan if !p.childrenResolved => p
       case filter @ Filter(conditions, child) =>
-        val subqueryExprs = new scala.collection.mutable.ArrayBuffer[SubqueryExpression]()
+        val subqueryExprs = new scala.collection.mutable.ArrayBuffer[In]()
         val nonSubQueryConds = new scala.collection.mutable.ArrayBuffer[Expression]()
-        val transformedConds = conditions.transform{
-          // Replace with dummy
-          case s @ SubqueryExpression(exp,subquery) =>
+        conditions.collect {
+          case s @ In(exp, Seq(SubqueryExpression(subquery))) =>
             subqueryExprs += s
+        }
+        val transformedConds = conditions.transform {
+          // Replace with dummy
+          case s @ In(exp,Seq(SubqueryExpression(subquery))) =>
             Literal(true)
         }
         if (subqueryExprs.size == 1) {
           val subqueryExpr = subqueryExprs.remove(0)
           createLeftSemiJoin(
-            child, subqueryExpr.value,
-            subqueryExpr.subquery, transformedConds)
+            child,
+            subqueryExpr.value,
+            subqueryExpr.list(0).asInstanceOf[SubqueryExpression].subquery,
+            transformedConds)
         } else if (subqueryExprs.size > 1) {
           // Only one subquery expression is supported.
-          throw new TreeNodeException(filter, "Only 1 SubQuery expression is supported.")
+          throw new TreeNodeException(filter, "Only one SubQuery expression is supported.")
         } else {
           filter
         }
@@ -471,10 +477,10 @@ class Analyzer(catalog: Catalog,
      * And combine the subquery conditions and parent query conditions.
      */ 
     def createLeftSemiJoin(left: LogicalPlan,
-        value: Expression, subquery: LogicalPlan,
+        value: Expression,
+        subquery: LogicalPlan,
         parentConds: Expression) : LogicalPlan = {
-      val (transformedPlan, subqueryConds) = transformAndGetConditions(
-          value, subquery)
+      val (transformedPlan, subqueryConds) = transformAndGetConditions(value, subquery)
       // Unify the parent query conditions and subquery conditions and add these as join conditions
       val unifyConds = And(parentConds, subqueryConds)
       Join(left, transformedPlan, LeftSemi, Some(unifyConds))
@@ -489,45 +495,49 @@ class Analyzer(catalog: Catalog,
       val expr = new scala.collection.mutable.ArrayBuffer[Expression]()
       val transformedPlan = subquery transform {
         case project @ Project(projectList, f @ Filter(condition, child)) =>
-          // Don't support more than 1 item in select list of subquery
+          // Don't support more than one item in select list of subquery
           if(projectList.size > 1) {
-            throw new TreeNodeException(project, "SubQuery can contain only 1 item in Select List")
+            throw new TreeNodeException(
+                project,
+                "SubQuery can contain only one item in Select List")
           }
           val resolvedChild = ResolveRelations(child)
           // Add the expressions to the projections which are used as filters in subquery
-          val toBeAddedExprs = f.references.filter(
-              a=>resolvedChild.resolve(a.name, resolver) != None && !projectList.contains(a))
-          val cache = collection.mutable.Map[String, String]()
+          val toBeAddedExprs = f.references.filter{a =>
+            resolvedChild.resolve(a.name, resolver) != None && !project.output.contains(a)}
+          val nameToExprMap = collection.mutable.Map[String, Alias]()
           // Create aliases for all projection expressions.
           val witAliases = (projectList ++ toBeAddedExprs).zipWithIndex.map {
             case (exp, index) => 
-              cache.put(exp.name, s"sqc$index")
+              nameToExprMap.put(exp.name, Alias(exp, s"sqc$index")())
               Alias(exp, s"sqc$index")()
           }
           // Replace the condition column names with alias names.
-          val transformedConds = condition.transform{
+          val transformedConds = condition.transform {
             case a: Attribute if resolvedChild.resolve(a.name, resolver) != None =>
-              UnresolvedAttribute("subquery." + cache.get(a.name).get)
+              nameToExprMap.get(a.name).get.toAttribute
           }
           // Join the first projection column of subquery to the main query and add as condition
           // TODO : We can avoid if the parent condition already has this condition.
-          expr += EqualTo(value, UnresolvedAttribute("subquery.sqc0"))
+          expr += EqualTo(value, witAliases(0).toAttribute)
           expr += transformedConds
           Project(witAliases, child)
         case project @ Project(projectList, child) =>
-          // Don't support more than 1 item in select list of subquery
+          // Don't support more than one item in select list of subquery
           if(projectList.size > 1) {
-            throw new TreeNodeException(project, "SubQuery can contain only 1 item in Select List")
+            throw new TreeNodeException(
+                project,
+                "SubQuery can contain only one item in Select List")
           }
           // Case 1  Uncorelated queries
           // Create aliases for all projection expressions.
           val witAliases = projectList.zipWithIndex.map{case (x,y) => Alias(x, s"sqc$y")()}
           // Take the first projection expression as join condition.
-          expr += EqualTo(value, UnresolvedAttribute("subquery.sqc0"))
+          expr += EqualTo(value, witAliases(0).toAttribute)
           Project(witAliases, child)
       }
       // Add alias to Subquery as 'subquery'
-      (Subquery("subquery", transformedPlan), expr.reduce(And(_, _)))
+      (transformedPlan, expr.reduce(And(_, _)))
     }
   }
 }
