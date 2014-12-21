@@ -504,7 +504,7 @@ class Analyzer(catalog: Catalog,
           val resolvedChild = ResolveRelations(child)
           // Add the expressions to the projections which are used as filters in subquery
           val toBeAddedExprs = f.references.filter{a =>
-            resolvedChild.resolve(a.name, resolver) != None && !project.output.contains(a)}
+            resolvedChild.resolve(a.name, resolver) != None && !project.outputSet.contains(a)}
           val nameToExprMap = collection.mutable.Map[String, Alias]()
           // Create aliases for all projection expressions.
           val witAliases = (projectList ++ toBeAddedExprs).zipWithIndex.map {
