@@ -13,12 +13,31 @@
   <form method="get">
   {{ form.db_id }}
   <input type="submit" class="btn btn-default" value="Run!"><br>
+  <div id='ace_container'>
   {{ form.sql(rows=10) }}
+  </div>
   </form>
   {{ results|safe }}
 {% endblock %}
 {% block tail %}
   {{ super() }}
+  <script src="{{ url_for('static', filename='ace.js') }}"></script>
+  <script src="{{ url_for('static', filename='mode-sql.js') }}"></script>
+  <script src="{{ url_for('static', filename='theme-crimson_editor.js') }}"></script>
   <script>
+    $( document ).ready(function() {
+        var editor = ace.edit("sql");
+        var textarea = $('textarea[name="sql"]').hide();
+        editor.setTheme("ace/theme/crimson_editor");
+        editor.setOptions({
+            minLines: 3,
+            maxLines: Infinity,
+        });
+        editor.getSession().setMode("ace/mode/sql");
+        editor.getSession().on('change', function(){
+            textarea.val(editor.getSession().getValue());
+        });
+        editor.focus(); 
+    });
   </script>
 {% endblock %}
