@@ -650,7 +650,11 @@ private[spark] class Master(
   def createApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    new ApplicationInfo(now, newApplicationId(date), desc, date, driver, defaultCores)
+    val appId = newApplicationId(date)
+    val logPath = EventLoggingListener.getLogPath(desc.eventLogFile.get, appId)
+    val newAppDesc = new ApplicationDescription(desc.name, desc.maxCores, desc.memoryPerSlave,
+      desc.command, desc.appUiUrl, Some(logPath))
+    new ApplicationInfo(now, appId, newAppDesc, date, driver, defaultCores)
   }
 
   def registerApplication(app: ApplicationInfo): Unit = {
