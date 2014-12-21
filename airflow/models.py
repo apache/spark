@@ -543,7 +543,9 @@ class TaskInstance(Base):
                         if task.email_on_failure and task.email:
                             self.email_alert(e, is_retry=False)
                 except Exception as e2:
-                    logging.error('Failed to send email to: ' + task.email)
+                    logging.error(
+                        'Failed to send email to: ' + str(task.email))
+                    logging.error(str(e2))
 
                 session.merge(self)
                 session.commit()

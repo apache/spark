@@ -146,6 +146,11 @@ def send_email(to, subject, html_content):
     SMTP_USER = getconf().get('smtp', 'SMTP_USER')
     SMTP_PASSWORD = getconf().get('smtp', 'SMTP_PASSWORD')
 
+    if type(to) is type(list()):
+        to = ','.join(to)
+
+    if ';' in to:
+        to = to.replace(';', ',')
 
     msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
@@ -157,6 +162,6 @@ def send_email(to, subject, html_content):
     s.starttls()
     if SMTP_USER and SMTP_PASSWORD:
         s.login(SMTP_USER, SMTP_PASSWORD)
-    logging.info("Sent an altert email to " + to)
+    logging.info("Sent an altert email to " + str(to))
     s.sendmail(SMTP_MAIL_FROM, to, msg.as_string())
     s.quit()
