@@ -9,7 +9,10 @@ from flask.ext.admin.form import DateTimePickerWidget
 from flask.ext.admin import base
 from flask.ext.admin.contrib.sqla import ModelView
 from flask import request
-from wtforms import Form, DateTimeField, SelectField, TextField, TextAreaField
+from wtforms import Form, DateTimeField, SelectField, TextAreaField
+from cgi import escape
+from wtforms.compat import text_type
+import wtforms
 
 from pygments import highlight
 from pygments.lexers import PythonLexer, SqlLexer, BashLexer
@@ -42,6 +45,23 @@ ck = Blueprint(
 app.register_blueprint(ck, url_prefix='/ck')
 app.jinja_env.add_extension("chartkick.ext.charts")
 
+
+class AceEditorWidget(wtforms.widgets.TextArea):
+    """
+    Renders an ACE code editor.
+    """
+    def __call__(self, field, **kwargs):
+        kwargs.setdefault('id', field.id)
+        html = '''
+        <div id="{el_id}" style="height:100px;">{contents}</div>
+        <textarea id="{el_id}_ace" name="{form_name}" style="display:none;visibility:hidden;">
+        </textarea>
+        '''.format(
+            el_id=kwargs.get('id', field.id),
+            contents=escape(text_type(field._value())),
+            form_name=field.id,
+        )
+        return wtforms.widgets.core.HTMLString(html)
 
 # Date filter form needed for gantt and graph view
 class DateTimeForm(Form):
@@ -81,6 +101,21 @@ class HomeView(AdminIndexView):
         dags = sorted(dagbag.dags.values(), key=lambda dag: dag.dag_id)
         return self.render('airflow/dags.html', dags=dags)
 admin = Admin(app, name="Airflow", index_view=HomeView(name='DAGs'))
+admin.add_link(
+    base.MenuLink(
+        category='Tools',
+        name='Query',
+        url='/admin/airflow/query'))
+admin.add_link(
+    base.MenuLink(
+        category='Docs',
+        name='@readthedocs.org',
+        url='http://airflow.readthedocs.org/en/latest/'))
+admin.add_link(
+    base.MenuLink(
+        category='Docs',
+        name='Github',
+        url='https://github.com/mistercrunch/Airflow'))
 
 
 class Airflow(BaseView):
@@ -95,13 +130,14 @@ class Airflow(BaseView):
     @expose('/query')
     def query(self):
         session = settings.Session()
-        dbs = session.query(models.DatabaseConnection)
+        dbs = session.query(models.DatabaseConnection).order_by(
+            models.DatabaseConnection.db_id)
         db_choices = [(db.db_id, db.db_id) for db in dbs]
         db_id_str = request.args.get('db_id')
         sql = request.args.get('sql')
         class QueryForm(Form):
             db_id = SelectField("Layout", choices=db_choices)
-            sql = TextAreaField("Execution date")
+            sql = TextAreaField("SQL", widget=AceEditorWidget())
         data = {
             'db_id': db_id_str,
             'sql': sql,
@@ -115,8 +151,15 @@ class Airflow(BaseView):
             try:
                 df = hook.get_pandas_df(sql)
                 has_data = len(df) > 0
+                df = df.fillna('')
                 results = df.to_html(
-                    classes="table table-striped table-bordered model-list")
+                    classes=(
+                        "table initialism table-striped "
+                        "table-bordered table-condensed"),
+                    index=False,
+                    na_rep='',
+
+                ) if has_data else ''
             except Exception as e:
                 flash(str(e), 'error')
                 error = True
@@ -130,7 +173,8 @@ class Airflow(BaseView):
         return self.render(
             'airflow/query.html', form=form,
             title="Query",
-            results=results, has_data=has_data)
+            results=results or '',
+            has_data=has_data)
 
     @expose('/chart')
     def chart(self):
@@ -782,20 +826,6 @@ class ReloadTaskView(BaseView):
         return redirect(url_for('index'))
 admin.add_view(ReloadTaskView(name='Reload DAGs', category="Admin"))
 
-if __name__ == "__main__":
-    logging.info("Starting the web server.")
-    app.run(debug=True)
-
-admin.add_link(
-    base.MenuLink(
-        category='Docs',
-        name='@readthedocs.org',
-        url='http://airflow.readthedocs.org/en/latest/'))
-admin.add_link(
-    base.MenuLink(
-        category='Docs',
-        name='Github',
-        url='https://github.com/mistercrunch/Airflow'))
 
 
 def label_link(v, c, m, p):
@@ -823,5 +853,5 @@ class ChartModelView(ModelView):
     }
 mv = ChartModelView(
     models.Chart, session,
-    name="Charts", category="Admin")
+    name="Charts", category="Tools")
 admin.add_view(mv)

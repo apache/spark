@@ -1139,4 +1139,4 @@ class Chart(Base):
     show_sql = Column(Boolean, default=True)
     height = Column(Integer, default=600)
     default_params = Column(String(5000), default="{}")
-    db = relationship("DatabaseConnection")
+    db = relationship("DatabaseConnection", order_by="DatabaseConnection.db_id")

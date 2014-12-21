@@ -39,13 +39,23 @@ pre code {
     overflow-wrap: normal;
     white-space: pre;
 }
-textarea {
-    width: 100%;
-    margin-top:2px;
-}
 input, select {
     margin: 0px;
 }
 .code {
     font-family: monospace;
+}
+
+#sql {
+    border: 1px solid #CCC;
+    border-radius: 5px;
+}
+.ace_editor div {
+    font: inherit!important
+}
+#ace_container {
+    margin: 10px 0px;
+}
+#sql_ace {
+    visibility: hidden;
 }

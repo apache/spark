@@ -4,7 +4,6 @@ TODO
 * User login / security
 * Tree view: remove dummy root node
 * Backfill wizard
-* Fix datepicker
 
 #### Write unittests
 * For each existing operator
