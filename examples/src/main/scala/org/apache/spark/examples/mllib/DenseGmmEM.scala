@@ -30,14 +30,15 @@ import org.apache.spark.mllib.linalg.Vectors
  */
 object DenseGmmEM {
   def main(args: Array[String]): Unit = {
-    if (args.length != 3) {
+    if (args.length < 3) {
       println("usage: DenseGmmEM <input file> <k> <convergenceTol>")
     } else {
-      run(args(0), args(1).toInt, args(2).toDouble)
+      val maxIterations = if (args.length > 3) args(3).toInt else 100
+      run(args(0), args(1).toInt, args(2).toDouble, maxIterations)
     }
   }
 
-  private def run(inputFile: String, k: Int, convergenceTol: Double) {
+  private def run(inputFile: String, k: Int, convergenceTol: Double, maxIterations: Int) {
     val conf = new SparkConf().setAppName("Gaussian Mixture Model EM example")
     val ctx  = new SparkContext(conf)
     
@@ -48,6 +49,7 @@ object DenseGmmEM {
     val clusters = new GaussianMixtureModelEM()
       .setK(k)
       .setConvergenceTol(convergenceTol)
+      .setMaxIterations(maxIterations)
       .run(data)
     
     for (i <- 0 until clusters.k) {

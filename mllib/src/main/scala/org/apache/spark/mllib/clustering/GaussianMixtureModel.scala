@@ -28,7 +28,7 @@ import org.apache.spark.mllib.stat.impl.MultivariateGaussian
  * are drawn from each Gaussian i=1..k with probability w(i); mu(i) and sigma(i) are 
  * the respective mean and covariance for each Gaussian distribution i=1..k. 
  * 
- * @param weight Weights for each Gaussian distribution in the mixture, where mu(i) is
+ * @param weight Weights for each Gaussian distribution in the mixture, where weight(i) is
  *               the weight for Gaussian i, and weight.sum == 1
  * @param mu Means for each Gaussian in the mixture, where mu(i) is the mean for Gaussian i
  * @param sigma Covariance maxtrix for each Gaussian in the mixture, where sigma(i) is the
