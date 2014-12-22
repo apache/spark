@@ -73,15 +73,13 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
           // It does not appear that the ql client for the metastore has a way to enumerate all the
           // SerDe properties directly...
-          val method = classOf[Table].getDeclaredMethod("getSerdeInfo")
-          method.setAccessible(true)
-          val serdeInfo = method.invoke(table).asInstanceOf[SerDeInfo]
+          val options = table.getTTable.getSd.getSerdeInfo.getParameters.toMap
 
           val resolvedRelation =
             ResolvedDataSource(
               hive,
               table.getProperty("spark.sql.sources.provider"),
-              serdeInfo.getParameters.toMap)
+              options)
 
           LogicalRelation(resolvedRelation.relation)
         }
