@@ -31,7 +31,7 @@ import org.apache.spark.mllib.linalg.Vectors
 object DenseGmmEM {
   def main(args: Array[String]): Unit = {
     if (args.length < 3) {
-      println("usage: DenseGmmEM <input file> <k> <convergenceTol>")
+      println("usage: DenseGmmEM <input file> <k> <convergenceTol> [maxIterations]")
     } else {
       val maxIterations = if (args.length > 3) args(3).toInt else 100
       run(args(0), args(1).toInt, args(2).toDouble, maxIterations)
