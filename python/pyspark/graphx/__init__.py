@@ -19,8 +19,8 @@
 Python bindings for GraphX.
 """
 
-from pyspark.graphx.vertex import VertexRDD, Vertex, VertexId
+from pyspark.graphx.vertex import VertexRDD, VertexId
 from pyspark.graphx.edge import Edge, EdgeRDD
 from pyspark.graphx.graph import Graph
 
-__all__ = ["PartitioningStrategy", "VertexRDD", "EdgeRDD", "Graph", "Vertex", "Edge"]
+__all__ = ["PartitioningStrategy", "VertexRDD", "EdgeRDD", "Graph", "Edge"]

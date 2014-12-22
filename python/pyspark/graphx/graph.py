@@ -164,13 +164,5 @@ class Graph(object):
     def stronglyConnectedComponents(self, iterations):
         return
 
-    def vertexProgram(self):
+    def pregel(self, initial_message, vertex_program, send_message, combine_message):
         return
-
-    def initialMessage(self):
-        return
-
-    def sendMessage(self):
-        return
-
-

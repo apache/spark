@@ -18,14 +18,12 @@
 """
 Python bindings for GraphX.
 """
-import operator
+import os
 import itertools
 from tempfile import NamedTemporaryFile
-from build.py4j.java_collections import MapConverter, ListConverter
+# from build.py4j.java_collections import MapConverter, ListConverter
 from pyspark.accumulators import PStatsParam
-from pyspark.graphx.partitionstrategy import PartitionStrategy
 from pyspark import RDD, StorageLevel
-from pyspark.rdd import PipelinedRDD
 from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer, \
     NoOpSerializer
 from pyspark.traceback_utils import SCCallSiteSync

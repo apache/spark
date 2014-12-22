@@ -46,8 +46,12 @@ from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, PickleSerializer
 
+from pyspark.graphx.vertex import VertexRDD
+from pyspark.graphx.edge import EdgeRDD, Edge
+from pyspark.graphx.graph import Graph
+
 __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
-    "Vertex", "Edge", "Graph",
-]
+    "VertexRDD", "EdgeRDD", "Edge", "Graph"]
+

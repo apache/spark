@@ -119,6 +119,7 @@ trait JavaVertexRDDLike[VD, This <: JavaVertexRDDLike[VD, This, R],
 
   def fromEdges[ED: ClassTag, VD: ClassTag]
     (edges: EdgeRDDImpl[ED, VD], numPartitions: Int, defaultVal: VD): JavaVertexRDD[VD] = {
-    JavaVertexRDD(VertexRDD.fromEdges[VD](EdgeRDD.fromEdges[ED, VD](edges), numPartitions, defaultVal))
+    JavaVertexRDD(VertexRDD.fromEdges[VD]
+      (EdgeRDD.fromEdges[ED, VD](edges), numPartitions, defaultVal))
   }
 }

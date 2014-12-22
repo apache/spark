@@ -108,6 +108,6 @@ public class JavaAPISuite implements Serializable {
         JavaEdgeRDD<String, String> javaEdgeRDD =
                 JavaEdgeRDD.apply(javaRDD, classTag, classTag);
 
-        assertEquals(javaEdgeRDD.count(), 4L);
+        assertEquals(javaEdgeRDD.count().longValue(), 4L);
     }
 }
