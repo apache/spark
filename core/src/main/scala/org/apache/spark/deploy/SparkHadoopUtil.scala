@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
 import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 
@@ -182,6 +183,17 @@ class SparkHadoopUtil extends Logging {
     val statisticsDataClass =
       Class.forName("org.apache.hadoop.fs.FileSystem$Statistics$StatisticsData")
     statisticsDataClass.getDeclaredMethod(methodName)
+  }
+
+  /**
+   * Using reflection to get the Configuration from JobContext/TaskAttemptContext. If we directly
+   * call `JobContext/TaskAttemptContext.getConfiguration`, it will generate different byte codes
+   * for Hadoop 1.+ and Hadoop 2.+ because JobContext/TaskAttemptContext is class in Hadoop 1.+
+   * while it's interface in Hadoop 2.+.
+   */
+  def getConfigurationFromJobContext(context: JobContext): Configuration = {
+    val method = context.getClass.getMethod("getConfiguration")
+    method.invoke(context).asInstanceOf[Configuration]
   }
 }
 
