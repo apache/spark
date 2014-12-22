@@ -257,6 +257,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Distinct(partial = false,
           execution.Distinct(partial = true, planLater(child))) :: Nil
 
+      case logical.SortPartitions(sortExprs, child) =>
+        // This sort only sorts tuples within a partition. Its requiredDistribution will be
+        // an UnspecifiedDistribution.
+        execution.Sort(sortExprs, global = false, planLater(child)) :: Nil
       case logical.Sort(sortExprs, global, child) if sqlContext.externalSortEnabled =>
         execution.ExternalSort(sortExprs, global, planLater(child)):: Nil
       case logical.Sort(sortExprs, global, child) =>
