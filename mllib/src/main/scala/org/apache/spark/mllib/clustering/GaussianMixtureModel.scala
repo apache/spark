@@ -22,6 +22,7 @@ import breeze.linalg.{DenseVector => BreezeVector}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.stat.impl.MultivariateGaussian
+import org.apache.spark.mllib.util.MLUtils
 
 /**
  * Multivariate Gaussian Mixture Model (GMM) consisting of k Gaussians, where points 
@@ -43,7 +44,7 @@ class GaussianMixtureModel(
   def k: Int = weight.length
 
   /** Maps given points to their cluster indices. */
-  def predictLabels(points: RDD[Vector]): RDD[Int] = {
+  def predict(points: RDD[Vector]): RDD[Int] = {
     val responsibilityMatrix = predictMembership(points, mu, sigma, weight, k)
     responsibilityMatrix.map(r => r.indexOf(r.max))
   }
@@ -70,11 +71,6 @@ class GaussianMixtureModel(
     }
   }
   
-  // We use "eps" as the minimum likelihood density for any given point
-  // in every cluster; this prevents any divide by zero conditions for
-  // outlier points.
-  private val eps = math.pow(2.0, -52)
-  
   /**
    * Compute the partial assignments for each vector
    */
@@ -83,7 +79,9 @@ class GaussianMixtureModel(
       dists: Array[MultivariateGaussian],
       weights: Array[Double],
       k: Int): Array[Double] = {
-    val p = weights.zip(dists).map { case (weight, dist) => eps + weight * dist.pdf(pt) }
+    val p = weights.zip(dists).map {
+      case (weight, dist) => MLUtils.EPSILON + weight * dist.pdf(pt)
+    }
     val pSum = p.sum 
     for (i <- 0 until k) {
       p(i) /= pSum

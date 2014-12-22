@@ -23,6 +23,7 @@ import breeze.linalg.{DenseVector => BreezeVector, DenseMatrix => BreezeMatrix, 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors}
 import org.apache.spark.mllib.stat.impl.MultivariateGaussian
+import org.apache.spark.mllib.util.MLUtils
 
 /**
  * This class performs expectation maximization for multivariate Gaussian
@@ -41,15 +42,13 @@ import org.apache.spark.mllib.stat.impl.MultivariateGaussian
  * is considered to have occurred.
  * @param maxIterations The maximum number of iterations to perform
  */
-class GaussianMixtureModelEM private (
+class GaussianMixtureEM private (
     private var k: Int, 
     private var convergenceTol: Double, 
     private var maxIterations: Int) extends Serializable {
   
   /** A default instance, 2 Gaussians, 100 iterations, 0.01 log-likelihood threshold */
   def this() = this(2, 0.01, 100)
-  
-  
   
   // number of samples per cluster to use when initializing Gaussians
   private val nSamples = 5
@@ -190,8 +189,6 @@ class GaussianMixtureModelEM private (
 
 // companion class to provide zero constructor for ExpectationSum
 private object ExpectationSum {
-  private val eps = math.pow(2.0, -52)
-  
   def zero(k: Int, d: Int): ExpectationSum = {
     new ExpectationSum(0.0, Array.fill(k)(0.0), 
       Array.fill(k)(BreezeVector.zeros(d)), Array.fill(k)(BreezeMatrix.zeros(d,d)))
@@ -203,7 +200,9 @@ private object ExpectationSum {
       weights: Array[Double], 
       dists: Array[MultivariateGaussian])
       (sums: ExpectationSum, x: BreezeVector[Double]): ExpectationSum = {
-    val p = weights.zip(dists).map { case (weight, dist) => eps + weight * dist.pdf(x) }
+    val p = weights.zip(dists).map {
+      case (weight, dist) => MLUtils.EPSILON + weight * dist.pdf(x)
+    }
     val pSum = p.sum
     sums.logLikelihood += math.log(pSum)
     val xxt = x * new Transpose(x)

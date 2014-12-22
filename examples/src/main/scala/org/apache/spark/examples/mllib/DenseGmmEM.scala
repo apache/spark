@@ -18,7 +18,7 @@
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.mllib.clustering.GaussianMixtureModelEM
+import org.apache.spark.mllib.clustering.GaussianMixtureEM
 import org.apache.spark.mllib.linalg.Vectors
 
 /**
@@ -46,7 +46,7 @@ object DenseGmmEM {
       Vectors.dense(line.trim.split(' ').map(_.toDouble))
     }.cache()
       
-    val clusters = new GaussianMixtureModelEM()
+    val clusters = new GaussianMixtureEM()
       .setK(k)
       .setConvergenceTol(convergenceTol)
       .setMaxIterations(maxIterations)
@@ -58,7 +58,7 @@ object DenseGmmEM {
     }
     
     println("Cluster labels (first <= 100):")
-    val clusterLabels = clusters.predictLabels(data)
+    val clusterLabels = clusters.predict(data)
     clusterLabels.take(100).foreach { x =>
       print(" " + x)
     }
