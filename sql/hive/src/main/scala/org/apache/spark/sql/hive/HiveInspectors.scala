@@ -105,9 +105,9 @@ import scala.collection.JavaConversions._
   {{{
    public interface PrimitiveObjectInspector {
      // Java Primitives (java.lang.Integer, java.lang.String etc.)
-     Object getPrimitiveWritableObject(Object o); 
+     Object getPrimitiveJavaObject(Object o);
      // Writables (hadoop.io.IntWritable, hadoop.io.Text etc.)
-     Object getPrimitiveJavaObject(Object o); 
+     Object getPrimitiveWritableObject(Object o);
      // ObjectInspector only inspect the `writable` always return true, we need to check it
      // before invoking the methods above.
      boolean preferWritable();
