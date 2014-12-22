@@ -38,10 +38,7 @@ object BroadcastTest {
     val slices = if (args.length > 0) args(0).toInt else 2
     val num = if (args.length > 1) args(1).toInt else 1000000
 
-    val arr1 = new Array[Int](num)
-    for (i <- 0 until arr1.length) {
-      arr1(i) = i
-    }
+    val arr1 = (0 until num).toArray
 
     for (i <- 0 until 3) {
       println("Iteration " + i)
