@@ -12,30 +12,32 @@
   <h2>DAG: {{ dag.dag_id }}</h2>
   <ul class="nav nav-pills">
     <li><a href="{{ url_for("airflow.tree", dag_id=dag.dag_id, num_runs=25) }}">
-        <i class="icon-plus-sign"></i>
+        <span class="glyphicon glyphicon-tree-deciduous" aria-hidden="true"></span>
       Tree View
     </a></li>
     <li><a href="{{ url_for("airflow.graph", dag_id=dag.dag_id) }}">
-      <i class="icon-random"></i>
+        <span class="glyphicon glyphicon-certificate" aria-hidden="true"></span>
       Graph View</a></li>
-    <li><a href="{{ url_for("airflow.duration", dag_id=dag.dag_id) }}">
-      <i class="icon-signal"></i>Task Duration
+    <li><a href="{{ url_for("airflow.duration", dag_id=dag.dag_id, days=30) }}">
+        <span class="glyphicon glyphicon-stats" aria-hidden="true"></span>
+        Task Duration
     </a></li>
     <li>
-      <a href="{{ url_for("airflow.landing_times", dag_id=dag.dag_id) }}">
-        <i class="icon-signal"></i>
+      <a href="{{ url_for("airflow.landing_times", dag_id=dag.dag_id, days=30) }}">
+        <span class="glyphicon glyphicon-plane" aria-hidden="true"></span>
         Landing Times
       </a>
     </li>
     <li>
       <a href="{{ url_for("airflow.gantt", dag_id=dag.dag_id) }}">
+        <span class="glyphicon glyphicon-align-left" aria-hidden="true"></span>
         <i class="icon-align-left"></i>
         Gantt
       </a>
     </li>
     <li>
       <a href="{{ url_for("airflow.code", dag_id=dag.dag_id) }}">
-      <i class="icon-barcode"></i>
+        <span class="glyphicon glyphicon-flash" aria-hidden="true"></span>
         Code
       </a>
     </li>

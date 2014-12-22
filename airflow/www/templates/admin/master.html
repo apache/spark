@@ -10,8 +10,9 @@
 {% endblock %}
 
 {% block brand %}
-<span class="brand" style="padding:5px 10px">
-    <img src="{{ url_for("static", filename="pin_100.png") }}" width="30">
-    <span style="vertical-align:middle;">AirFlow</span>
-</span>
+<a class="navbar-brand" rel="home" href="#">
+  <img style="float: left; width:35px; margin-top: -7px;"
+            src="{{ url_for("static", filename="pin_100.png") }}">
+            <span>AirFlow</span>
+        </a>
 {% endblock %}

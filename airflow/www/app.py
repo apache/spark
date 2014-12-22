@@ -100,7 +100,8 @@ class HomeView(AdminIndexView):
     def index(self):
         dags = sorted(dagbag.dags.values(), key=lambda dag: dag.dag_id)
         return self.render('airflow/dags.html', dags=dags)
-admin = Admin(app, name="Airflow", index_view=HomeView(name='DAGs'))
+admin = Admin(
+    app, name="Airflow", index_view=HomeView(name='DAGs'), template_mode='bootstrap3')
 admin.add_link(
     base.MenuLink(
         category='Tools',
@@ -153,12 +154,9 @@ class Airflow(BaseView):
                 has_data = len(df) > 0
                 df = df.fillna('')
                 results = df.to_html(
-                    classes=(
-                        "table initialism table-striped "
-                        "table-bordered table-condensed"),
+                    classes="table table-bordered table-striped no-wrap",
                     index=False,
                     na_rep='',
-
                 ) if has_data else ''
             except Exception as e:
                 flash(str(e), 'error')
@@ -600,8 +598,9 @@ class Airflow(BaseView):
     def duration(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
+        days = int(request.args.get('days', 30))
         dag = dagbag.dags[dag_id]
-        from_date = (datetime.today()-timedelta(30)).date()
+        from_date = (datetime.today()-timedelta(days)).date()
         from_date = datetime.combine(from_date, datetime.min.time())
 
         all_data = []
@@ -611,7 +610,7 @@ class Airflow(BaseView):
                 if ti.end_date:
                     data.append([
                         ti.execution_date.isoformat(),
-                        int(ti.duration)
+                        float(ti.duration) / (60*60)
                     ])
             if data:
                 all_data.append({'data': data, 'name': task.task_id})
@@ -630,8 +629,9 @@ class Airflow(BaseView):
     def landing_times(self):
         session = settings.Session()
         dag_id = request.args.get('dag_id')
+        days = int(request.args.get('days', 30))
         dag = dagbag.dags[dag_id]
-        from_date = (datetime.today()-timedelta(30)).date()
+        from_date = (datetime.today()-timedelta(days)).date()
         from_date = datetime.combine(from_date, datetime.min.time())
 
         all_data = []
@@ -641,7 +641,7 @@ class Airflow(BaseView):
                 if ti.end_date:
                     data.append([
                         ti.execution_date.isoformat(), (
-                            ti.end_date - ti.execution_date
+                            ti.end_date - (ti.execution_date + task.schedule_interval)
                         ).total_seconds()/(60*60)
                     ])
             all_data.append({'data': data, 'name': task.task_id})
@@ -838,8 +838,10 @@ def label_link(v, c, m, p):
 
 
 class ChartModelView(ModelView):
-    column_list = ('label', 'id', 'db_id', 'chart_type', 'show_datatable', )
+    column_list = ('label', 'db_id', 'chart_type', 'show_datatable', )
     column_formatters = dict(label=label_link)
+    create_template = 'airflow/chart/create.html'
+    edit_template = 'airflow/chart/edit.html'
     form_choices = {
         'chart_type': [
             ('line', 'Line Chart'),

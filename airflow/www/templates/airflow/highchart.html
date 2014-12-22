@@ -38,8 +38,10 @@
     </script>
     <script>
       Highcharts.setOptions({
-        colors: 
-            ["#FF5A5F", "#007A87", "#7B0051", "#00D1C1", "#8CE071", "#FFB400", "#FFAA91", "#B4A76C", "#9CA299", "#565A5C"]
+        colors: [
+            "#FF5A5F", "#007A87", "#7B0051", "#00D1C1", "#8CE071", "#FFB400", 
+            "#FFAA91", "#B4A76C", "#9CA299", "#565A5C"
+        ],
       });
       hc = {{ hc|safe }};
       $('#hc').highcharts(hc);

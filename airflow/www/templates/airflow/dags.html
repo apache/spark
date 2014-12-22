@@ -15,7 +15,7 @@
             <th>Filepath</th>
             <th>Owner</th>
             <th>Task Count</th>
-            <th>Activity</th>
+            <th class="text-center">Links</th>
         </tr>
         {% for dag in dags %}
             <tr>
@@ -31,9 +31,35 @@
                 </td>
                 <td>{{ dag.owner }}</td>
                 <td>{{ dag.tasks|length }}</td>
-                <td>
+                <td class="text-center">
+    <a href="{{ url_for("airflow.tree", dag_id=dag.dag_id, num_runs=25) }}" title="Tree View">
+        <span class="glyphicon glyphicon-tree-deciduous" aria-hidden="true"></span>
+    </a>
+    <a href="{{ url_for("airflow.graph", dag_id=dag.dag_id) }}" title="Graph View">
+        <span class="glyphicon glyphicon-certificate" aria-hidden="true"></span>
+      </a>
+    <a href="{{ url_for("airflow.duration", dag_id=dag.dag_id) }}" title="Tasks Duration">
+        <span class="glyphicon glyphicon-stats" aria-hidden="true"></span>
+    </a>
+    
+      <a href="{{ url_for("airflow.landing_times", dag_id=dag.dag_id) }}" title="Landing Times">
+        <span class="glyphicon glyphicon-plane" aria-hidden="true"></span>
+      </a>
+    
+    
+      <a href="{{ url_for("airflow.gantt", dag_id=dag.dag_id) }}" title="Gantt View">
+        <span class="glyphicon glyphicon-align-left" aria-hidden="true"></span>
+        <i class="icon-align-left"></i>
+      </a>
+    
+    
+      <a href="{{ url_for("airflow.code", dag_id=dag.dag_id) }}" title="Code View">
+        <span class="glyphicon glyphicon-flash" aria-hidden="true"></span>
+      </a>
+    
                     <a href="/admin/logview/?sort=1&desc=1&flt1_dag_id_equals={{ dag.dag_id }}">
                         <i class="icon-list"></i>
+                        <span class="glyphicon glyphicon-align-justify" aria-hidden="true"></span>
                     </a>
                 </td>
             </tr>
