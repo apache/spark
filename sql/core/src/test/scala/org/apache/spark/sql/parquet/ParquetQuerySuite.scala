@@ -95,6 +95,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     ParquetTestData.writeNestedFile2()
     ParquetTestData.writeNestedFile3()
     ParquetTestData.writeNestedFile4()
+    ParquetTestData.writeGlobFiles()
     testRDD = parquetFile(ParquetTestData.testDir.toString)
     testRDD.registerTempTable("testsource")
     parquetFile(ParquetTestData.testFilterDir.toString)
@@ -110,6 +111,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     Utils.deleteRecursively(ParquetTestData.testNestedDir2)
     Utils.deleteRecursively(ParquetTestData.testNestedDir3)
     Utils.deleteRecursively(ParquetTestData.testNestedDir4)
+    Utils.deleteRecursively(ParquetTestData.testGlobDir)
     // here we should also unregister the table??
 
     setConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED, originalParquetFilterPushdownEnabled.toString)
@@ -1047,6 +1049,30 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       assert(
         ParquetFilters.createFilter(p).isEmpty,
         "Comparison predicate with null shouldn't be pushed down")
+    }
+  }
+
+  test("Import of simple Parquet files using glob wildcard pattern") {
+    val testGlobDir = ParquetTestData.testGlobDir.toString
+    val globPatterns = Array(testGlobDir + "/*/*", testGlobDir + "/spark-*/*", testGlobDir + "/?pa?k-*/*")
+    globPatterns.foreach { path =>
+      val result = parquetFile(path).collect()
+      assert(result.size === 45)
+      result.zipWithIndex.foreach {
+        case (row, index) => {
+          val checkBoolean =
+            if ((index % 15) % 3 == 0)
+              row(0) == true
+            else
+              row(0) == false
+          assert(checkBoolean === true, s"boolean field value in line $index did not match")
+          if ((index % 15) % 5 == 0) assert(row(1) === 5, s"int field value in line $index did not match")
+          assert(row(2) === "abc", s"string field value in line $index did not match")
+          assert(row(3) === ((index.toLong % 15) << 33), s"long value in line $index did not match")
+          assert(row(4) === 2.5F, s"float field value in line $index did not match")
+          assert(row(5) === 4.5D, s"double field value in line $index did not match")
+        }
+      }
     }
   }
 }

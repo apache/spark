@@ -214,8 +214,6 @@ object OldDeps {
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
     scalaVersion := "2.10.4",
-    // TODO: remove this as soon as 1.2.0 is published on Maven central.
-    resolvers += "spark-staging-1038" at "https://repository.apache.org/content/repositories/orgapachespark-1038/",
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
