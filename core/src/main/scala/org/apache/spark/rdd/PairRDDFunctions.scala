@@ -472,7 +472,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
     this.cogroup(other, partitioner).flatMapValues( pair =>
-      for (v <- pair._1; w <- pair._2) yield (v, w)
+      for (v <- pair._1.iterator; w <- pair._2.iterator) yield (v, w)
     )
   }
 
@@ -485,9 +485,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def leftOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, Option[W]))] = {
     this.cogroup(other, partitioner).flatMapValues { pair =>
       if (pair._2.isEmpty) {
-        pair._1.map(v => (v, None))
+        pair._1.iterator.map(v => (v, None))
       } else {
-        for (v <- pair._1; w <- pair._2) yield (v, Some(w))
+        for (v <- pair._1.iterator; w <- pair._2.iterator) yield (v, Some(w))
       }
     }
   }
@@ -502,9 +502,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       : RDD[(K, (Option[V], W))] = {
     this.cogroup(other, partitioner).flatMapValues { pair =>
       if (pair._1.isEmpty) {
-        pair._2.map(w => (None, w))
+        pair._2.iterator.map(w => (None, w))
       } else {
-        for (v <- pair._1; w <- pair._2) yield (Some(v), w)
+        for (v <- pair._1.iterator; w <- pair._2.iterator) yield (Some(v), w)
       }
     }
   }
