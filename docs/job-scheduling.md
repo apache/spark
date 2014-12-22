@@ -98,7 +98,7 @@ pre-packaged distribution.
 2. Add this jar to the classpath of all `NodeManager`s in your cluster.
 3. In the `yarn-site.xml` on each node, add `spark_shuffle` to `yarn.nodemanager.aux-services`,
 then set `yarn.nodemanager.aux-services.spark_shuffle.class` to
-`org.apache.spark.yarn.network.YarnShuffleService`. Additionally, set all relevant
+`org.apache.spark.network.yarn.YarnShuffleService`. Additionally, set all relevant
 `spark.shuffle.service.*` [configurations](configuration.html).
 4. Restart all `NodeManager`s in your cluster.
 
