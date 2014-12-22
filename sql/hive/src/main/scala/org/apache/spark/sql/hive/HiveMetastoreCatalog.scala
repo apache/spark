@@ -102,6 +102,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     tbl.setProperty("spark.sql.sources.provider", provider)
     options.foreach { case (key, value) => tbl.setSerdeParam(key, value) }
 
+    tbl.setProperty("EXTERNAL", "TRUE")
+    tbl.setTableType(TableType.EXTERNAL_TABLE)
+
     // create the table
     synchronized {
       client.createTable(tbl, false)
