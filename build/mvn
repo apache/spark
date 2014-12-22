@@ -13,17 +13,26 @@ install_app() {
   local remote_tarball="$1/$2"
   local local_tarball="${_DIR}/$2"
   local binary="${_DIR}/$3"
+
+  # setup `curl` and `wget` silent options if we're running on Jenkins
+  local curl_opts=""
+  local wget_opts=""
+  if [ -n "$AMPLAB_JENKINS" ]; then
+    curl_opts="-s"
+    wget_opts="--quiet"
+  fi
+
   if [ -z "$3" -o ! -f "$binary" ]; then
     # check if we already have the tarball
     # check if we have curl installed
     # download application
     [ ! -f "${local_tarball}" ] && [ -n "`which curl 2>/dev/null`" ] && \
-      echo "exec: curl -s ${remote_tarball}" && \
-      curl -s "${remote_tarball}" > "${local_tarball}"
+      echo "exec: curl ${curl_opts} ${remote_tarball}" && \
+      curl ${curl_opts} "${remote_tarball}" > "${local_tarball}"
     # if the file still doesn't exist, lets try `wget` and cross our fingers
     [ ! -f "${local_tarball}" ] && [ -n "`which wget 2>/dev/null`" ] && \
-      echo "exec: wget --quiet ${remote_tarball}" && \
-      wget --quiet -O "${local_tarball}" "${remote_tarball}"
+      echo "exec: wget ${wget_opts} ${remote_tarball}" && \
+      wget ${wget_opts} -O "${local_tarball}" "${remote_tarball}"
     # if both were unsuccessful, exit
     [ ! -f "${local_tarball}" ] && \
       echo -n "ERROR: Cannot download $2 with cURL or wget; " && \
