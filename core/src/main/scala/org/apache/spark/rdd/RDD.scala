@@ -1173,7 +1173,7 @@ abstract class RDD[T: ClassTag](
     val nullWritableClassTag = implicitly[ClassTag[NullWritable]]
     val textClassTag = implicitly[ClassTag[Text]]
     val r = this.map(x => (NullWritable.get(), new Text(x.toString)))
-    RDD.rddToPairRDDFunctions(r)(nullWritableClassTag, textClassTag, null)
+    rddToPairRDDFunctions(r)(nullWritableClassTag, textClassTag, null)
       .saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path)
   }
 
@@ -1185,7 +1185,7 @@ abstract class RDD[T: ClassTag](
     val nullWritableClassTag = implicitly[ClassTag[NullWritable]]
     val textClassTag = implicitly[ClassTag[Text]]
     val r = this.map(x => (NullWritable.get(), new Text(x.toString)))
-    RDD.rddToPairRDDFunctions(r)(nullWritableClassTag, textClassTag, null)
+    rddToPairRDDFunctions(r)(nullWritableClassTag, textClassTag, null)
       .saveAsHadoopFile[TextOutputFormat[NullWritable, Text]](path, codec)
   }
 
