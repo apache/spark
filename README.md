@@ -9,8 +9,8 @@ R.
 ## Installing SparkR
 
 ### Requirements
-SparkR requires Scala 2.10 and Spark version >= 0.9.0. Current build by default uses the 1.1.0
-candidate from the Apache staging repositories. You can also build SparkR against a
+SparkR requires Scala 2.10 and Spark version >= 0.9.0. Current build by default uses
+Apache Spark 1.1.0. You can also build SparkR against a
 different Spark version (>= 0.9.0) by modifying `pkg/src/build.sbt`.
 
 SparkR also requires the R package `rJava` to be installed. To install `rJava`,
@@ -28,6 +28,12 @@ If you wish to try out the package directly from github, you can use [`install_g
 
     library(devtools)
     install_github("amplab-extras/SparkR-pkg", subdir="pkg")
+
+SparkR by default uses Apache Spark 1.1.0. You can switch to a different Spark
+version by setting the environment variable `SPARK_VERSION`. For example, to
+use Apache Spark 1.2.0, you can run
+
+    SPARK_VERSION=1.2.0 ./install-dev.sh
 
 SparkR by default links to Hadoop 1.0.4. To use SparkR with other Hadoop
 versions, you will need to rebuild SparkR with the same version that [Spark is
