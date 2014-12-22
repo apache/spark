@@ -852,6 +852,41 @@ Apart from these, the following properties are also available, and may be useful
     between nodes leading to flooding the network with those.
   </td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.io.preferDirectBufs</code></td>
+  <td>true</td>
+  <td>
+    (Netty only) Off-heap buffers are used to reduce garbage collection during shuffle and cache 
+    block transfer. For environments where off-heap memory is tightly limited, users may wish to 
+    turn this off to force all allocations from Netty to be on-heap.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.numConnectionsPerPeer</code></td>
+  <td>1</td>
+  <td>
+    (Netty only) Connections between hosts are reused in order to reduce connection buildup for 
+    large clusters. For clusters with many hard disks and few hosts, this may result in insufficient
+    concurrency to saturate all disks, and so users may consider increasing this value.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.maxRetries</code></td>
+  <td>3</td>
+  <td>
+    (Netty only) Fetches that fail due to IO-related exceptions are automatically retried if this is
+    set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC 
+    pauses or transient network connectivity issues.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.retryWait</code></td>
+  <td>5</td>
+  <td>
+    (Netty only) Seconds to wait between retries of fetches. The maximum delay caused by retrying
+    is simply <code>maxRetries * retryWait</code>, by default 15 seconds. 
+  </td>
+</tr>
 </table>
 
 #### Scheduling
