@@ -6,6 +6,8 @@
 {{ super() }}
 <link rel="stylesheet" type="text/css"
     href="{{ url_for("static", filename="main.css") }}">
+<link rel="stylesheet" type="text/css"
+    href="{{ url_for("static", filename="dataTables.bootstrap.css") }}">
 {% endblock %}
 
 {% block body %}
@@ -23,7 +25,10 @@
   {{ super() }}
   <script src="{{ url_for('static', filename='ace.js') }}"></script>
   <script src="{{ url_for('static', filename='mode-sql.js') }}"></script>
+  <script src="{{ url_for('static', filename='jquery.dataTables.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='dataTables.bootstrap.js') }}"></script>
   <script src="{{ url_for('static', filename='theme-crimson_editor.js') }}"></script>
+  <script src="{{ url_for('static', filename='bootstrap-select.js') }}"></script>
   <script>
     $( document ).ready(function() {
         var editor = ace.edit("sql");
@@ -38,6 +43,12 @@
             textarea.val(editor.getSession().getValue());
         });
         editor.focus(); 
+        $('table.dataframe').dataTable({
+            "scrollX": true,
+            "iDisplayLength": 25,
+        });
+        $('select').addClass("form-control");
+        $('select#db_id').attr("style", "width: auto; float:left;");
     });
   </script>
 {% endblock %}

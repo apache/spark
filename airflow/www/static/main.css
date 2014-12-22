@@ -23,6 +23,7 @@ span.error{
 }
 .tooltip-inner {
     text-align:left !important;
+    font-size: 12px;
 }
 input#execution_date {
     margin-bottom: 0px;
@@ -58,4 +59,25 @@ input, select {
 }
 #sql_ace {
     visibility: hidden;
+}
+table.dataframe {
+    font-size: 12px;
+}
+table.dataframe tbody tr td {
+    padding: 2px;
+}
+table.dataframe.dataTable thead > tr > th {
+    padding: 10px 20px 10px 10px;
+}
+table.dataTable.dataframe thead .sorting {
+    background: url('sort_both.png') no-repeat center right
+}
+table.dataTable.dataframe thead .sorting_desc {
+    background: url('sort_desc.png') no-repeat center right
+}
+table.dataTable.dataframe thead .sorting_asc {
+    background: url('sort_asc.png') no-repeat center right
+}
+.no-wrap {
+    white-space: nowrap;
 }

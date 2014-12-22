@@ -123,14 +123,14 @@ class HiveHook(BaseHook):
         if sp.returncode:
             raise Exception(all_err)
 
-    def max_partition(self, schema, table):
+    def max_partition(self, schema, table_name):
         '''
         Returns the maximum value for all partitions in a table. Works only
         for tables that have a single partition key. For subpartitionned
         table, we recommend using signal tables.
         '''
         self.hive._oprot.trans.open()
-        table = self.hive.get_table(dbname=schema, tbl_name=table)
+        table = self.hive.get_table(dbname=schema, tbl_name=table_name)
         if len(table.partitionKeys) == 0:
             raise Exception("The table isn't partitionned")
         elif len(table.partitionKeys) > 1:
@@ -139,7 +139,7 @@ class HiveHook(BaseHook):
                 "use a signal table!")
         else:
             parts = self.hive.get_partitions(
-                db_name='core_data', tbl_name='dim_users', max_parts=32767)
+                db_name=schema, tbl_name=table_name, max_parts=32767)
 
             self.hive._oprot.trans.close()
             return max([p.values[0] for p in parts])
