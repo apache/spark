@@ -58,13 +58,9 @@ install_zinc() {
 # and, with that, download the specific version of Scala necessary under
 # the build/ folder
 install_scala() {
-  [ -z "`which python 2>/dev/null`" ] && \
-    echo "ERROR: Found no `python` package; please install one and try again." && \
-    exit 1
   # determine the Scala version used in Spark
-  local scala_version=`python -c "
-from xml.dom import minidom
-print(minidom.parse('${_DIR}/../pom.xml').getElementsByTagName('scala.version')[0].firstChild.data)"`
+  local scala_version=`grep "scala.version" "${_DIR}/../pom.xml" | \
+                       head -1 | cut -f2 -d'>' | cut -f1 -d'<'`
   local scala_bin="${_DIR}/scala-${scala_version}/bin/scala"
 
   install_app \
