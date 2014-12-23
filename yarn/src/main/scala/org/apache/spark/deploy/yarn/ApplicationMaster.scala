@@ -60,7 +60,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
   @volatile private var finished = false
-  @volatile private var finalStatus = FinalApplicationStatus.SUCCEEDED
+  @volatile private var finalStatus = getDefaultFinalStatus
   @volatile private var finalMsg: String = ""
   @volatile private var userClassThread: Thread = _
 
@@ -150,6 +150,19 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           "Uncaught exception: " + e.getMessage())
     }
     exitCode
+  }
+
+  /**
+   * we should distinct the default final status between client and cluster,
+   * because the SUCCEEDED status may cause the HA failed in client mode and
+   * UNDEFINED may cause the error reporter in cluster when using sys.exit.
+   */
+  final def getDefaultFinalStatus() = {
+    if (isDriver) {
+      FinalApplicationStatus.SUCCEEDED
+    } else {
+      FinalApplicationStatus.UNDEFINED
+    }
   }
 
   /**
