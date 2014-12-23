@@ -29,15 +29,17 @@ import org.apache.spark.rdd.{RDD, UnionRDD}
  *
  * @param scoreAndLabels an RDD of (score, label) pairs.
  * @param numBins if greater than 0, then the curves (ROC curve, PR curve) computed internally
- *  will be down-sampled to this many "bins". This is useful because the curve contains a
- *  point for each distinct score in the input, and this could be as large as the input itself --
- *  millions of points or more, when thousands may be entirely sufficient to summarize the curve.
- *  After down-sampling, the curves will instead be made of approximately `numBins` points instead.
- *  Points are made from bins of equal numbers of consecutive points. The size of each bin
- *  is `floor(scoreAndLabels.count() / numBins)`, which means the resulting number of bins
- *  may not exactly equal numBins. The last bin in each partition may be smaller as a result,
- *  meaning there may be an extra sample at partition boundaries.
- *  If `numBins` is 0, no down-sampling will occur.
+ *                will be down-sampled to this many "bins". If 0, no down-sampling will occur.
+ *                This is useful because the curve contains a point for each distinct score
+ *                in the input, and this could be as large as the input itself -- millions of
+ *                points or more, when thousands may be entirely sufficient to summarize
+ *                the curve. After down-sampling, the curves will instead be made of approximately
+ *                `numBins` points instead. Points are made from bins of equal numbers of
+ *                consecutive points. The size of each bin is
+ *                `floor(scoreAndLabels.count() / numBins)`, which means the resulting number
+ *                of bins may not exactly equal numBins. The last bin in each partition may
+ *                be smaller as a result, meaning there may be an extra sample at
+ *                partition boundaries.
  */
 @Experimental
 class BinaryClassificationMetrics(
