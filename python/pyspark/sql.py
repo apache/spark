@@ -2095,9 +2095,8 @@ class SchemaRDD(RDD):
         """
         assert fraction >= 0.0, "Negative fraction value: %s" % fraction
         seed = seed if seed is not None else random.randint(0, sys.maxint)
-        rdd = self._jschema_rdd.baseSchemaRDD().sample(
-            withReplacement, fraction, long(seed))
-        return SchemaRDD(rdd.toJavaSchemaRDD(), self.sql_ctx)
+        rdd = self._jschema_rdd.sample(withReplacement, fraction, long(seed))
+        return SchemaRDD(rdd, self.sql_ctx)
 
     def takeSample(self, withReplacement, num, seed=None):
         """Return a fixed-size sampled subset of this SchemaRDD.
