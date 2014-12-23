@@ -50,10 +50,12 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
   }
 
   private def checkComparison(expression: Expression, expectedType: DataType): Unit = {
-    val plan = Project(Seq(Alias(expression, "c")()), relation)
-    val comparison = analyzer(plan).expressions(0).children(0).asInstanceOf[BinaryComparison]
-    assert(comparison.left.dataType ===  expectedType)
-    assert(comparison.right.dataType ===  expectedType)
+    val plan = Project(Alias(expression, "c")() :: Nil, relation)
+    val comparison = analyzer(plan).collect {
+      case Project(Alias(e: BinaryComparison, _) :: Nil, _) => e
+    }.head
+    assert(comparison.left.dataType === expectedType)
+    assert(comparison.right.dataType === expectedType)
   }
 
   test("basic operations") {
