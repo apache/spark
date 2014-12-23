@@ -205,4 +205,6 @@ broadcast <- function(sc, object) {
 setCheckpointDir <- function(sc, dirName) {
   ssc <- .jcall(sc, "Lorg/apache/spark/SparkContext;", "sc")
   .jcall(ssc, "V", "setCheckpointDir", suppressWarnings(normalizePath(dirName)))
+  # NOTE: rJava doesn't check for exceptions if the return type is void
+  .jcheck()
 }
