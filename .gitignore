@@ -51,7 +51,7 @@ checkpoint
 derby.log
 dist/
 dev/create-release/*txt
-dev/create-release/*new
+dev/create-release/*final
 spark-*-bin-*.tgz
 unit-tests.log
 /lib/

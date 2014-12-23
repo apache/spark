@@ -66,9 +66,16 @@ configuring Flume agents.
 
 ## Approach 2 (Experimental): Pull-based Approach using a Custom Sink
 Instead of Flume pushing data directly to Spark Streaming, this approach runs a custom Flume sink that allows the following.
+
 - Flume pushes data into the sink, and the data stays buffered.
-- Spark Streaming uses transactions to pull data from the sink. Transactions succeed only after data is received and replicated by Spark Streaming.
-This ensures that better reliability and fault-tolerance than the previous approach. However, this requires configuring Flume to run a custom sink. Here are the configuration steps.
+- Spark Streaming uses a [reliable Flume receiver](streaming-programming-guide.html#receiver-reliability)
+  and transactions to pull data from the sink. Transactions succeed only after data is received and
+  replicated by Spark Streaming.
+
+This ensures stronger reliability and
+[fault-tolerance guarantees](streaming-programming-guide.html#fault-tolerance-semantics)
+than the previous approach. However, this requires configuring Flume to run a custom sink.
+Here are the configuration steps.
 
 #### General Requirements
 Choose a machine that will run the custom sink in a Flume agent. The rest of the Flume pipeline is configured to send data to that agent. Machines in the Spark cluster should have access to the chosen machine running the custom sink.
@@ -104,7 +111,7 @@ See the [Flume's documentation](https://flume.apache.org/documentation.html) for
 configuring Flume agents.
 
 #### Configuring Spark Streaming Application
-1. **Linking:** In your SBT/Maven projrect definition, link your streaming application against the `spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}` (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide).
+1. **Linking:** In your SBT/Maven project definition, link your streaming application against the `spark-streaming-flume_{{site.SCALA_BINARY_VERSION}}` (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide).
 
 2. **Programming:** In the streaming application code, import `FlumeUtils` and create input DStream as follows.
 

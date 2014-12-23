@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.util.{Map => JMap, List => JList}
-import java.io.StringWriter
+
 
 import scala.collection.JavaConversions._
 
@@ -215,6 +215,19 @@ class SchemaRDD(
    */
   def orderBy(sortExprs: SortOrder*): SchemaRDD =
     new SchemaRDD(sqlContext, Sort(sortExprs, logicalPlan))
+
+  /**
+   * Sorts the results by the given expressions within partition.
+   * {{{
+   *   schemaRDD.sortBy('a)
+   *   schemaRDD.sortBy('a, 'b)
+   *   schemaRDD.sortBy('a.asc, 'b.desc)
+   * }}}
+   *
+   * @group Query
+   */
+  def sortBy(sortExprs: SortOrder*): SchemaRDD =
+    new SchemaRDD(sqlContext, SortPartitions(sortExprs, logicalPlan))
 
   @deprecated("use limit with integer argument", "1.1.0")
   def limit(limitExpr: Expression): SchemaRDD =
@@ -501,7 +514,7 @@ class SchemaRDD(
   }
 
   override def unpersist(blocking: Boolean): this.type = {
-    sqlContext.uncacheQuery(this, blocking)
+    sqlContext.tryUncacheQuery(this, blocking)
     this
   }
 }

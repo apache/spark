@@ -18,6 +18,7 @@
 package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
+import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
@@ -220,8 +221,7 @@ object StorageLevel {
     getCachedStorageLevel(obj)
   }
 
-  private[spark] val storageLevelCache =
-    new java.util.concurrent.ConcurrentHashMap[StorageLevel, StorageLevel]()
+  private[spark] val storageLevelCache = new ConcurrentHashMap[StorageLevel, StorageLevel]()
 
   private[spark] def getCachedStorageLevel(level: StorageLevel): StorageLevel = {
     storageLevelCache.putIfAbsent(level, level)
