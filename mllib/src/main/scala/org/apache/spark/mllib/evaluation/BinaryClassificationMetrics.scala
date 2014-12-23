@@ -42,9 +42,14 @@ import org.apache.spark.rdd.{RDD, UnionRDD}
 @Experimental
 class BinaryClassificationMetrics(
     val scoreAndLabels: RDD[(Double, Double)],
-    val numBins: Int = 0) extends Logging {
+    val numBins: Int) extends Logging {
 
   require(numBins >= 0, "numBins must be nonnegative")
+
+  /**
+   * Defaults `numBins` to 0.
+   */
+  def this(scoreAndLabels: RDD[(Double, Double)]) = this(scoreAndLabels, 0)
 
   /** Unpersist intermediate RDDs used in the computation. */
   def unpersist() {
@@ -127,15 +132,17 @@ class BinaryClassificationMetrics(
         val countsSize = counts.count()
         // Group the iterator into chunks of about countsSize / numBins points,
         // so that the resulting number of bins is about numBins
-        val grouping = countsSize / numBins
+        var grouping = countsSize / numBins
         if (grouping < 2) {
           // numBins was more than half of the size; no real point in down-sampling to bins
           logInfo(s"Curve is too small ($countsSize) for $numBins bins to be useful")
           counts
-        } else if (grouping >= Int.MaxValue) {
-          logWarning(s"Curve is too large ($countsSize) for $numBins bins; ignoring")
-          counts
         } else {
+          if (grouping >= Int.MaxValue) {
+            logWarning(
+              s"Curve too large ($countsSize) for $numBins bins; capping at ${Int.MaxValue}")
+            grouping = Int.MaxValue
+          }
           counts.mapPartitions(_.grouped(grouping.toInt).map { pairs =>
             // The score of the combined point will be just the first one's score
             val firstScore = pairs.head._1
