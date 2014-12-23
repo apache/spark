@@ -40,7 +40,7 @@ public class TransportConf {
     return conf.getInt("spark.shuffle.io.connectionTimeout", 120) * 1000;
   }
 
-  /** Number of concurrent connections between two nodes for fetching data. **/
+  /** Number of concurrent connections between two nodes for fetching data. */
   public int numConnectionsPerPeer() {
     return conf.getInt("spark.shuffle.io.numConnectionsPerPeer", 1);
   }
