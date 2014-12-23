@@ -361,9 +361,9 @@ object SparseMatrix {
    * @param entries Array of (i, j, value) tuples
    * @return The corresponding `SparseMatrix`
    */
-  def fromCOO(numRows: Int, numCols: Int, entries: Array[(Int, Int, Double)]): SparseMatrix = {
-    val numEntries = entries.size
-    val sortedEntries = entries.sortBy(v => (v._2, v._1))
+  def fromCOO(numRows: Int, numCols: Int, entries: Iterable[(Int, Int, Double)]): SparseMatrix = {
+    val sortedEntries = entries.toSeq.sortBy(v => (v._2, v._1))
+    val numEntries = sortedEntries.size
     if (sortedEntries.nonEmpty) {
       // Since the entries are sorted by column index, we only need to check the first and the last.
       for (col <- Seq(sortedEntries.head._2, sortedEntries.last._2)) {
@@ -413,54 +413,59 @@ object SparseMatrix {
     new SparseMatrix(n, n, (0 to n).toArray, (0 until n).toArray, Array.fill(n)(1.0))
   }
 
-  /** Generates the skeleton of a random `SparseMatrix` with a given random number generator. */
+  /**
+   * Generates the skeleton of a random `SparseMatrix` with a given random number generator.
+   * The values of the matrix returned are undefined.
+   */
   private def genRandMatrix(
       numRows: Int,
       numCols: Int,
       density: Double,
       rng: Random): SparseMatrix = {
-    require(density >= 0.0 && density <= 1.0, "density must be a double in the range " +
-      s"0.0 <= d <= 1.0. Currently, density: $density")
-    val length = math.ceil(numRows * numCols * density).toInt
-    var i = 0
+    require(numRows > 0, s"numRows must be greater than 0 but got $numRows")
+    require(numCols > 0, s"numCols must be greater than 0 but got $numCols")
+    require(density >= 0.0 && density <= 1.0,
+      s"density must be a double in the range 0.0 <= d <= 1.0. Currently, density: $density")
+    val size = numRows.toLong * numCols
+    val expected = size * density
+    assert(expected < Int.MaxValue,
+      "The expected number of nonzeros cannot be greater than Int.MaxValue.")
+    val nnz = math.ceil(expected).toInt
     if (density == 0.0) {
-      return new SparseMatrix(numRows, numCols, new Array[Int](numCols + 1),
-        Array[Int](), Array[Double]())
+      new SparseMatrix(numRows, numCols, new Array[Int](numCols + 1), Array[Int](), Array[Double]())
     } else if (density == 1.0) {
-      val rowIndices = Array.tabulate(numCols, numRows)((j, i) => i).flatten
-      return new SparseMatrix(numRows, numCols, (0 to numRows * numCols by numRows).toArray,
-        rowIndices, new Array[Double](numRows * numCols))
-    }
-    if (density < 0.34) { // Expected number of iterations is less than 1.5 * length
+      val colPtrs = Array.tabulate(numCols + 1)(j => j * numRows)
+      val rowIndices = Array.tabulate(size.toInt)(idx => idx % numRows)
+      new SparseMatrix(numRows, numCols, colPtrs, rowIndices, new Array[Double](numRows * numCols))
+    } else if (density < 0.34) {
+      // draw-by-draw, expected number of iterations is less than 1.5 * nnz
       val entries = MHashSet[(Int, Int)]()
-      while (entries.size < length) {
+      while (entries.size < nnz) {
         entries += ((rng.nextInt(numRows), rng.nextInt(numCols)))
       }
-      val entryList = entries.toArray.map(v => (v._1, v._2, 1.0))
-      SparseMatrix.fromCOO(numRows, numCols, entryList)
-    } else { // selection - rejection method
+      SparseMatrix.fromCOO(numRows, numCols, entries.map(v => (v._1, v._2, 1.0)))
+    } else {
+      // selection-rejection method
+      var idx = 0L
+      var numSelected = 0
+      var i = 0
       var j = 0
-      val pool = numRows * numCols
-      val rowIndexBuilder = new MArrayBuilder.ofInt
       val colPtrs = new Array[Int](numCols + 1)
-      while (i < length && j < numCols) {
-        var passedInPool = j * numRows
-        var r = 0
-        while (i < length && r < numRows) {
-          if (rng.nextDouble() < 1.0 * (length - i) / (pool - passedInPool)) {
-            rowIndexBuilder += r
-            i += 1
+      val rowIndices = new Array[Int](nnz)
+      while (j < numCols && numSelected < nnz) {
+        while (i < numRows && numSelected < nnz) {
+          if (rng.nextDouble() < 1.0 * (nnz - numSelected) / (size - idx)) {
+            rowIndices(numSelected) = i
+            numSelected += 1
           }
-          r += 1
-          passedInPool += 1
+          i += 1
+          idx += 1
         }
+        colPtrs(j + 1) = numSelected
         j += 1
-        colPtrs(j) = i
       }
-      val rowIndices = rowIndexBuilder.result()
-      new SparseMatrix(numRows, numCols, colPtrs, rowIndices, new Array[Double](rowIndices.size))
+      new SparseMatrix(numRows, numCols, colPtrs, rowIndices, new Array[Double](nnz))
     }
-
   }
 
   /**
