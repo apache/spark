@@ -23,7 +23,7 @@ import breeze.numerics.{sigmoid => Bsigmoid}
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg
 
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
@@ -411,18 +411,25 @@ private[ann] trait NeuralHelper {
   }
 
   protected def rollWeights(weightMatricesUpdate: Array[BDM[Double]],
-                            biasUpdate: Array[BDM[Double]]) = {
-    val wu = BDV.zeros[Double](weightCount)
+                            biasUpdate: Array[BDM[Double]],
+                            cumGradient: Vector): Unit = {
+    val wu = cumGradient.toArray
     var offset = 0
-    for(i <- 1 until topology.size){
-      for(j <- 0 until weightMatricesUpdate(i).cols){
-        wu(offset until (offset + weightMatricesUpdate(i).rows)) := weightMatricesUpdate(i)(::, j)
-        offset += weightMatricesUpdate(i).rows
+    for(i <- 1 until topology.length){
+      var k = 0
+      val numElements = topology(i) * topology(i - 1)
+      while(k < numElements){
+        wu(offset + k) += weightMatricesUpdate(i).data(k)
+        k += 1
       }
-      wu(offset until offset + topology(i)) := biasUpdate(i)(::, 0)
+      offset += numElements
+      k = 0
+      while(k < topology(i)){
+        wu(offset + k) += biasUpdate(i).data(k)
+        k += 1
+      }
       offset += topology(i)
     }
-    wu
   }
 
   protected def forwardRun(data: BDM[Double], weightMatrices: Array[BDM[Double]],
@@ -465,6 +472,13 @@ private[ann] trait NeuralHelper {
 private class ANNLeastSquaresGradient(val topology: Array[Int]) extends Gradient with NeuralHelper {
 
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
+    val gradient = Vectors.zeros(weights.size)
+    val loss = compute(data, label, weights, gradient)
+    (gradient, loss)
+  }
+
+  override def compute(data: Vector, label: Double, weights: Vector,
+                       cumGradient: Vector): Double = {
     val arrData = data.toArray
     val input = new BDV(arrData, 0, 1, topology(0)).toDenseMatrix.t
     val targetVector =
@@ -473,23 +487,12 @@ private class ANNLeastSquaresGradient(val topology: Array[Int]) extends Gradient
     /* forward run */
     val outputs = forwardRun(input, weightMatrices, bias)
     /* error back propagation */
-    val (gradientMatrices, errors) = wGradient(weightMatrices, targetVector, outputs)
-    val weightsGradient = rollWeights(gradientMatrices, errors)
+    val (gradientMatrices, deltas) = wGradient(weightMatrices, targetVector, outputs)
+    rollWeights(gradientMatrices, deltas, cumGradient)
     /* error */
-    val delta = targetVector :- outputs(topology.size - 1)
-    val outerError = Bsum(delta :* delta) / 2
-    val result = (Vectors.fromBreeze(weightsGradient), outerError)
-    result
-  }
-
-  override def compute(
-                        data: Vector,
-                        label: Double,
-                        weights: Vector,
-                        cumGradient: Vector): Double = {
-    val (grad, err) = compute(data, label, weights)
-    cumGradient.toBreeze += grad.toBreeze
-    err
+    val diff = targetVector :- outputs(topology.size - 1)
+    val outerError = Bsum(diff :* diff) / 2
+    outerError
   }
 }
 
