@@ -135,7 +135,7 @@ We use the scala-maven-plugin which supports incremental and continuous compilat
 
     mvn scala:cc
 
-should run continuous compilation (i.e. wait for changes). However, this has not been tested 
+should run continuous compilation (i.e. wait for changes). However, this has not been tested
 extensively. A couple of gotchas to note:
 * it only scans the paths `src/main` and `src/test` (see
 [docs](http://scala-tools.org/mvnsites/maven-scala-plugin/usage_cc.html)), so it will only work
@@ -217,3 +217,9 @@ compiler. When run locally as a background process, it speeds up builds of Scala
 like Spark. Developers who regularly recompile Spark with Maven will be the most interested in
 Zinc. The project site gives instructions for building and running `zinc`; OS X users can
 install it using `brew install zinc`.
+
+If using the `build/mvn` package `zinc` will automatically be downloaded and leveraged for all
+builds. This process will auto-start after the first time `build/mvn` is called and bind to port
+3030 unless the `ZINC_PORT` environment variable is set. The `zinc` process can subsequently be
+shut down at any time by running `build/zinc-<version>/bin/zinc -shutdown` and will automatically
+restart whenever `build/mvn` is called.
