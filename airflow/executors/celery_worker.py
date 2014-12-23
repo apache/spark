@@ -1,7 +1,7 @@
 import subprocess
 import logging
 
-from airflow.configuration import getconf
+from airflow.configuration import conf
 from celery import Celery
 
 # to start the celery worker, run the command:
@@ -10,9 +10,9 @@ from celery import Celery
 # app = Celery('airflow.executors.celery_worker', backend='amqp', broker='amqp://')
 
 app = Celery(
-    getconf().get('celery', 'CELERY_APP_NAME'),
-    backend=getconf().get('celery', 'CELERY_BROKER'),
-    broker=getconf().get('celery', 'CELERY_RESULTS_BACKEND'))
+    conf.get('celery', 'CELERY_APP_NAME'),
+    backend=conf.get('celery', 'CELERY_BROKER'),
+    broker=conf.get('celery', 'CELERY_RESULTS_BACKEND'))
 
 @app.task(name='airflow.executors.celery_worker.execute_command')
 def execute_command(command):

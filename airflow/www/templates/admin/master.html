@@ -11,8 +11,10 @@
 
 {% block brand %}
 <a class="navbar-brand" rel="home" href="#">
-  <img style="float: left; width:35px; margin-top: -7px;"
-            src="{{ url_for("static", filename="pin_100.png") }}">
-            <span>AirFlow</span>
-        </a>
+  <img 
+	style="float: left; width:35px; margin-top: -7px;"
+        src="{{ url_for("static", filename="pin_100.png") }}"
+        title="{{ current_user.username }}">
+  <span>AirFlow</span>
+</a>
 {% endblock %}

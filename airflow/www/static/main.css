@@ -81,3 +81,6 @@ table.dataTable.dataframe thead .sorting_asc {
 .no-wrap {
     white-space: nowrap;
 }
+div.form-inline{
+    margin-bottom: 5px;
+}

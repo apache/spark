@@ -3,7 +3,7 @@ from functools import wraps
 import inspect
 import logging
 import re
-from airflow.configuration import getconf
+from airflow.configuration import conf
 
 
 class State(object):
@@ -140,11 +140,11 @@ def send_email(to, subject, html_content):
     import smtplib
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
-    SMTP_HOST = getconf().get('smtp', 'SMTP_HOST')
-    SMTP_MAIL_FROM = getconf().get('smtp', 'SMTP_MAIL_FROM')
-    SMTP_PORT = getconf().get('smtp', 'SMTP_PORT')
-    SMTP_USER = getconf().get('smtp', 'SMTP_USER')
-    SMTP_PASSWORD = getconf().get('smtp', 'SMTP_PASSWORD')
+    SMTP_HOST = conf.get('smtp', 'SMTP_HOST')
+    SMTP_MAIL_FROM = conf.get('smtp', 'SMTP_MAIL_FROM')
+    SMTP_PORT = conf.get('smtp', 'SMTP_PORT')
+    SMTP_USER = conf.get('smtp', 'SMTP_USER')
+    SMTP_PASSWORD = conf.get('smtp', 'SMTP_PASSWORD')
 
     if type(to) is type(list()):
         to = ','.join(to)

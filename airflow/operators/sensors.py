@@ -3,7 +3,7 @@ import logging
 from time import sleep
 
 from airflow import settings
-from airflow.configuration import getconf
+from airflow.configuration import conf
 from airflow.hooks import HiveHook
 from airflow.models import BaseOperator
 from airflow.models import DatabaseConnection as DB
@@ -132,7 +132,7 @@ class HivePartitionSensor(BaseSensorOperator):
     def __init__(
             self,
             table, partition="ds='{{ ds }}'",
-            hive_dbid=getconf().get('hooks', 'HIVE_DEFAULT_DBID'),
+            hive_dbid=conf.get('hooks', 'HIVE_DEFAULT_DBID'),
             schema='default',
             *args, **kwargs):
         super(HivePartitionSensor, self).__init__(*args, **kwargs)

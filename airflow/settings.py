@@ -6,7 +6,7 @@ from sqlalchemy import event
 from sqlalchemy import exc
 from sqlalchemy.pool import Pool
 
-from airflow.configuration import getconf
+from airflow.configuration import conf
 
 HEADER = """\
        .__         _____.__
@@ -31,9 +31,9 @@ def pessimistic_connection_handling():
         cursor.close()
 
 
-BASE_FOLDER = getconf().get('core', 'BASE_FOLDER')
+BASE_FOLDER = conf.get('core', 'BASE_FOLDER')
 BASE_LOG_URL = "/admin/airflow/log"
-SQL_ALCHEMY_CONN = getconf().get('core', 'SQL_ALCHEMY_CONN')
+SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
 if BASE_FOLDER not in sys.path:
     sys.path.append(BASE_FOLDER)
 
