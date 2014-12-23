@@ -94,16 +94,16 @@ class LogisticGradient extends Gradient {
  * :: DeveloperApi ::
  * Compute gradient and loss for a Least-squared loss function, as used in linear regression.
  * This is correct for the averaged least squares loss function (mean squared error)
- *              L = 1/n ||A weights-y||^2
+ *              L = 1/2n ||A weights-y||^2
  * See also the documentation for the precise formulation.
  */
 @DeveloperApi
 class LeastSquaresGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val diff = dot(data, weights) - label
-    val loss = diff * diff
+    val loss = diff * diff / 2.0
     val gradient = data.copy
-    scal(2.0 * diff, gradient)
+    scal(diff, gradient)
     (gradient, loss)
   }
 
@@ -113,8 +113,8 @@ class LeastSquaresGradient extends Gradient {
       weights: Vector,
       cumGradient: Vector): Double = {
     val diff = dot(data, weights) - label
-    axpy(2.0 * diff, data, cumGradient)
-    diff * diff
+    axpy(diff, data, cumGradient)
+    diff * diff / 2.0
   }
 }
 
