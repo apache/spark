@@ -139,8 +139,8 @@ class ReceiverTracker(ssc: StreamingContext) extends Logging {
         logWarning("No prior receiver info")
         ReceiverInfo(streamId, "", null, false, "", lastErrorMessage = message, lastError = error)
     }
-    receiverInfo(streamId) = newReceiverInfo
-    ssc.scheduler.listenerBus.post(StreamingListenerReceiverStopped(receiverInfo(streamId)))
+    receiverInfo -= streamId
+    ssc.scheduler.listenerBus.post(StreamingListenerReceiverStopped(newReceiverInfo))
     val messageWithError = if (error != null && !error.isEmpty) {
       s"$message - $error"
     } else {
