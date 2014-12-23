@@ -59,7 +59,6 @@ private[yarn] class YarnAllocator(
     amClient: AMRMClient[ContainerRequest],
     appAttemptId: ApplicationAttemptId,
     args: ApplicationMasterArguments,
-    preferredNodes: collection.Map[String, collection.Set[_ <: SplitInfo]],
     securityMgr: SecurityManager)
   extends Logging {
 
@@ -97,9 +96,6 @@ private[yarn] class YarnAllocator(
   protected val executorCores = args.executorCores
   // Resource capability requested for all executors
   private val resource = Resource.newInstance(executorMemory + memoryOverhead, executorCores)
-
-  protected val (preferredHostToCount, preferredRackToCount) =
-    generateNodeToWeight(conf, preferredNodes)
 
   private val launcherPool = new ThreadPoolExecutor(
     // max pool size of Integer.MAX_VALUE is ignored because we use an unbounded queue
@@ -221,26 +217,9 @@ private[yarn] class YarnAllocator(
   private[yarn] def addResourceRequests(numExecutors: Int): Unit = {
     val containerRequests: Seq[ContainerRequest] = if (numExecutors <= 0) {
       List()
-    } else if (preferredHostToCount.isEmpty) {
+    } else {
       logDebug(s"Adding requests for $numExecutors executors with no host preferences.")
       constructContainerRequests(null, numExecutors)
-    } else {
-      // Request for all hosts in preferred nodes and for numExecutors -
-      // candidates.size, request by default allocation policy.
-      val hostContainerRequests = new ArrayBuffer[ContainerRequest](preferredHostToCount.size)
-      var numRemainingToRequest = numExecutors
-      for ((candidateHost, candidateCount) <- preferredHostToCount) {
-        val numUnfulfilledOnHost = (candidateCount - allocatedContainersOnHost(candidateHost)
-          - getNumPendingAtLocation(candidateHost))
-
-        if (numUnfulfilledOnHost > 0) {
-          val numToRequestOnHost = math.min(numUnfulfilledOnHost, numRemainingToRequest)
-          hostContainerRequests ++= constructContainerRequests(Array(candidateHost),
-            numToRequestOnHost)
-          numRemainingToRequest -= numToRequestOnHost
-        }
-      }
-      hostContainerRequests ++ constructContainerRequests(null, numRemainingToRequest)
     }
 
     for (request <- containerRequests) {
@@ -319,7 +298,7 @@ private[yarn] class YarnAllocator(
       if (numExecutorsRunningNow > maxExecutors) {
         logInfo(("Ignoring container %s at host %s, since we already have the required number of "
             +"containers.").format(containerId, executorHostname))
-        amClient.releaseAssignedContainer(container.getId)
+        internalReleaseContainer(container)
         numExecutorsRunning.decrementAndGet()
       } else {
         val executorId = executorIdCounter.incrementAndGet().toString
