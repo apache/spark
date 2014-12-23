@@ -342,15 +342,12 @@ private[spark] class Worker(
           // Create local dirs for the executor. These are passed to the executor via the
           // SPARK_LOCAL_DIRS environment variable, and deleted by the Worker when the
           // application finishes.
-          val appLocalDirs = appDirectories.synchronized {
-            val dirs = appDirectories.get(appId).getOrElse {
-              Utils.getOrCreateLocalRootDirs(conf).map { dir =>
-                Utils.createDirectory(dir).getAbsolutePath()
-              }.toSeq
-            }
-            appDirectories(appId) = dirs
-            dirs
+          val appLocalDirs = appDirectories.get(appId).getOrElse {
+            Utils.getOrCreateLocalRootDirs(conf).map { dir =>
+              Utils.createDirectory(dir).getAbsolutePath()
+            }.toSeq
           }
+          appDirectories(appId) = appLocalDirs
 
           val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
             self, workerId, host, sparkHome, executorDir, akkaUrl, conf, appLocalDirs,
@@ -472,7 +469,7 @@ private[spark] class Worker(
     registerWithMaster()
   }
 
-  private def maybeCleanupApplication(id: String): Unit = appDirectories.synchronized {
+  private def maybeCleanupApplication(id: String): Unit = {
     val shouldCleanup = finishedApps.contains(id) && !executors.values.exists(_.appId == id)
     if (shouldCleanup) {
       finishedApps -= id
