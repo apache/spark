@@ -323,13 +323,13 @@ object MLUtils {
     var squaredDistance = 0.0
     var iv1 = indices(kv1)
     val nnzv2 = v2.size
-
+   
     while (kv2 < nnzv2) {
       var score = 0.0
       if (kv2 != iv1) {
         score = v2(kv2)
       } else {
-        score = v1.values(iv1) - v2(kv2)
+        score = v1.values(kv1) - v2(kv2)
         if (kv1 < indices.length - 1) {
           kv1 += 1
           iv1 = indices(kv1)
