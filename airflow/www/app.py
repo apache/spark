@@ -20,7 +20,6 @@ from pygments.formatters import HtmlFormatter
 
 import jinja2
 
-
 import markdown
 import chartkick
 
@@ -32,10 +31,15 @@ from airflow import settings
 from airflow.configuration import getconf
 from airflow import utils
 
+from airflow.www.login import login_manager
+import flask_login
+from flask_login import login_required
+
 dagbag = models.DagBag(getconf().get('core', 'DAGS_FOLDER'))
 session = Session()
 
 app = Flask(__name__)
+login_manager.init_app(app)
 app.secret_key = 'airflowified'
 
 # Init for chartkick, the python wrapper for highcharts
@@ -129,6 +133,7 @@ class Airflow(BaseView):
         return self.render('airflow/dags.html')
 
     @expose('/query')
+    @login_required
     def query(self):
         session = settings.Session()
         dbs = session.query(models.DatabaseConnection).order_by(
@@ -316,6 +321,39 @@ class Airflow(BaseView):
             code, PythonLexer(), HtmlFormatter(noclasses=True))
         return self.render(
             'airflow/code.html', html_code=html_code, dag=dag, title=title)
+
+    @expose('/noaccess')
+    def noaccess(self):
+        return self.render('airflow/noaccess.html')
+
+    @expose('/login')
+    def login(u):
+        session = settings.Session()
+        role = 'airpal_topsecret.engineering.airbnb.com'
+        if not 'X-Internalauth-Username' in request.headers:
+            return redirect(url_for('airflow.noaccess'))
+        username = request.headers.get('X-Internalauth-Username')
+        has_access = role in request.headers.get('X-Internalauth-Groups')
+
+        d = {k:v for k, v in request.headers}
+        import urllib2
+        cookie = urllib2.unquote(d.get('Cookie'))
+        cookie = ''.join(cookie.split('j:')[1:]).split('; _ga=')[0]
+        cookie = json.loads(cookie)
+        #email = [email for email in cookie['mail'] if 'airbnb.com' in email][0]
+        email = str(cookie['data']['userData']['mail'][0])
+        if has_access:
+            user = session.query(models.User).filter(models.User.username == username).first()
+            if not user:
+                user = models.User(username=username)
+            user.email = email
+            session.merge(user)
+            session.commit()
+            session.close()
+            flask_login.login_user(user)
+            return user
+        else:
+            return "FAILED"
 
     @expose('/log')
     def log(self):

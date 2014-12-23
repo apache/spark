@@ -108,10 +108,17 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String(ID_LEN), unique=True)
     email = Column(String(500))
+    is_authenticated = Column(Boolean())
+    is_active = Column(Boolean())
+    is_anonymous = Column(Boolean(), default=False)
 
     def __init__(self, username=None, email=None):
         self.username = username
         self.email = email
+
+    def get_id(self):
+        return unicode(self.id)
+
 
 
 class DatabaseConnection(Base):
