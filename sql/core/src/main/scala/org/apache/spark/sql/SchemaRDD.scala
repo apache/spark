@@ -441,9 +441,10 @@ class SchemaRDD(
    * Serializes the Array[Row] returned by SchemaRDD's takeSample(), using the same
    * format as javaToPython and collectToPython. It is used by pyspark.
    */
-  private[sql] def takeSampleToPython(withReplacement: Boolean,
-                                       num: Int,
-                                       seed: Long): JList[Array[Byte]] = {
+  private[sql] def takeSampleToPython(
+      withReplacement: Boolean,
+      num: Int,
+      seed: Long): JList[Array[Byte]] = {
     val fieldTypes = schema.fields.map(_.dataType)
     val pickle = new Pickler
     new java.util.ArrayList(this.takeSample(withReplacement, num, seed).map { row =>
