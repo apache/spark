@@ -370,6 +370,9 @@ private[spark] class TaskSetManager(
     : Option[(Int, TaskLocality.Value, Boolean)] =
   {
     for (index <- dequeueTaskFromList(execId, getPendingTasksForExecutor(execId))) {
+      if (getPendingTasksForExecutor(execId).isEmpty) {
+        pendingTasksForExecutor -= execId
+      }
       return Some((index, TaskLocality.PROCESS_LOCAL, false))
     }
 
@@ -495,6 +498,11 @@ private[spark] class TaskSetManager(
    * Get the level we can launch tasks according to delay scheduling, based on current wait time.
    */
   private def getAllowedLocalityLevel(curTime: Long): TaskLocality.TaskLocality = {
+    if (myLocalityLevels(currentLocalityIndex) == TaskLocality.PROCESS_LOCAL &&
+        pendingTasksForExecutor.isEmpty && currentLocalityIndex < myLocalityLevels.length - 1) {
+      lastLaunchTime = curTime
+      currentLocalityIndex += 1
+    }
     while (curTime - lastLaunchTime >= localityWaits(currentLocalityIndex) &&
         currentLocalityIndex < myLocalityLevels.length - 1)
     {
