@@ -54,3 +54,5 @@ class AirflowConfigParser(ConfigParser):
 
 def getconf():
     return AirflowConfigParser.instance()
+
+conf = getconf()

@@ -20,7 +20,6 @@ from pygments.formatters import HtmlFormatter
 
 import jinja2
 
-
 import markdown
 import chartkick
 
@@ -29,13 +28,22 @@ from airflow import jobs
 from airflow import models
 from airflow.models import State
 from airflow import settings
-from airflow.configuration import getconf
+from airflow.configuration import conf
 from airflow import utils
 
-dagbag = models.DagBag(getconf().get('core', 'DAGS_FOLDER'))
+from airflow.www.login import login_manager
+import flask_login
+from flask_login import login_required
+
+AUTHENTICATE = conf.getboolean('core', 'AUTHENTICATE')
+if AUTHENTICATE is False:
+     login_required = lambda x: x
+
+dagbag = models.DagBag(conf.get('core', 'DAGS_FOLDER'))
 session = Session()
 
 app = Flask(__name__)
+login_manager.init_app(app)
 app.secret_key = 'airflowified'
 
 # Init for chartkick, the python wrapper for highcharts
@@ -129,6 +137,7 @@ class Airflow(BaseView):
         return self.render('airflow/dags.html')
 
     @expose('/query')
+    @login_required
     def query(self):
         session = settings.Session()
         dbs = session.query(models.DatabaseConnection).order_by(
@@ -175,6 +184,7 @@ class Airflow(BaseView):
             has_data=has_data)
 
     @expose('/chart')
+    @login_required
     def chart(self):
         from pandas.tslib import Timestamp
         session = settings.Session()
@@ -311,11 +321,48 @@ class Airflow(BaseView):
         dag_id = request.args.get('dag_id')
         dag = dagbag.dags[dag_id]
         code = "".join(open(dag.full_filepath, 'r').readlines())
-        title = dag.filepath.replace(getconf().get('core', 'BASE_FOLDER') + '/dags/', '')
+        title = dag.filepath.replace(conf.get('core', 'BASE_FOLDER') + '/dags/', '')
         html_code = highlight(
             code, PythonLexer(), HtmlFormatter(noclasses=True))
         return self.render(
             'airflow/code.html', html_code=html_code, dag=dag, title=title)
+
+    @expose('/noaccess')
+    def noaccess(self):
+        return self.render('airflow/noaccess.html')
+
+    @expose('/login')
+    def login(u):
+        session = settings.Session()
+        role = 'airpal_topsecret.engineering.airbnb.com'
+        if not 'X-Internalauth-Username' in request.headers:
+            return redirect(url_for('airflow.noaccess'))
+        username = request.headers.get('X-Internalauth-Username')
+        has_access = role in request.headers.get('X-Internalauth-Groups')
+
+        d = {k:v for k, v in request.headers}
+        import urllib2
+        cookie = urllib2.unquote(d.get('Cookie'))
+        cookie = ''.join(cookie.split('j:')[1:]).split('; _ga=')[0]
+        cookie = json.loads(cookie)
+        #email = [email for email in cookie['mail'] if 'airbnb.com' in email][0]
+        email = str(cookie['data']['userData']['mail'][0])
+        if has_access:
+            user = session.query(models.User).filter(models.User.username==username).first()
+            if not user:
+                user = models.User(username=username)
+            user.email = email
+            session.merge(user)
+            flask_login.login_user(user)
+            session.commit()
+            session.close()
+	    return redirect(request.args.get("next") or url_for("index"))
+        return redirect('/')
+
+    @expose('/logout')
+    def logout(self):
+        flask_login.logout_user()
+    	return redirect('/admin')
 
     @expose('/log')
     def log(self):
@@ -323,11 +370,12 @@ class Airflow(BaseView):
         task_id = request.args.get('task_id')
         execution_date = request.args.get('execution_date')
         dag = dagbag.dags[dag_id]
-        loc = getconf().get('core', 'BASE_LOG_FOLDER') + "/{dag_id}/{task_id}/{execution_date}"
+        loc = conf.get('core', 'BASE_LOG_FOLDER') + "/{dag_id}/{task_id}/{execution_date}"
         loc = loc.format(**locals())
         try:
             f = open(loc)
             log = "".join(f.readlines())
+            f.close()
         except:
             log = "The log file '{loc}' is missing.".format(**locals())
             TI = models.TaskInstance
@@ -340,7 +388,6 @@ class Airflow(BaseView):
                 log += "\n\nIt should be on host [{host}]".format(**locals())
             session.commit()
             session.close()
-
 
         log = "<pre><code>" + log + "</code></pre>"
         title = "Logs for {task_id} on {execution_date}".format(**locals())
@@ -729,6 +776,10 @@ admin.add_view(Airflow(name='DAGs'))
 # Leveraging the admin for CRUD and browse on models
 # ------------------------------------------------
 
+class LoginMixin(object):
+    def is_accessible(self):
+        return AUTHENTICATE is False or flask_login.current_user.is_authenticated()
+
 
 class ModelViewOnly(ModelView):
     """
@@ -789,12 +840,13 @@ class JobModelView(ModelViewOnly):
 mv = JobModelView(jobs.BaseJob, session, name="Jobs", category="Admin")
 admin.add_view(mv)
 
-
-mv = ModelView(models.User, session, name="Users", category="Admin")
+class UserModelView(LoginMixin, ModelView):
+    pass
+mv = UserModelView(models.User, session, name="Users", category="Admin")
 admin.add_view(mv)
 
 
-class DatabaseConnectionModelView(ModelView):
+class DatabaseConnectionModelView(LoginMixin, ModelView):
     column_list = ('db_id', 'db_type', 'host', 'port')
     form_choices = {
         'db_type': [
@@ -837,7 +889,7 @@ def label_link(v, c, m, p):
     return Markup("<a href='{url}'>{m.label}</a>".format(**locals()))
 
 
-class ChartModelView(ModelView):
+class ChartModelView(LoginMixin, ModelView):
     column_list = ('label', 'db_id', 'chart_type', 'show_datatable', )
     column_formatters = dict(label=label_link)
     create_template = 'airflow/chart/create.html'

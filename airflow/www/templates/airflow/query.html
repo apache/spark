@@ -13,8 +13,10 @@
 {% block body %}
   <h2>Query</h2>
   <form method="get">
-  {{ form.db_id }}
-  <input type="submit" class="btn btn-default" value="Run!"><br>
+    <div class="form-inline">
+      {{ form.db_id }}
+      <input type="submit" class="btn btn-default" value="Run!"><br>
+    </div>
   <div id='ace_container'>
   {{ form.sql(rows=10) }}
   </div>
@@ -48,7 +50,6 @@
             "iDisplayLength": 25,
         });
         $('select').addClass("form-control");
-        $('select#db_id').attr("style", "width: auto; float:left;");
     });
   </script>
 {% endblock %}

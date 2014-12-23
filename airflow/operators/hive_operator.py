@@ -1,6 +1,6 @@
 import logging
 
-from airflow.configuration import getconf
+from airflow.configuration import conf
 from airflow.hooks import HiveHook
 from airflow.models import BaseOperator
 from airflow.utils import apply_defaults
@@ -25,7 +25,7 @@ class HiveOperator(BaseOperator):
     @apply_defaults
     def __init__(
             self, hql,
-            hive_dbid=getconf().get('hooks', 'HIVE_DEFAULT_DBID'),
+            hive_dbid=conf.get('hooks', 'HIVE_DEFAULT_DBID'),
             *args, **kwargs):
         super(HiveOperator, self).__init__(*args, **kwargs)
 

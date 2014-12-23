@@ -16,12 +16,14 @@
 {% block body %}
     {{ super() }}
     <form method="get">
-        Run:<input type="hidden" value="{{ dag.dag_id }}" name="dag_id">
-        {{ form.execution_date | safe }}
-        Layout:
-        {{ form.arrange | safe }}
-        <input type="submit" value="Go" class="btn btn-default"
-        action="" method="get">
+	<div class="form-inline">
+		Run:<input type="hidden" value="{{ dag.dag_id }}" name="dag_id">
+		{{ form.execution_date(class_="form-control") | safe }}
+		Layout:
+		{{ form.arrange(class_="form-control") | safe }}
+		<input type="submit" value="Go" class="btn btn-default"
+		action="" method="get">
+	</div>
     </form>
     <div id="svg_container">
       <svg height=800 width="100%">

@@ -11,7 +11,7 @@ from sqlalchemy import func
 from sqlalchemy.orm.session import make_transient
 
 from airflow.executors import DEFAULT_EXECUTOR
-from airflow.configuration import getconf
+from airflow.configuration import conf
 from airflow import models
 from airflow import settings
 from airflow import utils
@@ -20,7 +20,7 @@ from airflow.utils import State
 
 
 Base = models.Base
-ID_LEN = getconf().getint('misc', 'ID_LEN')
+ID_LEN = conf.getint('misc', 'ID_LEN')
 
 class BaseJob(Base):
     """
@@ -51,7 +51,7 @@ class BaseJob(Base):
     def __init__(
             self,
             executor=DEFAULT_EXECUTOR,
-            heartrate=getconf().getint('misc', 'JOB_HEARTBEAT_SEC'),
+            heartrate=conf.getint('misc', 'JOB_HEARTBEAT_SEC'),
             *args, **kwargs):
         self.hostname = socket.gethostname()
         self.executor = executor
@@ -65,7 +65,7 @@ class BaseJob(Base):
     def is_alive(self):
         return (
             (datetime.now() - self.latest_heartbeat).seconds <
-            (getconf().getint('misc', 'JOB_HEARTBEAT_SEC') * 2.1)
+            (conf.getint('misc', 'JOB_HEARTBEAT_SEC') * 2.1)
         )
 
     def heartbeat(self):

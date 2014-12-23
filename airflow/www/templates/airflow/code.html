@@ -4,7 +4,5 @@
 {% block body %}
     {{ super() }}
     <h2>{{ title }}</h2>
-    <div class="panel">
-        {{ html_code|safe }}
-    </div>
+    {{ html_code|safe }}
 {% endblock %}

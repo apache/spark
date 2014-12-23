@@ -18,14 +18,14 @@ from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import relationship
 
 from airflow.executors import DEFAULT_EXECUTOR
-from airflow.configuration import getconf
+from airflow.configuration import conf
 from airflow import settings
 from airflow import utils
 from airflow.utils import State
 from airflow.utils import apply_defaults
 
 Base = declarative_base()
-ID_LEN = getconf().getint('misc', 'ID_LEN')
+ID_LEN = conf.getint('misc', 'ID_LEN')
 
 class DagBag(object):
     """
@@ -42,7 +42,7 @@ class DagBag(object):
             dag_folder=None,
             executor=DEFAULT_EXECUTOR):
         if not dag_folder:
-            dag_folder = getconf().get('core', 'DAGS_FOLDER')
+            dag_folder = conf.get('core', 'DAGS_FOLDER')
         logging.info("Filling up the DagBag from " + dag_folder)
         self.dag_folder = dag_folder
         self.dags = {}
@@ -112,6 +112,19 @@ class User(Base):
     def __init__(self, username=None, email=None):
         self.username = username
         self.email = email
+
+    def get_id(self):
+        return unicode(self.id)
+	
+    def is_active(self):
+        return True
+
+    def is_authenticated(self):
+        return True
+
+    def is_anonymous(self):
+        return False
+
 
 
 class DatabaseConnection(Base):
@@ -250,13 +263,13 @@ class TaskInstance(Base):
     @property
     def log_filepath(self):
         iso = self.execution_date.isoformat()
-        return getconf().get('core', 'BASE_LOG_FOLDER') + \
+        return conf.get('core', 'BASE_LOG_FOLDER') + \
             "/{self.dag_id}/{self.task_id}/{iso}.log".format(**locals())
 
     @property
     def log_url(self):
         iso = self.execution_date.isoformat()
-        BASE_URL = getconf().get('core', 'BASE_URL')
+        BASE_URL = conf.get('core', 'BASE_URL')
         return BASE_URL + (
             "/admin/airflow/log"
             "?dag_id={self.dag_id}"
@@ -930,7 +943,7 @@ class DAG(Base):
 
     @property
     def filepath(self):
-        base = getconf().get('core', 'DAGS_FOLDER')
+        base = conf.get('core', 'DAGS_FOLDER')
         return self.full_filepath.replace(base + '/', '')
 
     @property

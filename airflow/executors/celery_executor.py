@@ -3,7 +3,7 @@ import multiprocessing
 import time
 
 from airflow.executors.base_executor import BaseExecutor
-from airflow.configuration import getconf
+from airflow.configuration import conf
 from airflow.utils import State
 from celery_worker import execute_command
 
@@ -54,7 +54,7 @@ class CelerySubmitter(multiprocessing.Process):
                 self.task_queue.task_done()
                 break
             key, command = work
-            BASE_FOLDER = getconf().get('core', 'BASE_FOLDER')
+            BASE_FOLDER = conf.get('core', 'BASE_FOLDER')
             command = (
                 "exec bash -c '"
                 "cd $AIRFLOW_HOME;\n" +

@@ -1,8 +1,8 @@
-from airflow.configuration import getconf
+from airflow.configuration import conf
 
 def max_partition(
         table, schema="default",
-        hive_dbid=getconf().get('hooks', 'HIVE_DEFAULT_DBID')):
+        hive_dbid=conf.get('hooks', 'HIVE_DEFAULT_DBID')):
     from airflow.hooks.hive_hook import HiveHook
     if '.' in table:
         schema, table = table.split('.')
