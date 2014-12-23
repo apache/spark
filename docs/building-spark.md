@@ -11,6 +11,14 @@ Building Spark using Maven requires Maven 3.0.4 or newer and Java 6+.
 
 # Building with `build/mvn`
 
+Spark now comes packaged with a self-contained Maven installation to ease building and deployment of Spark from source located under the `build/` directory. This script will automatically download and setup all necessary build requirements ([Maven](https://maven.apache.org/), [Scala](http://www.scala-lang.org/), and [Zinc](https://github.com/typesafehub/zinc)) locally within the `build/` directory itself. It honors any `mvn` binary if present already, however, will pull down its own copy of Scala and Zinc regardless to ensure proper version requirements are met. `build/mvn` execution acts as a pass through to the `mvn` call allowing easy transition from previous build methods. As an example, one can build a version of Spark as follows:
+
+{% highlight bash %}
+build/mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=2.4.0 -DskipTests clean package
+{% endhighlight %}
+
+Other build examples can be found below.
+
 # Setting up Maven's Memory Usage
 
 You'll need to configure Maven to use more memory than usual by setting `MAVEN_OPTS`. We recommend the following settings:
@@ -29,7 +37,9 @@ If you don't run this, you may see errors like the following:
 
 You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
 
-**Note:** *For Java 8 and above this step is not required.*
+**Note:**
+* *For Java 8 and above this step is not required.*
+* *If using `build/mvn` and `MAVEN_OPTS` were not already set, the script will automate with for you.*
 
 # Specifying the Hadoop Version
 
@@ -190,22 +200,22 @@ compilation. More advanced developers may wish to use SBT.
 The SBT build is derived from the Maven POM files, and so the same Maven profiles and variables
 can be set to control the SBT build. For example:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 assembly
+    build/sbt -Pyarn -Phadoop-2.3 assembly
 
 # Testing with SBT
 
-Some of the tests require Spark to be packaged first, so always run `sbt/sbt assembly` the first time.  The following is an example of a correct (build, test) sequence:
+Some of the tests require Spark to be packaged first, so always run `build/sbt assembly` the first time.  The following is an example of a correct (build, test) sequence:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver assembly
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver test
+    build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver assembly
+    build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver test
 
 To run only a specific test suite as follows:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver "test-only org.apache.spark.repl.ReplSuite"
+    build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver "test-only org.apache.spark.repl.ReplSuite"
 
 To run test suites of a specific sub project as follows:
 
-    sbt/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver core/test
+    build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver core/test
 
 # Speeding up Compilation with Zinc
 
