@@ -22,15 +22,17 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.yarn.applicationMaster.waitTries</code></td>
-  <td>10</td>
+  <td><code>spark.yarn.am.waitTime</code></td>
+  <td>100000</td>
   <td>
-    Set the number of times the ApplicationMaster waits for the the Spark master and then also the number of tries it waits for the SparkContext to be initialized
+    In yarn-cluster mode, time in milliseconds for the application master to wait for the
+    SparkContext to be initialized. In yarn-client mode, time for the application master to wait
+    for the driver to connect to it.
   </td>
 </tr>
 <tr>
   <td><code>spark.yarn.submit.file.replication</code></td>
-  <td>3</td>
+  <td>The default HDFS replication (usually 3)</td>
   <td>
     HDFS replication level for the files uploaded into HDFS for the application. These include things like the Spark jar, the app jar, and any distributed cache files/archives.
   </td>
@@ -92,6 +94,13 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
+  <td><code>spark.yarn.queue</code></td>
+  <td>default</td>
+  <td>
+    The name of the YARN queue to which the application is submitted.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.jar</code></td>
   <td>(none)</td>
   <td>
@@ -130,6 +139,14 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   <td>25</td>
   <td>
     The maximum number of threads to use in the application master for launching executor containers.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.am.extraJavaOptions</code></td>
+  <td>(none)</td>
+  <td>
+  A string of extra JVM options to pass to the Yarn ApplicationMaster in client mode.
+  In cluster mode, use spark.driver.extraJavaOptions instead.
   </td>
 </tr>
 </table>
@@ -209,7 +226,7 @@ If you need a reference to the proper location to put log files in the YARN so t
 
 # Important notes
 
-- Before Hadoop 2.2, YARN does not support cores in container resource requests. Thus, when running against an earlier version, the numbers of cores given via command line arguments cannot be passed to YARN.  Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
+- Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
 - The local directories used by Spark executors will be the local directories configured for YARN (Hadoop YARN config `yarn.nodemanager.local-dirs`). If the user specifies `spark.local.dir`, it will be ignored.
 - The `--files` and `--archives` options support specifying file names with the # similar to Hadoop. For example you can specify: `--files localtest.txt#appSees.txt` and this will upload the file you have locally named localtest.txt into HDFS but this will be linked to by the name `appSees.txt`, and your application should use the name as `appSees.txt` to reference it when running on YARN.
 - The `--jars` option allows the `SparkContext.addJar` function to work if you are using it with local files and running in `yarn-cluster` mode. It does not need to be used if you are using it with HDFS, HTTP, HTTPS, or FTP files.

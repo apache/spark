@@ -23,7 +23,7 @@ private[spark] class ApplicationDescription(
     val memoryPerSlave: Int,
     val command: Command,
     var appUiUrl: String,
-    val eventLogDir: Option[String] = None)
+    val eventLogFile: Option[String] = None)
   extends Serializable {
 
   val user = System.getProperty("user.name", "<unknown>")
