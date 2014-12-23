@@ -714,15 +714,16 @@ private[spark] class Master(
   def rebuildSparkUI(app: ApplicationInfo): Boolean = {
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
-    val eventLogFile = app.desc.eventLogFile.getOrElse {
+    val eventLogDir = app.desc.eventLogDir.getOrElse {
       // Event logging is not enabled for this application
       app.desc.appUiUrl = notFoundBasePath
       return false
     }
 
     try {
-      val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
-      val (logInput, sparkVersion) = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
+      val fs = Utils.getHadoopFileSystem(eventLogDir, hadoopConf)
+      val (logInput, sparkVersion) = EventLoggingListener.openEventLog(
+        new Path(eventLogDir, app.id), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
         appName + " (completed)", HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
@@ -740,7 +741,7 @@ private[spark] class Master(
       case fnf: FileNotFoundException =>
         // Event logging is enabled for this application, but no event logs are found
         val title = s"Application history not found (${app.id})"
-        var msg = s"No event logs found for application $appName in $eventLogFile."
+        var msg = s"No event logs found for application $appName in $eventLogDir."
         logWarning(msg)
         msg += " Did you specify the correct logging directory?"
         msg = URLEncoder.encode(msg, "UTF-8")
