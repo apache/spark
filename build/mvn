@@ -20,6 +20,9 @@ install_app() {
   if [ -n "$AMPLAB_JENKINS" ]; then
     curl_opts="-s"
     wget_opts="--quiet"
+  else
+    curl_opts="--progress-bar"
+    wget_opts="--progress=bar:force"
   fi
 
   if [ -z "$3" -o ! -f "$binary" ]; then
@@ -119,6 +122,9 @@ if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`${ZINC_BIN} -status`" ]; then
     -scala-compiler "${SCALA_COMPILER}" \
     -scala-library "${SCALA_LIBRARY}" &>/dev/null
 fi
+
+# Set any `mvn` options if not already present
+export MAVEN_OPTS=${MAVEN_OPTS:-"-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"}
 
 # Last, call the `mvn` command as usual
 ${MVN_BIN} "$@"

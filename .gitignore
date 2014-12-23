@@ -8,7 +8,7 @@
 *.pyc
 .idea/
 .idea_modules/
-sbt/*.jar
+build/*.jar
 .settings
 .cache
 cache

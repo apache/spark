@@ -9,6 +9,7 @@ redirect_from: "building-with-maven.html"
 
 Building Spark using Maven requires Maven 3.0.4 or newer and Java 6+.
 
+# Building with `build/mvn`
 
 # Setting up Maven's Memory Usage
 
@@ -105,7 +106,7 @@ mvn -Pyarn-alpha -Phadoop-2.3 -Dhadoop.version=2.3.0 -Dyarn.version=0.23.7 -Dski
 # Building With Hive and JDBC Support
 To enable Hive integration for Spark SQL along with its JDBC server and CLI,
 add the `-Phive` and `Phive-thriftserver` profiles to your existing build options.
-By default Spark will build with Hive 0.13.1 bindings. You can also build for 
+By default Spark will build with Hive 0.13.1 bindings. You can also build for
 Hive 0.12.0 using the `-Phive-0.12.0` profile.
 {% highlight bash %}
 # Apache Hadoop 2.4.X with Hive 13 support
@@ -127,7 +128,7 @@ supported in Scala 2.11 builds.
 
 # Spark Tests in Maven
 
-Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin). 
+Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin).
 
 Some of the tests require Spark to be packaged first, so always run `mvn package` with `-DskipTests` the first time.  The following is an example of a correct (build, test) sequence:
 
@@ -164,9 +165,9 @@ The debian package can then be found under assembly/target. We added the short c
 Running only Java 8 tests and nothing else.
 
     mvn install -DskipTests -Pjava8-tests
-    
-Java 8 tests are run when `-Pjava8-tests` profile is enabled, they will run in spite of `-DskipTests`. 
-For these tests to run your system must have a JDK 8 installation. 
+
+Java 8 tests are run when `-Pjava8-tests` profile is enabled, they will run in spite of `-DskipTests`.
+For these tests to run your system must have a JDK 8 installation.
 If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.
 
 # Building for PySpark on YARN
@@ -178,7 +179,7 @@ then ship it over to the cluster. We are investigating the exact cause for this.
 
 # Packaging without Hadoop Dependencies for YARN
 
-The assembly jar produced by `mvn package` will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with yarn.application.classpath.  The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself. 
+The assembly jar produced by `mvn package` will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with yarn.application.classpath.  The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself.
 
 # Building with SBT
 
