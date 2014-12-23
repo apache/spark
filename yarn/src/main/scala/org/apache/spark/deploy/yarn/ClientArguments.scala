@@ -100,12 +100,16 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
         }
       }
     } else {
+      for (key <- Seq(driverMemKey, driverMemOverheadKey)) {
+        if (sparkConf.getOption(key).isDefined) {
+          println(s"$key is set but does not apply in client mode.")
+        }
+      }
+      if (amMemory != 512) {
+        println("--driver-memory is set but does not apply in client mode.")
+      }
       // In cluster mode, the driver and the AM live in the same JVM, so this does not apply
       amMemory = Utils.memoryStringToMb(sparkConf.get(amMemKey, "512m"))
-      if (sparkConf.contains(driverMemKey) || sparkConf.contains(driverMemOverheadKey)) {
-        println(s"$driverMemKey, $driverMemOverheadKey or --driver-memory does not apply " +
-            s"in client mode, please use $amMemKey and $amMemOverheadKey instead.")
-      }
     }
   }
 
