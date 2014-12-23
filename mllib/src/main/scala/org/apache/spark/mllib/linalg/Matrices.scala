@@ -740,16 +740,13 @@ object Matrices {
     val numCols = matrices(0).numCols
     var hasSparse = false
     var numRows = 0
-    var valsLength = 0
     matrices.foreach { mat =>
       require(numCols == mat.numCols, "The number of rows of the matrices in this sequence, " +
         "don't match!")
       mat match {
         case sparse: SparseMatrix =>
           hasSparse = true
-          valsLength += sparse.values.length
         case dense: DenseMatrix =>
-          valsLength += dense.values.length
         case _ => throw new IllegalArgumentException("Unsupported matrix format. Expected " +
           s"SparseMatrix or DenseMatrix. Instead got: ${mat.getClass}")
       }
