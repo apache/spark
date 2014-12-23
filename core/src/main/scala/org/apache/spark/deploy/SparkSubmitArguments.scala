@@ -214,7 +214,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     """.stripMargin
   }
 
-  /** Fill in values by parsing user options. */
+  /**
+   * Fill in values by parsing user options.
+   * NOTE: Any changes here must be reflected in YarnClientSchedulerBackend.
+   */
   private def parseOpts(opts: Seq[String]): Unit = {
     val EQ_SEPARATED_OPT="""(--[^=]+)=(.+)""".r
 
