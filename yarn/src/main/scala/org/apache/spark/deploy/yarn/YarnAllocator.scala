@@ -29,7 +29,6 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.util.RackResolver
@@ -66,11 +65,10 @@ private[yarn] class YarnAllocator(
 
   import YarnAllocator._
 
-  // These three complementary data structures are locked on allocatedHostToContainersMap.
+  // These two complementary data structures are locked on allocatedHostToContainersMap.
   private[yarn] val allocatedHostToContainersMap =
     new HashMap[String, collection.mutable.Set[ContainerId]]
   private[yarn] val allocatedContainerToHostMap = new HashMap[ContainerId, String]
-  private[yarn] val allocatedRackCount = new HashMap[String, Int]
 
   // Containers that we no longer care about. We've either already told the RM to release them or
   // will on the next heartbeat. Containers get removed from this map after the RM tells us they've
@@ -328,16 +326,12 @@ private[yarn] class YarnAllocator(
 
         logInfo("Launching container %s for on host %s".format(containerId, executorHostname))
 
-        val rack = RackResolver.resolve(conf, executorHostname).getNetworkLocation
         allocatedHostToContainersMap.synchronized {
           val containerSet = allocatedHostToContainersMap.getOrElseUpdate(executorHostname,
             new HashSet[ContainerId])
 
           containerSet += containerId
           allocatedContainerToHostMap.put(containerId, executorHostname)
-          if (rack != null) {
-            allocatedRackCount.put(rack, allocatedRackCount.getOrElse(rack, 0) + 1)
-          }
         }
 
         val executorRunnable = new ExecutorRunnable(
@@ -434,15 +428,6 @@ private[yarn] class YarnAllocator(
           }
 
           allocatedContainerToHostMap.remove(containerId)
-
-          // TODO: Move this part outside the synchronized block?
-          val rack = RackResolver.resolve(conf, host).getNetworkLocation
-          val rackCount = allocatedRackCount.getOrElse(rack, 0) - 1
-          if (rackCount > 0) {
-            allocatedRackCount.put(rack, rackCount)
-          } else {
-            allocatedRackCount.remove(rack)
-          }
         }
       }
     }
@@ -450,7 +435,7 @@ private[yarn] class YarnAllocator(
 
   private def allocatedContainersOnHost(host: String): Int = {
     allocatedHostToContainersMap.synchronized {
-     allocatedHostToContainersMap.getOrElse(host, Set()).size
+      allocatedHostToContainersMap.getOrElse(host, Set()).size
     }
   }
 
