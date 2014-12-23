@@ -1012,6 +1012,10 @@ let user control table caching explicitly:
 
 **NOTE:** `CACHE TABLE tbl` is now __eager__ by default not __lazy__. Don’t need to trigger cache materialization manually anymore.
 
+Spark SQL newly introduced a statement to let user control table caching whether or not lazy since Spark 1.2.0:
+
+	CACHE [LAZY] TABLE [AS SELECT] ...
+
 Several caching related features are not supported yet:
 
 * User defined partition level cache eviction policy
