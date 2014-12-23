@@ -327,9 +327,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     def numPartitions = self.numShufflePartitions
 
-    val strategies: Seq[Strategy] =
+    def strategies: Seq[Strategy] =
       extraStrategies ++ (
-      CommandStrategy(self) ::
+      CommandStrategy ::
       DataSourceStrategy ::
       TakeOrdered ::
       HashAggregation ::
