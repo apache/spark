@@ -36,6 +36,7 @@ private[spark] class StreamingListenerBus() extends Logging {
   private val EVENT_QUEUE_CAPACITY = 10000
   private val eventQueue = new LinkedBlockingQueue[StreamingListenerEvent](EVENT_QUEUE_CAPACITY)
   private val queueFullErrorMessageLogged = new AtomicBoolean(false)
+  @volatile private var stopped = false
 
   val listenerThread = new Thread("StreamingListenerBus") {
     setDaemon(true)
@@ -56,6 +57,7 @@ private[spark] class StreamingListenerBus() extends Logging {
           case batchCompleted: StreamingListenerBatchCompleted =>
             foreachListener(_.onBatchCompleted(batchCompleted))
           case StreamingListenerShutdown =>
+            assert(stopped)
             // Get out of the while loop and shutdown the daemon thread
             return
           case _ =>
@@ -73,6 +75,11 @@ private[spark] class StreamingListenerBus() extends Logging {
   }
 
   def post(event: StreamingListenerEvent) {
+    if (stopped) {
+      // Drop further events to make `StreamingListenerShutdown` be delivered ASAP
+      logError("StreamingListenerBus has been stopped! Drop " + event)
+      return
+    }
     val eventAdded = eventQueue.offer(event)
     if (!eventAdded && queueFullErrorMessageLogged.compareAndSet(false, true)) {
       logError("Dropping StreamingListenerEvent because no remaining room in event queue. " +
@@ -82,8 +89,9 @@ private[spark] class StreamingListenerBus() extends Logging {
   }
 
   def stop(): Unit = {
+    stopped = true
     // Should not call `post`, or `StreamingListenerShutdown` may be dropped.
-    eventQueue.offer(StreamingListenerShutdown)
+    eventQueue.put(StreamingListenerShutdown)
     listenerThread.join()
   }
 
