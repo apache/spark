@@ -719,14 +719,26 @@ private[spark] class Master(
   def rebuildSparkUI(app: ApplicationInfo): Boolean = {
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
-    val eventLogFile = app.desc.eventLogFile.getOrElse {
-      // Event logging is not enabled for this application
-      app.desc.appUiUrl = notFoundBasePath
+    val eventLogFile = app.desc.eventLogDir
+      .map { dir => EventLoggingListener.getLogPath(dir, app.id) }
+      .getOrElse {
+        // Event logging is not enabled for this application
+        app.desc.appUiUrl = notFoundBasePath
+        return false
+    }
+    val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
+
+    if (fs.exists(new Path(eventLogFile + EventLoggingListener.IN_PROGRESS))) {
+      // Event logging is enabled for this application, but the application is still in progress
+      val title = s"Application history not found (${app.id})"
+      var msg = s"Application $appName is still in progress."
+      logWarning(msg)
+      msg = URLEncoder.encode(msg, "UTF-8")
+      app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
       return false
     }
 
     try {
-      val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
       val (logInput, sparkVersion) = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
