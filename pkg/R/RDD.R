@@ -293,6 +293,8 @@ setMethod("checkpoint",
           function(rdd) {
             jrdd <- getJRDD(rdd)
             .jcall(jrdd$rdd(), "V", "checkpoint")
+            # NOTE: rJava doesn't check for exceptions if the return type is void
+            .jcheck()
             rdd@env$isCheckpointed <- TRUE
             rdd
           })
@@ -1099,6 +1101,8 @@ setMethod("saveAsObjectFile",
               rdd <- reserialize(rdd)
             }
             .jcall(getJRDD(rdd), "V", "saveAsObjectFile", path)
+            # NOTE: rJava doesn't check for exceptions if the return type is void
+            .jcheck()
             # Return nothing
             invisible(NULL)
           })
@@ -1127,6 +1131,8 @@ setMethod("saveAsTextFile",
             }
             stringRdd <- lapply(rdd, func)
             .jcall(getJRDD(stringRdd, dataSerialization = FALSE), "V", "saveAsTextFile", path)
+            # NOTE: rJava doesn't check for exceptions if the return type is void
+            .jcheck()
             # Return nothing
             invisible(NULL)
           })
