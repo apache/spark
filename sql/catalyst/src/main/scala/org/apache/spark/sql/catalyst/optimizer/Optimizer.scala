@@ -349,7 +349,7 @@ object CombineFilters extends Rule[LogicalPlan] {
 }
 
 /**
- * Normalizes conjuctions and disjunctions to eliminate common factors.
+ * Normalizes conjunctions and disjunctions to eliminate common factors.
  */
 object NormalizeFilters extends Rule[LogicalPlan] with PredicateHelper {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -358,17 +358,23 @@ object NormalizeFilters extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def normalizedPredicate(predicate: Expression): Seq[Expression] = predicate match {
-    // a || a => a
-    case Or(lhs, rhs) if lhs fastEquals rhs => lhs :: Nil
-    // a && a => a
-    case And(lhs, rhs) if lhs fastEquals rhs => lhs :: Nil
+    // a && a && a ... => a
+    case p @ And(e, _) if splitConjunctivePredicates(p).distinct.size == 1 => e :: Nil
+
+    // a || a || a ... => a
+    case p @ Or(e, _) if splitDisjunctivePredicates(p).distinct.size == 1 => e :: Nil
+
     // (a && b && c && ...) || (a && b && d && ...) => a && b && (c || d || ...)
     case Or(lhs, rhs) =>
       val lhsSet = splitConjunctivePredicates(lhs).toSet
       val rhsSet = splitConjunctivePredicates(rhs).toSet
-      val commonPredicates = lhsSet & rhsSet
-      val otherPredicates = (lhsSet | rhsSet) &~ commonPredicates
-      otherPredicates.reduceOption(Or).getOrElse(Literal(true)) :: commonPredicates.toList
+      val common = lhsSet.intersect(rhsSet)
+
+      (lhsSet.diff(common).reduceOption(And) ++ rhsSet.diff(common).reduceOption(And))
+        .reduceOption(Or)
+        .map(_ :: common.toList)
+        .getOrElse(common.toList)
+
     case _ => predicate :: Nil
   }
 }

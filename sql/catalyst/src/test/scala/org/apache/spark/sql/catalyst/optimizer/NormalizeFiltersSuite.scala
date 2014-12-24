@@ -52,13 +52,15 @@ class NormalizeFiltersSuite extends PlanTest {
 
   test("a && a => a") {
     checkExpression('a === 1 && 'a === 1, 'a === 1)
+    checkExpression('a === 1 && 'a === 1 && 'a === 1, 'a === 1)
   }
 
   test("a || a => a") {
     checkExpression('a === 1 || 'a === 1, 'a === 1)
+    checkExpression('a === 1 || 'a === 1 || 'a === 1, 'a === 1)
   }
 
-  test("(a && b) || (a && c)") {
+  test("(a && b) || (a && c) => a && (b || c)") {
     checkExpression(
       ('a === 1 && 'a < 10) || ('a > 2 && 'a === 1),
       ('a === 1) && ('a < 10 || 'a > 2))
