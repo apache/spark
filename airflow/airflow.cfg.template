@@ -31,5 +31,4 @@ HIVE_DEFAULT_DBID: hive_default
 [misc]
 RUN_AS_MASTER: True
 JOB_HEARTBEAT_SEC: 5
-# Used for dag_id and task_id VARCHAR length
 ID_LEN: 250

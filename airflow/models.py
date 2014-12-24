@@ -23,6 +23,7 @@ from airflow import settings
 from airflow import utils
 from airflow.utils import State
 from airflow.utils import apply_defaults
+from flask_login import current_user
 
 Base = declarative_base()
 ID_LEN = conf.getint('misc', 'ID_LEN')
@@ -113,9 +114,12 @@ class User(Base):
         self.username = username
         self.email = email
 
+    def __repr__(self):
+        return self.username
+
     def get_id(self):
         return unicode(self.id)
-	
+
     def is_active(self):
         return True
 
@@ -124,7 +128,6 @@ class User(Base):
 
     def is_anonymous(self):
         return False
-
 
 
 class DatabaseConnection(Base):
@@ -1145,13 +1148,16 @@ class Chart(Base):
     __tablename__ = "chart"
 
     id = Column(Integer, primary_key=True)
-
     label = Column(String(200))
     db_id = Column(String(ID_LEN), ForeignKey('db_connection.db_id'))
-    chart_type = Column(String(100), default="line_chart")
+    user_id = Column(Integer(), ForeignKey('user.id'),)
+    chart_type = Column(String(100), default="line")
+    sql_layout = Column(String(50), default="series")
     sql = Column(Text, default="SELECT series, x, y FROM table")
+    y_log_scale = Column(Boolean)
     show_datatable = Column(Boolean)
     show_sql = Column(Boolean, default=True)
     height = Column(Integer, default=600)
     default_params = Column(String(5000), default="{}")
-    db = relationship("DatabaseConnection", order_by="DatabaseConnection.db_id")
+    owner = relationship("User", cascade=False, cascade_backrefs=False)
+    db = relationship("DatabaseConnection")
