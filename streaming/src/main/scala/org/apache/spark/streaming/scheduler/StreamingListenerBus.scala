@@ -96,7 +96,9 @@ private[spark] class StreamingListenerBus() extends Logging {
   }
 
   private def foreachListener(f: StreamingListener => Unit): Unit = {
-    listeners.foreach { listener =>
+    val iter = listeners.iterator
+    while (iter.hasNext) {
+      val listener = iter.next()
       try {
         f(listener)
       } catch {
