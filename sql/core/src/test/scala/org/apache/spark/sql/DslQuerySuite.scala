@@ -24,6 +24,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.test.TestSQLContext._
 
+import scala.language.postfixOps
+
 class DslQuerySuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 

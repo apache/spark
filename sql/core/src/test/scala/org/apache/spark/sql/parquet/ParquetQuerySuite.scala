@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.parquet
 
+import scala.reflect.ClassTag
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
 import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
@@ -459,11 +461,17 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("make RecordFilter for simple predicates") {
-    def checkFilter[T <: FilterPredicate](predicate: Expression, defined: Boolean = true): Unit = {
+    def checkFilter[T <: FilterPredicate : ClassTag](
+        predicate: Expression,
+        defined: Boolean = true): Unit = {
       val filter = ParquetFilters.createFilter(predicate)
       if (defined) {
         assert(filter.isDefined)
-        assert(filter.get.isInstanceOf[T])
+        val tClass = implicitly[ClassTag[T]].runtimeClass
+        val filterGet = filter.get
+        assert(
+          tClass.isInstance(filterGet),
+          s"$filterGet of type ${filterGet.getClass} is not an instance of $tClass")
       } else {
         assert(filter.isEmpty)
       }
@@ -484,7 +492,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
 
     checkFilter[Operators.And]('a.int === 1 && 'a.int < 4)
     checkFilter[Operators.Or]('a.int === 1 || 'a.int < 4)
-    checkFilter[Operators.Not](!('a.int === 1))
+    checkFilter[Operators.NotEq[Integer]](!('a.int === 1))
 
     checkFilter('a.int > 'b.int, defined = false)
     checkFilter(('a.int > 'b.int) && ('a.int > 'b.int), defined = false)
