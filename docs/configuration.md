@@ -8,7 +8,7 @@ title: Spark Configuration
 Spark provides three locations to configure the system:
 
 * [Spark properties](#spark-properties) control most application parameters and can be set by using
-  a [SparkConf](api/core/index.html#org.apache.spark.SparkConf) object, or through Java
+  a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object, or through Java
   system properties.
 * [Environment variables](#environment-variables) can be used to set per-machine settings, such as
   the IP address, through the `conf/spark-env.sh` script on each node.
@@ -75,8 +75,8 @@ in the `spark-defaults.conf` file.
 
 The application web UI at `http://<driver>:4040` lists Spark properties in the "Environment" tab.
 This is a useful place to check to make sure that your properties have been set correctly. Note
-that only values explicitly specified through either `spark-defaults.conf` or SparkConf will
-appear. For all other configuration properties, you can assume the default value is used.
+that only values explicitly specified through `spark-defaults.conf`, `SparkConf`, or the command
+line will appear. For all other configuration properties, you can assume the default value is used.
 
 ## Available Properties
 
@@ -218,6 +218,45 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.executor.logs.rolling.strategy</code></td>
+  <td>(none)</td>
+  <td>
+    Set the strategy of rolling of executor logs. By default it is disabled. It can
+    be set to "time" (time-based rolling) or "size" (size-based rolling). For "time",
+    use <code>spark.executor.logs.rolling.time.interval</code> to set the rolling interval.
+    For "size", use <code>spark.executor.logs.rolling.size.maxBytes</code> to set
+    the maximum file size for rolling.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.time.interval</code></td>
+  <td>daily</td>
+  <td>
+    Set the time interval by which the executor logs will be rolled over.
+    Rolling is disabled by default. Valid values are `daily`, `hourly`, `minutely` or
+    any interval in seconds. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
+    for automatic cleaning of old logs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.size.maxBytes</code></td>
+  <td>(none)</td>
+  <td>
+    Set the max size of the file by which the executor logs will be rolled over.
+    Rolling is disabled by default. Value is set in terms of bytes.
+    See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
+    for automatic cleaning of old logs.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
+  <td>(none)</td>
+  <td>
+    Sets the number of latest rolling log files that are going to be retained by the system.
+    Older log files will be deleted. Disabled by default.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.userClassPathFirst</code></td>
   <td>false</td>
   <td>
@@ -253,6 +292,7 @@ Apart from these, the following properties are also available, and may be useful
     The results will be dumped as separated file for each RDD. They can be loaded
     by ptats.Stats(). If this is specified, the profile result will not be displayed
     automatically.
+  </td>
 </tr>
 <tr>
   <td><code>spark.python.worker.reuse</code></td>
@@ -269,7 +309,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     Add the environment variable specified by <code>EnvironmentVariableName</code> to the Executor
-    process. The user can specify multiple of these and to set multiple environment variables.
+    process. The user can specify multiple of these to set multiple environment variables.
   </td>
 </tr>
 <tr>
@@ -811,6 +851,41 @@ Apart from these, the following properties are also available, and may be useful
     between nodes leading to flooding the network with those.
   </td>
 </tr>
+<tr>
+  <td><code>spark.shuffle.io.preferDirectBufs</code></td>
+  <td>true</td>
+  <td>
+    (Netty only) Off-heap buffers are used to reduce garbage collection during shuffle and cache
+    block transfer. For environments where off-heap memory is tightly limited, users may wish to
+    turn this off to force all allocations from Netty to be on-heap.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.numConnectionsPerPeer</code></td>
+  <td>1</td>
+  <td>
+    (Netty only) Connections between hosts are reused in order to reduce connection buildup for
+    large clusters. For clusters with many hard disks and few hosts, this may result in insufficient
+    concurrency to saturate all disks, and so users may consider increasing this value.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.maxRetries</code></td>
+  <td>3</td>
+  <td>
+    (Netty only) Fetches that fail due to IO-related exceptions are automatically retried if this is
+    set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC
+    pauses or transient network connectivity issues.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.retryWait</code></td>
+  <td>5</td>
+  <td>
+    (Netty only) Seconds to wait between retries of fetches. The maximum delay caused by retrying
+    is simply <code>maxRetries * retryWait</code>, by default 15 seconds.
+  </td>
+</tr>
 </table>
 
 #### Scheduling
@@ -967,6 +1042,67 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+#### Dynamic allocation
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.dynamicAllocation.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to use dynamic resource allocation, which scales the number of executors registered
+    with this application up and down based on the workload. Note that this is currently only
+    available on YARN mode. For more detail, see the description
+    <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
+    <br><br>
+    This requires the following configurations to be set:
+    <code>spark.dynamicAllocation.minExecutors</code>,
+    <code>spark.dynamicAllocation.maxExecutors</code>, and
+    <code>spark.shuffle.service.enabled</code>
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.minExecutors</code></td>
+  <td>(none)</td>
+  <td>
+    Lower bound for the number of executors if dynamic allocation is enabled (required).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.maxExecutors</code></td>
+  <td>(none)</td>
+  <td>
+    Upper bound for the number of executors if dynamic allocation is enabled (required).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.schedulerBacklogTimeout</code></td>
+  <td>60</td>
+  <td>
+    If dynamic allocation is enabled and there have been pending tasks backlogged for more than
+    this duration (in seconds), new executors will be requested. For more detail, see this
+    <a href="job-scheduling.html#resource-allocation-policy">description</a>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.sustainedSchedulerBacklogTimeout</code></td>
+  <td><code>schedulerBacklogTimeout</code></td>
+  <td>
+    Same as <code>spark.dynamicAllocation.schedulerBacklogTimeout</code>, but used only for
+    subsequent executor requests. For more detail, see this
+    <a href="job-scheduling.html#resource-allocation-policy">description</a>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.executorIdleTimeout</code></td>
+  <td>600</td>
+  <td>
+    If dynamic allocation is enabled and an executor has been idle for more than this duration
+    (in seconds), the executor will be removed. For more detail, see this
+    <a href="job-scheduling.html#resource-allocation-policy">description</a>.
+  </td>
+</tr>
+</table>
+
 #### Security
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
@@ -1061,17 +1197,31 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.streaming.blockInterval</code></td>
   <td>200</td>
   <td>
-    Interval (milliseconds) at which data received by Spark Streaming receivers is coalesced
-    into blocks of data before storing them in Spark.
+    Interval (milliseconds) at which data received by Spark Streaming receivers is chunked
+    into blocks of data before storing them in Spark. Minimum recommended - 50 ms. See the
+    <a href="streaming-programming-guide.html#level-of-parallelism-in-data-receiving">performance
+     tuning</a> section in the Spark Streaming programing guide for more details.
   </td>
 </tr>
 <tr>
   <td><code>spark.streaming.receiver.maxRate</code></td>
   <td>infinite</td>
   <td>
-    Maximum rate (per second) at which each receiver will push data into blocks. Effectively,
-    each stream will consume at most this number of records per second.
+    Maximum number records per second at which each receiver will receive data.
+    Effectively, each stream will consume at most this number of records per second.
     Setting this configuration to 0 or a negative number will put no limit on the rate.
+    See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
+    in the Spark Streaming programing guide for mode details.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.receiver.writeAheadLogs.enable</code></td>
+  <td>false</td>
+  <td>
+    Enable write ahead logs for receivers. All the input data received through receivers
+    will be saved to write ahead logs that will allow it to be recovered after driver failures.
+    See the <a href="streaming-programming-guide.html#deploying-applications">deployment guide</a>
+    in the Spark Streaming programing guide for more details.
   </td>
 </tr>
 <tr>
@@ -1083,45 +1233,6 @@ Apart from these, the following properties are also available, and may be useful
     Setting this to false will allow the raw data and persisted RDDs to be accessible outside the
     streaming application as they will not be cleared automatically. But it comes at the cost of
     higher memory usage in Spark.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.executor.logs.rolling.strategy</code></td>
-  <td>(none)</td>
-  <td>
-    Set the strategy of rolling of executor logs. By default it is disabled. It can
-    be set to "time" (time-based rolling) or "size" (size-based rolling). For "time",
-    use <code>spark.executor.logs.rolling.time.interval</code> to set the rolling interval.
-    For "size", use <code>spark.executor.logs.rolling.size.maxBytes</code> to set
-    the maximum file size for rolling.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.executor.logs.rolling.time.interval</code></td>
-  <td>daily</td>
-  <td>
-    Set the time interval by which the executor logs will be rolled over.
-    Rolling is disabled by default. Valid values are `daily`, `hourly`, `minutely` or
-    any interval in seconds. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
-    for automatic cleaning of old logs.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.executor.logs.rolling.size.maxBytes</code></td>
-  <td>(none)</td>
-  <td>
-    Set the max size of the file by which the executor logs will be rolled over.
-    Rolling is disabled by default. Value is set in terms of bytes.
-    See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
-    for automatic cleaning of old logs.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
-  <td>(none)</td>
-  <td>
-    Sets the number of latest rolling log files that are going to be retained by the system.
-    Older log files will be deleted. Disabled by default.
   </td>
 </tr>
 </table>

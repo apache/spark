@@ -42,6 +42,15 @@ object Literal {
 }
 
 /**
+ * An extractor that matches non-null literal values
+ */
+object NonNullLiteral {
+  def unapply(literal: Literal): Option[(Any, DataType)] = {
+    Option(literal.value).map(_ => (literal.value, literal.dataType))
+  }
+}
+
+/**
  * Extractor for retrieving Int literals.
  */
 object IntegerLiteral {
