@@ -209,11 +209,8 @@ private[spark] class ExecutorAllocationManager(
       addTime += sustainedSchedulerBacklogTimeout * 1000
     }
 
-    removeTimes.foreach { case (executorId, expireTime) =>
-      if (now >= expireTime) {
-        removeExecutor(executorId)
-        removeTimes.remove(executorId)
-      }
+    removeTimes.retain {
+      case (executorId, expireTime) => !(now >= expireTime && removeExecutor(executorId))
     }
   }
 
@@ -291,7 +288,7 @@ private[spark] class ExecutorAllocationManager(
     // Do not kill the executor if we have already reached the lower bound
     val numExistingExecutors = executorIds.size - executorsPendingToRemove.size
     if (numExistingExecutors - 1 < minNumExecutors) {
-      logInfo(s"Not removing idle executor $executorId because there are only " +
+      logDebug(s"Not removing idle executor $executorId because there are only " +
         s"$numExistingExecutors executor(s) left (limit $minNumExecutors)")
       return false
     }
@@ -315,7 +312,7 @@ private[spark] class ExecutorAllocationManager(
   private def onExecutorAdded(executorId: String): Unit = synchronized {
     if (!executorIds.contains(executorId)) {
       executorIds.add(executorId)
-      executorIds.foreach(onExecutorIdle)
+      onExecutorIdle(executorId)
       logInfo(s"New executor $executorId has registered (new total is ${executorIds.size})")
       if (numExecutorsPending > 0) {
         numExecutorsPending -= 1
@@ -373,10 +370,12 @@ private[spark] class ExecutorAllocationManager(
    * the executor is not already marked as idle.
    */
   private def onExecutorIdle(executorId: String): Unit = synchronized {
-    if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
-      logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
-        s"scheduled to run on the executor (to expire in $executorIdleTimeout seconds)")
-      removeTimes(executorId) = clock.getTimeMillis + executorIdleTimeout * 1000
+    if (executorIds.contains(executorId)) {
+      if (!removeTimes.contains(executorId) && !executorsPendingToRemove.contains(executorId)) {
+        logDebug(s"Starting idle timer for $executorId because there are no more tasks " +
+          s"scheduled to run on the executor (to expire in $executorIdleTimeout seconds)")
+        removeTimes(executorId) = clock.getTimeMillis + executorIdleTimeout * 1000
+      }
     }
   }
 
@@ -431,6 +430,8 @@ private[spark] class ExecutorAllocationManager(
       val taskId = taskStart.taskInfo.taskId
       val taskIndex = taskStart.taskInfo.index
       val executorId = taskStart.taskInfo.executorId
+
+      allocationManager.onExecutorAdded(executorId)
 
       // If this is the last pending task, mark the scheduler queue as empty
       stageIdToTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[Int]) += taskIndex
