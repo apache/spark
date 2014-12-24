@@ -47,8 +47,8 @@ import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 import org.apache.spark.util._
 
 
-class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
-  with PrivateMethodTester with ResetSystemProperties {
+class BlockManagerSuite extends FunSuite with ResetSystemProperties with Matchers
+  with BeforeAndAfter with PrivateMethodTester {
 
   private val conf = new SparkConf(false)
   var store: BlockManager = null
