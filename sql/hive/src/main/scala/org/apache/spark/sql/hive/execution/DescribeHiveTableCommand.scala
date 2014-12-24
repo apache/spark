@@ -22,11 +22,11 @@ import scala.collection.JavaConversions._
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
-import org.apache.spark.sql.execution.{Command, LeafNode}
+import org.apache.spark.sql.execution.{SparkPlan, RunnableCommand}
 import org.apache.spark.sql.hive.{HiveContext, MetastoreRelation}
 import org.apache.spark.sql.hive.HiveShim
+import org.apache.spark.sql.SQLContext
 
 /**
  * Implementation for "describe [extended] table".
@@ -36,21 +36,10 @@ import org.apache.spark.sql.hive.HiveShim
 @DeveloperApi
 case class DescribeHiveTableCommand(
     table: MetastoreRelation,
-    output: Seq[Attribute],
-    isExtended: Boolean)(
-    @transient context: HiveContext)
-  extends LeafNode with Command {
+    override val output: Seq[Attribute],
+    isExtended: Boolean) extends RunnableCommand {
 
-  // Strings with the format like Hive. It is used for result comparison in our unit tests.
-  lazy val hiveString: Seq[String] = sideEffectResult.map {
-    case Row(name: String, dataType: String, comment) =>
-      Seq(name, dataType,
-        Option(comment.asInstanceOf[String]).getOrElse(""))
-        .map(s => String.format(s"%-20s", s))
-        .mkString("\t")
-  }
-
-  override protected lazy val sideEffectResult: Seq[Row] = {
+  override def run(sqlContext: SQLContext) = {
     // Trying to mimic the format of Hive's output. But not exactly the same.
     var results: Seq[(String, String, String)] = Nil
 
@@ -75,6 +64,4 @@ case class DescribeHiveTableCommand(
       Row(name, dataType, comment)
     }
   }
-
-  override def otherCopyArgs = context :: Nil
 }

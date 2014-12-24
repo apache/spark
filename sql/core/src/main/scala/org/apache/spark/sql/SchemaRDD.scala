@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.util.{Map => JMap, List => JList}
-import java.io.StringWriter
+
 
 import scala.collection.JavaConversions._
 
@@ -215,6 +215,19 @@ class SchemaRDD(
    */
   def orderBy(sortExprs: SortOrder*): SchemaRDD =
     new SchemaRDD(sqlContext, Sort(sortExprs, logicalPlan))
+
+  /**
+   * Sorts the results by the given expressions within partition.
+   * {{{
+   *   schemaRDD.sortBy('a)
+   *   schemaRDD.sortBy('a, 'b)
+   *   schemaRDD.sortBy('a.asc, 'b.desc)
+   * }}}
+   *
+   * @group Query
+   */
+  def sortBy(sortExprs: SortOrder*): SchemaRDD =
+    new SchemaRDD(sqlContext, SortPartitions(sortExprs, logicalPlan))
 
   @deprecated("use limit with integer argument", "1.1.0")
   def limit(limitExpr: Expression): SchemaRDD =
@@ -425,6 +438,21 @@ class SchemaRDD(
   }
 
   /**
+   * Serializes the Array[Row] returned by SchemaRDD's takeSample(), using the same
+   * format as javaToPython and collectToPython. It is used by pyspark.
+   */
+  private[sql] def takeSampleToPython(
+      withReplacement: Boolean,
+      num: Int,
+      seed: Long): JList[Array[Byte]] = {
+    val fieldTypes = schema.fields.map(_.dataType)
+    val pickle = new Pickler
+    new java.util.ArrayList(this.takeSample(withReplacement, num, seed).map { row =>
+      EvaluatePython.rowToArray(row, fieldTypes)
+    }.grouped(100).map(batched => pickle.dumps(batched.toArray)).toIterable)
+  }
+
+  /**
    * Creates SchemaRDD by applying own schema to derived RDD. Typically used to wrap return value
    * of base RDD functions that do not change schema.
    *
@@ -501,7 +529,7 @@ class SchemaRDD(
   }
 
   override def unpersist(blocking: Boolean): this.type = {
-    sqlContext.uncacheQuery(this, blocking)
+    sqlContext.tryUncacheQuery(this, blocking)
     this
   }
 }
