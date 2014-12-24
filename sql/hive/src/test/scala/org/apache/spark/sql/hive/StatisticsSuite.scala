@@ -22,7 +22,6 @@ import org.scalatest.BeforeAndAfterAll
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.{SQLConf, QueryTest}
-import org.apache.spark.sql.catalyst.plans.logical.NativeCommand
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
