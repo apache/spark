@@ -255,6 +255,7 @@ def get_spark_shark_version(opts):
         "1.0.1": "1.0.1",
         "1.0.2": "1.0.2",
         "1.1.0": "1.1.0",
+        "1.2.0": "1.2.0",
     }
     version = opts.spark_version.replace("v", "")
     if version not in spark_shark_map:
