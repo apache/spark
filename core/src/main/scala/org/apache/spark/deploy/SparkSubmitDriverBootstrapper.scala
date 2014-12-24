@@ -144,7 +144,8 @@ private[spark] object SparkSubmitDriverBootstrapper {
     val isWindows = Utils.isWindows
     val isPySparkShell = sys.env.contains("PYSPARK_SHELL")
     if (!isWindows) {
-      val stdinThread = new RedirectThread(System.in, process.getOutputStream, "redirect stdin")
+      val stdinThread = new RedirectThread(System.in, process.getOutputStream, "redirect stdin",
+        propagateEof = true)
       stdinThread.start()
       // For the PySpark shell, Spark submit itself runs as a python subprocess, and so this JVM
       // should terminate on broken pipe, which signals that the parent process has exited. In
