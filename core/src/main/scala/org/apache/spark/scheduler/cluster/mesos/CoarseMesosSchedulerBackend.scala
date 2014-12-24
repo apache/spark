@@ -263,9 +263,12 @@ private[spark] class CoarseMesosSchedulerBackend(
       val filters = Filters.newBuilder().setRefuseSeconds(-1).build()
 
       for (offer <- offers) {
+
         val slaveId = offer.getSlaveId.getValue
         val mem = getResource(offer.getResourcesList, "mem")
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
+        logTrace("Received offer id: " + offer.getId.getValue + ", cpu: " + cpus.toString +
+          ", mem: " + mem.toString)
         if (taskIdToSlaveId.size < executorLimit.getOrElse(Int.MaxValue) &&
           totalCoresAcquired < maxCores &&
           mem >= minMemRequired &&
@@ -290,17 +293,24 @@ private[spark] class CoarseMesosSchedulerBackend(
               .addResources(createResource("mem",
               MemoryUtils.calculateTotalMemory(sc)))
           } else {
+            val taskCpus = cpusToUse - shuffleServiceCpu
+            val taskMem = mem - shuffleServiceMem
             builder.setExecutor(
               ExecutorInfo.newBuilder()
+                .setExecutorId(ExecutorID.newBuilder().setValue(slaveId).build)
                 .addResources(createResource("cpus", shuffleServiceCpu))
                 .addResources(createResource("mem", shuffleServiceMem))
-                .setCommand(createExecutorCommand(offer)).build()
-            )
+                .setCommand(createExecutorCommand(offer)).build())
+              .addResources(createResource("cpus", taskCpus))
+              .addResources(createResource("mem", taskMem))
 
             builder.setData(
               ByteString.copyFrom(
-                Utils.serialize(createTaskCommandString(offer, cpusToUse - shuffleServiceCpu))))
+                Utils.serialize(createTaskCommandString(offer, taskCpus))))
           }
+
+          logTrace("Launching task with offer id: " + offer.getId.getValue +
+            ", task: " + builder.build())
 
           d.launchTasks(
             Collections.singleton(offer.getId), Collections.singletonList(builder.build()), filters)

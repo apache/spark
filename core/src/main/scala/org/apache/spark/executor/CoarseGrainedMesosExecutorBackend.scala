@@ -25,7 +25,7 @@ import org.apache.mesos.Protos._
 import org.apache.spark.deploy.worker.StandaloneWorkerShuffleService
 import scala.collection.JavaConversions._
 import scala.io.Source
-import java.io.PrintWriter
+import java.io.{File, PrintWriter}
 
 /**
  * The Coarse grained Mesos executor backend is responsible for launching the shuffle service
@@ -63,6 +63,8 @@ private[spark] class CoarseGrainedMesosExecutorBackend(val sparkConf: SparkConf)
     if (executorProc != null) {
       logError("Received LaunchTask while executor is already running")
       val status = TaskStatus.newBuilder()
+        .setTaskId(taskInfo.getTaskId)
+        .setSlaveId(taskInfo.getSlaveId)
         .setState(TaskState.TASK_FAILED)
         .setMessage("Received LaunchTask while executor is already running")
         .build()
@@ -75,7 +77,10 @@ private[spark] class CoarseGrainedMesosExecutorBackend(val sparkConf: SparkConf)
     // Since it's a shared class we are preserving the existing behavior
     // and launching it as a subprocess here.
     val command = Utils.deserialize[String](taskInfo.getData().toByteArray)
-    val pb = new ProcessBuilder(command)
+
+    // Mesos only work on linux platforms, as mesos command executor also
+    // executes with /bin/sh -c, we assume this will also work under mesos execution.
+    val pb = new ProcessBuilder(List("/bin/sh", "-c", command))
 
     val currentEnvVars = pb.environment()
     for (variable <- taskInfo.getExecutor.getCommand.getEnvironment.getVariablesList()) {
@@ -122,11 +127,18 @@ private[spark] class CoarseGrainedMesosExecutorBackend(val sparkConf: SparkConf)
   }
 
   override def killTask(d: ExecutorDriver, t: TaskID) {
-    if (executorProc == null) {
+    if (taskId == null) {
       logError("Received killtask when no process is initialized")
       return
     }
 
+    if (!taskId.getValue.equals(t.getValue)) {
+      logError("Asked to kill task '" + t.getValue + "' but executor is running task '" +
+        taskId.getValue + "'")
+      return
+    }
+
+    assert(executorProc != null)
     // We only destroy the coarse grained executor but leave the shuffle
     // service running for other tasks that might be reusing this executor.
     // This is no-op if the process already finished.
