@@ -49,6 +49,20 @@ class CachedTableSuite extends QueryTest {
     uncacheTable("tempTable")
   }
 
+  test("unpersist an uncached table will not raise exception") {
+    assert(None == lookupCachedData(testData))
+    testData.unpersist(true)
+    assert(None == lookupCachedData(testData))
+    testData.unpersist(false)
+    assert(None == lookupCachedData(testData))
+    testData.persist()
+    assert(None != lookupCachedData(testData))
+    testData.unpersist(true)
+    assert(None == lookupCachedData(testData))
+    testData.unpersist(false)
+    assert(None == lookupCachedData(testData))
+  }
+
   test("cache table as select") {
     sql("CACHE TABLE tempTable AS SELECT key FROM testData")
     assertCached(sql("SELECT COUNT(*) FROM tempTable"))

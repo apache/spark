@@ -133,7 +133,9 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
   }
 
   /**
-   * Loads a parquet file, returning the result as a [[JavaSchemaRDD]].
+   * Loads a parquet file from regular path or files that match file patterns in path,
+   * returning the result as a [[JavaSchemaRDD]].
+   * Supported glob file pattern information at ([[http://tinyurl.com/kcqrzn8]]).
    */
   def parquetFile(path: String): JavaSchemaRDD =
     new JavaSchemaRDD(

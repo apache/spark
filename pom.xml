@@ -256,18 +256,6 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
-    <!-- TODO: remove this as soon as 1.2.0 is published on Maven central -->
-    <repository>
-      <id>spark-staging-1038</id>
-      <name>Spark 1.2.0 Staging (1038)</name>
-      <url>https://repository.apache.org/content/repositories/orgapachespark-1038/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
   </repositories>
   <pluginRepositories>
     <pluginRepository>
@@ -292,7 +280,7 @@
       <version>1.0.0</version>
     </dependency>
     <!--
-      This dependency has been added to provided scope as it is needed for executing build
+      This depndency has been added to provided scope as it is needed for executing build
       specific groovy scripts using gmaven+ and not required for downstream project building
       with spark.
     -->
@@ -1121,7 +1109,7 @@
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
             <filereports>SparkTestSuite.txt</filereports>
-            <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
+            <argLine>-ea -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
             <stderr/>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
@@ -1179,6 +1167,9 @@
               </fileset>
               <fileset>
                 <directory>checkpoint</directory>
+              </fileset>
+              <fileset>
+                <directory>lib_managed</directory>
               </fileset>
             </filesets>
           </configuration>
