@@ -105,7 +105,7 @@ private[yarn] class YarnAllocator(
     new ThreadFactoryBuilder().setNameFormat("ContainerLauncher #%d").setDaemon(true).build())
   launcherPool.allowCoreThreadTimeOut(true)
 
-  private val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
+  private val driverUrl = "akka.tcp://sparkDriver@%s:%s/user/%s".format(
     sparkConf.get("spark.driver.host"),
     sparkConf.get("spark.driver.port"),
     CoarseGrainedSchedulerBackend.ACTOR_NAME)
