@@ -138,24 +138,6 @@
           <skip>true</skip>
         </configuration>
       </plugin>
-      <plugin>
-        <groupId>org.scalatest</groupId>
-        <artifactId>scalatest-maven-plugin</artifactId>
-        <configuration>
-          <environmentVariables>
-            <SPARK_HOME>${basedir}/../..</SPARK_HOME>
-          </environmentVariables>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-surefire-plugin</artifactId>
-        <configuration>
-          <environmentVariables>
-            <SPARK_HOME>${basedir}/../..</SPARK_HOME>
-          </environmentVariables>
-        </configuration>
-      </plugin>
     </plugins>
 
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
