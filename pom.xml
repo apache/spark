@@ -1010,6 +1010,9 @@
               <fileset>
                 <directory>checkpoint</directory>
               </fileset>
+              <fileset>
+                <directory>lib_managed</directory>
+              </fileset>
             </filesets>
           </configuration>
         </plugin>
