@@ -40,6 +40,7 @@ object DefaultOptimizer extends Optimizer {
       ConstantFolding,
       LikeSimplification,
       BooleanSimplification,
+      NormalizeFilters,
       SimplifyFilters,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
@@ -344,6 +345,31 @@ object BooleanSimplification extends Rule[LogicalPlan] {
 object CombineFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ff @ Filter(fc, nf @ Filter(nc, grandChild)) => Filter(And(nc, fc), grandChild)
+  }
+}
+
+/**
+ * Normalizes conjuctions and disjunctions to eliminate common factors.
+ */
+object NormalizeFilters extends Rule[LogicalPlan] with PredicateHelper {
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(predicate: Predicate, child) =>
+      f.copy(condition = normalizedPredicate(predicate).reduce(And))
+  }
+
+  def normalizedPredicate(predicate: Expression): Seq[Expression] = predicate match {
+    // a || a => a
+    case Or(lhs, rhs) if lhs fastEquals rhs => lhs :: Nil
+    // a && a => a
+    case And(lhs, rhs) if lhs fastEquals rhs => lhs :: Nil
+    // (a || b || c || ...) && (a || b || d || ...) => a && b && (c || d || ...)
+    case Or(lhs, rhs) =>
+      val lhsSet = splitConjunctivePredicates(lhs).toSet
+      val rhsSet = splitConjunctivePredicates(rhs).toSet
+      val commonPredicates = lhsSet & rhsSet
+      val otherPredicates = (lhsSet | rhsSet) &~ commonPredicates
+      otherPredicates.reduceOption(Or).getOrElse(Literal(true)) :: commonPredicates.toList
+    case _ => predicate :: Nil
   }
 }
 
