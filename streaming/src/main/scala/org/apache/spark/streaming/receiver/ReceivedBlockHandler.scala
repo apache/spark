@@ -178,7 +178,7 @@ private[streaming] class WriteAheadLogBasedBlockHandler(
   }
 
   def cleanupOldBlock(threshTime: Long) {
-    logManager.cleanupOldLogs(threshTime)
+    logManager.cleanupOldLogs(threshTime, waitForCompletion = false)
   }
 
   def stop() {

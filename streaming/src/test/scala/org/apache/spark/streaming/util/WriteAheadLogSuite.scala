@@ -188,10 +188,8 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     manager = writeDataUsingManager(testDir, dataToWrite, manualClock, stopManager = false)
     val logFiles = getLogFilesInDirectory(testDir)
     assert(logFiles.size > 1)
-    manager.cleanupOldLogs(manualClock.currentTime() / 2)
-    eventually(timeout(1 second), interval(10 milliseconds)) {
-      assert(getLogFilesInDirectory(testDir).size < logFiles.size)
-    }
+    manager.cleanupOldLogs(manualClock.currentTime() / 2, waitForCompletion = true)
+    assert(getLogFilesInDirectory(testDir).size < logFiles.size)
   }
 
   test("WriteAheadLogManager - handling file errors while reading rotating logs") {

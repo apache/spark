@@ -125,20 +125,6 @@ private[streaming] class WriteAheadLogManager(
    * between the node calculating the threshTime (say, driver node), and the local system time
    * (say, worker node), the caller has to take account of possible time skew.
    *
-   * This method deletes old log files asynchronously.
-   */
-  def cleanupOldLogs(threshTime: Long): Unit = {
-    cleanupOldLogs(threshTime, waitForCompletion = false)
-  }
-
-  /**
-   * Delete the log files that are older than the threshold time.
-   *
-   * Its important to note that the threshold time is based on the time stamps used in the log
-   * files, which is usually based on the local system time. So if there is coordination necessary
-   * between the node calculating the threshTime (say, driver node), and the local system time
-   * (say, worker node), the caller has to take account of possible time skew.
-   *
    * If waitForCompletion is set to true, this method will return only after old logs have been
    * deleted. Else the files will be deleted asynchronously.
    */
