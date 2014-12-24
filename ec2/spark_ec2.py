@@ -39,7 +39,7 @@ from datetime import datetime
 from optparse import OptionParser
 from sys import stderr
 
-DEFAULT_SPARK_VERSION = "1.1.0"
+DEFAULT_SPARK_VERSION = "1.2.0"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 MESOS_SPARK_EC2_BRANCH = "v4"
