@@ -124,6 +124,9 @@ class DAGScheduler(
   /** If enabled, we may run certain actions like take() and first() locally. */
   private val localExecutionEnabled = sc.getConf.getBoolean("spark.localExecution.enabled", false)
 
+  /** The configured number of times to retry running stage */
+  private val maxStageRetryAttempts = sc.getConf.getInt("spark.stage.retry.attempts", 10)
+
   /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
   private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)
 
@@ -590,7 +593,11 @@ class DAGScheduler(
       val failedStagesCopy = failedStages.toArray
       failedStages.clear()
       for (stage <- failedStagesCopy.sortBy(_.jobId)) {
-        submitStage(stage)
+        if (stage.attemptId >= maxStageRetryAttempts) {
+          abortStage(stage, "Retry attempt times has got max " + maxStageRetryAttempts)
+        } else {
+          submitStage(stage)
+        }
       }
     }
     submitWaitingStages()
