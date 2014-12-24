@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import org.apache.spark.util.ResetSystemProperties
 import org.scalatest.FunSuite
 
 import org.apache.spark._
@@ -110,8 +109,7 @@ class FakeTaskSetManager(
   }
 }
 
-class TaskSchedulerImplSuite extends FunSuite with ResetSystemProperties with LocalSparkContext
-  with Logging {
+class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Logging {
 
   def createDummyTaskSetManager(priority: Int, stage: Int, numTasks: Int, cs: TaskSchedulerImpl,
       taskSet: TaskSet): FakeTaskSetManager = {
@@ -164,12 +162,12 @@ class TaskSchedulerImplSuite extends FunSuite with ResetSystemProperties with Lo
   }
 
   test("Fair Scheduler Test") {
-    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
+    val conf = new SparkConf().set("spark.scheduler.allocation.file", xmlPath)
+    sc = new SparkContext("local", "TaskSchedulerImplSuite", conf)
     val taskScheduler = new TaskSchedulerImpl(sc)
     val taskSet = FakeTask.createTaskSet(1)
 
-    val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
-    System.setProperty("spark.scheduler.allocation.file", xmlPath)
     val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
     val schedulableBuilder = new FairSchedulableBuilder(rootPool, sc.conf)
     schedulableBuilder.buildPools()
