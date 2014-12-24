@@ -46,12 +46,6 @@ private[spark] class CoarseGrainedExecutorBackend(
   var executor: Executor = null
   var driver: RpcEndPointRef = null
 
-  def notifyDriver(driverUrl: String, selfRef: RpcEndPointRef): Unit = {
-    logInfo("Connecting to driver: " + driverUrl)
-    driver = env.rpcEnv.setupEndPointRefByUrl(driverUrl)
-    driver.send(RegisterExecutor(executorId, hostPort, cores, selfRef))
-  }
-
   override def remoteConnectionTerminated(remoteAddress: String): Unit = {
     logError(s"Driver $remoteAddress disassociated! Shutting down.")
     System.exit(1)
@@ -124,7 +118,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val fut = Patterns.ask(driverActor, RetrieveSparkProps, timeout)
       val props = Await.result(fut, timeout).asInstanceOf[Seq[(String, String)]] ++
         Seq[(String, String)](("spark.app.id", appId))
-      //fetcher.shutdown()
+      fetcher.shutdown()
 
       // Create SparkEnv using properties we fetched from the driver.
       val driverConf = new SparkConf().setAll(props)
@@ -140,9 +134,10 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val rpc = new CoarseGrainedExecutorBackend(driverUrl, executorId, sparkHostPort, cores, env)
       val rpcRef = env.rpcEnv.setupEndPoint("Executor", rpc)
 
-      rpc.notifyDriver(driverUrl, rpcRef)
-
-      // Notify the driver of our existence.
+      // Register this executor with the driver.
+      logInfo("Connecting to driver: " + driverUrl)
+      val driverRef = env.rpcEnv.setupEndPointRefByUrl(driverUrl)
+      driverRef.send(RegisterExecutor(executorId, sparkHostPort, cores, rpcRef))
 
       workerUrl.foreach { url =>
         env.actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")

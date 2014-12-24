@@ -17,13 +17,13 @@
 
 package org.apache.spark.rpc
 
-import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
-
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
 import akka.actor.{ActorRef, Actor, Props, ActorSystem}
 import akka.pattern.ask
+import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
+import org.slf4j.Logger
 
 import org.apache.spark.{Logging, SparkException, SparkConf}
 import org.apache.spark.util.AkkaUtils
@@ -55,6 +55,10 @@ abstract class RpcEndPoint {
   def remoteConnectionTerminated(remoteAddress: String): Unit = {
     // By default, do nothing.
   }
+
+  protected def log: Logger
+
+  private[rpc] def logMessage = log
 }
 
 
@@ -88,7 +92,7 @@ class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
           endpoint.remoteConnectionTerminated(remoteAddress.toString)
 
         case message: Any =>
-          println("got message " + name + " : " + message)
+          endpoint.logMessage.trace("Received RPC message: " + message)
           val pf = endpoint.receive(new AkkaRpcEndPointRef(sender(), conf))
           if (pf.isDefinedAt(message)) {
             pf.apply(message)
