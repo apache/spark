@@ -60,27 +60,18 @@ mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -DskipTests clean package
 mvn -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
 {% endhighlight %}
 
-For Apache Hadoop 2.2.0 and later and Cloudera CDH 5 with YARN, you can enable the "yarn" profile and optionally set the "yarn.version" property if it is different from "hadoop.version". As of Spark 1.3, Spark only supports YARN versions 2.2.0 and later.
+You can enable the "yarn" profile and optionally set the "yarn.version" property if it is different from "hadoop.version". Spark only supports YARN versions 2.2.0 and later.
 
 Examples:
 
 {% highlight bash %}
 # Apache Hadoop 2.2.X
-mvn -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.X -DskipTests clean package
+mvn -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 -DskipTests clean package
 
 # Apache Hadoop 2.3.X
-mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.X -DskipTests clean package
+mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0 -DskipTests clean package
 
 # Apache Hadoop 2.4.X or 2.5.X
-mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=VERSION -DskipTests clean package
-
-# Cloudera CDH 5.0.X
-mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0-cdh5.0.X -DskipTests clean package
-
-# Cloudera CDH 5.1.X
-mvn -Pyarn -Phadoop-2.3 -Dhadoop.version=2.3.0-cdh5.1.X -DskipTests clean package
-
-# Cloudera CDEH 5.2.X or 5.3.X
 mvn -Pyarn -Phadoop-2.4 -Dhadoop.version=VERSION -DskipTests clean package
 
 Versions of Hadoop after 2.5.X may or may not work with the -Phadoop-2.4 profile (they were
