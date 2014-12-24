@@ -693,7 +693,7 @@ private[spark] object ClientBase extends Logging {
     addClasspathEntry(Environment.PWD.$(), env)
 
     // Normally the users app.jar is last in case conflicts with spark jars
-    if (sparkConf.get("spark.yarn.user.classpath.first", "false").toBoolean) {
+    if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
       addUserClasspath(args, sparkConf, env)
       addFileToClasspath(sparkJar(sparkConf), SPARK_JAR, env)
       populateHadoopClasspath(conf, env)
