@@ -448,11 +448,11 @@ object SparseMatrix {
       // selection-rejection method
       var idx = 0L
       var numSelected = 0
-      var i = 0
       var j = 0
       val colPtrs = new Array[Int](numCols + 1)
       val rowIndices = new Array[Int](nnz)
       while (j < numCols && numSelected < nnz) {
+        var i = 0
         while (i < numRows && numSelected < nnz) {
           if (rng.nextDouble() < 1.0 * (nnz - numSelected) / (size - idx)) {
             rowIndices(numSelected) = i
