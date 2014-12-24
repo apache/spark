@@ -352,9 +352,9 @@
           </execution>
         </executions>
         <configuration>
-          <tasks>
+          <target>
             <unzip src="../python/lib/py4j-0.8.2.1-src.zip" dest="../python/build" />
-          </tasks>
+          </target>
         </configuration>
       </plugin>
       <plugin>
