@@ -17,6 +17,9 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.util.concurrent.Semaphore
+import java.util.concurrent.atomic.AtomicReference
+
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
@@ -33,12 +36,11 @@ private[spark] class SparkDeploySchedulerBackend(
 
   private var client: AppClient = null
   private var stopping = false
-  private val shutdownCallbackLock = new Object()
-  private var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
+  private val shutdownCallback: AtomicReference[(SparkDeploySchedulerBackend) => Unit] =
+    new AtomicReference
   @volatile private var appId: String = _
 
-  private val registrationLock = new Object()
-  private var registrationDone = false
+  private val registrationBarrier = new Semaphore(0)
 
   private val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
   private val totalExpectedCores = maxCores.getOrElse(0)
@@ -84,10 +86,9 @@ private[spark] class SparkDeploySchedulerBackend(
     super.stop()
     client.stop()
 
-    shutdownCallbackLock.synchronized {
-      if (shutdownCallback != null) {
-        shutdownCallback(this)
-      }
+    val callback = shutdownCallback.get
+    if (callback != null) {
+      callback(this)
     }
   }
 
@@ -140,24 +141,15 @@ private[spark] class SparkDeploySchedulerBackend(
     }
 
   def setShutdownCallback(f: SparkDeploySchedulerBackend => Unit) {
-    shutdownCallbackLock.synchronized {
-      shutdownCallback = f
-    }
+    shutdownCallback.set(f)
   }
 
   private def waitForRegistration() = {
-    registrationLock.synchronized {
-      while (!registrationDone) {
-        registrationLock.wait()
-      }
-    }
+    registrationBarrier.acquire()
   }
 
   private def notifyContext() = {
-    registrationLock.synchronized {
-      registrationDone = true
-      registrationLock.notifyAll()
-    }
+    registrationBarrier.release()
   }
 
 }
