@@ -1902,7 +1902,7 @@ object SparkContext extends Logging {
         val masterUrls = localCluster.start()
         val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
-        backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
+        backend.setShutdownCallback { (backend: SparkDeploySchedulerBackend) =>
           localCluster.stop()
         }
         (backend, scheduler)

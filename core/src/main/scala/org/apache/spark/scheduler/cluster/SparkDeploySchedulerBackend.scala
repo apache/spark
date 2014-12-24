@@ -31,16 +31,17 @@ private[spark] class SparkDeploySchedulerBackend(
   with AppClientListener
   with Logging {
 
-  var client: AppClient = null
-  var stopping = false
-  var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
-  @volatile var appId: String = _
+  private var client: AppClient = null
+  private var stopping = false
+  private val shutdownCallbackLock = new Object()
+  private var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
+  @volatile private var appId: String = _
 
-  val registrationLock = new Object()
-  var registrationDone = false
+  private val registrationLock = new Object()
+  private var registrationDone = false
 
-  val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
-  val totalExpectedCores = maxCores.getOrElse(0)
+  private val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
+  private val totalExpectedCores = maxCores.getOrElse(0)
 
   override def start() {
     super.start()
@@ -82,8 +83,11 @@ private[spark] class SparkDeploySchedulerBackend(
     stopping = true
     super.stop()
     client.stop()
-    if (shutdownCallback != null) {
-      shutdownCallback(this)
+
+    shutdownCallbackLock.synchronized {
+      if (shutdownCallback != null) {
+        shutdownCallback(this)
+      }
     }
   }
 
@@ -134,6 +138,12 @@ private[spark] class SparkDeploySchedulerBackend(
       logWarning("Application ID is not initialized yet.")
       super.applicationId
     }
+
+  def setShutdownCallback(f: SparkDeploySchedulerBackend => Unit) {
+    shutdownCallbackLock.synchronized {
+      shutdownCallback = f
+    }
+  }
 
   private def waitForRegistration() = {
     registrationLock.synchronized {
