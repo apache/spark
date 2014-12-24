@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.tree.loss
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel
@@ -25,12 +24,11 @@ import org.apache.spark.rdd.RDD
 
 /**
  * :: DeveloperApi ::
- * Class for least squares error loss calculation.
+ * Class for squared error loss calculation.
  *
- * The features x and the corresponding label y is predicted using the function F.
- * For each instance:
- * Loss: (y - F)**2/2
- * Negative gradient: y - F
+ * The squared (L2) error is defined as:
+ *   (y - F(x))**2
+ * where y is the label and F(x) is the model prediction for features x.
  */
 @DeveloperApi
 object SquaredError extends Loss {
@@ -38,23 +36,24 @@ object SquaredError extends Loss {
   /**
    * Method to calculate the gradients for the gradient boosting calculation for least
    * squares error calculation.
-   * @param model Model of the weak learner
+   * The gradient with respect to F(x) is: - 2 (y - F(x))
+   * @param model Ensemble model
    * @param point Instance of the training dataset
    * @return Loss gradient
    */
   override def gradient(
     model: TreeEnsembleModel,
     point: LabeledPoint): Double = {
-    model.predict(point.features) - point.label
+    2.0 * (model.predict(point.features) - point.label)
   }
 
   /**
-   * Method to calculate error of the base learner for the gradient boosting calculation.
+   * Method to calculate loss of the base learner for the gradient boosting calculation.
    * Note: This method is not used by the gradient boosting algorithm but is useful for debugging
    * purposes.
-   * @param model Model of the weak learner.
+   * @param model Ensemble model
    * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @return
+   * @return  Mean squared error of model on data
    */
   override def computeError(model: TreeEnsembleModel, data: RDD[LabeledPoint]): Double = {
     data.map { y =>
@@ -62,5 +61,4 @@ object SquaredError extends Loss {
       err * err
     }.mean()
   }
-
 }

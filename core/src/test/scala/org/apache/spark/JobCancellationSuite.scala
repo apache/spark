@@ -27,7 +27,6 @@ import scala.concurrent.future
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.Matchers
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 
 /**
