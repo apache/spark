@@ -28,17 +28,12 @@ $(function() {
         $(this).find('.expand-additional-metrics-arrow').toggleClass('arrow-closed');
     });
 
-    $("input:checkbox:not(:checked)").each(function() {
-        var column = "table ." + $(this).attr("name");
-        $(column).hide();
-    });
-    // Stripe table rows after rows have been hidden to ensure correct striping.
-    stripeTables();
+    stripeSummaryTable();
 
     $("input:checkbox").click(function() {
         var column = "table ." + $(this).attr("name");
         $(column).toggle();
-        stripeTables();
+        stripeSummaryTable();
     });
 
     $("#select-all-metrics").click(function() {

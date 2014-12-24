@@ -67,7 +67,7 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected lazy val ddl: Parser[LogicalPlan] = createTable
 
   /**
-   * CREATE FOREIGN TEMPORARY TABLE avroTable
+   * CREATE TEMPORARY TABLE avroTable
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")
    */
@@ -100,9 +100,26 @@ private[sql] case class CreateTableUsing(
         }
     }
     val dataSource = clazz.newInstance().asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
-    val relation = dataSource.createRelation(sqlContext, options)
+    val relation = dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
 
     sqlContext.baseRelationToSchemaRDD(relation).registerTempTable(tableName)
     Seq.empty
   }
+}
+
+/**
+ * Builds a map in which keys are case insensitive
+ */
+protected class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String] {
+
+  val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))
+
+  override def get(k: String): Option[String] = baseMap.get(k.toLowerCase)
+
+  override def + [B1 >: String](kv: (String, B1)): Map[String, B1] =
+    baseMap + kv.copy(_1 = kv._1.toLowerCase)
+
+  override def iterator: Iterator[(String, String)] = baseMap.iterator
+
+  override def -(key: String): Map[String, String] = baseMap - key.toLowerCase()
 }

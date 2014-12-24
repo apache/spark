@@ -35,6 +35,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
       .setMaster("local")
       .setAppName("test-executor-allocation-manager")
       .set("spark.dynamicAllocation.enabled", "true")
+      .set("spark.dynamicAllocation.testing", "true")
     intercept[SparkException] { new SparkContext(conf) }
     SparkEnv.get.stop() // cleanup the created environment
     SparkContext.clearActiveContext()
