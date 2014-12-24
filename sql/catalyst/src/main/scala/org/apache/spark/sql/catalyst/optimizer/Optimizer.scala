@@ -362,7 +362,7 @@ object NormalizeFilters extends Rule[LogicalPlan] with PredicateHelper {
     case Or(lhs, rhs) if lhs fastEquals rhs => lhs :: Nil
     // a && a => a
     case And(lhs, rhs) if lhs fastEquals rhs => lhs :: Nil
-    // (a || b || c || ...) && (a || b || d || ...) => a && b && (c || d || ...)
+    // (a && b && c && ...) || (a && b && d && ...) => a && b && (c || d || ...)
     case Or(lhs, rhs) =>
       val lhsSet = splitConjunctivePredicates(lhs).toSet
       val rhsSet = splitConjunctivePredicates(rhs).toSet
