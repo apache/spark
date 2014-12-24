@@ -192,14 +192,14 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
       def dfs(status: FileStatus, currentDepth: Int): List[FileStatus] = {
         status match {
           case _ if currentDepth < 0 => Nil
-          case _ if !status.isDirectory => {
+          case _ if !status.isDir => {
             if (filter.accept(status.getPath)) {
               status :: Nil
             } else {
               Nil
             }
           }
-          case _ if status.isDirectory => {
+          case _ if status.isDir => {
             val path = status.getPath
             val depthFilter =   depth + directoryDepth - path.depth()
             if (lastFoundDirs.contains(path)
