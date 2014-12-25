@@ -47,12 +47,6 @@ sink(stderr())
 depsLen <- readInt(inputCon)
 if (depsLen > 0) {
   execFunctionDeps <- readRawLen(inputCon, depsLen)
-
-  # load the dependencies into current environment
-  depsFileName <- tempfile(pattern="spark-exec", fileext=".deps")
-  depsFile <- file(depsFileName, open="wb")
-  writeBin(execFunctionDeps, depsFile, endian="big")
-  close(depsFile)
 }
 
 # Include packages as required
@@ -62,8 +56,8 @@ for (pkg in packageNames) {
 }
 
 if (depsLen > 0) {
-	load(depsFileName)
-	unlink(depsFileName)
+  # load the dependencies into current environment
+  load(rawConnection(execFunctionDeps, open='rb'))
 }
 
 # Read and set broadcast variables
