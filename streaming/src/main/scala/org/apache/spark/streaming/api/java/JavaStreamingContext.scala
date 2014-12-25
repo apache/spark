@@ -209,6 +209,18 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   }
 
   /**
+   * Create an input stream that monitors a Hadoop-compatible filesystem
+   * for new files and reads them as flat binary files with fixed record lengths,
+   * yielding byte arrays
+   * @param directory HDFS directory to monitor for new files
+   * @param recordLength The length at which to split the records
+   */
+
+  def binaryRecordsStream(directory: String, recordLength: Int): JavaDStream[Array[Byte]] = {
+    ssc.binaryRecordsStream(directory, recordLength)
+  }
+
+  /**
    * Create an input stream from network source hostname:port, where data is received
    * as serialized blocks (serialized using the Spark's serializer) that can be directly
    * pushed into the block manager without deserializing them. This is the most efficient
