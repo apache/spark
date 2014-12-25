@@ -173,12 +173,13 @@ object Vectors {
    * Creates a sparse vector providing its index array and value array.
    *
    * @param size vector size.
-   * @param indices index array.
-   * @param values value array.
+   * @param indices index array, must be strictly increasing.
+   * @param values value array, must have the same length as indices.
    */
   def sparse(size: Int, indices: Array[Int], values: Array[Double]): Vector = {
-    val (newIndices, newValues) = indices.zip(values).sortBy(_._1).unzip
-    new SparseVector(size, newIndices, newValues)
+    require((1 until indices.length).forall(i => indices(i-1) <= indices(i)), 
+      "indices is not strictly increasing.")
+    new SparseVector(size, indices, values)
   }
 
   /**
