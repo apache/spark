@@ -262,7 +262,8 @@ class StreamingContext(object):
         @param directory:       Directory to load data from
         @param recordLength:    Length of each record in bytes
         """
-        return DStream(self._jssc.binaryRecordsStream(directory, recordLength), self, NoOpSerializer())
+        return DStream(self._jssc.binaryRecordsStream(directory, recordLength), self,
+                       NoOpSerializer())
 
     def _check_serializers(self, rdds):
         # make sure they have same serializer
