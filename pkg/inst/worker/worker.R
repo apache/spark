@@ -57,7 +57,7 @@ for (pkg in packageNames) {
 
 if (depsLen > 0) {
   # load the dependencies into current environment
-  load(rawConnection(execFunctionDeps, open='rb'))
+  load(rawConnection(memDecompress(execFunctionDeps, "g"), open='rb'))
 }
 
 # Read and set broadcast variables
