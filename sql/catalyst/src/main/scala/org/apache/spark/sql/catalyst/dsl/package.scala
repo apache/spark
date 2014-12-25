@@ -297,7 +297,8 @@ package object dsl {
 
   object plans {  // scalastyle:ignore
     implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) extends LogicalPlanFunctions {
-      def writeToFile(path: String) = WriteToFile(path, logicalPlan)
+      def writeToFile(path: String, overwrite: Boolean) =
+        WriteToFile(path, logicalPlan, overwrite)
     }
   }
 

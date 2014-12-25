@@ -151,7 +151,12 @@ private[sql] object ParquetRelation {
    *
    * @param pathString The directory the Parquetfile will be stored in.
    * @param attributes The schema of the relation.
+   * @param allowExisting Allow the file existed,
+   *                      If it's false, an exception will raise if the path already existed,
+   *                                     otherwise create a new file.
+   *                      If it's true, we either create a new file or overwrite the existed one.
    * @param conf A configuration to be used.
+   * @param sqlContext SQLContext
    * @return An empty ParquetRelation.
    */
   def createEmpty(pathString: String,

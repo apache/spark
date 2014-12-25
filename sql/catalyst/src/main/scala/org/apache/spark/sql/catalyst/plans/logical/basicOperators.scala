@@ -126,7 +126,8 @@ case class CreateTableAsSelect[T](
 
 case class WriteToFile(
     path: String,
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    overwrite: Boolean) extends UnaryNode {
   override def output = child.output
 }
 

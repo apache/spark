@@ -1888,7 +1888,7 @@ class SchemaRDD(RDD):
         rdd = self._jschema_rdd.baseSchemaRDD().toJSON()
         return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
-    def saveAsParquetFile(self, path):
+    def saveAsParquetFile(self, path, overwrite=False):
         """Save the contents as a Parquet file, preserving the schema.
 
         Files that are written out using this method can be read back in as
@@ -1903,7 +1903,7 @@ class SchemaRDD(RDD):
         >>> sorted(srdd2.collect()) == sorted(srdd.collect())
         True
         """
-        self._jschema_rdd.saveAsParquetFile(path)
+        self._jschema_rdd.saveAsParquetFile(path, overwrite)
 
     def registerTempTable(self, name):
         """Registers this RDD as a temporary table using the given name.

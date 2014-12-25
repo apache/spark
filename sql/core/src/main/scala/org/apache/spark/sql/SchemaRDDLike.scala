@@ -68,12 +68,29 @@ private[sql] trait SchemaRDDLike {
   /**
    * Saves the contents of this `SchemaRDD` as a parquet file, preserving the schema.  Files that
    * are written out using this method can be read back in as a SchemaRDD using the `parquetFile`
-   * function.
+   * function. It will raise exception if the specified path already existed.
    *
+   * @param path   The destination path.
    * @group schema
    */
   def saveAsParquetFile(path: String): Unit = {
-    sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+    // We provide override functions for the ability of default function argument value,
+    // which is not naturely supported by Java
+    saveAsParquetFile(path, false)
+  }
+
+  /**
+   * Saves the contents of this `SchemaRDD` as a parquet file, preserving the schema.  Files that
+   * are written out using this method can be read back in as a SchemaRDD using the `parquetFile`
+   * function.
+   * @param path      The destination path.
+   * @param overwrite If it's false, an exception will raise if the path already existed,
+   *                  otherwise create a new file.
+   *                  If it's true, we either create a new file or overwrite the existed one.
+   * @group schema
+   */
+  def saveAsParquetFile(path: String, overwrite: Boolean): Unit = {
+    sqlContext.executePlan(WriteToFile(path, logicalPlan, overwrite)).toRdd
   }
 
   /**
