@@ -56,6 +56,13 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   with SparkHadoopMapReduceUtil
   with Serializable
 {
+
+  if (keyClass.isArray) {
+    logWarning("Using arrays as keys may lead to incorrect results (see SPARK-597)")
+  } else if (classOf[Enum[_]].isAssignableFrom(keyClass)) {
+    logWarning("Using Java enums as keys may lead to incorrect results (see SPARK-3847)")
+  }
+
   /**
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined type" C

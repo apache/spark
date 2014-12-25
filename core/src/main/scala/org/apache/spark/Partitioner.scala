@@ -78,6 +78,7 @@ object Partitioner {
   private[spark] def assertPartitionerSupportsKeyClass(
       partitioner: Partitioner,
       keyClass: Class[_]): Unit = {
+    // If you update this method, consider also updating the warnings at the top of PairRDDFunctions
     if (partitioner.isInstanceOf[HashPartitioner]) {
       if (keyClass.isArray) {
         throw new SparkException("HashPartitioner cannot partition array keys (see SPARK-597)")
