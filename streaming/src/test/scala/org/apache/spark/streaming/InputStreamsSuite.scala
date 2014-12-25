@@ -250,7 +250,8 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
       val fileStream = ssc.binaryRecordsStream(testDir.toString, 1)
 
-      val outputBuffer = new ArrayBuffer[Seq[Array[Byte]]] with SynchronizedBuffer[Seq[Array[Byte]]]
+      val outputBuffer = new ArrayBuffer[Seq[Array[Byte]]]
+        with SynchronizedBuffer[Seq[Array[Byte]]]
       val outputStream = new TestOutputStream(fileStream, outputBuffer)
       outputStream.register()
       ssc.start()
