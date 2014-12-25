@@ -73,7 +73,8 @@ class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
     directory: String,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
     newFilesOnly: Boolean = true,
-    conf: Option[Configuration] = None)(implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F])
+    conf: Option[Configuration] = None)
+    (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F])
   extends InputDStream[(K, V)](ssc_) {
 
   // Data to be saved as part of the streaming checkpoints
