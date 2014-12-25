@@ -22,6 +22,7 @@ import java.io.{IOException, ObjectInputStream}
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
@@ -71,7 +72,8 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     @transient ssc_ : StreamingContext,
     directory: String,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
-    newFilesOnly: Boolean = true)
+    newFilesOnly: Boolean = true,
+    conf: Option[Configuration])
   extends InputDStream[(K, V)](ssc_) {
 
   // Data to be saved as part of the streaming checkpoints
@@ -232,7 +234,8 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   /** Generate one RDD from an array of files */
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
     val fileRDDs = files.map(file =>{
-      val rdd = context.sparkContext.newAPIHadoopFile[K, V, F](file)
+      val hadoopConfiguration = conf.getOrElse(ssc.sparkContext.hadoopConfiguration)
+      val rdd = context.sparkContext.newAPIHadoopFile[K, V, F](file, hadoopConfiguration)
       if (rdd.partitions.size == 0) {
         logError("File " + file + " has no data in it. Spark Streaming can only ingest " +
           "files that have been \"moved\" to the directory assigned to the file stream. " +
