@@ -42,7 +42,7 @@ from sys import stderr
 DEFAULT_SPARK_VERSION = "1.2.0"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
-MESOS_SPARK_EC2_BRANCH = "v4"
+MESOS_SPARK_EC2_BRANCH = "branch-1.3"
 # A URL prefix from which to fetch AMI information
 AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/{b}/ami-list".format(b=MESOS_SPARK_EC2_BRANCH)
 
