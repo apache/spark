@@ -44,7 +44,7 @@ class DummyString(val arr: Array[Char]) {
 }
 
 class SizeEstimatorSuite
-  extends FunSuite with ResetSystemProperties with BeforeAndAfterEach with PrivateMethodTester {
+  extends FunSuite with BeforeAndAfterEach with PrivateMethodTester with ResetSystemProperties {
 
   override def beforeEach() {
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
