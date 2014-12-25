@@ -78,7 +78,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
     if (mapSideCombine && keyClass.isArray) {
       // Map-side combining with array keys won't lead to incorrect results, but it's ineffective
-      // because the arrays' hashcodes will be based on object identity rather than their contents;
+      // because the arrays' hashcodes will be based on object identity rather than their contents
       throw new SparkException("Map-side combining is not supported for array keys (see SPARK-597)")
     }
     Partitioner.assertPartitionerSupportsKeyClass(partitioner, keyClass)
@@ -289,7 +289,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def reduceByKeyLocally(func: (V, V) => V): Map[K, V] = {
 
     if (keyClass.isArray) {
-      throw new SparkException("reduceByKeyLocally() does not support array keys")
+      throw new SparkException("reduceByKeyLocally() does not support array keys (see SPARK-597)")
     }
 
     val reducePartition = (iter: Iterator[(K, V)]) => {
