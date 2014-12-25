@@ -65,6 +65,27 @@ object Partitioner {
       new HashPartitioner(bySize.head.partitions.size)
     }
   }
+
+  /**
+   * Check whether the given partitioner can correctly partition keys of the given class.  This is
+   * used to prevent Java arrays (SPARK-597) or enumerations (SPARK-3847) from being used with
+   * HashPartitioner, since that will lead to incorrect results.  Since partitioning is an expensive
+   * operation, this method lets perform these checks once per transformation rather than once per
+   * record.
+   *
+   * @throws SparkException if the partitioner will behave incorrectly for keys of the given class.
+   */
+  private[spark] def assertPartitionerSupportsKeyClass(
+      partitioner: Partitioner,
+      keyClass: Class[_]): Unit = {
+    if (partitioner.isInstanceOf[HashPartitioner]) {
+      if (keyClass.isArray) {
+        throw new SparkException("HashPartitioner cannot partition array keys (see SPARK-597)")
+      } else if (classOf[Enum[_]].isAssignableFrom(keyClass)) {
+        throw new SparkException("HashPartitioner cannot partition Java enums (see SPARK-3847)")
+      }
+    }
+  }
 }
 
 /**
@@ -73,7 +94,12 @@ object Partitioner {
  *
  * Java arrays have hashCodes that are based on the arrays' identities rather than their contents,
  * so attempting to partition an RDD[Array[_]] or RDD[(Array[_], _)] using a HashPartitioner will
- * produce an unexpected or incorrect result.
+ * produce an unexpected or incorrect result.  See SPARK-597 for more details.
+ *
+ * Similarly, Java Enums have hash hashCodes are JVM-dependent, so it is unsafe to compare the
+ * hashCodes of Java Enums in different JVMs.  To work around this, you can either call toString()
+ * on the Enums and work with string values, or use Scala sealed traits and case objects to emulate
+ * Java Enums.  See SPARK-3847 for more details.
  */
 class HashPartitioner(partitions: Int) extends Partitioner {
   def numPartitions = partitions

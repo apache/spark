@@ -17,6 +17,8 @@
 
 package org.apache.spark
 
+import java.util.concurrent.TimeUnit
+
 import scala.collection.mutable.ArrayBuffer
 import scala.math.abs
 
@@ -208,11 +210,12 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
   }
 
   test("partitioning Java arrays should fail") {
+    // See SPARK-597
     val arrs: RDD[Array[Int]] = sc.parallelize(Array(1, 2, 3, 4), 2).map(x => Array(x))
+    assert(intercept[SparkException]{ arrs.distinct() }.getMessage.contains("array"))
+
     val arrPairs: RDD[(Array[Int], Int)] =
       sc.parallelize(Array(1, 2, 3, 4), 2).map(x => (Array(x), x))
-
-    assert(intercept[SparkException]{ arrs.distinct() }.getMessage.contains("array"))
     // We can't catch all usages of arrays, since they might occur inside other collections:
     // assert(fails { arrPairs.distinct() })
     assert(intercept[SparkException]{ arrPairs.partitionBy(new HashPartitioner(2)) }.getMessage.contains("array"))
@@ -226,6 +229,29 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     assert(intercept[SparkException]{ arrPairs.cogroup(arrPairs) }.getMessage.contains("array"))
     assert(intercept[SparkException]{ arrPairs.reduceByKeyLocally(_ + _) }.getMessage.contains("array"))
     assert(intercept[SparkException]{ arrPairs.reduceByKey(_ + _) }.getMessage.contains("array"))
+    assert(intercept[SparkException]{ arrPairs.map(x => x).reduceByKey(_ + _) }.getMessage.contains("array"))
+  }
+
+  test("partitioning Java enums should fail") {
+    // See SPARK-3847
+    val enums: RDD[TimeUnit] = sc.parallelize(Array(TimeUnit.SECONDS, TimeUnit.MICROSECONDS), 2)
+    assert(intercept[SparkException]{ enums.distinct() }.getMessage.contains("enum"))
+
+    val enumPairs: RDD[(TimeUnit, String)] = enums.map(e => (e, e.toString))
+    assert(intercept[SparkException]{ enumPairs.partitionBy(new HashPartitioner(2)) }.getMessage.contains("enum"))
+    assert(intercept[SparkException]{ enumPairs.join(enumPairs) }.getMessage.contains("enum"))
+    assert(intercept[SparkException]{ enumPairs.leftOuterJoin(enumPairs) }.getMessage.contains("enum"))
+    assert(intercept[SparkException]{ enumPairs.rightOuterJoin(enumPairs) }.getMessage.contains("enum"))
+    assert(intercept[SparkException]{ enumPairs.fullOuterJoin(enumPairs) }.getMessage.contains("enum"))
+    assert(intercept[SparkException]{ enumPairs.groupByKey() }.getMessage.contains("enum"))
+    assert(intercept[SparkException]{ enumPairs.countByKey() }.getMessage.contains("enum"))
+    // This case works, since it doesn't use a shuffle and enums are save to use as hashmap keys:
+    enumPairs.countByKeyApprox(1)
+    assert(intercept[SparkException]{ enumPairs.cogroup(enumPairs) }.getMessage.contains("enum"))
+    // Similar to countByKeyApprox, this also works:
+    enumPairs.reduceByKeyLocally(_ + _)
+    assert(intercept[SparkException]{ enumPairs.reduceByKey(_ + _) }.getMessage.contains("enum"))
+    assert(intercept[SparkException]{ enumPairs.map(x => x).reduceByKey(_ + _) }.getMessage.contains("enum"))
   }
 
   test("zero-length partitions should be correctly handled") {
