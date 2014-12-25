@@ -33,7 +33,7 @@ class NormalizeFiltersSuite extends PlanTest {
       Batch("AnalysisNodes", Once,
         EliminateAnalysisOperators),
       Batch("NormalizeFilters", FixedPoint(100),
-        NormalizeFilters,
+        BooleanSimplification,
         SimplifyFilters))
   }
 
