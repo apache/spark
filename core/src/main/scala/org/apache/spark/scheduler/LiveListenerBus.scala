@@ -28,7 +28,8 @@ import org.apache.spark.util.Utils
  *
  * Until start() is called, all posted events are only buffered. Only after this listener bus
  * has started will events be actually propagated to all attached listeners. This listener bus
- * is stopped when it receives a SparkListenerShutdown event, which is posted using stop().
+ * will be stopped when stop() is called. After `stop()` is called, it won't accept new events.
+ * However, for the events in the bufer, it will still process them before it exits.
  */
 private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
 

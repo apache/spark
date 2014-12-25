@@ -350,7 +350,6 @@ class JsonProtocolSuite extends FunSuite {
         assert(e1.sparkUser == e2.sparkUser)
       case (e1: SparkListenerApplicationEnd, e2: SparkListenerApplicationEnd) =>
         assert(e1.time == e2.time)
-      case (SparkListenerShutdown, SparkListenerShutdown) =>
       case _ => fail("Events don't match in types!")
     }
   }

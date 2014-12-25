@@ -70,7 +70,6 @@ private[spark] trait SparkListenerBus extends Logging {
         foreachListener(_.onApplicationEnd(applicationEnd))
       case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
         foreachListener(_.onExecutorMetricsUpdate(metricsUpdate))
-      case SparkListenerShutdown =>
     }
   }
 
