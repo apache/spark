@@ -121,7 +121,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
     /** Clean up metadata older than the given threshold time */
   def cleanupOldMetadata(cleanupThreshTime: Time) {
-    receivedBlockTracker.cleanupOldBatches(cleanupThreshTime)
+    receivedBlockTracker.cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
   }
 
   /** Register a receiver */

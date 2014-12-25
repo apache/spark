@@ -182,14 +182,34 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("WriteAheadLogManager - cleanup old logs") {
+    logCleanUpTest(waitForCompletion = false)
+  }
+
+  test("WriteAheadLogManager - cleanup old logs synchronously") {
+    logCleanUpTest(waitForCompletion = true)
+  }
+
+  private def logCleanUpTest(waitForCompletion: Boolean): Unit = {
     // Write data with manager, recover with new manager and verify
     val manualClock = new ManualClock
     val dataToWrite = generateRandomData()
     manager = writeDataUsingManager(testDir, dataToWrite, manualClock, stopManager = false)
     val logFiles = getLogFilesInDirectory(testDir)
     assert(logFiles.size > 1)
-    manager.cleanupOldLogs(manualClock.currentTime() / 2, waitForCompletion = true)
-    assert(getLogFilesInDirectory(testDir).size < logFiles.size)
+
+    // To avoid code repeat
+    def cleanUpAndVerify(): Unit = {
+      manager.cleanupOldLogs(manualClock.currentTime() / 2, waitForCompletion)
+      assert(getLogFilesInDirectory(testDir).size < logFiles.size)
+    }
+
+    if (waitForCompletion) {
+      cleanUpAndVerify()
+    } else {
+      eventually(timeout(1 second), interval(10 milliseconds)) {
+        cleanUpAndVerify()
+      }
+    }
   }
 
   test("WriteAheadLogManager - handling file errors while reading rotating logs") {

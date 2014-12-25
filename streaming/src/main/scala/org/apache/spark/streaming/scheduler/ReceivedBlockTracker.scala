@@ -139,11 +139,6 @@ private[streaming] class ReceivedBlockTracker(
     getReceivedBlockQueue(streamId).toSeq
   }
 
-  /** Clean up block information of old batches asynchronously. */
-  def cleanupOldBatches(cleanupThreshTime: Time): Unit = synchronized {
-    cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
-  }
-
   /**
    * Clean up block information of old batches. If waitForCompletion is true, this method
    * returns only after the files are cleaned up.
