@@ -468,7 +468,7 @@ class StreamingContextTests(PySparkStreamingTestCase):
             with open(os.path.join(d, name), "wb") as f:
                 f.write(bytearray(range(10)))
         self.wait_for(result, 2)
-        self.assertEqual([range(10),range(10)], map(lambda v: list(v[0]), result))
+        self.assertEqual([range(10), range(10)], map(lambda v: list(v[0]), result))
 
     def test_union(self):
         input = [range(i + 1) for i in range(3)]
