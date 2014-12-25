@@ -230,6 +230,10 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     assert(intercept[SparkException]{ arrPairs.reduceByKeyLocally(_ + _) }.getMessage.contains("array"))
     assert(intercept[SparkException]{ arrPairs.reduceByKey(_ + _) }.getMessage.contains("array"))
     assert(intercept[SparkException]{ arrPairs.map(x => x).reduceByKey(_ + _) }.getMessage.contains("array"))
+    implicit object ArrayIntOrdering extends Ordering[Array[Int]] {
+      override def compare(x: Array[Int], y: Array[Int]) = 0
+    }
+    assert(intercept[SparkException]{ arrPairs.repartitionAndSortWithinPartitions(new HashPartitioner(2)) }.getMessage.contains("array"))
   }
 
   test("partitioning Java enums should fail") {
@@ -252,6 +256,7 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     enumPairs.reduceByKeyLocally(_ + _)
     assert(intercept[SparkException]{ enumPairs.reduceByKey(_ + _) }.getMessage.contains("enum"))
     assert(intercept[SparkException]{ enumPairs.map(x => x).reduceByKey(_ + _) }.getMessage.contains("enum"))
+    assert(intercept[SparkException]{ enumPairs.repartitionAndSortWithinPartitions(new HashPartitioner(2)) }.getMessage.contains("enum"))
   }
 
   test("zero-length partitions should be correctly handled") {

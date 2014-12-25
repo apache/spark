@@ -72,6 +72,8 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
    * because it can push the sorting down into the shuffle machinery.
    */
   def repartitionAndSortWithinPartitions(partitioner: Partitioner): RDD[(K, V)] = {
+    val keyClass = implicitly[ClassTag[K]].runtimeClass
+    Partitioner.assertPartitionerSupportsKeyClass(partitioner, keyClass)
     new ShuffledRDD[K, V, V](self, partitioner).setKeyOrdering(ordering)
   }
 
