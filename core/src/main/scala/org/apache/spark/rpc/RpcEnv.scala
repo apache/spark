@@ -32,7 +32,7 @@ import org.apache.spark.util.AkkaUtils
 /**
  * An RPC environment.
  */
-abstract class RpcEnv {
+trait RpcEnv {
   def setupEndPoint(name: String, endpoint: RpcEndPoint): RpcEndPointRef
 
   def setupDriverEndPointRef(name: String): RpcEndPointRef
@@ -48,7 +48,7 @@ abstract class RpcEnv {
 /**
  * An end point for the RPC that defines what functions to trigger given a message.
  */
-abstract class RpcEndPoint {
+trait RpcEndPoint {
 
   def receive(sender: RpcEndPointRef): PartialFunction[Any, Unit]
 
@@ -65,7 +65,7 @@ abstract class RpcEndPoint {
 /**
  * A reference for a remote [[RpcEndPoint]].
  */
-abstract class RpcEndPointRef {
+trait RpcEndPointRef {
 
   def address: String
 
@@ -131,7 +131,7 @@ class AkkaRpcEndPointRef(private[rpc] val actorRef: ActorRef, conf: SparkConf)
   private[this] val timeout =
     Duration.create(conf.getLong("spark.akka.lookupTimeout", 30), "seconds")
 
-  override def address: String = actorRef.path.address.toString
+  override val address: String = actorRef.path.address.toString
 
   override def askWithReply[T](message: Any): T = {
     var attempts = 0
