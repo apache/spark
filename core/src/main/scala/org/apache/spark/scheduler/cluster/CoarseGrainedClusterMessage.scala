@@ -20,7 +20,7 @@ package org.apache.spark.scheduler.cluster
 import java.nio.ByteBuffer
 
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.rpc.RpcEndPointRef
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.{SerializableBuffer, Utils}
 
 
@@ -42,7 +42,7 @@ private[spark] object CoarseGrainedClusterMessages {
 
   // Executors to driver
   case class RegisterExecutor(
-      executorId: String, hostPort: String, cores: Int, rpcRef: RpcEndPointRef)
+      executorId: String, hostPort: String, cores: Int, rpcRef: RpcEndpointRef)
     extends CoarseGrainedClusterMessage {
     Utils.checkHostPort(hostPort, "Expected host port")
   }

@@ -29,33 +29,33 @@ trait RpcEnv {
   /**
    * Need this map to set up the `sender` for the send method.
    */
-  private val endPointToRef = new ConcurrentHashMap[RpcEndPoint, RpcEndPointRef]()
+  private val endpointToRef = new ConcurrentHashMap[RpcEndpoint, RpcEndpointRef]()
 
   /**
-   * Need this map to remove `RpcEndPoint` from `endPointToRef` via a `RpcEndPointRef`
+   * Need this map to remove `RpcEndpoint` from `endpointToRef` via a `RpcEndpointRef`
    */
-  private val refToEndPoint = new ConcurrentHashMap[RpcEndPointRef, RpcEndPoint]()
+  private val refToEndpoint = new ConcurrentHashMap[RpcEndpointRef, RpcEndpoint]()
 
 
-  protected def registerEndPoint(endPoint: RpcEndPoint, endPointRef: RpcEndPointRef): Unit = {
-    refToEndPoint.put(endPointRef, endPoint)
-    endPointToRef.put(endPoint, endPointRef)
+  protected def registerEndpoint(endpoint: RpcEndpoint, endpointRef: RpcEndpointRef): Unit = {
+    refToEndpoint.put(endpointRef, endpoint)
+    endpointToRef.put(endpoint, endpointRef)
   }
 
-  protected def unregisterEndPoint(endPointRef: RpcEndPointRef): Unit = {
-    val endPoint = refToEndPoint.remove(endPointRef)
-    endPointToRef.remove(endPoint)
+  protected def unregisterEndpoint(endpointRef: RpcEndpointRef): Unit = {
+    val endpoint = refToEndpoint.remove(endpointRef)
+    endpointToRef.remove(endpoint)
   }
 
-  def endPointRef(endPoint: RpcEndPoint): RpcEndPointRef = endPointToRef.get(endPoint)
+  def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef = endpointToRef.get(endpoint)
 
-  def setupEndPoint(name: String, endPoint: RpcEndPoint): RpcEndPointRef
+  def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
 
-  def setupDriverEndPointRef(name: String): RpcEndPointRef
+  def setupDriverEndpointRef(name: String): RpcEndpointRef
 
-  def setupEndPointRefByUrl(url: String): RpcEndPointRef
+  def setupEndpointRefByUrl(url: String): RpcEndpointRef
 
-  def stop(endPoint: RpcEndPointRef): Unit
+  def stop(endpoint: RpcEndpointRef): Unit
 
   def stopAll(): Unit
 }
@@ -64,16 +64,16 @@ trait RpcEnv {
 /**
  * An end point for the RPC that defines what functions to trigger given a message.
  */
-trait RpcEndPoint {
+trait RpcEndpoint {
 
   val rpcEnv: RpcEnv
 
   /**
    * Provide the implicit sender.
    */
-  implicit final def self: RpcEndPointRef = rpcEnv.endPointRef(this)
+  implicit final def self: RpcEndpointRef = rpcEnv.endpointRef(this)
 
-  def receive(sender: RpcEndPointRef): PartialFunction[Any, Unit]
+  def receive(sender: RpcEndpointRef): PartialFunction[Any, Unit]
 
   def remoteConnectionTerminated(remoteAddress: String): Unit = {
     // By default, do nothing.
@@ -89,21 +89,21 @@ trait RpcEndPoint {
 }
 
 
-object RpcEndPoint {
-  final val noSender: RpcEndPointRef = null
+object RpcEndpoint {
+  final val noSender: RpcEndpointRef = null
 }
 
 /**
- * A reference for a remote [[RpcEndPoint]].
+ * A reference for a remote [[RpcEndpoint]].
  */
-trait RpcEndPointRef {
+trait RpcEndpointRef {
 
   def address: String
 
   def askWithReply[T](message: Any): T
 
   /**
-   * Send a message to the remote end point asynchronously. No delivery guarantee is provided.
+   * Send a message to the remote endpoint asynchronously. No delivery guarantee is provided.
    */
-  def send(message: Any)(implicit sender: RpcEndPointRef = RpcEndPoint.noSender): Unit
+  def send(message: Any)(implicit sender: RpcEndpointRef = RpcEndpoint.noSender): Unit
 }

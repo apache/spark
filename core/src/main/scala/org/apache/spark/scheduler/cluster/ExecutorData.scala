@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.rpc.RpcEndPointRef
+import org.apache.spark.rpc.RpcEndpointRef
 
 /**
  * Grouping of data for an executor used by CoarseGrainedSchedulerBackend.
@@ -29,7 +29,7 @@ import org.apache.spark.rpc.RpcEndPointRef
  * @param totalCores The total number of cores available to the executor
  */
 private[cluster] class ExecutorData(
-   val executorActor: RpcEndPointRef,
+   val executorActor: RpcEndpointRef,
    val executorAddress: String,
    val executorHost: String ,
    var freeCores: Int,

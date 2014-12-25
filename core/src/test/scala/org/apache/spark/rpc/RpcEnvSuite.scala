@@ -40,27 +40,27 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
 
   test("send a message locally") {
     @volatile var message: String = null
-    val rpcEndPointRef = env.setupEndPoint("send_test", new RpcEndPoint with Logging {
+    val rpcEndpointRef = env.setupEndpoint("send_test", new RpcEndpoint with Logging {
       override val rpcEnv = env
 
-      override def receive(sender: RpcEndPointRef) = {
+      override def receive(sender: RpcEndpointRef) = {
         case msg: String => message = msg
       }
     })
-    rpcEndPointRef.send("hello")
+    rpcEndpointRef.send("hello")
     Thread.sleep(2000)
     assert("hello" === message)
   }
 
   test("ask a message locally") {
-    val rpcEndPointRef = env.setupEndPoint("ask_test", new RpcEndPoint with Logging {
+    val rpcEndpointRef = env.setupEndpoint("ask_test", new RpcEndpoint with Logging {
       override val rpcEnv = env
 
-      override def receive(sender: RpcEndPointRef) = {
+      override def receive(sender: RpcEndpointRef) = {
         case msg: String => sender.send(msg)
       }
     })
-    val reply = rpcEndPointRef.askWithReply[String]("hello")
+    val reply = rpcEndpointRef.askWithReply[String]("hello")
     assert("hello" === reply)
   }
 
@@ -71,20 +71,20 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
 
     case class Pong(id: Int)
 
-    val pongRef = env.setupEndPoint("pong", new RpcEndPoint with Logging {
+    val pongRef = env.setupEndpoint("pong", new RpcEndpoint with Logging {
       override val rpcEnv = env
 
-      override def receive(sender: RpcEndPointRef) = {
+      override def receive(sender: RpcEndpointRef) = {
         case Ping(id) => sender.send(Pong(id))
       }
     })
 
-    val pingRef = env.setupEndPoint("ping", new RpcEndPoint with Logging {
+    val pingRef = env.setupEndpoint("ping", new RpcEndpoint with Logging {
       override val rpcEnv = env
 
-      var requester: RpcEndPointRef = _
+      var requester: RpcEndpointRef = _
 
-      override def receive(sender: RpcEndPointRef) = {
+      override def receive(sender: RpcEndpointRef) = {
         case Start => {
           requester = sender
           pongRef.send(Ping(1))
@@ -104,16 +104,16 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("register and unregister") {
-    val endPoint = new RpcEndPoint with Logging {
+    val endpoint = new RpcEndpoint with Logging {
       override val rpcEnv = env
 
-      override def receive(sender: RpcEndPointRef) = {
+      override def receive(sender: RpcEndpointRef) = {
         case msg: String => sender.send(msg)
       }
     }
-    val rpcEndPointRef = env.setupEndPoint("register_test", endPoint)
-    assert(rpcEndPointRef eq env.endPointRef(endPoint))
-    endPoint.stop()
-    assert(null == env.endPointRef(endPoint))
+    val rpcEndpointRef = env.setupEndpoint("register_test", endpoint)
+    assert(rpcEndpointRef eq env.endpointRef(endpoint))
+    endpoint.stop()
+    assert(null == env.endpointRef(endpoint))
   }
 }

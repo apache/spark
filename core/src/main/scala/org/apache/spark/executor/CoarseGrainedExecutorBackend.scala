@@ -28,7 +28,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
-import org.apache.spark.rpc.{RpcEndPointRef, RpcEndPoint}
+import org.apache.spark.rpc.{RpcEndpointRef, RpcEndpoint}
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
@@ -39,21 +39,21 @@ private[spark] class CoarseGrainedExecutorBackend(
     hostPort: String,
     cores: Int,
     env: SparkEnv)
-  extends RpcEndPoint with ExecutorBackend with Logging {
+  extends RpcEndpoint with ExecutorBackend with Logging {
 
   override val rpcEnv = env.rpcEnv
 
   Utils.checkHostPort(hostPort, "Expected hostport")
 
   var executor: Executor = null
-  var driver: RpcEndPointRef = null
+  var driver: RpcEndpointRef = null
 
   override def remoteConnectionTerminated(remoteAddress: String): Unit = {
     logError(s"Driver $remoteAddress disassociated! Shutting down.")
     System.exit(1)
   }
 
-  override def receive(sender: RpcEndPointRef) = {
+  override def receive(sender: RpcEndpointRef) = {
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
       val (hostname, _) = Utils.parseHostPort(hostPort)
@@ -134,11 +134,11 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       // Start the CoarseGrainedExecutorBackend RPC end point.
       val sparkHostPort = hostname + ":" + boundPort
       val rpc = new CoarseGrainedExecutorBackend(driverUrl, executorId, sparkHostPort, cores, env)
-      val rpcRef = env.rpcEnv.setupEndPoint("Executor", rpc)
+      val rpcRef = env.rpcEnv.setupEndpoint("Executor", rpc)
 
       // Register this executor with the driver.
       logInfo("Connecting to driver: " + driverUrl)
-      val driverRef = env.rpcEnv.setupEndPointRefByUrl(driverUrl)
+      val driverRef = env.rpcEnv.setupEndpointRefByUrl(driverUrl)
       driverRef.send(RegisterExecutor(executorId, sparkHostPort, cores, rpcRef))
 
       workerUrl.foreach { url =>

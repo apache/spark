@@ -30,7 +30,7 @@ import org.apache.spark.util.AkkaUtils
 
 class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
 
-  override def setupEndPoint(name: String, endPoint: RpcEndPoint): RpcEndPointRef = {
+  override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
     val actorRef = actorSystem.actorOf(Props(new Actor {
       override def preStart(): Unit = {
         // Listen for remote client disconnection events, since they don't go through Akka's watch()
@@ -39,44 +39,44 @@ class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
 
       override def receive: Receive = {
         case DisassociatedEvent(_, remoteAddress, _) =>
-          endPoint.remoteConnectionTerminated(remoteAddress.toString)
+          endpoint.remoteConnectionTerminated(remoteAddress.toString)
 
         case message: Any =>
-          endPoint.logMessage.trace("Received RPC message: " + message)
-          val pf = endPoint.receive(new AkkaRpcEndPointRef(sender(), conf))
+          endpoint.logMessage.trace("Received RPC message: " + message)
+          val pf = endpoint.receive(new AkkaRpcEndpointRef(sender(), conf))
           if (pf.isDefinedAt(message)) {
             pf.apply(message)
           }
       }
     }), name = name)
-    val endPointRef = new AkkaRpcEndPointRef(actorRef, conf)
-    registerEndPoint(endPoint, endPointRef)
-    endPointRef
+    val endpointRef = new AkkaRpcEndpointRef(actorRef, conf)
+    registerEndpoint(endpoint, endpointRef)
+    endpointRef
   }
 
-  override def setupDriverEndPointRef(name: String): RpcEndPointRef = {
-    new AkkaRpcEndPointRef(AkkaUtils.makeDriverRef(name, conf, actorSystem), conf)
+  override def setupDriverEndpointRef(name: String): RpcEndpointRef = {
+    new AkkaRpcEndpointRef(AkkaUtils.makeDriverRef(name, conf, actorSystem), conf)
   }
 
-  override def setupEndPointRefByUrl(url: String): RpcEndPointRef = {
+  override def setupEndpointRefByUrl(url: String): RpcEndpointRef = {
     val timeout = Duration.create(conf.getLong("spark.akka.lookupTimeout", 30), "seconds")
     val ref = Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
-    new AkkaRpcEndPointRef(ref, conf)
+    new AkkaRpcEndpointRef(ref, conf)
   }
 
   override def stopAll(): Unit = {
     // Do nothing since actorSystem was created outside.
   }
 
-  override def stop(endPoint: RpcEndPointRef): Unit = {
-    require(endPoint.isInstanceOf[AkkaRpcEndPointRef])
-    unregisterEndPoint(endPoint)
-    actorSystem.stop(endPoint.asInstanceOf[AkkaRpcEndPointRef].actorRef)
+  override def stop(endpoint: RpcEndpointRef): Unit = {
+    require(endpoint.isInstanceOf[AkkaRpcEndpointRef])
+    unregisterEndpoint(endpoint)
+    actorSystem.stop(endpoint.asInstanceOf[AkkaRpcEndpointRef].actorRef)
   }
 }
 
-private[akka] class AkkaRpcEndPointRef(val actorRef: ActorRef, conf: SparkConf)
-  extends RpcEndPointRef with Serializable with Logging {
+private[akka] class AkkaRpcEndpointRef(val actorRef: ActorRef, conf: SparkConf)
+  extends RpcEndpointRef with Serializable with Logging {
 
   private[this] val maxRetries = conf.getInt("spark.akka.num.retries", 3)
   private[this] val retryWaitMs = conf.getInt("spark.akka.retry.wait", 3000)
@@ -110,12 +110,12 @@ private[akka] class AkkaRpcEndPointRef(val actorRef: ActorRef, conf: SparkConf)
       "Error sending message [message = " + message + "]", lastException)
   }
 
-  override def send(message: Any)(implicit sender: RpcEndPointRef = RpcEndPoint.noSender): Unit = {
+  override def send(message: Any)(implicit sender: RpcEndpointRef = RpcEndpoint.noSender): Unit = {
     implicit val actorSender: ActorRef =
       if (sender == null) {
         Actor.noSender
       } else {
-        sender.asInstanceOf[AkkaRpcEndPointRef].actorRef
+        sender.asInstanceOf[AkkaRpcEndpointRef].actorRef
       }
     actorRef ! message
   }
