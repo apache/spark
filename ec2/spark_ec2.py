@@ -39,7 +39,7 @@ from datetime import datetime
 from optparse import OptionParser
 from sys import stderr
 
-DEFAULT_SPARK_VERSION = "1.1.0"
+DEFAULT_SPARK_VERSION = "1.2.0"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 MESOS_SPARK_EC2_BRANCH = "v4"
@@ -251,10 +251,13 @@ def get_spark_shark_version(opts):
         "0.8.1": "0.8.1",
         "0.9.0": "0.9.0",
         "0.9.1": "0.9.1",
+        # These are dummy versions (no Shark versions after this)
         "1.0.0": "1.0.0",
         "1.0.1": "1.0.1",
         "1.0.2": "1.0.2",
         "1.1.0": "1.1.0",
+        "1.1.1": "1.1.1",
+        "1.2.0": "1.2.0",
     }
     version = opts.spark_version.replace("v", "")
     if version not in spark_shark_map:
