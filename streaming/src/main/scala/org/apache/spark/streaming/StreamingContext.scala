@@ -392,20 +392,6 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Create an input stream from a queue of RDDs. In each batch,
-   * it will process either one or all of the RDDs returned by the queue.
-   * @param queue      Queue of RDDs
-   * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
-   * @tparam T         Type of objects in the RDD
-   */
-  def queueStream[T: ClassTag](
-      queue: Queue[RDD[T]],
-      oneAtATime: Boolean = true
-    ): InputDStream[T] = {
-    queueStream(queue, oneAtATime, sc.makeRDD(Seq[T](), 1))
-  }
-
-  /**
    * Create an input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as flat binary files, assuming a fixed length per record,
    * generating one byte array per record. Files must be written to the monitored directory
@@ -421,6 +407,20 @@ class StreamingContext private[streaming] (
     val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](directory, conf)
     val data = br.map{ case (k, v) => v.getBytes}
     data
+  }
+
+  /**
+   * Create an input stream from a queue of RDDs. In each batch,
+   * it will process either one or all of the RDDs returned by the queue.
+   * @param queue      Queue of RDDs
+   * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
+   * @tparam T         Type of objects in the RDD
+   */
+  def queueStream[T: ClassTag](
+      queue: Queue[RDD[T]],
+      oneAtATime: Boolean = true
+    ): InputDStream[T] = {
+    queueStream(queue, oneAtATime, sc.makeRDD(Seq[T](), 1))
   }
 
   /**
