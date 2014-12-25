@@ -18,10 +18,8 @@
 package org.apache.spark.streaming.scheduler
 
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.LinkedBlockingQueue
-import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.{LinkedBlockingQueue, CopyOnWriteArrayList}
 
-import scala.collection.JavaConversions._
 import scala.util.control.NonFatal
 
 import org.apache.spark.Logging
@@ -29,6 +27,10 @@ import org.apache.spark.util.Utils
 
 /** Asynchronously passes StreamingListenerEvents to registered StreamingListeners. */
 private[spark] class StreamingListenerBus() extends Logging {
+  // `listeners` will be set up during the initialization of the whole system and the number of
+  // listeners are small. The copying cost of CopyOnWriteArrayList will be little. With the help of
+  // CopyOnWriteArrayList, we can eliminate a lock during processing every event comparing to
+  // SynchronizedBuffer.
   private val listeners = new CopyOnWriteArrayList[StreamingListener]()
 
   /* Cap the capacity of the SparkListenerEvent queue so we get an explicit error (rather than
@@ -96,6 +98,9 @@ private[spark] class StreamingListenerBus() extends Logging {
   }
 
   private def foreachListener(f: StreamingListener => Unit): Unit = {
+    // JavaConversions will create a JIterableWrapper if we use some Scala collection functions.
+    // However, this method will be called frequently. To avoid the wrapper cost, here ewe use
+    // Java Iterator directly.
     val iter = listeners.iterator
     while (iter.hasNext) {
       val listener = iter.next()
