@@ -28,8 +28,8 @@ import org.apache.spark.util.Utils
 /** Asynchronously passes StreamingListenerEvents to registered StreamingListeners. */
 private[spark] class StreamingListenerBus() extends Logging {
   // `listeners` will be set up during the initialization of the whole system and the number of
-  // listeners is small, so the copying cost of CopyOnWriteArrayList will be little. With the help of
-  // CopyOnWriteArrayList, we can eliminate a lock during processing every event comparing to
+  // listeners is small, so the copying cost of CopyOnWriteArrayList will be little. With the help
+  // of CopyOnWriteArrayList, we can eliminate a lock during processing every event comparing to
   // SynchronizedBuffer.
   private val listeners = new CopyOnWriteArrayList[StreamingListener]()
 
