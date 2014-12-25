@@ -418,7 +418,7 @@ class StreamingContext private[streaming] (
       recordLength: Int): DStream[Array[Byte]] = {
     val conf = sc_.hadoopConfiguration
     conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
-    val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](directory)
+    val br = fileStream[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](directory, conf)
     val data = br.map{ case (k, v) => v.getBytes}
     data
   }
