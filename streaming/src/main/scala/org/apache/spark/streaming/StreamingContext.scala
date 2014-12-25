@@ -367,6 +367,7 @@ class StreamingContext private[streaming] (
    * Files must be written to the monitored directory by "moving" them from another
    * location within the same file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
+   * @param conf Hadoop configuration
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
    * @tparam F Input format for reading HDFS file
@@ -398,6 +399,7 @@ class StreamingContext private[streaming] (
    * by "moving" them from another location within the same file system. File names
    * starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
+   * @param recordLength length of each record in bytes
    */
   def binaryRecordsStream(
       directory: String,
