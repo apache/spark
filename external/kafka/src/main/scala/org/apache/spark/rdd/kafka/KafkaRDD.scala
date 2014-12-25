@@ -31,7 +31,7 @@ import kafka.message.{MessageAndMetadata, MessageAndOffset}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
 
-private[spark] case class KafkaRDDPartition(
+case class KafkaRDDPartition(
   override val index: Int,
   topic: String,
   partition: Int,
