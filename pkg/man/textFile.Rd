@@ -7,7 +7,7 @@ textFile(sc, path, minSplits = NULL)
 \arguments{
   \item{sc}{SparkContext to use}
 
-  \item{path}{Path of file to read}
+  \item{path}{Path of file to read. A vector of multiple paths is allowed.}
 
   \item{minSplits}{Minimum number of splits to be created.
   If NULL, the default value is chosen based on available

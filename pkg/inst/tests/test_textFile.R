@@ -108,3 +108,17 @@ test_that("textFile() and saveAsTextFile() word count works as expected", {
   unlink(fileName1)
   unlink(fileName2)
 })
+
+test_that("textFile() on multiple paths", {
+  fileName1 <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName2 <- tempfile(pattern="spark-test", fileext=".tmp")
+  writeLines("Spark is pretty.", fileName1)
+  writeLines("Spark is awesome.", fileName2)
+
+  rdd <- textFile(sc, c(fileName1, fileName2))
+  expect_true(count(rdd) == 2)
+
+  unlink(fileName1)
+  unlink(fileName2)
+})
+
