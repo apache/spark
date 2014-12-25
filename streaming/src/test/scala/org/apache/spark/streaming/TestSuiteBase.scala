@@ -21,11 +21,13 @@ import java.io.{ObjectInputStream, IOException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.SynchronizedBuffer
+import scala.concurrent.TimeoutException
 import scala.reflect.ClassTag
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
+import org.apache.spark.streaming.scheduler.{StreamingListenerBatchStarted, StreamingListenerBatchCompleted, StreamingListener}
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.rdd.RDD
@@ -101,6 +103,77 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
   }
 
   def toTestOutputStream = new TestOutputStream[T](this.parent, this.output.map(_.flatten))
+}
+
+/**
+ * This is an interface that can be used to block until certain events occur, such as
+ * the start/completion of batches.  This is much less brittle than waiting on wall-clock time.
+ * Internally, this is implemented using a StreamingListener.  Constructing a new instance of this
+ * class automatically registers a StreamingListener on the given StreamingContext.
+ */
+class StreamingTestWaiter(ssc: StreamingContext) {
+
+  // All access to this state should be guarded by `StreamingTestWaiter.this.synchronized`
+  private var numCompletedBatches = 0
+  private var numStartedBatches = 0
+
+  private val listener = new StreamingListener {
+    override def onBatchStarted(batchStarted: StreamingListenerBatchStarted): Unit =
+      StreamingTestWaiter.this.synchronized {
+        numStartedBatches += 1
+        StreamingTestWaiter.this.notifyAll()
+      }
+    override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit =
+      StreamingTestWaiter.this.synchronized {
+        numCompletedBatches += 1
+        StreamingTestWaiter.this.notifyAll()
+      }
+  }
+  ssc.addStreamingListener(listener)
+
+  def getNumCompletedBatches: Int = this.synchronized {
+    numCompletedBatches
+  }
+
+  def getNumStartedBatches: Int = this.synchronized {
+    numStartedBatches
+  }
+
+  /**
+   * Block until the number of completed batches reaches the given threshold.
+   */
+  def waitForTotalBatchesCompleted(
+      targetNumBatches: Int,
+      timeout: Duration): Unit = this.synchronized {
+    val startTime = System.currentTimeMillis()
+    def successful = getNumCompletedBatches >= targetNumBatches
+    def timedOut = (System.currentTimeMillis() - startTime) >= timeout.milliseconds
+    while (!timedOut && !successful) {
+      this.wait(timeout.milliseconds)
+    }
+    if (!successful && timedOut) {
+      throw new TimeoutException(s"Waited for $targetNumBatches completed batches, but only" +
+        s" $numCompletedBatches have completed after $timeout")
+    }
+  }
+
+  /**
+   * Block until the number of started batches reaches the given threshold.
+   */
+  def waitForTotalBatchesStarted(
+    targetNumBatches: Int,
+    timeout: Duration): Unit = this.synchronized {
+    val startTime = System.currentTimeMillis()
+    def successful = getNumStartedBatches >= targetNumBatches
+    def timedOut = (System.currentTimeMillis() - startTime) >= timeout.milliseconds
+    while (!timedOut && !successful) {
+      this.wait(timeout.milliseconds)
+    }
+    if (!successful && timedOut) {
+      throw new TimeoutException(s"Waited for $targetNumBatches started batches, but only" +
+        s" $numStartedBatches have started after $timeout")
+    }
+  }
 }
 
 /**
