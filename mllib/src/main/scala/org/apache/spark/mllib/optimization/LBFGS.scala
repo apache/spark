@@ -209,15 +209,17 @@ object LBFGS extends Logging {
       val bcW = data.context.broadcast(w)
       val localGradient = gradient
 
-      val (gradientSum, lossSum) = data.treeAggregate((Vectors.zeros(n), 0.0))(
-          seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
-            val l = localGradient.compute(
-              features, label, bcW.value, grad)
-            (grad, loss + l)
+      val (gradientSum, lossSum) = data.mapPartitions(t => Iterator(t))
+        .treeAggregate((Vectors.zeros(n), 0.0))(
+          seqOp = (c, v) => {
+            // c: (grad, loss), v: Iterator[(label, features)], l: (count, loss)
+            val l = localGradient.compute(v, bcW.value, c._1)
+            (c._1, c._2 + l._2)
           },
-          combOp = (c1, c2) => (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
-            axpy(1.0, grad2, grad1)
-            (grad1, loss1 + loss2)
+          combOp = (c1, c2) => {
+            // c: (grad, loss)
+            axpy(1.0, c1._1, c2._1)
+            (c2._1, c1._2 + c2._2)
           })
 
       /**

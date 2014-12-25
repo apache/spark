@@ -17,44 +17,50 @@
 
 package org.apache.spark.mllib.neuralNetwork
 
-import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, sum => brzSum, axpy => brzAxpy}
+import java.util.Random
+
+import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, Matrix => BM,
+sum => brzSum, Axis => BrzAxis, axpy => brzAxpy, norm => brzNorm}
 import org.apache.commons.math3.random.JDKRandomGenerator
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
-import org.apache.spark.mllib.linalg.{Vector => SV, DenseVector => SDV}
+import org.apache.spark.mllib.linalg.{DenseMatrix => SDM, SparseMatrix => SSM, Matrix => SM,
+SparseVector => SSV, DenseVector => SDV, Vector => SV, Vectors, Matrices, BLAS}
 import org.apache.spark.mllib.optimization.{Gradient, GradientDescent}
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 import org.apache.spark.rdd.RDD
 
 class RBM(
-  val weight: BDM[Double],
-  val visibleBias: BDV[Double],
-  val hiddenBias: BDV[Double],
+  val weight: SM,
+  val visibleBias: SV,
+  val hiddenBias: SV,
   val dropoutRate: Double) extends Logging with Serializable {
 
   def this(
     numIn: Int,
     numOut: Int,
-    dropoutRate: Double = 0.5D) {
+    dropout: Double = 0.5D) {
     this(Layer.initUniformDistWeight(numIn, numOut, 0D, 0.001),
       Layer.initializeBias(numIn),
       Layer.initializeBias(numOut),
-      dropoutRate)
+      dropout)
   }
 
   require(dropoutRate >= 0 && dropoutRate < 1)
-  protected lazy val rand = new JDKRandomGenerator()
+  protected lazy val rand: Random = new JDKRandomGenerator()
+  protected[neuralNetwork] lazy val visibleLayer: Layer = {
+    val brzWeight = weight.toBreeze.toDenseMatrix
+    new ReLuLayer(new SDM(weight.numCols, weight.numRows, brzWeight.t.toArray), visibleBias)
+  }
+
+  protected[neuralNetwork] lazy val hiddenLayer: Layer = {
+    new ReLuLayer(weight, hiddenBias)
+  }
 
   setSeed(Utils.random.nextInt())
 
-  def visibleLayer: Layer = {
-    new ReLuLayer(weight.t, visibleBias)
-  }
-
-  def hiddenLayer: Layer = {
-    new ReLuLayer(weight, hiddenBias)
-  }
 
   def setSeed(seed: Long): Unit = {
     rand.setSeed(seed)
@@ -64,38 +70,38 @@ class RBM(
 
   def cdK: Int = 1
 
-  def numOut: Int = weight.rows
+  def numOut: Int = weight.numRows
 
-  def numIn: Int = weight.cols
+  def numIn: Int = weight.numCols
 
-  def forward(visible: BDM[Double]): BDM[Double] = {
+  def forward(visible: SM): SM = {
     val hidden = activateHidden(visible)
     if (dropoutRate > 0) {
-      hidden :*= (1 - dropoutRate)
+      hidden.toBreeze :*= (1 - dropoutRate)
     }
     hidden
   }
 
-  protected def activateHidden(visible: BDM[Double]): BDM[Double] = {
-    assert(visible.rows == weight.cols)
+  protected def activateHidden(visible: SM): SM = {
+    require(visible.numRows == weight.numCols)
     hiddenLayer.forward(visible)
   }
 
-  protected def sampleHidden(hiddenMean: BDM[Double]): BDM[Double] = {
+  protected def sampleHidden(hiddenMean: SM): SM = {
     hiddenLayer.sample(hiddenMean)
   }
 
-  protected def sampleVisible(visibleMean: BDM[Double]): BDM[Double] = {
+  protected def sampleVisible(visibleMean: SM): SM = {
     visibleLayer.sample(visibleMean)
   }
 
-  protected def activateVisible(hidden: BDM[Double]): BDM[Double] = {
-    assert(hidden.rows == weight.rows)
+  protected def activateVisible(hidden: SM): SM = {
+    require(hidden.numRows == weight.numRows)
     visibleLayer.forward(hidden)
   }
 
-  protected def dropOutMask(cols: Int): BDM[Double] = {
-    val mask = new BDM[Double](numOut, cols)
+  protected def dropOutMask(cols: Int): SM = {
+    val mask = SDM.zeros(numOut, cols)
     for (i <- 0 until numOut) {
       for (j <- 0 until cols) {
         mask(i, j) = if (rand.nextDouble() > dropoutRate) 1D else 0D
@@ -104,22 +110,10 @@ class RBM(
     mask
   }
 
-  protected def meanSquaredError(visible: BDM[Double], out: BDM[Double]): Double = {
-    assert(visible.rows == out.rows)
-    assert(visible.cols == out.cols)
-    var diff = 0D
-    for (i <- 0 until out.rows) {
-      for (j <- 0 until out.cols) {
-        diff += math.pow(visible(i, j) - out(i, j), 2)
-      }
-    }
-    diff / out.rows
-  }
-
-  def learn(input: BDM[Double]): (BDM[Double], BDV[Double], BDV[Double], Double, Double) = {
-    val batchSize = input.cols
-    val mask: BDM[Double] = if (dropoutRate > 0) {
-      this.dropOutMask(input.cols)
+  def learn(input: SM): (SM, SV, SV, Double, Double) = {
+    val batchSize = input.numCols
+    val mask: SM = if (dropoutRate > 0) {
+      this.dropOutMask(batchSize)
     } else {
       null
     }
@@ -127,12 +121,12 @@ class RBM(
     val h1Mean = activateHidden(input)
     val h1Sample = sampleHidden(h1Mean)
 
-    var vKMean: BDM[Double] = null
-    var vKSample: BDM[Double] = null
-    var hKMean: BDM[Double] = null
-    var hKSample: BDM[Double] = h1Sample
+    var vKMean: SM = null
+    var vKSample: SM = null
+    var hKMean: SM = null
+    var hKSample: SM = h1Sample
     if (dropoutRate > 0) {
-      hKSample :*= mask
+      hKSample.toBreeze :*= mask.toBreeze
     }
 
     for (i <- 0 until cdK) {
@@ -140,26 +134,24 @@ class RBM(
       hKMean = activateHidden(vKMean)
       hKSample = sampleHidden(hKMean)
       if (dropoutRate > 0) {
-        hKSample :*= mask
+        hKSample.toBreeze :*= mask.toBreeze
       }
     }
 
-    val gradWeight: BDM[Double] = hKMean * vKMean.t
-    gradWeight :-= h1Mean * input.t
+    val gradWeight = SDM.zeros(weight.numRows, weight.numCols)
+    BLAS.gemm(false, true, 1.0, hKMean,
+      new SDM(vKMean.numRows, vKMean.numCols, vKMean.toArray), 1.0, gradWeight)
+    BLAS.gemm(false, true, -1.0, h1Mean,
+      new SDM(input.numRows, input.numCols, input.toArray), 1.0, gradWeight)
 
-    val diffVisible = vKMean - input
-    val gradVisibleBias = BDV.zeros[Double](numIn)
-    for (i <- 0 until batchSize) {
-      gradVisibleBias :+= diffVisible(::, i)
-    }
+    val diffVisible: BM[Double] = vKMean.toBreeze - input.toBreeze
+    val gradVisibleBias = Vectors.fromBreeze(brzSum(diffVisible.toDenseMatrix, BrzAxis._1))
 
-    val diffHidden = hKMean - h1Mean
-    val gradHiddenBias = BDV.zeros[Double](numOut)
-    for (i <- 0 until batchSize) {
-      gradHiddenBias :+= diffHidden(::, i)
-    }
 
-    val mse = meanSquaredError(input, vKMean)
+    val diffHidden: BM[Double] = hKMean.toBreeze - h1Mean.toBreeze
+    val gradHiddenBias = Vectors.fromBreeze(brzSum(diffHidden.toDenseMatrix, BrzAxis._1))
+
+    val mse = Layer.meanSquaredError(input, vKMean)
     (gradWeight, gradVisibleBias, gradHiddenBias, mse, batchSize.toDouble)
   }
 
@@ -230,56 +222,27 @@ object RBM extends Logging {
     epsilon: Double): RBM = {
     val numVisible = rbm.numIn
     val numHidden = rbm.numOut
-    val gradient = new RBMGradient(rbm.numIn, rbm.numOut, rbm.dropoutRate)
+    val gradient = new RBMGradient(rbm.numIn, rbm.numOut, rbm.dropoutRate, batchSize)
     val updater = new RBMAdaDeltaUpdater(numVisible, numHidden, rho, epsilon)
     val optimizer = new GradientDescent(gradient, updater).
       setMiniBatchFraction(fraction).
       setNumIterations(maxNumIterations).
       setRegParam(weightCost).
       setStepSize(learningRate)
-    val trainingRDD = if (batchSize > 1) {
-      batchVector(data, batchSize, numVisible).map(t => (0D, t))
-    } else {
-      data.map(t => (0D, t))
-    }
+    val trainingRDD = data.map(t => (0D, t))
     // TODO: the related jira SPARK-4526
-    trainingRDD.cache().setName("RBM-dataBatch")
+    trainingRDD.persist(StorageLevel.MEMORY_AND_DISK).setName("RBM-dataBatch")
     val weights = optimizer.optimize(trainingRDD, toVector(rbm))
     trainingRDD.unpersist()
     fromVector(rbm, weights)
     rbm
   }
 
-  private[mllib] def batchMatrix(
-    data: RDD[SV],
-    batchSize: Int,
-    numVisible: Int): RDD[BDM[Double]] = {
-    val dataBatch = data.mapPartitions { itr =>
-      itr.grouped(batchSize).map { seq =>
-        val batch = BDM.zeros[Double](numVisible, seq.size)
-        seq.zipWithIndex.foreach { case (v, i) =>
-          batch(::, i) := v.toBreeze
-        }
-        batch
-      }
-    }
-    dataBatch
-  }
-
-  private[mllib] def batchVector(
-    data: RDD[SV],
-    batchSize: Int,
-    numVisible: Int): RDD[SV] = {
-    batchMatrix(data, batchSize, numVisible).map { t =>
-      new SDV(t.toArray)
-    }
-  }
-
   private[mllib] def fromVector(rbm: RBM, weights: SV): Unit = {
     val (weight, visibleBias, hiddenBias) = vectorToStructure(rbm.numIn, rbm.numOut, weights)
-    rbm.weight := weight
-    rbm.visibleBias := visibleBias
-    rbm.hiddenBias := hiddenBias
+    rbm.weight.toBreeze := weight.toBreeze
+    rbm.visibleBias.toBreeze := visibleBias.toBreeze
+    rbm.hiddenBias.toBreeze := hiddenBias.toBreeze
   }
 
   private[mllib] def toVector(rbm: RBM): SV = {
@@ -287,11 +250,11 @@ object RBM extends Logging {
   }
 
   private[mllib] def structureToVector(
-    weight: BDM[Double],
-    visibleBias: BDV[Double],
-    hiddenBias: BDV[Double]): SV = {
-    val numVisible = visibleBias.length
-    val numHidden = hiddenBias.length
+    weight: SM,
+    visibleBias: SV,
+    hiddenBias: SV): SV = {
+    val numVisible = visibleBias.size
+    val numHidden = hiddenBias.size
     val sumLen = numHidden * numVisible + numVisible + numHidden
     val data = new Array[Double](sumLen)
     var offset = 0
@@ -309,6 +272,28 @@ object RBM extends Logging {
   }
 
   private[mllib] def vectorToStructure(
+    numVisible: Int,
+    numHidden: Int,
+    weights: SV): (SM, SV, SV) = {
+    val data = weights.toArray
+    var offset = 0
+
+    val weight = SDM.zeros(numHidden, numVisible)
+    System.arraycopy(data, offset, weight.values, 0, numHidden * numVisible)
+    offset += numHidden * numVisible
+
+    val visibleBias = Vectors.zeros(numVisible).asInstanceOf[SDV]
+    System.arraycopy(data, offset, visibleBias.values, 0, numVisible)
+    offset += numVisible
+
+    val hiddenBias = Vectors.zeros(numHidden).asInstanceOf[SDV]
+    System.arraycopy(data, offset, hiddenBias.values, 0, numHidden)
+    offset += numHidden
+
+    (weight, visibleBias, hiddenBias)
+  }
+
+  private[mllib] def vectorToBreeze(
     numVisible: Int,
     numHidden: Int,
     weights: SV): (BDM[Double], BDV[Double], BDV[Double]) = {
@@ -337,9 +322,9 @@ object RBM extends Logging {
     iter: Int,
     regParam: Double): Double = {
     if (regParam > 0D) {
-      val (weight, _, _) = RBM.vectorToStructure(numVisible, numHidden, weightsOld)
+      val (weight, _, _) = RBM.vectorToBreeze(numVisible, numHidden, weightsOld)
       val (gradWeight, _, _) =
-        RBM.vectorToStructure(numVisible, numHidden, gradient)
+        RBM.vectorToBreeze(numVisible, numHidden, gradient)
       brzAxpy(regParam, weight, gradWeight)
       var norm = 0D
       for (i <- 0 until weight.rows) {
@@ -356,29 +341,13 @@ object RBM extends Logging {
 private[mllib] class RBMGradient(
   val numIn: Int,
   val numOut: Int,
-  val dropoutRate: Double) extends Gradient {
+  val dropoutRate: Double,
+  val batchSize: Int) extends Gradient {
   override def compute(data: SV, label: Double, weights: SV): (SV, Double) = {
     val (weight, visibleBias, hiddenBias) = RBM.vectorToStructure(numIn, numOut, weights)
     val rbm = new RBM(weight, visibleBias, hiddenBias, dropoutRate)
-
-    val input = if (data.size > numIn) {
-      val numCol = data.size / numIn
-      new BDM[Double](numIn, numCol, data.toArray)
-    }
-    else {
-      new BDV(data.toArray, 0, 1, numIn).toDenseMatrix.t
-    }
-    RBM.fromVector(rbm, weights)
-
-    var (gradWeight, gradVisibleBias, gradHiddenBias, error, numCol) = rbm.learn(input)
-    if (numCol != 1D) {
-      val scale = 1D / numCol
-      gradWeight :*= scale
-      gradVisibleBias :*= scale
-      gradHiddenBias :*= scale
-      error *= scale
-    }
-
+    val input = new SDM(numIn, 1, data.toArray)
+    val (gradWeight, gradVisibleBias, gradHiddenBias, error, _) = rbm.learn(input)
     (RBM.structureToVector(gradWeight, gradVisibleBias, gradHiddenBias), error)
   }
 
@@ -388,8 +357,33 @@ private[mllib] class RBMGradient(
     weights: SV,
     cumGradient: SV): Double = {
     val (grad, err) = compute(data, label, weights)
-    cumGradient.toBreeze += grad.toBreeze
+    BLAS.axpy(1, grad, cumGradient)
     err
+  }
+
+  override def compute(
+    iter: Iterator[(Double, SV)],
+    weights: SV,
+    cumGradient: SV): (Long, Double) = {
+    val (weight, visibleBias, hiddenBias) = RBM.vectorToStructure(numIn, numOut, weights)
+    val rbm = new RBM(weight, visibleBias, hiddenBias, dropoutRate)
+    var loss = 0D
+    var count = 0L
+    iter.map(_._2).grouped(batchSize).foreach { seq =>
+      val numCol = seq.size
+      val input: BDM[Double] = BDM.zeros(numIn, numCol)
+      seq.zipWithIndex.foreach { case (data, index) =>
+        assert(data.size == numIn)
+        input(::, index) := data.toBreeze
+      }
+      var (gradWeight, gradVisibleBias,
+      gradHiddenBias, error, _) = rbm.learn(Matrices.fromBreeze(input))
+      val w = RBM.structureToVector(gradWeight, gradVisibleBias, gradHiddenBias)
+      BLAS.axpy(1, w, cumGradient)
+      loss += error
+      count += numCol
+    }
+    (count, loss)
   }
 }
 
@@ -400,7 +394,7 @@ private[mllib] class RBMAdaGradUpdater(
   rho: Double = 0,
   epsilon: Double = 1e-2,
   gamma: Double = 1e-1,
-  momentum: Double = 0) extends AdaGradUpdater(rho, epsilon, gamma, momentum) {
+  momentum: Double = 0.9) extends AdaGradUpdater(rho, epsilon, gamma, momentum) {
 
   override protected def l2(
     weightsOld: SV,

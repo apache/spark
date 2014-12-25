@@ -21,7 +21,8 @@ import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, sum => brzSum}
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.Logging
-import org.apache.spark.mllib.linalg.{Vector => SV, DenseVector => SDV, Vectors}
+import org.apache.spark.mllib.linalg.{DenseMatrix => SDM, SparseMatrix => SSM, Matrix => SM,
+SparseVector => SSV, DenseVector => SDV, Vector => SV, Vectors, Matrices, BLAS}
 import org.apache.spark.rdd.RDD
 
 class StackedRBM(val innerRBMs: Array[RBM])
@@ -36,7 +37,7 @@ class StackedRBM(val innerRBMs: Array[RBM])
 
   def numOut = innerRBMs.last.numOut
 
-  def forward(visible: BDM[Double], toLayer: Int): BDM[Double] = {
+  def forward(visible: SM, toLayer: Int): SM = {
     var x = visible
     for (layer <- 0 until toLayer) {
       x = innerRBMs(layer).forward(x)
@@ -44,8 +45,25 @@ class StackedRBM(val innerRBMs: Array[RBM])
     x
   }
 
-  def forward(visible: BDM[Double]): BDM[Double] = {
+  def forward(visible: SM): SM = {
     forward(visible, numLayer)
+  }
+
+  def topology: Array[Int] = {
+    val topology = new Array[Int](numLayer + 1)
+    topology(0) = numInput
+    for (i <- 1 to numLayer) {
+      topology(i) = innerRBMs(i - 1).numOut
+    }
+    topology
+  }
+
+  def toMLP(): MLP = {
+    val layers = new Array[Layer](numLayer)
+    for (layer <- 0 until numLayer) {
+      layers(layer) = innerRBMs(layer).hiddenLayer
+    }
+    new MLP(layers, innerRBMs.map(_.dropoutRate))
   }
 }
 
@@ -71,8 +89,6 @@ object StackedRBM extends Logging {
     learningRate: Double,
     weightCost: Double,
     maxLayer: Int = -1): StackedRBM = {
-    val sc = data.context
-    val numInput = stackedRBM.numInput
     val trainLayer = if (maxLayer > -1D) {
       maxLayer
     } else {
@@ -81,48 +97,46 @@ object StackedRBM extends Logging {
 
     for (layer <- 0 until trainLayer) {
       logInfo(s"Train ($layer/$trainLayer)")
-      val broadcastStackedRBM = sc.broadcast(stackedRBM)
-      val dataBatch = batches(data, broadcastStackedRBM, batchSize, numInput, layer)
+      val broadcast = data.context.broadcast(stackedRBM)
+      val dataBatch = forward(data, broadcast, layer)
       val rbm = stackedRBM.innerRBMs(layer)
-      dataBatch.cache().setName(s"dataBatch-$layer")
       RBM.train(dataBatch, batchSize, numIteration, rbm,
         fraction, learningRate, weightCost)
-      broadcastStackedRBM.destroy(blocking = false)
-      dataBatch.unpersist(blocking = false)
+      // broadcast.destroy(blocking = false)
     }
-
     stackedRBM
   }
 
-  private[mllib] def batches(
+  private def forward(
     data: RDD[SV],
-    broadcastStackedRBM: Broadcast[StackedRBM],
-    batchSize: Int,
-    numInput: Int,
-    toLayer: Int
-    ): RDD[SV] = {
-    val dataBatch = data.mapPartitions { itr =>
-      val stackedRBM = broadcastStackedRBM.value
-      itr.grouped(batchSize).flatMap { seq =>
-        var x = BDM.zeros[Double](numInput, seq.size)
-        seq.zipWithIndex.foreach { case (v, i) =>
-          x(::, i) :+= v.toBreeze
-        }
-        x = stackedRBM.forward(x, toLayer)
-        (0 until seq.size).map { i =>
-          Vectors.fromBreeze(x(::, i))
+    broadcast: Broadcast[StackedRBM],
+    toLayer: Int): RDD[SV] = {
+    if (toLayer > 0) {
+      data.mapPartitions { itr =>
+        val stackedRBM = broadcast.value
+        itr.map { data =>
+          val input = new SDM(data.size, 1, data.toArray)
+          val x = stackedRBM.forward(input, toLayer).toBreeze.toDenseMatrix
+          Vectors.fromBreeze(x(::, 0))
         }
       }
-
+    } else {
+      data
     }
-    dataBatch
   }
 
   def initializeRBMs(topology: Array[Int]): Array[RBM] = {
     val numLayer = topology.length - 1
     val innerRBMs: Array[RBM] = new Array[RBM](numLayer)
     for (layer <- 0 until numLayer) {
-      innerRBMs(layer) = new RBM(topology(layer), topology(layer + 1))
+      val dropout = if (layer == 0) {
+        0.2
+      } else if (layer < numLayer - 1) {
+        0.5
+      } else {
+        0.0
+      }
+      innerRBMs(layer) = new RBM(topology(layer), topology(layer + 1), dropout)
       println(s"innerRBMs($layer) = ${innerRBMs(layer).numIn} * ${innerRBMs(layer).numOut}")
     }
     innerRBMs

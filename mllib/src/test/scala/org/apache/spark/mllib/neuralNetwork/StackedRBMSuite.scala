@@ -26,7 +26,7 @@ class StackedRBMSuite extends FunSuite with MnistDatasetSuite with Matchers {
     val (data, numVisible) = mnistTrainDataset(5000)
     data.cache()
     val topology = Array(numVisible, 300, 300, 500)
-    val stackedRBM = StackedRBM.train(data.map(_._1), 23, 1200, topology, 0.1, 0.05, 0.0)
+    val stackedRBM = StackedRBM.train(data.map(_._1), 23, 1200, topology, 0.01, 0.1, 0.0)
   }
 
 }

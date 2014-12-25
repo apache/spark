@@ -21,8 +21,19 @@ import org.apache.spark.Logging
 import org.apache.spark.mllib.linalg.{Vector => SV}
 import org.apache.spark.rdd.RDD
 
-class DBN(val stackedRBM: StackedRBM, val nn: MLP)
+class DBN(val stackedRBM: StackedRBM)
   extends Logging with Serializable {
+  lazy val mlp: MLP = {
+    val nn = stackedRBM.toMLP()
+    val lastLayer = nn.innerLayers(nn.numLayer - 1)
+    Layer.initUniformDistWeight(lastLayer.weight, 0.01)
+    nn.innerLayers(nn.numLayer - 1) = new SoftMaxLayer(lastLayer.weight, lastLayer.bias)
+    nn
+  }
+
+  def this(topology: Array[Int]) {
+    this(new StackedRBM(topology))
+  }
 }
 
 object DBN extends Logging {
@@ -34,7 +45,7 @@ object DBN extends Logging {
     fraction: Double,
     weightCost: Double,
     learningRate: Double): DBN = {
-    val dbn = initializeDBN(topology)
+    val dbn = new DBN(topology)
     pretrain(data, batchSize, numIteration, dbn,
       fraction, learningRate, weightCost)
     finetune(data, batchSize, numIteration, dbn,
@@ -64,25 +75,8 @@ object DBN extends Logging {
     fraction: Double,
     learningRate: Double,
     weightCost: Double): DBN = {
-    MLP.train(data, batchSize, numIteration, dbn.nn,
+    MLP.train(data, batchSize, numIteration, dbn.mlp,
       fraction, learningRate, weightCost)
     dbn
-  }
-
-  def initializeDBN(topology: Array[Int]): DBN = {
-    val numLayer = topology.length - 1
-    val stackedRBM = new StackedRBM(topology)
-    val innerLayers = new Array[Layer](numLayer)
-    for (layer <- 0 until numLayer) {
-      val rbmLayer = stackedRBM.innerRBMs(layer).hiddenLayer
-      innerLayers(layer) = if (layer < numLayer - 1) {
-        rbmLayer
-      } else {
-        Layer.initUniformDistWeight(rbmLayer.weight, 0.01)
-        new SoftmaxLayer(rbmLayer.weight, rbmLayer.bias)
-      }
-    }
-    val mlp = new MLP(innerLayers)
-    new DBN(stackedRBM, mlp)
   }
 }
