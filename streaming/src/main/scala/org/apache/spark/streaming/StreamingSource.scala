@@ -28,58 +28,67 @@ private[streaming] class StreamingSource(ssc: StreamingContext) extends Source {
 
   private val streamingListener = ssc.progressListener
 
-  private def registerGauge[T](name: String, f: StreamingJobProgressListener => Option[T],
+  private def registerGauge[T](name: String, f: StreamingJobProgressListener => T,
       defaultValue: T) {
+    metricRegistry.register(MetricRegistry.name("streaming", name), new Gauge[T] {
+      override def getValue: T = Option(f(streamingListener)).getOrElse(defaultValue)
+    })
+  }
+
+  private def registerGaugeWithOption[T](
+      name: String,
+      f: StreamingJobProgressListener => Option[T],
+      defaultValue: T): Unit = {
     metricRegistry.register(MetricRegistry.name("streaming", name), new Gauge[T] {
       override def getValue: T = f(streamingListener).getOrElse(defaultValue)
     })
   }
 
   // Gauge for number of network receivers
-  registerGauge("receivers", l => Option(l.numReceivers), 0)
+  registerGauge("receivers", _.numReceivers, 0)
 
   // Gauge for number of total completed batches
-  registerGauge("totalCompletedBatches", l => Option(l.numTotalCompletedBatches), 0L)
+  registerGauge("totalCompletedBatches", _.numTotalCompletedBatches, 0L)
 
   // Gauge for number of unprocessed batches
-  registerGauge("unprocessedBatches", l => Option(l.numUnprocessedBatches), 0L)
+  registerGauge("unprocessedBatches", _.numUnprocessedBatches, 0L)
 
   // Gauge for number of waiting batches
-  registerGauge("waitingBatches", l => Option(l.waitingBatches.size), 0L)
+  registerGauge("waitingBatches", _.waitingBatches.size, 0L)
 
   // Gauge for number of running batches
-  registerGauge("runningBatches", l => Option(l.runningBatches.size), 0L)
+  registerGauge("runningBatches", _.runningBatches.size, 0L)
 
   // Gauge for number of retained completed batches
-  registerGauge("retainedCompletedBatches", l => Option(l.retainedCompletedBatches.size), 0L)
+  registerGauge("retainedCompletedBatches", _.retainedCompletedBatches.size, 0L)
 
   // Gauge for last completed batch, useful for monitoring the streaming job's running status,
   // displayed data -1 for any abnormal condition.
-  registerGauge("lastCompletedBatch_submissionTime",
+  registerGaugeWithOption("lastCompletedBatch_submissionTime",
     _.lastCompletedBatch.map(_.submissionTime), -1L)
-  registerGauge("lastCompletedBatch_processingStartTime",
+  registerGaugeWithOption("lastCompletedBatch_processingStartTime",
     _.lastCompletedBatch.flatMap(_.processingStartTime), -1L)
-  registerGauge("lastCompletedBatch_processingEndTime",
+  registerGaugeWithOption("lastCompletedBatch_processingEndTime",
     _.lastCompletedBatch.flatMap(_.processingEndTime), -1L)
 
   // Gauge for last completed batch's delay information.
-  registerGauge("lastCompletedBatch_processingTime",
+  registerGaugeWithOption("lastCompletedBatch_processingDelay",
     _.lastCompletedBatch.flatMap(_.processingDelay), -1L)
-  registerGauge("lastCompletedBatch_schedulingDelay",
+  registerGaugeWithOption("lastCompletedBatch_schedulingDelay",
     _.lastCompletedBatch.flatMap(_.schedulingDelay), -1L)
-  registerGauge("lastCompletedBatch_totalDelay",
+  registerGaugeWithOption("lastCompletedBatch_totalDelay",
     _.lastCompletedBatch.flatMap(_.totalDelay), -1L)
 
   // Gauge for last received batch, useful for monitoring the streaming job's running status,
   // displayed data -1 for any abnormal condition.
-  registerGauge("lastReceivedBatch_submissionTime",
+  registerGaugeWithOption("lastReceivedBatch_submissionTime",
     _.lastCompletedBatch.map(_.submissionTime), -1L)
-  registerGauge("lastReceivedBatch_processingStartTime",
+  registerGaugeWithOption("lastReceivedBatch_processingStartTime",
     _.lastCompletedBatch.flatMap(_.processingStartTime), -1L)
-  registerGauge("lastReceivedBatch_processingEndTime",
+  registerGaugeWithOption("lastReceivedBatch_processingEndTime",
     _.lastCompletedBatch.flatMap(_.processingEndTime), -1L)
 
   // Gauge for last received batch records and total received batch records.
-  registerGauge("lastReceivedBatchRecords", l => Option(l.lastReceivedBatchRecords.values.sum), 0L)
-  registerGauge("totalReceivedBatchRecords", l => Option(l.numTotalReceivedBatchRecords), 0L)
+  registerGauge("lastReceivedBatchRecords", _.lastReceivedBatchRecords.values.sum, 0L)
+  registerGauge("totalReceivedBatchRecords", _.numTotalReceivedBatchRecords, 0L)
 }
