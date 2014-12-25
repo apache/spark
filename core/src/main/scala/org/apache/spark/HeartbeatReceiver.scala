@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.rpc.{RpcEndPointRef, RpcEndPoint}
+import org.apache.spark.rpc.{RpcEnv, RpcEndPointRef, RpcEndPoint}
 import org.apache.spark.scheduler.TaskScheduler
 import org.apache.spark.storage.BlockManagerId
 
@@ -36,8 +36,8 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 /**
  * Lives in the driver to receive heartbeats from executors..
  */
-private[spark] class HeartbeatReceiver(scheduler: TaskScheduler, conf: SparkConf)
-  extends RpcEndPoint with Logging {
+private[spark] class HeartbeatReceiver(override val rpcEnv: RpcEnv,
+    scheduler: TaskScheduler, conf: SparkConf) extends RpcEndPoint with Logging {
 
   override def receive(sender: RpcEndPointRef) = {
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>

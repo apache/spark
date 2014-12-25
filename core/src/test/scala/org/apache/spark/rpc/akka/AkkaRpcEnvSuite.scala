@@ -17,8 +17,24 @@
 
 package org.apache.spark.rpc.akka
 
-import org.apache.spark.rpc.RpcEnvSuite
+import akka.actor.ActorSystem
 
-class AkkaRpcEnvSuite extends RpcEnvSuite{
+import org.apache.spark.rpc.{RpcEnv, RpcEnvSuite}
+import org.apache.spark.SparkConf
 
+class AkkaRpcEnvSuite extends RpcEnvSuite {
+
+  var akkaSystem: ActorSystem = _
+
+  override def createRpcEnv: RpcEnv = {
+    val conf = new SparkConf()
+    akkaSystem = ActorSystem("test")
+    new AkkaRpcEnv(akkaSystem, conf)
+  }
+
+  override def destroyRpcEnv(rpcEnv: RpcEnv): Unit = {
+    if (akkaSystem != null) {
+      akkaSystem.shutdown()
+    }
+  }
 }
