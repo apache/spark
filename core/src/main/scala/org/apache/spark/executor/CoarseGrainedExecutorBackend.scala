@@ -28,7 +28,8 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
-import org.apache.spark.rpc.{AkkaRpcEnv, RpcEnv, RpcEndPointRef, RpcEndPoint}
+import org.apache.spark.rpc.{RpcEnv, RpcEndPointRef, RpcEndPoint}
+import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
