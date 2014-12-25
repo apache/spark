@@ -26,7 +26,7 @@ private[spark] case class ApplicationHistoryInfo(
     endTime: Long,
     lastUpdated: Long,
     sparkUser: String,
-    incomplete: Boolean = false)
+    completed: Boolean = false)
 
 private[spark] abstract class ApplicationHistoryProvider {
 

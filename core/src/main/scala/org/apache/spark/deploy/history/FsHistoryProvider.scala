@@ -348,5 +348,5 @@ private class FsApplicationHistoryInfo(
     endTime: Long,
     lastUpdated: Long,
     sparkUser: String,
-    incomplete: Boolean = false)
-  extends ApplicationHistoryInfo(id, name, startTime, endTime, lastUpdated, sparkUser, incomplete)
+    completed: Boolean = true)
+  extends ApplicationHistoryInfo(id, name, startTime, endTime, lastUpdated, sparkUser, completed)
