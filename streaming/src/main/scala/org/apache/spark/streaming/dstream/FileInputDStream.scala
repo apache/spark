@@ -68,12 +68,12 @@ import org.apache.spark.util.{TimeStampedHashMap, Utils}
  *   processing semantics are undefined.
  */
 private[streaming]
-class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : ClassTag](
+class FileInputDStream[K, V, F <: NewInputFormat[K,V]](
     @transient ssc_ : StreamingContext,
     directory: String,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
     newFilesOnly: Boolean = true,
-    conf: Option[Configuration])
+    conf: Option[Configuration] = None)(implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F])
   extends InputDStream[(K, V)](ssc_) {
 
   // Data to be saved as part of the streaming checkpoints
@@ -234,8 +234,14 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   /** Generate one RDD from an array of files */
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
     val fileRDDs = files.map(file =>{
-      val hadoopConfiguration = conf.getOrElse(ssc.sparkContext.hadoopConfiguration)
-      val rdd = context.sparkContext.newAPIHadoopFile[K, V, F](file, hadoopConfiguration)
+      val rdd = conf match {
+        case Some(config) => context.sparkContext.newAPIHadoopFile(file,
+          fm.runtimeClass.asInstanceOf[Class[F]],
+          km.runtimeClass.asInstanceOf[Class[K]],
+          vm.runtimeClass.asInstanceOf[Class[V]],
+          config)
+        case None => context.sparkContext.newAPIHadoopFile[K, V, F](file)
+      }
       if (rdd.partitions.size == 0) {
         logError("File " + file + " has no data in it. Spark Streaming can only ingest " +
           "files that have been \"moved\" to the directory assigned to the file stream. " +

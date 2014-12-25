@@ -764,19 +764,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       vm.runtimeClass.asInstanceOf[Class[V]])
   }
 
-  /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat,
-    * using class tags but also allowing for an arbitrary configuration. */
-  def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]]
-  (path: String, conf: Configuration = hadoopConfiguration)
-  (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
-    newAPIHadoopFile(
-      path,
-      fm.runtimeClass.asInstanceOf[Class[F]],
-      km.runtimeClass.asInstanceOf[Class[K]],
-      vm.runtimeClass.asInstanceOf[Class[V]],
-      conf)
-  }
-
   /**
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
