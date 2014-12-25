@@ -132,12 +132,14 @@ class KafkaRDD[
             null.asInstanceOf[R]
           } else {
             val item = iter.next
-            if (item.offset > part.untilOffset) {
+            if (item.offset >= part.untilOffset) {
               finished = true
+              null.asInstanceOf[R]
+            } else {
+              requestOffset = item.nextOffset
+              messageHandler(new MessageAndMetadata(
+                part.topic, part.partition, item.message, item.offset, keyDecoder, valueDecoder))
             }
-            requestOffset = item.nextOffset
-            messageHandler(new MessageAndMetadata(
-              part.topic, part.partition, item.message, item.offset, keyDecoder, valueDecoder))
           }
         }
       }

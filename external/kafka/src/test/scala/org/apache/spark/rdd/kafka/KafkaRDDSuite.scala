@@ -55,13 +55,21 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
 
     val rdd = getRdd(kc, Set(topic))
     assert(rdd.isDefined)
-    assert(rdd.get.countByValue.size === sent.size)
+    assert(rdd.get.count === sent.values.sum)
 
     kc.setConsumerOffsets(kafkaParams("group.id"), rdd.get.untilOffsets)
 
     val rdd2 = getRdd(kc, Set(topic))
+    val sent2 = Map("d" -> 1)
+    produceAndSendMessage(topic, sent2)
     assert(rdd2.isDefined)
     assert(rdd2.get.count === 0)
+
+    val rdd3 = getRdd(kc, Set(topic))
+    produceAndSendMessage(topic, Map("extra" -> 22))
+    assert(rdd3.isDefined)
+    assert(rdd3.get.count === sent2.values.sum)
+
   }
 
   private def getRdd(kc: KafkaCluster, topics: Set[String]) = {
@@ -73,7 +81,7 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
       until <- kc.getLatestLeaderOffsets(topicPartitions).right.toOption
     } yield {
       new KafkaRDD[String, String, StringDecoder, StringDecoder, String](
-        sc, kc.kafkaParams, from, until, mmd => mmd.message)
+        sc, kc.kafkaParams, from, until, mmd => s"${mmd.offset} ${mmd.message}")
     }
   }
 }
