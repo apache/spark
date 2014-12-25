@@ -100,6 +100,7 @@ private[spark] class Client(
     appContext.setApplicationType("SPARK")
     val capability = Records.newRecord(classOf[Resource])
     capability.setMemory(args.amMemory + amMemoryOverhead)
+    capability.setVirtualCores(args.amCores)
     appContext.setResource(capability)
     appContext
   }
