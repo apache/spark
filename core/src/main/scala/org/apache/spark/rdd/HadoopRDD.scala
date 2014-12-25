@@ -190,7 +190,7 @@ class HadoopRDD[K, V](
     newInputFormat
   }
 
-  @transient private val thesePartitions_ : Array[Partition] = {
+  protected def getThesePartitions() : Array[Partition] = {
     val start = System.nanoTime
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
@@ -208,7 +208,22 @@ class HadoopRDD[K, V](
     array
   }
 
-  override def getPartitions: Array[Partition] = thesePartitions_
+  @transient private var thesePartitions_ : Array[Partition] = {
+    try {
+      getThesePartitions()
+    } catch {
+      case e: Exception => 
+        logDebug("Error initializing HadoopRDD's partitions", e)
+        null
+    }
+  }
+
+  override def getPartitions: Array[Partition] = {
+    if (thesePartitions_ == null) {
+      thesePartitions_ = getThesePartitions()
+    }
+    thesePartitions_
+  }
 
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
     val iter = new NextIterator[(K, V)] {
