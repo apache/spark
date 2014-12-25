@@ -1,23 +1,5 @@
 # context.R: SparkContext driven functions
 
-#' Create an RDD from a text file.
-#'
-#' This function reads a text file from HDFS, a local file system (available on all
-#' nodes), or any Hadoop-supported file system URI, and creates an
-#' RDD of strings from it.
-#'
-#' @param sc SparkContext to use
-#' @param path Path of file to read
-#' @param minSplits Minimum number of splits to be created. If NULL, the default
-#'  value is chosen based on available parallelism.
-#' @return RDD where each item is of type \code{character}
-#' @export
-#' @examples
-#'\dontrun{
-#'  sc <- sparkR.init()
-#'  lines <- textFile(sc, "myfile.txt")
-#'}
-
 getMinSplits <- function(sc, minSplits) {
   if (is.null(minSplits)) {
     ssc <- .jcall(sc, "Lorg/apache/spark/SparkContext;", "sc")
@@ -27,7 +9,27 @@ getMinSplits <- function(sc, minSplits) {
   as.integer(minSplits)
 }
 
+#' Create an RDD from a text file.
+#'
+#' This function reads a text file from HDFS, a local file system (available on all
+#' nodes), or any Hadoop-supported file system URI, and creates an
+#' RDD of strings from it.
+#'
+#' @param sc SparkContext to use
+#' @param path Path of file to read. A vector of multiple paths is allowed.
+#' @param minSplits Minimum number of splits to be created. If NULL, the default
+#'  value is chosen based on available parallelism.
+#' @return RDD where each item is of type \code{character}
+#' @export
+#' @examples
+#'\dontrun{
+#'  sc <- sparkR.init()
+#'  lines <- textFile(sc, "myfile.txt")
+#'}
 textFile <- function(sc, path, minSplits = NULL) {
+  #' Convert a string vector of paths to a string containing comma separated paths
+  path <- paste(path, collapse=",")
+
   jrdd <- .jcall(sc, "Lorg/apache/spark/api/java/JavaRDD;", "textFile", path,
                  getMinSplits(sc, minSplits))
   RDD(jrdd, FALSE)
@@ -39,7 +41,7 @@ textFile <- function(sc, path, minSplits = NULL) {
 #' saveAsObjectFile() of the RDD class.
 #'
 #' @param sc SparkContext to use
-#' @param path Path of file to read
+#' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @param minSplits Minimum number of splits to be created. If NULL, the default
 #'  value is chosen based on available parallelism.
 #' @return RDD containing serialized R objects.
@@ -50,8 +52,10 @@ textFile <- function(sc, path, minSplits = NULL) {
 #'  sc <- sparkR.init()
 #'  rdd <- objectFile(sc, "myfile")
 #'}
-
 objectFile <- function(sc, path, minSplits = NULL) {
+  #' Convert a string vector of paths to a string containing comma separated paths
+  path <- paste(path, collapse=",")
+
   jrdd <- .jcall(sc, "Lorg/apache/spark/api/java/JavaRDD;", "objectFile", path,
                  getMinSplits(sc, minSplits))
   # Assume the RDD contains serialized R objects.

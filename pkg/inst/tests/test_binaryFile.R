@@ -55,3 +55,19 @@ test_that("saveAsObjectFile()/objectFile() following RDD transformations works",
   unlink(fileName2, recursive = TRUE)
 })
 
+test_that("saveAsObjectFile()/objectFile() works with multiple paths", {
+  fileName1 <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName2 <- tempfile(pattern="spark-test", fileext=".tmp")
+
+  rdd1 <- parallelize(sc, "Spark is pretty.")
+  saveAsObjectFile(rdd1, fileName1)
+  rdd2 <- parallelize(sc, "Spark is awesome.")
+  saveAsObjectFile(rdd2, fileName2)
+
+  rdd <- objectFile(sc, c(fileName1, fileName2))
+  expect_true(count(rdd) == 2)
+
+  unlink(fileName1, recursive = TRUE)
+  unlink(fileName2, recursive = TRUE)
+})
+
