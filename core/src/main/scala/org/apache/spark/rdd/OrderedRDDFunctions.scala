@@ -73,7 +73,7 @@ class OrderedRDDFunctions[K : Ordering : ClassTag,
    */
   def repartitionAndSortWithinPartitions(partitioner: Partitioner): RDD[(K, V)] = {
     val keyClass = implicitly[ClassTag[K]].runtimeClass
-    Partitioner.assertPartitionerSupportsKeyClass(partitioner, keyClass)
+    Partitioner.assertHashCodeIsWellBehaved(keyClass)
     new ShuffledRDD[K, V, V](self, partitioner).setKeyOrdering(ordering)
   }
 

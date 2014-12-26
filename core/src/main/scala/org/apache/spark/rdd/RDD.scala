@@ -963,9 +963,7 @@ abstract class RDD[T: ClassTag](
       (implicit ord: Ordering[T] = null)
       : PartialResult[Map[T, BoundedDouble]] =
   {
-    if (elementClassTag.runtimeClass.isArray) {
-      throw new SparkException("countByValueApprox() does not support arrays (see SPARK-597)")
-    }
+    Partitioner.assertHashCodeIsWellBehaved(elementClassTag.runtimeClass)
     val countPartition: (TaskContext, Iterator[T]) => OpenHashMap[T,Long] = { (ctx, iter) =>
       val map = new OpenHashMap[T,Long]
       iter.foreach {

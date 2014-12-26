@@ -57,10 +57,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   with Serializable
 {
 
-  if (keyClass.isArray) {
-    logWarning("Using arrays as keys may lead to incorrect results (see SPARK-597)")
-  }
-
   /**
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)], for a "combined type" C
@@ -81,12 +77,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       mapSideCombine: Boolean = true,
       serializer: Serializer = null): RDD[(K, C)] = {
     require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
-    if (mapSideCombine && keyClass.isArray) {
-      // Map-side combining with array keys won't lead to incorrect results, but it's ineffective
-      // because the arrays' hashcodes will be based on object identity rather than their contents
-      throw new SparkException("Map-side combining is not supported for array keys (see SPARK-597)")
-    }
-    Partitioner.assertPartitionerSupportsKeyClass(partitioner, keyClass)
+    Partitioner.assertHashCodeIsWellBehaved(keyClass)
     val aggregator = new Aggregator[K, V, C](
       self.context.clean(createCombiner),
       self.context.clean(mergeValue),
@@ -292,10 +283,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * before sending results to a reducer, similarly to a "combiner" in MapReduce.
    */
   def reduceByKeyLocally(func: (V, V) => V): Map[K, V] = {
-
-    if (keyClass.isArray) {
-      throw new SparkException("reduceByKeyLocally() does not support array keys (see SPARK-597)")
-    }
+    Partitioner.assertHashCodeIsWellBehaved(keyClass)
 
     val reducePartition = (iter: Iterator[(K, V)]) => {
       val map = new JHashMap[K, V]
@@ -469,7 +457,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Return a copy of the RDD partitioned using the specified partitioner.
    */
   def partitionBy(partitioner: Partitioner): RDD[(K, V)] = {
-    Partitioner.assertPartitionerSupportsKeyClass(partitioner, keyClass)
+    if (partitioner.isInstanceOf[HashPartitioner]) {
+      Partitioner.assertHashCodeIsWellBehaved(keyClass)
+    }
     if (self.partitioner == Some(partitioner)) {
       self
     } else {
@@ -692,7 +682,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       other3: RDD[(K, W3)],
       partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2], Iterable[W3]))] = {
-    Partitioner.assertPartitionerSupportsKeyClass(partitioner, keyClass)
+    Partitioner.assertHashCodeIsWellBehaved(keyClass)
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2, other3), partitioner)
     cg.mapValues { case Array(vs, w1s, w2s, w3s) =>
        (vs.asInstanceOf[Iterable[V]],
@@ -708,7 +698,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W]))]  = {
-    Partitioner.assertPartitionerSupportsKeyClass(partitioner, keyClass)
+    Partitioner.assertHashCodeIsWellBehaved(keyClass)
     val cg = new CoGroupedRDD[K](Seq(self, other), partitioner)
     cg.mapValues { case Array(vs, w1s) =>
       (vs.asInstanceOf[Iterable[V]], w1s.asInstanceOf[Iterable[W]])
@@ -721,7 +711,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], partitioner: Partitioner)
       : RDD[(K, (Iterable[V], Iterable[W1], Iterable[W2]))] = {
-    Partitioner.assertPartitionerSupportsKeyClass(partitioner, keyClass)
+    Partitioner.assertHashCodeIsWellBehaved(keyClass)
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2), partitioner)
     cg.mapValues { case Array(vs, w1s, w2s) =>
       (vs.asInstanceOf[Iterable[V]],

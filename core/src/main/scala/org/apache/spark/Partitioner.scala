@@ -67,20 +67,15 @@ object Partitioner {
   }
 
   /**
-   * Check whether the given partitioner can correctly partition keys of the given class.  This is
-   * used to prevent Java arrays from being used with HashPartitioner, since that will lead to
-   * incorrect results (SPARK-597).
-   *
-   * @throws SparkException if the partitioner does not support keys of the given class.
+   * Throw SparkException if the given class's hashCode method is not well-behaved (e.g. if it is
+   * based on object identity rather than object equality).  This was introduced to prevent Java
+   * arrays from being used as keys for PairRDDFunctions methods, since Array.hashCode is
+   * Object.hashCode, which means that hashmaps for aggregating keys.
    */
-  private[spark] def assertPartitionerSupportsKeyClass(
-      partitioner: Partitioner,
-      keyClass: Class[_]): Unit = {
-    // If you update this method, consider also updating the warnings at the top of PairRDDFunctions
-    if (partitioner.isInstanceOf[HashPartitioner]) {
-      if (keyClass.isArray) {
-        throw new SparkException("HashPartitioner cannot partition array keys (see SPARK-597)")
-      }
+  private[spark] def assertHashCodeIsWellBehaved(cls: Class[_]): Unit = {
+    if (cls.isArray) {
+      throw new SparkException(
+        "Arrays are unsafe to use as keys and may lead to incorrect results (see SPARK-597)")
     }
   }
 }

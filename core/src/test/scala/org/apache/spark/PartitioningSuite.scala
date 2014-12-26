@@ -212,28 +212,28 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
   test("partitioning Java arrays should fail") {
     // See SPARK-597
     val arrs: RDD[Array[Int]] = sc.parallelize(Array(1, 2, 3, 4), 2).map(x => Array(x))
-    assert(intercept[SparkException]{ arrs.distinct() }.getMessage.contains("array"))
+    assert(intercept[SparkException]{ arrs.distinct() }.getMessage.contains("Arrays"))
 
     val arrPairs: RDD[(Array[Int], Int)] =
       sc.parallelize(Array(1, 2, 3, 4), 2).map(x => (Array(x), x))
     // We can't catch all usages of arrays, since they might occur inside other collections:
     // assert(fails { arrPairs.distinct() })
-    assert(intercept[SparkException]{ arrPairs.partitionBy(new HashPartitioner(2)) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.join(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.leftOuterJoin(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.rightOuterJoin(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.fullOuterJoin(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.groupByKey() }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.countByKey() }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.countByKeyApprox(1) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.cogroup(arrPairs) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.reduceByKeyLocally(_ + _) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.reduceByKey(_ + _) }.getMessage.contains("array"))
-    assert(intercept[SparkException]{ arrPairs.map(x => x).reduceByKey(_ + _) }.getMessage.contains("array"))
+    assert(intercept[SparkException]{ arrPairs.partitionBy(new HashPartitioner(2)) }.getMessage.contains("Arrays"))
+    assert(intercept[SparkException]{ arrPairs.join(arrPairs) }.getMessage.contains("Arrays"))
+    assert(intercept[SparkException]{ arrPairs.leftOuterJoin(arrPairs) }.getMessage.contains("Arrays"))
+    assert(intercept[SparkException]{ arrPairs.rightOuterJoin(arrPairs) }.getMessage.contains("Arrays"))
+    assert(intercept[SparkException]{ arrPairs.fullOuterJoin(arrPairs) }.getMessage.contains("Arrays"))
+    assert(intercept[SparkException]{ arrPairs.groupByKey() }.getMessage.contains("Arrays"))
+    assert(intercept[SparkException]{ arrPairs.countByKey() }.getMessage.contains("Arrays"))
+    assert(intercept[SparkException]{ arrPairs.countByKeyApprox(1) }.getMessage.contains("Arrays"))
+    assert(intercept[SparkException]{ arrPairs.cogroup(arrPairs) }.getMessage.contains("Arrays"))
+    assert(intercept[SparkException]{ arrPairs.reduceByKeyLocally(_ + _) }.getMessage.contains("Arrays"))
+    assert(intercept[SparkException]{ arrPairs.reduceByKey(_ + _) }.getMessage.contains("Arrays"))
+    assert(intercept[SparkException]{ arrPairs.map(x => x).reduceByKey(_ + _) }.getMessage.contains("Arrays"))
     implicit object ArrayIntOrdering extends Ordering[Array[Int]] {
       override def compare(x: Array[Int], y: Array[Int]) = 0
     }
-    assert(intercept[SparkException]{ arrPairs.repartitionAndSortWithinPartitions(new HashPartitioner(2)) }.getMessage.contains("array"))
+    assert(intercept[SparkException]{ arrPairs.repartitionAndSortWithinPartitions(new HashPartitioner(2)) }.getMessage.contains("Arrays"))
   }
 
   test("HashPartitioner should partition Java enums based on their ordinals") {
