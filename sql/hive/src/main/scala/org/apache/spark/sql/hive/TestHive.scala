@@ -20,9 +20,6 @@ package org.apache.spark.sql.hive.test
 import java.io.File
 import java.util.{Set => JavaSet}
 
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.ql.session.SessionState
-
 import scala.collection.mutable
 import scala.language.implicitConversions
 
@@ -37,10 +34,11 @@ import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.plans.logical.{CacheTableCommand, LogicalPlan, NativeCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{CacheTableCommand, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.SQLConf
+import org.apache.spark.sql.hive.execution.HiveNativeCommand
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -161,7 +159,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   abstract class QueryExecution extends super.QueryExecution {
     override lazy val analyzed = {
       val describedTables = logical match {
-        case NativeCommand(describedTable(tbl)) => tbl :: Nil
+        case HiveNativeCommand(describedTable(tbl)) => tbl :: Nil
         case CacheTableCommand(tbl, _, _) => tbl :: Nil
         case _ => Nil
       }

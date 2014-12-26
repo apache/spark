@@ -15,24 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution
-
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.catalyst.expressions.{Attribute, GenericRow, Row}
-import org.apache.spark.sql.execution.{Command, LeafNode}
-import org.apache.spark.sql.hive.HiveContext
+package org.apache.spark.streamingtest
 
 /**
- * :: DeveloperApi ::
+ * A test suite to make sure all `implicit` functions work correctly.
+ *
+ * As `implicit` is a compiler feature, we don't need to run this class.
+ * What we need to do is making the compiler happy.
  */
-@DeveloperApi
-case class NativeCommand(
-    sql: String, output: Seq[Attribute])(
-    @transient context: HiveContext)
-  extends LeafNode with Command {
+class ImplicitSuite {
 
-  override protected lazy val sideEffectResult: Seq[Row] = context.runSqlHive(sql).map(Row(_))
+  // We only want to test if `implict` works well with the compiler, so we don't need a real DStream.
+  def mockDStream[T]: org.apache.spark.streaming.dstream.DStream[T] = null
 
-  override def otherCopyArgs = context :: Nil
+  def testToPairDStreamFunctions(): Unit = {
+    val dstream: org.apache.spark.streaming.dstream.DStream[(Int, Int)] = mockDStream
+    dstream.groupByKey()
+  }
 }

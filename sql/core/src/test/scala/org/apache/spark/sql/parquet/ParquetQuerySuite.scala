@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.parquet
 
+import scala.reflect.ClassTag
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
 import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
@@ -95,6 +97,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     ParquetTestData.writeNestedFile2()
     ParquetTestData.writeNestedFile3()
     ParquetTestData.writeNestedFile4()
+    ParquetTestData.writeGlobFiles()
     testRDD = parquetFile(ParquetTestData.testDir.toString)
     testRDD.registerTempTable("testsource")
     parquetFile(ParquetTestData.testFilterDir.toString)
@@ -110,6 +113,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     Utils.deleteRecursively(ParquetTestData.testNestedDir2)
     Utils.deleteRecursively(ParquetTestData.testNestedDir3)
     Utils.deleteRecursively(ParquetTestData.testNestedDir4)
+    Utils.deleteRecursively(ParquetTestData.testGlobDir)
     // here we should also unregister the table??
 
     setConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED, originalParquetFilterPushdownEnabled.toString)
@@ -457,11 +461,17 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("make RecordFilter for simple predicates") {
-    def checkFilter[T <: FilterPredicate](predicate: Expression, defined: Boolean = true): Unit = {
+    def checkFilter[T <: FilterPredicate : ClassTag](
+        predicate: Expression,
+        defined: Boolean = true): Unit = {
       val filter = ParquetFilters.createFilter(predicate)
       if (defined) {
         assert(filter.isDefined)
-        assert(filter.get.isInstanceOf[T])
+        val tClass = implicitly[ClassTag[T]].runtimeClass
+        val filterGet = filter.get
+        assert(
+          tClass.isInstance(filterGet),
+          s"$filterGet of type ${filterGet.getClass} is not an instance of $tClass")
       } else {
         assert(filter.isEmpty)
       }
@@ -482,7 +492,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
 
     checkFilter[Operators.And]('a.int === 1 && 'a.int < 4)
     checkFilter[Operators.Or]('a.int === 1 || 'a.int < 4)
-    checkFilter[Operators.Not](!('a.int === 1))
+    checkFilter[Operators.NotEq[Integer]](!('a.int === 1))
 
     checkFilter('a.int > 'b.int, defined = false)
     checkFilter(('a.int > 'b.int) && ('a.int > 'b.int), defined = false)
@@ -1047,6 +1057,30 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
       assert(
         ParquetFilters.createFilter(p).isEmpty,
         "Comparison predicate with null shouldn't be pushed down")
+    }
+  }
+
+  test("Import of simple Parquet files using glob wildcard pattern") {
+    val testGlobDir = ParquetTestData.testGlobDir.toString
+    val globPatterns = Array(testGlobDir + "/*/*", testGlobDir + "/spark-*/*", testGlobDir + "/?pa?k-*/*")
+    globPatterns.foreach { path =>
+      val result = parquetFile(path).collect()
+      assert(result.size === 45)
+      result.zipWithIndex.foreach {
+        case (row, index) => {
+          val checkBoolean =
+            if ((index % 15) % 3 == 0)
+              row(0) == true
+            else
+              row(0) == false
+          assert(checkBoolean === true, s"boolean field value in line $index did not match")
+          if ((index % 15) % 5 == 0) assert(row(1) === 5, s"int field value in line $index did not match")
+          assert(row(2) === "abc", s"string field value in line $index did not match")
+          assert(row(3) === ((index.toLong % 15) << 33), s"long value in line $index did not match")
+          assert(row(4) === 2.5F, s"float field value in line $index did not match")
+          assert(row(5) === 4.5D, s"double field value in line $index did not match")
+        }
+      }
     }
   }
 }
