@@ -26,7 +26,7 @@ To build Spark and its example programs, run:
 
 (You do not need to do this if you downloaded a pre-built package.)
 More detailed documentation is available from the project site, at
-["Building Spark with Maven"](http://spark.apache.org/docs/latest/building-with-maven.html).
+["Building Spark with Maven"](http://spark.apache.org/docs/latest/building-spark.html).
 
 ## Interactive Scala Shell
 

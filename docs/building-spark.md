@@ -60,7 +60,7 @@ mvn -Dhadoop.version=2.0.0-mr1-cdh4.2.0 -DskipTests clean package
 mvn -Phadoop-0.23 -Dhadoop.version=0.23.7 -DskipTests clean package
 {% endhighlight %}
 
-For Apache Hadoop 2.x, 0.23.x, Cloudera CDH, and other Hadoop versions with YARN, you can enable the "yarn" profile and optionally set the "yarn.version" property if it is different from "hadoop.version". As of Spark 1.3, Spark only supports YARN versions 2.2.0 and later.
+You can enable the "yarn" profile and optionally set the "yarn.version" property if it is different from "hadoop.version". Spark only supports YARN versions 2.2.0 and later.
 
 Examples:
 
@@ -124,7 +124,21 @@ We use the scala-maven-plugin which supports incremental and continuous compilat
 
     mvn scala:cc
 
-should run continuous compilation (i.e. wait for changes). However, this has not been tested extensively.
+should run continuous compilation (i.e. wait for changes). However, this has not been tested 
+extensively. A couple of gotchas to note:
+* it only scans the paths `src/main` and `src/test` (see
+[docs](http://scala-tools.org/mvnsites/maven-scala-plugin/usage_cc.html)), so it will only work
+from within certain submodules that have that structure.
+* you'll typically need to run `mvn install` from the project root for compilation within
+specific submodules to work; this is because submodules that depend on other submodules do so via
+the `spark-parent` module).
+
+Thus, the full flow for running continuous-compilation of the `core` submodule may look more like:
+ ```
+ $ mvn install
+ $ cd core
+ $ mvn scala:cc
+```
 
 # Using With IntelliJ IDEA
 

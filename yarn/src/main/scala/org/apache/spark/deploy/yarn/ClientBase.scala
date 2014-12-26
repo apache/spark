@@ -352,11 +352,30 @@ private[spark] trait ClientBase extends Logging {
     if (isLaunchingDriver) {
       sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
+        .map(Utils.splitCommandString).getOrElse(Seq.empty)
         .foreach(opts => javaOpts += opts)
       val libraryPaths = Seq(sys.props.get("spark.driver.extraLibraryPath"),
         sys.props.get("spark.driver.libraryPath")).flatten
       if (libraryPaths.nonEmpty) {
         prefixEnv = Some(Utils.libraryPathEnvPrefix(libraryPaths))
+      }
+      if (sparkConf.getOption("spark.yarn.am.extraJavaOptions").isDefined) {
+        logWarning("spark.yarn.am.extraJavaOptions will not take effect in cluster mode")
+      }
+    } else {
+      // Validate and include yarn am specific java options in yarn-client mode.
+      val amOptsKey = "spark.yarn.am.extraJavaOptions"
+      val amOpts = sparkConf.getOption(amOptsKey)
+      amOpts.foreach { opts =>
+        if (opts.contains("-Dspark")) {
+          val msg = s"$amOptsKey is not allowed to set Spark options (was '$opts'). "
+          throw new SparkException(msg)
+        }
+        if (opts.contains("-Xmx") || opts.contains("-Xms")) {
+          val msg = s"$amOptsKey is not allowed to alter memory settings (was '$opts')."
+          throw new SparkException(msg)
+        }
+        javaOpts ++= Utils.splitCommandString(opts)
       }
     }
 
@@ -674,7 +693,7 @@ private[spark] object ClientBase extends Logging {
     addClasspathEntry(Environment.PWD.$(), env)
 
     // Normally the users app.jar is last in case conflicts with spark jars
-    if (sparkConf.get("spark.yarn.user.classpath.first", "false").toBoolean) {
+    if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
       addUserClasspath(args, sparkConf, env)
       addFileToClasspath(sparkJar(sparkConf), SPARK_JAR, env)
       populateHadoopClasspath(conf, env)

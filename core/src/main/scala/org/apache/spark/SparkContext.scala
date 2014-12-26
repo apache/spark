@@ -64,7 +64,7 @@ import org.apache.spark.util._
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
  */
-class SparkContext(config: SparkConf) extends Logging {
+class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationClient {
 
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -172,6 +172,9 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def this(master: String, appName: String, sparkHome: String, jars: Seq[String]) =
     this(master, appName, sparkHome, jars, Map(), Map())
 
+  // log out Spark Version in Spark driver log
+  logInfo(s"Running Spark version $SPARK_VERSION")
+  
   private[spark] val conf = config.clone()
   conf.validateSettings()
 
@@ -344,6 +347,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // The metrics system for Driver need to be set spark.app.id to app ID.
   // So it should start after we get app ID from the task scheduler and set spark.app.id.
   metricsSystem.start()
+  // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
+  metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
   // Optionally log Spark events
   private[spark] val eventLogger: Option[EventLoggingListener] = {
@@ -363,7 +368,7 @@ class SparkContext(config: SparkConf) extends Logging {
     if (dynamicAllocationEnabled) {
       assert(master.contains("yarn") || dynamicAllocationTesting,
         "Dynamic allocation of executors is currently only supported in YARN mode")
-      Some(new ExecutorAllocationManager(this))
+      Some(new ExecutorAllocationManager(this, listenerBus, conf))
     } else {
       None
     }
@@ -992,7 +997,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def requestExecutors(numAdditionalExecutors: Int): Boolean = {
+  override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
     assert(master.contains("yarn") || dynamicAllocationTesting,
       "Requesting executors is currently only supported in YARN mode")
     schedulerBackend match {
@@ -1010,7 +1015,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def killExecutors(executorIds: Seq[String]): Boolean = {
+  override def killExecutors(executorIds: Seq[String]): Boolean = {
     assert(master.contains("yarn") || dynamicAllocationTesting,
       "Killing executors is currently only supported in YARN mode")
     schedulerBackend match {
@@ -1028,7 +1033,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def killExecutor(executorId: String): Boolean = killExecutors(Seq(executorId))
+  override def killExecutor(executorId: String): Boolean = super.killExecutor(executorId)
 
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
