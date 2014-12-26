@@ -68,10 +68,8 @@ object Partitioner {
 
   /**
    * Check whether the given partitioner can correctly partition keys of the given class.  This is
-   * used to prevent Java arrays (SPARK-597) or enumerations (SPARK-3847) from being used with
-   * HashPartitioner, since that will lead to incorrect results.  Since partitioning is an expensive
-   * operation, this method lets us perform these checks once per transformation rather than once
-   * per record.
+   * used to prevent Java arrays from being used with HashPartitioner, since that will lead to
+   * incorrect results (SPARK-597).
    *
    * @throws SparkException if the partitioner does not support keys of the given class.
    */
@@ -82,8 +80,6 @@ object Partitioner {
     if (partitioner.isInstanceOf[HashPartitioner]) {
       if (keyClass.isArray) {
         throw new SparkException("HashPartitioner cannot partition array keys (see SPARK-597)")
-      } else if (classOf[Enum[_]].isAssignableFrom(keyClass)) {
-        throw new SparkException("HashPartitioner cannot partition Java enum keys (see SPARK-3847)")
       }
     }
   }
@@ -96,17 +92,14 @@ object Partitioner {
  * Java arrays have hashCodes that are based on the arrays' identities rather than their contents,
  * so attempting to partition an RDD[Array[_]] or RDD[(Array[_], _)] using a HashPartitioner will
  * produce an unexpected or incorrect result.  See SPARK-597 for more details.
- *
- * Similarly, Java Enums have hash hashCodes are JVM-dependent, so it is unsafe to compare enum
- * hashCodes that were generated in different JVMs.  To work around this, you can call toString()
- * on the Enums and work with string values, or use Scala sealed traits and case objects to emulate
- * Java Enums.  See SPARK-3847 for more details.
  */
 class HashPartitioner(partitions: Int) extends Partitioner {
   def numPartitions = partitions
 
   def getPartition(key: Any): Int = key match {
     case null => 0
+    // Java enumeration's hashCodes are not comparable across JVMs (see SPARK-3847):
+    case enum: Enum[_] => Utils.nonNegativeMod(enum.ordinal(), numPartitions)
     case _ => Utils.nonNegativeMod(key.hashCode, numPartitions)
   }
 

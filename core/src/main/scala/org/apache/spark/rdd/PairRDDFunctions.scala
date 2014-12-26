@@ -59,8 +59,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   if (keyClass.isArray) {
     logWarning("Using arrays as keys may lead to incorrect results (see SPARK-597)")
-  } else if (classOf[Enum[_]].isAssignableFrom(keyClass)) {
-    logWarning("Using Java enums as keys may lead to incorrect results (see SPARK-3847)")
   }
 
   /**

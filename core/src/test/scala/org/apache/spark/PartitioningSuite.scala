@@ -236,27 +236,11 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     assert(intercept[SparkException]{ arrPairs.repartitionAndSortWithinPartitions(new HashPartitioner(2)) }.getMessage.contains("array"))
   }
 
-  test("partitioning Java enums should fail") {
+  test("HashPartitioner should partition Java enums based on their ordinals") {
     // See SPARK-3847
-    val enums: RDD[TimeUnit] = sc.parallelize(Array(TimeUnit.SECONDS, TimeUnit.MICROSECONDS), 2)
-    assert(intercept[SparkException]{ enums.distinct() }.getMessage.contains("enum"))
-
-    val enumPairs: RDD[(TimeUnit, String)] = enums.map(e => (e, e.toString))
-    assert(intercept[SparkException]{ enumPairs.partitionBy(new HashPartitioner(2)) }.getMessage.contains("enum"))
-    assert(intercept[SparkException]{ enumPairs.join(enumPairs) }.getMessage.contains("enum"))
-    assert(intercept[SparkException]{ enumPairs.leftOuterJoin(enumPairs) }.getMessage.contains("enum"))
-    assert(intercept[SparkException]{ enumPairs.rightOuterJoin(enumPairs) }.getMessage.contains("enum"))
-    assert(intercept[SparkException]{ enumPairs.fullOuterJoin(enumPairs) }.getMessage.contains("enum"))
-    assert(intercept[SparkException]{ enumPairs.groupByKey() }.getMessage.contains("enum"))
-    assert(intercept[SparkException]{ enumPairs.countByKey() }.getMessage.contains("enum"))
-    // This case works, since it doesn't use a shuffle and enums are save to use as hashmap keys:
-    enumPairs.countByKeyApprox(1)
-    assert(intercept[SparkException]{ enumPairs.cogroup(enumPairs) }.getMessage.contains("enum"))
-    // Similar to countByKeyApprox, this also works:
-    enumPairs.reduceByKeyLocally(_ + _)
-    assert(intercept[SparkException]{ enumPairs.reduceByKey(_ + _) }.getMessage.contains("enum"))
-    assert(intercept[SparkException]{ enumPairs.map(x => x).reduceByKey(_ + _) }.getMessage.contains("enum"))
-    assert(intercept[SparkException]{ enumPairs.repartitionAndSortWithinPartitions(new HashPartitioner(2)) }.getMessage.contains("enum"))
+    val partitioner = new HashPartitioner(1000)
+    assert(partitioner.getPartition(TimeUnit.SECONDS) === TimeUnit.SECONDS.ordinal())
+    assert(partitioner.getPartition(TimeUnit.MICROSECONDS) === TimeUnit.MICROSECONDS.ordinal())
   }
 
   test("zero-length partitions should be correctly handled") {
