@@ -128,11 +128,19 @@ class KafkaRDD[
               .dropWhile(_.offset < requestOffset)
           }
           if (!iter.hasNext) {
+            assert(requestOffset == part.untilOffset,
+              s"ran out of messages before reaching ending offset ${part.untilOffset} " +
+                s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
+                " This should not happen, and indicates that messages may have been lost")
             finished = true
             null.asInstanceOf[R]
           } else {
             val item = iter.next
             if (item.offset >= part.untilOffset) {
+              assert(item.offset == part.untilOffset,
+                s"got ${item.offset} > ending offset ${part.untilOffset} " +
+                  s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
+                  " This should not happen, and indicates a message may have been skipped")
               finished = true
               null.asInstanceOf[R]
             } else {
