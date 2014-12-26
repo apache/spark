@@ -35,8 +35,9 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   private val completedaBatchInfos = new Queue[BatchInfo]
   private val batchInfoLimit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 100)
   private var totalCompletedBatches = 0L
+  private var totalReceivedRecords = 0L
+  private var totalProcessedRecords = 0L
   private val receiverInfos = new HashMap[Int, ReceiverInfo]
-  private var totalReceivedBatchRecords = 0L
 
   val batchDuration = ssc.graph.batchDuration.milliseconds
 
@@ -67,7 +68,7 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     waitingBatchInfos.remove(batchStarted.batchInfo.batchTime)
 
     batchStarted.batchInfo.receivedBlockInfo.foreach { case (_, infos) =>
-      totalReceivedBatchRecords += infos.map(_.numRecords).sum
+      totalReceivedRecords += infos.map(_.numRecords).sum
     }
   }
 
@@ -77,6 +78,10 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     completedaBatchInfos.enqueue(batchCompleted.batchInfo)
     if (completedaBatchInfos.size > batchInfoLimit) completedaBatchInfos.dequeue()
     totalCompletedBatches += 1L
+
+    batchCompleted.batchInfo.receivedBlockInfo.foreach { case (_, infos) =>
+      totalProcessedRecords += infos.map(_.numRecords).sum
+    }
   }
 
   def numReceivers = synchronized {
@@ -87,8 +92,12 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     totalCompletedBatches
   }
 
-  def numTotalReceivedBatchRecords: Long = synchronized {
-    totalReceivedBatchRecords
+  def numTotalReceivedRecords: Long = synchronized {
+    totalReceivedRecords
+  }
+
+  def numTotalProcessedRecords: Long = synchronized {
+    totalProcessedRecords
   }
 
   def numUnprocessedBatches: Long = synchronized {

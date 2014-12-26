@@ -29,10 +29,9 @@ private[streaming] class StreamingSource(ssc: StreamingContext) extends Source {
   private val streamingListener = ssc.progressListener
 
   private def registerGauge[T](name: String, f: StreamingJobProgressListener => T,
-      defaultValue: T) {
-    metricRegistry.register(MetricRegistry.name("streaming", name), new Gauge[T] {
-      override def getValue: T = Option(f(streamingListener)).getOrElse(defaultValue)
-    })
+      defaultValue: T): Unit = {
+    registerGaugeWithOption[T](name,
+      (l: StreamingJobProgressListener) => Option(f(streamingListener)), defaultValue)
   }
 
   private def registerGaugeWithOption[T](
@@ -49,6 +48,12 @@ private[streaming] class StreamingSource(ssc: StreamingContext) extends Source {
 
   // Gauge for number of total completed batches
   registerGauge("totalCompletedBatches", _.numTotalCompletedBatches, 0L)
+
+  // Gauge for number of total received records
+  registerGauge("totalReceivedRecords", _.numTotalReceivedRecords, 0L)
+
+  // Gauge for number of total processed records
+  registerGauge("totalProcessedRecords", _.numTotalProcessedRecords, 0L)
 
   // Gauge for number of unprocessed batches
   registerGauge("unprocessedBatches", _.numUnprocessedBatches, 0L)
@@ -88,7 +93,6 @@ private[streaming] class StreamingSource(ssc: StreamingContext) extends Source {
   registerGaugeWithOption("lastReceivedBatch_processingEndTime",
     _.lastCompletedBatch.flatMap(_.processingEndTime), -1L)
 
-  // Gauge for last received batch records and total received batch records.
-  registerGauge("lastReceivedBatchRecords", _.lastReceivedBatchRecords.values.sum, 0L)
-  registerGauge("totalReceivedBatchRecords", _.numTotalReceivedBatchRecords, 0L)
+  // Gauge for last received batch records.
+  registerGauge("lastReceivedBatch_records", _.lastReceivedBatchRecords.values.sum, 0L)
 }
