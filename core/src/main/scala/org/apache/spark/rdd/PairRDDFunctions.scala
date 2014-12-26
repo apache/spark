@@ -46,7 +46,6 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.CompactBuffer
 import org.apache.spark.util.random.StratifiedSamplingUtils
-import org.apache.spark.util.KeyValueOrdering
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
@@ -459,60 +458,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def groupByKey(numPartitions: Int): RDD[(K, Iterable[V])] = {
     groupByKey(new HashPartitioner(numPartitions))
   }
-
-  /**
-   * Group the values for each key in the RDD into a single sorted sequence. Allows controlling the
-   * partitioning of the resulting key-value pair RDD by passing a Partitioner.
-   *
-   * Note: This operation may be very expensive. If you are grouping in order to perform an
-   * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
-   * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
-   */
-  def groupByKeyAndSortValues(valueOrdering: Ordering[V], partitioner: Partitioner): 
-      RDD[(K, Iterable[V])] = {
-    val keyPartitioner = new Partitioner{
-      override def numPartitions: Int = partitioner.numPartitions
-      override def getPartition(key: Any): Int = 
-        partitioner.getPartition(key.asInstanceOf[Tuple2[Any, Any]]._1)
-    }
-
-    val shuffled = new ShuffledRDD[(K, V), Unit, Unit](self.map{ kv => (kv, ())}, keyPartitioner)
-      .setKeyOrdering(new KeyValueOrdering[K, V](None, Some(valueOrdering)))
-
-    new RDD[(K, Iterable[V])](shuffled) {
-      def compute(split: Partition, context: TaskContext): Iterator[(K, Iterable[V])] = 
-        new Iterator[(K, Iterable[V])] {
-          private val iter = shuffled.compute(split, context).map(_._1).buffered
-
-          override def hasNext: Boolean = iter.hasNext
-
-          override def next(): (K, Iterable[V]) = {
-            val key = iter.head._1
-            val buffer = new ArrayBuffer[V]
-            while (iter.hasNext && iter.head._1 == key)
-              buffer += iter.next()._2
-            (key, buffer)
-          }
-        }
-
-      protected def getPartitions: Array[Partition] = shuffled.getPartitions
-    }
-  }
-
-  /**
-   * Simplified version of groupByKeyAndSortValues that hash-partitions the output RDD.
-   */
-  def groupByKeyAndSortValues(valueOrdering: Ordering[V], numPartitions: Int): 
-      RDD[(K, Iterable[V])] = 
-    groupByKeyAndSortValues(valueOrdering, new HashPartitioner(numPartitions))
-
-  /**
-   * Simplified version of groupByKeyAndSortValues that hash-partitions the output RDD
-   * and uses the natural ordering for sorting the values.
-   */
-  def groupByKeyAndSortValues(numPartitions: Int)(implicit valueOrdering: Ordering[V]):
-      RDD[(K, Iterable[V])] =
-    groupByKeyAndSortValues(valueOrdering, numPartitions)
 
   /**
    * Return a copy of the RDD partitioned using the specified partitioner.

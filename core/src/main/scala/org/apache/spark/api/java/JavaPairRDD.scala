@@ -37,7 +37,7 @@ import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.JavaUtils.mapAsSerializableJavaMap
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, PairFunction}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
-import org.apache.spark.rdd.{OrderedRDDFunctions, RDD}
+import org.apache.spark.rdd.{OrderedRDDFunctions, OrderedValueRDDFunctions, RDD}
 import org.apache.spark.rdd.RDD.rddToPairRDDFunctions
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
@@ -397,24 +397,30 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
    */
   def groupByKeyAndSortValues(valueComp: Comparator[V], partitioner: Partitioner):
-      JavaPairRDD[K, JIterable[V]] = fromRDD(groupByResultToJava(
-        rdd.groupByKeyAndSortValues(Ordering.comparatorToOrdering(valueComp), partitioner)))
+      JavaPairRDD[K, JIterable[V]] = {
+    implicit val valueOrdering = valueComp // Allow implicit conversion of Comparator to Ordering.
+    fromRDD(groupByResultToJava(
+      new OrderedValueRDDFunctions[K, V, (K, V)](rdd).groupByKeyAndSortValues(partitioner)))
+  }
 
   /**
    * Simplified version of groupByKeyAndSortValues that hash-partitions the output RDD.
    */
   def groupByKeyAndSortValues(valueComp: Comparator[V], numPartitions: Int):
-      JavaPairRDD[K, JIterable[V]] = fromRDD(groupByResultToJava(
-        rdd.groupByKeyAndSortValues(Ordering.comparatorToOrdering(valueComp), numPartitions)))
+      JavaPairRDD[K, JIterable[V]] = {
+    implicit val valueOrdering = valueComp // Allow implicit conversion of Comparator to Ordering.
+    fromRDD(groupByResultToJava(
+      new OrderedValueRDDFunctions[K, V, (K, V)](rdd).groupByKeyAndSortValues(numPartitions)))
+  }
 
   /**
    * Simplified version of groupByKeyAndSortValues that hash-partitions the output RDD
    * and uses the natural ordering for sorting the values.
    */
   def groupByKeyAndSortValues(numPartitions: Int): JavaPairRDD[K, JIterable[V]] = {
-    val valueComp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[V]]
+    implicit val valueOrdering = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[V]]
     fromRDD(groupByResultToJava(
-      rdd.groupByKeyAndSortValues(Ordering.comparatorToOrdering(valueComp), numPartitions)))
+      new OrderedValueRDDFunctions[K, V, (K, V)](rdd).groupByKeyAndSortValues(numPartitions)))
   }
 
   /**
