@@ -151,10 +151,10 @@ object Client {
     val driverArgs = new ClientArguments(args)
 
     if (!driverArgs.logLevel.isGreaterOrEqual(Level.WARN)) {
-      conf.set("spark.akka.logLifecycleEvents", "true")
+      conf.set("spark.akka.remote.log-remote-lifecycle-events", "true")
     }
-    conf.set("spark.akka.askTimeout", "10")
-    conf.set("akka.loglevel", driverArgs.logLevel.toString.replace("WARN", "WARNING"))
+    conf.set("spark.internal.akka.askTimeout", "10")
+    conf.set("spark.akka.loglevel", driverArgs.logLevel.toString.replace("WARN", "WARNING"))
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 
     val (actorSystem, _) = AkkaUtils.createActorSystem(

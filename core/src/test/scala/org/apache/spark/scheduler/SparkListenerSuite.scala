@@ -38,7 +38,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
   }
 
   override def afterAll() {
-    System.clearProperty("spark.akka.frameSize")
+    System.clearProperty("spark.akka.remote.netty.tcp.maximum-frame-size")
   }
 
   test("basic creation and shutdown of LiveListenerBus") {
@@ -272,7 +272,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     sc.addSparkListener(listener)
 
     // Make a task whose result is larger than the akka frame size
-    System.setProperty("spark.akka.frameSize", "1")
+    System.setProperty("spark.akka.remote.netty.tcp.maximum-frame-size", "1048576b")
     val akkaFrameSize =
       sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
     val result = sc.parallelize(Seq(1), 1)

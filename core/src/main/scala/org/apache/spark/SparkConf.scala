@@ -216,6 +216,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
      *   E.g. spark.akka.option.x.y.x = "value"
      */
     getAll.filter { case (k, _) => isAkkaConf(k) }
+        .map { case (k, v) => (k.substring(k.indexOf("akka")), v) }
 
   /**
    * Returns the Spark application id, valid in the Driver after TaskScheduler registration and
@@ -354,7 +355,7 @@ private[spark] object SparkConf {
    * Return whether the given config is an akka config (e.g. akka.actor.provider).
    * Note that this does not include spark-specific akka configs (e.g. spark.akka.timeout).
    */
-  def isAkkaConf(name: String): Boolean = name.startsWith("akka.")
+  def isAkkaConf(name: String): Boolean = name.startsWith("spark.akka.")
 
   /**
    * Return whether the given config should be passed to an executor on start-up.
@@ -364,7 +365,6 @@ private[spark] object SparkConf {
    */
   def isExecutorStartupConf(name: String): Boolean = {
     isAkkaConf(name) ||
-    name.startsWith("spark.akka") ||
     name.startsWith("spark.auth") ||
     isSparkPortConf(name)
   }

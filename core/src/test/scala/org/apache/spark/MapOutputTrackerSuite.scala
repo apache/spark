@@ -153,8 +153,8 @@ class MapOutputTrackerSuite extends FunSuite {
 
   test("remote fetch below akka frame size") {
     val newConf = new SparkConf
-    newConf.set("spark.akka.frameSize", "1")
-    newConf.set("spark.akka.askTimeout", "1") // Fail fast
+    newConf.set("spark.akka.remote.netty.tcp.maximum-frame-size", "1048576b")
+    newConf.set("spark.internal.akka.askTimeout", "1") // Fail fast
 
     val masterTracker = new MapOutputTrackerMaster(conf)
     val actorSystem = ActorSystem("test")
@@ -174,8 +174,8 @@ class MapOutputTrackerSuite extends FunSuite {
 
   test("remote fetch exceeds akka frame size") {
     val newConf = new SparkConf
-    newConf.set("spark.akka.frameSize", "1")
-    newConf.set("spark.akka.askTimeout", "1") // Fail fast
+    newConf.set("spark.akka.remote.netty.tcp.maximum-frame-size", "1048576b")
+    newConf.set("spark.internal.akka.askTimeout", "1") // Fail fast
 
     val masterTracker = new MapOutputTrackerMaster(conf)
     val actorSystem = ActorSystem("test")

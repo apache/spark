@@ -61,11 +61,11 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndA
   override def beforeAll {
     // Set the Akka frame size to be as small as possible (it must be an integer, so 1 is as small
     // as we can make it) so the tests don't take too long.
-    System.setProperty("spark.akka.frameSize", "1")
+    System.setProperty("spark.akka.remote.netty.tcp.maximum-frame-size", "1048576b")
   }
 
   override def afterAll {
-    System.clearProperty("spark.akka.frameSize")
+    System.clearProperty("spark.akka.remote.netty.tcp.maximum-frame-size")
   }
 
   test("handling results smaller than Akka frame size") {
