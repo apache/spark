@@ -18,6 +18,9 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
+import spire.implicits._
+import spire.math._
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.FullOuter
@@ -289,6 +292,116 @@ object OptimizeIn extends Rule[LogicalPlan] {
       case In(v, list) if !list.exists(!_.isInstanceOf[Literal]) =>
           val hSet = list.map(e => e.eval(null))
           InSet(v, HashSet() ++ hSet)
+    }
+  }
+}
+
+/**
+ * Simplifies Conditions(And, Or) expressions when the conditions can by optimized.
+ */
+object ConditionSimplification extends Rule[LogicalPlan] with PredicateHelper {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsDown {
+      // a && a => a
+      case And(left, right) if left.fastEquals(right) =>
+        left
+
+      // a || a => a
+      case Or(left, right) if left.fastEquals(right) =>
+        left
+
+      //  a < 2 && a > 2 => false, a > 3 && a > 5 => a > 5
+      case and @ And(
+      e1 @ NumericLiteralBinaryComparison(n1, i1),
+      e2 @ NumericLiteralBinaryComparison(n2, i2)) if n1 == n2 =>
+        if (!i1.intersects(i2)) Literal(false)
+        else if (i1.isSubsetOf(i2)) e1
+        else if (i1.isSupersetOf(i2)) e2
+        else and
+
+      //  a < 2 || a >= 2 => true, a > 3 || a > 5 => a > 3
+      case or @ Or(
+      e1 @ NumericLiteralBinaryComparison(n1, i1),
+      e2 @ NumericLiteralBinaryComparison(n2, i2)) if n1 == n2 =>
+        if (i1.intersects(i2)) Literal(true)
+        else if (i1.isSubsetOf(i2)) e2
+        else if (i1.isSupersetOf(i2)) e1
+        else or
+
+      // (a < 3 && b > 5) || a > 2 => b > 5 || a > 2
+      case Or(left1 @ And(left2, right2), right1) =>
+        And(Or(left2, right1), Or(right2, right1))
+
+      // (a < 3 || b > 5) || a > 2 => true, (b > 5 || a < 3) || a > 2 => true
+      case Or( Or(
+      e1 @ NumericLiteralBinaryComparison(n1, i1), e2 @ NumericLiteralBinaryComparison(n2, i2)),
+      right @ NumericLiteralBinaryComparison(n3, i3)) =>
+        if (n3 fastEquals n1) {
+          Or(Or(e1, right), e2)
+        } else {
+          Or(Or(e2, right), e1)
+        }
+
+      // (b > 5 && a < 2) && a > 3 => false, (a < 2 && b > 5) && a > 3 => false
+      case And(And(
+      e1 @ NumericLiteralBinaryComparison(n1, i1), e2 @ NumericLiteralBinaryComparison(n2, i2)),
+      right @ NumericLiteralBinaryComparison(n3, i3)) =>
+        if (n3 fastEquals n1) {
+          And(And(e1, right), e2)
+        } else {
+          And(And(e2, right), e1)
+        }
+
+      // (a < 2 || b > 5) && a > 3 => b > 5 && a > 3
+      case And(left1@Or(left2, right2), right1) =>
+        Or(And(left2, right1), And(right2, right1))
+
+      // (a && b && c && ...) || (a && b && d && ...) || (a && b && e && ...) ... =>
+      // a && b && ((c && ...) || (d && ...) || (e && ...) || ...)
+      case or @ Or(left, right) =>
+        val lhsSet = splitConjunctivePredicates(left).toSet
+        val rhsSet = splitConjunctivePredicates(right).toSet
+        val common = lhsSet.intersect(rhsSet)
+        (lhsSet.diff(common).reduceOption(And) ++ rhsSet.diff(common).reduceOption(And))
+          .reduceOption(Or)
+          .map(_ :: common.toList)
+          .getOrElse(common.toList)
+          .reduce(And)
+
+      // (a || b || c || ...) && (a || b || d || ...) && (a || b || e || ...) ... =>
+      // (a || b) || ((c || ...) && (f || ...) && (e || ...) && ...)
+      case and @ And(left, right) =>
+        val lhsSet = splitDisjunctivePredicates(left).toSet
+        val rhsSet = splitDisjunctivePredicates(right).toSet
+        val common = lhsSet.intersect(rhsSet)
+        (lhsSet.diff(common).reduceOption(Or) ++ rhsSet.diff(common).reduceOption(Or))
+          .reduceOption(And)
+          .map(_ :: common.toList)
+          .getOrElse(common.toList)
+          .reduce(Or)
+    }
+  }
+
+  private implicit class NumericLiteral(e: Literal) {
+    def toDouble = Cast(e, DoubleType).eval().asInstanceOf[Double]
+  }
+
+  object NumericLiteralBinaryComparison {
+    def unapply(e: Expression): Option[(NamedExpression, Interval[Double])] = e match {
+      case LessThan(n: NamedExpression, l @ Literal(_, _: NumericType)) => Some((n, Interval.below(l.toDouble)))
+      case LessThan(l @ Literal(_, _: NumericType), n: NamedExpression) => Some((n, Interval.atOrAbove(l.toDouble)))
+
+      case GreaterThan(n: NamedExpression, l @ Literal(_, _: NumericType)) => Some((n, Interval.above(l.toDouble)))
+      case GreaterThan(l @ Literal(_, dt: NumericType), n: NamedExpression) => Some((n, Interval.atOrBelow(l.toDouble)))
+
+      case LessThanOrEqual(n: NamedExpression, l @ Literal(_, _: NumericType)) => Some((n, Interval.atOrBelow(l.toDouble)))
+      case LessThanOrEqual(l @ Literal(_, _: NumericType), n: NamedExpression) => Some((n, Interval.above(l.toDouble)))
+
+      case GreaterThanOrEqual(n: NamedExpression, l @ Literal(_, _: NumericType)) => Some((n, Interval.atOrAbove(l.toDouble)))
+      case GreaterThanOrEqual(l @ Literal(_, _: NumericType), n: NamedExpression) => Some((n, Interval.below(l.toDouble)))
+
+      case EqualTo(n: NamedExpression, l @ Literal(_, _: NumericType)) => Some((n, Interval.point(l.toDouble)))
     }
   }
 }

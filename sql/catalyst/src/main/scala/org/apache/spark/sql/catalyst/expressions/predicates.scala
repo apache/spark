@@ -48,6 +48,14 @@ trait PredicateHelper {
     }
   }
 
+  protected def splitDisjunctivePredicates(condition: Expression): Seq[Expression] = {
+    condition match {
+      case Or(cond1, cond2) =>
+        splitDisjunctivePredicates(cond1) ++ splitDisjunctivePredicates(cond2)
+      case other => other :: Nil
+    }
+  }
+
   /**
    * Returns true if `expr` can be evaluated using only the output of `plan`.  This method
    * can be used to determine when is is acceptable to move expression evaluation within a query
