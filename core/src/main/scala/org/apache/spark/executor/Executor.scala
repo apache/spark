@@ -22,8 +22,6 @@ import java.lang.management.ManagementFactory
 import java.nio.ByteBuffer
 import java.util.concurrent._
 
-import org.apache.spark.network.rpc.{SimpleRpcClient, SimpleRpcServer}
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
@@ -83,8 +81,8 @@ private[spark] class Executor(
   }
 
   // Create an actor for receiving RPCs from the driver
-  private val executorActor =
-    env.rpcEnv.setupEndpoint("ExecutorActor", new ExecutorActor(env.rpcEnv, executorId))
+  private val executorActor = env.rpcEnv.setupEndpoint(
+    "ExecutorActor", new ExecutorActor(env.rpcEnv, executorId))
 
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
@@ -353,8 +351,11 @@ private[spark] class Executor(
   }
 
   def startDriverHeartbeater() {
-    val interval = conf.getInt("spark.executor.heartbeatInterval", 3000)
-    val heartbeatReceiverRef = env.rpcEnv.setupDriverEndpointRef("HeartbeatReceiver")
+    val interval = conf.getInt("spark.executor.heartbeatInterval", 10000)
+    val timeout = AkkaUtils.lookupTimeout(conf)
+    val retryAttempts = AkkaUtils.numRetries(conf)
+    val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
+    val heartbeatReceiverRef = AkkaUtils.makeDriverRef("HeartbeatReceiver", conf, env.actorSystem)
 
     val t = new Thread() {
       override def run() {
@@ -368,7 +369,7 @@ private[spark] class Executor(
           for (taskRunner <- runningTasks.values()) {
             if (!taskRunner.attemptedTask.isEmpty) {
               Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
-                metrics.updateShuffleReadMetrics()
+                metrics.updateShuffleReadMetrics
                 metrics.jvmGCTime = curGCTime - taskRunner.startGCTime
                 if (isLocal) {
                   // JobProgressListener will hold an reference of it during
@@ -386,7 +387,8 @@ private[spark] class Executor(
 
           val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
           try {
-            val response = heartbeatReceiverRef.askWithReply[HeartbeatResponse](message)
+            val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
+              retryAttempts, retryIntervalMs, timeout)
             if (response.reregisterBlockManager) {
               logWarning("Told to re-register on heartbeat")
               env.blockManager.reregister()

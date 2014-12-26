@@ -15,23 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.executor
 
-import akka.actor.{Address, ActorRef}
+import org.apache.spark.util.ThreadStackTrace
+import org.apache.spark.{LocalSparkContext, SparkContext}
+import org.scalatest.FunSuite
 
-/**
- * Grouping of data for an executor used by CoarseGrainedSchedulerBackend.
- *
- * @param executorActor The ActorRef representing this executor
- * @param executorAddress The network address of this executor
- * @param executorHost The hostname that this executor is running on
- * @param freeCores  The current number of cores available for work on the executor
- * @param totalCores The total number of cores available to the executor
- */
-private[cluster] class ExecutorData(
-   val executorActor: ActorRef,
-   val executorAddress: Address,
-   val executorHost: String ,
-   var freeCores: Int,
-   val totalCores: Int
-)
+class ExecutorActorSuite extends FunSuite with LocalSparkContext {
+
+   test("ExecutorActor") {
+     sc = new SparkContext("local[2]", "test")
+     sc.env.rpcEnv.setupEndpoint("executor-actor", new ExecutorActor(sc.env.rpcEnv, "executor-1"))
+     val receiverRef = sc.env.rpcEnv.setupDriverEndpointRef("executor-actor")
+     val response = receiverRef.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump)
+     assert(response.size > 0)
+   }
+ }

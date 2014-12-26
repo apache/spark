@@ -410,9 +410,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         Some(Utils.getThreadDump())
       } else {
         val (host, port) = env.blockManager.master.getActorSystemHostPortForExecutor(executorId).get
-        val actorRef = AkkaUtils.makeExecutorRef("ExecutorActor", conf, host, port, env.actorSystem)
-        Some(AkkaUtils.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump, actorRef,
-          AkkaUtils.numRetries(conf), AkkaUtils.retryWaitMs(conf), AkkaUtils.askTimeout(conf)))
+        val endpointRef = env.rpcEnv.setupDriverEndpointRef("ExecutorActor")
+        Some(endpointRef.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump))
       }
     } catch {
       case e: Exception =>
