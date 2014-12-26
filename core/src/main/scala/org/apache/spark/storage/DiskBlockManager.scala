@@ -166,7 +166,8 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   /** Cleanup local dirs and stop shuffle sender. */
   private[spark] def stop() {
     // Only perform cleanup if an external service is not serving our shuffle files.
-    if (!blockManager.externalShuffleServiceEnabled) {
+    if (!blockManager.externalShuffleServiceEnabled ||
+      (blockManager.blockManagerId.isDriver && conf.get("spark.deploy.mode") == "client")) {
       localDirs.foreach { localDir =>
         if (localDir.isDirectory() && localDir.exists()) {
           try {
