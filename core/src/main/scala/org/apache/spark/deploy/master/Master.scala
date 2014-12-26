@@ -760,10 +760,11 @@ private[spark] class Master(
         // Event logging is enabled for this application, but no event logs are found
         val title = s"Application history not found (${app.id})"
         var msg = s"No event logs found for application $appName in $eventLogFile."
-        logWarning(msg)
+        val exception = URLEncoder.encode(Utils.exceptionString(fnf), "UTF-8")
+        logWarning(msg, fnf)
         msg += " Did you specify the correct logging directory?"
         msg = URLEncoder.encode(msg, "UTF-8")
-        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
+        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title"
         false
       case e: Exception =>
         // Replay exception message to application UI page
