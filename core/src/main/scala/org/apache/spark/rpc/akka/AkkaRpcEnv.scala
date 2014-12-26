@@ -73,6 +73,8 @@ class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
     unregisterEndpoint(endpoint)
     actorSystem.stop(endpoint.asInstanceOf[AkkaRpcEndpointRef].actorRef)
   }
+
+  override def toString = s"${getClass.getSimpleName}($actorSystem)"
 }
 
 private[akka] class AkkaRpcEndpointRef(val actorRef: ActorRef, conf: SparkConf)

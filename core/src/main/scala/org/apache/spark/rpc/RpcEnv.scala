@@ -45,7 +45,11 @@ trait RpcEnv {
     endpointToRef.remove(endpoint)
   }
 
-  def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef = endpointToRef.get(endpoint)
+  def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef = {
+    val endpointRef = endpointToRef.get(endpoint)
+    require(endpointRef != null, s"Cannot find RpcEndpointRef of ${endpoint} in ${this}")
+    endpointRef
+  }
 
   def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
 

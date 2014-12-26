@@ -113,6 +113,10 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
     val rpcEndpointRef = env.setupEndpoint("register_test", endpoint)
     assert(rpcEndpointRef eq env.endpointRef(endpoint))
     endpoint.stop()
-    assert(null == env.endpointRef(endpoint))
+
+    val e = intercept[IllegalArgumentException] {
+      env.endpointRef(endpoint)
+    }
+    assert(e.getMessage.contains("Cannot find RpcEndpointRef"))
   }
 }
