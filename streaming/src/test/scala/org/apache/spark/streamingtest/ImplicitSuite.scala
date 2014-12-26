@@ -29,7 +29,7 @@ class ImplicitSuite {
   def mockDStream[T]: org.apache.spark.streaming.dstream.DStream[T] = null
 
   def testToPairDStreamFunctions(): Unit = {
-    val rdd: org.apache.spark.streaming.dstream.DStream[(Int, Int)] = mockDStream
-    rdd.groupByKey()
+    val dstream: org.apache.spark.streaming.dstream.DStream[(Int, Int)] = mockDStream
+    dstream.groupByKey()
   }
 }
