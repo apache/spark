@@ -35,6 +35,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var executorCores = 1
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
   var amQueue = sparkConf.get("spark.yarn.queue", "default")
+  var amCores = 1
   var amMemory: Int = 512 // MB
   var appName: String = "Spark"
   var priority = 0
@@ -118,6 +119,13 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
             println("--master-memory is deprecated. Use --driver-memory instead.")
           }
           amMemory = value
+          args = tail
+
+        case ("--master-cores" | "--driver-cores") :: IntParam(value) :: tail =>
+          if (args(0) == "--master-cores") {
+            println("--master-cores is deprecated. Use --driver-cores instead.")
+          }
+          amCores = value
           args = tail
 
         case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>
