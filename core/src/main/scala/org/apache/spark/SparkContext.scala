@@ -229,7 +229,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // An asynchronous listener bus for Spark events
   private[spark] val listenerBus = new LiveListenerBus
 
-  conf.set("spark.executor.id", "driver")
+  conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.createDriverEnv(conf, isLocal, listenerBus)
