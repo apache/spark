@@ -34,13 +34,12 @@ private[spark] class YarnClientSchedulerBackend(
   private var client: Client = null
   private var appId: ApplicationId = null
   @volatile private var stopping: Boolean = false
-
+  
   /**
-   * Create a Yarn client to submit an application to the ResourceManager.
-   * This waits until the application is running.
+   * Create a Yarn client to create an application to the ResourceManager.
    */
-  override def start() {
-    super.start()
+  override def initialize() {
+    super.initialize()
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
@@ -54,7 +53,17 @@ private[spark] class YarnClientSchedulerBackend(
     val args = new ClientArguments(argsArrayBuf.toArray, conf)
     totalExpectedExecutors = args.numExecutors
     client = new Client(args, conf)
-    appId = client.submitApplication()
+    appId = client.createApplication()
+  }
+
+  /**
+   * Submit the application created by Yarn client to the ResourceManager.
+   * This waits until the application is running.
+   */
+  override def start() {
+    super.start()
+    
+    client.submitApplication()
     waitForApplication()
     asyncMonitorApplication()
   }

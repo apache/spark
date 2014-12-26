@@ -759,6 +759,9 @@ class DAGScheduler(
         val stageIds = jobIdToStageIds(jobId).toArray
         val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
         listenerBus.post(SparkListenerJobStart(job.jobId, stageInfos, properties))
+        if (taskScheduler.started.compareAndSet(false, true)) {
+          taskScheduler.start()
+        }
         submitStage(finalStage)
       }
     }
@@ -1346,7 +1349,9 @@ class DAGScheduler(
   def stop() {
     logInfo("Stopping DAGScheduler")
     dagSchedulerActorSupervisor ! PoisonPill
-    taskScheduler.stop()
+    if (taskScheduler.started.compareAndSet(true, false)) {
+      taskScheduler.stop()
+    }
   }
 }
 

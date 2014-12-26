@@ -517,7 +517,9 @@ private[spark] trait ClientBase extends Logging {
    * throw an appropriate SparkException.
    */
   def run(): Unit = {
-    val (yarnApplicationState, finalApplicationStatus) = monitorApplication(submitApplication())
+    val appId = createApplication()
+    submitApplication()
+    val (yarnApplicationState, finalApplicationStatus) = monitorApplication(appId)
     if (yarnApplicationState == YarnApplicationState.FAILED ||
       finalApplicationStatus == FinalApplicationStatus.FAILED) {
       throw new SparkException("Application finished with failed status")
@@ -535,8 +537,11 @@ private[spark] trait ClientBase extends Logging {
    |  Methods that cannot be implemented here due to API differences across hadoop versions  |
    * --------------------------------------------------------------------------------------- */
 
+  /** Create an application running our ApplicationMaster to the ResourceManager. */
+  def createApplication(): ApplicationId
+  
   /** Submit an application running our ApplicationMaster to the ResourceManager. */
-  def submitApplication(): ApplicationId
+  def submitApplication(): Unit
 
   /** Set up security tokens for launching our ApplicationMaster container. */
   protected def setupSecurityToken(containerContext: ContainerLaunchContext): Unit

@@ -248,7 +248,8 @@ class ClientBaseSuite extends FunSuite with Matchers {
       val sparkConf: SparkConf,
       val yarnConf: YarnConfiguration) extends ClientBase {
     override def setupSecurityToken(amContainer: ContainerLaunchContext): Unit = ???
-    override def submitApplication(): ApplicationId = ???
+    override def createApplication(): ApplicationId = ???
+    override def submitApplication(): Unit = ???
     override def getApplicationReport(appId: ApplicationId): ApplicationReport = ???
     override def getClientToken(report: ApplicationReport): String = ???
   }
