@@ -150,9 +150,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
         removeExecutor(executorId, reason)
         sender ! true
 
-//      case DisassociatedEvent(_, address, _) =>
-//        addressToExecutorId.get(address).foreach(removeExecutor(_,
-//          "remote Akka client disassociated"))
+      case DisassociatedEvent(_, address, _) =>
+        addressToExecutorId.get(address.toString).foreach(removeExecutor(_,
+          "remote Akka client disassociated"))
 
       case RetrieveSparkProps =>
         println("sending the other side properties RetrieveSparkProps")

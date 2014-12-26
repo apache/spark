@@ -42,7 +42,9 @@ trait RpcEnv {
 
   protected def unregisterEndpoint(endpointRef: RpcEndpointRef): Unit = {
     val endpoint = refToEndpoint.remove(endpointRef)
-    endpointToRef.remove(endpoint)
+    if (endpoint != null) {
+      endpointToRef.remove(endpoint)
+    }
   }
 
   def endpointRef(endpoint: RpcEndpoint): RpcEndpointRef = {
@@ -75,6 +77,13 @@ trait RpcEndpoint {
    */
   implicit final def self: RpcEndpointRef = rpcEnv.endpointRef(this)
 
+  /**
+   * Same assumption like Actor: messages sent to a RpcEndpoint will be delivered in sequence, and
+   * messages from the same RpcEndpoint will be delivered in order.
+   *
+   * @param sender
+   * @return
+   */
   def receive(sender: RpcEndpointRef): PartialFunction[Any, Unit]
 
   def remoteConnectionTerminated(remoteAddress: String): Unit = {

@@ -36,8 +36,8 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 /**
  * Lives in the driver to receive heartbeats from executors..
  */
-private[spark] class HeartbeatReceiver(override val rpcEnv: RpcEnv,
-    scheduler: TaskScheduler, conf: SparkConf) extends RpcEndpoint with Logging {
+private[spark] class HeartbeatReceiver(override val rpcEnv: RpcEnv, scheduler: TaskScheduler)
+  extends RpcEndpoint {
 
   override def receive(sender: RpcEndpointRef) = {
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>

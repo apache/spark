@@ -325,7 +325,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     SparkContext.createTaskScheduler(this, master)
 
   private val heartbeatReceiver = env.rpcEnv.setupEndpoint("HeartbeatReceiver",
-      new HeartbeatReceiver(env.rpcEnv, taskScheduler, conf))
+      new HeartbeatReceiver(env.rpcEnv, taskScheduler))
 
   @volatile private[spark] var dagScheduler: DAGScheduler = _
   try {
