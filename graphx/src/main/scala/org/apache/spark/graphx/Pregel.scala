@@ -115,12 +115,12 @@ object Pregel extends Logging {
   def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]
      (graph: Graph[VD, ED],
       initialMsg: A,
-      maxIterations: Int = Int.MaxValue,
-      activeDirection: EdgeDirection = EdgeDirection.Either)
+      maxIterations: Int,
+      activeDirection: EdgeDirection,
+      tripletFields: TripletFields)
      (vprog: (VertexId, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
-      mergeMsg: (A, A) => A,
-      tripletFields: TripletFields = TripletFields.All)
+      mergeMsg: (A, A) => A)
     : Graph[VD, ED] =
   {
     var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
@@ -162,6 +162,24 @@ object Pregel extends Logging {
 
     g
   } // end of apply
+
+  /**
+   * This old Pregel API (<=1.2.0) is left because of
+   * binary compatibility.
+   */
+  def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]
+     (graph: Graph[VD, ED],
+      initialMsg: A,
+      maxIterations: Int = Int.MaxValue,
+      activeDirection: EdgeDirection = EdgeDirection.Either)
+     (vprog: (VertexId, VD, A) => VD,
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
+      mergeMsg: (A, A) => A)
+    : Graph[VD, ED] =
+  {
+    Pregel(graph, initialMsg, maxIterations, activeDirection, TripletFields.All)(
+      vprog, sendMsg, mergeMsg)
+  }
 
   private def mapReduceTriplets[VD: ClassTag, ED: ClassTag, A: ClassTag](
       g: Graph[VD, ED],
