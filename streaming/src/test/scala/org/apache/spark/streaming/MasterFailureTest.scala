@@ -20,7 +20,6 @@ package org.apache.spark.streaming
 import org.apache.spark.Logging
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.Utils
-import org.apache.spark.streaming.StreamingContext._
 
 import scala.util.Random
 import scala.collection.mutable.ArrayBuffer
