@@ -138,11 +138,11 @@ private abstract class BaseRRDD[T: ClassTag, U: ClassTag](
         // R worker process output serialization flag
         dataOut.writeInt(if (dataSerialized) 1 else 0)
 
-        dataOut.writeInt(functionDependencies.length)
-        dataOut.write(functionDependencies, 0, functionDependencies.length)
-
         dataOut.writeInt(packageNames.length)
         dataOut.write(packageNames, 0, packageNames.length)
+
+        dataOut.writeInt(functionDependencies.length)
+        dataOut.write(functionDependencies, 0, functionDependencies.length)
 
         dataOut.writeInt(broadcastVars.length)
         broadcastVars.foreach { broadcast =>

@@ -43,19 +43,16 @@ isOutputSerialized <- readInt(inputCon)
 # interfering with outputStream
 sink(stderr())
 
-# read function dependencies
-depsLen <- readInt(inputCon)
-if (depsLen > 0) {
-  execFunctionDeps <- readRawLen(inputCon, depsLen)
-}
-
 # Include packages as required
 packageNames <- unserialize(readRaw(inputCon))
 for (pkg in packageNames) {
   suppressPackageStartupMessages(require(as.character(pkg), character.only=TRUE))
 }
 
+# read function dependencies
+depsLen <- readInt(inputCon)
 if (depsLen > 0) {
+  execFunctionDeps <- readRawLen(inputCon, depsLen)
   # load the dependencies into current environment
   load(rawConnection(execFunctionDeps, open='rb'))
 }
