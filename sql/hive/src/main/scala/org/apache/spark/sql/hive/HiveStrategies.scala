@@ -133,7 +133,7 @@ private[hive] trait HiveStrategies {
             }
 
             hiveContext
-              .parquetFile(partitions.map(_.getLocation).mkString(","))
+              .parquetFile(ParquetRelation.makePartitionPath(partitions.map(_.getLocation)))
               .addPartitioningAttributes(relation.partitionKeys)
               .lowerCase
               .where(unresolvedOtherPredicates)
