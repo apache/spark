@@ -64,7 +64,8 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
       )
 
     // Write an unfinished app, new-style.
-    writeFile(new File(testDir, "new2" + EventLoggingListener.IN_PROGRESS), true, None,
+    val logFile2 = new File(testDir, "new2" + EventLoggingListener.IN_PROGRESS)
+    writeFile(logFile2, true, None,
       SparkListenerApplicationStart("app2-2", None, 1L, "test")
       )
 
@@ -92,12 +93,17 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
 
     val list = provider.getListing().toSeq
     list should not be (null)
-    list.size should be (2)
+    list.size should be (4)
+    list.count(e => e.completed) should be (2)
 
     list(0) should be (ApplicationHistoryInfo(oldLog.getName(), "app3", 2L, 3L,
-      oldLog.lastModified(), "test"))
+      oldLog.lastModified(), "test", true))
     list(1) should be (ApplicationHistoryInfo(logFile1.getName(), "app1-1", 1L, 2L,
-      logFile1.lastModified(), "test"))
+      logFile1.lastModified(), "test", true))
+    list(2) should be (ApplicationHistoryInfo(oldLog2.getName(), "app4", 2L, -1L,
+      oldLog2.lastModified(), "test", false))
+     list(3) should be (ApplicationHistoryInfo(logFile2.getName(), "app2-2", 1L, -1L,
+      logFile2.lastModified(), "test", false))
 
     // Make sure the UI can be rendered.
     list.foreach { case info =>

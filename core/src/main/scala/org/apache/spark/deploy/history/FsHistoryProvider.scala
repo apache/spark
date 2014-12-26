@@ -173,13 +173,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       val logInfos = statusList
         .filter { entry =>
           try {
-            if (isApplicationCompleted(entry)) {
-              val modTime = getModificationTime(entry)
-              newLastModifiedTime = math.max(newLastModifiedTime, modTime)
-              modTime >= lastModifiedTime
-            } else {
-              true
-            }
+            val modTime = getModificationTime(entry)
+            newLastModifiedTime = math.max(newLastModifiedTime, modTime)
+            modTime >= lastModifiedTime
           } catch {
             case e: AccessControlException =>
               // Do not use "logInfo" since these messages can get pretty noisy if printed on
