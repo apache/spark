@@ -24,14 +24,14 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.{SparkListenerTaskEnd, SparkListener}
 
 import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest.Matchers
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem}
 
 import scala.collection.mutable.ArrayBuffer
 
-class InputOutputMetricsSuite extends FunSuite with SharedSparkContext with ShouldMatchers {
+class InputOutputMetricsSuite extends FunSuite with SharedSparkContext with Matchers {
   test("input metrics when reading text file with single split") {
     val file = new File(getClass.getSimpleName + ".txt")
     val pw = new PrintWriter(new FileWriter(file))

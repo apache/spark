@@ -15,33 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.execution;
+package org.apache.spark.streamingtest
 
-import org.apache.hadoop.hive.ql.exec.UDF;
+/**
+ * A test suite to make sure all `implicit` functions work correctly.
+ *
+ * As `implicit` is a compiler feature, we don't need to run this class.
+ * What we need to do is making the compiler happy.
+ */
+class ImplicitSuite {
 
-import java.util.List;
+  // We only want to test if `implict` works well with the compiler, so we don't need a real DStream.
+  def mockDStream[T]: org.apache.spark.streaming.dstream.DStream[T] = null
 
-public class UDFListListInt extends UDF {
-  /**
-   * @param obj
-   *   SQL schema: array&lt;struct&lt;x: int, y: int, z: int&gt;&gt;
-   *   Java Type: List&lt;List&lt;Integer&gt;&gt;
-   */
-  @SuppressWarnings("unchecked")
-  public long evaluate(Object obj) {
-    if (obj == null) {
-      return 0L;
-    }
-    List<List<?>> listList = (List<List<?>>) obj;
-    long retVal = 0;
-    for (List<?> aList : listList) {
-      Number someInt = (Number) aList.get(1);
-      try {
-        retVal += someInt.longValue();
-      } catch (NullPointerException e) {
-        System.out.println(e);
-      }
-    }
-    return retVal;
+  def testToPairDStreamFunctions(): Unit = {
+    val dstream: org.apache.spark.streaming.dstream.DStream[(Int, Int)] = mockDStream
+    dstream.groupByKey()
   }
 }
