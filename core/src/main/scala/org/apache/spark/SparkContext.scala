@@ -329,8 +329,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   try {
     dagScheduler = new DAGScheduler(this)
   } catch {
-    case e: Exception => throw
-      new SparkException("DAGScheduler cannot be initialized due to %s".format(e.getMessage))
+    case e: Exception => {
+      stop()
+      throw
+        new SparkException("DAGScheduler cannot be initialized due to %s".format(e.getMessage))
+    }
   }
 
   // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
