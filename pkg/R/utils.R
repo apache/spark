@@ -139,7 +139,7 @@ getDependencies <- function(name) {
 
   rc <- rawConnection(raw(), 'wb')
   save(list=filteredVars, file=rc, envir=closureEnv)
-  binData <- memCompress(rawConnectionValue(rc), "g")
+  binData <- rawConnectionValue(rc)
   close(rc)
   binData
 }
