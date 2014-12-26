@@ -56,6 +56,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
   }
 
+  createQueryTest("constant object inspector for generic udf",
+    """SELECT named_struct(
+      lower("AA"), "10",
+      repeat(lower("AA"), 3), "11",
+      lower(repeat("AA", 3)), "12",
+      printf("Bb%d", 12), "13",
+      repeat(printf("s%d", 14), 2), "14") FROM src LIMIT 1""")
+
   createQueryTest("NaN to Decimal",
     "SELECT CAST(CAST('NaN' AS DOUBLE) AS DECIMAL(1,1)) FROM src LIMIT 1")
 
@@ -311,10 +319,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("DISTINCT",
     "SELECT DISTINCT key, value FROM src")
 
-  ignore("empty aggregate input") {
-    createQueryTest("empty aggregate input",
-      "SELECT SUM(key) FROM (SELECT * FROM src LIMIT 0) a")
-  }
+  createQueryTest("empty aggregate input",
+    "SELECT SUM(key) FROM (SELECT * FROM src LIMIT 0) a")
 
   createQueryTest("lateral view1",
     "SELECT tbl.* FROM src LATERAL VIEW explode(array(1,2)) tbl as a")
@@ -404,6 +410,15 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   createQueryTest("select null from table",
     "SELECT null FROM src LIMIT 1")
+
+  test("predicates contains an empty AttributeSet() references") {
+    sql(
+      """
+        |SELECT a FROM (
+        |  SELECT 1 AS a FROM src LIMIT 1 ) table
+        |WHERE abs(20141202) is not null
+      """.stripMargin).collect()
+  }
 
   test("implement identity function using case statement") {
     val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")

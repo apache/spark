@@ -26,6 +26,7 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
 
   private val pageSize = 20
+  private val plusOrMinus = 2
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val requestedPage = Option(request.getParameter("page")).getOrElse("1").toInt
@@ -39,6 +40,9 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     val last = Math.min(actualFirst + pageSize, allApps.size) - 1
     val pageCount = allApps.size / pageSize + (if (allApps.size % pageSize > 0) 1 else 0)
 
+    val secondPageFromLeft = 2
+    val secondPageFromRight = pageCount - 1
+
     val appTable = UIUtils.listingTable(appHeader, appRow, apps)
     val providerConfig = parent.getProviderConfig()
     val content =
@@ -48,17 +52,48 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
             {providerConfig.map { case (k, v) => <li><strong>{k}:</strong> {v}</li> }}
           </ul>
           {
+            // This displays the indices of pages that are within `plusOrMinus` pages of
+            // the current page. Regardless of where the current page is, this also links
+            // to the first and last page. If the current page +/- `plusOrMinus` is greater
+            // than the 2nd page from the first page or less than the 2nd page from the last
+            // page, `...` will be displayed.
             if (allApps.size > 0) {
+              val leftSideIndices =
+                rangeIndices(actualPage - plusOrMinus until actualPage, 1 < _)
+              val rightSideIndices =
+                rangeIndices(actualPage + 1 to actualPage + plusOrMinus, _ < pageCount)
+
               <h4>
                 Showing {actualFirst + 1}-{last + 1} of {allApps.size}
-                <span style="float: right">
-                  {if (actualPage > 1) <a href={"/?page=" + (actualPage - 1)}>&lt;</a>}
-                  {if (actualPage < pageCount) <a href={"/?page=" + (actualPage + 1)}>&gt;</a>}
-                </span>
+                  <span style="float: right">
+                    {
+                      if (actualPage > 1) {
+                        <a href={"/?page=" + (actualPage - 1)}>&lt; </a>
+                        <a href={"/?page=1"}>1</a>
+                      }
+                    }
+                    {if (actualPage - plusOrMinus > secondPageFromLeft) " ... "}
+                    {leftSideIndices}
+                    {actualPage}
+                    {rightSideIndices}
+                    {if (actualPage + plusOrMinus < secondPageFromRight) " ... "}
+                    {
+                      if (actualPage < pageCount) {
+                        <a href={"/?page=" + pageCount}>{pageCount}</a>
+                        <a href={"/?page=" + (actualPage + 1)}> &gt;</a>
+                      }
+                    }
+                  </span>
               </h4> ++
               appTable
             } else {
-              <h4>No Completed Applications Found</h4>
+              <h4>No completed applications found!</h4> ++
+              <p>Did you specify the correct logging directory?
+                Please verify your setting of <span style="font-style:italic">
+                spark.history.fs.logDirectory</span> and whether you have the permissions to
+                access it.<br /> It is also possible that your application did not run to
+                completion or did not stop the SparkContext.
+              </p>
             }
           }
         </div>
@@ -74,6 +109,10 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     "Duration",
     "Spark User",
     "Last Updated")
+
+  private def rangeIndices(range: Seq[Int], condition: Int => Boolean): Seq[Node] = {
+    range.filter(condition).map(nextPage => <a href={"/?page=" + nextPage}> {nextPage} </a>)
+  }
 
   private def appRow(info: ApplicationHistoryInfo): Seq[Node] = {
     val uiAddress = HistoryServer.UI_PATH_PREFIX + s"/${info.id}"

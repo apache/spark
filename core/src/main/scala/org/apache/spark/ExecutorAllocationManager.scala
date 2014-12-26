@@ -60,10 +60,12 @@ import org.apache.spark.scheduler._
  *   spark.dynamicAllocation.executorIdleTimeout (K) -
  *     If an executor has been idle for this duration, remove it
  */
-private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging {
+private[spark] class ExecutorAllocationManager(
+    client: ExecutorAllocationClient,
+    listenerBus: LiveListenerBus,
+    conf: SparkConf)
+  extends Logging {
   import ExecutorAllocationManager._
-
-  private val conf = sc.conf
 
   // Lower and upper bounds on the number of executors. These are required.
   private val minNumExecutors = conf.getInt("spark.dynamicAllocation.minExecutors", -1)
@@ -168,7 +170,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
    * Register for scheduler callbacks to decide when to add and remove executors.
    */
   def start(): Unit = {
-    sc.addSparkListener(listener)
+    listenerBus.addListener(listener)
     startPolling()
   }
 
@@ -253,7 +255,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     val actualNumExecutorsToAdd = math.min(numExecutorsToAdd, maxNumExecutorsToAdd)
 
     val newTotalExecutors = numExistingExecutors + actualNumExecutorsToAdd
-    val addRequestAcknowledged = testing || sc.requestExecutors(actualNumExecutorsToAdd)
+    val addRequestAcknowledged = testing || client.requestExecutors(actualNumExecutorsToAdd)
     if (addRequestAcknowledged) {
       logInfo(s"Requesting $actualNumExecutorsToAdd new executor(s) because " +
         s"tasks are backlogged (new desired total will be $newTotalExecutors)")
@@ -295,7 +297,7 @@ private[spark] class ExecutorAllocationManager(sc: SparkContext) extends Logging
     }
 
     // Send a request to the backend to kill this executor
-    val removeRequestAcknowledged = testing || sc.killExecutor(executorId)
+    val removeRequestAcknowledged = testing || client.killExecutor(executorId)
     if (removeRequestAcknowledged) {
       logInfo(s"Removing executor $executorId because it has been idle for " +
         s"$executorIdleTimeout seconds (new desired total will be ${numExistingExecutors - 1})")

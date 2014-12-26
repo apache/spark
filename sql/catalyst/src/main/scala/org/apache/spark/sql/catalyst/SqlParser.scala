@@ -85,6 +85,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val ON = Keyword("ON")
   protected val OR = Keyword("OR")
   protected val ORDER = Keyword("ORDER")
+  protected val SORT = Keyword("SORT")
   protected val OUTER = Keyword("OUTER")
   protected val OVERWRITE = Keyword("OVERWRITE")
   protected val REGEXP = Keyword("REGEXP")
@@ -140,7 +141,7 @@ class SqlParser extends AbstractSparkSQLParser {
       (WHERE  ~> expression).? ~
       (GROUP  ~  BY ~> rep1sep(expression, ",")).? ~
       (HAVING ~> expression).? ~
-      (ORDER  ~  BY ~> ordering).? ~
+      sortType.? ~
       (LIMIT  ~> expression).? ^^ {
         case d ~ p ~ r ~ f ~ g ~ h ~ o ~ l  =>
           val base = r.getOrElse(NoRelation)
@@ -150,7 +151,7 @@ class SqlParser extends AbstractSparkSQLParser {
             .getOrElse(Project(assignAliases(p), withFilter))
           val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
           val withHaving = h.map(Filter(_, withDistinct)).getOrElse(withDistinct)
-          val withOrder = o.map(Sort(_, withHaving)).getOrElse(withHaving)
+          val withOrder = o.map(_(withHaving)).getOrElse(withHaving)
           val withLimit = l.map(Limit(_, withOrder)).getOrElse(withOrder)
           withLimit
       }
@@ -202,6 +203,11 @@ class SqlParser extends AbstractSparkSQLParser {
     | FULL  ~ OUTER.? ^^^ FullOuter
     )
 
+  protected lazy val sortType: Parser[LogicalPlan => LogicalPlan] =
+    ( ORDER ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, l) }
+    | SORT ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => SortPartitions(o, l) }
+    )
+
   protected lazy val ordering: Parser[Seq[SortOrder]] =
     ( rep1sep(singleOrder, ",")
     | rep1sep(expression, ",") ~ direction.? ^^ {
@@ -234,6 +240,7 @@ class SqlParser extends AbstractSparkSQLParser {
     | termExpression ~ (">=" ~> termExpression) ^^ { case e1 ~ e2 => GreaterThanOrEqual(e1, e2) }
     | termExpression ~ ("!=" ~> termExpression) ^^ { case e1 ~ e2 => Not(EqualTo(e1, e2)) }
     | termExpression ~ ("<>" ~> termExpression) ^^ { case e1 ~ e2 => Not(EqualTo(e1, e2)) }
+    | termExpression ~ ("<=>" ~> termExpression) ^^ { case e1 ~ e2 => EqualNullSafe(e1, e2) }
     | termExpression ~ NOT.? ~ (BETWEEN ~> termExpression) ~ (AND ~> termExpression) ^^ {
         case e ~ not ~ el ~ eu =>
           val betweenExpr: Expression = And(GreaterThanOrEqual(e, el), LessThanOrEqual(e, eu))
@@ -276,7 +283,8 @@ class SqlParser extends AbstractSparkSQLParser {
     | SUM   ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => SumDistinct(exp) }
     | COUNT ~  "(" ~> "*"                    <~ ")" ^^ { case _ => Count(Literal(1)) }
     | COUNT ~  "(" ~> expression             <~ ")" ^^ { case exp => Count(exp) }
-    | COUNT ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => CountDistinct(exp :: Nil) }
+    | COUNT ~> "(" ~> DISTINCT ~> repsep(expression, ",") <~ ")" ^^
+      { case exps => CountDistinct(exps) }
     | APPROXIMATE ~ COUNT ~ "(" ~ DISTINCT ~> expression <~ ")" ^^
       { case exp => ApproxCountDistinct(exp) }
     | APPROXIMATE ~> "(" ~> floatLit ~ ")" ~ COUNT ~ "(" ~ DISTINCT ~ expression <~ ")" ^^
@@ -339,18 +347,13 @@ class SqlParser extends AbstractSparkSQLParser {
     | floatLit ^^ { f => Literal(f.toDouble) }
     )
 
-  private val longMax = BigDecimal(s"${Long.MaxValue}")
-  private val longMin = BigDecimal(s"${Long.MinValue}")
-  private val intMax = BigDecimal(s"${Int.MaxValue}")
-  private val intMin = BigDecimal(s"${Int.MinValue}")
-
   private def toNarrowestIntegerType(value: String) = {
     val bigIntValue = BigDecimal(value)
 
     bigIntValue match {
-      case v if v < longMin || v > longMax => v
-      case v if v < intMin || v > intMax => v.toLong
-      case v => v.toInt
+      case v if bigIntValue.isValidInt => v.toIntExact
+      case v if bigIntValue.isValidLong => v.toLongExact
+      case v => v
     }
   }
 

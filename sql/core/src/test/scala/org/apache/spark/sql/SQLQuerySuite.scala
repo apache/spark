@@ -22,7 +22,6 @@ import java.util.TimeZone
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /* Implicits */
@@ -41,6 +40,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   override protected def afterAll() {
     TimeZone.setDefault(origZone)
+  }
+
+  test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
+    checkAnswer(
+      sql("SELECT a FROM testData2 SORT BY a"),
+      Seq(1, 1, 2 ,2 ,3 ,3).map(Seq(_))
+    )
   }
 
   test("grouping on nested fields") {
@@ -972,5 +978,31 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     jsonRDD(sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
     checkAnswer(sql("SELECT a.b + 1 FROM data GROUP BY a.b + 1"), 2)
     dropTempTable("data")
+  }
+
+  test("SPARK-4432 Fix attribute reference resolution error when using ORDER BY") {
+    checkAnswer(
+      sql("SELECT a + b FROM testData2 ORDER BY a"),
+      Seq(2, 3, 3 ,4 ,4 ,5).map(Seq(_))
+    )
+  }
+
+  test("Supporting relational operator '<=>' in Spark SQL") {
+    val nullCheckData1 = TestData(1,"1") :: TestData(2,null) :: Nil
+    val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
+    rdd1.registerTempTable("nulldata1")
+    val nullCheckData2 = TestData(1,"1") :: TestData(2,null) :: Nil
+    val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
+    rdd2.registerTempTable("nulldata2")
+    checkAnswer(sql("SELECT nulldata1.key FROM nulldata1 join " +
+      "nulldata2 on nulldata1.value <=> nulldata2.value"),
+        (1 to 2).map(i => Seq(i)))
+  }
+
+  test("Multi-column COUNT(DISTINCT ...)") {
+    val data = TestData(1,"val_1") :: TestData(2,"val_2") :: Nil
+    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
+    rdd.registerTempTable("distinctData")
+    checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), 2)
   }
 }

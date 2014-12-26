@@ -26,7 +26,7 @@ import scala.collection.JavaConverters._
 
 import net.razorvine.pickle.{Pickler, Unpickler}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.python.PythonRDD
+import org.apache.spark.api.python.{PythonBroadcast, PythonRDD}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.expressions._
@@ -45,7 +45,7 @@ private[spark] case class PythonUDF(
     envVars: JMap[String, String],
     pythonIncludes: JList[String],
     pythonExec: String,
-    broadcastVars: JList[Broadcast[Array[Byte]]],
+    broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]],
     dataType: DataType,
     children: Seq[Expression]) extends Expression with SparkLogging {
@@ -132,7 +132,7 @@ object EvaluatePython {
       arr.asInstanceOf[Array[Any]].map(x => toJava(x, array.elementType))
 
     case (obj: Map[_, _], mt: MapType) => obj.map {
-      case (k, v) => (k, toJava(v, mt.valueType)) // key should be primitive type
+      case (k, v) => (toJava(k, mt.keyType), toJava(v, mt.valueType))
     }.asJava
 
     case (ud, udt: UserDefinedType[_]) => toJava(udt.serialize(ud), udt.sqlType)

@@ -22,7 +22,6 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.Map
 import scala.collection.mutable.Queue
-import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import akka.actor.{Props, SupervisorStrategy}
@@ -121,6 +120,11 @@ class StreamingContext private[streaming] (
     }
   }
 
+  if (sc.conf.get("spark.master") == "local" || sc.conf.get("spark.master") == "local[1]") {
+    logWarning("spark.master should be set as local[n], n > 1 in local mode if you have receivers" +
+      " to get data, otherwise Spark jobs will not get resources to process the received data.")
+  }
+
   private[streaming] val conf = sc.conf
 
   private[streaming] val env = SparkEnv.get
@@ -187,7 +191,7 @@ class StreamingContext private[streaming] (
   /**
    * Set each DStreams in this context to remember RDDs it generated in the last given duration.
    * DStreams remember RDDs only for a limited duration of time and releases them for garbage
-   * collection. This method allows the developer to specify how to long to remember the RDDs (
+   * collection. This method allows the developer to specify how long to remember the RDDs (
    * if the developer wishes to query old data outside the DStream computation).
    * @param duration Minimum duration that each DStream should remember its RDDs
    */
@@ -518,9 +522,11 @@ object StreamingContext extends Logging {
 
   private[streaming] val DEFAULT_CLEANER_TTL = 3600
 
-  implicit def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
+  @deprecated("Replaced by implicit functions in the DStream companion object. This is " +
+    "kept here only for backward compatibility.", "1.3.0")
+  def toPairDStreamFunctions[K, V](stream: DStream[(K, V)])
       (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
-    new PairDStreamFunctions[K, V](stream)
+    DStream.toPairDStreamFunctions(stream)(kt, vt, ord)
   }
 
   /**
