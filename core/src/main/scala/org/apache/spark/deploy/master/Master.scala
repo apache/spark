@@ -719,26 +719,28 @@ private[spark] class Master(
   def rebuildSparkUI(app: ApplicationInfo): Boolean = {
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
-    val eventLogFile = app.desc.eventLogDir
-      .map { dir => EventLoggingListener.getLogPath(dir, app.id) }
-      .getOrElse {
-        // Event logging is not enabled for this application
-        app.desc.appUiUrl = notFoundBasePath
-        return false
-    }
-    val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
-
-    if (fs.exists(new Path(eventLogFile + EventLoggingListener.IN_PROGRESS))) {
-      // Event logging is enabled for this application, but the application is still in progress
-      val title = s"Application history not found (${app.id})"
-      var msg = s"Application $appName is still in progress."
-      logWarning(msg)
-      msg = URLEncoder.encode(msg, "UTF-8")
-      app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
-      return false
-    }
-
+    var eventLogFile: String = null
     try {
+      eventLogFile = app.desc.eventLogDir
+        .map { dir => EventLoggingListener.getLogPath(dir, app.id) }
+        .getOrElse {
+          // Event logging is not enabled for this application
+          app.desc.appUiUrl = notFoundBasePath
+          return false
+        }
+        
+      val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
+
+      if (fs.exists(new Path(eventLogFile + EventLoggingListener.IN_PROGRESS))) {
+        // Event logging is enabled for this application, but the application is still in progress
+        val title = s"Application history not found (${app.id})"
+        var msg = s"Application $appName is still in progress."
+        logWarning(msg)
+        msg = URLEncoder.encode(msg, "UTF-8")
+        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
+        return false
+      }
+
       val (logInput, sparkVersion) = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
@@ -764,7 +766,7 @@ private[spark] class Master(
         app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
         false
       case e: Exception =>
-        // Relay exception message to application UI page
+        // Replay exception message to application UI page
         val title = s"Application history load error (${app.id})"
         val exception = URLEncoder.encode(Utils.exceptionString(e), "UTF-8")
         var msg = s"Exception in replaying log for application $appName!"
