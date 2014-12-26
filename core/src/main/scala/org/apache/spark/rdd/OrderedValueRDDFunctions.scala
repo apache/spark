@@ -50,9 +50,10 @@ class OrderedValueRDDFunctions[K : ClassTag,
         partitioner.getPartition(key.asInstanceOf[Product2[Any, Any]]._1)
     }
 
-    val shuffled = new ShuffledRDD[Product2[K, V], Unit, Unit](self.map{ kv => (kv, ())}, keyPartitioner)
+    val shuffled = new ShuffledRDD[Product2[K, V], Unit, Unit](self.map{ kv => (kv, ())},
+      keyPartitioner)
       .setKeyOrdering(new KeyValueOrdering[K, V](None, Some(valueOrdering)))
-
+    
     new RDD[(K, Iterable[V])](shuffled) {
       def compute(split: Partition, context: TaskContext): Iterator[(K, Iterable[V])] = 
         new Iterator[(K, Iterable[V])] {

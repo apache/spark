@@ -418,7 +418,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * and uses the natural ordering for sorting the values.
    */
   def groupByKeyAndSortValues(numPartitions: Int): JavaPairRDD[K, JIterable[V]] = {
-    implicit val valueOrdering = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[V]]
+    implicit val valueOrdering = com.google.common.collect.Ordering.natural()
+      .asInstanceOf[Comparator[V]]
     fromRDD(groupByResultToJava(
       new OrderedValueRDDFunctions[K, V, (K, V)](rdd).groupByKeyAndSortValues(numPartitions)))
   }
