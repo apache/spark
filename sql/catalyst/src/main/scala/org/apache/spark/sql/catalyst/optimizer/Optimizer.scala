@@ -42,6 +42,7 @@ object DefaultOptimizer extends Optimizer {
       NullPropagation,
       ConstantFolding,
       LikeSimplification,
+      ConditionSimplification,
       BooleanSimplification,
       SimplifyFilters,
       SimplifyCasts,
@@ -302,7 +303,8 @@ object OptimizeIn extends Rule[LogicalPlan] {
 object ConditionSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsDown {
+    case q: LogicalPlan => q transformExpressionsUp {
+      /** 1. one And/Or with same condition. */
       // a && a => a
       case And(left, right) if left.fastEquals(right) =>
         left
@@ -311,75 +313,129 @@ object ConditionSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case Or(left, right) if left.fastEquals(right) =>
         left
 
+      /** 2. one And/Or with literal conditions that can be merged. */
       //  a < 2 && a > 2 => false, a > 3 && a > 5 => a > 5
       case and @ And(
-      e1 @ NumericLiteralBinaryComparison(n1, i1),
-      e2 @ NumericLiteralBinaryComparison(n2, i2)) if n1 == n2 =>
+      e1 @ NumLitBinComparison(n1, i1),
+      e2 @ NumLitBinComparison(n2, i2)) if n1 == n2 =>
         if (!i1.intersects(i2)) Literal(false)
         else if (i1.isSubsetOf(i2)) e1
         else if (i1.isSupersetOf(i2)) e2
+        else if (i1.intersect(i2).isPoint)
+          EqualTo(n1, Literal(i1.intersect(i2).asInstanceOf[Point[Double]].value, n1.dataType))
         else and
 
       //  a < 2 || a >= 2 => true, a > 3 || a > 5 => a > 3
       case or @ Or(
-      e1 @ NumericLiteralBinaryComparison(n1, i1),
-      e2 @ NumericLiteralBinaryComparison(n2, i2)) if n1 == n2 =>
-        if (i1.intersects(i2)) Literal(true)
+      e1 @ NumLitBinComparison(n1, i1),
+      e2 @ NumLitBinComparison(n2, i2)) if n1 == n2 =>
+        // a hack to avoid bug of spire
+        val op = Interval.all[Double] -- i1
+        if (i1.intersects(i2) && i1.union(i2) == Interval.all[Double]) Literal(true)
+        else if (op(op.size - 1) == i2) Literal(true)
         else if (i1.isSubsetOf(i2)) e2
         else if (i1.isSupersetOf(i2)) e1
         else or
 
-      // (a < 3 && b > 5) || a > 2 => b > 5 || a > 2
-      case Or(left1 @ And(left2, right2), right1) =>
-        And(Or(left2, right1), Or(right2, right1))
-
+      /** 3. Two And/Or with literal condition that can be merged, do a transformation to reuse 2. */
       // (a < 3 || b > 5) || a > 2 => true, (b > 5 || a < 3) || a > 2 => true
-      case Or( Or(
-      e1 @ NumericLiteralBinaryComparison(n1, i1), e2 @ NumericLiteralBinaryComparison(n2, i2)),
-      right @ NumericLiteralBinaryComparison(n3, i3)) =>
+      case or @ Or(
+      Or(e1 @ NumLitBinComparison(n1, i1), e2 @ NumLitBinComparison(n2, i2)),
+      right @ NumLitBinComparison(n3, i3)) =>
         if (n3 fastEquals n1) {
           Or(Or(e1, right), e2)
-        } else {
+        } else if (n3 fastEquals n2)  {
           Or(Or(e2, right), e1)
+        } else {
+          or
         }
 
       // (b > 5 && a < 2) && a > 3 => false, (a < 2 && b > 5) && a > 3 => false
-      case And(And(
-      e1 @ NumericLiteralBinaryComparison(n1, i1), e2 @ NumericLiteralBinaryComparison(n2, i2)),
-      right @ NumericLiteralBinaryComparison(n3, i3)) =>
+      case and @ And(
+      And(e1 @ NumLitBinComparison(n1, i1), e2 @ NumLitBinComparison(n2, i2)),
+      right @ NumLitBinComparison(n3, i3)) =>
         if (n3 fastEquals n1) {
           And(And(e1, right), e2)
-        } else {
+        } else if (n3 fastEquals n2) {
           And(And(e2, right), e1)
+        } else {
+          and
         }
 
       // (a < 2 || b > 5) && a > 3 => b > 5 && a > 3
-      case And(left1@Or(left2, right2), right1) =>
-        Or(And(left2, right1), And(right2, right1))
+      // using formula: a && (b || c) = (a && b) || (a && c)
+      case And(
+      left1 @ Or(left2 @ NumLitBinComparison(n1, i1), right2 @ NumLitBinComparison(n2, i2)),
+      right1 @ NumLitBinComparison(n3, i3))
+        if ((n3.fastEquals(n1) && i3 != i1) || (n3.fastEquals(n2) && i3 != i2)) =>
+          Or(And(left2, right1), And(right2, right1))
 
-      // (a && b && c && ...) || (a && b && d && ...) || (a && b && e && ...) ... =>
+      // (a < 3 && b > 5) || a > 2 => b > 5 || a > 2.
+      // using formula:	a || (b && c) = (a || b) && (a || c)
+      case Or(
+      left1 @ And(left2 @ NumLitBinComparison(n1, i1), right2 @ NumLitBinComparison(n2, i2)),
+      right1 @ NumLitBinComparison(n3, i3))
+        if ((n3.fastEquals(n1) && i3 != i1) || (n3.fastEquals(n2) && i3 != i2)) =>
+          Or(And(left2, right1), And(right2, right1))
+
+      /** 4. And/Or whose one child is literal condition, the other is Or/And */
+      // (a < 2 || b > 5) && a < 2 => a < 2
+      case And(
+      left1 @ Or(left2 @ NumLitBinComparison(_, _), right2 @ NumLitBinComparison(_, _)),
+      right1 @ NumLitBinComparison(_, _))
+        if (right1 fastEquals left2) || (right1 fastEquals right2) =>
+        right1
+
+      // (a < 3 && b > 5) || a < 3  => a < 3
+      case Or(
+      left1 @ And(left2 @ NumLitBinComparison(_, _), right2 @ NumLitBinComparison(_, _)),
+      right1 @ NumLitBinComparison(_, _))
+        if (right1 fastEquals left2) || (right1 fastEquals right2) =>
+        right1
+
+      // 5. (a && b && c && ...) || (a && b && d && ...) || (a && b && e && ...) ... =>
       // a && b && ((c && ...) || (d && ...) || (e && ...) || ...)
       case or @ Or(left, right) =>
         val lhsSet = splitConjunctivePredicates(left).toSet
         val rhsSet = splitConjunctivePredicates(right).toSet
         val common = lhsSet.intersect(rhsSet)
-        (lhsSet.diff(common).reduceOption(And) ++ rhsSet.diff(common).reduceOption(And))
-          .reduceOption(Or)
-          .map(_ :: common.toList)
-          .getOrElse(common.toList)
-          .reduce(And)
+        val ldiff = lhsSet.diff(common)
+        val rdiff = rhsSet.diff(common)
+        if (common.size == 0) {
+          or
+        }else if ( ldiff.size == 0 || rdiff == 0) {
+          common.reduce(And)
+        } else {
+          (ldiff.reduceOption(And) ++ rdiff.reduceOption(And))
+            .reduceOption(Or)
+            .map(_ :: common.toList)
+            .getOrElse(common.toList)
+            .reduce(And)
+        }
 
-      // (a || b || c || ...) && (a || b || d || ...) && (a || b || e || ...) ... =>
+      // 6. (a || b || c || ...) && (a || b || d || ...) && (a || b || e || ...) ... =>
       // (a || b) || ((c || ...) && (f || ...) && (e || ...) && ...)
       case and @ And(left, right) =>
         val lhsSet = splitDisjunctivePredicates(left).toSet
         val rhsSet = splitDisjunctivePredicates(right).toSet
         val common = lhsSet.intersect(rhsSet)
-        (lhsSet.diff(common).reduceOption(Or) ++ rhsSet.diff(common).reduceOption(Or))
-          .reduceOption(And)
-          .map(_ :: common.toList)
-          .getOrElse(common.toList)
-          .reduce(Or)
+        val ldiff = lhsSet.diff(common)
+        val rdiff = rhsSet.diff(common)
+
+        if (common.size == 0) {
+          and
+        }else if (ldiff.size == 0 || rdiff.size == 0) {
+          common.reduce(Or)
+        } else {
+          val x = (ldiff.reduceOption(Or) ++ rdiff.reduceOption(Or))
+            .reduceOption(And)
+            .map(_ :: common.toList)
+            .getOrElse(common.toList)
+            .reduce(Or)
+          x
+        }
+
+      case other => other
     }
   }
 
@@ -387,9 +443,9 @@ object ConditionSimplification extends Rule[LogicalPlan] with PredicateHelper {
     def toDouble = Cast(e, DoubleType).eval().asInstanceOf[Double]
   }
 
-  object NumericLiteralBinaryComparison {
+  object NumLitBinComparison {
     def unapply(e: Expression): Option[(NamedExpression, Interval[Double])] = e match {
-      case LessThan(n: NamedExpression, l @ Literal(_, _: NumericType)) => Some((n, Interval.below(l.toDouble)))
+      case LessThan(n: NamedExpression, l @ Literal(_, _: NumericType)) =>  Some((n, Interval.below(l.toDouble)))
       case LessThan(l @ Literal(_, _: NumericType), n: NamedExpression) => Some((n, Interval.atOrAbove(l.toDouble)))
 
       case GreaterThan(n: NamedExpression, l @ Literal(_, _: NumericType)) => Some((n, Interval.above(l.toDouble)))
@@ -402,6 +458,7 @@ object ConditionSimplification extends Rule[LogicalPlan] with PredicateHelper {
       case GreaterThanOrEqual(l @ Literal(_, _: NumericType), n: NamedExpression) => Some((n, Interval.below(l.toDouble)))
 
       case EqualTo(n: NamedExpression, l @ Literal(_, _: NumericType)) => Some((n, Interval.point(l.toDouble)))
+      case other => None
     }
   }
 }

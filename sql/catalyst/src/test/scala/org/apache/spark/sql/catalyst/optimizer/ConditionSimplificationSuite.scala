@@ -31,7 +31,7 @@ class ConditionSimplificationSuite extends PlanTest {
     val batches =
       Batch("AnalysisNodes", Once,
         EliminateAnalysisOperators) ::
-        Batch("Constant Folding", FixedPoint(10),
+        Batch("Constant Folding", FixedPoint(50),
           NullPropagation,
           ConstantFolding,
           ConditionSimplification,
@@ -55,11 +55,12 @@ class ConditionSimplificationSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  test("literal in front of attribute") {
-    checkCondition(Literal(1) < 'a || Literal(2) < 'a, 'a > 1)
+  test("literals in front of attribute") {
+    checkCondition(Literal(1) < 'a || Literal(2) < 'a, Literal(1) < 'a)
+    checkCondition(Literal(1) < 'a && Literal(2) < 'a, Literal(2) < 'a)
   }
 
-  test("combine the same condition") {
+  test("And/Or with the same conditions") {
     checkCondition('a < 1 || 'a < 1, 'a < 1)
     checkCondition('a < 1 || 'a < 1 || 'a < 1 || 'a < 1, 'a < 1)
     checkCondition('a > 2 && 'a > 2, 'a > 2)
@@ -69,7 +70,7 @@ class ConditionSimplificationSuite extends PlanTest {
 
   test("combine literal binary comparison") {
     checkCondition('a === 1 && 'a < 1)
-    checkCondition('a === 1 || 'a < 1, 'a <= 1)
+    checkCondition('a === 1 || 'a < 1, 'a === 1 || 'a < 1)
 
     checkCondition('a === 1 && 'a === 2)
     checkCondition('a === 1 || 'a === 2, 'a === 1 || 'a === 2)
@@ -82,6 +83,10 @@ class ConditionSimplificationSuite extends PlanTest {
 
     checkCondition('a > 3 && 'a > 2, 'a > 3)
     checkCondition('a > 3 || 'a > 2, 'a > 2)
+
+    checkCondition('a < 2 || 'a === 3 , 'a < 2 || 'a === 3)
+    checkCondition('a === 3 || 'a > 5, 'a === 3 || 'a > 5)
+    checkCondition('a < 2 || 'a > 5, 'a < 2 || 'a > 5)
 
     checkCondition('a >= 1 && 'a <= 1, 'a === 1)
 
@@ -103,11 +108,11 @@ class ConditionSimplificationSuite extends PlanTest {
     checkCondition('a < 1 || 'b > 2 || 'a >= 1)
     checkCondition('a < 1 && 'b > 2 && 'a >= 1)
 
-    checkCondition('a < 2 || 'b > 3 || 'b > 2, 'a < 2 || 'b > 2)
-    checkCondition('a < 2 && 'b > 3 && 'b > 2, 'a < 2 && 'b > 3)
+    checkCondition('a < 2 || 'b > 3 || 'b > 2,  'b > 2 || 'a < 2)
+    checkCondition('a < 2 && 'b > 3 && 'b > 2, 'b > 3 && 'a < 2)
 
-    checkCondition('a < 2 || ('b > 3 || 'b > 2), 'b > 2 || 'a < 2)
-    checkCondition('a < 2 && ('b > 3 && 'b > 2), 'b > 3 && 'a < 2)
+    checkCondition('a < 2 || ('b > 3 || 'b > 2), 'a < 2 || 'b > 2)
+    checkCondition('a < 2 && ('b > 3 && 'b > 2), 'a < 2 && 'b > 3)
 
     checkCondition('a < 2 || 'a === 3 || 'a > 5, 'a < 2 || 'a === 3 || 'a > 5)
   }
@@ -115,11 +120,7 @@ class ConditionSimplificationSuite extends PlanTest {
   test("combine predicate : 2 difference combine") {
     checkCondition(('a < 2 || 'a > 3) && 'a > 4, 'a > 4)
     checkCondition(('a < 2 || 'b > 3) && 'a < 2, 'a < 2)
-
-    checkCondition('a < 2 || ('a >= 2 && 'b > 1), 'b > 1 ||  'a < 2)
-    checkCondition('a < 2 || ('a === 2 && 'b > 1), 'a < 2 || ('a === 2 && 'b > 1))
-
-    checkCondition('a > 3 || ('a > 2 && 'a < 4), 'a > 2)
+    checkCondition(('a < 2 && 'b > 3) || 'a < 2, 'a < 2)
   }
 
   test("multi left, single right") {
@@ -127,24 +128,24 @@ class ConditionSimplificationSuite extends PlanTest {
   }
 
   test("multi left, multi right") {
-    checkCondition(('a < 2 || 'b > 3) && ('a < 2 || 'c > 5), 'a < 2 || ('b > 3 && 'c > 5))
+    checkCondition(('a < 2 || 'b > 3) && ('a < 2 || 'c > 5), ('b > 3 && 'c > 5) || 'a < 2)
 
     var input: Expression = ('a === 'b || 'b > 3) && ('a === 'b || 'a > 3) && ('a === 'b || 'a < 5)
-    var expected: Expression = 'a === 'b || ('b > 3 && 'a > 3 && 'a < 5)
+    var expected: Expression = ('a > 3 && 'a < 5 && 'b > 3) || 'a === 'b
     checkCondition(input, expected)
 
     input = ('a === 'b || 'b > 3) && ('a === 'b || 'a > 3) && ('a === 'b || 'a > 1)
-    expected = 'a === 'b || ('b > 3 && 'a > 3)
+    expected = ('a > 3 && 'b > 3) || 'a === 'b
     checkCondition(input, expected)
 
     input = ('a === 'b && 'b > 3 && 'c > 2) ||
       ('a === 'b && 'c < 1 && 'a === 5) ||
       ('a === 'b && 'b < 5 && 'a > 1)
 
-    expected = ('a === 'b) &&
+    expected =
       (((('b > 3) && ('c > 2)) ||
         (('c < 1) && ('a === 5))) ||
-        (('b < 5) && ('a > 1)))
+        (('b < 5) && ('a > 1))) && ('a === 'b)
     checkCondition(input, expected)
 
     input = ('a < 2 || 'b > 5 || 'a < 2 || 'b > 1) && ('a < 2 || 'b > 1)
@@ -152,7 +153,7 @@ class ConditionSimplificationSuite extends PlanTest {
     checkCondition(input, expected)
 
     input = ('a === 'b || 'b > 5) && ('a === 'b || 'c > 3) && ('a === 'b || 'b > 1)
-    expected = ('a === 'b) || ('c > 3 && 'b > 5)
+    expected = ('b > 5 && 'c > 3) ||  ('a === 'b)
     checkCondition(input, expected)
   }
 }
