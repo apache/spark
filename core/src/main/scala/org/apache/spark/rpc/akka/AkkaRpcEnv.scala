@@ -39,7 +39,11 @@ class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
       }
 
       override def receive: Receive = {
-        case DisassociatedEvent(_, remoteAddress, _) =>
+        case message @ DisassociatedEvent(_, remoteAddress, _) =>
+          val pf = endpoint.receive(new AkkaRpcEndpointRef(sender(), conf))
+          if (pf.isDefinedAt(message)) {
+            pf.apply(message)
+          }
           endpoint.remoteConnectionTerminated(remoteAddress.toString)
         case message: Any =>
           logInfo("Received RPC message: " + message)

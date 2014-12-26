@@ -17,7 +17,6 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.Logging
 import org.apache.spark.rpc.{RpcEnv, RpcEndpointRef, RpcEndpoint}
 import org.apache.spark.util.Utils
 
@@ -30,8 +29,7 @@ private[spark] case object TriggerThreadDump
  * Actor that runs inside of executors to enable driver -> executor RPC.
  */
 private[spark]
-class ExecutorActor(override val rpcEnv: RpcEnv, executorId: String)
-  extends RpcEndpoint with Logging {
+class ExecutorActor(override val rpcEnv: RpcEnv, executorId: String) extends RpcEndpoint {
 
   override def receive(sender: RpcEndpointRef) = {
     case TriggerThreadDump =>

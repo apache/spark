@@ -84,9 +84,9 @@ private[spark] class CoarseGrainedExecutorBackend(
 
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
-      executor.stop()
-      //rpcEnv.stop(this)
       // TODO(rxin): Stop this properly.
+      stop()
+      rpcEnv.stopAll()
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
