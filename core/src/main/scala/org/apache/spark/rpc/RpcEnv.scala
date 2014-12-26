@@ -19,8 +19,6 @@ package org.apache.spark.rpc
 
 import java.util.concurrent.ConcurrentHashMap
 
-import org.slf4j.Logger
-
 /**
  * An RPC environment.
  */
@@ -78,10 +76,6 @@ trait RpcEndpoint {
   def remoteConnectionTerminated(remoteAddress: String): Unit = {
     // By default, do nothing.
   }
-
-  protected def log: Logger
-
-  private[rpc] def logMessage = log
 
   final def stop(): Unit = {
     rpcEnv.stop(self)

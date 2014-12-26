@@ -17,7 +17,6 @@
 
 package org.apache.spark.rpc
 
-import org.apache.spark.Logging
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
@@ -40,7 +39,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
 
   test("send a message locally") {
     @volatile var message: String = null
-    val rpcEndpointRef = env.setupEndpoint("send_test", new RpcEndpoint with Logging {
+    val rpcEndpointRef = env.setupEndpoint("send_test", new RpcEndpoint {
       override val rpcEnv = env
 
       override def receive(sender: RpcEndpointRef) = {
@@ -53,7 +52,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("ask a message locally") {
-    val rpcEndpointRef = env.setupEndpoint("ask_test", new RpcEndpoint with Logging {
+    val rpcEndpointRef = env.setupEndpoint("ask_test", new RpcEndpoint {
       override val rpcEnv = env
 
       override def receive(sender: RpcEndpointRef) = {
@@ -71,7 +70,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
 
     case class Pong(id: Int)
 
-    val pongRef = env.setupEndpoint("pong", new RpcEndpoint with Logging {
+    val pongRef = env.setupEndpoint("pong", new RpcEndpoint {
       override val rpcEnv = env
 
       override def receive(sender: RpcEndpointRef) = {
@@ -79,7 +78,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
     })
 
-    val pingRef = env.setupEndpoint("ping", new RpcEndpoint with Logging {
+    val pingRef = env.setupEndpoint("ping", new RpcEndpoint {
       override val rpcEnv = env
 
       var requester: RpcEndpointRef = _
@@ -104,7 +103,7 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("register and unregister") {
-    val endpoint = new RpcEndpoint with Logging {
+    val endpoint = new RpcEndpoint {
       override val rpcEnv = env
 
       override def receive(sender: RpcEndpointRef) = {

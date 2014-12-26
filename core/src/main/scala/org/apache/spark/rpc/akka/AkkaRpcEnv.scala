@@ -31,7 +31,7 @@ import org.apache.spark.util.AkkaUtils
 class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
 
   override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
-    val actorRef = actorSystem.actorOf(Props(new Actor {
+    val actorRef = actorSystem.actorOf(Props(new Actor with Logging {
       override def preStart(): Unit = {
         // Listen for remote client disconnection events, since they don't go through Akka's watch()
         context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
@@ -42,7 +42,7 @@ class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
           endpoint.remoteConnectionTerminated(remoteAddress.toString)
 
         case message: Any =>
-          endpoint.logMessage.trace("Received RPC message: " + message)
+          logTrace("Received RPC message: " + message)
           val pf = endpoint.receive(new AkkaRpcEndpointRef(sender(), conf))
           if (pf.isDefinedAt(message)) {
             pf.apply(message)
