@@ -22,7 +22,6 @@ from threading import Lock
 from tempfile import NamedTemporaryFile
 import atexit
 
-from pyspark import accumulators
 from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast
 from pyspark.conf import SparkConf
