@@ -62,7 +62,7 @@ public class JavaIsotonicRegressionSuite implements Serializable {
         new double[] {1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12})).cache();
 
     IsotonicRegressionAlgorithm isotonicRegressionAlgorithm = new PoolAdjacentViolators();
-    IsotonicRegressionModel model = isotonicRegressionAlgorithm.run(testRDD.rdd(), MonotonicityConstraint.Isotonic());
+    IsotonicRegressionModel model = isotonicRegressionAlgorithm.run(testRDD.rdd(), true);
 
     List<WeightedLabeledPoint> expected = IsotonicDataGenerator
       .generateIsotonicInputAsList(
@@ -77,7 +77,7 @@ public class JavaIsotonicRegressionSuite implements Serializable {
       .generateIsotonicInputAsList(
         new double[] {1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12})).cache();
 
-    IsotonicRegressionModel model = IsotonicRegression.train(testRDD.rdd(), MonotonicityConstraint.Isotonic());
+    IsotonicRegressionModel model = IsotonicRegression.train(testRDD.rdd(), true);
 
     List<WeightedLabeledPoint> expected = IsotonicDataGenerator
       .generateIsotonicInputAsList(
@@ -92,7 +92,7 @@ public class JavaIsotonicRegressionSuite implements Serializable {
       .generateIsotonicInputAsList(
         new double[] {1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12})).cache();
 
-    IsotonicRegressionModel model = IsotonicRegression.train(testRDD.rdd(), MonotonicityConstraint.Isotonic());
+    IsotonicRegressionModel model = IsotonicRegression.train(testRDD.rdd(), true);
 
     JavaRDD<Vector> vectors = testRDD.map(new Function<WeightedLabeledPoint, Vector>() {
       @Override

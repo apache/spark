@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.regression.MonotonicityConstraint.MonotonicityConstraint.{Antitonic, Isotonic}
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.scalatest.{Matchers, FunSuite}
 import WeightedLabeledPointConversions._
@@ -37,7 +36,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(generateIsotonicInput(1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12, 14, 15, 17, 16, 17, 18, 19, 20)).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predictions should be(generateIsotonicInput(1, 2, 7d/3, 7d/3, 7d/3, 6, 7, 8, 10, 10, 10, 12, 14, 15, 16.5, 16.5, 17, 18, 19, 20))
   }
@@ -46,7 +45,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(List[WeightedLabeledPoint]()).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predictions should be(List())
   }
@@ -55,7 +54,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(generateIsotonicInput(1)).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predictions should be(generateIsotonicInput(1))
   }
@@ -64,7 +63,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(generateIsotonicInput(1, 2, 3, 4, 5)).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predictions should be(generateIsotonicInput(1, 2, 3, 4, 5))
   }
@@ -73,7 +72,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(generateIsotonicInput(5, 4, 3, 2, 1)).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predictions should be(generateIsotonicInput(3, 3, 3, 3, 3))
   }
@@ -82,7 +81,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(generateIsotonicInput(1, 2, 3, 4, 2)).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predictions should be(generateIsotonicInput(1, 2, 3, 3, 3))
   }
@@ -91,7 +90,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(generateIsotonicInput(4, 2, 3, 4, 5)).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predictions should be(generateIsotonicInput(3, 3, 3, 4, 5))
   }
@@ -100,7 +99,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(generateIsotonicInput(-1, -2, 0, 1, -1)).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predictions should be(generateIsotonicInput(-1.5, -1.5, 0, 0, 0))
   }
@@ -109,7 +108,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(generateIsotonicInput(1, 2, 3, 4, 5).reverse).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predictions should be(generateIsotonicInput(1, 2, 3, 4, 5))
   }
@@ -118,7 +117,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(generateWeightedIsotonicInput(Seq(1, 2, 3, 4, 2), Seq(1, 1, 1, 1, 2))).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predictions should be(generateWeightedIsotonicInput(Seq(1, 2, 2.75, 2.75,2.75), Seq(1, 1, 1, 1, 2)))
   }
@@ -127,7 +126,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(generateWeightedIsotonicInput(Seq(1, 2, 3, 2, 1), Seq(1, 1, 1, 0.1, 0.1))).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predictions.map(p => p.copy(label = round(p.label))) should be
       (generateWeightedIsotonicInput(Seq(1, 2, 3.3/1.2, 3.3/1.2, 3.3/1.2), Seq(1, 1, 1, 0.1, 0.1)))
@@ -137,7 +136,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(generateWeightedIsotonicInput(Seq(1, 2, 3, 2, 1), Seq(-1, 1, -3, 1, -5))).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predictions.map(p => p.copy(label = round(p.label))) should be
       (generateWeightedIsotonicInput(Seq(1, 10/6, 10/6, 10/6, 10/6), Seq(-1, 1, -3, 1, -5)))
@@ -147,7 +146,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(generateWeightedIsotonicInput(Seq(1, 2, 3, 2, 1), Seq(0, 0, 0, 1, 0))).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predictions should be(generateWeightedIsotonicInput(Seq(1, 2, 2, 2, 2), Seq(0, 0, 0, 1, 0)))
   }
@@ -156,7 +155,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(generateIsotonicInput(1, 2, 7, 1, 2)).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predict(Vectors.dense(0)) should be(1)
     model.predict(Vectors.dense(2)) should be(2)
@@ -168,7 +167,7 @@ class IsotonicRegressionSuite
     val testRDD = sc.parallelize(generateIsotonicInput(7, 5, 3, 5, 1)).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Antitonic)
+    val model = alg.run(testRDD, false)
 
     model.predict(Vectors.dense(0)) should be(7)
     model.predict(Vectors.dense(2)) should be(5)
@@ -183,7 +182,7 @@ class IsotonicRegressionSuite
         LabeledPoint(1, Vectors.dense(2)))).cache()
 
     val alg = new PoolAdjacentViolators
-    val model = alg.run(testRDD, Isotonic)
+    val model = alg.run(testRDD, true)
 
     model.predictions should be(generateIsotonicInput(1.5, 1.5))
   }
@@ -201,7 +200,7 @@ class IsotonicRegressionClusterSuite extends FunSuite with LocalClusterSparkCont
 
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val model = IsotonicRegression.train(points, Isotonic)
+    val model = IsotonicRegression.train(points, true)
     val predictions = model.predict(points.map(_.features))
   }
 }
