@@ -17,8 +17,15 @@
 
 package org.apache.spark.rpc
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.concurrent.Eventually._
+
+/**
+ * Common tests for an RpcEnv implementation.
+ */
 abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
 
   var env: RpcEnv = _
@@ -111,12 +118,43 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
       }
     }
     val rpcEndpointRef = env.setupEndpoint("register_test", endpoint)
-    assert(rpcEndpointRef eq env.endpointRef(endpoint))
+
+    eventually(timeout(5 seconds), interval(200 milliseconds)) {
+      assert(rpcEndpointRef eq env.endpointRef(endpoint))
+    }
     endpoint.stop()
 
     val e = intercept[IllegalArgumentException] {
       env.endpointRef(endpoint)
     }
     assert(e.getMessage.contains("Cannot find RpcEndpointRef"))
+  }
+
+  test("fault tolerance") {
+    case class SetState(state: Int)
+
+    case object Crash
+
+    case object GetState
+
+    val rpcEndpointRef = env.setupEndpoint("fault_tolerance", new RpcEndpoint {
+      override val rpcEnv = env
+
+      var state: Int = 0
+
+      override def receive(sender: RpcEndpointRef) = {
+        case SetState(state) => this.state = state
+        case Crash => throw new RuntimeException("Oops")
+        case GetState => sender.send(state)
+      }
+    })
+    assert(0 === rpcEndpointRef.askWithReply[Int](GetState))
+
+    rpcEndpointRef.send(SetState(10))
+    assert(10 === rpcEndpointRef.askWithReply[Int](GetState))
+
+    rpcEndpointRef.send(Crash)
+    // RpcEndpoint is crashed. Should reset its state.
+    assert(0 === rpcEndpointRef.askWithReply[Int](GetState))
   }
 }

@@ -53,7 +53,7 @@ trait RpcEnv {
     endpointRef
   }
 
-  def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef
+  def setupEndpoint(name: String, endpointCreator: => RpcEndpoint): RpcEndpointRef
 
   def setupDriverEndpointRef(name: String): RpcEndpointRef
 

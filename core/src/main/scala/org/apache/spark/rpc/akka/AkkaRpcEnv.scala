@@ -17,6 +17,8 @@
 
 package org.apache.spark.rpc.akka
 
+import java.util.concurrent.CountDownLatch
+
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
@@ -30,32 +32,42 @@ import org.apache.spark.util.AkkaUtils
 
 class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
 
-  override def setupEndpoint(name: String, endpoint: RpcEndpoint): RpcEndpointRef = {
-    val actorRef = actorSystem.actorOf(Props(new Actor with Logging {
+  override def setupEndpoint(name: String, endpointCreator: => RpcEndpoint): RpcEndpointRef = {
+    val latch = new CountDownLatch(1)
+    try {
+      @volatile var endpointRef: AkkaRpcEndpointRef = null
+      val actorRef = actorSystem.actorOf(Props(new Actor with Logging {
 
-      override def preStart(): Unit = {
-        // Listen for remote client disconnection events, since they don't go through Akka's watch()
-        context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-      }
+        val endpoint = endpointCreator
+        latch.await()
+        require(endpointRef != null)
+        registerEndpoint(endpoint, endpointRef)
 
-      override def receive: Receive = {
-        case message @ DisassociatedEvent(_, remoteAddress, _) =>
-          val pf = endpoint.receive(new AkkaRpcEndpointRef(sender(), conf))
-          if (pf.isDefinedAt(message)) {
-            pf.apply(message)
-          }
-          endpoint.remoteConnectionTerminated(remoteAddress.toString)
-        case message: Any =>
-          logInfo("Received RPC message: " + message)
-          val pf = endpoint.receive(new AkkaRpcEndpointRef(sender(), conf))
-          if (pf.isDefinedAt(message)) {
-            pf.apply(message)
-          }
-      }
-    }), name = name)
-    val endpointRef = new AkkaRpcEndpointRef(actorRef, conf)
-    registerEndpoint(endpoint, endpointRef)
-    endpointRef
+        override def preStart(): Unit = {
+          // Listen for remote client disconnection events, since they don't go through Akka's watch()
+          context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+        }
+
+        override def receive: Receive = {
+          case message @ DisassociatedEvent(_, remoteAddress, _) =>
+            val pf = endpoint.receive(new AkkaRpcEndpointRef(sender(), conf))
+            if (pf.isDefinedAt(message)) {
+              pf.apply(message)
+            }
+            endpoint.remoteConnectionTerminated(remoteAddress.toString)
+          case message: Any =>
+            logInfo("Received RPC message: " + message)
+            val pf = endpoint.receive(new AkkaRpcEndpointRef(sender(), conf))
+            if (pf.isDefinedAt(message)) {
+              pf.apply(message)
+            }
+        }
+      }), name = name)
+      endpointRef = new AkkaRpcEndpointRef(actorRef, conf)
+      endpointRef
+    } finally {
+      latch.countDown()
+    }
   }
 
   override def setupDriverEndpointRef(name: String): RpcEndpointRef = {

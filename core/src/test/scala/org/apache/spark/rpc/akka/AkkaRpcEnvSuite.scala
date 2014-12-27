@@ -33,6 +33,7 @@ class AkkaRpcEnvSuite extends RpcEnvSuite {
   }
 
   override def destroyRpcEnv(rpcEnv: RpcEnv): Unit = {
+    rpcEnv.stopAll()
     if (akkaSystem != null) {
       akkaSystem.shutdown()
     }
