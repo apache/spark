@@ -39,7 +39,7 @@ You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
 
 **Note:**
 * *For Java 8 and above this step is not required.*
-* *If using `build/mvn` and `MAVEN_OPTS` were not already set, the script will automate with for you.*
+* *If using `build/mvn` and `MAVEN_OPTS` were not already set, the script will automate this for you.*
 
 # Specifying the Hadoop Version
 
