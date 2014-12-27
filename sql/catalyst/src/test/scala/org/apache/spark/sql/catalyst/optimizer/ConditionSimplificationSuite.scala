@@ -68,7 +68,7 @@ class ConditionSimplificationSuite extends PlanTest {
     checkCondition(('a < 1 && 'a < 2) || ('a < 1 && 'a < 2), 'a < 1)
   }
 
-  test("combine literal binary comparison") {
+  test("one And/Or with literal conditions") {
     checkCondition('a === 1 && 'a < 1)
     checkCondition('a === 1 || 'a < 1, 'a === 1 || 'a < 1)
 
@@ -104,7 +104,7 @@ class ConditionSimplificationSuite extends PlanTest {
     checkCondition('a > "9" || 'a < "0", 'a > 9.0 || 'a < 0.0)
   }
 
-  test("combine predicate : 2 same combine") {
+  test("two same And/Or with literal conditions") {
     checkCondition('a < 1 || 'b > 2 || 'a >= 1)
     checkCondition('a < 1 && 'b > 2 && 'a >= 1)
 
@@ -117,17 +117,19 @@ class ConditionSimplificationSuite extends PlanTest {
     checkCondition('a < 2 || 'a === 3 || 'a > 5, 'a < 2 || 'a === 3 || 'a > 5)
   }
 
-  test("combine predicate : 2 difference combine") {
+  test("two different And/Or with literal conditions") {
     checkCondition(('a < 2 || 'a > 3) && 'a > 4, 'a > 4)
     checkCondition(('a < 2 || 'b > 3) && 'a < 2, 'a < 2)
     checkCondition(('a < 2 && 'b > 3) || 'a < 2, 'a < 2)
   }
 
-  test("multi left, single right") {
+  test("more than two And/Or: one child is literal condition") {
     checkCondition(('a < 2 || 'a > 3 || 'b > 5) && 'a < 2, 'a < 2)
+    checkCondition(('a < 2 && 'a > 3 && 'b > 5) && 'a < 2)
+    checkCondition(('a < 2 && 'a > 3 && 'b > 5) || 'a < 2,  'a < 2)
   }
 
-  test("multi left, multi right") {
+  test("more than two And/Or") {
     checkCondition(('a < 2 || 'b > 3) && ('a < 2 || 'c > 5), ('b > 3 && 'c > 5) || 'a < 2)
 
     var input: Expression = ('a === 'b || 'b > 3) && ('a === 'b || 'a > 3) && ('a === 'b || 'a < 5)
