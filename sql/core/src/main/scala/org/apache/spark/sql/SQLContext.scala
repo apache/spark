@@ -269,6 +269,45 @@ class SQLContext(@transient val sparkContext: SparkContext)
         path, ScalaReflection.attributesFor[A], allowExisting, conf, this))
   }
 
+
+  /**
+   * :: Experimental ::
+   * Creates an empty parquet file with the provided schema. The parquet file thus created
+   * can be registered as a table, which can then be used as the target of future
+   * `insertInto` operations.
+   *
+   * {{{
+   *   val sqlContext = new SQLContext(...)
+   *   import sqlContext._
+   *
+   *   val schema = 
+   *     StructType(List(StructField("name", StringType),
+   *                     StructField("age", IntegerType)))
+   *   createParquetFile(schema, "path/to/file.parquet").registerTempTable("people")
+   *   sql("INSERT INTO people SELECT 'michael', 29")
+   * }}}
+   *
+   * @param schema StructType describing the records to be stored in the Parquet file.
+   * @param path The path where the directory containing parquet metadata should be created.
+   *             Data inserted into this table will also be stored at this location.
+   * @param allowExisting When false, an exception will be thrown if this directory already exists.
+   * @param conf A Hadoop configuration object that can be used to specify options to the parquet
+   *             output format.
+   *
+   * @group userf
+   */
+  @Experimental
+  def createParquetFile(
+      schema: StructType,
+      path: String,
+      allowExisting: Boolean = true,
+      conf: Configuration = new Configuration()): SchemaRDD = {
+    new SchemaRDD(
+      this,
+      ParquetRelation.createEmpty(
+        path, schema.toAttributes, allowExisting, conf, this))
+  }
+
   /**
    * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
    * during the lifetime of this instance of SQLContext.
