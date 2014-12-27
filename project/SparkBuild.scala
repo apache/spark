@@ -114,10 +114,12 @@ object SparkBuild extends PomBuild {
 
   override val userPropertiesMap = System.getProperties.toMap
 
+  // Handle case where hadoop.version is set via profile.
+  // Needed only because we read back this property in sbt
+  // when we create the assembly jar.
   val pom = loadEffectivePom(new File("pom.xml"),
     profiles = profiles,
     userProps = userPropertiesMap)
-
   if (System.getProperty("hadoop.version") == null) {
     System.setProperty("hadoop.version",
       pom.getProperties.get("hadoop.version").asInstanceOf[String])
