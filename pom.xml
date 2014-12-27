@@ -149,6 +149,7 @@
     <scala.binary.version>2.10</scala.binary.version>
     <jline.version>${scala.version}</jline.version>
     <jline.groupid>org.scala-lang</jline.groupid>
+    <jackson.version>1.8.8</jackson.version>
   </properties>
 
   <repositories>
@@ -819,10 +820,15 @@
         </exclusions>
       </dependency>
       <dependency>
-        <!-- Matches the version of jackson-core-asl pulled in by avro -->
+        <!-- Matches the versions of jackson-mapper-asl and jackson-core-asl with avro -->
         <groupId>org.codehaus.jackson</groupId>
         <artifactId>jackson-mapper-asl</artifactId>
-        <version>1.8.8</version>
+        <version>${jackson.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.codehaus.jackson</groupId>
+        <artifactId>jackson-mapper-asl</artifactId>
+        <version>${jackson.version}</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
