@@ -29,7 +29,7 @@ from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
-    PairDeserializer, AutoBatchedSerializer, NoOpSerializer, LargeObjectSerializer
+    PairDeserializer, AutoBatchedSerializer, NoOpSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 from pyspark.traceback_utils import CallSite, first_spark_call
@@ -407,7 +407,7 @@ class SparkContext(object):
 
     def binaryFiles(self, path, minPartitions=None):
         """
-        :: Experimental ::
+        .. note:: Experimental
 
         Read a directory of binary files from HDFS, a local file system
         (available on all nodes), or any Hadoop-supported file system URI
@@ -424,7 +424,7 @@ class SparkContext(object):
 
     def binaryRecords(self, path, recordLength):
         """
-        :: Experimental ::
+        .. note:: Experimental
 
         Load data from a flat binary file, assuming each record is a set of numbers
         with the specified numerical format (see ByteBuffer), and the number of
@@ -624,15 +624,7 @@ class SparkContext(object):
         object for reading it in distributed functions. The variable will
         be sent to each cluster only once.
         """
-        ser = LargeObjectSerializer()
-
-        # pass large object by py4j is very slow and need much memory
-        tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
-        ser.dump_stream([value], tempFile)
-        tempFile.close()
-        jbroadcast = self._jvm.PythonRDD.readBroadcastFromFile(self._jsc, tempFile.name)
-        return Broadcast(jbroadcast.id(), None, jbroadcast,
-                         self._pickled_broadcast_vars, tempFile.name)
+        return Broadcast(self, value, self._pickled_broadcast_vars)
 
     def accumulator(self, value, accum_param=None):
         """

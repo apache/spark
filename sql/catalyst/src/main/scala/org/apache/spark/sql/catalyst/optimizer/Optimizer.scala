@@ -203,8 +203,6 @@ object NullPropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case e @ Count(Literal(null, _)) => Cast(Literal(0L), e.dataType)
-      case e @ Sum(Literal(c, _)) if c == 0 => Cast(Literal(0L), e.dataType)
-      case e @ Average(Literal(c, _)) if c == 0 => Literal(0.0, e.dataType)
       case e @ IsNull(c) if !c.nullable => Literal(false, BooleanType)
       case e @ IsNotNull(c) if !c.nullable => Literal(true, BooleanType)
       case e @ GetItem(Literal(null, _), _) => Literal(null, e.dataType)
@@ -212,6 +210,7 @@ object NullPropagation extends Rule[LogicalPlan] {
       case e @ GetField(Literal(null, _), _) => Literal(null, e.dataType)
       case e @ EqualNullSafe(Literal(null, _), r) => IsNull(r)
       case e @ EqualNullSafe(l, Literal(null, _)) => IsNull(l)
+      case e @ Count(expr) if !expr.nullable => Count(Literal(1))
 
       // For Coalesce, remove null literals.
       case e @ Coalesce(children) =>

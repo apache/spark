@@ -23,6 +23,8 @@
 # Enter posix mode for bash
 set -o posix
 
+# NOTE: This exact class name is matched downstream by SparkSubmit.
+# Any changes need to be reflected there.
 CLASS="org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
 
 # Figure out where Spark is installed

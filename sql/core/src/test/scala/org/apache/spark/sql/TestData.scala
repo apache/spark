@@ -32,6 +32,10 @@ object TestData {
     (1 to 100).map(i => TestData(i, i.toString))).toSchemaRDD
   testData.registerTempTable("testData")
 
+  val negativeData = TestSQLContext.sparkContext.parallelize(
+    (1 to 100).map(i => TestData(-i, (-i).toString))).toSchemaRDD
+  negativeData.registerTempTable("negativeData")
+
   case class LargeAndSmallInts(a: Int, b: Int)
   val largeAndSmallInts =
     TestSQLContext.sparkContext.parallelize(

@@ -22,7 +22,6 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.FunSuite
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
 import org.apache.spark.io.CompressionCodec
 
 class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {

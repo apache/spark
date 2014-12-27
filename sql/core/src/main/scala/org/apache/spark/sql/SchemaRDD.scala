@@ -18,7 +18,7 @@
 package org.apache.spark.sql
 
 import java.util.{Map => JMap, List => JList}
-import java.io.StringWriter
+
 
 import scala.collection.JavaConversions._
 
@@ -216,6 +216,19 @@ class SchemaRDD(
   def orderBy(sortExprs: SortOrder*): SchemaRDD =
     new SchemaRDD(sqlContext, Sort(sortExprs, logicalPlan))
 
+  /**
+   * Sorts the results by the given expressions within partition.
+   * {{{
+   *   schemaRDD.sortBy('a)
+   *   schemaRDD.sortBy('a, 'b)
+   *   schemaRDD.sortBy('a.asc, 'b.desc)
+   * }}}
+   *
+   * @group Query
+   */
+  def sortBy(sortExprs: SortOrder*): SchemaRDD =
+    new SchemaRDD(sqlContext, SortPartitions(sortExprs, logicalPlan))
+
   @deprecated("use limit with integer argument", "1.1.0")
   def limit(limitExpr: Expression): SchemaRDD =
     new SchemaRDD(sqlContext, Limit(limitExpr, logicalPlan))
@@ -225,6 +238,8 @@ class SchemaRDD(
    * {{{
    *   schemaRDD.limit(10)
    * }}}
+   * 
+   * @group Query
    */
   def limit(limitNum: Int): SchemaRDD =
     new SchemaRDD(sqlContext, Limit(Literal(limitNum), logicalPlan))
@@ -355,6 +370,8 @@ class SchemaRDD(
    * Return the number of elements in the RDD. Unlike the base RDD implementation of count, this
    * implementation leverages the query optimizer to compute the count on the SchemaRDD, which
    * supports features such as filter pushdown.
+   * 
+   * @group Query
    */
   @Experimental
   override def count(): Long = aggregate(Count(Literal(1))).collect().head.getLong(0)
@@ -416,6 +433,21 @@ class SchemaRDD(
     val fieldTypes = schema.fields.map(_.dataType)
     val pickle = new Pickler
     new java.util.ArrayList(collect().map { row =>
+      EvaluatePython.rowToArray(row, fieldTypes)
+    }.grouped(100).map(batched => pickle.dumps(batched.toArray)).toIterable)
+  }
+
+  /**
+   * Serializes the Array[Row] returned by SchemaRDD's takeSample(), using the same
+   * format as javaToPython and collectToPython. It is used by pyspark.
+   */
+  private[sql] def takeSampleToPython(
+      withReplacement: Boolean,
+      num: Int,
+      seed: Long): JList[Array[Byte]] = {
+    val fieldTypes = schema.fields.map(_.dataType)
+    val pickle = new Pickler
+    new java.util.ArrayList(this.takeSample(withReplacement, num, seed).map { row =>
       EvaluatePython.rowToArray(row, fieldTypes)
     }.grouped(100).map(batched => pickle.dumps(batched.toArray)).toIterable)
   }
@@ -497,7 +529,7 @@ class SchemaRDD(
   }
 
   override def unpersist(blocking: Boolean): this.type = {
-    sqlContext.uncacheQuery(this, blocking)
+    sqlContext.tryUncacheQuery(this, blocking)
     this
   }
 }
