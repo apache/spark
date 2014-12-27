@@ -6,4 +6,4 @@ _DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 echo "WARNING: The sbt/sbt script has been deprecated in place of build/sbt." >&2
 echo "         Please change all references to point to the new location." >&2
 
-${_DIR}/../build/sbt $@
+${_DIR}/../build/sbt "$@"

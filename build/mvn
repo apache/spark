@@ -2,6 +2,8 @@
 
 # Determine the current working directory
 _DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Preserve the calling directory
+_CALLING_DIR="$(pwd)"
 
 # Installs any application tarball given a URL, the expected tarball name,
 # and, optionally, a checkable binary path to determine if the binary has
@@ -112,7 +114,7 @@ install_zinc
 install_scala
 
 # Reset the current working directory
-cd "${_DIR}/.."
+cd "${_CALLING_DIR}"
 
 # Now that zinc is ensured to be installed, check its status and, if its
 # not running or just installed, start it

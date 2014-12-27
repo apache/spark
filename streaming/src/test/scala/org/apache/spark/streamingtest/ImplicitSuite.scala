@@ -15,18 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy
+package org.apache.spark.streamingtest
 
-private[spark] class ApplicationDescription(
-    val name: String,
-    val maxCores: Option[Int],
-    val memoryPerSlave: Int,
-    val command: Command,
-    var appUiUrl: String,
-    val eventLogDir: Option[String] = None)
-  extends Serializable {
+/**
+ * A test suite to make sure all `implicit` functions work correctly.
+ *
+ * As `implicit` is a compiler feature, we don't need to run this class.
+ * What we need to do is making the compiler happy.
+ */
+class ImplicitSuite {
 
-  val user = System.getProperty("user.name", "<unknown>")
+  // We only want to test if `implict` works well with the compiler, so we don't need a real DStream.
+  def mockDStream[T]: org.apache.spark.streaming.dstream.DStream[T] = null
 
-  override def toString: String = "ApplicationDescription(" + name + ")"
+  def testToPairDStreamFunctions(): Unit = {
+    val dstream: org.apache.spark.streaming.dstream.DStream[(Int, Int)] = mockDStream
+    dstream.groupByKey()
+  }
 }
