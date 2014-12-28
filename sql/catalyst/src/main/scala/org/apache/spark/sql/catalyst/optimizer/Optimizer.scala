@@ -18,7 +18,6 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.collection.immutable.HashSet
-
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.FullOuter
@@ -313,19 +312,20 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           // a && a => a
           case (l, r) if l fastEquals r => l
           case (_, _) =>
-            // (a && b && c && ...) || (a && b && d && ...) || (a && b && e && ...) ... =>
-            // a && b && ((c && ...) || (d && ...) || (e && ...) || ...)
             val lhsSet = splitDisjunctivePredicates(left).toSet
             val rhsSet = splitDisjunctivePredicates(right).toSet
             val common = lhsSet.intersect(rhsSet)
             val ldiff = lhsSet.diff(common)
             val rdiff = rhsSet.diff(common)
-
             if (common.size == 0) {
+              // a && b
               and
             }else if (ldiff.size == 0 || rdiff.size == 0) {
+              // a && (a || b)
               common.reduce(Or)
             } else {
+              // (a || b || c || ...) && (a || b || d || ...) && (a || b || e || ...) ... =>
+              // (a || b) || ((c || ...) && (f || ...) && (e || ...) && ...)
               (ldiff.reduceOption(Or) ++ rdiff.reduceOption(Or))
                 .reduceOption(And)
                 .map(_ :: common.toList)
@@ -343,18 +343,20 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           // a || a => a
           case (l, r) if l fastEquals r => l
           case (_, _) =>
-            // (a || b || c || ...) && (a || b || d || ...) && (a || b || e || ...) ... =>
-            // (a || b) || ((c || ...) && (f || ...) && (e || ...) && ...)
             val lhsSet = splitConjunctivePredicates(left).toSet
             val rhsSet = splitConjunctivePredicates(right).toSet
             val common = lhsSet.intersect(rhsSet)
             val ldiff = lhsSet.diff(common)
             val rdiff = rhsSet.diff(common)
             if (common.size == 0) {
+              // a || b
               or
             }else if ( ldiff.size == 0 || rdiff.size == 0) {
+              // a || (b && a)
               common.reduce(And)
             } else {
+              // (a && b && c && ...) || (a && b && d && ...) || (a && b && e && ...) ... =>
+              // a && b && ((c && ...) || (d && ...) || (e && ...) || ...)
               (ldiff.reduceOption(And) ++ rdiff.reduceOption(And))
                 .reduceOption(Or)
                 .map(_ :: common.toList)
