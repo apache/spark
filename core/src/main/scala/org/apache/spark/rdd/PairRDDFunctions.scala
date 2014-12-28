@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.{Date, HashMap => JHashMap}
 
+import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.mapred.lib.MultipleTextOutputFormat
 
 import scala.collection.{Map, mutable}
@@ -873,12 +874,15 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * /path/prefix/F [/part-1, /part-2, etc]
    * /path/prefix/N [/part-1, /part-2, etc]
    */
-  def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
-    val paths = this.keys.map("path/" + "key_" + _.toString)
-    
-    saveAsHadoopFile(path, keyClass, valueClass, fm.runtimeClass.asInstanceOf[Class[F]])
+  def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String, numPartitions : Int)
+                                                    (implicit fm: ClassTag[F]) {
+    partitionBy(new HashPartitioner(numPartitions)).
+      saveAsHadoopFileByKey(path)
   }
 
+  def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
+    saveAsHadoopFile(path, keyClass, valueClass, classOf[RDDMultipleTextOutputFormat])
+  }
   /**
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD. Compress the result with the

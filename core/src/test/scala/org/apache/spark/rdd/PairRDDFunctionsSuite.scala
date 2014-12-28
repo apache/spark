@@ -17,23 +17,30 @@
 
 package org.apache.spark.rdd
 
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.mapred._
-import org.apache.hadoop.util.Progressable
-
 import scala.collection.mutable.{ArrayBuffer, HashSet}
+import scala.sys.process._
 import scala.util.Random
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.mapred._
 import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter => NewOutputCommitter,
 OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
 TaskAttemptContext => NewTaskAttempContext}
 import org.apache.spark.{Partitioner, SharedSparkContext}
 import org.apache.spark.util.Utils
+import org.apache.hadoop.util.Progressable
 
 import org.scalatest.FunSuite
 
 class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
+  test("saveAsHadoopFileByKey should generate a text file per key") {
+    val pairs = sc.parallelize((1 to 20).zipWithIndex)
+    val conf = new JobConf()
+    
+    pairs.saveAsHadoopFileByKey("testPath")
+  }
+
   test("aggregateByKey") {
     val pairs = sc.parallelize(Array((1, 1), (1, 1), (3, 2), (5, 1), (5, 3)), 2)
 
