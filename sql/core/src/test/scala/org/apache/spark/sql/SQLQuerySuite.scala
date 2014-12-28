@@ -42,6 +42,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     TimeZone.setDefault(origZone)
   }
 
+  test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
+    checkAnswer(
+      sql("SELECT a FROM testData2 SORT BY a"),
+      Seq(1, 1, 2 ,2 ,3 ,3).map(Seq(_))
+    )
+  }
+
   test("grouping on nested fields") {
     jsonRDD(sparkContext.parallelize("""{"nested": {"attribute": 1}, "value": 2}""" :: Nil))
      .registerTempTable("rows")

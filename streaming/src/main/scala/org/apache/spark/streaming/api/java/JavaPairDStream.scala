@@ -36,7 +36,6 @@ import org.apache.spark.api.java.function.{Function => JFunction, Function2 => J
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.dstream.DStream
 
 /**
@@ -815,6 +814,6 @@ object JavaPairDStream {
 
   def scalaToJavaLong[K: ClassTag](dstream: JavaPairDStream[K, Long])
   : JavaPairDStream[K, JLong] = {
-    StreamingContext.toPairDStreamFunctions(dstream.dstream).mapValues(new JLong(_))
+    DStream.toPairDStreamFunctions(dstream.dstream).mapValues(new JLong(_))
   }
 }

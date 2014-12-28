@@ -174,35 +174,16 @@ class IDFModel private[mllib] (val idf: Vector) extends Serializable {
    */
   def transform(dataset: RDD[Vector]): RDD[Vector] = {
     val bcIdf = dataset.context.broadcast(idf)
-    dataset.mapPartitions { iter =>
-      val thisIdf = bcIdf.value
-      iter.map { v =>
-        val n = v.size
-        v match {
-          case sv: SparseVector =>
-            val nnz = sv.indices.size
-            val newValues = new Array[Double](nnz)
-            var k = 0
-            while (k < nnz) {
-              newValues(k) = sv.values(k) * thisIdf(sv.indices(k))
-              k += 1
-            }
-            Vectors.sparse(n, sv.indices, newValues)
-          case dv: DenseVector =>
-            val newValues = new Array[Double](n)
-            var j = 0
-            while (j < n) {
-              newValues(j) = dv.values(j) * thisIdf(j)
-              j += 1
-            }
-            Vectors.dense(newValues)
-          case other =>
-            throw new UnsupportedOperationException(
-              s"Only sparse and dense vectors are supported but got ${other.getClass}.")
-        }
-      }
-    }
+    dataset.mapPartitions(iter => iter.map(v => IDFModel.transform(bcIdf.value, v)))
   }
+
+  /**
+   * Transforms a term frequency (TF) vector to a TF-IDF vector
+   *
+   * @param v a term frequency vector
+   * @return a TF-IDF vector
+   */
+  def transform(v: Vector): Vector = IDFModel.transform(idf, v)
 
   /**
    * Transforms term frequency (TF) vectors to TF-IDF vectors (Java version).
@@ -211,5 +192,41 @@ class IDFModel private[mllib] (val idf: Vector) extends Serializable {
    */
   def transform(dataset: JavaRDD[Vector]): JavaRDD[Vector] = {
     transform(dataset.rdd).toJavaRDD()
+  }
+}
+
+private object IDFModel {
+
+  /**
+   * Transforms a term frequency (TF) vector to a TF-IDF vector with a IDF vector
+   *
+   * @param idf an IDF vector
+   * @param v a term frequence vector
+   * @return a TF-IDF vector
+   */
+  def transform(idf: Vector, v: Vector): Vector = {
+    val n = v.size
+    v match {
+      case sv: SparseVector =>
+        val nnz = sv.indices.size
+        val newValues = new Array[Double](nnz)
+        var k = 0
+        while (k < nnz) {
+          newValues(k) = sv.values(k) * idf(sv.indices(k))
+          k += 1
+        }
+        Vectors.sparse(n, sv.indices, newValues)
+      case dv: DenseVector =>
+        val newValues = new Array[Double](n)
+        var j = 0
+        while (j < n) {
+          newValues(j) = dv.values(j) * idf(j)
+          j += 1
+        }
+        Vectors.dense(newValues)
+      case other =>
+        throw new UnsupportedOperationException(
+          s"Only sparse and dense vectors are supported but got ${other.getClass}.")
+    }
   }
 }

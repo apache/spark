@@ -65,7 +65,8 @@ private[spark] class YarnClientSchedulerBackend(
    */
   private def getExtraClientArguments: Seq[String] = {
     val extraArgs = new ArrayBuffer[String]
-    val optionTuples = // List of (target Client argument, environment variable, Spark property)
+    // List of (target Client argument, environment variable, Spark property)
+    val optionTuples =
       List(
         ("--driver-memory", "SPARK_MASTER_MEMORY", "spark.master.memory"),
         ("--driver-memory", "SPARK_DRIVER_MEMORY", "spark.driver.memory"),
@@ -78,11 +79,25 @@ private[spark] class YarnClientSchedulerBackend(
         ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
         ("--name", "SPARK_YARN_APP_NAME", "spark.app.name")
       )
+    // Warn against the following deprecated environment variables: env var -> suggestion
+    val deprecatedEnvVars = Map(
+      "SPARK_MASTER_MEMORY" -> "SPARK_DRIVER_MEMORY or --driver-memory through spark-submit",
+      "SPARK_WORKER_INSTANCES" -> "SPARK_WORKER_INSTANCES or --num-executors through spark-submit",
+      "SPARK_WORKER_MEMORY" -> "SPARK_EXECUTOR_MEMORY or --executor-memory through spark-submit",
+      "SPARK_WORKER_CORES" -> "SPARK_EXECUTOR_CORES or --executor-cores through spark-submit")
+    // Do the same for deprecated properties: property -> suggestion
+    val deprecatedProps = Map("spark.master.memory" -> "--driver-memory through spark-submit")
     optionTuples.foreach { case (optionName, envVar, sparkProp) =>
       if (System.getenv(envVar) != null) {
         extraArgs += (optionName, System.getenv(envVar))
+        if (deprecatedEnvVars.contains(envVar)) {
+          logWarning(s"NOTE: $envVar is deprecated. Use ${deprecatedEnvVars(envVar)} instead.")
+        }
       } else if (sc.getConf.contains(sparkProp)) {
         extraArgs += (optionName, sc.getConf.get(sparkProp))
+        if (deprecatedProps.contains(sparkProp)) {
+          logWarning(s"NOTE: $sparkProp is deprecated. Use ${deprecatedProps(sparkProp)} instead.")
+        }
       }
     }
     extraArgs

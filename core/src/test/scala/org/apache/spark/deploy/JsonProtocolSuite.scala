@@ -119,7 +119,7 @@ class JsonProtocolSuite extends FunSuite {
   def createExecutorRunner(): ExecutorRunner = {
     new ExecutorRunner("appId", 123, createAppDesc(), 4, 1234, null, "workerId", "host",
       new File("sparkHome"), new File("workDir"), "akka://worker",
-      new SparkConf, ExecutorState.RUNNING)
+      new SparkConf, Seq("localDir"), ExecutorState.RUNNING)
   }
 
   def createDriverRunner(): DriverRunner = {
