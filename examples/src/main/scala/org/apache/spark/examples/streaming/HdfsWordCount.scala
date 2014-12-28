@@ -19,7 +19,6 @@ package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.streaming.StreamingContext._
 
 /**
  * Counts words in new text files created in the given directory

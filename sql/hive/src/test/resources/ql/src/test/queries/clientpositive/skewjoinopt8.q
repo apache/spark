@@ -4,16 +4,16 @@ set hive.optimize.skewjoin.compiletime = true;
 
 CREATE TABLE T1(key STRING, val STRING) STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../data/files/T1.txt' INTO TABLE T1;
+LOAD DATA LOCAL INPATH '../../data/files/T1.txt' INTO TABLE T1;
 
 CREATE TABLE T2(key STRING, val STRING)
 SKEWED BY (key) ON ((3), (8)) STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../data/files/T2.txt' INTO TABLE T2;
+LOAD DATA LOCAL INPATH '../../data/files/T2.txt' INTO TABLE T2;
 
 CREATE TABLE T3(key STRING, val STRING) STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../data/files/T3.txt' INTO TABLE T3;
+LOAD DATA LOCAL INPATH '../../data/files/T3.txt' INTO TABLE T3;
 
 -- This test is for validating skewed join compile time optimization for more than
 -- 2 tables. The join key is the same, and so a 3-way join would be performed.

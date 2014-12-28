@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.types.StringType
 
 /**
@@ -30,18 +30,10 @@ abstract class Command extends LeafNode {
 }
 
 /**
- * Returned for commands supported by a given parser, but not catalyst.  In general these are DDL
- * commands that are passed directly to another system.
+ *
+ * Commands of the form "SET [key [= value] ]".
  */
-case class NativeCommand(cmd: String) extends Command {
-  override def output =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
-
-/**
- * Commands of the form "SET (key) (= value)".
- */
-case class SetCommand(key: Option[String], value: Option[String]) extends Command {
+case class SetCommand(kv: Option[(String, Option[String])]) extends Command {
   override def output = Seq(
     AttributeReference("", StringType, nullable = false)())
 }
@@ -56,9 +48,15 @@ case class ExplainCommand(plan: LogicalPlan, extended: Boolean = false) extends 
 }
 
 /**
- * Returned for the "CACHE TABLE tableName" and "UNCACHE TABLE tableName" command.
+ * Returned for the "CACHE TABLE tableName [AS SELECT ...]" command.
  */
-case class CacheCommand(tableName: String, doCache: Boolean) extends Command
+case class CacheTableCommand(tableName: String, plan: Option[LogicalPlan], isLazy: Boolean)
+  extends Command
+
+/**
+ * Returned for the "UNCACHE TABLE tableName" command.
+ */
+case class UncacheTableCommand(tableName: String) extends Command
 
 /**
  * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.

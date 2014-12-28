@@ -17,22 +17,73 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.execution.SparkLogicalPlan
-import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
-import org.apache.spark.sql.hive.execution.HiveComparisonTest
+import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.{QueryTest, SchemaRDD}
+import org.apache.spark.storage.RDDBlockId
 
-class CachedTableSuite extends HiveComparisonTest {
-  import TestHive._
+class CachedTableSuite extends QueryTest {
+  /**
+   * Throws a test failed exception when the number of cached tables differs from the expected
+   * number.
+   */
+  def assertCached(query: SchemaRDD, numCachedTables: Int = 1): Unit = {
+    val planWithCaching = query.queryExecution.withCachedData
+    val cachedData = planWithCaching collect {
+      case cached: InMemoryRelation => cached
+    }
 
-  TestHive.loadTestTable("src")
-
-  test("cache table") {
-    TestHive.cacheTable("src")
+    assert(
+      cachedData.size == numCachedTables,
+      s"Expected query to contain $numCachedTables, but it actually had ${cachedData.size}\n" +
+        planWithCaching)
   }
 
-  createQueryTest("read from cached table",
-    "SELECT * FROM src LIMIT 1", reset = false)
+  def rddIdOf(tableName: String): Int = {
+    val executedPlan = table(tableName).queryExecution.executedPlan
+    executedPlan.collect {
+      case InMemoryColumnarTableScan(_, _, relation) =>
+        relation.cachedColumnBuffers.id
+      case _ =>
+        fail(s"Table $tableName is not cached\n" + executedPlan)
+    }.head
+  }
+
+  def isMaterialized(rddId: Int): Boolean = {
+    sparkContext.env.blockManager.get(RDDBlockId(rddId, 0)).nonEmpty
+  }
+
+  test("cache table") {
+    val preCacheResults = sql("SELECT * FROM src").collect().toSeq
+
+    cacheTable("src")
+    assertCached(sql("SELECT * FROM src"))
+
+    checkAnswer(
+      sql("SELECT * FROM src"),
+      preCacheResults)
+
+    uncacheTable("src")
+    assertCached(sql("SELECT * FROM src"), 0)
+  }
+
+  test("cache invalidation") {
+    sql("CREATE TABLE cachedTable(key INT, value STRING)")
+
+    sql("INSERT INTO TABLE cachedTable SELECT * FROM src")
+    checkAnswer(sql("SELECT * FROM cachedTable"), table("src").collect().toSeq)
+
+    cacheTable("cachedTable")
+    checkAnswer(sql("SELECT * FROM cachedTable"), table("src").collect().toSeq)
+
+    sql("INSERT INTO TABLE cachedTable SELECT * FROM src")
+    checkAnswer(
+      sql("SELECT * FROM cachedTable"),
+      table("src").collect().toSeq ++ table("src").collect().toSeq)
+
+    sql("DROP TABLE cachedTable")
+  }
 
   test("Drop cached table") {
     sql("CREATE TABLE test(a INT)")
@@ -48,25 +99,6 @@ class CachedTableSuite extends HiveComparisonTest {
     sql("DROP TABLE IF EXISTS nonexistantTable")
   }
 
-  test("check that table is cached and uncache") {
-    TestHive.table("src").queryExecution.analyzed match {
-      case _ : InMemoryRelation => // Found evidence of caching
-      case noCache => fail(s"No cache node found in plan $noCache")
-    }
-    TestHive.uncacheTable("src")
-  }
-
-  createQueryTest("read from uncached table",
-    "SELECT * FROM src LIMIT 1", reset = false)
-
-  test("make sure table is uncached") {
-    TestHive.table("src").queryExecution.analyzed match {
-      case cachePlan: InMemoryRelation =>
-        fail(s"Table still cached after uncache: $cachePlan")
-      case noCache => // Table uncached successfully
-    }
-  }
-
   test("correct error on uncache of non-cached table") {
     intercept[IllegalArgumentException] {
       TestHive.uncacheTable("src")
@@ -75,17 +107,55 @@ class CachedTableSuite extends HiveComparisonTest {
 
   test("'CACHE TABLE' and 'UNCACHE TABLE' HiveQL statement") {
     TestHive.sql("CACHE TABLE src")
-    TestHive.table("src").queryExecution.executedPlan match {
-      case _: InMemoryColumnarTableScan => // Found evidence of caching
-      case _ => fail(s"Table 'src' should be cached")
-    }
+    assertCached(table("src"))
     assert(TestHive.isCached("src"), "Table 'src' should be cached")
 
     TestHive.sql("UNCACHE TABLE src")
-    TestHive.table("src").queryExecution.executedPlan match {
-      case _: InMemoryColumnarTableScan => fail(s"Table 'src' should not be cached")
-      case _ => // Found evidence of uncaching
-    }
+    assertCached(table("src"), 0)
     assert(!TestHive.isCached("src"), "Table 'src' should not be cached")
+  }
+
+  test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
+    sql("CACHE TABLE testCacheTable AS SELECT * FROM src")
+    assertCached(table("testCacheTable"))
+
+    val rddId = rddIdOf("testCacheTable")
+    assert(
+      isMaterialized(rddId),
+      "Eagerly cached in-memory table should have already been materialized")
+
+    uncacheTable("testCacheTable")
+    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+  }
+
+  test("CACHE TABLE tableName AS SELECT ...") {
+    sql("CACHE TABLE testCacheTable AS SELECT key FROM src LIMIT 10")
+    assertCached(table("testCacheTable"))
+
+    val rddId = rddIdOf("testCacheTable")
+    assert(
+      isMaterialized(rddId),
+      "Eagerly cached in-memory table should have already been materialized")
+
+    uncacheTable("testCacheTable")
+    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
+  }
+
+  test("CACHE LAZY TABLE tableName") {
+    sql("CACHE LAZY TABLE src")
+    assertCached(table("src"))
+
+    val rddId = rddIdOf("src")
+    assert(
+      !isMaterialized(rddId),
+      "Lazily cached in-memory table shouldn't be materialized eagerly")
+
+    sql("SELECT COUNT(*) FROM src").collect()
+    assert(
+      isMaterialized(rddId),
+      "Lazily cached in-memory table should have been materialized")
+
+    uncacheTable("src")
+    assert(!isMaterialized(rddId), "Uncached in-memory table should have been unpersisted")
   }
 }

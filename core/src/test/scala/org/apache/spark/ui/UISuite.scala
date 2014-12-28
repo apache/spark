@@ -23,7 +23,6 @@ import javax.servlet.http.HttpServletRequest
 import scala.io.Source
 import scala.util.{Failure, Success, Try}
 
-import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.servlet.ServletContextHandler
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Eventually._
@@ -108,14 +107,8 @@ class UISuite extends FunSuite {
   }
 
   test("jetty selects different port under contention") {
-    val startPort = 4040
-    val server = new Server(startPort)
-
-    Try { server.start() } match {
-      case Success(s) =>
-      case Failure(e) =>
-      // Either case server port is busy hence setup for test complete
-    }
+    val server = new ServerSocket(0)
+    val startPort = server.getLocalPort
     val serverInfo1 = JettyUtils.startJettyServer(
       "0.0.0.0", startPort, Seq[ServletContextHandler](), new SparkConf)
     val serverInfo2 = JettyUtils.startJettyServer(
@@ -126,6 +119,9 @@ class UISuite extends FunSuite {
     assert(boundPort1 != startPort)
     assert(boundPort2 != startPort)
     assert(boundPort1 != boundPort2)
+    serverInfo1.server.stop()
+    serverInfo2.server.stop()
+    server.close()
   }
 
   test("jetty binds to port 0 correctly") {

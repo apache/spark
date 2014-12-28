@@ -110,12 +110,16 @@ However, L1 regularization can help promote sparsity in weights leading to small
 It is not recommended to train models without any regularization,
 especially when the number of training examples is small.
 
+### Optimization
+
+Under the hood, linear methods use convex optimization methods to optimize the objective functions.  MLlib uses two methods, SGD and L-BFGS, described in the [optimization section](mllib-optimization.html).  Currently, most algorithm APIs support Stochastic Gradient Descent (SGD), and a few support L-BFGS. Refer to [this optimization section](mllib-optimization.html#Choosing-an-Optimization-Method) for guidelines on choosing between optimization methods.
+
 ## Binary classification
 
 [Binary classification](http://en.wikipedia.org/wiki/Binary_classification)
 aims to divide items into two categories: positive and negative.  MLlib
-supports two linear methods for binary classification: linear support vector
-machines (SVMs) and logistic regression. For both methods, MLlib supports
+supports two linear methods for binary classification: linear Support Vector
+Machines (SVMs) and logistic regression. For both methods, MLlib supports
 L1 and L2 regularized variants. The training data set is represented by an RDD
 of [LabeledPoint](mllib-data-types.html) in MLlib.  Note that, in the
 mathematical formulation in this guide, a training label $y$ is denoted as
@@ -123,7 +127,7 @@ either $+1$ (positive) or $-1$ (negative), which is convenient for the
 formulation.  *However*, the negative label is represented by $0$ in MLlib
 instead of $-1$, to be consistent with multiclass labeling.
 
-### Linear support vector machines (SVMs)
+### Linear Support Vector Machines (SVMs)
 
 The [linear SVM](http://en.wikipedia.org/wiki/Support_vector_machine#Linear_SVM)
 is a standard method for large-scale classification tasks. It is a linear method as described above in equation `$\eqref{eq:regPrimal}$`, with the loss function in the formulation given by the hinge loss:
@@ -247,7 +251,7 @@ val modelL1 = svmAlg.run(training)
 All of MLlib's methods use Java-friendly types, so you can import and call them there the same
 way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
 Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
-calling `.rdd()` on your `JavaRDD` object. A standalone application example
+calling `.rdd()` on your `JavaRDD` object. A self-contained application example
 that is equivalent to the provided example in Scala is given bellow:
 
 {% highlight java %}
@@ -323,9 +327,9 @@ svmAlg.optimizer()
 final SVMModel modelL1 = svmAlg.run(training.rdd());
 {% endhighlight %}
 
-In order to run the above standalone application, follow the instructions
-provided in the [Standalone
-Applications](quick-start.html#standalone-applications) section of the Spark
+In order to run the above application, follow the instructions
+provided in the [Self-Contained
+Applications](quick-start.html#self-contained-applications) section of the Spark
 quick-start guide. Be sure to also include *spark-mllib* to your build file as
 a dependency.
 </div>
@@ -396,7 +400,7 @@ val data = sc.textFile("data/mllib/ridge-data/lpsa.data")
 val parsedData = data.map { line =>
   val parts = line.split(',')
   LabeledPoint(parts(0).toDouble, Vectors.dense(parts(1).split(' ').map(_.toDouble)))
-}
+}.cache()
 
 // Building the model
 val numIterations = 100
@@ -455,6 +459,7 @@ public class LinearRegression {
         }
       }
     );
+    parsedData.cache();
 
     // Building the model
     int numIterations = 100;
@@ -470,7 +475,7 @@ public class LinearRegression {
         }
       }
     );
-    JavaRDD<Object> MSE = new JavaDoubleRDD(valuesAndPreds.map(
+    double MSE = new JavaDoubleRDD(valuesAndPreds.map(
       new Function<Tuple2<Double, Double>, Object>() {
         public Object call(Tuple2<Double, Double> pair) {
           return Math.pow(pair._1() - pair._2(), 2.0);
@@ -481,12 +486,6 @@ public class LinearRegression {
   }
 }
 {% endhighlight %}
-
-In order to run the above standalone application, follow the instructions
-provided in the [Standalone
-Applications](quick-start.html#standalone-applications) section of the Spark
-quick-start guide. Be sure to also include *spark-mllib* to your build file as
-a dependency.
 </div>
 
 <div data-lang="python" markdown="1">
@@ -517,6 +516,12 @@ print("Mean Squared Error = " + str(MSE))
 {% endhighlight %}
 </div>
 </div>
+
+In order to run the above application, follow the instructions
+provided in the [Self-Contained Applications](quick-start.html#self-contained-applications)
+section of the Spark
+quick-start guide. Be sure to also include *spark-mllib* to your build file as
+a dependency.
 
 ## Streaming linear regression
 
@@ -553,8 +558,8 @@ but in practice you will likely want to use unlabeled vectors for test data.
 
 {% highlight scala %}
 
-val trainingData = ssc.textFileStream('/training/data/dir').map(LabeledPoint.parse)
-val testData = ssc.textFileStream('/testing/data/dir').map(LabeledPoint.parse)
+val trainingData = ssc.textFileStream("/training/data/dir").map(LabeledPoint.parse).cache()
+val testData = ssc.textFileStream("/testing/data/dir").map(LabeledPoint.parse)
 
 {% endhighlight %}
 

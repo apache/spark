@@ -17,25 +17,20 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.StreamingContext._
-
-import org.apache.spark.{Partitioner, HashPartitioner}
-import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.RDD
-
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
-import org.apache.hadoop.mapred.OutputFormat
 import org.apache.hadoop.conf.Configuration
-import org.apache.spark.streaming.{Time, Duration}
+import org.apache.hadoop.mapred.{JobConf, OutputFormat}
+import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
+
+import org.apache.spark.{HashPartitioner, Partitioner, SerializableWritable}
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.{Duration, Time}
+import org.apache.spark.streaming.StreamingContext.rddToFileName
 
 /**
  * Extra functions available on DStream of (key, value) pairs through an implicit conversion.
- * Import `org.apache.spark.streaming.StreamingContext._` at the top of your program to use
- * these functions.
  */
 class PairDStreamFunctions[K, V](self: DStream[(K,V)])
     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K])
@@ -398,10 +393,9 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
    * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of each key.
    * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
-   * @param updateFunc State update function. If `this` function returns None, then
-   *                   corresponding state key-value pair will be eliminated. Note, that
-   *                   this function may generate a different a tuple with a different key
-   *                   than the input key. It is up to the developer to decide whether to
+   * @param updateFunc State update function. Note, that this function may generate a different
+   *                   tuple with a different key than the input key. Therefore keys may be removed
+   *                   or added in this way. It is up to the developer to decide whether to
    *                   remember the partitioner despite the key being changed.
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
    *                    DStream
@@ -413,7 +407,53 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
       partitioner: Partitioner,
       rememberPartitioner: Boolean
     ): DStream[(K, S)] = {
-     new StateDStream(self, ssc.sc.clean(updateFunc), partitioner, rememberPartitioner)
+     new StateDStream(self, ssc.sc.clean(updateFunc), partitioner, rememberPartitioner, None)
+  }
+
+  /**
+   * Return a new "state" DStream where the state for each key is updated by applying
+   * the given function on the previous state of the key and the new values of the key.
+   * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
+   * @param updateFunc State update function. If `this` function returns None, then
+   *                   corresponding state key-value pair will be eliminated.
+   * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
+   *                    DStream.
+   * @param initialRDD initial state value of each key.
+   * @tparam S State type
+   */
+  def updateStateByKey[S: ClassTag](
+      updateFunc: (Seq[V], Option[S]) => Option[S],
+      partitioner: Partitioner,
+      initialRDD: RDD[(K, S)]
+    ): DStream[(K, S)] = {
+    val newUpdateFunc = (iterator: Iterator[(K, Seq[V], Option[S])]) => {
+      iterator.flatMap(t => updateFunc(t._2, t._3).map(s => (t._1, s)))
+    }
+    updateStateByKey(newUpdateFunc, partitioner, true, initialRDD)
+  }
+
+  /**
+   * Return a new "state" DStream where the state for each key is updated by applying
+   * the given function on the previous state of the key and the new values of each key.
+   * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
+   * @param updateFunc State update function. Note, that this function may generate a different
+   *                   tuple with a different key than the input key. Therefore keys may be removed
+   *                   or added in this way. It is up to the developer to decide whether to
+   *                   remember the  partitioner despite the key being changed.
+   * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
+   *                    DStream
+   * @param rememberPartitioner Whether to remember the paritioner object in the generated RDDs.
+   * @param initialRDD initial state value of each key.
+   * @tparam S State type
+   */
+  def updateStateByKey[S: ClassTag](
+      updateFunc: (Iterator[(K, Seq[V], Option[S])]) => Iterator[(K, S)],
+      partitioner: Partitioner,
+      rememberPartitioner: Boolean,
+      initialRDD: RDD[(K, S)]
+    ): DStream[(K, S)] = {
+     new StateDStream(self, ssc.sc.clean(updateFunc), partitioner,
+       rememberPartitioner, Some(initialRDD))
   }
 
   /**
@@ -569,6 +609,42 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
   }
 
   /**
+   * Return a new DStream by applying 'full outer join' between RDDs of `this` DStream and
+   * `other` DStream. Hash partitioning is used to generate the RDDs with Spark's default
+   * number of partitions.
+   */
+  def fullOuterJoin[W: ClassTag](other: DStream[(K, W)]): DStream[(K, (Option[V], Option[W]))] = {
+    fullOuterJoin[W](other, defaultPartitioner())
+  }
+
+  /**
+   * Return a new DStream by applying 'full outer join' between RDDs of `this` DStream and
+   * `other` DStream. Hash partitioning is used to generate the RDDs with `numPartitions`
+   * partitions.
+   */
+  def fullOuterJoin[W: ClassTag](
+      other: DStream[(K, W)],
+      numPartitions: Int
+    ): DStream[(K, (Option[V], Option[W]))] = {
+    fullOuterJoin[W](other, defaultPartitioner(numPartitions))
+  }
+
+  /**
+   * Return a new DStream by applying 'full outer join' between RDDs of `this` DStream and
+   * `other` DStream. The supplied org.apache.spark.Partitioner is used to control
+   * the partitioning of each RDD.
+   */
+  def fullOuterJoin[W: ClassTag](
+      other: DStream[(K, W)],
+      partitioner: Partitioner
+    ): DStream[(K, (Option[V], Option[W]))] = {
+    self.transformWith(
+      other,
+      (rdd1: RDD[(K, V)], rdd2: RDD[(K, W)]) => rdd1.fullOuterJoin(rdd2, partitioner)
+    )
+  }
+
+  /**
    * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval
    * is generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix"
    */
@@ -590,11 +666,13 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
-      conf: JobConf = new JobConf
+      conf: JobConf = new JobConf(ssc.sparkContext.hadoopConfiguration)
     ) {
+    // Wrap conf in SerializableWritable so that ForeachDStream can be serialized for checkpoints
+    val serializableConf = new SerializableWritable(conf)
     val saveFunc = (rdd: RDD[(K, V)], time: Time) => {
       val file = rddToFileName(prefix, suffix, time)
-      rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass, conf)
+      rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass, serializableConf.value)
     }
     self.foreachRDD(saveFunc)
   }
@@ -621,11 +699,14 @@ class PairDStreamFunctions[K, V](self: DStream[(K,V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
-      conf: Configuration = new Configuration
+      conf: Configuration = ssc.sparkContext.hadoopConfiguration
     ) {
+    // Wrap conf in SerializableWritable so that ForeachDStream can be serialized for checkpoints
+    val serializableConf = new SerializableWritable(conf)
     val saveFunc = (rdd: RDD[(K, V)], time: Time) => {
       val file = rddToFileName(prefix, suffix, time)
-      rdd.saveAsNewAPIHadoopFile(file, keyClass, valueClass, outputFormatClass, conf)
+      rdd.saveAsNewAPIHadoopFile(
+        file, keyClass, valueClass, outputFormatClass, serializableConf.value)
     }
     self.foreachRDD(saveFunc)
   }

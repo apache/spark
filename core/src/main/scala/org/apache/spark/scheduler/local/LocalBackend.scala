@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import akka.actor.{Actor, ActorRef, Props}
 
-import org.apache.spark.{Logging, SparkEnv, TaskState}
+import org.apache.spark.{Logging, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
@@ -41,17 +41,18 @@ private case class StopExecutor()
  * and the TaskSchedulerImpl.
  */
 private[spark] class LocalActor(
-  scheduler: TaskSchedulerImpl,
-  executorBackend: LocalBackend,
-  private val totalCores: Int) extends Actor with ActorLogReceive with Logging {
+    scheduler: TaskSchedulerImpl,
+    executorBackend: LocalBackend,
+    private val totalCores: Int)
+  extends Actor with ActorLogReceive with Logging {
 
   private var freeCores = totalCores
 
-  private val localExecutorId = "localhost"
+  private val localExecutorId = SparkContext.DRIVER_IDENTIFIER
   private val localExecutorHostname = "localhost"
 
-  val executor = new Executor(
-    localExecutorId, localExecutorHostname, scheduler.conf.getAll, isLocal = true)
+  private val executor = new Executor(
+    localExecutorId, localExecutorHostname, SparkEnv.get, isLocal = true)
 
   override def receiveWithLogging = {
     case ReviveOffers =>
@@ -88,6 +89,7 @@ private[spark] class LocalActor(
 private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
   extends SchedulerBackend with ExecutorBackend {
 
+  private val appId = "local-" + System.currentTimeMillis
   var localActor: ActorRef = null
 
   override def start() {
@@ -114,5 +116,7 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
   override def statusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer) {
     localActor ! StatusUpdate(taskId, state, serializedData)
   }
+
+  override def applicationId(): String = appId
 
 }

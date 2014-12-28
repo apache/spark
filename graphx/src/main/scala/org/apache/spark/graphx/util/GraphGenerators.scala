@@ -118,7 +118,7 @@ object GraphGenerators {
       val Z = rand.nextGaussian()
       X = math.exp(mu + sigma*Z)
     }
-    math.round(X.toFloat)
+    math.floor(X).toInt
   }
 
   /**

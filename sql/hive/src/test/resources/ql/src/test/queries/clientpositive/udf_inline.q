@@ -1,3 +1,5 @@
+set hive.fetch.task.conversion=more;
+
 describe function inline;
 
 explain SELECT inline( 

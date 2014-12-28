@@ -18,8 +18,10 @@
 package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
+import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -97,12 +99,12 @@ class StorageLevel private(
     ret
   }
 
-  override def writeExternal(out: ObjectOutput) {
+  override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     out.writeByte(toInt)
     out.writeByte(_replication)
   }
 
-  override def readExternal(in: ObjectInput) {
+  override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     val flags = in.readByte()
     _useDisk = (flags & 8) != 0
     _useMemory = (flags & 4) != 0
@@ -219,8 +221,7 @@ object StorageLevel {
     getCachedStorageLevel(obj)
   }
 
-  private[spark] val storageLevelCache =
-    new java.util.concurrent.ConcurrentHashMap[StorageLevel, StorageLevel]()
+  private[spark] val storageLevelCache = new ConcurrentHashMap[StorageLevel, StorageLevel]()
 
   private[spark] def getCachedStorageLevel(level: StorageLevel): StorageLevel = {
     storageLevelCache.putIfAbsent(level, level)

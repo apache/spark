@@ -17,16 +17,20 @@
 
 package org.apache.spark.mllib.recommendation
 
+import java.lang.{Integer => JavaInteger}
+
 import org.jblas.DoubleMatrix
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.Logging
+import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.api.python.SerDe
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Model representing the result of matrix factorization.
+ *
+ * Note: If you create the model directly using constructor, please be aware that fast prediction
+ * requires cached user/product features and their associated partitioners.
  *
  * @param rank Rank for the features in this model.
  * @param userFeatures RDD of tuples where each tuple represents the userId and
@@ -34,10 +38,28 @@ import org.apache.spark.mllib.api.python.SerDe
  * @param productFeatures RDD of tuples where each tuple represents the productId
  *                        and the features computed for this product.
  */
-class MatrixFactorizationModel private[mllib] (
+class MatrixFactorizationModel(
     val rank: Int,
     val userFeatures: RDD[(Int, Array[Double])],
-    val productFeatures: RDD[(Int, Array[Double])]) extends Serializable {
+    val productFeatures: RDD[(Int, Array[Double])]) extends Serializable with Logging {
+
+  require(rank > 0)
+  validateFeatures("User", userFeatures)
+  validateFeatures("Product", productFeatures)
+
+  /** Validates factors and warns users if there are performance concerns. */
+  private def validateFeatures(name: String, features: RDD[(Int, Array[Double])]): Unit = {
+    require(features.first()._2.size == rank,
+      s"$name feature dimension does not match the rank $rank.")
+    if (features.partitioner.isEmpty) {
+      logWarning(s"$name factor does not have a partitioner. "
+        + "Prediction on individual records could be slow.")
+    }
+    if (features.getStorageLevel == StorageLevel.NONE) {
+      logWarning(s"$name factor is not cached. Prediction could be slow.")
+    }
+  }
+
   /** Predict the rating of one user for one product. */
   def predict(user: Int, product: Int): Double = {
     val userVector = new DoubleMatrix(userFeatures.lookup(user).head)
@@ -63,6 +85,13 @@ class MatrixFactorizationModel private[mllib] (
         val productVector = new DoubleMatrix(pFeatures)
         Rating(user, product, userVector.dot(productVector))
     }
+  }
+
+  /**
+   * Java-friendly version of [[MatrixFactorizationModel.predict]].
+   */
+  def predict(usersProducts: JavaPairRDD[JavaInteger, JavaInteger]): JavaRDD[Rating] = {
+    predict(usersProducts.rdd.asInstanceOf[RDD[(Int, Int)]]).toJavaRDD()
   }
 
   /**
@@ -106,19 +135,4 @@ class MatrixFactorizationModel private[mllib] (
     }
     scored.top(num)(Ordering.by(_._2))
   }
-
-  /**
-   * :: DeveloperApi ::
-   * Predict the rating of many users for many products.
-   * This is a Java stub for python predictAll()
-   *
-   * @param usersProductsJRDD A JavaRDD with serialized tuples (user, product)
-   * @return JavaRDD of serialized Rating objects.
-   */
-  @DeveloperApi
-  def predict(usersProductsJRDD: JavaRDD[Array[Byte]]): JavaRDD[Array[Byte]] = {
-    val usersProducts = usersProductsJRDD.rdd.map(xBytes => SerDe.unpackTuple(xBytes))
-    predict(usersProducts).map(rate => SerDe.serializeRating(rate))
-  }
-
 }
