@@ -85,7 +85,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
 }
 
-private[spark] object YarnSparkHadoopUtil {
+object YarnSparkHadoopUtil {
   // Additional memory overhead 
   // 7% was arrived at experimentally. In the interest of minimizing memory waste while covering
   // the common cases. Memory overhead tends to grow with container size. 
