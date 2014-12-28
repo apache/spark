@@ -77,12 +77,12 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       .orNull
     // If dynamic allocation is enabled, start at the max number of executors
     if (isDynamicAllocationEnabled) {
-      val maxExecutorsConf = "spark.dynamicAllocation.maxExecutors"
-      if (!sparkConf.contains(maxExecutorsConf)) {
+      val minExecutorsConf = "spark.dynamicAllocation.maxExecutors"
+      if (!sparkConf.contains(minExecutorsConf)) {
         throw new IllegalArgumentException(
-          s"$maxExecutorsConf must be set if dynamic allocation is enabled!")
+          s"$minExecutorsConf must be set if dynamic allocation is enabled!")
       }
-      numExecutors = sparkConf.get(maxExecutorsConf).toInt
+      numExecutors = sparkConf.get(minExecutorsConf).toInt
     }
   }
 
