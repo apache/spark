@@ -17,9 +17,9 @@
 # limitations under the License.
 #
 
-echo -e "q\n" | sbt/sbt -Phive -Phive-thriftserver scalastyle > scalastyle.txt
+echo -e "q\n" | build/sbt -Phive -Phive-thriftserver scalastyle > scalastyle.txt
 # Check style with YARN built too
-echo -e "q\n" | sbt/sbt -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 scalastyle \
+echo -e "q\n" | build/sbt -Pyarn -Phadoop-2.2 -Dhadoop.version=2.2.0 scalastyle \
   >> scalastyle.txt
 
 ERRORS=$(cat scalastyle.txt | awk '{if($1~/error/)print}')
