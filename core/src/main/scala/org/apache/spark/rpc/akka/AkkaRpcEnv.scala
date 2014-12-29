@@ -31,6 +31,7 @@ import org.apache.spark.rpc._
 import org.apache.spark.util.AkkaUtils
 
 class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
+  // TODO Once finishing the new Rpc mechanism, make actorSystem be a private val
 
   override def setupEndpoint(name: String, endpointCreator: => RpcEndpoint): RpcEndpointRef = {
     val latch = new CountDownLatch(1)
@@ -44,6 +45,7 @@ class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
         registerEndpoint(endpoint, endpointRef)
 
         override def preStart(): Unit = {
+          endpoint.preStart()
           // Listen for remote client disconnection events, since they don't go through Akka's watch()
           context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
         }
@@ -93,7 +95,7 @@ class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
   override def toString = s"${getClass.getSimpleName}($actorSystem)"
 }
 
-private[akka] class AkkaRpcEndpointRef(val actorRef: ActorRef, conf: SparkConf)
+private[akka] class AkkaRpcEndpointRef(val actorRef: ActorRef, @transient conf: SparkConf)
   extends RpcEndpointRef with Serializable with Logging {
 
   private[this] val maxRetries = conf.getInt("spark.akka.num.retries", 3)

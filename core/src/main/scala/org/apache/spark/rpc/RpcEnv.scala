@@ -72,10 +72,15 @@ trait RpcEndpoint {
 
   val rpcEnv: RpcEnv
 
+  def preStart(): Unit = {}
+
   /**
-   * Provide the implicit sender.
+   * Provide the implicit sender. `self` will become valid when `preStart` is called.
    */
-  implicit final def self: RpcEndpointRef = rpcEnv.endpointRef(this)
+  implicit final def self: RpcEndpointRef = {
+    require(rpcEnv != null, "rpcEnv has not been initialized")
+    rpcEnv.endpointRef(this)
+  }
 
   /**
    * Same assumption like Actor: messages sent to a RpcEndpoint will be delivered in sequence, and

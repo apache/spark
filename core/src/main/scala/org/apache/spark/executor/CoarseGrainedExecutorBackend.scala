@@ -19,19 +19,18 @@ package org.apache.spark.executor
 
 import java.nio.ByteBuffer
 
-import scala.concurrent.Await
-
-import akka.actor.{Actor, ActorSelection, Props}
-import akka.pattern.Patterns
-import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent}
+import akka.actor.Props
+import akka.remote.DisassociatedEvent
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
+import org.apache.spark.rpc.akka.AkkaRpcEnv
+import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef}
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
+import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     driverUrl: String,
@@ -39,21 +38,23 @@ private[spark] class CoarseGrainedExecutorBackend(
     hostPort: String,
     cores: Int,
     env: SparkEnv)
-  extends Actor with ActorLogReceive with ExecutorBackend with Logging {
+  extends RpcEndpoint with ExecutorBackend with Logging {
+
+  override val rpcEnv = env.rpcEnv
 
   Utils.checkHostPort(hostPort, "Expected hostport")
 
   var executor: Executor = null
-  var driver: ActorSelection = null
+  var driver: RpcEndpointRef = _
 
-  override def preStart() {
+  override def preStart(): Unit = {
+    // self is valid now. So now we can use `send`
     logInfo("Connecting to driver: " + driverUrl)
-    driver = context.actorSelection(driverUrl)
-    driver ! RegisterExecutor(executorId, hostPort, cores)
-    context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+    driver = rpcEnv.setupEndpointRefByUrl(driverUrl)
+    driver.send(RegisterExecutor(executorId, hostPort, cores, self))
   }
 
-  override def receiveWithLogging = {
+  override def receive(sender: RpcEndpointRef) = {
     case RegisteredExecutor =>
       logInfo("Successfully registered with driver")
       val (hostname, _) = Utils.parseHostPort(hostPort)
@@ -89,12 +90,13 @@ private[spark] class CoarseGrainedExecutorBackend(
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
       executor.stop()
-      context.stop(self)
-      context.system.shutdown()
+      stop()
+      rpcEnv.stopAll()
+      env.actorSystem.shutdown()
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
-    driver ! StatusUpdate(executorId, taskId, state, data)
+    driver.send(StatusUpdate(executorId, taskId, state, data))
   }
 }
 
@@ -119,12 +121,14 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       val port = executorConf.getInt("spark.executor.port", 0)
       val (fetcher, _) = AkkaUtils.createActorSystem(
         "driverPropsFetcher", hostname, port, executorConf, new SecurityManager(executorConf))
-      val driver = fetcher.actorSelection(driverUrl)
-      val timeout = AkkaUtils.askTimeout(executorConf)
-      val fut = Patterns.ask(driver, RetrieveSparkProps, timeout)
-      val props = Await.result(fut, timeout).asInstanceOf[Seq[(String, String)]] ++
+      val rpcEnv = new AkkaRpcEnv(fetcher, executorConf)
+      val driver = rpcEnv.setupEndpointRefByUrl(driverUrl)
+      val props = driver.askWithReply[Seq[(String, String)]](RetrieveSparkProps) ++
         Seq[(String, String)](("spark.app.id", appId))
+
+      rpcEnv.stopAll()
       fetcher.shutdown()
+      fetcher.awaitTermination()
 
       // Create SparkEnv using properties we fetched from the driver.
       val driverConf = new SparkConf().setAll(props)
@@ -137,10 +141,8 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
 
       // Start the CoarseGrainedExecutorBackend actor.
       val sparkHostPort = hostname + ":" + boundPort
-      env.actorSystem.actorOf(
-        Props(classOf[CoarseGrainedExecutorBackend],
-          driverUrl, executorId, sparkHostPort, cores, env),
-        name = "Executor")
+      env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
+          driverUrl, executorId, sparkHostPort, cores, env))
       workerUrl.foreach { url =>
         env.actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
       }

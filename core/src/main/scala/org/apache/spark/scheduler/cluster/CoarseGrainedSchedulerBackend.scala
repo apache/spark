@@ -84,7 +84,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
     }
 
     def receiveWithLogging = {
-      case RegisterExecutor(executorId, hostPort, cores) =>
+      case RegisterExecutor(executorId, hostPort, cores, executorRef) =>
         Utils.checkHostPort(hostPort, "Host port expected " + hostPort)
         if (executorDataMap.contains(executorId)) {
           sender ! RegisterExecutorFailed("Duplicate executor ID: " + executorId)
