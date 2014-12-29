@@ -3,7 +3,7 @@ import dateutil.parser
 import json
 import logging
 
-from flask import Flask, url_for, Markup, Blueprint, redirect, flash
+from flask import Flask, url_for, Markup, Blueprint, redirect, flash, Response
 from flask.ext.admin import Admin, BaseView, expose, AdminIndexView
 from flask.ext.admin.form import DateTimePickerWidget
 from flask.ext.admin import base
@@ -183,81 +183,71 @@ class Airflow(BaseView):
             results=results or '',
             has_data=has_data)
 
-
-    @expose('/chart')
+    @expose('/chart_data')
     @login_required
-    def chart(self):
+    def chart_data(self):
         from pandas.tslib import Timestamp
         session = settings.Session()
         chart_id = request.args.get('chart_id')
         chart = session.query(models.Chart).filter_by(id=chart_id).all()[0]
-        show_sql = chart.show_sql
         db = session.query(
             models.DatabaseConnection).filter_by(db_id=chart.db_id).all()[0]
         session.expunge_all()
 
-        all_data = {}
-        hc = None
-        hook = db.get_hook()
+        payload = {}
+        payload['state'] = 'ERROR'
+        payload['error'] = ''
+
+        # Processing templated fields
         try:
             args = eval(chart.default_params)
             if type(args) is not type(dict()):
                 raise Exception('Not a dict')
         except:
             args = {}
-            flash(
+            payload['error'] += (
                 "Default params is not valid, string has to evaluate as "
-                "a Python dictionary", 'error')
+                "a Python dictionary. ")
 
         request_dict = {k:request.args.get(k) for k in request.args}
-        args.update(request_dict)
         from airflow import macros
+        args.update(request_dict)
         args['macros'] = macros
         sql = jinja2.Template(chart.sql).render(**args)
         label = jinja2.Template(chart.label).render(**args)
-        has_data = False
-        table = None
-        failed = False
+        payload['sql_html'] = Markup(highlight(
+            sql,
+            SqlLexer(), # Lexer call
+            HtmlFormatter(noclasses=True))
+        )
+        payload['label'] = label
+
         import pandas as pd
         pd.set_option('display.max_colwidth', 100)
+        hook = db.get_hook()
         try:
             df = hook.get_pandas_df(sql)
-            has_data = len(df)
         except Exception as e:
-            flash(str(e), 'error')
-            has_data = False
-            failed = True
+            payload['error'] += "SQL execution failed. Details: " + str(e)
 
-        if show_sql:
-            sql = Markup(highlight(
-                sql,
-                SqlLexer(), # Lexer call
-                HtmlFormatter(noclasses=True))
-            )
-        show_chart = True
-        if failed:
-            show_sql = True
-            show_chart = False
-        elif not has_data:
-            show_sql = True
-            show_chart = False
-            flash('No data was returned', 'error')
-        elif len(df.columns) < 3:
-            show_sql = True
-            show_chart = False
-            flash(
-                "SQL needs to return at least 3 columns (series, x, y)",
-                'error')
-        else:
+        if not payload['error'] and len(df) == 0:
+            payload['error'] += "Empty result set. "
+        elif not payload['error'] and len(df.columns) < 3:
+            payload['error'] += "SQL needs to return at least 3 columns. "
+        elif not payload['error']:
             import numpy as np
+
+            data = None
+            if chart.chart_type == "datatable":
+                chart.show_datatable = True
+            if chart.show_datatable:
+                data = df.to_dict(orient="split")
+                data['columns'] = [{'title': c} for c in data['columns']]
 
             # Trying to convert time to something Highcharts likes
             x_col = 1 if chart.sql_layout == 'series' else 0
             x_is_dt = True
-
-            print df.dtypes
             df[df.columns[x_col]] = pd.to_datetime(df[df.columns[x_col]])
-            print df.dtypes
             try:
                 # From string to datetime
                 df[df.columns[x_col]] = pd.to_datetime(df[df.columns[x_col]])
@@ -269,6 +259,7 @@ class Airflow(BaseView):
                     lambda x:int(x.strftime("%s")) * 1000)
 
             if chart.sql_layout == 'series':
+                # User provides columns (series, x, y)
                 xaxis_label = df.columns[1]
                 yaxis_label = df.columns[2]
                 df[df.columns[2]] = df[df.columns[2]].astype(np.float)
@@ -277,6 +268,7 @@ class Airflow(BaseView):
                     columns=df.columns[0],
                     values=df.columns[2], aggfunc=np.sum)
             else:
+                # User provides columns (x, y, metric1, metric2, ...)
                 xaxis_label = df.columns[0]
                 yaxis_label = 'y'
                 df.index = df[df.columns[0]]
@@ -286,7 +278,6 @@ class Airflow(BaseView):
                     df[col] = df[col].astype(np.float)
 
             series = []
-            #df = df.fillna(0)
             for col in df.columns:
                 series.append({
                     'name': col,
@@ -319,7 +310,7 @@ class Airflow(BaseView):
                 'title': {'text': ''},
                 'xAxis': {
                     'title': {'text': xaxis_label},
-                    'type': 'datetime',
+                    'type': 'datetime' if x_is_dt else None,
                 },
                 'yAxis': {
                     'min': 0,
@@ -333,22 +324,44 @@ class Airflow(BaseView):
                 hc['yAxis']['minorTickInterval'] = 0.1
                 del hc['yAxis']['min']
 
-            if chart.show_datatable:
-                table = df.to_html(
-                    classes='table table-striped table-bordered')
+            payload['state'] = 'SUCCESS'
+            payload['hc'] = hc
+            payload['data'] = data
 
-        sql += Markup("<code><pre>"+json.dumps(hc, indent=4)+ "</pre></code>")
+        def date_handler(obj):
+            return obj.isoformat() if hasattr(obj, 'isoformat') else obj
+        response = Response(
+            response=json.dumps(payload, indent=4, default=date_handler),
+            status=200,
+            mimetype="application/json")
 
+        session.commit()
+        session.close()
+        return response
+
+    @expose('/chart')
+    @login_required
+    def chart(self):
+        session = settings.Session()
+        chart_id = request.args.get('chart_id')
+        chart = session.query(models.Chart).filter_by(id=chart_id).all()[0]
+        session.expunge_all()
+
+        if chart.show_sql:
+            sql = Markup(highlight(
+                chart.sql,
+                SqlLexer(), # Lexer call
+                HtmlFormatter(noclasses=True))
+            )
+
+            series = []
+            #df = df.fillna(0)
         response = self.render(
             'airflow/highchart.html',
             chart=chart,
             title="Chart",
-            table=Markup(table),
-            hc=json.dumps(hc) if hc else None,
-            show_chart=show_chart,
-            show_sql=show_sql,
             sql=sql,
-            label=label)
+            label=chart.label)
         session.commit()
         session.close()
         return response
@@ -948,6 +961,7 @@ class ChartModelView(LoginMixin, ModelView):
             ('area', 'Overlapping Area Chart'),
             ('stacked_area', 'Stacked Area Chart'),
             ('percent_area', 'Percent Area Chart'),
+            ('datatable', 'No chart, data table only'),
         ],
         'sql_layout': [
             ('series', 'SELECT series, x, y FROM ...'),
