@@ -29,7 +29,7 @@
 #   SPARK_NICENESS The scheduling priority for daemons. Defaults to 0.
 ##
 
-usage="Usage: spark-daemon.sh [--config <conf-dir>] (start|stop) <spark-command> <spark-instance-number> <args...>"
+usage="Usage: spark-daemon.sh [--foreground] [--config <conf-dir>] (start|stop) <spark-command> <spark-instance-number> <args...>"
 
 # if no args specified, show usage
 if [ $# -le 1 ]; then
@@ -43,6 +43,14 @@ sbin="`cd "$sbin"; pwd`"
 . "$sbin/spark-config.sh"
 
 # get arguments
+
+RUN_IN_FOREGROUND=0
+# Check if --foreground is passed as an argument. It is an optional parameter.
+if [ "$1" == "--foreground" ]
+then
+    shift
+    RUN_IN_FOREGROUND="1"
+fi
 
 # Check if --config is passed as an argument. It is an optional parameter.
 # Exit if the argument is not a directory.
@@ -95,17 +103,19 @@ fi
 
 export SPARK_PRINT_LAUNCH_COMMAND="1"
 
-# get log directory
-if [ "$SPARK_LOG_DIR" = "" ]; then
-  export SPARK_LOG_DIR="$SPARK_HOME/logs"
-fi
-mkdir -p "$SPARK_LOG_DIR"
-touch "$SPARK_LOG_DIR"/.spark_test > /dev/null 2>&1
-TEST_LOG_DIR=$?
-if [ "${TEST_LOG_DIR}" = "0" ]; then
-  rm -f "$SPARK_LOG_DIR"/.spark_test
-else
-  chown "$SPARK_IDENT_STRING" "$SPARK_LOG_DIR"
+if [ "$RUN_IN_FOREGROUND" = "0" ]; then
+    # get log directory
+    if [ "$SPARK_LOG_DIR" = "" ]; then
+        export SPARK_LOG_DIR="$SPARK_HOME/logs"
+    fi
+    mkdir -p "$SPARK_LOG_DIR"
+    touch "$SPARK_LOG_DIR"/.spark_test > /dev/null 2>&1
+    TEST_LOG_DIR=$?
+    if [ "${TEST_LOG_DIR}" = "0" ]; then
+        rm -f "$SPARK_LOG_DIR"/.spark_test
+    else
+        chown "$SPARK_IDENT_STRING" "$SPARK_LOG_DIR"
+    fi
 fi
 
 if [ "$SPARK_PID_DIR" = "" ]; then
@@ -141,24 +151,36 @@ case $option in
       rsync -a -e ssh --delete --exclude=.svn --exclude='logs/*' --exclude='contrib/hod/logs/*' $SPARK_MASTER/ "$SPARK_HOME"
     fi
 
-    spark_rotate_log "$log"
-    echo "starting $command, logging to $log"
-    if [ $option == spark-submit ]; then
-      source "$SPARK_HOME"/bin/utils.sh
-      gatherSparkSubmitOpts "$@"
-      nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-submit --class $command \
-        "${SUBMISSION_OPTS[@]}" spark-internal "${APPLICATION_OPTS[@]}" >> "$log" 2>&1 < /dev/null &
+    if [ "$RUN_IN_FOREGROUND" = "0" ]; then
+        spark_rotate_log "$log"
+        echo starting $command, logging to $log
+        if [ $option == spark-submit ]; then
+            source "$SPARK_HOME"/bin/utils.sh
+            gatherSparkSubmitOpts "$@"
+            nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-submit --class $command \
+                "${SUBMISSION_OPTS[@]}" spark-internal "${APPLICATION_OPTS[@]}" >> "$log" 2>&1 < /dev/null &
+        else
+            nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
+        fi
+        newpid=$!
+        echo $newpid > $pid
+        sleep 2
+        # Check if the process has died; in that case we'll tail the log so the user can see
+        if ! kill -0 $newpid >/dev/null 2>&1; then
+            echo "failed to launch $command:"
+            tail -2 "$log" | sed 's/^/  /'
+            echo "full log in $log"
+        fi
     else
-      nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
-    fi
-    newpid=$!
-    echo $newpid > $pid
-    sleep 2
-    # Check if the process has died; in that case we'll tail the log so the user can see
-    if [[ ! $(ps -p "$newpid" -o args=) =~ $command ]]; then
-      echo "failed to launch $command:"
-      tail -2 "$log" | sed 's/^/  /'
-      echo "full log in $log"
+        echo starting $command, logging to stdout
+        if [ $option == spark-submit ]; then
+            source "$SPARK_HOME"/bin/utils.sh
+            gatherSparkSubmitOpts "$@"
+            nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-submit --class $command \
+                "${SUBMISSION_OPTS[@]}" spark-internal "${APPLICATION_OPTS[@]}" 2>&1 < /dev/null
+        else
+            nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-class $command "$@" 2>&1 < /dev/null
+        fi
     fi
     ;;
 
