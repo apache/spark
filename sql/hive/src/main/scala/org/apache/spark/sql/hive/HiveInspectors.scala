@@ -341,7 +341,10 @@ private[hive] trait HiveInspectors {
       (o: Any) => new HiveVarchar(o.asInstanceOf[String], o.asInstanceOf[String].size)
 
     case _: JavaHiveDecimalObjectInspector =>
-      (o: Any) => HiveShim.createDecimal(o.asInstanceOf[Decimal].toJavaBigDecimal)
+      (o: Any) => o match {
+        case b: BigDecimal => HiveShim.createDecimal(b.underlying())
+        case d: Decimal => HiveShim.createDecimal(d.toJavaBigDecimal)
+      }
 
     case soi: StandardStructObjectInspector =>
       val wrappers = soi.getAllStructFieldRefs.map(ref => wrapperFor(ref.getFieldObjectInspector))
