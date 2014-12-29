@@ -767,7 +767,7 @@ private[spark] class Master(
         app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&exception=$exception&title=$title"
         false
       case e: Exception =>
-        // Replay exception message to application UI page
+        // Relay exception message to application UI page
         val title = s"Application history load error (${app.id})"
         val exception = URLEncoder.encode(Utils.exceptionString(e), "UTF-8")
         var msg = s"Exception in replaying log for application $appName!"
