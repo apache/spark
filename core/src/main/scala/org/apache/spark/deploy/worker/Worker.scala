@@ -466,7 +466,12 @@ private[spark] class Worker(
       maybeCleanupApplication(id)
       
     case MasterDisconnected(masterUrl) =>
-      masterDisconnected()
+      if (masterUrl != activeMasterUrl) {
+        logWarning(s"Get message from Invalid Master ($masterUrl)." +
+          s"Valid Master is : $activeMasterUrl, so ignore the message.")
+      } else {
+        masterDisconnected()
+      }
   }
 
   private def masterDisconnected() {
