@@ -190,7 +190,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     }
   }
 
-  private[parquet] def writePrimitive(schema: PrimitiveType, value: Any): Unit = {
+  private[parquet] def writePrimitive(schema: DataType, value: Any): Unit = {
     if (value != null) {
       schema match {
         case StringType => writer.addBinary(
@@ -207,6 +207,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
         case DoubleType => writer.addDouble(value.asInstanceOf[Double])
         case FloatType => writer.addFloat(value.asInstanceOf[Float])
         case BooleanType => writer.addBoolean(value.asInstanceOf[Boolean])
+        case DateType => writer.addInteger(value.asInstanceOf[java.sql.Date].getTime.toInt)
         case d: DecimalType =>
           if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
             sys.error(s"Unsupported datatype $d, cannot write to consumer")
