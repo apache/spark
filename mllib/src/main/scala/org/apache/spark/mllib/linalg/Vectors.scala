@@ -268,7 +268,7 @@ object Vectors {
    * @param p norm.
    * @return norm in L^p^ space.
    */
-  private[spark] def norm(vector: Vector, p: Double): Double = {
+  def norm(vector: Vector, p: Double): Double = {
     require(p >= 1.0)
     val values = vector match {
       case dv: DenseVector => dv.values
