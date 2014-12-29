@@ -151,6 +151,11 @@ def master(args):
     job.run()
 
 
+def worker(args):
+    from airflow.executors.celery_executor import app
+    app.start()
+
+
 def initdb(args):
 
     if raw_input(
@@ -160,7 +165,6 @@ def initdb(args):
                             format=settings.SIMPLE_LOG_FORMAT)
 
         from airflow import models
-        from airflow import jobs
 
         logging.info("Dropping tables that exist")
         models.Base.metadata.drop_all(settings.engine)
@@ -199,7 +203,6 @@ def initdb(args):
 
 if __name__ == '__main__':
 
-    reload(logging)
     logging.root.handlers = []
 
     parser = argparse.ArgumentParser()
@@ -305,6 +308,10 @@ if __name__ == '__main__':
     ht = "Initialize and reset the metadata database"
     parser_initdb = subparsers.add_parser('initdb', help=ht)
     parser_initdb.set_defaults(func=initdb)
+
+    ht = "Start a Celery worker node"
+    parser_worker = subparsers.add_parser('worker', help=ht)
+    parser_worker.set_defaults(func=worker)
 
     args = parser.parse_args()
     args.func(args)
