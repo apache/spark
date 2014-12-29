@@ -197,17 +197,13 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
     val logFiles = getLogFilesInDirectory(testDir)
     assert(logFiles.size > 1)
 
-    // To avoid code repeat
-    def cleanUpAndVerify(): Unit = {
-      manager.cleanupOldLogs(manualClock.currentTime() / 2, waitForCompletion)
-      assert(getLogFilesInDirectory(testDir).size < logFiles.size)
-    }
+    manager.cleanupOldLogs(manualClock.currentTime() / 2, waitForCompletion)
 
     if (waitForCompletion) {
-      cleanUpAndVerify()
+      assert(getLogFilesInDirectory(testDir).size < logFiles.size)
     } else {
       eventually(timeout(1 second), interval(10 milliseconds)) {
-        cleanUpAndVerify()
+        assert(getLogFilesInDirectory(testDir).size < logFiles.size)
       }
     }
   }

@@ -126,7 +126,8 @@ private[streaming] class WriteAheadLogManager(
    * (say, worker node), the caller has to take account of possible time skew.
    *
    * If waitForCompletion is set to true, this method will return only after old logs have been
-   * deleted. Else the files will be deleted asynchronously.
+   * deleted. This should be set to true only for testing. Else the files will be deleted
+   * asynchronously.
    */
   def cleanupOldLogs(threshTime: Long, waitForCompletion: Boolean): Unit = {
     val oldLogFiles = synchronized { pastLogs.filter { _.endTime < threshTime } }
