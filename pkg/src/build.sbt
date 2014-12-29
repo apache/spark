@@ -15,6 +15,7 @@ organization := "edu.berkeley.cs.amplab"
 scalaVersion := "2.10.3"
 
 libraryDependencies ++= Seq(
+  "io.netty" % "netty-all" % "4.0.23.Final",
   "org.slf4j" % "slf4j-api" % "1.7.2",
   "org.slf4j" % "slf4j-log4j12" % "1.7.2"
 )
