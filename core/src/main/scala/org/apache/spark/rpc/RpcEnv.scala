@@ -67,6 +67,15 @@ trait RpcEnv {
 
 /**
  * An end point for the RPC that defines what functions to trigger given a message.
+ *
+ * RpcEndpoint will be guaranteed that `preStart`, `receive` and `remoteConnectionTerminated` will
+ * be called in sequence.
+ *
+ * Happen before relation:
+ *
+ * constructor preStart receive* remoteConnectionTerminated
+ *
+ * ?? Need to guarantee that no message will be delivered after remoteConnectionTerminated ??
  */
 trait RpcEndpoint {
 

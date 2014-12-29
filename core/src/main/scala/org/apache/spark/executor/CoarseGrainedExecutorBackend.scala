@@ -20,7 +20,6 @@ package org.apache.spark.executor
 import java.nio.ByteBuffer
 
 import akka.actor.Props
-import akka.remote.DisassociatedEvent
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
@@ -83,16 +82,17 @@ private[spark] class CoarseGrainedExecutorBackend(
         executor.killTask(taskId, interruptThread)
       }
 
-    case x: DisassociatedEvent =>
-      logError(s"Driver $x disassociated! Shutting down.")
-      System.exit(1)
-
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
       executor.stop()
       stop()
       rpcEnv.stopAll()
       env.actorSystem.shutdown()
+  }
+
+  override def remoteConnectionTerminated(remoteAddress: String): Unit = {
+    logError(s"Driver $remoteAddress disassociated! Shutting down.")
+    System.exit(1)
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {

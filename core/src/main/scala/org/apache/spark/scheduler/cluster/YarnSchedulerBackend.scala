@@ -33,7 +33,9 @@ import org.apache.spark.util.AkkaUtils
 private[spark] abstract class YarnSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem) {
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
+
+  val actorSystem = sc.env.actorSystem
 
   if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
     minRegisteredRatio = 0.8
