@@ -635,6 +635,28 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.resourceOffer("execA", "host3", NO_PREF).get.index === 2)
   }
 
+  // regression test for SPARK-4939
+  test("node-local tasks should be scheduled right after process-local tasks finished") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"))
+    val taskSet = FakeTask.createTaskSet(4,
+      Seq(TaskLocation("host1")),
+      Seq(TaskLocation("host2")),
+      Seq(ExecutorCacheTaskLocation("host1", "execA")),
+      Seq(ExecutorCacheTaskLocation("host2", "execB")))
+    val clock = new FakeClock
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
+
+    // process-local tasks are scheduled first
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 2)
+    assert(manager.resourceOffer("execB", "host2", NODE_LOCAL).get.index === 3)
+    // node-local tasks are scheduled without delay
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 0)
+    assert(manager.resourceOffer("execB", "host2", NODE_LOCAL).get.index === 1)
+    assert(manager.resourceOffer("execA", "host1", NODE_LOCAL) == None)
+    assert(manager.resourceOffer("execB", "host2", NODE_LOCAL) == None)
+  }
+
   test("Ensure TaskSetManager is usable after addition of levels") {
     // Regression test for SPARK-2931
     sc = new SparkContext("local", "test")
