@@ -368,6 +368,7 @@ private[spark] class Master(
           } else {
             logWarning(s"Got heartbeat from unregistered worker $workerId." +
               " This worker was never registered, so ignoring the heartbeat.")
+            sender ! MasterDisconnected(masterUrl)
           }
       }
     }

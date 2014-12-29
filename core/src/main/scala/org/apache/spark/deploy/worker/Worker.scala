@@ -464,6 +464,9 @@ private[spark] class Worker(
     case ApplicationFinished(id) =>
       finishedApps += id
       maybeCleanupApplication(id)
+      
+    case MasterDisconnected(masterUrl) =>
+      masterDisconnected()
   }
 
   private def masterDisconnected() {
