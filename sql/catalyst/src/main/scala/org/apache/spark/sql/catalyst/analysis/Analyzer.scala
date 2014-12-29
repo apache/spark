@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.types.StructType
+import org.apache.spark.sql.catalyst.types.IntegerType
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -34,13 +37,15 @@ object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true
  * [[UnresolvedRelation]]s into fully typed objects using information in a schema [[Catalog]] and
  * a [[FunctionRegistry]].
  */
-class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Boolean)
+class Analyzer(catalog: Catalog,
+               registry: FunctionRegistry,
+               caseSensitive: Boolean,
+               maxIterations: Int = 100)
   extends RuleExecutor[LogicalPlan] with HiveTypeCoercion {
 
   val resolver = if (caseSensitive) caseSensitiveResolution else caseInsensitiveResolution
 
-  // TODO: pass this in as a parameter.
-  val fixedPoint = FixedPoint(100)
+  val fixedPoint = FixedPoint(maxIterations)
 
   /**
    * Override to provide additional rules for the "Resolution" batch.
@@ -53,13 +58,14 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     Batch("Resolution", fixedPoint,
       ResolveReferences ::
       ResolveRelations ::
+      ResolveGroupingAnalytics ::
       ResolveSortReferences ::
       NewRelationInstances ::
       ImplicitGenerate ::
-      StarExpansion ::
       ResolveFunctions ::
       GlobalAggregates ::
       UnresolvedHavingClauseAttributes ::
+      TrimGroupingAliases ::
       typeCoercionRules ++
       extendedRules : _*),
     Batch("Check Analysis", Once,
@@ -90,6 +96,103 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   }
 
   /**
+   * Removes no-op Alias expressions from the plan.
+   */
+  object TrimGroupingAliases extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case Aggregate(groups, aggs, child) =>
+        Aggregate(groups.map(_.transform { case Alias(c, _) => c }), aggs, child)
+    }
+  }
+
+  object ResolveGroupingAnalytics extends Rule[LogicalPlan] {
+    /**
+     * Extract attribute set according to the grouping id
+     * @param bitmask bitmask to represent the selected of the attribute sequence
+     * @param exprs the attributes in sequence
+     * @return the attributes of non selected specified via bitmask (with the bit set to 1)
+     */
+    private def buildNonSelectExprSet(bitmask: Int, exprs: Seq[Expression])
+    : OpenHashSet[Expression] = {
+      val set = new OpenHashSet[Expression](2)
+
+      var bit = exprs.length - 1
+      while (bit >= 0) {
+        if (((bitmask >> bit) & 1) == 0) set.add(exprs(bit))
+        bit -= 1
+      }
+
+      set
+    }
+
+    /*
+     *  GROUP BY a, b, c, WITH ROLLUP
+     *  is equivalent to
+     *  GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (a), ( )).
+     *  Group Count: N + 1 (N is the number of group expression)
+     *
+     *  We need to get all of its subsets for the rule described above, the subset is
+     *  represented as the bit masks.
+     */
+    def bitmasks(r: Rollup): Seq[Int] = {
+      Seq.tabulate(r.groupByExprs.length + 1)(idx => {(1 << idx) - 1})
+    }
+
+    /*
+     *  GROUP BY a, b, c, WITH CUBE
+     *  is equivalent to
+     *  GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) ).
+     *  Group Count: 2^N (N is the number of group expression)
+     *
+     *  We need to get all of its sub sets for a given GROUPBY expressions, the subset is
+     *  represented as the bit masks.
+     */
+    def bitmasks(c: Cube): Seq[Int] = {
+      Seq.tabulate(1 << c.groupByExprs.length)(i => i)
+    }
+
+    /**
+     * Create an array of Projections for the child projection, and replace the projections'
+     * expressions which equal GroupBy expressions with Literal(null), if those expressions
+     * are not set for this grouping set (according to the bit mask).
+     */
+    private[this] def expand(g: GroupingSets): Seq[GroupExpression] = {
+      val result = new scala.collection.mutable.ArrayBuffer[GroupExpression]
+
+      g.bitmasks.foreach { bitmask =>
+        // get the non selected grouping attributes according to the bit mask
+        val nonSelectedGroupExprSet = buildNonSelectExprSet(bitmask, g.groupByExprs)
+
+        val substitution = (g.child.output :+ g.gid).map(expr => expr transformDown {
+          case x: Expression if nonSelectedGroupExprSet.contains(x) =>
+            // if the input attribute in the Invalid Grouping Expression set of for this group
+            // replace it with constant null
+            Literal(null, expr.dataType)
+          case x if x == g.gid =>
+            // replace the groupingId with concrete value (the bit mask)
+            Literal(bitmask, IntegerType)
+        })
+
+        result += GroupExpression(substitution)
+      }
+
+      result.toSeq
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case a: Cube if a.resolved =>
+        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations, a.gid)
+      case a: Rollup if a.resolved =>
+        GroupingSets(bitmasks(a), a.groupByExprs, a.child, a.aggregations, a.gid)
+      case x: GroupingSets if x.resolved =>
+        Aggregate(
+          x.groupByExprs :+ x.gid,
+          x.aggregations,
+          Expand(expand(x), x.child.output :+ x.gid, x.child))
+    }
+  }
+
+  /**
    * Checks for non-aggregated attributes with aggregation
    */
   object CheckAggregation extends Rule[LogicalPlan] {
@@ -104,10 +207,15 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
             case e => e.children.forall(isValidAggregateExpression)
           }
 
-          aggregateExprs.foreach { e =>
-            if (!isValidAggregateExpression(e)) {
-              throw new TreeNodeException(plan, s"Expression not in GROUP BY: $e")
-            }
+          aggregateExprs.find { e =>
+            !isValidAggregateExpression(e.transform {
+              // Should trim aliases around `GetField`s. These aliases are introduced while
+              // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
+              // (Should we just turn `GetField` into a `NamedExpression`?)
+              case Alias(g: GetField, _) => g
+            })
+          }.foreach { e =>
+            throw new TreeNodeException(plan, s"Expression not in GROUP BY: $e")
           }
 
           aggregatePlan
@@ -135,16 +243,63 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    */
   object ResolveReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case q: LogicalPlan if q.childrenResolved =>
+      case p: LogicalPlan if !p.childrenResolved => p
+
+      // If the projection list contains Stars, expand it.
+      case p@Project(projectList, child) if containsStar(projectList) =>
+        Project(
+          projectList.flatMap {
+            case s: Star => s.expand(child.output, resolver)
+            case o => o :: Nil
+          },
+          child)
+      case t: ScriptTransformation if containsStar(t.input) =>
+        t.copy(
+          input = t.input.flatMap {
+            case s: Star => s.expand(t.child.output, resolver)
+            case o => o :: Nil
+          }
+        )
+
+      // If the aggregate function argument contains Stars, expand it.
+      case a: Aggregate if containsStar(a.aggregateExpressions) =>
+        a.copy(
+          aggregateExpressions = a.aggregateExpressions.flatMap {
+            case s: Star => s.expand(a.child.output, resolver)
+            case o => o :: Nil
+          }
+        )
+
+      case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressions {
+          case u @ UnresolvedAttribute(name)
+              if resolver(name, VirtualColumn.groupingIdName) &&
+                q.isInstanceOf[GroupingAnalytics] =>
+              // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
+            q.asInstanceOf[GroupingAnalytics].gid
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result = q.resolveChildren(name, resolver).getOrElse(u)
             logDebug(s"Resolving $u to $result")
             result
+
+          // Resolve field names using the resolver.
+          case f @ GetField(child, fieldName) if !f.resolved && child.resolved =>
+            child.dataType match {
+              case StructType(fields) =>
+                val resolvedFieldName = fields.map(_.name).find(resolver(_, fieldName))
+                resolvedFieldName.map(n => f.copy(fieldName = n)).getOrElse(f)
+              case _ => f
+            }
         }
     }
+
+    /**
+     * Returns true if `exprs` contains a [[Star]].
+     */
+    protected def containsStar(exprs: Seq[Expression]): Boolean =
+      exprs.collect { case _: Star => true}.nonEmpty
   }
 
   /**
@@ -163,7 +318,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {
           // Add missing attributes and then project them away after the sort.
-          Project(projectList,
+          Project(projectList.map(_.toAttribute),
             Sort(ordering,
               Project(projectList ++ missingInProject, child)))
         } else {
@@ -259,45 +414,6 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         Generate(g, join = false, outer = false, None, child)
     }
   }
-
-  /**
-   * Expands any references to [[Star]] (*) in project operators.
-   */
-  object StarExpansion extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      // Wait until children are resolved
-      case p: LogicalPlan if !p.childrenResolved => p
-      // If the projection list contains Stars, expand it.
-      case p @ Project(projectList, child) if containsStar(projectList) =>
-        Project(
-          projectList.flatMap {
-            case s: Star => s.expand(child.output, resolver)
-            case o => o :: Nil
-          },
-          child)
-      case t: ScriptTransformation if containsStar(t.input) =>
-        t.copy(
-          input = t.input.flatMap {
-            case s: Star => s.expand(t.child.output, resolver)
-            case o => o :: Nil
-          }
-        )
-      // If the aggregate function argument contains Stars, expand it.
-      case a: Aggregate if containsStar(a.aggregateExpressions) =>
-        a.copy(
-          aggregateExpressions = a.aggregateExpressions.flatMap {
-            case s: Star => s.expand(a.child.output, resolver)
-            case o => o :: Nil
-          }
-        )
-    }
-
-    /**
-     * Returns true if `exprs` contains a [[Star]].
-     */
-    protected def containsStar(exprs: Seq[Expression]): Boolean =
-      exprs.collect { case _: Star => true }.nonEmpty
-  }
 }
 
 /**
@@ -310,4 +426,3 @@ object EliminateAnalysisOperators extends Rule[LogicalPlan] {
     case Subquery(_, child) => child
   }
 }
-

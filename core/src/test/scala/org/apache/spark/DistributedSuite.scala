@@ -23,7 +23,6 @@ import org.scalatest.concurrent.Timeouts._
 import org.scalatest.Matchers
 import org.scalatest.time.{Millis, Span}
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 class NotSerializableClass
@@ -202,7 +201,8 @@ class DistributedSuite extends FunSuite with Matchers with BeforeAndAfter
     val blockManager = SparkEnv.get.blockManager
     val blockTransfer = SparkEnv.get.blockTransferService
     blockManager.master.getLocations(blockId).foreach { cmId =>
-      val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, blockId.toString)
+      val bytes = blockTransfer.fetchBlockSync(cmId.host, cmId.port, cmId.executorId,
+        blockId.toString)
       val deserialized = blockManager.dataDeserialize(blockId, bytes.nioByteBuffer())
         .asInstanceOf[Iterator[Int]].toList
       assert(deserialized === (1 to 100).toList)

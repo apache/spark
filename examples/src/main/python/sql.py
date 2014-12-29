@@ -48,7 +48,7 @@ if __name__ == "__main__":
 
     # A JSON dataset is pointed to by path.
     # The path can be either a single text file or a directory storing text files.
-    path = os.environ['SPARK_HOME'] + "examples/src/main/resources/people.json"
+    path = os.path.join(os.environ['SPARK_HOME'], "examples/src/main/resources/people.json")
     # Create a SchemaRDD from the file(s) pointed to by path
     people = sqlContext.jsonFile(path)
     # root

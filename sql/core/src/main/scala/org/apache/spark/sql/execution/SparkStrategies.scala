@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{SQLContext, execution}
+import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
@@ -208,23 +208,16 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         InsertIntoParquetTable(table, planLater(child), overwrite) :: Nil
       case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) =>
         val prunePushedDownFilters =
-          if (sparkContext.conf.getBoolean(ParquetFilters.PARQUET_FILTER_PUSHDOWN_ENABLED, true)) {
-            (filters: Seq[Expression]) => {
-              filters.filter { filter =>
-                // Note: filters cannot be pushed down to Parquet if they contain more complex
-                // expressions than simple "Attribute cmp Literal" comparisons. Here we remove
-                // all filters that have been pushed down. Note that a predicate such as
-                // "(A AND B) OR C" can result in "A OR C" being pushed down.
-                val recordFilter = ParquetFilters.createFilter(filter)
-                if (!recordFilter.isDefined) {
-                  // First case: the pushdown did not result in any record filter.
-                  true
-                } else {
-                  // Second case: a record filter was created; here we are conservative in
-                  // the sense that even if "A" was pushed and we check for "A AND B" we
-                  // still want to keep "A AND B" in the higher-level filter, not just "B".
-                  !ParquetFilters.findExpression(recordFilter.get, filter).isDefined
-                }
+          if (sqlContext.parquetFilterPushDown) {
+            (predicates: Seq[Expression]) => {
+              // Note: filters cannot be pushed down to Parquet if they contain more complex
+              // expressions than simple "Attribute cmp Literal" comparisons. Here we remove all
+              // filters that have been pushed down. Note that a predicate such as "(A AND B) OR C"
+              // can result in "A OR C" being pushed down. Here we are conservative in the sense
+              // that even if "A" was pushed and we check for "A AND B" we still want to keep
+              // "A AND B" in the higher-level filter, not just "B".
+              predicates.map(p => p -> ParquetFilters.createFilter(p)).collect {
+                case (predicate, None) => predicate
               }
             }
           } else {
@@ -234,7 +227,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           projectList,
           filters,
           prunePushedDownFilters,
-          ParquetTableScan(_, relation, filters)) :: Nil
+          ParquetTableScan(
+            _,
+            relation,
+            if (sqlContext.parquetFilterPushDown) filters else Nil)) :: Nil
 
       case _ => Nil
     }
@@ -260,9 +256,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Distinct(child) =>
         execution.Distinct(partial = false,
           execution.Distinct(partial = true, planLater(child))) :: Nil
+
+      case logical.Sort(sortExprs, child) if sqlContext.externalSortEnabled =>
+        execution.ExternalSort(sortExprs, global = true, planLater(child)):: Nil
       case logical.Sort(sortExprs, child) =>
-        // This sort is a global sort. Its requiredDistribution will be an OrderedDistribution.
         execution.Sort(sortExprs, global = true, planLater(child)):: Nil
+
       case logical.SortPartitions(sortExprs, child) =>
         // This sort only sorts tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.
@@ -271,6 +270,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
         execution.Filter(condition, planLater(child)) :: Nil
+      case logical.Expand(projections, output, child) =>
+        execution.Expand(projections, output, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
         execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
       case logical.Sample(fraction, withReplacement, seed, child) =>
@@ -280,7 +281,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val nPartitions = if (data.isEmpty) 1 else numPartitions
         PhysicalRDD(
           output,
-          RDDConversions.productToRowRdd(sparkContext.parallelize(data, nPartitions))) :: Nil
+          RDDConversions.productToRowRdd(sparkContext.parallelize(data, nPartitions),
+            StructType.fromAttributes(output))) :: Nil
       case logical.Limit(IntegerLiteral(limit), child) =>
         execution.Limit(limit, planLater(child)) :: Nil
       case Unions(unionChildren) =>
@@ -295,23 +297,27 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.PhysicalRDD(Nil, singleRowRdd) :: Nil
       case logical.Repartition(expressions, child) =>
         execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
-      case e @ EvaluatePython(udf, child) =>
+      case e @ EvaluatePython(udf, child, _) =>
         BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd) :: Nil
       case _ => Nil
     }
   }
 
-  case class CommandStrategy(context: SQLContext) extends Strategy {
+  case object CommandStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case r: RunnableCommand => ExecutedCommand(r) :: Nil
       case logical.SetCommand(kv) =>
-        Seq(execution.SetCommand(kv, plan.output)(context))
+        Seq(ExecutedCommand(execution.SetCommand(kv, plan.output)))
       case logical.ExplainCommand(logicalPlan, extended) =>
-        Seq(execution.ExplainCommand(logicalPlan, plan.output, extended)(context))
+        Seq(ExecutedCommand(
+          execution.ExplainCommand(logicalPlan, plan.output, extended)))
       case logical.CacheTableCommand(tableName, optPlan, isLazy) =>
-        Seq(execution.CacheTableCommand(tableName, optPlan, isLazy))
+        Seq(ExecutedCommand(
+          execution.CacheTableCommand(tableName, optPlan, isLazy)))
       case logical.UncacheTableCommand(tableName) =>
-        Seq(execution.UncacheTableCommand(tableName))
+        Seq(ExecutedCommand(
+          execution.UncacheTableCommand(tableName)))
       case _ => Nil
     }
   }

@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql.api.java;
 
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 /**
  * The base type of all Spark SQL data types.
@@ -55,11 +53,6 @@ public abstract class DataType {
   public static final TimestampType TimestampType = new TimestampType();
 
   /**
-   * Gets the DecimalType object.
-   */
-  public static final DecimalType DecimalType = new DecimalType();
-
-  /**
    * Gets the DoubleType object.
    */
   public static final DoubleType DoubleType = new DoubleType();
@@ -88,6 +81,11 @@ public abstract class DataType {
    * Gets the ShortType object.
    */
   public static final ShortType ShortType = new ShortType();
+
+  /**
+   * Gets the NullType object.
+   */
+  public static final NullType NullType = new NullType();
 
   /**
    * Creates an ArrayType by specifying the data type of elements ({@code elementType}).
@@ -151,15 +149,31 @@ public abstract class DataType {
    * Creates a StructField by specifying the name ({@code name}), data type ({@code dataType}) and
    * whether values of this field can be null values ({@code nullable}).
    */
-  public static StructField createStructField(String name, DataType dataType, boolean nullable) {
+  public static StructField createStructField(
+      String name,
+      DataType dataType,
+      boolean nullable,
+      Metadata metadata) {
     if (name == null) {
       throw new IllegalArgumentException("name should not be null.");
     }
     if (dataType == null) {
       throw new IllegalArgumentException("dataType should not be null.");
     }
+    if (metadata == null) {
+      throw new IllegalArgumentException("metadata should not be null.");
+    }
 
-    return new StructField(name, dataType, nullable);
+    return new StructField(name, dataType, nullable, metadata);
+  }
+
+  /**
+   * Creates a StructField with empty metadata.
+   *
+   * @see #createStructField(String, DataType, boolean, Metadata)
+   */
+  public static StructField createStructField(String name, DataType dataType, boolean nullable) {
+    return createStructField(name, dataType, nullable, (new MetadataBuilder()).build());
   }
 
   /**
@@ -191,5 +205,4 @@ public abstract class DataType {
 
     return new StructType(fields);
   }
-
 }

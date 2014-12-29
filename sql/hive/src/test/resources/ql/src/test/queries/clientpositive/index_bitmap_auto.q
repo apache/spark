@@ -1,3 +1,6 @@
+set hive.stats.dbclass=counter;
+set hive.stats.autogather=true;
+
 -- try the query without indexing, with manual indexing, and with automatic indexing
 -- without indexing
 SELECT key, value FROM src WHERE key=0 AND value = "val_0" ORDER BY key;
@@ -21,12 +24,12 @@ SELECT * FROM default__src_src2_index__ ORDER BY value;
 EXPLAIN
 SELECT a.bucketname AS `_bucketname`, COLLECT_SET(a.offset) as `_offsets`
 FROM (SELECT `_bucketname` AS bucketname, `_offset` AS offset, `_bitmaps` AS bitmaps FROM default__src_src1_index__
-        WHERE key = 0) a
-  JOIN 
-     (SELECT `_bucketname` AS bucketname, `_offset` AS offset, `_bitmaps` AS bitmaps FROM default__src_src2_index__
-        WHERE value = "val_0") b
-  ON
-    a.bucketname = b.bucketname AND a.offset = b.offset WHERE NOT
+       WHERE key = 0) a
+ JOIN 
+    (SELECT `_bucketname` AS bucketname, `_offset` AS offset, `_bitmaps` AS bitmaps FROM default__src_src2_index__
+       WHERE value = "val_0") b
+ ON
+   a.bucketname = b.bucketname AND a.offset = b.offset WHERE NOT
 EWAH_BITMAP_EMPTY(EWAH_BITMAP_AND(a.bitmaps, b.bitmaps)) GROUP BY a.bucketname;
 
 INSERT OVERWRITE DIRECTORY "${system:test.tmp.dir}/index_result" 

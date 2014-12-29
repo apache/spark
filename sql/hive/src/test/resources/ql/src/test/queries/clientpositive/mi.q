@@ -15,7 +15,7 @@ GROUP BY key, value, ds, hr;
 show partitions nzhang_t1;
 show partitions nzhang_t2;
 
-select * from nzhang_t1;
-select * from nzhang_t2;
+select * from nzhang_t1 order by key, value;
+select * from nzhang_t2 order by key, value;
 
 

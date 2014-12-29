@@ -23,6 +23,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.SparkConf
 import org.apache.spark.serializer.JavaSerializer
 
+import scala.util.Random
 
 class MapStatusSuite extends FunSuite {
 
@@ -46,6 +47,26 @@ class MapStatusSuite extends FunSuite {
     }
   }
 
+  test("MapStatus should never report non-empty blocks' sizes as 0") {
+    import Math._
+    for (
+      numSizes <- Seq(1, 10, 100, 1000, 10000);
+      mean <- Seq(0L, 100L, 10000L, Int.MaxValue.toLong);
+      stddev <- Seq(0.0, 0.01, 0.5, 1.0)
+    ) {
+      val sizes = Array.fill[Long](numSizes)(abs(round(Random.nextGaussian() * stddev)) + mean)
+      val status = MapStatus(BlockManagerId("a", "b", 10), sizes)
+      val status1 = compressAndDecompressMapStatus(status)
+      for (i <- 0 until numSizes) {
+        if (sizes(i) != 0) {
+          val failureMessage = s"Failed with $numSizes sizes with mean=$mean, stddev=$stddev"
+          assert(status.getSizeForBlock(i) !== 0, failureMessage)
+          assert(status1.getSizeForBlock(i) !== 0, failureMessage)
+        }
+      }
+    }
+  }
+
   test("large tasks should use " + classOf[HighlyCompressedMapStatus].getName) {
     val sizes = Array.fill[Long](2001)(150L)
     val status = MapStatus(null, sizes)
@@ -56,37 +77,25 @@ class MapStatusSuite extends FunSuite {
     assert(status.getSizeForBlock(2000) === 150L)
   }
 
-  test(classOf[HighlyCompressedMapStatus].getName + ": estimated size is within 10%") {
-    val sizes = Array.tabulate[Long](50) { i => i.toLong }
+  test("HighlyCompressedMapStatus: estimated size should be the average non-empty block size") {
+    val sizes = Array.tabulate[Long](3000) { i => i.toLong }
+    val avg = sizes.sum / sizes.filter(_ != 0).length
     val loc = BlockManagerId("a", "b", 10)
     val status = MapStatus(loc, sizes)
-    val ser = new JavaSerializer(new SparkConf)
-    val buf = ser.newInstance().serialize(status)
-    val status1 = ser.newInstance().deserialize[MapStatus](buf)
+    val status1 = compressAndDecompressMapStatus(status)
+    assert(status1.isInstanceOf[HighlyCompressedMapStatus])
     assert(status1.location == loc)
-    for (i <- 0 until sizes.length) {
-      // make sure the estimated size is within 10% of the input; note that we skip the very small
-      // sizes because the compression is very lossy there.
+    for (i <- 0 until 3000) {
       val estimate = status1.getSizeForBlock(i)
-      if (estimate > 100) {
-        assert(math.abs(estimate - sizes(i)) * 10 <= sizes(i),
-          s"incorrect estimated size $estimate, original was ${sizes(i)}")
+      if (sizes(i) > 0) {
+        assert(estimate === avg)
       }
     }
   }
 
-  test(classOf[HighlyCompressedMapStatus].getName + ": estimated size should be the average size") {
-    val sizes = Array.tabulate[Long](3000) { i => i.toLong }
-    val avg = sizes.sum / sizes.length
-    val loc = BlockManagerId("a", "b", 10)
-    val status = MapStatus(loc, sizes)
+  def compressAndDecompressMapStatus(status: MapStatus): MapStatus = {
     val ser = new JavaSerializer(new SparkConf)
     val buf = ser.newInstance().serialize(status)
-    val status1 = ser.newInstance().deserialize[MapStatus](buf)
-    assert(status1.location == loc)
-    for (i <- 0 until 3000) {
-      val estimate = status1.getSizeForBlock(i)
-      assert(estimate === avg)
-    }
+    ser.newInstance().deserialize[MapStatus](buf)
   }
 }

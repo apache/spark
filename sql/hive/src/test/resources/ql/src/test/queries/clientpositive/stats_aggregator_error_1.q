@@ -1,12 +1,12 @@
 -- In this test, there is a dummy stats aggregator which throws an error when various
--- methods are called (as indicated by the parameter hive.test.dummystats.agregator)
+-- methods are called (as indicated by the parameter hive.test.dummystats.aggregator)
 -- Since stats need not be reliable (by setting hive.stats.reliable to false), the 
 -- insert statements succeed. The insert statement succeeds even if the stats aggregator
 -- is set to null, since stats need not be reliable.
 
 create table tmptable(key string, value string);
 
-set hive.stats.dbclass=dummy;
+set hive.stats.dbclass=custom;
 set hive.stats.default.publisher=org.apache.hadoop.hive.ql.stats.DummyStatsPublisher;
 set hive.stats.default.aggregator=org.apache.hadoop.hive.ql.stats.DummyStatsAggregator;
 set hive.stats.reliable=false;

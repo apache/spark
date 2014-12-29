@@ -56,9 +56,8 @@ private[spark] class HashShuffleWriter[K, V](
       } else {
         records
       }
-    } else if (dep.aggregator.isEmpty && dep.mapSideCombine) {
-      throw new IllegalStateException("Aggregator is empty for map-side combine")
     } else {
+      require(!dep.mapSideCombine, "Map-side combine without Aggregator specified!")
       records
     }
 
@@ -107,7 +106,7 @@ private[spark] class HashShuffleWriter[K, V](
       writer.commitAndClose()
       writer.fileSegment().length
     }
-    MapStatus(blockManager.blockManagerId, sizes)
+    MapStatus(blockManager.shuffleServerId, sizes)
   }
 
   private def revertWrites(): Unit = {

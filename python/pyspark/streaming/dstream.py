@@ -441,9 +441,11 @@ class DStream(object):
 
         if `invReduceFunc` is not None, the reduction is done incrementally
         using the old window's reduced value :
-         1. reduce the new values that entered the window (e.g., adding new counts)
-         2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
-         This is more efficient than `invReduceFunc` is None.
+
+        1. reduce the new values that entered the window (e.g., adding new counts)
+
+        2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
+        This is more efficient than `invReduceFunc` is None.
 
         @param reduceFunc:     associative reduce function
         @param invReduceFunc:  inverse reduce function of `reduceFunc`

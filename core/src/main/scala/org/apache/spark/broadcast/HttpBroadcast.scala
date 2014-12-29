@@ -72,13 +72,13 @@ private[spark] class HttpBroadcast[T: ClassTag](
   }
 
   /** Used by the JVM when serializing this object. */
-  private def writeObject(out: ObjectOutputStream) {
+  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
     assertValid()
     out.defaultWriteObject()
   }
 
   /** Used by the JVM when deserializing this object. */
-  private def readObject(in: ObjectInputStream) {
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
     HttpBroadcast.synchronized {
       SparkEnv.get.blockManager.getSingle(blockId) match {
@@ -191,10 +191,12 @@ private[broadcast] object HttpBroadcast extends Logging {
       logDebug("broadcast security enabled")
       val newuri = Utils.constructURIForAuthentication(new URI(url), securityManager)
       uc = newuri.toURL.openConnection()
+      uc.setConnectTimeout(httpReadTimeout)
       uc.setAllowUserInteraction(false)
     } else {
       logDebug("broadcast not using security")
       uc = new URL(url).openConnection()
+      uc.setConnectTimeout(httpReadTimeout)
     }
 
     val in = {

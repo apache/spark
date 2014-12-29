@@ -102,30 +102,26 @@ case class Like(left: Expression, right: Expression)
 
   // replace the _ with .{1} exactly match 1 time of any character
   // replace the % with .*, match 0 or more times with any character
-  override def escape(v: String) = {
-    val sb = new StringBuilder()
-    var i = 0;
-    while (i < v.length) {
-      // Make a special case for "\\_" and "\\%"
-      val n = v.charAt(i);
-      if (n == '\\' && i + 1 < v.length && (v.charAt(i + 1) == '_' || v.charAt(i + 1) == '%')) {
-        sb.append(v.charAt(i + 1))
-        i += 1
-      } else {
-        if (n == '_') {
-          sb.append(".");
-        } else if (n == '%') {
-          sb.append(".*");
-        } else {
-          sb.append(Pattern.quote(Character.toString(n)));
-        }
-      }
-
-      i += 1
+  override def escape(v: String) =
+    if (!v.isEmpty) {
+      "(?s)" + (' ' +: v.init).zip(v).flatMap {
+        case (prev, '\\') => ""
+        case ('\\', c) =>
+          c match {
+            case '_' => "_"
+            case '%' => "%"
+            case _ => Pattern.quote("\\" + c)
+          }
+        case (prev, c) =>
+          c match {
+            case '_' => "."
+            case '%' => ".*"
+            case _ => Pattern.quote(Character.toString(c))
+          }
+      }.mkString
+    } else {
+      v
     }
-
-    sb.toString()
-  }
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 }

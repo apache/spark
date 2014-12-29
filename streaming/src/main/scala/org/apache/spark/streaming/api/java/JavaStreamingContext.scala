@@ -46,7 +46,7 @@ import org.apache.spark.streaming.receiver.Receiver
  * org.apache.spark.api.java.JavaSparkContext (see core Spark documentation) can be accessed
  * using `context.sparkContext`. After creating and transforming DStreams, the streaming
  * computation can be started and stopped using `context.start()` and `context.stop()`,
- * respectively. `context.awaitTransformation()` allows the current thread to wait for the
+ * respectively. `context.awaitTermination()` allows the current thread to wait for the
  * termination of a context by `stop()` or by an exception.
  */
 class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
@@ -479,7 +479,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   /**
    * Sets each DStreams in this context to remember RDDs it generated in the last given duration.
    * DStreams remember RDDs only for a limited duration of duration and releases them for garbage
-   * collection. This method allows the developer to specify how to long to remember the RDDs (
+   * collection. This method allows the developer to specify how long to remember the RDDs (
    * if the developer wishes to query old data outside the DStream computation).
    * @param duration Minimum duration that each DStream should remember its RDDs
    */
