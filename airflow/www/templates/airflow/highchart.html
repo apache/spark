@@ -2,6 +2,19 @@
 
 {% block head_css %}
 {{ super() }}
+<link rel="stylesheet" type="text/css"
+    href="{{ url_for("static", filename="main.css") }}">
+<link rel="stylesheet" type="text/css"
+    href="{{ url_for("static", filename="dataTables.bootstrap.css") }}">
+<style>
+  pre {
+    margin: 0px;
+    padding: 0px;
+    border: none;
+    background: none;
+    background-color: #FFF;
+  };
+</style>
 {% endblock %}
 {% block title %}
 {{ title }}
@@ -11,40 +24,122 @@
 {{ super() }}
 <div id="container">
     <h2>
-        {{ label }}
-        <a href="/admin/chartview/edit/?url=%2Fadmin%2Fchartview%2F&id={{ chart.id }}">
-            <i class="icon-edit" 
-                style="vertical-align:middle;"></i>
+        <span id="label">{{ label }}</span>
+        <a href="/admin/chart/edit/?id={{ chart.id }}">
+            <span class="glyphicon glyphicon-edit" aria-hidden="true"></span>
         </a>
     </h2>
-    <div id="hc" style="height:{{ chart.height }}px;">
-        <img src="{{ url_for('static', filename='loading.gif') }}" width="50px">
+    <div id="error" style="display: none;" class="alert alert-danger" role="alert">
+        <span class="glyphicon glyphicon-exclamation-sign" aria-hidden="true"></span>
+        <span id="error_msg">Oops.</span>
     </div>
-    {% if show_sql %}
-        <h4>SQL</h4>
-        {{ sql }}
+    {% if chart.show_sql %}
+      <div class="panel panel-default">
+        <div class="panel-heading" role="tab" id="headingTwo">
+          <h4 class="panel-title">
+            <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#sql_panel" aria-expanded="true" aria-controls="sql_panel">
+                    SQL
+                    <span class="glyphicon glyphicon-chevron-up" aria-hidden="true"></span>
+                    <span class="glyphicon glyphicon-chevron-down" aria-hidden="true"></span>
+            </a>
+          </h4>
+        </div>
+        <div id="sql_panel" class="panel-collapse collapse in" role="tabpanel" aria-labelledby="headingTwo">
+          <div class="panel-body" id="sql_panel_body">
+            {{ sql }}
+          </div>
+        </div>
+      </div>
     {% endif %}
-    {% if chart.show_datatable %}
-        <h4>Data</h4>
-        {{ table }}
+    {% if chart.chart_type != "datatable" %}
+      <div id="chart_section" class="panel panel-default">
+        <div class="panel-heading" role="tab" id="headingTwo">
+          <h4 class="panel-title">
+            <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#chart_panel" aria-expanded="true" aria-controls="chart_panel">
+                Chart
+                <span class="glyphicon glyphicon-chevron-up" aria-hidden="true"></span>
+                <span class="glyphicon glyphicon-chevron-down" aria-hidden="true"></span>
+            </a>
+          </h4>
+        </div>
+        <div id="chart_panel" class="panel-collapse collapse in" role="tabpanel" aria-labelledby="headingTwo">
+          <div class="panel-body">
+            <div id="hc" style="height:{{ chart.height }}px;">
+                <img src="{{ url_for('static', filename='loading.gif') }}" width="50px">
+            </div>
+          </div>
+        </div>
+      </div>
+    {% endif %}
+    {% if chart.show_datatable or chart.chart_type == "datatable" %}
+      <div id="datatable_section" class="panel panel-default">
+        <div class="panel-heading" role="tab" id="headingTwo">
+          <h4 class="panel-title">
+            <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#datatable_panel" aria-expanded="true" aria-controls="datatable_panel">
+                    Data
+                    <span class="glyphicon glyphicon-chevron-up" aria-hidden="true"></span>
+                    <span class="glyphicon glyphicon-chevron-down" aria-hidden="true"></span>
+            </a>
+          </h4>
+        </div>
+        <div id="datatable_panel" class="panel-collapse collapse in" role="tabpanel" aria-labelledby="headingTwo">
+          <div class="panel-body" id="datatable_panel_body">
+              <table id="datatable" class="dataframe table table-bordered table-striped no-wrap"></table>
+                <img id="loading" src="{{ url_for('static', filename='loading.gif') }}" width="50px">
+          </div>
+        </div>
+      </div>
     {% endif %}
 </div>
 {% endblock %}
 
 {% block tail %}
     {{ super() }}
+    <script src="{{ url_for('static', filename='jquery.dataTables.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='dataTables.bootstrap.js') }}"></script>
     <script src="{{ url_for('static', filename='highcharts.js') }}"></script>
     <script src="{{ url_for('static', filename='highcharts-more.js') }}">
     </script>
     <script>
+    function error(msg){
+      $('#error_msg').html(msg);
+      $('#error').show();
+      $('#loading').hide();
+      $('#chart_section').hide(1000);
+      $('#datatable_section').hide(1000);
+    }
+    $( document ).ready(function() {
       Highcharts.setOptions({
         colors: [
             "#FF5A5F", "#007A87", "#7B0051", "#00D1C1", "#8CE071", "#FFB400", 
             "#FFAA91", "#B4A76C", "#9CA299", "#565A5C"
         ],
       });
-      hc = {{ hc|safe }};
-      $('#hc').highcharts(hc);
+      url = "{{ url_for('airflow.chart_data', chart_id=chart.id) }}";
+      $.getJSON(url, function(payload) {
+        $('#loading').hide();
+        $("#sql_panel_body").html(payload.sql_html);
+        $("#label").html(payload.label);
+        if (payload.state == "SUCCESS") {
+          {% if chart.chart_type != "datatable" %}
+            $('#hc').highcharts(payload.hc);
+          {% endif %}
+          {% if chart.show_datatable or chart.chart_type == "datatable" %}
+              $('#datatable').dataTable( {
+                "data": payload.data.data,
+                "columns": payload.data.columns,
+                "scrollX": true,
+                "iDisplayLength": 25,
+              });   
+          {% endif %}
+        }  
+        else {
+          error(payload.error);
+        }
+      }).fail(function() {
+        error( "Ooops. Unhandled error." );
+      });
+    });
     </script>
 
 {% endblock %}
