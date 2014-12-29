@@ -48,8 +48,9 @@ class PythonBroadcastSuite extends FunSuite with Matchers {
       }
       val broadcast = new PythonBroadcast(broadcastDataFile.getAbsolutePath)
       assertBroadcastIsValid(broadcast)
+      val conf = new SparkConf().set("spark.kryo.registrationRequired", "true")
       val deserializedBroadcast =
-        Utils.clone[PythonBroadcast](broadcast, new KryoSerializer(new SparkConf()).newInstance())
+        Utils.clone[PythonBroadcast](broadcast, new KryoSerializer(conf).newInstance())
       assertBroadcastIsValid(deserializedBroadcast)
     } finally {
       Utils.deleteRecursively(tempDir)
