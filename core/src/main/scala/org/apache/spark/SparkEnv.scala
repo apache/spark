@@ -289,9 +289,9 @@ object SparkEnv extends Logging {
 
     // Have to assign trackerActor after initialization as MapOutputTrackerActor
     // requires the MapOutputTracker itself
-    mapOutputTracker.trackerActor = registerOrLookupEndpoint(
-      "MapOutputTracker",
-      new MapOutputTrackerMasterActor(rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
+    mapOutputTracker.trackerActor = registerOrLookupEndpoint("MapOutputTracker",
+      new MapOutputTrackerMasterActor(
+        rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
     // Let the user specify short names for shuffle managers
     val shortShuffleMgrNames = Map(

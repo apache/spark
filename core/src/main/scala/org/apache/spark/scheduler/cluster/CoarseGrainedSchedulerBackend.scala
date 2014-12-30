@@ -59,17 +59,20 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
 
   private val executorDataMap = new HashMap[String, ExecutorData]
 
-  // Number of executors requested from the cluster manager that have not registered yet
+  // Number of executors requested from the cluster manager thaSimpt have not registered yet
   private var numPendingExecutors = 0
 
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
 
-  class DriverActor(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)]) extends RpcEndpoint with Logging {
+  class DriverActor(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
+    extends RpcEndpoint with Logging {
+
     override protected def log = CoarseGrainedSchedulerBackend.this.log
     private val addressToExecutorId = new HashMap[String, String]
 
-    private val reviveScheduler = Executors.newScheduledThreadPool(1, Utils.namedThreadFactory("driver-revive-scheduler"))
+    private val reviveScheduler =
+      Executors.newScheduledThreadPool(1, Utils.namedThreadFactory("driver-revive-scheduler"))
 
     override def preStart() {
       // Periodically revive offers to allow delay scheduling to work

@@ -46,7 +46,8 @@ class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
 
         override def preStart(): Unit = {
           endpoint.preStart()
-          // Listen for remote client disconnection events, since they don't go through Akka's watch()
+          // Listen for remote client disconnection events,
+          // since they don't go through Akka's watch()
           context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
         }
 
