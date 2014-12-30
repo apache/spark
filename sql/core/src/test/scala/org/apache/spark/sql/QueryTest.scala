@@ -70,7 +70,7 @@ class QueryTest extends PlanTest {
           """.stripMargin)
     }
 
-    if (prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {
+    if (prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {   // issues here, sparkAnswer may be GenericRow[]
       fail(s"""
         |Results do not match for query:
         |${rdd.logicalPlan}

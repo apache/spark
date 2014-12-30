@@ -49,21 +49,6 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected implicit def asParser(k: Keyword): Parser[String] =
     lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
 
-  // data types
-  protected val STRING = Keyword("STRING")
-  protected val DOUBLE = Keyword("DOUBLE")
-  protected val BOOLEAN = Keyword("BOOLEAN")
-  protected val FLOAT = Keyword("FLOAT")
-  protected val INT = Keyword("INT")
-  protected val TINYINT = Keyword("TINYINT")
-  protected val SMALLINT = Keyword("SMALLINT")
-  protected val BIGINT = Keyword("BIGINT")
-  protected val BINARY = Keyword("BINARY")
-  protected val DECIMAL = Keyword("DECIMAL")
-  protected val DATE = Keyword("DATE")
-  protected val TIMESTAMP = Keyword("TIMESTAMP")
-  protected val VARCHAR = Keyword("VARCHAR")
-
   protected val CREATE = Keyword("CREATE")
   protected val TEMPORARY = Keyword("TEMPORARY")
   protected val TABLE = Keyword("TABLE")
