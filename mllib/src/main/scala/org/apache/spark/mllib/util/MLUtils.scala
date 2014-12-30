@@ -154,10 +154,12 @@ object MLUtils {
   def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {
     // TODO: allow to specify label precision and feature precision.
     val dataStr = data.map { case LabeledPoint(label, features) =>
-      val featureStrings = features.toBreeze.activeIterator.map { case (i, v) =>
-        s"${i + 1}:$v"
+      val sb = new StringBuilder(label.toString)
+      features.foreachActive { case (i, v) =>
+        sb += ' '
+        sb ++= s"${i + 1}:$v"
       }
-      (Iterator(label) ++ featureStrings).mkString(" ")
+      sb.mkString
     }
     dataStr.saveAsTextFile(dir)
   }
