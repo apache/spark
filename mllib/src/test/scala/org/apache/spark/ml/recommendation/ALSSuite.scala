@@ -22,7 +22,7 @@ import java.util.Random
 import org.apache.spark.mllib.linalg.Vectors
 import org.scalatest.FunSuite
 
-import org.apache.spark.ml.recommendation.ALS.{NormalEquation, LocalIndexEncoder}
+import org.apache.spark.ml.recommendation.ALS.{CholeskySolver, NormalEquation, LocalIndexEncoder}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
@@ -45,11 +45,12 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("normal equation construction with explict feedback") {
-    val ne0 = new NormalEquation(2)
+    val k = 2
+    val ne0 = new NormalEquation(k)
       .add(Array(1.0f, 2.0f), 3.0f)
       .add(Array(4.0f, 5.0f), 6.0f)
-    assert(ne0.k === 2)
-    assert(ne0.triK === 3)
+    assert(ne0.k === k)
+    assert(ne0.triK === k * (k + 1) / 2)
     assert(ne0.n === 2)
     // NumPy code that computes the expected values:
     // A = np.matrix("1 2; 4 5")
@@ -89,14 +90,15 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("normal equation construction with implicit feedback") {
+    val k = 2
     val alpha = 0.5
-    val ne0 = new NormalEquation(2)
+    val ne0 = new NormalEquation(k)
       .addImplicit(Array(-5.0f, -4.0f), -3.0f, alpha)
       .addImplicit(Array(-2.0f, -1.0f), 0.0f, alpha)
       .addImplicit(Array(1.0f, 2.0f), 3.0f, alpha)
-    assert(ne0.k === 2)
-    assert(ne0.triK === 3)
-    assert(ne0.n === 1)
+    assert(ne0.k === k)
+    assert(ne0.triK === k * (k + 1) / 2)
+    assert(ne0.n === 0) // addImplicit doesn't increase the count.
     // NumPy code that computes the expected values:
     // alpha = 0.5
     // A = np.matrix("-5 -4; -2 -1; 1 2")
@@ -109,5 +111,32 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
     // atb = A.transpose() * C * b1
     assert(Vectors.dense(ne0.ata) ~== Vectors.dense(39.0, 33.0, 30.0) relTol 1e-8)
     assert(Vectors.dense(ne0.atb) ~== Vectors.dense(2.5, 5.0) relTol 1e-8)
+  }
+
+  test("Cholesky solver") {
+    val k = 2
+    val ne0 = new NormalEquation(k)
+      .add(Array(1.0f, 2.0f), 4.0f)
+      .add(Array(1.0f, 3.0f), 9.0f)
+      .add(Array(1.0f, 4.0f), 16.0f)
+    val ne1 = new NormalEquation(k)
+      .merge(ne0)
+
+    val chol = new CholeskySolver(k)
+    val x0 = chol.solve(ne0, 0.0).map(_.toDouble)
+    // NumPy code that computes the expected solution:
+    // A = np.matrix("1 2; 1 3; 1 4")
+    // b = b = np.matrix("3; 6")
+    // x0 = np.linalg.lstsq(A, b)[0]
+    assert(Vectors.dense(x0) ~== Vectors.dense(-8.333333, 6.0) relTol 1e-6)
+
+    assert(ne0.n === 0)
+    assert(ne0.ata.forall(_ == 0.0))
+    assert(ne0.atb.forall(_ == 0.0))
+
+    val x1 = chol.solve(ne1, 0.5).map(_.toDouble)
+    // NumPy code that computes the expected solution, where lambda is scaled by n:
+    // x0 = np.linalg.solve(A.transpose() * A + 0.5 * 3 * np.eye(2), A.transpose() * b)
+    assert(Vectors.dense(x1) ~== Vectors.dense(-0.1155556, 3.28) relTol 1e-6)
   }
 }

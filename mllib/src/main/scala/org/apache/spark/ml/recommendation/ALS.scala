@@ -210,7 +210,7 @@ private object ALS extends Logging {
   private case class Rating(user: Int, item: Int, rating: Float)
 
   /** Cholesky solver for least square problems. */
-  private class CholeskySolver(val k: Int) {
+  private[recommendation] class CholeskySolver(val k: Int) {
 
     val upper = "U"
     val info = new intW(0)
@@ -226,13 +226,14 @@ private object ALS extends Logging {
       }
       lapack.dppsv(upper, k, 1, ne.ata, ne.atb, k, info)
       val code = info.`val`
-      assert(code == 0, s"lapack.sppsv returned $code.")
+      assert(code == 0, s"lapack.dppsv returned $code.")
       val x = new Array[Float](k)
       i = 0
       while (i < k) {
         x(i) = ne.atb(i).toFloat
         i += 1
       }
+      ne.reset()
       x
     }
   }
@@ -272,7 +273,6 @@ private object ALS extends Logging {
       blas.dspr(upper, k, confidence - 1.0, da, 1, ata)
       if (b > 0) {
         blas.daxpy(k, confidence, da, 1, atb, 1)
-        n += 1
       }
       this
     }
