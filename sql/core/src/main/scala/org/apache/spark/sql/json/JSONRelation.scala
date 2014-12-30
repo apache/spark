@@ -43,8 +43,7 @@ private[sql] case class JSONRelation(
 
   private def baseRDD = sqlContext.sparkContext.textFile(fileName)
 
-  override val schema =
-    userSpecifiedSchema.getOrElse(
+  override val schema = userSpecifiedSchema.getOrElse(
     JsonRDD.inferSchema(
       baseRDD,
       samplingRatio,

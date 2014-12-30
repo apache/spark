@@ -100,9 +100,15 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected lazy val pair: Parser[(String, String)] = ident ~ stringLit ^^ { case k ~ v => (k,v) }
 
   protected lazy val column: Parser[StructField] =
-    ident ~  ident ^^ { case name ~ typ =>
+  ( ident ~  ident ^^ { case name ~ typ =>
       StructField(name, metastoreTypes.toDataType(typ))
     }
+  |
+    ident ~ ("decimal" ~ "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
+      case name ~ precision ~ scale =>
+        StructField(name, DecimalType(precision.toInt, scale.toInt))
+    }
+  )
 }
 
 /**
@@ -121,8 +127,8 @@ private[sql] class MetastoreTypes extends RegexParsers {
       "bigint" ^^^ LongType |
       "binary" ^^^ BinaryType |
       "boolean" ^^^ BooleanType |
-      fixedDecimalType |                     // Hive 0.13+ decimal with precision/scale
-      "decimal" ^^^ DecimalType.Unlimited |  // Hive 0.12 decimal with no precision/scale
+      fixedDecimalType |                     // decimal with precision/scale
+      "decimal" ^^^ DecimalType.Unlimited |  // decimal with no precision/scale
       "date" ^^^ DateType |
       "timestamp" ^^^ TimestampType |
       "varchar\\((\\d+)\\)".r ^^^ StringType
@@ -204,8 +210,13 @@ private[sql] case class CreateTableUsing(
     }
     val dataSource =
       clazz.newInstance().asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
-    val relation = dataSource.createRelation(
-      sqlContext, new CaseInsensitiveMap(options), Some(StructType(tableCols)))
+    val relation = if(tableCols.isEmpty) {
+      dataSource.createRelation(
+        sqlContext, new CaseInsensitiveMap(options))
+    } else {
+      dataSource.createRelation(
+        sqlContext, new CaseInsensitiveMap(options), Some(StructType(tableCols)))
+    }
 
     sqlContext.baseRelationToSchemaRDD(relation).registerTempTable(tableName)
     Seq.empty

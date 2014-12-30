@@ -41,9 +41,7 @@ trait RelationProvider {
    * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
    * by the Map that is passed to the function.
    */
-  def createRelation(
-      sqlContext: SQLContext,
-      parameters: Map[String, String]): BaseRelation
+  def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation
 }
 
 /**
