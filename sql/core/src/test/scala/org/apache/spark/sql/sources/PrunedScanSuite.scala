@@ -19,11 +19,10 @@ package org.apache.spark.sql.sources
 
 import org.apache.spark.sql._
 
-class PrunedScanSource extends SchemaRelationProvider {
+class PrunedScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
-      parameters: Map[String, String],
-      schema: Option[StructType] = None): BaseRelation = {
+      parameters: Map[String, String]): BaseRelation = {
     SimplePrunedScan(parameters("from").toInt, parameters("to").toInt)(sqlContext)
   }
 }

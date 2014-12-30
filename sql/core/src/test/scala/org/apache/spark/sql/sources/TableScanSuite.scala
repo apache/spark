@@ -21,11 +21,10 @@ import org.apache.spark.sql._
 
 class DefaultSource extends SimpleScanSource
 
-class SimpleScanSource extends SchemaRelationProvider {
+class SimpleScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
-      parameters: Map[String, String],
-      schema: Option[StructType] = None): BaseRelation = {
+      parameters: Map[String, String]): BaseRelation = {
     SimpleScan(parameters("from").toInt, parameters("TO").toInt)(sqlContext)
   }
 }

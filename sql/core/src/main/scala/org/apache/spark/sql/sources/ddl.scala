@@ -209,12 +209,15 @@ private[sql] case class CreateTableUsing(
             sys.error(s"Failed to load class for data source: $provider")
         }
     }
-    val dataSource =
-      clazz.newInstance().asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
     val relation = if(tableCols.isEmpty) {
-      dataSource.createRelation(
-        sqlContext, new CaseInsensitiveMap(options))
+      val dataSource =
+        clazz.newInstance().asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
+
+      dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
     } else {
+      val dataSource =
+        clazz.newInstance().asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
+
       dataSource.createRelation(
         sqlContext, new CaseInsensitiveMap(options), Some(StructType(tableCols)))
     }
