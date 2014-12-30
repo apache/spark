@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.sources
 
+import scala.language.implicitConversions
+import scala.util.parsing.combinator.syntactical.StandardTokenParsers
+import scala.util.parsing.combinator.{RegexParsers, PackratParsers}
+
 import org.apache.spark.Logging
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.util.Utils
-
-import scala.language.implicitConversions
-import scala.util.parsing.combinator.lexical.StdLexical
-import scala.util.parsing.combinator.syntactical.StandardTokenParsers
-import scala.util.parsing.combinator.PackratParsers
-
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.SqlLexical
 
@@ -49,6 +49,21 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected implicit def asParser(k: Keyword): Parser[String] =
     lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
 
+  // data types
+  protected val STRING = Keyword("STRING")
+  protected val DOUBLE = Keyword("DOUBLE")
+  protected val BOOLEAN = Keyword("BOOLEAN")
+  protected val FLOAT = Keyword("FLOAT")
+  protected val INT = Keyword("INT")
+  protected val TINYINT = Keyword("TINYINT")
+  protected val SMALLINT = Keyword("SMALLINT")
+  protected val BIGINT = Keyword("BIGINT")
+  protected val BINARY = Keyword("BINARY")
+  protected val DECIMAL = Keyword("DECIMAL")
+  protected val DATE = Keyword("DATE")
+  protected val TIMESTAMP = Keyword("TIMESTAMP")
+  protected val VARCHAR = Keyword("VARCHAR")
+
   protected val CREATE = Keyword("CREATE")
   protected val TEMPORARY = Keyword("TEMPORARY")
   protected val TABLE = Keyword("TABLE")
@@ -67,15 +82,30 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected lazy val ddl: Parser[LogicalPlan] = createTable
 
   /**
-   * CREATE TEMPORARY TABLE avroTable
+   * `CREATE TEMPORARY TABLE avroTable
    * USING org.apache.spark.sql.avro
-   * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")
+   * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
+   * or
+   * `CREATE TEMPORARY TABLE avroTable(intField int, stringField string...)
+   * USING org.apache.spark.sql.avro
+   * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    */
   protected lazy val createTable: Parser[LogicalPlan] =
-    CREATE ~ TEMPORARY ~ TABLE ~> ident ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
+  (  CREATE ~ TEMPORARY ~ TABLE ~> ident ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
       case tableName ~ provider ~ opts =>
-        CreateTableUsing(tableName, provider, opts)
+        CreateTableUsing(tableName, Seq.empty, provider, opts)
     }
+  |
+    CREATE ~ TEMPORARY ~ TABLE ~> ident
+      ~ tableCols  ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
+      case tableName ~ tableColumns ~ provider ~ opts =>
+      CreateTableUsing(tableName, tableColumns, provider, opts)
+    }
+  )
+
+  protected lazy val metastoreTypes = new MetastoreTypes
+
+  protected lazy val tableCols: Parser[Seq[StructField]] =  "(" ~> repsep(column, ",") <~ ")"
 
   protected lazy val options: Parser[Map[String, String]] =
     "(" ~> repsep(pair, ",") <~ ")" ^^ { case s: Seq[(String, String)] => s.toMap }
@@ -83,10 +113,98 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected lazy val className: Parser[String] = repsep(ident, ".") ^^ { case s => s.mkString(".")}
 
   protected lazy val pair: Parser[(String, String)] = ident ~ stringLit ^^ { case k ~ v => (k,v) }
+
+  protected lazy val column: Parser[StructField] =
+    ident ~  ident ^^ { case name ~ typ =>
+      StructField(name, metastoreTypes.toDataType(typ))
+    }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Provides a parser for data types.
+ */
+@DeveloperApi
+private[sql] class MetastoreTypes extends RegexParsers {
+  protected lazy val primitiveType: Parser[DataType] =
+    "string" ^^^ StringType |
+      "float" ^^^ FloatType |
+      "int" ^^^ IntegerType |
+      "tinyint" ^^^ ByteType |
+      "smallint" ^^^ ShortType |
+      "double" ^^^ DoubleType |
+      "bigint" ^^^ LongType |
+      "binary" ^^^ BinaryType |
+      "boolean" ^^^ BooleanType |
+      fixedDecimalType |                     // Hive 0.13+ decimal with precision/scale
+      "decimal" ^^^ DecimalType.Unlimited |  // Hive 0.12 decimal with no precision/scale
+      "date" ^^^ DateType |
+      "timestamp" ^^^ TimestampType |
+      "varchar\\((\\d+)\\)".r ^^^ StringType
+
+  protected lazy val fixedDecimalType: Parser[DataType] =
+    ("decimal" ~> "(" ~> "\\d+".r) ~ ("," ~> "\\d+".r <~ ")") ^^ {
+      case precision ~ scale =>
+        DecimalType(precision.toInt, scale.toInt)
+    }
+
+  protected lazy val arrayType: Parser[DataType] =
+    "array" ~> "<" ~> dataType <~ ">" ^^ {
+      case tpe => ArrayType(tpe)
+    }
+
+  protected lazy val mapType: Parser[DataType] =
+    "map" ~> "<" ~> dataType ~ "," ~ dataType <~ ">" ^^ {
+      case t1 ~ _ ~ t2 => MapType(t1, t2)
+    }
+
+  protected lazy val structField: Parser[StructField] =
+    "[a-zA-Z0-9_]*".r ~ ":" ~ dataType ^^ {
+      case name ~ _ ~ tpe => StructField(name, tpe, nullable = true)
+    }
+
+  protected lazy val structType: Parser[DataType] =
+    "struct" ~> "<" ~> repsep(structField,",") <~ ">"  ^^ {
+      case fields => new StructType(fields)
+    }
+
+  private[sql] lazy val dataType: Parser[DataType] =
+    arrayType |
+      mapType |
+      structType |
+      primitiveType
+
+  def toDataType(metastoreType: String): DataType = parseAll(dataType, metastoreType) match {
+    case Success(result, _) => result
+    case failure: NoSuccess => sys.error(s"Unsupported dataType: $metastoreType")
+  }
+
+  def toMetastoreType(dt: DataType): String = dt match {
+    case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"
+    case StructType(fields) =>
+      s"struct<${fields.map(f => s"${f.name}:${toMetastoreType(f.dataType)}").mkString(",")}>"
+    case MapType(keyType, valueType, _) =>
+      s"map<${toMetastoreType(keyType)},${toMetastoreType(valueType)}>"
+    case StringType => "string"
+    case FloatType => "float"
+    case IntegerType => "int"
+    case ByteType => "tinyint"
+    case ShortType => "smallint"
+    case DoubleType => "double"
+    case LongType => "bigint"
+    case BinaryType => "binary"
+    case BooleanType => "boolean"
+    case DateType => "date"
+    case d: DecimalType => "decimal"
+    case TimestampType => "timestamp"
+    case NullType => "void"
+    case udt: UserDefinedType[_] => toMetastoreType(udt.sqlType)
+  }
 }
 
 private[sql] case class CreateTableUsing(
     tableName: String,
+    tableCols: Seq[StructField],
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
@@ -100,7 +218,8 @@ private[sql] case class CreateTableUsing(
         }
     }
     val dataSource = clazz.newInstance().asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
-    val relation = dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
+    val relation = dataSource.createRelation(
+      sqlContext, new CaseInsensitiveMap(options), Some(StructType(tableCols)))
 
     sqlContext.baseRelationToSchemaRDD(relation).registerTempTable(tableName)
     Seq.empty
