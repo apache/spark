@@ -210,12 +210,23 @@ private object ALS extends Logging {
   private case class Rating(user: Int, item: Int, rating: Float)
 
   /** Cholesky solver for least square problems. */
-  private[recommendation] class CholeskySolver(val k: Int) {
+  private[recommendation] class CholeskySolver {
 
-    val upper = "U"
-    val info = new intW(0)
+    private val upper = "U"
+    private val info = new intW(0)
 
+    /**
+     * Solves a least squares problem with L2 regularization:
+     *
+     *   min norm(A x - b)^2^ + lambda * n * norm(x)^2^
+     *
+     * @param ne a [[NormalEquation]] instance that contains AtA, Atb, and n (number of instances)
+     * @param lambda regularization constant, which will be scaled by n
+     * @return the solution x
+     */
     def solve(ne: NormalEquation, lambda: Double): Array[Float] = {
+      val k = ne.k
+      // Add scaled lambda to the diagonals of AtA.
       val scaledlambda = lambda * ne.n
       var i = 0
       var j = 2
@@ -241,9 +252,13 @@ private object ALS extends Logging {
   /** Representing a normal equation (ALS' subproblem). */
   private[recommendation] class NormalEquation(val k: Int) extends Serializable {
 
+    /** Number of entries in the upper triangular part of a k-by-k matrix. */
     val triK = k * (k + 1) / 2
+    /** A^T^ * A */
     val ata = new Array[Double](triK)
+    /** A^T^ * b */
     val atb = new Array[Double](k)
+    /** Number of observations. */
     var n = 0
 
     private val da = new Array[Double](k)
@@ -257,6 +272,7 @@ private object ALS extends Logging {
       }
     }
 
+    /** Adds an observation. */
     def add(a: Array[Float], b: Float): this.type = {
       require(a.size == k)
       copyToDouble(a)
@@ -266,6 +282,9 @@ private object ALS extends Logging {
       this
     }
 
+    /**
+     * Adds an observation with implicit feedback. Note that this does not increment the counter.
+     */
     def addImplicit(a: Array[Float], b: Float, alpha: Double): this.type = {
       require(a.size == k)
       val confidence = 1.0 + alpha * math.abs(b)
@@ -277,6 +296,7 @@ private object ALS extends Logging {
       this
     }
 
+    /** Merges another normal equation object. */
     def merge(other: NormalEquation): this.type = {
       require(other.k == k)
       blas.daxpy(ata.size, 1.0, other.ata, 1, ata, 1)
@@ -285,6 +305,7 @@ private object ALS extends Logging {
       this
     }
 
+    /** Resets everything to zero, which should be called after each solve. */
     def reset(): Unit = {
       javaUtil.Arrays.fill(ata, 0.0)
       javaUtil.Arrays.fill(atb, 0.0)
@@ -749,7 +770,7 @@ private object ALS extends Logging {
         val dstFactors = new Array[Array[Float]](dstIds.size)
         var j = 0
         val ls = new NormalEquation(k)
-        val solver = new CholeskySolver(k)
+        val solver = new CholeskySolver
         while (j < dstIds.size) {
           ls.reset()
           if (implicitPrefs) {

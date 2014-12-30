@@ -122,7 +122,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
     val ne1 = new NormalEquation(k)
       .merge(ne0)
 
-    val chol = new CholeskySolver(k)
+    val chol = new CholeskySolver
     val x0 = chol.solve(ne0, 0.0).map(_.toDouble)
     // NumPy code that computes the expected solution:
     // A = np.matrix("1 2; 1 3; 1 4")
