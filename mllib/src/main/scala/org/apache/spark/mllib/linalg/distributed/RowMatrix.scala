@@ -588,8 +588,8 @@ class RowMatrix(
     val n = numCols().toInt
     val mat = BDM.zeros[Double](m, n)
     var i = 0
-    rows.collect().foreach { v =>
-      v.toBreeze.activeIterator.foreach { case (j, v) =>
+    rows.collect().foreach { vector =>
+      vector.foreachActive { case (j, v) =>
         mat(i, j) = v
       }
       i += 1
