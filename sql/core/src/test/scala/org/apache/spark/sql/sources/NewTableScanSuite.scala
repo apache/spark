@@ -95,7 +95,7 @@ class NewTableScanSuite extends DataSourceTest {
       """
         |CREATE TEMPORARY TABLE oneToTen(stringField string, intField int, longField bigint,
         |floatField float, doubleField double, shortField smallint, byteField tinyint,
-        |booleanField boolean, decimalField decimal, dateField date, timestampField timestamp)
+        |booleanField boolean, decimalField decimal(10,2), dateField date, timestampField timestamp)
         |USING org.apache.spark.sql.sources.AllDataTypesScanSource
         |OPTIONS (
         |  From '1',

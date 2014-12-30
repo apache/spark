@@ -50,6 +50,7 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
     lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
 
   protected val CREATE = Keyword("CREATE")
+  protected val DECIMAL = Keyword("DECIMAL")
   protected val TEMPORARY = Keyword("TEMPORARY")
   protected val TABLE = Keyword("TABLE")
   protected val USING = Keyword("USING")
@@ -104,7 +105,7 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
       StructField(name, metastoreTypes.toDataType(typ))
     }
   |
-    ident ~ ("decimal" ~ "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
+    ident ~ (DECIMAL ~ "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
       case name ~ precision ~ scale =>
         StructField(name, DecimalType(precision.toInt, scale.toInt))
     }
