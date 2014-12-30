@@ -370,6 +370,8 @@ private[spark] class TaskSetManager(
     : Option[(Int, TaskLocality.Value, Boolean)] =
   {
     for (index <- dequeueTaskFromList(execId, getPendingTasksForExecutor(execId))) {
+      // Remove the execId from pendingTasksForExecutor when no more tasks for it to enable fast
+      // checking of whether pendingTasksForExecutor is empty or not
       if (getPendingTasksForExecutor(execId).isEmpty) {
         pendingTasksForExecutor -= execId
       }
@@ -498,6 +500,7 @@ private[spark] class TaskSetManager(
    * Get the level we can launch tasks according to delay scheduling, based on current wait time.
    */
   private def getAllowedLocalityLevel(curTime: Long): TaskLocality.TaskLocality = {
+    // Move to next locality level if there is no process-local tasks
     if (myLocalityLevels(currentLocalityIndex) == TaskLocality.PROCESS_LOCAL &&
         pendingTasksForExecutor.isEmpty && currentLocalityIndex < myLocalityLevels.length - 1) {
       lastLaunchTime = curTime
