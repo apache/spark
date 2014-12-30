@@ -1587,8 +1587,7 @@ class RDD(object):
     def groupByKey(self, numPartitions=None):
         """
         Group the values for each key in the RDD into a single sequence.
-        Hash-partitions the resulting RDD with into numPartitions
-        partitions.
+        Hash-partitions the resulting RDD with numPartitions partitions.
 
         The values in the resulting RDD is iterable object L{ResultIterable},
         they can be iterated only once. The `len(values)` will result in

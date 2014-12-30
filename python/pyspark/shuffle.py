@@ -188,7 +188,7 @@ class ExternalMerger(Merger):
       dict. Repeat this again until combine all the items.
 
     - Before return any items, it will load each partition and
-      combine them seperately. Yield them before loading next
+      combine them separately. Yield them before loading next
       partition.
 
     - During loading a partition, if the memory goes over limit,
@@ -197,7 +197,7 @@ class ExternalMerger(Merger):
 
     `data` and `pdata` are used to hold the merged items in memory.
     At first, all the data are merged into `data`. Once the used
-    memory goes over limit, the items in `data` are dumped indo
+    memory goes over limit, the items in `data` are dumped into
     disks, `data` will be cleared, all rest of items will be merged
     into `pdata` and then dumped into disks. Before returning, all
     the items in `pdata` will be dumped into disks.
@@ -235,7 +235,7 @@ class ExternalMerger(Merger):
         self.batch = batch
         # scale is used to scale down the hash of key for recursive hash map
         self.scale = scale
-        # unpartitioned merged data
+        # un-partitioned merged data
         self.data = {}
         # partitioned merged data, list of dicts
         self.pdata = []
@@ -334,7 +334,7 @@ class ExternalMerger(Merger):
 
             for k, v in self.data.iteritems():
                 h = self._partition(k)
-                # put one item in batch, make it compatitable with load_stream
+                # put one item in batch, make it compatible with load_stream
                 # it will increase the memory if dump them in batch
                 self.serializer.dump_stream([(k, v)], streams[h])
 
@@ -676,12 +676,12 @@ class ExternalGroupBy(ExternalMerger):
       If the data in one partitions can be hold in memory, then it
       will load and combine them in memory and yield.
 
-    - If the dataset in one partittion cannot be hold in memory,
+    - If the dataset in one partition cannot be hold in memory,
       it will sort them first. If all the files are already sorted,
       it merge them by heap.merge(), so it will do external sort
       for all the files.
 
-    - After sorting, `GroupByKey` class will put all the continious
+    - After sorting, `GroupByKey` class will put all the continuous
       items with the same key as a group, yield the values as
       an iterator.
     """
