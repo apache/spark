@@ -47,8 +47,9 @@ trait RelationProvider {
 /**
  * ::DeveloperApi::
  * Implemented by objects that produce relations for a specific kind of data source.  When
- * Spark SQL is given a DDL operation with a USING clause specified and user defined schema optionally,
- * this interface is used to pass in the parameters specified by a user.
+ * Spark SQL is given a DDL operation with
+ * 1. USING clause: to specify the implemented SchemaRelationProvider
+ * 2. User defined schema: users can define schema optionally when create table
  *
  * Users may specify the fully qualified class name of a given data source.  When that class is
  * not found Spark SQL will append the class name `DefaultSource` to the path, allowing for
