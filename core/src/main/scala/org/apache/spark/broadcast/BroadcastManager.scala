@@ -53,12 +53,16 @@ private[spark] class BroadcastManager(
   }
 
   def stop() {
+    initialized = false
     broadcastFactory.stop()
   }
 
   private val nextBroadcastId = new AtomicLong(0)
 
   def newBroadcast[T: ClassTag](value_ : T, isLocal: Boolean) = {
+    if (!initialized) {
+      throw new SparkException("BroadcastManager has not been init or already shut down.")
+    }
     broadcastFactory.newBroadcast[T](value_, isLocal, nextBroadcastId.getAndIncrement())
   }
 
