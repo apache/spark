@@ -21,10 +21,11 @@ import scala.language.existentials
 
 import org.apache.spark.sql._
 
-class FilteredScanSource extends RelationProvider {
+class FilteredScanSource extends SchemaRelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
-      parameters: Map[String, String]): BaseRelation = {
+      parameters: Map[String, String],
+      schema: Option[StructType] = None): BaseRelation = {
     SimpleFilteredScan(parameters("from").toInt, parameters("to").toInt)(sqlContext)
   }
 }

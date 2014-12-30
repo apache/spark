@@ -43,12 +43,12 @@ import scala.collection.JavaConversions._
  * required is `path`, which should be the location of a collection of, optionally partitioned,
  * parquet files.
  */
-class DefaultSource extends RelationProvider {
+class DefaultSource extends SchemaRelationProvider {
   /** Returns a new base relation with the given parameters. */
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String],
-      schema: Option[StructType]): BaseRelation = {
+      schema: Option[StructType] = None): BaseRelation = {
     val path =
       parameters.getOrElse("path", sys.error("'path' must be specified for parquet tables."))
 

@@ -217,7 +217,8 @@ private[sql] case class CreateTableUsing(
             sys.error(s"Failed to load class for data source: $provider")
         }
     }
-    val dataSource = clazz.newInstance().asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
+    val dataSource =
+      clazz.newInstance().asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
     val relation = dataSource.createRelation(
       sqlContext, new CaseInsensitiveMap(options), Some(StructType(tableCols)))
 

@@ -43,8 +43,33 @@ trait RelationProvider {
    */
   def createRelation(
       sqlContext: SQLContext,
+      parameters: Map[String, String]): BaseRelation
+}
+
+/**
+ * ::DeveloperApi::
+ * Implemented by objects that produce relations for a specific kind of data source.  When
+ * Spark SQL is given a DDL operation with a USING clause specified and user defined schema optionally,
+ * this interface is used to pass in the parameters specified by a user.
+ *
+ * Users may specify the fully qualified class name of a given data source.  When that class is
+ * not found Spark SQL will append the class name `DefaultSource` to the path, allowing for
+ * less verbose invocation.  For example, 'org.apache.spark.sql.json' would resolve to the
+ * data source 'org.apache.spark.sql.json.DefaultSource'
+ *
+ * A new instance of this class with be instantiated each time a DDL call is made.
+ */
+@DeveloperApi
+trait SchemaRelationProvider {
+  /**
+   * Returns a new base relation with the given parameters and user defined schema.
+   * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
+   * by the Map that is passed to the function.
+   */
+  def createRelation(
+      sqlContext: SQLContext,
       parameters: Map[String, String],
-      schema: Option[StructType]): BaseRelation
+      schema: Option[StructType] = None): BaseRelation
 }
 
 /**

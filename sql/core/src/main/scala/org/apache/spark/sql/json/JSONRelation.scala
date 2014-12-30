@@ -21,12 +21,12 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.sources._
 
-private[sql] class DefaultSource extends RelationProvider {
+private[sql] class DefaultSource extends SchemaRelationProvider {
   /** Returns a new base relation with the given parameters. */
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String],
-      schema: Option[StructType]): BaseRelation = {
+      schema: Option[StructType] = None): BaseRelation = {
     val fileName = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 
