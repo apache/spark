@@ -100,7 +100,7 @@ public abstract class TaskContext implements Serializable {
 
   /**
    * An ID recording how many times this task has been attempted.  The first task attempt will be
-   * assigned attemptId = 0, and subsequent attempts will have increasing ids.
+   * assigned attemptId = 0, and subsequent attempts will have increasing IDs.
    */
   public abstract long attemptId();
 
