@@ -34,7 +34,7 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
-import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.rpc.{RpcEndpointRef, RpcEndpoint, RpcEnv}
 import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
@@ -272,6 +272,15 @@ object SparkEnv extends Logging {
       }
     }
 
+    def registerOrLookupEndpoint(name: String, endpointCreator: => RpcEndpoint): RpcEndpointRef = {
+      if (isDriver) {
+        logInfo("Registering " + name)
+        rpcEnv.setupEndpoint(name, endpointCreator)
+      } else {
+        rpcEnv.setupDriverEndpointRef(name)
+      }
+    }
+
     val mapOutputTracker =  if (isDriver) {
       new MapOutputTrackerMaster(conf)
     } else {
@@ -280,9 +289,9 @@ object SparkEnv extends Logging {
 
     // Have to assign trackerActor after initialization as MapOutputTrackerActor
     // requires the MapOutputTracker itself
-    mapOutputTracker.trackerActor = registerOrLookup(
+    mapOutputTracker.trackerActor = registerOrLookupEndpoint(
       "MapOutputTracker",
-      new MapOutputTrackerMasterActor(mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
+      new MapOutputTrackerMasterActor(rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
     // Let the user specify short names for shuffle managers
     val shortShuffleMgrNames = Map(
