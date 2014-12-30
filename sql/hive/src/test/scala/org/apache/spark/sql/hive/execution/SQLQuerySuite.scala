@@ -32,6 +32,13 @@ case class Nested3(f3: Int)
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest {
+  test("SPARK-4512 Fix attribute reference resolution error when using SORT BY") {
+    checkAnswer(
+      sql("SELECT * FROM (SELECT key + key AS a FROM src SORT BY value) t ORDER BY t.a"),
+      sql("SELECT key + key as a FROM src ORDER BY a").collect().toSeq
+    )
+  }
+
   test("CTAS with serde") {
     sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect
     sql(

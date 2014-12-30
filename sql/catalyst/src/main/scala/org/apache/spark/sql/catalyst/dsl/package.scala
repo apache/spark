@@ -244,9 +244,9 @@ package object dsl {
         condition: Option[Expression] = None) =
       Join(logicalPlan, otherPlan, joinType, condition)
 
-    def orderBy(sortExprs: SortOrder*) = Sort(sortExprs, logicalPlan)
+    def orderBy(sortExprs: SortOrder*) = Sort(sortExprs, true, logicalPlan)
 
-    def sortBy(sortExprs: SortOrder*) = SortPartitions(sortExprs, logicalPlan)
+    def sortBy(sortExprs: SortOrder*) = Sort(sortExprs, false, logicalPlan)
 
     def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*) = {
       val aliasedExprs = aggregateExprs.map {
