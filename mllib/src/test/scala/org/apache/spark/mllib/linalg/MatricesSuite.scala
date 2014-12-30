@@ -43,9 +43,9 @@ class MatricesSuite extends FunSuite {
 
   test("sparse matrix construction") {
     val m = 3
-    val n = 2
+    val n = 4
     val values = Array(1.0, 2.0, 4.0, 5.0)
-    val colPtrs = Array(0, 2, 4)
+    val colPtrs = Array(0, 2, 2, 4, 4)
     val rowIndices = Array(1, 2, 1, 2)
     val mat = Matrices.sparse(m, n, colPtrs, rowIndices, values).asInstanceOf[SparseMatrix]
     assert(mat.numRows === m)
@@ -53,6 +53,13 @@ class MatricesSuite extends FunSuite {
     assert(mat.values.eq(values), "should not copy data")
     assert(mat.colPtrs.eq(colPtrs), "should not copy data")
     assert(mat.rowIndices.eq(rowIndices), "should not copy data")
+
+    val entries: Array[(Int, Int, Double)] = Array((2, 2, 3.0), (1, 0, 1.0), (2, 0, 2.0),
+        (1, 2, 2.0), (2, 2, 2.0), (1, 2, 2.0), (0, 0, 0.0))
+
+    val mat2 = SparseMatrix.fromCOO(m, n, entries)
+    assert(mat.toBreeze === mat2.toBreeze)
+    assert(mat2.values.length == 4)
   }
 
   test("sparse matrix construction with wrong number of elements") {
@@ -117,6 +124,142 @@ class MatricesSuite extends FunSuite {
     assert(sparseMat.values(2) === 10.0)
   }
 
+  test("toSparse, toDense") {
+    val m = 3
+    val n = 2
+    val values = Array(1.0, 2.0, 4.0, 5.0)
+    val allValues = Array(1.0, 2.0, 0.0, 0.0, 4.0, 5.0)
+    val colPtrs = Array(0, 2, 4)
+    val rowIndices = Array(0, 1, 1, 2)
+
+    val spMat1 = new SparseMatrix(m, n, colPtrs, rowIndices, values)
+    val deMat1 = new DenseMatrix(m, n, allValues)
+
+    val spMat2 = deMat1.toSparse()
+    val deMat2 = spMat1.toDense()
+
+    assert(spMat1.toBreeze === spMat2.toBreeze)
+    assert(deMat1.toBreeze === deMat2.toBreeze)
+  }
+
+  test("map, update") {
+    val m = 3
+    val n = 2
+    val values = Array(1.0, 2.0, 4.0, 5.0)
+    val allValues = Array(1.0, 2.0, 0.0, 0.0, 4.0, 5.0)
+    val colPtrs = Array(0, 2, 4)
+    val rowIndices = Array(0, 1, 1, 2)
+
+    val spMat1 = new SparseMatrix(m, n, colPtrs, rowIndices, values)
+    val deMat1 = new DenseMatrix(m, n, allValues)
+    val deMat2 = deMat1.map(_ * 2)
+    val spMat2 = spMat1.map(_ * 2)
+    deMat1.update(_ * 2)
+    spMat1.update(_ * 2)
+
+    assert(spMat1.toArray === spMat2.toArray)
+    assert(deMat1.toArray === deMat2.toArray)
+  }
+
+  test("horzcat, vertcat, eye, speye") {
+    val m = 3
+    val n = 2
+    val values = Array(1.0, 2.0, 4.0, 5.0)
+    val allValues = Array(1.0, 2.0, 0.0, 0.0, 4.0, 5.0)
+    val colPtrs = Array(0, 2, 4)
+    val rowIndices = Array(0, 1, 1, 2)
+
+    val spMat1 = new SparseMatrix(m, n, colPtrs, rowIndices, values)
+    val deMat1 = new DenseMatrix(m, n, allValues)
+    val deMat2 = Matrices.eye(3)
+    val spMat2 = Matrices.speye(3)
+    val deMat3 = Matrices.eye(2)
+    val spMat3 = Matrices.speye(2)
+
+    val spHorz = Matrices.horzcat(Array(spMat1, spMat2))
+    val spHorz2 = Matrices.horzcat(Array(spMat1, deMat2))
+    val spHorz3 = Matrices.horzcat(Array(deMat1, spMat2))
+    val deHorz1 = Matrices.horzcat(Array(deMat1, deMat2))
+
+    val deHorz2 = Matrices.horzcat(Array[Matrix]())
+
+    assert(deHorz1.numRows === 3)
+    assert(spHorz2.numRows === 3)
+    assert(spHorz3.numRows === 3)
+    assert(spHorz.numRows === 3)
+    assert(deHorz1.numCols === 5)
+    assert(spHorz2.numCols === 5)
+    assert(spHorz3.numCols === 5)
+    assert(spHorz.numCols === 5)
+    assert(deHorz2.numRows === 0)
+    assert(deHorz2.numCols === 0)
+    assert(deHorz2.toArray.length === 0)
+
+    assert(deHorz1.toBreeze.toDenseMatrix === spHorz2.toBreeze.toDenseMatrix)
+    assert(spHorz2.toBreeze === spHorz3.toBreeze)
+    assert(spHorz(0, 0) === 1.0)
+    assert(spHorz(2, 1) === 5.0)
+    assert(spHorz(0, 2) === 1.0)
+    assert(spHorz(1, 2) === 0.0)
+    assert(spHorz(1, 3) === 1.0)
+    assert(spHorz(2, 4) === 1.0)
+    assert(spHorz(1, 4) === 0.0)
+    assert(deHorz1(0, 0) === 1.0)
+    assert(deHorz1(2, 1) === 5.0)
+    assert(deHorz1(0, 2) === 1.0)
+    assert(deHorz1(1, 2) == 0.0)
+    assert(deHorz1(1, 3) === 1.0)
+    assert(deHorz1(2, 4) === 1.0)
+    assert(deHorz1(1, 4) === 0.0)
+
+    intercept[IllegalArgumentException] {
+      Matrices.horzcat(Array(spMat1, spMat3))
+    }
+
+    intercept[IllegalArgumentException] {
+      Matrices.horzcat(Array(deMat1, spMat3))
+    }
+
+    val spVert = Matrices.vertcat(Array(spMat1, spMat3))
+    val deVert1 = Matrices.vertcat(Array(deMat1, deMat3))
+    val spVert2 = Matrices.vertcat(Array(spMat1, deMat3))
+    val spVert3 = Matrices.vertcat(Array(deMat1, spMat3))
+    val deVert2 = Matrices.vertcat(Array[Matrix]())
+
+    assert(deVert1.numRows === 5)
+    assert(spVert2.numRows === 5)
+    assert(spVert3.numRows === 5)
+    assert(spVert.numRows === 5)
+    assert(deVert1.numCols === 2)
+    assert(spVert2.numCols === 2)
+    assert(spVert3.numCols === 2)
+    assert(spVert.numCols === 2)
+    assert(deVert2.numRows === 0)
+    assert(deVert2.numCols === 0)
+    assert(deVert2.toArray.length === 0)
+
+    assert(deVert1.toBreeze.toDenseMatrix === spVert2.toBreeze.toDenseMatrix)
+    assert(spVert2.toBreeze === spVert3.toBreeze)
+    assert(spVert(0, 0) === 1.0)
+    assert(spVert(2, 1) === 5.0)
+    assert(spVert(3, 0) === 1.0)
+    assert(spVert(3, 1) === 0.0)
+    assert(spVert(4, 1) === 1.0)
+    assert(deVert1(0, 0) === 1.0)
+    assert(deVert1(2, 1) === 5.0)
+    assert(deVert1(3, 0) === 1.0)
+    assert(deVert1(3, 1) === 0.0)
+    assert(deVert1(4, 1) === 1.0)
+
+    intercept[IllegalArgumentException] {
+      Matrices.vertcat(Array(spMat1, spMat2))
+    }
+
+    intercept[IllegalArgumentException] {
+      Matrices.vertcat(Array(deMat1, spMat2))
+    }
+  }
+
   test("zeros") {
     val mat = Matrices.zeros(2, 3).asInstanceOf[DenseMatrix]
     assert(mat.numRows === 2)
@@ -161,5 +304,30 @@ class MatricesSuite extends FunSuite {
     assert(mat.numRows === 2)
     assert(mat.numCols === 2)
     assert(mat.values.toSeq === Seq(1.0, 0.0, 0.0, 2.0))
+  }
+
+  test("sprand") {
+    val rng = mock[Random]
+    when(rng.nextInt(4)).thenReturn(0, 1, 1, 3, 2, 2, 0, 1, 3, 0)
+    when(rng.nextDouble()).thenReturn(1.0, 2.0, 3.0, 4.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)
+    val mat = SparseMatrix.sprand(4, 4, 0.25, rng)
+    assert(mat.numRows === 4)
+    assert(mat.numCols === 4)
+    assert(mat.rowIndices.toSeq === Seq(3, 0, 2, 1))
+    assert(mat.values.toSeq === Seq(1.0, 2.0, 3.0, 4.0))
+    val mat2 = SparseMatrix.sprand(2, 3, 1.0, rng)
+    assert(mat2.rowIndices.toSeq === Seq(0, 1, 0, 1, 0, 1))
+    assert(mat2.colPtrs.toSeq === Seq(0, 2, 4, 6))
+  }
+
+  test("sprandn") {
+    val rng = mock[Random]
+    when(rng.nextInt(4)).thenReturn(0, 1, 1, 3, 2, 2, 0, 1, 3, 0)
+    when(rng.nextGaussian()).thenReturn(1.0, 2.0, 3.0, 4.0)
+    val mat = SparseMatrix.sprandn(4, 4, 0.25, rng)
+    assert(mat.numRows === 4)
+    assert(mat.numCols === 4)
+    assert(mat.rowIndices.toSeq === Seq(3, 0, 2, 1))
+    assert(mat.values.toSeq === Seq(1.0, 2.0, 3.0, 4.0))
   }
 }

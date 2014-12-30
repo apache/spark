@@ -25,7 +25,6 @@ import com.google.common.io.Files
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Time, Seconds, StreamingContext}
-import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.util.IntParam
 
 /**

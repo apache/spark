@@ -25,7 +25,6 @@ import org.apache.spark.streaming.scheduler.StreamingListenerBatchStarted
 import org.apache.spark.streaming.scheduler.BatchInfo
 import org.apache.spark.streaming.scheduler.StreamingListenerBatchSubmitted
 import org.apache.spark.util.Distribution
-import org.apache.spark.Logging
 
 
 private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
@@ -36,6 +35,8 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   private val completedaBatchInfos = new Queue[BatchInfo]
   private val batchInfoLimit = ssc.conf.getInt("spark.streaming.ui.retainedBatches", 100)
   private var totalCompletedBatches = 0L
+  private var totalReceivedRecords = 0L
+  private var totalProcessedRecords = 0L
   private val receiverInfos = new HashMap[Int, ReceiverInfo]
 
   val batchDuration = ssc.graph.batchDuration.milliseconds
@@ -65,6 +66,10 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
   override def onBatchStarted(batchStarted: StreamingListenerBatchStarted) = synchronized {
     runningBatchInfos(batchStarted.batchInfo.batchTime) = batchStarted.batchInfo
     waitingBatchInfos.remove(batchStarted.batchInfo.batchTime)
+
+    batchStarted.batchInfo.receivedBlockInfo.foreach { case (_, infos) =>
+      totalReceivedRecords += infos.map(_.numRecords).sum
+    }
   }
 
   override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted) = synchronized {
@@ -73,6 +78,10 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
     completedaBatchInfos.enqueue(batchCompleted.batchInfo)
     if (completedaBatchInfos.size > batchInfoLimit) completedaBatchInfos.dequeue()
     totalCompletedBatches += 1L
+
+    batchCompleted.batchInfo.receivedBlockInfo.foreach { case (_, infos) =>
+      totalProcessedRecords += infos.map(_.numRecords).sum
+    }
   }
 
   def numReceivers = synchronized {
@@ -81,6 +90,14 @@ private[streaming] class StreamingJobProgressListener(ssc: StreamingContext)
 
   def numTotalCompletedBatches: Long = synchronized {
     totalCompletedBatches
+  }
+
+  def numTotalReceivedRecords: Long = synchronized {
+    totalReceivedRecords
+  }
+
+  def numTotalProcessedRecords: Long = synchronized {
+    totalProcessedRecords
   }
 
   def numUnprocessedBatches: Long = synchronized {

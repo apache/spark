@@ -142,16 +142,16 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case Project(projectList1, Project(projectList2, child)) =>
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
-      val aliasMap = projectList2.collect {
-        case a @ Alias(e, _) => (a.toAttribute: Expression, a)
-      }.toMap
+      val aliasMap = AttributeMap(projectList2.collect {
+        case a @ Alias(e, _) => (a.toAttribute, a)
+      })
 
       // Substitute any attributes that are produced by the child projection, so that we safely
       // eliminate it.
       // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
       // TODO: Fix TransformBase to avoid the cast below.
       val substitutedProjection = projectList1.map(_.transform {
-        case a if aliasMap.contains(a) => aliasMap(a)
+        case a: Attribute if aliasMap.contains(a) => aliasMap(a)
       }).asInstanceOf[Seq[NamedExpression]]
 
       Project(substitutedProjection, child)
@@ -317,10 +317,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             val common = lhsSet.intersect(rhsSet)
             val ldiff = lhsSet.diff(common)
             val rdiff = rhsSet.diff(common)
-            if (common.size == 0) {
-              // a && b
-              and
-            }else if (ldiff.size == 0 || rdiff.size == 0) {
+            if (ldiff.size == 0 || rdiff.size == 0) {
               // a && (a || b)
               common.reduce(Or)
             } else {
@@ -348,10 +345,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             val common = lhsSet.intersect(rhsSet)
             val ldiff = lhsSet.diff(common)
             val rdiff = rhsSet.diff(common)
-            if (common.size == 0) {
-              // a || b
-              or
-            }else if ( ldiff.size == 0 || rdiff.size == 0) {
+            if ( ldiff.size == 0 || rdiff.size == 0) {
               // a || (b && a)
               common.reduce(And)
             } else {
