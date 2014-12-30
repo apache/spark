@@ -139,6 +139,8 @@ if (isOutputSerialized) {
 }
 
 close(outputCon)
+close(inputCon)
+unlink(inFileName)
 
 # Restore stdout
 sink()
