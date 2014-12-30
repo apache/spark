@@ -213,6 +213,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     @transient val thread  = new Thread() {
       override def run() {
         try {
+          SparkEnv.set(env)
           // initialize all the receivers
           val receivers = receiverInputStreams.map(nis => {
             val rcvr = nis.getReceiver()
@@ -223,7 +224,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           // start local receiver
           val t1 = new Thread() {
             override def run(): Unit = {
-              SparkEnv.set(env)
               startLocalReceivers(receivers.filter(_.isInstanceOf[PythonReceiverWrapper]))
             }
           }
@@ -232,8 +232,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
           // start other receivers
           val t2 = new Thread() {
             override def run(): Unit = {
-              SparkEnv.set(env)
-              startReceivers(receivers.filterNot(_.isInstanceOf[PythonReceiverWrapper]))
+              val rcs = receivers.filterNot(_.isInstanceOf[PythonReceiverWrapper])
+              if (!rcs.isEmpty) {
+                startReceivers(rcs)
+              }
             }
           }
           t2.start()
@@ -277,13 +279,14 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       val threads = receivers.map{ receiver =>
         new Thread() {
           override def run(): Unit = {
-            val executor = new ReceiverSupervisorImpl(
+            val supervisor = new ReceiverSupervisorImpl(
               receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
-            executor.start()
-            executor.awaitTermination()
+            supervisor.start()
+            supervisor.awaitTermination()
           }
         }
       }
+      threads.foreach(_.setDaemon(true))
       threads.foreach(_.start())
       // waiting for all threads
       threads.foreach(_.join())
