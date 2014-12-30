@@ -1007,12 +1007,11 @@ let user control table caching explicitly:
     CACHE TABLE logs_last_month;
     UNCACHE TABLE logs_last_month;
 
-**NOTE:** `CACHE TABLE tbl` is lazy, similar to `.cache` on an RDD. This command only marks `tbl` to ensure that
-partitions are cached when calculated but doesn't actually cache it until a query that touches `tbl` is executed.
-To force the table to be cached, you may simply count the table immediately after executing `CACHE TABLE`:
+**NOTE:** `CACHE TABLE tbl` is now __eager__ by default not __lazy__. Don’t need to trigger cache materialization manually anymore.
 
-    CACHE TABLE logs_last_month;
-    SELECT COUNT(1) FROM logs_last_month;
+Spark SQL newly introduced a statement to let user control table caching whether or not lazy since Spark 1.2.0:
+
+	CACHE [LAZY] TABLE [AS SELECT] ...
 
 Several caching related features are not supported yet:
 
