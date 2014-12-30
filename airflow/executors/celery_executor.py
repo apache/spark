@@ -50,7 +50,7 @@ class CeleryExecutor(BaseExecutor):
             if self.last_state[key] != async.state:
                 if async.state == celery_states.SUCCESS:
                     self.change_state(key, State.SUCCESS)
-                elif async.state in celery_states.FAILURE_STATES:
+                elif async.state == celery_states.FAILURE:
                     self.change_state(key, State.FAILED)
                 self.last_state[key] = async.state
 
