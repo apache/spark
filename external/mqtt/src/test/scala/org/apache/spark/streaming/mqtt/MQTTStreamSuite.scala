@@ -17,31 +17,70 @@
 
 package org.apache.spark.streaming.mqtt
 
+import org.apache.spark.Logging
 import org.scalatest.FunSuite
-
+import org.scalatest.concurrent.Eventually
+import scala.concurrent.duration._
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.eclipse.paho.client.mqttv3._
+import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
 
-class MQTTStreamSuite extends FunSuite {
+abstract class MQTTStreamSuiteBase extends FunSuite with Eventually with Logging {
 
   val batchDuration = Seconds(1)
+  val master: String = "local[2]"
+  val framework: String = this.getClass.getSimpleName
+  val brokerUrl = "tcp://localhost:1883"
+  val topic = "def"
 
-  private val master: String = "local[2]"
+  def publishData(sendMessage: String): Unit = {
 
-  private val framework: String = this.getClass.getSimpleName
+    try {
+
+      val persistence: MqttClientPersistence = new MqttDefaultFilePersistence("/tmp")
+      val client: MqttClient = new MqttClient(brokerUrl, MqttClient.generateClientId(), persistence)
+      client.connect()
+      val msgTopic: MqttTopic = client.getTopic(topic)
+
+      val message: MqttMessage = new MqttMessage(String.valueOf(sendMessage).getBytes("utf-8"))
+      message.setQos(1)
+      message.setRetained(true)
+      msgTopic.publish(message)
+      println("Published data \ntopic: " + msgTopic.getName() + "\nMessage: " + message)
+
+      client.disconnect()
+
+    } catch {
+      case e: MqttException => println("Exception Caught: " + e)
+    }
+  }
+}
+
+class MQTTStreamSuite extends MQTTStreamSuiteBase {
 
   test("mqtt input stream") {
     val ssc = new StreamingContext(master, framework, batchDuration)
-    val brokerUrl = "abc"
-    val topic = "def"
+    val sendMessage = "MQTT demo for spark streaming"
+
+    publishData(sendMessage)
 
     // tests the API, does not actually test data receiving
-    val test1: ReceiverInputDStream[String] = MQTTUtils.createStream(ssc, brokerUrl, topic)
-    val test2: ReceiverInputDStream[String] =
+
+    val receiveStream: ReceiverInputDStream[String] =
       MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_AND_DISK_SER_2)
 
-    // TODO: Actually test receiving data
+    var result: String = ""
+    receiveStream.foreachRDD { rdd =>
+      result = rdd.first
+      result
+    }
+
+    ssc.start()
+    eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
+      assert(sendMessage.equals(result))
+    }
     ssc.stop()
   }
 }
