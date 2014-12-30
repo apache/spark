@@ -22,8 +22,7 @@ import scopt.OptionParser
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.recommendation.ALS
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.{Row, SQLContext}
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
