@@ -102,7 +102,7 @@ public class JavaSimpleParamsExample {
     // 'probability' column since we renamed the lr.probabilityCol parameter previously.
     model2.transform(test).registerTempTable("results");
     DataFrame results =
-        jsql.sql("SELECT features, label, probability, prediction FROM results");
+        jsql.sql("SELECT features, label, myProbability, prediction FROM results");
     for (Row r: results.collect()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") -> prob=" + r.get(2)
           + ", prediction=" + r.get(3));

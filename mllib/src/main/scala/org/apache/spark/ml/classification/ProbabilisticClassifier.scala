@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import scala.reflect.runtime.universe._
-
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.param.{HasProbabilityCol, ParamMap, Params}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
@@ -42,8 +40,10 @@ private[classification] trait ProbabilisticClassifierParams
   }
 }
 
+
 /**
  * :: AlphaComponent ::
+ *
  * Single-label binary or multiclass classifier which can output class conditional probabilities.
  *
  * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
@@ -57,13 +57,13 @@ abstract class ProbabilisticClassifier[
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
   extends Classifier[FeaturesType, Learner, M] with ProbabilisticClassifierParams {
 
-  setProbabilityCol("") // Do not output by default
-
   def setProbabilityCol(value: String): Learner = set(probabilityCol, value).asInstanceOf[Learner]
 }
 
+
 /**
  * :: AlphaComponent ::
+ *
  * Model produced by a [[ProbabilisticClassifier]].
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
@@ -75,8 +75,6 @@ abstract class ProbabilisticClassificationModel[
     FeaturesType,
     M <: ProbabilisticClassificationModel[FeaturesType, M]]
   extends ClassificationModel[FeaturesType, M] with ProbabilisticClassifierParams {
-
-  setProbabilityCol("") // Do not output by default
 
   def setProbabilityCol(value: String): M = set(probabilityCol, value).asInstanceOf[M]
 

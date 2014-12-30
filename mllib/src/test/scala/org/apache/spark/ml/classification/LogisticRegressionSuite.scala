@@ -19,9 +19,9 @@ package org.apache.spark.ml.classification
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.ml.LabeledPoint
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row, SQLContext}
@@ -45,13 +45,13 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(lr.getLabelCol == "label")
     val model = lr.fit(dataset)
     model.transform(dataset)
-      .select('label, 'score, 'prediction)
+      .select('label, 'probability, 'prediction)
       .collect()
     // Check defaults
     assert(model.getThreshold === 0.5)
     assert(model.getFeaturesCol == "features")
     assert(model.getPredictionCol == "prediction")
-    assert(model.getScoreCol == "score")
+    assert(model.getProbabilityCol == "probability")
   }
 
   test("logistic regression with setters") {
@@ -60,7 +60,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
       .setMaxIter(10)
       .setRegParam(1.0)
       .setThreshold(0.6)
-      .setScoreCol("probability")
+      .setProbabilityCol("myProbability")
     val model = lr.fit(dataset)
     model.transform(dataset, model.threshold -> 0.8) // overwrite threshold
       .select("label", "score", "prediction")
@@ -80,26 +80,26 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     // Modify model params, and check that the params worked.
     model.setThreshold(1.0)
     val predAllZero = model.transform(dataset)
-      .select('prediction, 'probability)
+      .select('prediction, 'myProbability)
       .collect()
-      .map { case Row(pred: Double, prob: Double) => pred }
+      .map { case Row(pred: Double, prob: Vector) => pred }
     assert(predAllZero.forall(_ === 0.0))
     // Call transform with params, and check that the params worked.
     val predNotAllZero =
-      model.transform(dataset, model.threshold -> 0.0, model.scoreCol -> "myProb")
+      model.transform(dataset, model.threshold -> 0.0, model.probabilityCol -> "myProb")
         .select('prediction, 'myProb)
         .collect()
-        .map { case Row(pred: Double, prob: Double) => pred }
+        .map { case Row(pred: Double, prob: Vector) => pred }
     assert(predNotAllZero.exists(_ !== 0.0))
 
     // Call fit() with new params, and check as many params as we can.
     val model2 = lr.fit(dataset, lr.maxIter -> 5, lr.regParam -> 0.1, lr.threshold -> 0.4,
-      lr.scoreCol -> "theProb")
+      lr.probabilityCol -> "theProb")
     assert(model2.fittingParamMap.get(lr.maxIter).get === 5)
     assert(model2.fittingParamMap.get(lr.regParam).get === 0.1)
     assert(model2.fittingParamMap.get(lr.threshold).get === 0.4)
     assert(model2.getThreshold === 0.4)
-    assert(model2.getScoreCol == "theProb")
+    assert(model2.getProbabilityCol == "theProb")
   }
 
   test("logistic regression: Predictor, Classifier methods") {

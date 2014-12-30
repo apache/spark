@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import scala.reflect.runtime.universe._
-
 import org.apache.spark.annotation.{DeveloperApi, AlphaComponent}
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.param.{Params, ParamMap, HasRawPredictionCol}
@@ -62,8 +60,6 @@ abstract class Classifier[
   extends Predictor[FeaturesType, Learner, M]
   with ClassifierParams {
 
-  setRawPredictionCol("") // Do not output by default
-
   def setRawPredictionCol(value: String): Learner =
     set(rawPredictionCol, value).asInstanceOf[Learner]
 
@@ -81,8 +77,6 @@ abstract class Classifier[
 @AlphaComponent
 abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[FeaturesType, M]]
   extends PredictionModel[FeaturesType, M] with ClassifierParams {
-
-  setRawPredictionCol("") // Do not output by default
 
   def setRawPredictionCol(value: String): M = set(rawPredictionCol, value).asInstanceOf[M]
 

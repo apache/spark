@@ -19,14 +19,12 @@ package org.apache.spark.ml.param
 
 import scala.annotation.varargs
 import scala.collection.mutable
-import scala.reflect.runtime.universe._
 
 import java.lang.reflect.Modifier
 
-import org.apache.spark.annotation.{DeveloperApi, AlphaComponent}
+import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.Identifiable
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.ScalaReflection
 
 /**
  * :: AlphaComponent ::

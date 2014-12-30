@@ -32,7 +32,8 @@ private[regression] trait LinearRegressionParams extends RegressorParams
 
 /**
  * :: AlphaComponent ::
- * Logistic regression.
+ *
+ * Linear regression.
  */
 @AlphaComponent
 class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegressionModel]
@@ -78,6 +79,7 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
 
 /**
  * :: AlphaComponent ::
+ *
  * Model produced by [[LinearRegression]].
  */
 @AlphaComponent

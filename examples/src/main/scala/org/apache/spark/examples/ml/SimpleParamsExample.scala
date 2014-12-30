@@ -93,7 +93,7 @@ object SimpleParamsExample {
     model2.transform(test)
       .select('features, 'label, 'myProbability, 'prediction)
       .collect()
-      .foreach { case Row(features: Vector, label: Double, prob: Double, prediction: Double) =>
+      .foreach { case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
         println("(" + features + ", " + label + ") -> prob=" + prob + ", prediction=" + prediction)
       }
 

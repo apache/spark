@@ -30,6 +30,7 @@ trait RegressorParams extends PredictorParams
 
 /**
  * :: AlphaComponent ::
+ *
  * Single-label regression
  *
  * @tparam FeaturesType  Type of input features.  E.g., [[org.apache.spark.mllib.linalg.Vector]]
@@ -49,6 +50,7 @@ abstract class Regressor[
 
 /**
  * :: AlphaComponent ::
+ *
  * Model produced by a [[Regressor]].
  *
  * @tparam FeaturesType  Type of input features.  E.g., [[org.apache.spark.mllib.linalg.Vector]]

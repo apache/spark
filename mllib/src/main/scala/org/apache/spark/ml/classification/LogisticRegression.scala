@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
-import org.apache.spark.mllib.linalg.{VectorUDT, Vectors, BLAS, Vector}
+import org.apache.spark.mllib.linalg.{BLAS, Vector, VectorUDT, Vectors}
 import org.apache.spark.sql._
 import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
@@ -35,6 +35,7 @@ private[classification] trait LogisticRegressionParams extends ProbabilisticClas
 
 /**
  * :: AlphaComponent ::
+ *
  * Logistic regression.
  * Currently, this class only supports binary classification.
  */
@@ -86,6 +87,7 @@ class LogisticRegression
 
 /**
  * :: AlphaComponent ::
+ *
  * Model produced by [[LogisticRegression]].
  */
 @AlphaComponent

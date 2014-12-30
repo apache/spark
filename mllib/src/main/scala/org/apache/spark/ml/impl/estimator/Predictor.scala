@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.impl.estimator
 
-import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.linalg.Vector
@@ -62,6 +62,8 @@ trait PredictorParams extends Params
 }
 
 /**
+ * :: AlphaComponent ::
+ *
  * Abstraction for prediction problems (regression and classification).
  *
  * @tparam FeaturesType  Type of features.
@@ -71,7 +73,7 @@ trait PredictorParams extends Params
  * @tparam M  Specialization of [[PredictionModel]].  If you subclass this type, use this type
  *            parameter to specify the concrete type for the corresponding model.
  */
-@DeveloperApi
+@AlphaComponent
 abstract class Predictor[
     FeaturesType,
     Learner <: Predictor[FeaturesType, Learner, M],
@@ -124,7 +126,18 @@ abstract class Predictor[
   }
 }
 
-private[ml] abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, M]]
+/**
+ * :: AlphaComponent ::
+ *
+ * Abstraction for a model for prediction tasks (regression and classification).
+ *
+ * @tparam FeaturesType  Type of features.
+ *                       E.g., [[org.apache.spark.mllib.linalg.VectorUDT]] for vector features.
+ * @tparam M  Specialization of [[PredictionModel]].  If you subclass this type, use this type
+ *            parameter to specify the concrete type for the corresponding model.
+ */
+@AlphaComponent
+abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, M]]
   extends Model[M] with PredictorParams {
 
   def setFeaturesCol(value: String): M = set(featuresCol, value).asInstanceOf[M]
