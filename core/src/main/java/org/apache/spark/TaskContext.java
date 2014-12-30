@@ -98,7 +98,17 @@ public abstract class TaskContext implements Serializable {
 
   public abstract int partitionId();
 
+  /**
+   * An ID recording how many times this task has been attempted.  The first task attempt will be
+   * assigned attemptId = 0, and subsequent attempts will have increasing ids.
+   */
   public abstract long attemptId();
+
+  /**
+   * An ID that is unique to this task attempt (within the same SparkContext, no two task attempts
+   * will share the same task ID).
+   */
+  public abstract long taskId();
 
   /** ::DeveloperApi:: */
   @DeveloperApi

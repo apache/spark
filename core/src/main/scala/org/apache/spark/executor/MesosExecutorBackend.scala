@@ -77,10 +77,13 @@ private[spark] class MesosExecutorBackend
 
   override def launchTask(d: ExecutorDriver, taskInfo: TaskInfo) {
     val taskId = taskInfo.getTaskId.getValue.toLong
+    val attemptIdPlusData = taskInfo.getData.asReadOnlyByteBuffer()
+    val attemptId = attemptIdPlusData.getLong  // Updates the position by 8 bytes
+    val data = attemptIdPlusData.slice()  // Subsequence starting at the current position
     if (executor == null) {
       logError("Received launchTask but executor was null")
     } else {
-      executor.launchTask(this, taskId, taskInfo.getName, taskInfo.getData.asReadOnlyByteBuffer)
+      executor.launchTask(this, taskId = taskId, attemptId = attemptId, taskInfo.getName, data)
     }
   }
 

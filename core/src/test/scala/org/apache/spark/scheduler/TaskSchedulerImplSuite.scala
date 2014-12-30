@@ -85,7 +85,7 @@ class FakeTaskSetManager(
   {
     if (tasksSuccessful + numRunningTasks < numTasks) {
       increaseRunningTasks(1)
-      Some(new TaskDescription(0, execId, "task 0:0", 0, null))
+      Some(new TaskDescription(0, 0, execId, "task 0:0", 0, null))
     } else {
       None
     }

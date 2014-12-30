@@ -635,7 +635,7 @@ class DAGScheduler(
       val rdd = job.finalStage.rdd
       val split = rdd.partitions(job.partitions(0))
       val taskContext =
-        new TaskContextImpl(job.finalStage.id, job.partitions(0), 0, true)
+        new TaskContextImpl(job.finalStage.id, job.partitions(0), 0, 0, true)
       TaskContextHelper.setTaskContext(taskContext)
       try {
         val result = job.func(taskContext, rdd.iterator(split, taskContext))

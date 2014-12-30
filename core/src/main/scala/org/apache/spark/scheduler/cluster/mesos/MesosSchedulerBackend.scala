@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
+import java.nio.ByteBuffer
 import java.util.{ArrayList => JArrayList, List => JList}
 import java.util.Collections
 
@@ -290,13 +291,22 @@ private[spark] class MesosSchedulerBackend(
       .setType(Value.Type.SCALAR)
       .setScalar(Value.Scalar.newBuilder().setValue(scheduler.CPUS_PER_TASK).build())
       .build()
+    // Encode the attemptId as part of the data payload, since there's not a MesosTaskInfo field
+    // to hold it:
+    val data = {
+      val serializedTask = task.serializedTask
+      val dataBuffer = ByteBuffer.allocate(8 + serializedTask.limit())
+      dataBuffer.putLong(task.attemptId)
+      dataBuffer.put(serializedTask)
+      ByteString.copyFrom(dataBuffer)
+    }
     MesosTaskInfo.newBuilder()
       .setTaskId(taskId)
       .setSlaveId(SlaveID.newBuilder().setValue(slaveId).build())
       .setExecutor(createExecutorInfo(slaveId))
       .setName(task.name)
       .addResources(cpuResource)
-      .setData(ByteString.copyFrom(task.serializedTask))
+      .setData(data)
       .build()
   }
 

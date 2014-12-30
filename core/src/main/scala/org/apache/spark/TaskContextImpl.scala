@@ -22,8 +22,10 @@ import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerExce
 
 import scala.collection.mutable.ArrayBuffer
 
-private[spark] class TaskContextImpl(val stageId: Int,
+private[spark] class TaskContextImpl(
+    val stageId: Int,
     val partitionId: Int,
+    val taskId: Long,
     val attemptId: Long,
     val runningLocally: Boolean = false,
     val taskMetrics: TaskMetrics = TaskMetrics.empty)
