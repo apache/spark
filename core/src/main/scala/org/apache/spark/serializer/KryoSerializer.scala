@@ -26,7 +26,6 @@ import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializ
 import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
 
 import org.apache.spark._
-import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.HttpBroadcast
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage._
@@ -80,7 +79,6 @@ class KryoSerializer(conf: SparkConf)
     // Allow sending SerializableWritable
     kryo.register(classOf[SerializableWritable[_]], new KryoJavaSerializer())
     kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
-    kryo.register(classOf[PythonBroadcast], new KryoJavaSerializer())
 
     // Allow the user to register their own classes by setting spark.kryo.registrator
     for (regCls <- registrator) {
