@@ -18,56 +18,17 @@
 package org.apache.spark.mllib.regression
 
 import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.MonotonicityConstraint.MonotonicityConstraint._
 import org.apache.spark.rdd.RDD
-
-/**
- * Monotonicity constrains for monotone regression
- * Isotonic (increasing)
- * Antitonic (decreasing)
- */
-object MonotonicityConstraint {
-
-  object MonotonicityConstraint {
-
-    sealed trait MonotonicityConstraint {
-      private[regression] def holds(
-        current: WeightedLabeledPoint,
-        next: WeightedLabeledPoint): Boolean
-    }
-
-    /**
-     * Isotonic monotonicity constraint. Increasing sequence
-     */
-    case object Isotonic extends MonotonicityConstraint {
-      override def holds(current: WeightedLabeledPoint, next: WeightedLabeledPoint): Boolean = {
-        current.label <= next.label
-      }
-    }
-
-    /**
-     * Antitonic monotonicity constrain. Decreasing sequence
-     */
-    case object Antitonic extends MonotonicityConstraint {
-      override def holds(current: WeightedLabeledPoint, next: WeightedLabeledPoint): Boolean = {
-        current.label >= next.label
-      }
-    }
-  }
-
-  val Isotonic = MonotonicityConstraint.Isotonic
-  val Antitonic = MonotonicityConstraint.Antitonic
-}
 
 /**
  * Regression model for Isotonic regression
  *
  * @param predictions Weights computed for every feature.
- * @param monotonicityConstraint specifies if the sequence is increasing or decreasing
+ * @param isotonic isotonic (increasing) or antitonic (decreasing) sequence
  */
 class IsotonicRegressionModel(
     val predictions: Seq[(Double, Double, Double)],
-    val monotonicityConstraint: MonotonicityConstraint)
+    val isotonic: Boolean)
   extends RegressionModel {
 
   override def predict(testData: RDD[Vector]): RDD[Double] =
@@ -91,23 +52,23 @@ trait IsotonicRegressionAlgorithm
    *
    * @param predictions labels estimated using isotonic regression algorithm.
    *                    Used for predictions on new data points.
-   * @param monotonicityConstraint isotonic or antitonic
+   * @param isotonic isotonic (increasing) or antitonic (decreasing) sequence
    * @return isotonic regression model
    */
   protected def createModel(
       predictions: Seq[(Double, Double, Double)],
-      monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel
+      isotonic: Boolean): IsotonicRegressionModel
 
   /**
    * Run algorithm to obtain isotonic regression model
    *
    * @param input data
-   * @param monotonicityConstraint ascending or descenting
+   * @param isotonic isotonic (increasing) or antitonic (decreasing) sequence
    * @return isotonic regression model
    */
   def run(
       input: RDD[(Double, Double, Double)],
-      monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel
+      isotonic: Boolean): IsotonicRegressionModel
 }
 
 /**
@@ -118,16 +79,16 @@ class PoolAdjacentViolators private [mllib]
 
   override def run(
       input: RDD[(Double, Double, Double)],
-      monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel = {
+      isotonic: Boolean): IsotonicRegressionModel = {
     createModel(
-      parallelPoolAdjacentViolators(input, monotonicityConstraint),
-      monotonicityConstraint)
+      parallelPoolAdjacentViolators(input, isotonic),
+      isotonic)
   }
 
   override protected def createModel(
       predictions: Seq[(Double, Double, Double)],
-      monotonicityConstraint: MonotonicityConstraint): IsotonicRegressionModel = {
-    new IsotonicRegressionModel(predictions, monotonicityConstraint)
+      isotonic: Boolean): IsotonicRegressionModel = {
+    new IsotonicRegressionModel(predictions, isotonic)
   }
 
   /**
@@ -138,32 +99,38 @@ class PoolAdjacentViolators private [mllib]
    * Method in situ mutates input array
    *
    * @param in input data
-   * @param monotonicityConstraint asc or desc
+   * @param isotonic asc or desc
    * @return result
    */
   private def poolAdjacentViolators(
-      in: Array[WeightedLabeledPoint],
-      monotonicityConstraint: MonotonicityConstraint): Array[WeightedLabeledPoint] = {
+      in: Array[(Double, Double, Double)],
+      isotonic: Boolean): Array[(Double, Double, Double)] = {
 
     // Pools sub array within given bounds assigning weighted average value to all elements
-    def pool(in: Array[WeightedLabeledPoint], start: Int, end: Int): Unit = {
+    def pool(in: Array[(Double, Double, Double)], start: Int, end: Int): Unit = {
       val poolSubArray = in.slice(start, end + 1)
 
-      val weightedSum = poolSubArray.map(lp => lp.label * lp.weight).sum
-      val weight = poolSubArray.map(_.weight).sum
+      val weightedSum = poolSubArray.map(lp => lp._1 * lp._3).sum
+      val weight = poolSubArray.map(_._3).sum
 
       for(i <- start to end) {
-        in(i) = WeightedLabeledPoint(weightedSum / weight, in(i).features, in(i).weight)
+        in(i) = (weightedSum / weight, in(i)._2, in(i)._3)
       }
     }
 
     var i = 0
 
+    val monotonicityConstrainter: (Double, Double) => Boolean = (x, y) => if(isotonic) {
+      x <= y
+    } else {
+      x >= y
+    }
+
     while(i < in.length) {
       var j = i
 
       // Find monotonicity violating sequence, if any
-      while(j < in.length - 1 && !monotonicityConstraint.holds(in(j), in(j + 1))) {
+      while(j < in.length - 1 && !monotonicityConstrainter(in(j)._1, in(j + 1)._1)) {
         j = j + 1
       }
 
@@ -173,7 +140,7 @@ class PoolAdjacentViolators private [mllib]
       } else {
         // Otherwise pool the violating sequence
         // And check if pooling caused monotonicity violation in previously processed points
-        while (i >= 0 && !monotonicityConstraint.holds(in(i), in(i + 1))) {
+        while (i >= 0 && !monotonicityConstrainter(in(i)._1, in(i + 1)._1)) {
           pool(in, i, j)
           i = i - 1
         }
@@ -190,19 +157,19 @@ class PoolAdjacentViolators private [mllib]
    * Calls Pool adjacent violators on each partition and then again on the result
    *
    * @param testData input
-   * @param monotonicityConstraint asc or desc
+   * @param isotonic isotonic (increasing) or antitonic (decreasing) sequence
    * @return result
    */
   private def parallelPoolAdjacentViolators(
       testData: RDD[(Double, Double, Double)],
-      monotonicityConstraint: MonotonicityConstraint): Seq[(Double, Double, Double)] = {
+      isotonic: Boolean): Seq[(Double, Double, Double)] = {
 
     poolAdjacentViolators(
       testData
         .sortBy(_._2)
         .cache()
-        .mapPartitions(it => poolAdjacentViolators(it.toArray, monotonicityConstraint).toIterator)
-        .collect(), monotonicityConstraint)
+        .mapPartitions(it => poolAdjacentViolators(it.toArray, isotonic).toIterator)
+        .collect(), isotonic)
   }
 }
 
@@ -221,11 +188,11 @@ object IsotonicRegression {
    *              Each point describes a row of the data
    *              matrix A as well as the corresponding right hand side label y
    *              and weight as number of measurements
-   * @param monotonicityConstraint Isotonic (increasing) or Antitonic (decreasing) sequence
+   * @param isotonic isotonic (increasing) or antitonic (decreasing) sequence
    */
   def train(
       input: RDD[(Double, Double, Double)],
-      monotonicityConstraint: MonotonicityConstraint = Isotonic): IsotonicRegressionModel = {
-    new PoolAdjacentViolators().run(input, monotonicityConstraint)
+      isotonic: Boolean = true): IsotonicRegressionModel = {
+    new PoolAdjacentViolators().run(input, isotonic)
   }
 }
