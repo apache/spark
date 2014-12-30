@@ -214,9 +214,6 @@ class SqlParser extends AbstractSparkSQLParser {
       }
     )
 
-  protected lazy val singleOrder: Parser[SortOrder] =
-    expression ~ direction ^^ { case e ~ o => SortOrder(e, o) }
-
   protected lazy val direction: Parser[SortDirection] =
     ( ASC  ^^^ Ascending
     | DESC ^^^ Descending
