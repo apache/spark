@@ -42,7 +42,6 @@ while (($#)); do
   shift
 done
 
-
 if [ ! -d "$SPARK_CONF_DIR" ]; then
   SPARK_CONF_DIR="$SPARK_HOME/conf"
 fi
