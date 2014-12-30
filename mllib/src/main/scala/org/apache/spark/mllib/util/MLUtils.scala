@@ -157,7 +157,7 @@ object MLUtils {
       val sb = new StringBuilder(label.toString)
       features.foreachActive { case (i, v) =>
         sb += ' '
-        sb ++= s"${i+1}:$v"
+        sb ++= s"${i + 1}:$v"
       }
       sb.mkString
     }
