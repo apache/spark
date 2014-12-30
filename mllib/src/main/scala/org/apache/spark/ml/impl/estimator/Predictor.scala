@@ -80,22 +80,9 @@ abstract class Predictor[
     M <: PredictionModel[FeaturesType, M]]
   extends Estimator[M] with PredictorParams {
 
-  // TODO: Eliminate asInstanceOf and see if that works.
   def setLabelCol(value: String): Learner = set(labelCol, value).asInstanceOf[Learner]
   def setFeaturesCol(value: String): Learner = set(featuresCol, value).asInstanceOf[Learner]
   def setPredictionCol(value: String): Learner = set(predictionCol, value).asInstanceOf[Learner]
-
-  /*
-  // This will be useful for boosting.
-  protected def selectLabelColumn(dataset: SchemaRDD, paramMap: ParamMap): RDD[Double] = {
-    import dataset.sqlContext._
-    val map = this.paramMap ++ paramMap
-    dataset.select(map(labelCol).attr).map {
-      case Row(label: Double) => label
-      case Row(label: Int) => label.toDouble
-    }
-  }
-  */
 
   /**
    * :: DeveloperApi ::
