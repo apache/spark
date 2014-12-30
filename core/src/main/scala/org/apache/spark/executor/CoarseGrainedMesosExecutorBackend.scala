@@ -41,16 +41,16 @@ private[spark] class CoarseGrainedMesosExecutorBackend(val sparkConf: SparkConf)
   private var driver: ExecutorDriver = null
   private var executorProc: Process = null
   private var taskId: TaskID = null
+  @volatile var killed = false
 
   override def registered(
       driver: ExecutorDriver,
       executorInfo: ExecutorInfo,
       frameworkInfo: FrameworkInfo,
       slaveInfo: SlaveInfo) {
-
     this.driver = driver
     logInfo("Coarse Grain Mesos Executor '" + executorInfo.getExecutorId.getValue +
-            "' is registered.")
+      "' is registered.")
 
     if (shuffleService == null) {
       sparkConf.set("spark.shuffle.service.enabled", "true")
@@ -72,15 +72,20 @@ private[spark] class CoarseGrainedMesosExecutorBackend(val sparkConf: SparkConf)
       return
     }
 
+    killed = false
+
+    logInfo("Launching task id: " + taskInfo.getTaskId.getValue)
+
     // We are launching the CoarseGrainedExecutorBackend via subprocess
     // because the backend is designed to run in its own process.
     // Since it's a shared class we are preserving the existing behavior
     // and launching it as a subprocess here.
-    val command = Utils.deserialize[String](taskInfo.getData().toByteArray)
+    val command = "exec " + Utils.deserialize[String](taskInfo.getData().toByteArray)
 
-    // Mesos only work on linux platforms, as mesos command executor also
-    // executes with /bin/sh -c, we assume this will also work under mesos execution.
-    val pb = new ProcessBuilder(List("/bin/sh", "-c", command))
+    logInfo("Running command: " + command)
+
+    // Mesos only work on linux platforms, so we assume bash is available is Mesos is used.
+    val pb = new ProcessBuilder("/bin/bash", "-c", command)
 
     val currentEnvVars = pb.environment()
     for (variable <- taskInfo.getExecutor.getCommand.getEnvironment.getVariablesList()) {
@@ -105,15 +110,21 @@ private[spark] class CoarseGrainedMesosExecutorBackend(val sparkConf: SparkConf)
       }
     }.start()
 
+    driver.sendStatusUpdate(TaskStatus.newBuilder()
+      .setState(TaskState.TASK_RUNNING)
+      .setTaskId(taskInfo.getTaskId)
+      .build)
+
     new Thread("process waiter for mesos executor for task " + taskInfo.getTaskId.getValue) {
       override def run() {
         executorProc.waitFor()
-        val (state, msg) = if (executorProc.exitValue() == 0) {
+        val (state, msg) = if (killed) {
+          (TaskState.TASK_KILLED, "")
+        }  else if (executorProc.exitValue() == 0) {
           (TaskState.TASK_FINISHED, "")
         } else {
           (TaskState.TASK_FAILED, "Exited with status: " + executorProc.exitValue().toString)
         }
-
         // We leave the shuffle service running after the task.
         cleanup(state, msg)
       }
@@ -139,11 +150,11 @@ private[spark] class CoarseGrainedMesosExecutorBackend(val sparkConf: SparkConf)
     }
 
     assert(executorProc != null)
+    killed = true
     // We only destroy the coarse grained executor but leave the shuffle
     // service running for other tasks that might be reusing this executor.
     // This is no-op if the process already finished.
     executorProc.destroy()
-    cleanup(TaskState.TASK_KILLED)
   }
 
   def cleanup(state: TaskState, msg: String = ""): Unit = synchronized {
