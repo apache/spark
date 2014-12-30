@@ -34,24 +34,18 @@ abstract class MQTTStreamSuiteBase extends FunSuite with Eventually with Logging
   val framework: String = this.getClass.getSimpleName
   val brokerUrl = "tcp://localhost:1883"
   val topic = "def"
-
   def publishData(sendMessage: String): Unit = {
-
     try {
-
       val persistence: MqttClientPersistence = new MqttDefaultFilePersistence("/tmp")
       val client: MqttClient = new MqttClient(brokerUrl, MqttClient.generateClientId(), persistence)
       client.connect()
       val msgTopic: MqttTopic = client.getTopic(topic)
-
       val message: MqttMessage = new MqttMessage(String.valueOf(sendMessage).getBytes("utf-8"))
       message.setQos(1)
       message.setRetained(true)
       msgTopic.publish(message)
       println("Published data \ntopic: " + msgTopic.getName() + "\nMessage: " + message)
-
       client.disconnect()
-
     } catch {
       case e: MqttException => println("Exception Caught: " + e)
     }
@@ -59,24 +53,17 @@ abstract class MQTTStreamSuiteBase extends FunSuite with Eventually with Logging
 }
 
 class MQTTStreamSuite extends MQTTStreamSuiteBase {
-
   test("mqtt input stream") {
     val ssc = new StreamingContext(master, framework, batchDuration)
     val sendMessage = "MQTT demo for spark streaming"
-
     publishData(sendMessage)
-
-    // tests the API, does not actually test data receiving
-
     val receiveStream: ReceiverInputDStream[String] =
       MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_AND_DISK_SER_2)
-
     var result: String = ""
     receiveStream.foreachRDD { rdd =>
       result = rdd.first
       result
     }
-
     ssc.start()
     eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
       assert(sendMessage.equals(result))
