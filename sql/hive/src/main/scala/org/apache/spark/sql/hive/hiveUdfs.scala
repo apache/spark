@@ -159,11 +159,6 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
     isUDFDeterministic && returnInspector.isInstanceOf[ConstantObjectInspector]
 
   @transient
-  protected def constantReturnValue = unwrap(
-    returnInspector.asInstanceOf[ConstantObjectInspector].getWritableConstantValue(),
-    returnInspector)
-  
-  @transient
   protected lazy val deferedObjects =
     argumentInspectors.map(new DeferredObjectAdapter(_)).toArray[DeferredObject]
 
@@ -171,7 +166,6 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
 
   override def eval(input: Row): Any = {
     returnInspector // Make sure initialized.
-    if(foldable) return constantReturnValue
 
     var i = 0
     while (i < children.length) {
