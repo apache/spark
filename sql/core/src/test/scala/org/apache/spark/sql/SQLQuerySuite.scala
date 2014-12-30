@@ -29,13 +29,14 @@ import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext._
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
-  // Make sure the tables are loaded.
-  TestData
 
   var origZone: TimeZone = _
   override protected def beforeAll() {
     origZone = TimeZone.getDefault
     TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+
+    // Make sure the tables are loaded.
+    TestData
   }
 
   override protected def afterAll() {
@@ -152,6 +153,33 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time='123'"),
       Nil)
+  }
+
+  test("support cast date data type") {
+    checkAnswer(sql(
+      "SELECT d from dates where d = cast('2011-01-11' as date)"),
+      java.sql.Date.valueOf("2011-01-11"))
+
+    checkAnswer(sql(
+      "SELECT d from dates where d = '2012-02-12'"),
+      java.sql.Date.valueOf("2012-02-12")
+    )
+
+    checkAnswer(sql(
+      "SELECT d from dates where d > '2012-02-12' AND d < cast('2014-01-01' as date)"),
+      java.sql.Date.valueOf("2013-03-13")
+    )
+
+    checkAnswer(sql(
+      "SELECT d from dates where d IN('2012-02-12', '2013-03-13')"),
+      Seq(Seq(java.sql.Date.valueOf("2012-02-12")),
+        Seq(java.sql.Date.valueOf("2013-03-13")))
+    )
+
+    checkAnswer(sql(
+      "SELECT d from dates where d = '2012'"),
+      Nil
+    )
   }
 
   test("index into array") {
