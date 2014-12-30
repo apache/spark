@@ -238,14 +238,15 @@ private object ALS extends Logging {
   }
 
   /** Representing a normal equation (ALS' subproblem). */
-  private class NormalEquation(val k: Int) extends Serializable {
+  private[recommendation] class NormalEquation(val k: Int) extends Serializable {
 
     val triK = k * (k + 1) / 2
     val ata = new Array[Double](triK)
     val atb = new Array[Double](k)
-    val da = new Array[Double](k)
     var n = 0
-    val upper = "U"
+
+    private val da = new Array[Double](k)
+    private val upper = "U"
 
     private def copyToDouble(a: Array[Float]): Unit = {
       var i = 0
@@ -256,6 +257,7 @@ private object ALS extends Logging {
     }
 
     def add(a: Array[Float], b: Float): this.type = {
+      require(a.size == k)
       copyToDouble(a)
       blas.dspr(upper, k, 1.0, da, 1, ata)
       blas.daxpy(k, b.toDouble, da, 1, atb, 1)
@@ -264,16 +266,19 @@ private object ALS extends Logging {
     }
 
     def addImplicit(a: Array[Float], b: Float, alpha: Double): this.type = {
+      require(a.size == k)
       val confidence = 1.0 + alpha * math.abs(b)
       copyToDouble(a)
       blas.dspr(upper, k, confidence - 1.0, da, 1, ata)
       if (b > 0) {
         blas.daxpy(k, confidence, da, 1, atb, 1)
+        n += 1
       }
       this
     }
 
     def merge(other: NormalEquation): this.type = {
+      require(other.k == k)
       blas.daxpy(ata.size, 1.0, other.ata, 1, ata, 1)
       blas.daxpy(atb.size, 1.0, other.atb, 1, atb, 1)
       n += other.n
