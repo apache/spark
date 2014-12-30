@@ -132,13 +132,10 @@ case class HiveTableScan(
     }
   }
 
-  override def execute() = {
-    val res = if (!relation.hiveQlTable.isPartitioned) {
-      hadoopReader.makeRDDForTable(relation.hiveQlTable)
-    } else {
-      hadoopReader.makeRDDForPartitionedTable(prunePartitions(relation.hiveQlPartitions))
-    }
-    res.map(_.copy)
+  override def execute() = if (!relation.hiveQlTable.isPartitioned) {
+    hadoopReader.makeRDDForTable(relation.hiveQlTable)
+  } else {
+    hadoopReader.makeRDDForPartitionedTable(prunePartitions(relation.hiveQlPartitions))
   }
 
   override def output = attributes
