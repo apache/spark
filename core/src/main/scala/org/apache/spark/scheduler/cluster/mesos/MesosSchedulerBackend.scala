@@ -293,7 +293,7 @@ private[spark] class MesosSchedulerBackend(
       .build()
     // Encode the attemptId as part of the data payload, since there's not a MesosTaskInfo field
     // to hold it:
-    val data = {
+    val data: ByteString = {
       val serializedTask = task.serializedTask
       val dataBuffer = ByteBuffer.allocate(8 + serializedTask.limit())
       dataBuffer.putLong(task.attemptId)
