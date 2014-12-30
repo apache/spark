@@ -32,6 +32,8 @@ import org.apache.spark.streaming.dstream._
 
 /** A stream of {@link org.apache.spark.rdd.kafka.KafkaRDD} where
   * each given Kafka topic/partition corresponds to an RDD partition.
+  * The spark configuration spark.streaming.receiver.maxRate gives the maximum number of messages
+  * per second that each '''partition''' will accept.
   * Starting offsets are specified in advance,
   * and this DStream is not responsible for committing offsets,
   * so that you can control exactly-once semantics.
@@ -61,6 +63,16 @@ class DeterministicKafkaInputDStream[
 
   private val kc = new KafkaCluster(kafkaParams)
 
+  private val maxMessagesPerPartition: Option[Long] = {
+    val ratePerSec = ssc.sparkContext.getConf.getInt("spark.streaming.receiver.maxRate", 0)
+    if (ratePerSec > 0) {
+      val secsPerBatch = ssc.graph.batchDuration.milliseconds.toDouble / 1000
+      Some((secsPerBatch * ratePerSec).toLong)
+    } else {
+      None
+    }
+  }
+
   // TODO based on the design of InputDStream's lastValidTime, it appears there isn't a
   // thread safety concern with private mutable state, but is this certain?
   private var currentOffsets = fromOffsets
@@ -83,8 +95,19 @@ class DeterministicKafkaInputDStream[
     }
   }
 
+  private def clamp(leaderOffsets: Map[TopicAndPartition, Long]): Map[TopicAndPartition, Long] = {
+    maxMessagesPerPartition.map { mmp =>
+      leaderOffsets.map { kv =>
+        val (k, v) = kv
+        val curr = currentOffsets(k)
+        val diff = v - curr
+        if (diff > mmp) (k, curr + mmp) else (k, v)
+      }
+    }.getOrElse(leaderOffsets)
+  }
+
   override def compute(validTime: Time): Option[KafkaRDD[K, V, U, T, R]] = {
-    val untilOffsets = latestLeaderOffsets(maxRetries)
+    val untilOffsets = clamp(latestLeaderOffsets(maxRetries))
     val rdd = new KafkaRDD[K, V, U, T, R](
       ssc_.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
 
