@@ -81,7 +81,7 @@ public class JavaSimpleParamsExample {
 
     // One can also combine ParamMaps.
     ParamMap paramMap2 = new ParamMap();
-    paramMap2.put(lr.scoreCol().w("probability")); // Change output column name
+    paramMap2.put(lr.probabilityCol().w("myProbability")); // Change output column name
     ParamMap paramMapCombined = paramMap.$plus$plus(paramMap2);
 
     // Now learn a new model using the paramMapCombined parameters.
@@ -98,8 +98,8 @@ public class JavaSimpleParamsExample {
 
     // Make predictions on test documents using the Transformer.transform() method.
     // LogisticRegression.transform will only use the 'features' column.
-    // Note that model2.transform() outputs a 'probability' column instead of the usual 'score'
-    // column since we renamed the lr.scoreCol parameter previously.
+    // Note that model2.transform() outputs a 'myProbability' column instead of the usual
+    // 'probability' column since we renamed the lr.probabilityCol parameter previously.
     model2.transform(test).registerTempTable("results");
     DataFrame results =
         jsql.sql("SELECT features, label, probability, prediction FROM results");

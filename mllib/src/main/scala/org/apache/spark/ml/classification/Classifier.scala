@@ -17,26 +17,55 @@
 
 package org.apache.spark.ml.classification
 
-import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.api.java.JavaRDD
+import scala.reflect.runtime.universe._
+
+import org.apache.spark.annotation.{DeveloperApi, AlphaComponent}
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor, PredictorParams}
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.rdd.RDD
+import org.apache.spark.ml.param.{Params, ParamMap, HasRawPredictionCol}
+import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.Star
 
 /**
+ * :: DeveloperApi ::
  * Params for classification.
- * Currently empty, but may add functionality later.
  */
-private[classification] trait ClassifierParams extends PredictorParams
+@DeveloperApi
+trait ClassifierParams extends PredictorParams
+  with HasRawPredictionCol {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      paramMap: ParamMap,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    val parentSchema = super.validateAndTransformSchema(schema, paramMap, fitting, featuresDataType)
+    val map = this.paramMap ++ paramMap
+    addOutputColumn(parentSchema, map(rawPredictionCol), new VectorUDT)
+  }
+}
 
 /**
- * Single-label binary or multiclass classification
+ * :: AlphaComponent ::
+ * Single-label binary or multiclass classification.
  * Classes are indexed {0, 1, ..., numClasses - 1}.
+ *
+ * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
+ * @tparam Learner  Concrete Estimator type
+ * @tparam M  Concrete Model type
  */
 @AlphaComponent
-abstract class Classifier[Learner <: Classifier[Learner, M], M <: ClassificationModel[M]]
-  extends Predictor[Learner, M]
+abstract class Classifier[
+    FeaturesType,
+    Learner <: Classifier[FeaturesType, Learner, M],
+    M <: ClassificationModel[FeaturesType, M]]
+  extends Predictor[FeaturesType, Learner, M]
   with ClassifierParams {
+
+  setRawPredictionCol("") // Do not output by default
+
+  def setRawPredictionCol(value: String): Learner =
+    set(rawPredictionCol, value).asInstanceOf[Learner]
 
   // TODO: defaultEvaluator (follow-up PR)
 }
@@ -46,42 +75,130 @@ abstract class Classifier[Learner <: Classifier[Learner, M], M <: Classification
  * Model produced by a [[Classifier]].
  * Classes are indexed {0, 1, ..., numClasses - 1}.
  *
- * @tparam M  Model type.
+ * @tparam FeaturesType  Type of input features.  E.g., [[Vector]]
+ * @tparam M  Concrete Model type
  */
 @AlphaComponent
-abstract class ClassificationModel[M <: ClassificationModel[M]]
-  extends PredictionModel[M] with ClassifierParams {
+abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[FeaturesType, M]]
+  extends PredictionModel[FeaturesType, M] with ClassifierParams {
+
+  setRawPredictionCol("") // Do not output by default
+
+  def setRawPredictionCol(value: String): M = set(rawPredictionCol, value).asInstanceOf[M]
 
   /** Number of classes (values which the label can take). */
   def numClasses: Int
 
   /**
+   * Transforms dataset by reading from [[featuresCol]], and appending new columns as specified by
+   * parameters:
+   *  - predicted labels as [[predictionCol]] of type [[Double]]
+   *  - raw predictions (confidences) as [[rawPredictionCol]] of type [[Vector]].
+   *
+   * @param dataset input dataset
+   * @param paramMap additional parameters, overwrite embedded params
+   * @return transformed dataset
+   */
+  override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
+    // This default implementation should be overridden as needed.
+
+    // Check schema
+    transformSchema(dataset.schema, paramMap, logging = true)
+    val map = this.paramMap ++ paramMap
+
+    // Prepare model
+    val tmpModel = if (paramMap.size != 0) {
+      val tmpModel = this.copy()
+      Params.inheritValues(paramMap, parent, tmpModel)
+      tmpModel
+    } else {
+      this
+    }
+
+    val (numColsOutput, outputData) =
+      ClassificationModel.transformColumnsImpl[FeaturesType](dataset, tmpModel, map)
+    if (numColsOutput == 0) {
+      logWarning(s"$uid: ClassificationModel.transform() was called as NOOP" +
+        " since no output columns were set.")
+    }
+    outputData
+  }
+
+  /**
+   * :: DeveloperApi ::
+   *
    * Predict label for the given features.
+   * This internal method is used to implement [[transform()]] and output [[predictionCol]].
+   *
    * This default implementation for classification predicts the index of the maximum value
    * from [[predictRaw()]].
    */
-  override def predict(features: Vector): Double = {
+  @DeveloperApi
+  override protected def predict(features: FeaturesType): Double = {
     predictRaw(features).toArray.zipWithIndex.maxBy(_._1)._2
   }
 
   /**
+   * :: DeveloperApi ::
+   *
    * Raw prediction for each possible label.
    * The meaning of a "raw" prediction may vary between algorithms, but it intuitively gives
-   * a magnitude of confidence in each possible label.
+   * a measure of confidence in each possible label (where larger = more confident).
+   * This internal method is used to implement [[transform()]] and output [[rawPredictionCol]].
+   *
    * @return  vector where element i is the raw prediction for label i.
    *          This raw prediction may be any real number, where a larger value indicates greater
    *          confidence for that label.
    */
-  def predictRaw(features: Vector): Vector
+  @DeveloperApi
+  protected def predictRaw(features: FeaturesType): Vector
 
-  /** Batch version of [[predictRaw]] */
-  def predictRaw(dataset: RDD[Vector]): RDD[Vector] = dataset.map(predictRaw)
+}
 
-  /** Java-friendly batch version of [[predictRaw]] */
-  def predictRaw(dataset: JavaRDD[Vector]): JavaRDD[Vector] = {
-    dataset.rdd.map(predictRaw).toJavaRDD()
+private[ml] object ClassificationModel {
+
+  /**
+   * Added prediction column(s).  This is separated from [[ClassificationModel.transform()]]
+   * since it is used by [[org.apache.spark.ml.classification.ProbabilisticClassificationModel]].
+   * @param dataset  Input dataset
+   * @param map  Parameter map.  This will NOT be merged with the embedded paramMap; the merge
+   *             should already be done.
+   * @return (number of columns added, transformed dataset)
+   */
+  private[ml] def transformColumnsImpl[FeaturesType](
+      dataset: SchemaRDD,
+      model: ClassificationModel[FeaturesType, _],
+      map: ParamMap): (Int, SchemaRDD) = {
+
+    import org.apache.spark.sql.catalyst.dsl._
+    import dataset.sqlContext._
+
+    // Output selected columns only.
+    // This is a bit complicated since it tries to avoid repeated computation.
+    var tmpData = dataset
+    var numColsOutput = 0
+    if (map(model.rawPredictionCol) != "") {
+      // output raw prediction
+      val features2raw: FeaturesType => Vector = model.predictRaw
+      tmpData = tmpData.select(Star(None),
+        features2raw.call(map(model.featuresCol).attr) as map(model.rawPredictionCol))
+      numColsOutput += 1
+      if (map(model.predictionCol) != "") {
+        val raw2pred: Vector => Double = (rawPred) => {
+          rawPred.toArray.zipWithIndex.maxBy(_._1)._2
+        }
+        tmpData = tmpData.select(Star(None),
+          raw2pred.call(map(model.rawPredictionCol).attr) as map(model.predictionCol))
+        numColsOutput += 1
+      }
+    } else if (map(model.predictionCol) != "") {
+      // output prediction
+      val features2pred: FeaturesType => Double = model.predict
+      tmpData = tmpData.select(Star(None),
+        features2pred.call(map(model.featuresCol).attr) as map(model.predictionCol))
+      numColsOutput += 1
+    }
+    (numColsOutput, tmpData)
   }
-
-  // TODO: accuracy(dataset: RDD[LabeledPoint]): Double (follow-up PR)
 
 }

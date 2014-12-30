@@ -17,15 +17,23 @@
 
 package org.apache.spark.ml.impl.estimator
 
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.ml.{Estimator, LabeledPoint, Model}
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Star
 
-private[ml] trait PredictorParams extends Params
+
+/**
+ * :: DeveloperApi ::
+ *
+ * Trait for parameters for prediction (regression and classification).
+ */
+@DeveloperApi
+trait PredictorParams extends Params
   with HasLabelCol with HasFeaturesCol with HasPredictionCol {
 
   /**
@@ -33,33 +41,41 @@ private[ml] trait PredictorParams extends Params
    * @param schema input schema
    * @param paramMap additional parameters
    * @param fitting whether this is in fitting
+   * @param featuresDataType  SQL DataType for FeaturesType.
+   *                          E.g., [[org.apache.spark.mllib.linalg.VectorUDT]] for vector features.
    * @return output schema
    */
   protected def validateAndTransformSchema(
       schema: StructType,
       paramMap: ParamMap,
-      fitting: Boolean): StructType = {
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
     val map = this.paramMap ++ paramMap
-    val featuresType = schema(map(featuresCol)).dataType
-    // TODO: Support casting Array[Double] and Array[Float] to Vector.
-    require(featuresType.isInstanceOf[VectorUDT],
-      s"Features column ${map(featuresCol)} must be Vector types" +
-        s" but was actually $featuresType.")
+    // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
+    checkInputColumn(schema, map(featuresCol), featuresDataType)
     if (fitting) {
-      val labelType = schema(map(labelCol)).dataType
-      require(labelType == DoubleType || labelType == IntegerType,
-        s"Cannot convert label column ${map(labelCol)} of type $labelType to a Double column.")
+      // TODO: Allow other numeric types
+      checkInputColumn(schema, map(labelCol), DoubleType)
     }
-    val fieldNames = schema.fieldNames
-    require(!fieldNames.contains(map(predictionCol)),
-      s"Prediction column ${map(predictionCol)} already exists.")
-    val outputFields = schema.fields ++ Seq(
-      StructField(map(predictionCol), DoubleType, nullable = false))
-    StructType(outputFields)
+    addOutputColumn(schema, map(predictionCol), DoubleType)
   }
 }
 
-private[ml] abstract class Predictor[Learner <: Predictor[Learner, M], M <: PredictionModel[M]]
+/**
+ * Abstraction for prediction problems (regression and classification).
+ *
+ * @tparam FeaturesType  Type of features.
+ *                       E.g., [[org.apache.spark.mllib.linalg.VectorUDT]] for vector features.
+ * @tparam Learner  Specialization of this class.  If you subclass this type, use this type
+ *                  parameter to specify the concrete type.
+ * @tparam M  Specialization of [[PredictionModel]].  If you subclass this type, use this type
+ *            parameter to specify the concrete type for the corresponding model.
+ */
+@DeveloperApi
+abstract class Predictor[
+    FeaturesType,
+    Learner <: Predictor[FeaturesType, Learner, M],
+    M <: PredictionModel[FeaturesType, M]]
   extends Estimator[M] with PredictorParams {
 
   // TODO: Eliminate asInstanceOf and see if that works.
@@ -67,6 +83,8 @@ private[ml] abstract class Predictor[Learner <: Predictor[Learner, M], M <: Pred
   def setFeaturesCol(value: String): Learner = set(featuresCol, value).asInstanceOf[Learner]
   def setPredictionCol(value: String): Learner = set(predictionCol, value).asInstanceOf[Learner]
 
+  /*
+  // This will be useful for boosting.
   protected def selectLabelColumn(dataset: SchemaRDD, paramMap: ParamMap): RDD[Double] = {
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
@@ -75,113 +93,109 @@ private[ml] abstract class Predictor[Learner <: Predictor[Learner, M], M <: Pred
       case Row(label: Int) => label.toDouble
     }
   }
+  */
+
+  /**
+   * :: DeveloperApi ::
+   *
+   * Returns the SQL DataType corresponding to the FeaturesType type parameter.
+   *
+   * This is used by [[validateAndTransformSchema()]].
+   * This workaround is needed since SQL has different APIs for Scala and Java.
+   */
+  @DeveloperApi
+  protected def featuresDataType: DataType
 
   private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap, fitting = true)
+    validateAndTransformSchema(schema, paramMap, fitting = true, featuresDataType)
   }
 
-  override def fit(dataset: SchemaRDD, paramMap: ParamMap): M = {
-    transformSchema(dataset.schema, paramMap, logging = true)
+  /**
+   * Extract [[labelCol]] and [[featuresCol]] from the given dataset,
+   * and put it in an RDD with strong types.
+   */
+  protected def extractLabeledPoints(dataset: SchemaRDD, paramMap: ParamMap): RDD[LabeledPoint] = {
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
-    val instances = dataset.select(map(labelCol).attr, map(featuresCol).attr)
+    dataset.select(map(labelCol).attr, map(featuresCol).attr)
       .map { case Row(label: Double, features: Vector) =>
       LabeledPoint(label, features)
     }
-    val model = train(instances, map)
-    // copy model params
-    Params.inheritValues(map, this, model)
-    model
   }
-
-  /**
-   * Same as [[fit()]], but using strong types.
-   *
-   * @param dataset  Training data
-   * @param paramMap  Parameters for training.
-   *                  These values override any specified in this Estimator's embedded ParamMap.
-   */
-  def train(dataset: RDD[LabeledPoint], paramMap: ParamMap): M
-
-  /**
-   * Same as [[fit()]], but using strong types.
-   * @param dataset  Training data
-   */
-  def train(dataset: RDD[LabeledPoint]): M = train(dataset, new ParamMap())
-
-  /** Java-friendly version of [[train()]]. */
-  def train(dataset: JavaRDD[LabeledPoint], paramMap: ParamMap): M = train(dataset.rdd, paramMap)
-
-  /** Java-friendly version of [[train()]]. */
-  def train(dataset: JavaRDD[LabeledPoint]): M = train(dataset.rdd)
 }
 
-private[ml] abstract class PredictionModel[M <: PredictionModel[M]]
+private[ml] abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, M]]
   extends Model[M] with PredictorParams {
 
   def setFeaturesCol(value: String): M = set(featuresCol, value).asInstanceOf[M]
 
   def setPredictionCol(value: String): M = set(predictionCol, value).asInstanceOf[M]
 
+  /**
+   * :: DeveloperApi ::
+   *
+   * Returns the SQL DataType corresponding to the FeaturesType type parameter.
+   *
+   * This is used by [[validateAndTransformSchema()]].
+   * This workaround is needed since SQL has different APIs for Scala and Java.
+   */
+  @DeveloperApi
+  protected def featuresDataType: DataType
+
   private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap, fitting = false)
+    validateAndTransformSchema(schema, paramMap, fitting = false, featuresDataType)
   }
 
   /**
-   * Transforms dataset by reading from [[featuresCol]], calling [[predict( )]], and storing
+   * Transforms dataset by reading from [[featuresCol]], calling [[predict()]], and storing
    * the predictions as a new column [[predictionCol]].
-   * This default implementation should be overridden as needed.
+   *
    * @param dataset input dataset
    * @param paramMap additional parameters, overwrite embedded params
    * @return transformed dataset with [[predictionCol]] of type [[Double]]
    */
   override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
+    // This default implementation should be overridden as needed.
     import org.apache.spark.sql.catalyst.dsl._
     import dataset.sqlContext._
 
+    // Check schema
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
-    val tmpModel = this.copy()
-    Params.inheritValues(paramMap, parent, tmpModel)
-    val pred: Vector => Double = (features) => {
-      tmpModel.predict(features)
+
+    // Prepare model
+    val tmpModel = if (paramMap.size != 0) {
+      val tmpModel = this.copy()
+      Params.inheritValues(paramMap, parent, tmpModel)
+      tmpModel
+    } else {
+      this
     }
-    dataset.select(Star(None), pred.call(map(featuresCol).attr) as map(predictionCol))
+
+    if (map(predictionCol) != "") {
+      val pred: FeaturesType => Double = (features) => {
+        tmpModel.predict(features)
+      }
+      dataset.select(Star(None), pred.call(map(featuresCol).attr) as map(predictionCol))
+    } else {
+      this.logWarning(s"$uid: Predictor.transform() was called as NOOP" +
+        " since no output columns were set.")
+      dataset
+    }
   }
 
   /**
-   * Strongly typed version of [[transform()]].
-   * Default implementation using single-instance predict().
+   * :: DeveloperApi ::
    *
-   * Developers should override this for efficiency.  E.g., this does not broadcast the model.
-   */
-  def predict(dataset: RDD[Vector], paramMap: ParamMap): RDD[Double] = {
-    val tmpModel = this.copy()
-    Params.inheritValues(paramMap, parent, tmpModel)
-    dataset.map(tmpModel.predict)
-  }
-
-  /** Strongly typed version of [[transform()]]. */
-  def predict(dataset: RDD[Vector]): RDD[Double] = predict(dataset, new ParamMap)
-
-  /**
    * Predict label for the given features.
+   * This internal method is used to implement [[transform()]] and output [[predictionCol]].
    */
-  def predict(features: Vector): Double
-
-  /** Java-friendly version of [[predict()]]. */
-  def predict(dataset: JavaRDD[Vector], paramMap: ParamMap): JavaRDD[java.lang.Double] = {
-    predict(dataset.rdd, paramMap).map(_.asInstanceOf[java.lang.Double]).toJavaRDD()
-  }
-
-  /** Java-friendly version of [[predict()]]. */
-  def predict(dataset: JavaRDD[Vector]): JavaRDD[java.lang.Double] = {
-    predict(dataset.rdd, new ParamMap).map(_.asInstanceOf[java.lang.Double]).toJavaRDD()
-  }
+  @DeveloperApi
+  protected def predict(features: FeaturesType): Double
 
   /**
    * Create a copy of the model.
    * The copy is shallow, except for the embedded paramMap, which gets a deep copy.
    */
-  private[ml] def copy(): M
+  protected def copy(): M
 }

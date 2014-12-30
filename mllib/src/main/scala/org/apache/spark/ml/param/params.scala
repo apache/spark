@@ -19,11 +19,14 @@ package org.apache.spark.ml.param
 
 import scala.annotation.varargs
 import scala.collection.mutable
+import scala.reflect.runtime.universe._
 
 import java.lang.reflect.Modifier
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.{DeveloperApi, AlphaComponent}
 import org.apache.spark.ml.Identifiable
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.ScalaReflection
 
 /**
  * :: AlphaComponent ::
@@ -158,7 +161,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Sets a parameter in the embedded param map.
    */
-  private[ml] def set[T](param: Param[T], value: T): this.type = {
+  protected def set[T](param: Param[T], value: T): this.type = {
     require(param.parent.eq(this))
     paramMap.put(param.asInstanceOf[Param[Any]], value)
     this
@@ -174,7 +177,7 @@ trait Params extends Identifiable with Serializable {
   /**
    * Gets the value of a parameter in the embedded param map.
    */
-  private[ml] def get[T](param: Param[T]): T = {
+  protected def get[T](param: Param[T]): T = {
     require(param.parent.eq(this))
     paramMap(param)
   }
@@ -183,9 +186,38 @@ trait Params extends Identifiable with Serializable {
    * Internal param map.
    */
   protected val paramMap: ParamMap = ParamMap.empty
+
+  /**
+   * Check whether the given schema contains an input column.
+   * @param colName  Parameter name for the input column.
+   * @param dataType  SQL DataType of the input column.
+   */
+  protected def checkInputColumn(schema: StructType, colName: String, dataType: DataType): Unit = {
+    val actualDataType = schema(colName).dataType
+    require(actualDataType.equals(dataType),
+      s"Input column $colName must be of type $dataType" +
+        s" but was actually $actualDataType.  Column param description: ${getParam(colName)}")
+  }
+
+  protected def addOutputColumn(
+      schema: StructType,
+      colName: String,
+      dataType: DataType): StructType = {
+    if (colName.length == 0) return schema
+    val fieldNames = schema.fieldNames
+    require(!fieldNames.contains(colName), s"Prediction column $colName already exists.")
+    val outputFields = schema.fields ++ Seq(StructField(colName, dataType, nullable = false))
+    StructType(outputFields)
+  }
 }
 
-private[ml] object Params {
+/**
+ * :: DeveloperApi ::
+ *
+ * Helper functionality for developers.
+ */
+@DeveloperApi
+object Params {
 
   /**
    * Copies parameter values from the parent estimator to the child model it produced.
@@ -310,6 +342,11 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
       ParamPair(param, value)
     }
   }
+
+  /**
+   * Number of param pairs in this set.
+   */
+  def size: Int = map.size
 }
 
 object ParamMap {

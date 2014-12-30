@@ -17,23 +17,31 @@
 
 package org.apache.spark.ml.regression
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.{DeveloperApi, AlphaComponent}
 import org.apache.spark.ml.impl.estimator.{PredictionModel, Predictor, PredictorParams}
-import org.apache.spark.mllib.linalg.Vector
 
 /**
+ * :: DeveloperApi ::
  * Params for regression.
  * Currently empty, but may add functionality later.
  */
-private[regression] trait RegressorParams extends PredictorParams
+@DeveloperApi
+trait RegressorParams extends PredictorParams
 
 /**
  * :: AlphaComponent ::
  * Single-label regression
+ *
+ * @tparam FeaturesType  Type of input features.  E.g., [[org.apache.spark.mllib.linalg.Vector]]
+ * @tparam Learner  Concrete Estimator type
+ * @tparam M  Concrete Model type
  */
 @AlphaComponent
-abstract class Regressor[Learner <: Regressor[Learner, M], M <: RegressionModel[M]]
-  extends Predictor[Learner, M]
+abstract class Regressor[
+    FeaturesType,
+    Learner <: Regressor[FeaturesType, Learner, M],
+    M <: RegressionModel[FeaturesType, M]]
+  extends Predictor[FeaturesType, Learner, M]
   with RegressorParams {
 
   // TODO: defaultEvaluator (follow-up PR)
@@ -42,15 +50,21 @@ abstract class Regressor[Learner <: Regressor[Learner, M], M <: RegressionModel[
 /**
  * :: AlphaComponent ::
  * Model produced by a [[Regressor]].
- * @tparam M  Model type.
+ *
+ * @tparam FeaturesType  Type of input features.  E.g., [[org.apache.spark.mllib.linalg.Vector]]
+ * @tparam M  Concrete Model type.
  */
 @AlphaComponent
-abstract class RegressionModel[M <: RegressionModel[M]]
-  extends PredictionModel[M] with RegressorParams {
+abstract class RegressionModel[FeaturesType, M <: RegressionModel[FeaturesType, M]]
+  extends PredictionModel[FeaturesType, M] with RegressorParams {
 
   /**
+   * :: DeveloperApi ::
+   *
    * Predict real-valued label for the given features.
+   * This internal method is used to implement [[transform()]] and output [[predictionCol]].
    */
-  def predict(features: Vector): Double
+  @DeveloperApi
+  protected def predict(features: FeaturesType): Double
 
 }

@@ -18,11 +18,10 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.LabeledPoint
 import org.apache.spark.ml.param.{Params, ParamMap, HasMaxIter, HasRegParam}
-import org.apache.spark.mllib.linalg.{BLAS, Vector}
+import org.apache.spark.mllib.linalg.{VectorUDT, BLAS, Vector}
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql._
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -36,7 +35,7 @@ private[regression] trait LinearRegressionParams extends RegressorParams
  * Logistic regression.
  */
 @AlphaComponent
-class LinearRegression extends Regressor[LinearRegression, LinearRegressionModel]
+class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegressionModel]
   with LinearRegressionParams {
 
   setRegParam(0.1)
@@ -45,41 +44,36 @@ class LinearRegression extends Regressor[LinearRegression, LinearRegressionModel
   def setRegParam(value: Double): this.type = set(regParam, value)
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
-  /**
-   * Same as [[fit()]], but using strong types.
-   * NOTE: This does NOT support instance weights.
-   * @param dataset  Training data.  Instance weights are ignored.
-   * @param paramMap  Parameters for training.
-   *                  These values override any specified in this Estimator's embedded ParamMap.
-   */
-  override def train(dataset: RDD[LabeledPoint], paramMap: ParamMap): LinearRegressionModel = {
+  override def fit(dataset: SchemaRDD, paramMap: ParamMap): LinearRegressionModel = {
+    // Check schema
+    transformSchema(dataset.schema, paramMap, logging = true)
+
+    // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
+    val oldDataset = extractLabeledPoints(dataset, paramMap)
     val map = this.paramMap ++ paramMap
-    val oldDataset = dataset.map { case LabeledPoint(label: Double, features: Vector, weight) =>
-      org.apache.spark.mllib.regression.LabeledPoint(label, features)
-    }
-    val handlePersistence = oldDataset.getStorageLevel == StorageLevel.NONE
+    val handlePersistence = dataset.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) {
       oldDataset.persist(StorageLevel.MEMORY_AND_DISK)
     }
+
+    // Train model
     val lr = new LinearRegressionWithSGD()
     lr.optimizer
       .setRegParam(map(regParam))
       .setNumIterations(map(maxIter))
     val model = lr.run(oldDataset)
     val lrm = new LinearRegressionModel(this, map, model.weights, model.intercept)
+
     if (handlePersistence) {
       oldDataset.unpersist()
     }
+
+    // copy model params
+    Params.inheritValues(map, this, lrm)
     lrm
   }
 
-  /**
-   * Same as [[fit()]], but using strong types.
-   * NOTE: This does NOT support instance weights.
-   * @param dataset  Training data.  Instance weights are ignored.
-   */
-  override def train(dataset: RDD[LabeledPoint]): LinearRegressionModel =
-    train(dataset, new ParamMap()) // Override documentation
+  override protected def featuresDataType: DataType = new VectorUDT
 }
 
 /**
@@ -92,16 +86,18 @@ class LinearRegressionModel private[ml] (
     override val fittingParamMap: ParamMap,
     val weights: Vector,
     val intercept: Double)
-  extends RegressionModel[LinearRegressionModel]
+  extends RegressionModel[Vector, LinearRegressionModel]
   with LinearRegressionParams {
 
-  override def predict(features: Vector): Double = {
+  override protected def predict(features: Vector): Double = {
     BLAS.dot(features, weights) + intercept
   }
 
-  private[ml] override def copy(): LinearRegressionModel = {
+  override protected def copy(): LinearRegressionModel = {
     val m = new LinearRegressionModel(parent, fittingParamMap, weights, intercept)
     Params.inheritValues(this.paramMap, this, m)
     m
   }
+
+  override protected def featuresDataType: DataType = new VectorUDT
 }
