@@ -789,7 +789,7 @@ private object ALS extends Logging {
    *
    * @param numBlocks number of blocks
    */
-  private class LocalIndexEncoder(numBlocks: Int) extends Serializable {
+  private[recommendation] class LocalIndexEncoder(numBlocks: Int) extends Serializable {
 
     require(numBlocks > 0, s"numBlocks must be positive but found $numBlocks.")
 
