@@ -942,8 +942,17 @@ def label_link(v, c, m, p):
 
 class ChartModelView(LoginMixin, ModelView):
     form_columns = (
-        'label', 'db', 'chart_type', 'owner', 'show_datatable',  'y_log_scale',
-        'sql_layout', 'show_sql', 'height', 'sql', 'default_params',)
+        'label',
+        'owner',
+        'db',
+        'chart_type',
+        'show_datatable',
+        'y_log_scale',
+        'show_sql',
+        'height',
+        'sql_layout',
+        'sql',
+        'default_params',)
     column_list = (
         'label', 'db_id', 'chart_type', 'owner',
         'show_datatable', 'show_sql',)
