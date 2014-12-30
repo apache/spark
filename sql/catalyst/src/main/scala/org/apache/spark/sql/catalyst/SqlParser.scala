@@ -209,9 +209,8 @@ class SqlParser extends AbstractSparkSQLParser {
     )
 
   protected lazy val ordering: Parser[Seq[SortOrder]] =
-    ( rep1sep(singleOrder, ",")
-    | rep1sep(expression, ",") ~ direction.? ^^ {
-        case exps ~ d => exps.map(SortOrder(_, d.getOrElse(Ascending)))
+    ( rep1sep(expression ~ direction.? , ",") ^^ {
+        case exps  => exps.map(pair => SortOrder(pair._1, pair._2.getOrElse(Ascending)))
       }
     )
 
