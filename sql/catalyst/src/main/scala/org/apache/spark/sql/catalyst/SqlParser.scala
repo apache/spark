@@ -162,7 +162,7 @@ class SqlParser extends AbstractSparkSQLParser {
     }
 
   protected lazy val projection: Parser[Expression] =
-    expression ~ (AS.? ~> ident.?) ^^ {
+    expression ~ (AS.? ~> (ident | stringLit).?) ^^ {
       case e ~ a => a.fold(e)(Alias(e, _)())
     }
 
