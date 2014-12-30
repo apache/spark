@@ -34,6 +34,7 @@ abstract class MQTTStreamSuiteBase extends FunSuite with Eventually with Logging
   val framework: String = this.getClass.getSimpleName
   val brokerUrl = "tcp://localhost:1883"
   val topic = "def"
+  
   def publishData(sendMessage: String): Unit = {
     try {
       val persistence: MqttClientPersistence = new MqttDefaultFilePersistence("/tmp")
