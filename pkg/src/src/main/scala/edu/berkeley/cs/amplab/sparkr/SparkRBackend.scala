@@ -19,17 +19,17 @@ import io.netty.handler.codec.bytes.ByteArrayDecoder
 import io.netty.handler.codec.bytes.ByteArrayEncoder
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 
-class SparkRBackend(portToBind: Int) {
+class SparkRBackend() {
 
   var channelFuture: ChannelFuture = null  
   var bootstrap: ServerBootstrap = null
-  val backendImpl = new SparkRBackendInterfaceImpl 
+  var bossGroup: EventLoopGroup = null
 
-  init(portToBind)
-  
   def init(port: Int) {
-    val bossGroup = new NioEventLoopGroup(SparkRConf.numServerThreads)
+    bossGroup = new NioEventLoopGroup(SparkRConf.numServerThreads)
     val workerGroup = bossGroup
+    val backendImpl = new SparkRBackendInterfaceImpl
+    val handler = new SparkRBackendHandler(backendImpl, this)
   
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)
@@ -47,7 +47,7 @@ class SparkRBackend(portToBind: Int) {
             // initialBytesToStrip = 4, i.e. strip out the length field itself
             new LengthFieldBasedFrameDecoder(Integer.MAX_VALUE, 0, 4, 0, 4))
           .addLast("decoder", new ByteArrayDecoder())
-          .addLast("handler", new SparkRBackendHandler(backendImpl))
+          .addLast("handler", handler)
       }
     })
 
@@ -83,7 +83,17 @@ object SparkRBackend {
       System.err.println("Usage: SparkRBackend <port>")
       System.exit(-1)
     }
-    val sparkRBackend = new SparkRBackend(args(0).toInt) 
-    sparkRBackend.run()
+    val sparkRBackend = new SparkRBackend()
+    try {
+      sparkRBackend.init(args(0).toInt)
+      sparkRBackend.run()
+    } catch {
+      case e: IOException => {
+        System.err.println("Server shutting down: failed with exception ", e)
+        sparkRBackend.close()
+        System.exit(0)
+      }
+    }
+    System.exit(0)
   }
 }

@@ -19,13 +19,14 @@ launchBackend <- function(
     jar, 
     mainClass, 
     args, 
+    javaOpts="-Xms2g -Xmx2g",
     javaHome=Sys.getenv("JAVA_HOME")) {
   if (javaHome != "") {
     java_bin <- paste(javaHome, "bin", "java", sep="/")
   } else {
     java_bin <- "java"
   }
-  command <- paste(java_bin, "-cp", jar, mainClass, args, sep=" ")
+  command <- paste(java_bin, javaOpts, "-cp", jar, mainClass, args, sep=" ")
   cat("Launching java with command ", command, "\n")
   invisible(system(command, intern=FALSE, ignore.stdout=F, ignore.stderr=F, wait=F))
 }

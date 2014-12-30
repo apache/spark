@@ -11,7 +11,7 @@ import edu.berkeley.cs.amplab.sparkr.SerializeJavaR._
 /**
  * Handler for SparkRBackend
  */
-class SparkRBackendHandler(backend: SparkRBackendInterface) 
+class SparkRBackendHandler(backend: SparkRBackendInterface, server: SparkRBackend)
     extends SimpleChannelInboundHandler[Array[Byte]] {
 
   override def channelRead0(ctx: ChannelHandlerContext, msg: Array[Byte]) {
@@ -25,18 +25,18 @@ class SparkRBackendHandler(backend: SparkRBackendInterface)
     // each handle function
     val rpcName = readString(dis)
 
-    System.err.println("Got rpcName " + rpcName)
+    System.err.println(s"Handling $rpcName")
 
     rpcName match {
       case "createSparkContext" => handleCreateSparkContext(dis, dos)
+      case "stopBackend" => {
+        dos.write(0)
+        server.close()
+      }
       case _ => dos.writeInt(-1)
-    }
+     }
 
-    dos.flush()
     val reply = bos.toByteArray
-
-    println("Writing reply of length " + reply.length)
-
     ctx.write(reply)
   }
   

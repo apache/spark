@@ -82,6 +82,7 @@ object SerializeJavaR {
     val len = value.length
     out.writeInt(len + 1) // For the \0
     out.writeBytes(value)
+    out.writeByte(0)
   }
 
   def writeIntArr(out: DataOutputStream, value: Array[Int]) {
