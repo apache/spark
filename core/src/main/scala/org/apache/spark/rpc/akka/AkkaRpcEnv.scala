@@ -30,6 +30,8 @@ import org.apache.spark.{Logging, SparkException, SparkConf}
 import org.apache.spark.rpc._
 import org.apache.spark.util.AkkaUtils
 
+import scala.util.control.NonFatal
+
 class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
   // TODO Once finishing the new Rpc mechanism, make actorSystem be a private val
 
@@ -53,15 +55,28 @@ class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
 
         override def receive: Receive = {
           case DisassociatedEvent(_, remoteAddress, _) =>
-            endpoint.remoteConnectionTerminated(remoteAddress.toString)
+            try {
+              endpoint.remoteConnectionTerminated(remoteAddress.toString)
+            } catch {
+              case NonFatal(e) => endpoint.onError(e)
+            }
           case message: Any =>
-            logInfo("Received RPC message: " + message)
-            val pf = endpoint.receive(new AkkaRpcEndpointRef(sender(), conf))
-            if (pf.isDefinedAt(message)) {
-              pf.apply(message)
+            try {
+              logInfo("Received RPC message: " + message)
+              val pf = endpoint.receive(new AkkaRpcEndpointRef(sender(), conf))
+              if (pf.isDefinedAt(message)) {
+                pf.apply(message)
+              }
+            } catch {
+              case NonFatal(e) => endpoint.onError(e)
             }
         }
-      }), name = name)
+
+        override def postStop(): Unit = {
+          endpoint.postStop()
+        }
+
+        }), name = name)
       endpointRef = new AkkaRpcEndpointRef(actorRef, conf)
       endpointRef
     } finally {

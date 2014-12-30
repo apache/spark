@@ -20,25 +20,17 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 
-import akka.actor._
-import akka.testkit.{ImplicitSender, TestKit, TestActorRef}
-import org.scalatest.{BeforeAndAfter, FunSuiteLike}
+import org.scalatest.{FunSuite, BeforeAndAfter}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rpc.RpcEndpoint
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.CallSite
 import org.apache.spark.executor.TaskMetrics
-
-class BuggyDAGEventProcessActor extends Actor {
-  val state = 0
-  def receive = {
-    case _ => throw new SparkException("error")
-  }
-}
 
 /**
  * An RDD for passing to DAGScheduler. These RDDs will use the dependencies and
@@ -65,8 +57,7 @@ class MyRDD(
 
 class DAGSchedulerSuiteDummyException extends Exception
 
-class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with FunSuiteLike
-  with ImplicitSender with BeforeAndAfter with LocalSparkContext with Timeouts {
+class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with Timeouts {
 
   val conf = new SparkConf
   /** Set of TaskSets the DAGScheduler has requested executed. */
@@ -111,9 +102,10 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     }
   }
 
+  var sc: SparkContext = null
   var mapOutputTracker: MapOutputTrackerMaster = null
   var scheduler: DAGScheduler = null
-  var dagEventProcessTestActor: TestActorRef[DAGSchedulerEventProcessActor] = null
+  var dagEventProcessTestActor: RpcEndpoint = null
 
   /**
    * Set of cache locations to return from our mock BlockManagerMaster.
@@ -167,13 +159,13 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
         runLocallyWithinThread(job)
       }
     }
-    dagEventProcessTestActor = TestActorRef[DAGSchedulerEventProcessActor](
-      Props(classOf[DAGSchedulerEventProcessActor], scheduler))(system)
+    val rpcEnv = sc.env.rpcEnv
+    dagEventProcessTestActor = new DAGSchedulerEventProcessActor(rpcEnv, scheduler)
+    rpcEnv.setupEndpoint("DAGSchedulerEventProcessActorTest", dagEventProcessTestActor)
   }
 
-  override def afterAll() {
-    super.afterAll()
-    TestKit.shutdownActorSystem(system)
+  after {
+    sc.stop()
   }
 
   /**
@@ -190,7 +182,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
    * DAGScheduler event loop.
    */
   private def runEvent(event: DAGSchedulerEvent) {
-    dagEventProcessTestActor.receive(event)
+    dagEventProcessTestActor.receive(RpcEndpoint.noSender)(event)
   }
 
   /**
@@ -396,8 +388,9 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
         runLocallyWithinThread(job)
       }
     }
-    dagEventProcessTestActor = TestActorRef[DAGSchedulerEventProcessActor](
-      Props(classOf[DAGSchedulerEventProcessActor], noKillScheduler))(system)
+    val rpcEnv = sc.env.rpcEnv
+    dagEventProcessTestActor = new DAGSchedulerEventProcessActor(rpcEnv, noKillScheduler)
+    rpcEnv.setupEndpoint("DAGSchedulerEventProcessActor-nokill", dagEventProcessTestActor)
     val jobId = submit(new MyRDD(sc, 1, Nil), Array(0))
     cancel(jobId)
     // Because the job wasn't actually cancelled, we shouldn't have received a failure message.
@@ -723,18 +716,6 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     // Make sure we can still run local commands as well as cluster commands.
     assert(sc.parallelize(1 to 10, 2).count() === 10)
     assert(sc.parallelize(1 to 10, 2).first() === 1)
-  }
-
-  test("DAGSchedulerActorSupervisor closes the SparkContext when EventProcessActor crashes") {
-    val actorSystem = ActorSystem("test")
-    val supervisor = actorSystem.actorOf(
-      Props(classOf[DAGSchedulerActorSupervisor], scheduler), "dagSupervisor")
-    supervisor ! Props[BuggyDAGEventProcessActor]
-    val child = expectMsgType[ActorRef]
-    watch(child)
-    child ! "hi"
-    expectMsgPF(){ case Terminated(child) => () }
-    assert(scheduler.sc.dagScheduler === null)
   }
 
   test("accumulator not calculated for resubmitted result stage") {

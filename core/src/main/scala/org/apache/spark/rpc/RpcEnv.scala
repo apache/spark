@@ -100,9 +100,21 @@ trait RpcEndpoint {
    */
   def receive(sender: RpcEndpointRef): PartialFunction[Any, Unit]
 
+  /**
+   * Call onError when any exception is thrown during handling messages.
+   *
+   * @param e
+   */
+  def onError(e: Throwable): Unit = {
+    // By default, throw e and let RpcEnv handle it
+    throw e
+  }
+
   def remoteConnectionTerminated(remoteAddress: String): Unit = {
     // By default, do nothing.
   }
+
+  def postStop(): Unit = {}
 
   final def stop(): Unit = {
     rpcEnv.stop(self)

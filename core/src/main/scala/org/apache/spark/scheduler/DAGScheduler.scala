@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import java.io.NotSerializableException
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{TimeUnit, Executors}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
 import scala.concurrent.Await
@@ -28,8 +29,6 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import akka.actor._
-import akka.actor.SupervisorStrategy.Stop
 import akka.pattern.ask
 import akka.util.Timeout
 
@@ -38,6 +37,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.rpc.{RpcEnv, RpcEndpointRef, RpcEndpoint}
 import org.apache.spark.storage._
 import org.apache.spark.util.{CallSite, SystemClock, Clock, Utils}
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
@@ -81,6 +81,11 @@ class DAGScheduler(
 
   def this(sc: SparkContext) = this(sc, sc.taskScheduler)
 
+  private val rpcEnv = env.rpcEnv
+
+  private val messageScheduler =
+    Executors.newScheduledThreadPool(1, Utils.namedThreadFactory("dag-scheduler-message"))
+
   private[scheduler] val nextJobId = new AtomicInteger(0)
   private[scheduler] def numTotalJobs: Int = nextJobId.get()
   private val nextStageId = new AtomicInteger(0)
@@ -112,14 +117,9 @@ class DAGScheduler(
   //       stray messages to detect.
   private val failedEpoch = new HashMap[String, Long]
 
-  private val dagSchedulerActorSupervisor =
-    env.actorSystem.actorOf(Props(new DAGSchedulerActorSupervisor(this)))
-
   // A closure serializer that we reuse.
   // This is only safe because DAGScheduler runs in a single thread.
   private val closureSerializer = SparkEnv.get.closureSerializer.newInstance()
-
-  private[scheduler] var eventProcessActor: ActorRef = _
 
   /** If enabled, we may run certain actions like take() and first() locally. */
   private val localExecutionEnabled = sc.getConf.getBoolean("spark.localExecution.enabled", false)
@@ -127,26 +127,18 @@ class DAGScheduler(
   /** If enabled, FetchFailed will not cause stage retry, in order to surface the problem. */
   private val disallowStageRetryForTest = sc.getConf.getBoolean("spark.test.noStageRetry", false)
 
-  private def initializeEventProcessActor() {
-    // blocking the thread until supervisor is started, which ensures eventProcessActor is
-    // not null before any job is submitted
-    implicit val timeout = Timeout(30 seconds)
-    val initEventActorReply =
-      dagSchedulerActorSupervisor ? Props(new DAGSchedulerEventProcessActor(this))
-    eventProcessActor = Await.result(initEventActorReply, timeout.duration).
-      asInstanceOf[ActorRef]
-  }
-
-  initializeEventProcessActor()
+  private[scheduler] var eventProcessActor = rpcEnv.setupEndpoint(
+    "DAGSchedulerEventProcessActor-" + DAGScheduler.nextId,
+    new DAGSchedulerEventProcessActor(rpcEnv, this))
 
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
-    eventProcessActor ! BeginEvent(task, taskInfo)
+    eventProcessActor.send(BeginEvent(task, taskInfo))
   }
 
   // Called to report that a task has completed and results are being fetched remotely.
   def taskGettingResult(taskInfo: TaskInfo) {
-    eventProcessActor ! GettingResultEvent(taskInfo)
+    eventProcessActor.send(GettingResultEvent(taskInfo))
   }
 
   // Called by TaskScheduler to report task completions or failures.
@@ -157,7 +149,8 @@ class DAGScheduler(
       accumUpdates: Map[Long, Any],
       taskInfo: TaskInfo,
       taskMetrics: TaskMetrics) {
-    eventProcessActor ! CompletionEvent(task, reason, result, accumUpdates, taskInfo, taskMetrics)
+    eventProcessActor.send(
+      CompletionEvent(task, reason, result, accumUpdates, taskInfo, taskMetrics))
   }
 
   /**
@@ -179,18 +172,18 @@ class DAGScheduler(
 
   // Called by TaskScheduler when an executor fails.
   def executorLost(execId: String) {
-    eventProcessActor ! ExecutorLost(execId)
+    eventProcessActor.send(ExecutorLost(execId))
   }
 
   // Called by TaskScheduler when a host is added
   def executorAdded(execId: String, host: String) {
-    eventProcessActor ! ExecutorAdded(execId, host)
+    eventProcessActor.send(ExecutorAdded(execId, host))
   }
 
   // Called by TaskScheduler to cancel an entire TaskSet due to either repeated failures or
   // cancellation of the job itself.
   def taskSetFailed(taskSet: TaskSet, reason: String) {
-    eventProcessActor ! TaskSetFailed(taskSet, reason)
+    eventProcessActor.send(TaskSetFailed(taskSet, reason))
   }
 
   private def getCacheLocs(rdd: RDD[_]): Array[Seq[TaskLocation]] = {
@@ -495,8 +488,8 @@ class DAGScheduler(
     assert(partitions.size > 0)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
-    eventProcessActor ! JobSubmitted(
-      jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter, properties)
+    eventProcessActor.send(JobSubmitted(
+      jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter, properties))
     waiter
   }
 
@@ -536,8 +529,8 @@ class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val partitions = (0 until rdd.partitions.size).toArray
     val jobId = nextJobId.getAndIncrement()
-    eventProcessActor ! JobSubmitted(
-      jobId, rdd, func2, partitions, allowLocal = false, callSite, listener, properties)
+    eventProcessActor.send(JobSubmitted(
+      jobId, rdd, func2, partitions, allowLocal = false, callSite, listener, properties))
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 
@@ -546,19 +539,19 @@ class DAGScheduler(
    */
   def cancelJob(jobId: Int) {
     logInfo("Asked to cancel job " + jobId)
-    eventProcessActor ! JobCancelled(jobId)
+    eventProcessActor.send(JobCancelled(jobId))
   }
 
   def cancelJobGroup(groupId: String) {
     logInfo("Asked to cancel job group " + groupId)
-    eventProcessActor ! JobGroupCancelled(groupId)
+    eventProcessActor.send(JobGroupCancelled(groupId))
   }
 
   /**
    * Cancel all jobs that are running or waiting in the queue.
    */
   def cancelAllJobs() {
-    eventProcessActor ! AllJobsCancelled
+    eventProcessActor.send(AllJobsCancelled)
   }
 
   private[scheduler] def doCancelAllJobs() {
@@ -574,7 +567,7 @@ class DAGScheduler(
    * Cancel all jobs associated with a running or scheduled stage.
    */
   def cancelStage(stageId: Int) {
-    eventProcessActor ! StageCancelled(stageId)
+    eventProcessActor.send(StageCancelled(stageId))
   }
 
   /**
@@ -1086,8 +1079,11 @@ class DAGScheduler(
           import env.actorSystem.dispatcher
           logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
             s"$failedStage (${failedStage.name}) due to fetch failure")
-          env.actorSystem.scheduler.scheduleOnce(
-            RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
+          messageScheduler.schedule(new Runnable {
+            override def run(): Unit = {
+              eventProcessActor.send(ResubmitFailedStages)
+            }
+          }, RESUBMIT_TIMEOUT.toMillis, TimeUnit.MILLISECONDS)
         }
         failedStages += failedStage
         failedStages += mapStage
@@ -1345,35 +1341,13 @@ class DAGScheduler(
 
   def stop() {
     logInfo("Stopping DAGScheduler")
-    dagSchedulerActorSupervisor ! PoisonPill
+    rpcEnv.stop(eventProcessActor)
     taskScheduler.stop()
   }
 }
 
-private[scheduler] class DAGSchedulerActorSupervisor(dagScheduler: DAGScheduler)
-  extends Actor with Logging {
-
-  override val supervisorStrategy =
-    OneForOneStrategy() {
-      case x: Exception =>
-        logError("eventProcesserActor failed; shutting down SparkContext", x)
-        try {
-          dagScheduler.doCancelAllJobs()
-        } catch {
-          case t: Throwable => logError("DAGScheduler failed to cancel all jobs.", t)
-        }
-        dagScheduler.sc.stop()
-        Stop
-    }
-
-  def receive = {
-    case p: Props => sender ! context.actorOf(p)
-    case _ => logWarning("received unknown message in DAGSchedulerActorSupervisor")
-  }
-}
-
-private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGScheduler)
-  extends Actor with Logging {
+private[scheduler] class DAGSchedulerEventProcessActor(
+  override val rpcEnv: RpcEnv, dagScheduler: DAGScheduler) extends RpcEndpoint with Logging {
 
   override def preStart() {
     // set DAGScheduler for taskScheduler to ensure eventProcessActor is always
@@ -1384,7 +1358,7 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
   /**
    * The main event loop of the DAG scheduler.
    */
-  def receive = {
+  def receive(sender: RpcEndpointRef) = {
     case JobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite, listener, properties) =>
       dagScheduler.handleJobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite,
         listener, properties)
@@ -1427,6 +1401,17 @@ private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGSchedule
     // Cancel any active jobs in postStop hook
     dagScheduler.cleanUpAfterSchedulerStop()
   }
+
+  override def onError(e: Throwable): Unit = {
+    logError("eventProcesserActor failed; shutting down SparkContext", e)
+    stop()
+    try {
+      dagScheduler.doCancelAllJobs()
+    } catch {
+      case t: Throwable => logError("DAGScheduler failed to cancel all jobs.", t)
+    }
+    dagScheduler.sc.stop()
+  }
 }
 
 private[spark] object DAGScheduler {
@@ -1438,4 +1423,9 @@ private[spark] object DAGScheduler {
   // The time, in millis, to wake up between polls of the completion queue in order to potentially
   // resubmit failed stages
   val POLL_TIMEOUT = 10L
+
+  private val id = new AtomicInteger(0)
+
+  // To resolve the conflicts of actor name in the unit tests
+  def nextId = id.getAndDecrement
 }
