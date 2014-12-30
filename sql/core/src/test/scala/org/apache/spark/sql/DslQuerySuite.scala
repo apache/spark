@@ -88,7 +88,7 @@ class DslQuerySuite extends QueryTest {
       Seq(Seq(6)))
   }
 
-  test("sorting") {
+  test("global sorting") {
     checkAnswer(
       testData2.orderBy('a.asc, 'b.asc),
       Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)))
@@ -122,22 +122,31 @@ class DslQuerySuite extends QueryTest {
       mapData.collect().sortBy(_.data(1)).reverse.toSeq)
   }
 
-  test("sorting #2") {
+  test("partition wide sorting") {
+    // 2 partitions totally, and
+    // Partition #1 with values:
+    //    (1, 1)
+    //    (1, 2)
+    //    (2, 1)
+    // Partition #2 with values:
+    //    (2, 2)
+    //    (3, 1)
+    //    (3, 2)
     checkAnswer(
       testData2.sortBy('a.asc, 'b.asc),
       Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)))
 
     checkAnswer(
       testData2.sortBy('a.asc, 'b.desc),
-      Seq((1,2), (1,1), (2,2), (2,1), (3,2), (3,1)))
+      Seq((1,2), (1,1), (2,1), (2,2), (3,2), (3,1)))
 
     checkAnswer(
       testData2.sortBy('a.desc, 'b.desc),
-      Seq((3,2), (3,1), (2,2), (2,1), (1,2), (1,1)))
+      Seq((2,1), (1,2), (1,1), (3,2), (3,1), (2,2)))
 
     checkAnswer(
       testData2.sortBy('a.desc, 'b.asc),
-      Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
+      Seq((2,1), (1,1), (1,2), (3,1), (3,2), (2,2)))
   }
 
   test("limit") {
