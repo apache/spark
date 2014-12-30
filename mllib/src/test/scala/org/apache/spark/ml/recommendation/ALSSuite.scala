@@ -19,10 +19,10 @@ package org.apache.spark.ml.recommendation
 
 import java.util.Random
 
-import org.apache.spark.mllib.linalg.Vectors
 import org.scalatest.FunSuite
 
-import org.apache.spark.ml.recommendation.ALS.{CholeskySolver, NormalEquation, LocalIndexEncoder}
+import org.apache.spark.ml.recommendation.ALS.{CholeskySolver, LocalIndexEncoder, NormalEquation}
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
