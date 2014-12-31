@@ -1,9 +1,9 @@
 from pyspark.sql import SchemaRDD
-from pyspark.ml import _jvm
+from pyspark.ml import Estimator, Transformer, _jvm
 from pyspark.ml.param import Param
 
 
-class LogisticRegression(object):
+class LogisticRegression(Estimator):
     """
     Logistic regression.
     """
@@ -45,7 +45,7 @@ class LogisticRegression(object):
         return LogisticRegressionModel(java_model)
 
 
-class LogisticRegressionModel(object):
+class LogisticRegressionModel(Transformer):
     """
     Model fitted by LogisticRegression.
     """

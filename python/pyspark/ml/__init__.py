@@ -3,7 +3,7 @@ import inspect
 from pyspark import SparkContext
 from pyspark.ml.param import Param
 
-__all__ = ["Pipeline"]
+__all__ = ["Pipeline", "Transformer", "Estimator"]
 
 # An implementation of PEP3102 for Python 2.
 _keyword_only_secret = 70861589
@@ -60,3 +60,15 @@ class PipelineModel(object):
         for t in self.transformers:
             dataset = t.transform(dataset)
         return dataset
+
+
+class Estimator(object):
+
+    def fit(self, dataset, params={}):
+        raise NotImplementedError()
+
+
+class Transformer(object):
+
+    def transform(self, dataset, paramMap={}):
+        raise NotImplementedError()
