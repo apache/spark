@@ -193,6 +193,8 @@ case class TakeOrdered(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan) 
  * Performs a sort on-heap.
  * @param global when true performs a global sort of all partitions by shuffling the data first
  *               if necessary.
+ * @param sortOrder The Sort Order will be applied within the partition, and also will be applied
+ *                  on partitions if `global` is set to true.
  */
 @DeveloperApi
 case class Sort(
@@ -207,6 +209,30 @@ case class Sort(
     child.execute().mapPartitions( { iterator =>
       val ordering = newOrdering(sortOrder, child.output)
       iterator.map(_.copy()).toArray.sorted(ordering).iterator
+    }, preservesPartitioning = true)
+  }
+
+  override def output = child.output
+}
+
+/**
+ * :: DeveloperApi ::
+ * Performs a partitions sorting only
+ * Compare to global sort, we will not do the sort within the partition.
+ * Compare to non global sort, we don't have overlap keys among partitions.
+ * @param sortOrder Sort Order will be applied on partitions, so we will not get the overlap keys
+ *                  among partitions.
+ */
+@DeveloperApi
+case class SortPartitions(
+                 sortOrder: Seq[SortOrder],
+                 child: SparkPlan)
+  extends UnaryNode {
+  override def requiredChildDistribution = OrderedDistribution(sortOrder) :: Nil
+
+  override def execute() = attachTree(this, "sort") {
+    child.execute().mapPartitions( { iterator =>
+      iterator.map(_.copy())
     }, preservesPartitioning = true)
   }
 
