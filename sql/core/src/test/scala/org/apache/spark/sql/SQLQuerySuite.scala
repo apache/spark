@@ -172,8 +172,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
     checkAnswer(sql(
       "SELECT d from dates where d IN('2012-02-12', '2013-03-13')"),
-      Seq(Seq(java.sql.Date.valueOf("2012-02-12")),
-        Seq(java.sql.Date.valueOf("2013-03-13")))
+      Row(java.sql.Date.valueOf("2012-02-12")) ::
+      Row(java.sql.Date.valueOf("2013-03-13")) :: Nil
     )
 
     checkAnswer(sql(
