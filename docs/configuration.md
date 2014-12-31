@@ -652,19 +652,19 @@ Apart from these, the following properties are also available, and may be useful
     tasks.</td>
 </tr>
 <tr>
-  <td><code>spark.files.overwrite</code></td>
-  <td>false</td>
-  <td>
-    Whether to overwrite files added through SparkContext.addFile() when the target file exists and
-    its contents do not match those of the source.
-  </td>
-</tr>
-<tr>
   <td><code>spark.files.fetchTimeout</code></td>
   <td>60</td>
   <td>
     Communication timeout to use when fetching files added through SparkContext.addFile() from
     the driver, in seconds.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.files.overwrite</code></td>
+  <td>false</td>
+  <td>
+    Whether to overwrite files added through SparkContext.addFile() when the target file exists and
+    its contents do not match those of the source.
   </td>
 </tr>
 <tr>
