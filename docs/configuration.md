@@ -1062,10 +1062,12 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.dynamicAllocation.minExecutors</code></td>
-  <td>(none)</td>
+  <td><code>spark.dynamicAllocation.executorIdleTimeout</code></td>
+  <td>600</td>
   <td>
-    Lower bound for the number of executors if dynamic allocation is enabled (required).
+    If dynamic allocation is enabled and an executor has been idle for more than this duration
+    (in seconds), the executor will be removed. For more detail, see this
+    <a href="job-scheduling.html#resource-allocation-policy">description</a>.
   </td>
 </tr>
 <tr>
@@ -1073,6 +1075,13 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     Upper bound for the number of executors if dynamic allocation is enabled (required).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.dynamicAllocation.minExecutors</code></td>
+  <td>(none)</td>
+  <td>
+    Lower bound for the number of executors if dynamic allocation is enabled (required).
   </td>
 </tr>
 <tr>
@@ -1090,15 +1099,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Same as <code>spark.dynamicAllocation.schedulerBacklogTimeout</code>, but used only for
     subsequent executor requests. For more detail, see this
-    <a href="job-scheduling.html#resource-allocation-policy">description</a>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.dynamicAllocation.executorIdleTimeout</code></td>
-  <td>600</td>
-  <td>
-    If dynamic allocation is enabled and an executor has been idle for more than this duration
-    (in seconds), the executor will be removed. For more detail, see this
     <a href="job-scheduling.html#resource-allocation-policy">description</a>.
   </td>
 </tr>
