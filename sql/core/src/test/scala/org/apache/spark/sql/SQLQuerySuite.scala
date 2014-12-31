@@ -272,6 +272,23 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       mapData.collect().take(1).toSeq)
   }
 
+  test("from follow multiple brackets") {
+    checkAnswer(sql(
+      "select key from ((select * from testData limit 1) union all (select * from testData limit 1)) x limit 1"),
+      1
+    )
+
+    checkAnswer(sql(
+      "select key from (select * from testData) x limit 1"),
+      1
+    )
+
+    checkAnswer(sql(
+      "select key from (select * from testData limit 1 union all select * from testData limit 1) x limit 1"),
+      1
+    )
+  }
+
   test("average") {
     checkAnswer(
       sql("SELECT AVG(a) FROM testData2"),
