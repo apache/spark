@@ -38,7 +38,6 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
   before {
     ssc = new StreamingContext(master, framework, batchDuration)
   }
-
   after {
     if (ssc != null) {
       ssc.stop()
