@@ -64,23 +64,31 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
     verify(listener, times(1)).onTaskCompletion(any())
   }
 
-  test("TaskContext.attemptId should return attempt number, not task id (SPARK-4014)") {
+  test("TaskContext.attemptNumber should return attempt number, not task id (SPARK-4014)") {
     sc = new SparkContext("local-cluster[2,1,512]", "test")
     // Check that attemptIds are 0 for all tasks' initial attempts
     val attemptIds = sc.parallelize(Seq(1, 2), 2).mapPartitions { iter =>
-      Seq(TaskContext.get().attemptId()).iterator
+      Seq(TaskContext.get().attemptNumber).iterator
     }.collect()
     assert(attemptIds.toSet === Set(0))
 
     // Test a job with failed tasks
     val attemptIdsWithFailedTask = sc.parallelize(Seq(1, 2), 2).mapPartitions { iter =>
-      val attemptId = TaskContext.get().attemptId()
+      val attemptId = TaskContext.get().attemptNumber
       if (iter.next() == 1 && attemptId == 0) {
         throw new Exception("First execution of task failed")
       }
       Seq(attemptId).iterator
     }.collect()
     assert(attemptIdsWithFailedTask.toSet === Set(0, 1))
+  }
+
+  test("TaskContext.attemptId returns taskAttemptId for backwards-compatibility (SPARK-4014)") {
+    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    val attemptIds = sc.parallelize(Seq(1, 2, 3, 4), 4).mapPartitions { iter =>
+      Seq(TaskContext.get().attemptId).iterator
+    }.collect()
+    assert(attemptIds.toSet === Set(0, 1, 2, 3))
   }
 }
 

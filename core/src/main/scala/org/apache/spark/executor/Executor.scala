@@ -110,11 +110,11 @@ private[spark] class Executor(
   def launchTask(
       context: ExecutorBackend,
       taskId: Long,
-      attemptId: Long,
+      attemptNumber: Int,
       taskName: String,
       serializedTask: ByteBuffer) {
-    val tr =
-      new TaskRunner(context, taskId = taskId, attemptId = attemptId, taskName, serializedTask)
+    val tr = new TaskRunner(context, taskId = taskId, attemptNumber = attemptNumber, taskName,
+      serializedTask)
     runningTasks.put(taskId, tr)
     threadPool.execute(tr)
   }
@@ -141,7 +141,7 @@ private[spark] class Executor(
   class TaskRunner(
       execBackend: ExecutorBackend,
       val taskId: Long,
-      val attemptId: Long,
+      val attemptNumber: Int,
       taskName: String,
       serializedTask: ByteBuffer)
     extends Runnable {
@@ -189,7 +189,7 @@ private[spark] class Executor(
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
-        val value = task.run(taskId = taskId, attemptId = attemptId)
+        val value = task.run(taskAttemptId = taskId, attemptNumber = attemptNumber)
         val taskFinish = System.currentTimeMillis()
 
         // If the task has been killed, let's fail it.

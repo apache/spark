@@ -173,7 +173,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       // Simulate fetch failures:
       val mappedData = data.map { x =>
         val taskContext = TaskContext.get
-        if (taskContext.attemptId() == 1) {  // Cause this stage to fail on its first attempt.
+        if (taskContext.attemptNumber == 0) {  // Cause this stage to fail on its first attempt.
           val env = SparkEnv.get
           val bmAddress = env.blockManager.blockManagerId
           val shuffleId = shuffleHandle.shuffleId

@@ -295,8 +295,8 @@ private[spark] class MesosSchedulerBackend(
     // to hold it:
     val data: ByteString = {
       val serializedTask = task.serializedTask
-      val dataBuffer = ByteBuffer.allocate(8 + serializedTask.limit())
-      dataBuffer.putLong(task.attemptId)
+      val dataBuffer = ByteBuffer.allocate(4 + serializedTask.limit())
+      dataBuffer.putLong(task.attemptNumber)
       dataBuffer.put(serializedTask)
       ByteString.copyFrom(dataBuffer)
     }
