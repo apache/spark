@@ -76,19 +76,4 @@ class HiveTableScanSuite extends HiveComparisonTest {
       === Array(Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")),Row(null)))
     TestHive.sql("DROP TABLE timestamp_query_null")
   }
-
-  test("Spark-4963: SchemaRDD sample on mutable row return wrong result") {
-    TestHive.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    val location =
-      Utils.getSparkClassLoader.getResource("data/files/kv1.txt").getFile()
-    TestHive.sql(s"LOAD DATA LOCAL INPATH '$location' INTO TABLE src")
-    TestHive.sql("SELECT * FROM src WHERE key % 2 = 0")
-      .sample(withReplacement = false, fraction = 0.3)
-      .registerTempTable("sampled")
-    assert((1 to 10)
-      .map(_ => TestHive.sql("SELECT * FROM sampled WHERE key % 2 = 1")
-      .collect()
-      .isEmpty)
-      .reduce(_ && _),"SchemaRDD sample return wrong result")
-  }
 }
