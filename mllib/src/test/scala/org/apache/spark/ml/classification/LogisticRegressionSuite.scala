@@ -82,7 +82,9 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
       .select('prediction, 'myProbability)
       .collect()
       .map { case Row(pred: Double, prob: Vector) => pred }
-    assert(predAllZero.forall(_ === 0.0))
+    assert(predAllZero.forall(_ === 0),
+      s"With threshold=1.0, expected predictions to be all 0, but only" +
+      s" ${predAllZero.count(_ === 0)} of ${dataset.count()} were 0.")
     // Call transform with params, and check that the params worked.
     val predNotAllZero =
       model.transform(dataset, model.threshold -> 0.0, model.probabilityCol -> "myProb")
@@ -115,10 +117,11 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
     // Compare rawPrediction with probability
     results.select('rawPrediction, 'probability).collect().map {
       case Row(raw: Vector, prob: Vector) =>
-        val raw2prob: (Double => Double) = (m) => 1.0 / (1.0 + math.exp(-m))
-        raw.toArray.map(raw2prob).zip(prob.toArray).foreach { case (r, p) =>
-          assert(r ~== p relTol eps)
-        }
+        assert(raw.size === 2)
+        assert(prob.size === 2)
+        val probFromRaw1 = 1.0 / (1.0 + math.exp(-raw(1)))
+        assert(prob(1) ~== probFromRaw1 relTol eps)
+        assert(prob(0) ~== 1.0 - probFromRaw1 relTol eps)
     }
 
     // Compare prediction with probability

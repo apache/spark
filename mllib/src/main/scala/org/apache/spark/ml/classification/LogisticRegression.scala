@@ -149,7 +149,7 @@ class LogisticRegressionModel private[ml] (
     if (map(probabilityCol) != "") {
       if (map(rawPredictionCol) != "") {
         val raw2prob: Vector => Vector = (rawPreds) => {
-          val prob1 = 1.0 / 1.0 + math.exp(-rawPreds(1))
+          val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
           Vectors.dense(1.0 - prob1, prob1)
         }
         tmpData = tmpData.select(Star(None),
@@ -171,7 +171,7 @@ class LogisticRegressionModel private[ml] (
           predict.call(map(probabilityCol).attr) as map(predictionCol))
       } else if (map(rawPredictionCol) != "") {
         val predict: Vector => Double = (rawPreds) => {
-          val prob1 = 1.0 / 1.0 + math.exp(-rawPreds(1))
+          val prob1 = 1.0 / (1.0 + math.exp(-rawPreds(1)))
           if (prob1 > t) 1.0 else 0.0
         }
         tmpData = tmpData.select(Star(None),
@@ -207,7 +207,7 @@ class LogisticRegressionModel private[ml] (
 
   override protected def predictRaw(features: Vector): Vector = {
     val m = margin(features)
-    Vectors.dense(-m, m)
+    Vectors.dense(0.0, m)
   }
 
   override protected def copy(): LogisticRegressionModel = {
