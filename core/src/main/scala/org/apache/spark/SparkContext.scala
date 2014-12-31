@@ -176,10 +176,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   logInfo(s"Running Spark version $SPARK_VERSION")
   
   private[spark] val conf = config.clone()
-  val portRetriesConf = conf.getOption("spark.port.maxRetries")
-  if (portRetriesConf.isDefined) {
-    System.setProperty("spark.port.maxRetries", portRetriesConf.get)
-  }
+  conf.getOption("spark.port.maxRetries")
+      .foreach(portRetriesConf => System.setProperty("spark.port.maxRetries", portRetriesConf))
   conf.validateSettings()
 
   /**

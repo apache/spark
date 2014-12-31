@@ -75,10 +75,9 @@ trait ExecutorRunnableUtil extends Logging {
     // registers with the Scheduler and transfers the spark configs. Since the Executor backend
     // uses Akka to connect to the scheduler, the akka settings are needed as well as the
     // authentication settings.
-    sparkConf.getAll.
-      filter { case (k, v) =>
+    sparkConf.getAll.filter { case (k, v) =>
       k.startsWith("spark.auth") || k.startsWith("spark.akka") || k.equals("spark.port.maxRetries")
-      }.
+    }.
       foreach { case (k, v) => javaOpts += YarnSparkHadoopUtil.escapeForShell(s"-D$k=$v") }
 
     sparkConf.getAkkaConf.
