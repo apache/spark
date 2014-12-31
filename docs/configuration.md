@@ -191,6 +191,15 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><code>spark.executor.extraClassPath</code></td>
+  <td>(none)</td>
+  <td>
+    Extra classpath entries to append to the classpath of executors. This exists primarily
+    for backwards-compatibility with older versions of Spark. Users typically should not need
+    to set this option.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.extraJavaOptions</code></td>
   <td>(none)</td>
   <td>
@@ -202,19 +211,28 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.extraClassPath</code></td>
-  <td>(none)</td>
-  <td>
-    Extra classpath entries to append to the classpath of executors. This exists primarily
-    for backwards-compatibility with older versions of Spark. Users typically should not need
-    to set this option.
-  </td>
-</tr>
-<tr>
   <td><code>spark.executor.extraLibraryPath</code></td>
   <td>(none)</td>
   <td>
     Set a special library path to use when launching executor JVM's.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
+  <td>(none)</td>
+  <td>
+    Sets the number of latest rolling log files that are going to be retained by the system.
+    Older log files will be deleted. Disabled by default.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.logs.rolling.size.maxBytes</code></td>
+  <td>(none)</td>
+  <td>
+    Set the max size of the file by which the executor logs will be rolled over.
+    Rolling is disabled by default. Value is set in terms of bytes.
+    See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
+    for automatic cleaning of old logs.
   </td>
 </tr>
 <tr>
@@ -239,21 +257,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.logs.rolling.size.maxBytes</code></td>
+  <td><code>spark.executorEnv.[EnvironmentVariableName]</code></td>
   <td>(none)</td>
   <td>
-    Set the max size of the file by which the executor logs will be rolled over.
-    Rolling is disabled by default. Value is set in terms of bytes.
-    See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
-    for automatic cleaning of old logs.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.executor.logs.rolling.maxRetainedFiles</code></td>
-  <td>(none)</td>
-  <td>
-    Sets the number of latest rolling log files that are going to be retained by the system.
-    Older log files will be deleted. Disabled by default.
+    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Executor
+    process. The user can specify multiple of these to set multiple environment variables.
   </td>
 </tr>
 <tr>
@@ -264,15 +272,6 @@ Apart from these, the following properties are also available, and may be useful
     loading classes in Executors. This feature can be used to mitigate conflicts between
     Spark's dependencies and user dependencies. It is currently an experimental feature.
     (Currently, this setting does not work for YARN, see <a href="https://issues.apache.org/jira/browse/SPARK-2996">SPARK-2996</a> for more details).
-  </td>
-</tr>
-<tr>
-  <td><code>spark.python.worker.memory</code></td>
-  <td>512m</td>
-  <td>
-    Amount of memory to use per python worker process during aggregation, in the same
-    format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>). If the memory
-    used during aggregation goes above this amount, it will spill the data into disks.
   </td>
 </tr>
 <tr>
@@ -296,6 +295,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.python.worker.memory</code></td>
+  <td>512m</td>
+  <td>
+    Amount of memory to use per python worker process during aggregation, in the same
+    format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>). If the memory
+    used during aggregation goes above this amount, it will spill the data into disks.
+  </td>
+</tr>
+<tr>
   <td><code>spark.python.worker.reuse</code></td>
   <td>true</td>
   <td>
@@ -303,14 +311,6 @@ Apart from these, the following properties are also available, and may be useful
     does not need to fork() a Python process for every tasks. It will be very useful
     if there is large broadcast, then the broadcast will not be needed to transfered
     from JVM to Python worker for every task.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.executorEnv.[EnvironmentVariableName]</code></td>
-  <td>(none)</td>
-  <td>
-    Add the environment variable specified by <code>EnvironmentVariableName</code> to the Executor
-    process. The user can specify multiple of these to set multiple environment variables.
   </td>
 </tr>
 <tr>
