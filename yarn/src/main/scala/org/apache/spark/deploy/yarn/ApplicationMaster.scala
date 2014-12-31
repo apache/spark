@@ -311,7 +311,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private def cleanupStagingDir(fs: FileSystem) {
     var stagingDirPath: Path = null
     try {
-      val preserveFiles = sparkConf.get("spark.yarn.preserve.staging.files", "false").toBoolean
+      val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
       if (!preserveFiles) {
         stagingDirPath = new Path(System.getenv("SPARK_YARN_STAGING_DIR"))
         if (stagingDirPath == null) {
