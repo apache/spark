@@ -17,8 +17,7 @@
 
 package org.apache.spark.streaming.mqtt
 
-import org.apache.spark.Logging
-import org.scalatest.FunSuite
+import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.concurrent.Eventually
 import scala.concurrent.duration._
 import org.apache.spark.streaming.{Seconds, StreamingContext}
@@ -27,14 +26,40 @@ import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.eclipse.paho.client.mqttv3._
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
 
-abstract class MQTTStreamSuiteBase extends FunSuite with Eventually with Logging {
-
+class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
   val batchDuration = Seconds(1)
   val master: String = "local[2]"
   val framework: String = this.getClass.getSimpleName
   val brokerUrl = "tcp://localhost:1883"
   val topic = "def"
-  
+
+  var ssc: StreamingContext = _
+
+  after {
+    if (ssc != null) {
+      ssc.stop()
+      ssc = null
+    }
+  }
+
+  test("mqtt input stream") {
+    ssc = new StreamingContext(master, framework, batchDuration)
+    val sendMessage = "MQTT demo for spark streaming"
+    publishData(sendMessage)
+    val receiveStream: ReceiverInputDStream[String] =
+      MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_AND_DISK_SER_2)
+    var receiveMessage: String = ""
+    receiveStream.foreachRDD { rdd =>
+      receiveMessage = rdd.first
+      receiveMessage
+    }
+    ssc.start()
+    eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
+      assert(sendMessage.equals(receiveMessage))
+    }
+    ssc.stop()
+  }
+
   def publishData(sendMessage: String): Unit = {
     try {
       val persistence: MqttClientPersistence = new MqttDefaultFilePersistence("/tmp")
@@ -50,25 +75,5 @@ abstract class MQTTStreamSuiteBase extends FunSuite with Eventually with Logging
     } catch {
       case e: MqttException => println("Exception Caught: " + e)
     }
-  }
-}
-
-class MQTTStreamSuite extends MQTTStreamSuiteBase {
-  test("mqtt input stream") {
-    val ssc = new StreamingContext(master, framework, batchDuration)
-    val sendMessage = "MQTT demo for spark streaming"
-    publishData(sendMessage)
-    val receiveStream: ReceiverInputDStream[String] =
-      MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_AND_DISK_SER_2)
-    var result: String = ""
-    receiveStream.foreachRDD { rdd =>
-      result = rdd.first
-      result
-    }
-    ssc.start()
-    eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
-      assert(sendMessage.equals(result))
-    }
-    ssc.stop()
   }
 }
