@@ -120,6 +120,24 @@ class DslQuerySuite extends QueryTest {
       mapData.collect().sortBy(_.data(1)).reverse.toSeq)
   }
 
+  test("sorting #2") {
+    checkAnswer(
+      testData2.sortBy('a.asc, 'b.asc),
+      Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)))
+
+    checkAnswer(
+      testData2.sortBy('a.asc, 'b.desc),
+      Seq((1,2), (1,1), (2,2), (2,1), (3,2), (3,1)))
+
+    checkAnswer(
+      testData2.sortBy('a.desc, 'b.desc),
+      Seq((3,2), (3,1), (2,2), (2,1), (1,2), (1,1)))
+
+    checkAnswer(
+      testData2.sortBy('a.desc, 'b.asc),
+      Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
+  }
+
   test("limit") {
     checkAnswer(
       testData.limit(10),
@@ -280,6 +298,74 @@ class DslQuerySuite extends QueryTest {
       // SELECT *, foo(key, value) FROM testData
       testData.select(Star(None), foo.call('key, 'value)).limit(3),
       (1, "1", "11") :: (2, "2", "22") :: (3, "3", "33") :: Nil
+    )
+  }
+
+  test("sqrt") {
+    checkAnswer(
+      testData.select(sqrt('key)).orderBy('key asc),
+      (1 to 100).map(n => Seq(math.sqrt(n)))
+    )
+
+    checkAnswer(
+      testData.select(sqrt('value), 'key).orderBy('key asc, 'value asc),
+      (1 to 100).map(n => Seq(math.sqrt(n), n))
+    )
+
+    checkAnswer(
+      testData.select(sqrt(Literal(null))),
+      (1 to 100).map(_ => Seq(null))
+    )
+  }
+
+  test("abs") {
+    checkAnswer(
+      testData.select(abs('key)).orderBy('key asc),
+      (1 to 100).map(n => Seq(n))
+    )
+
+    checkAnswer(
+      negativeData.select(abs('key)).orderBy('key desc),
+      (1 to 100).map(n => Seq(n))
+    )
+
+    checkAnswer(
+      testData.select(abs(Literal(null))),
+      (1 to 100).map(_ => Seq(null))
+    )
+  }
+
+  test("upper") {
+    checkAnswer(
+      lowerCaseData.select(upper('l)),
+      ('a' to 'd').map(c => Seq(c.toString.toUpperCase()))
+    )
+
+    checkAnswer(
+      testData.select(upper('value), 'key),
+      (1 to 100).map(n => Seq(n.toString, n))
+    )
+
+    checkAnswer(
+      testData.select(upper(Literal(null))),
+      (1 to 100).map(n => Seq(null))
+    )
+  }
+
+  test("lower") {
+    checkAnswer(
+      upperCaseData.select(lower('L)),
+      ('A' to 'F').map(c => Seq(c.toString.toLowerCase()))
+    )
+
+    checkAnswer(
+      testData.select(lower('value), 'key),
+      (1 to 100).map(n => Seq(n.toString, n))
+    )
+
+    checkAnswer(
+      testData.select(lower(Literal(null))),
+      (1 to 100).map(n => Seq(null))
     )
   }
 }

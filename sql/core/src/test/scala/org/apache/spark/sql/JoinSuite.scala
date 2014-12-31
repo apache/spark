@@ -80,8 +80,13 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         classOf[HashOuterJoin]),
       ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
         classOf[HashOuterJoin]),
-      ("SELECT * FROM testData full outer join testData2 ON key = a", classOf[HashOuterJoin])
-      // TODO add BroadcastNestedLoopJoin
+      ("SELECT * FROM testData full outer join testData2 ON key = a", classOf[HashOuterJoin]),
+      ("SELECT * FROM testData left JOIN testData2 ON (key * a != key + a)",
+        classOf[BroadcastNestedLoopJoin]),
+      ("SELECT * FROM testData right JOIN testData2 ON (key * a != key + a)",
+        classOf[BroadcastNestedLoopJoin]),
+      ("SELECT * FROM testData full JOIN testData2 ON (key * a != key + a)",
+        classOf[BroadcastNestedLoopJoin])
     ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
   }
 
