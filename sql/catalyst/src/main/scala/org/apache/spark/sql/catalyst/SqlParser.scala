@@ -178,7 +178,15 @@ class SqlParser extends AbstractSparkSQLParser {
     joinedRelation | relationFactor
 
   protected lazy val relationFactor: Parser[LogicalPlan] =
-    ( ident ~ (opt(AS) ~> opt(ident)) ^^ {
+    ( ident ~ ("." ~> ident) ~ ("." ~> ident) ~ (opt(AS) ~> opt(ident)) ^^ {
+        case clusterName ~ dbName ~ tableName ~ alias =>
+          UnresolvedRelation(None, clusterName + "." + dbName + "." + tableName, alias)
+      }
+    | ident ~ ("." ~> ident) ~ (opt(AS) ~> opt(ident)) ^^ {
+        case dbName ~ tableName ~ alias =>
+          UnresolvedRelation(None, dbName + "." + tableName, alias)
+      }
+    | ident ~ (opt(AS) ~> opt(ident)) ^^ {
         case tableName ~ alias => UnresolvedRelation(None, tableName, alias)
       }
     | ("(" ~> start <~ ")") ~ (AS.? ~> ident) ^^ { case s ~ a => Subquery(a, s) }
