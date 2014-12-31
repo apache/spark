@@ -54,18 +54,15 @@ from functools import partial
 import itertools
 if sys.version < '3':
     from copy_reg import _extension_registry, _inverted_registry, _extension_cache
+    from types import InstanceType
+    from pickle import DictionaryType
 else:
     from copyreg import _extension_registry, _inverted_registry, _extension_cache
+    InstanceType = object  # see http://bugs.python.org/issue8206
+    DictionaryType = dict
 import dis
 import traceback
 import platform
-
-# But see http://bugs.python.org/issue8206
-try:
-  from types import InstanceType
-except ImportError:
-  InstanceType = object
-
 
 PyImp = platform.python_implementation()
 
@@ -106,7 +103,9 @@ def range_params(rangeobj):
     Note: Only guarentees that elements of range are the same. parameters may
     be different.
     e.g. range(1,1) is interpretted as range(0,0); both behave the same
-    though w/ iteration
+    though w/ iteration.
+
+    NOTE: this is only used by Python 3.
     """
 
     range_len = len(rangeobj)
@@ -116,6 +115,25 @@ def range_params(rangeobj):
     if range_len == 1: #one element
         return start, 1, 1
     return (start, rangeobj[1] - rangeobj[0], range_len)
+
+def xrange_params(xrangeobj):
+    """Returns a 3 element tuple describing the xrange start, step, and len
+    respectively
+    Note: Only guarentees that elements of xrange are the same. parameters may
+    be different.
+    e.g. xrange(1,1) is interpretted as xrange(0,0); both behave the same
+    though w/ iteration
+
+    NOTE: this is only used by Python 2.x
+    """
+
+    xrange_len = len(xrangeobj)
+    if not xrange_len: #empty
+        return (0,1,0)
+    start = xrangeobj[0]
+    if xrange_len == 1: #one element
+        return start, 1, 1
+    return (start, xrangeobj[1] - xrangeobj[0], xrange_len)
 
 #debug variables intended for developer use:
 printSerialization = False
@@ -127,7 +145,10 @@ useForcedImports = True #Should I use forced imports for tracking?
 
 class CloudPickler(pickle.Pickler):
 
-    dispatch = pickle._Pickler.dispatch.copy()
+    if sys.version < '3':
+        dispatch = pickle.Pickler.dispatch.copy()
+    else:
+        dispatch = pickle._Pickler.dispatch.copy()
     savedForceImports = False
     savedDjangoEnv = False #hack tro transport django environment
 
@@ -159,7 +180,14 @@ class CloudPickler(pickle.Pickler):
     def save_memoryview(self, obj):
         """Fallback to save_string"""
         pickle.Pickler.save_string(self,str(obj))
-    dispatch[memoryview] = save_memoryview
+    if sys.version >= '3':
+        dispatch[memoryview] = save_memoryview
+
+    def save_buffer(self, obj):
+        """Fallback to save_string"""
+        pickle.Pickler.save_string(self,str(obj))
+    if sys.version < '3':
+        dispatch[buffer] = save_buffer
 
     #block broken objects
     def save_unsupported(self, obj, pack=None):
@@ -187,7 +215,7 @@ class CloudPickler(pickle.Pickler):
             self.save_reduce(_get_module_builtins, (), obj=obj)
         else:
             pickle.Pickler.save_dict(self, obj)
-    dispatch[dict] = save_dict
+    dispatch[DictionaryType] = save_dict
 
 
     def save_module(self, obj, pack=struct.pack):
@@ -665,19 +693,19 @@ class CloudPickler(pickle.Pickler):
             save(state)
             write(pickle.BUILD)
 
-
-    def save_range(self, obj):
+    def save_xrange(self, obj):
         """Save an xrange object in python 2.5
         Python 2.6 supports this natively
         """
-        _range_params = range_params(obj)
-        self.save_reduce(_build_range, _range_params)
+        range_params = xrange_params(obj)
+        self.save_reduce(_build_xrange,range_params)
 
-    #python2.6+ supports xrange pickling. some py2.5 extensions might as well.  We just test it
-    try:
-        range(0).__reduce__()
-    except TypeError: #can't pickle -- use PiCloud pickler
-        dispatch[range] = save_range
+    if sys.version < '3':
+        #python2.6+ supports xrange pickling. some py2.5 extensions might as well.  We just test it
+        try:
+            xrange(0).__reduce__()
+        except TypeError: #can't pickle -- use PiCloud pickler
+            dispatch[xrange] = save_xrange
 
     def save_partial(self, obj):
         """Partial objects do not serialize correctly in python2.x -- this fixes the bugs"""
@@ -738,7 +766,10 @@ class CloudPickler(pickle.Pickler):
         self.save(retval)  #save stringIO
         self.memoize(obj)
 
-    dispatch[io.TextIOWrapper] = save_file
+    if sys.version >= '3':
+        dispatch[io.TextIOWrapper] = save_file
+    else:
+        dispatch[file] = save_file
     """Special functions for Add-on libraries"""
 
     def inject_numpy(self):
@@ -895,9 +926,9 @@ A version mismatch is likely.  Specific error was:\n' % modname)
             setattr(main,modname.__name__, modname)
 
 #object generators:
-def _build_range(start, step, len):
-    """Built xrange explicitly"""
-    return range(start, start + step*len, step)
+def _build_xrange(start, step, len):
+    """Build xrange explicitly (only used on Python 2.x)"""
+    return xrange(start, start + step*len, step)
 
 def _genpartial(func, args, kwds):
     if not args:

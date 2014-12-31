@@ -17,7 +17,13 @@
 
 import copy
 from collections import defaultdict
-from itertools import chain, ifilter, imap
+from itertools import chain
+import sys
+if sys.version < '3':
+    from itertools import ifilter, imap
+else:
+    ifilter = filter
+    imap = map
 import operator
 import sys
 import shlex

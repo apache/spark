@@ -19,6 +19,8 @@ from __future__ import print_function
 import os
 import shutil
 import sys
+if sys.version >= '3':
+    xrange = range
 from threading import Lock
 from tempfile import NamedTemporaryFile
 

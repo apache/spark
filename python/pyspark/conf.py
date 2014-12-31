@@ -56,6 +56,11 @@ spark.home=/path
 
 __all__ = ['SparkConf']
 
+import sys
+# TODO: this is a hack
+if sys.version >= '3':
+    unicode = str
+
 
 class SparkConf(object):
 
