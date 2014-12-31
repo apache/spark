@@ -601,19 +601,19 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.broadcast.factory</code></td>
-  <td>org.apache.spark.broadcast.<br />TorrentBroadcastFactory</td>
-  <td>
-    Which broadcast implementation to use.
-  </td>
-</tr>
-<tr>
   <td><code>spark.broadcast.blockSize</code></td>
   <td>4096</td>
   <td>
     Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>.
     Too large a value decreases parallelism during broadcast (makes it slower); however, if it is
     too small, <code>BlockManager</code> might take a performance hit.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.broadcast.factory</code></td>
+  <td>org.apache.spark.broadcast.<br />TorrentBroadcastFactory</td>
+  <td>
+    Which broadcast implementation to use.
   </td>
 </tr>
 <tr>
