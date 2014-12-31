@@ -55,7 +55,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
   }
-  
+
   createQueryTest("constant object inspector for generic udf",
     """SELECT named_struct(
       lower("AA"), "10",
