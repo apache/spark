@@ -63,7 +63,7 @@ private[sql] case class ParquetRelation(
   override val output =
     partitioningAttributes ++
     ParquetTypesConverter.readSchemaFromFile(
-      new Path(path.split(",").head),
+      new Path(ParquetRelation.splitPartitionPath(path).head),
       conf,
       sqlContext.isParquetBinaryAsString)
 
@@ -82,6 +82,17 @@ private[sql] case class ParquetRelation(
 }
 
 private[sql] object ParquetRelation {
+  // TODO It's a hack way to separate partition paths, in long term
+  // we need to provide API to support multiple paths / partition as inputs
+  private val partitionFileDelimiter = "[PARTITION FILE DELIMITER]"
+  def makePartitionPath(paths: Seq[String]) = {
+    if (paths.exists(_.contains(partitionFileDelimiter))) {
+      sys.error(s"File Path contains $partitionFileDelimiter which is not allowed")
+    }
+    paths.mkString(partitionFileDelimiter)
+  }
+
+  def splitPartitionPath(path: String) = path.split("\\[PARTITION FILE DELIMITER\\]")
 
   def enableLogForwarding() {
     // Note: the parquet.Log class has a static initializer that

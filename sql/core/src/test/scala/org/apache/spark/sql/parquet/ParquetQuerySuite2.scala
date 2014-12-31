@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.parquet
 
+import org.apache.spark.util.Utils
+import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext
@@ -32,6 +34,18 @@ class ParquetQuerySuite2 extends QueryTest with ParquetTest {
     withParquetTable((0 until 10).map(i => (i, i.toString)), "t") {
       checkAnswer(sql("SELECT _1 FROM t"), (0 until 10).map(Row.apply(_)))
     }
+  }
+
+  test("simple projection with comma in file name") {
+    val data = sparkContext.parallelize((1, 1) :: Nil)
+    val tmpFile1 = util.getTempFilePath("t,t").getCanonicalFile
+    val tmpFile2 = util.getTempFilePath("t|t").getCanonicalFile
+    Utils.registerShutdownDeleteDir(tmpFile1)
+    Utils.registerShutdownDeleteDir(tmpFile2)
+    data.saveAsParquetFile(tmpFile1.getCanonicalPath)
+    data.saveAsParquetFile(tmpFile2.getCanonicalPath)
+    assert(parquetFile(tmpFile1.getCanonicalPath).first() === Row(1, 1))
+    assert(parquetFile(tmpFile2.getCanonicalPath).first() === Row(1, 1))
   }
 
   test("insertion") {

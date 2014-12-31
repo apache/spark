@@ -86,7 +86,7 @@ case class ParquetTableScan(
 
     val conf: Configuration = ContextUtil.getConfiguration(job)
 
-    relation.path.split(",").foreach { curPath =>
+    ParquetRelation.splitPartitionPath(relation.path).foreach { curPath =>
       val qualifiedPath = {
         val path = new Path(curPath)
         path.getFileSystem(conf).makeQualified(path)
