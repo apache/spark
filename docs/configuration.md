@@ -601,6 +601,33 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><code>spark.broadcast.factory</code></td>
+  <td>org.apache.spark.broadcast.<br />TorrentBroadcastFactory</td>
+  <td>
+    Which broadcast implementation to use.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.broadcast.blockSize</code></td>
+  <td>4096</td>
+  <td>
+    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>.
+    Too large a value decreases parallelism during broadcast (makes it slower); however, if it is
+    too small, <code>BlockManager</code> might take a performance hit.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.cleaner.ttl</code></td>
+  <td>(infinite)</td>
+  <td>
+    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks
+    generated, etc.). Periodic cleanups will ensure that metadata older than this duration will be
+    forgotten. This is useful for running Spark for many hours / days (for example, running 24/7 in
+    case of Spark Streaming applications). Note that any RDD that persists in memory for more than
+    this duration will be cleared as well.
+  </td>
+</tr>
+<tr>
   <td><code>spark.default.parallelism</code></td>
   <td>
     For distributed shuffle operations like <code>reduceByKey</code> and <code>join</code>, the
@@ -618,20 +645,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.broadcast.factory</code></td>
-  <td>org.apache.spark.broadcast.<br />TorrentBroadcastFactory</td>
-  <td>
-    Which broadcast implementation to use.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.broadcast.blockSize</code></td>
-  <td>4096</td>
-  <td>
-    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>.
-    Too large a value decreases parallelism during broadcast (makes it slower); however, if it is
-    too small, <code>BlockManager</code> might take a performance hit.
-  </td>
+    <td><code>spark.executor.heartbeatInterval</code></td>
+    <td>10000</td>
+    <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
+    the driver know that the executor is still alive and update it with metrics for in-progress
+    tasks.</td>
 </tr>
 <tr>
   <td><code>spark.files.overwrite</code></td>
@@ -650,12 +668,38 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+    <td><code>spark.hadoop.cloneConf</code></td>
+    <td>false</td>
+    <td>If set to true, clones a new Hadoop <code>Configuration</code> object for each task.  This
+    option should be enabled to work around <code>Configuration</code> thread-safety issues (see
+    <a href="https://issues.apache.org/jira/browse/SPARK-2546">SPARK-2546</a> for more details).
+    This is disabled by default in order to avoid unexpected performance regressions for jobs that
+    are not affected by these issues.</td>
+</tr>
+<tr>
+    <td><code>spark.hadoop.validateOutputSpecs</code></td>
+    <td>true</td>
+    <td>If set to true, validates the output specification (e.g. checking if the output directory already exists)
+    used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
+    output directories. We recommend that users do not disable this except if trying to achieve compatibility with
+    previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
+</tr>
+<tr>
   <td><code>spark.storage.memoryFraction</code></td>
   <td>0.6</td>
   <td>
     Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
     generation of objects in the JVM, which by default is given 0.6 of the heap, but you can
     increase it if you configure your own old generation size.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.storage.memoryMapThreshold</code></td>
+  <td>8192</td>
+  <td>
+    Size of a block, in bytes, above which Spark memory maps when reading a block from disk.
+    This prevents Spark from memory mapping very small blocks. In general, memory
+    mapping has high overhead for blocks close to or below the page size of the operating system.
   </td>
 </tr>
 <tr>
@@ -677,55 +721,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.storage.memoryMapThreshold</code></td>
-  <td>8192</td>
-  <td>
-    Size of a block, in bytes, above which Spark memory maps when reading a block from disk.
-    This prevents Spark from memory mapping very small blocks. In general, memory
-    mapping has high overhead for blocks close to or below the page size of the operating system.
-  </td>
-</tr>
-<tr>
   <td><code>spark.tachyonStore.url</code></td>
   <td>tachyon://localhost:19998</td>
   <td>
     The URL of the underlying Tachyon file system in the TachyonStore.
   </td>
-</tr>
-<tr>
-  <td><code>spark.cleaner.ttl</code></td>
-  <td>(infinite)</td>
-  <td>
-    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks
-    generated, etc.). Periodic cleanups will ensure that metadata older than this duration will be
-    forgotten. This is useful for running Spark for many hours / days (for example, running 24/7 in
-    case of Spark Streaming applications). Note that any RDD that persists in memory for more than
-    this duration will be cleared as well.
-  </td>
-</tr>
-<tr>
-    <td><code>spark.hadoop.validateOutputSpecs</code></td>
-    <td>true</td>
-    <td>If set to true, validates the output specification (e.g. checking if the output directory already exists)
-    used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
-    output directories. We recommend that users do not disable this except if trying to achieve compatibility with
-    previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
-</tr>
-<tr>
-    <td><code>spark.hadoop.cloneConf</code></td>
-    <td>false</td>
-    <td>If set to true, clones a new Hadoop <code>Configuration</code> object for each task.  This
-    option should be enabled to work around <code>Configuration</code> thread-safety issues (see
-    <a href="https://issues.apache.org/jira/browse/SPARK-2546">SPARK-2546</a> for more details).
-    This is disabled by default in order to avoid unexpected performance regressions for jobs that
-    are not affected by these issues.</td>
-</tr>
-<tr>
-    <td><code>spark.executor.heartbeatInterval</code></td>
-    <td>10000</td>
-    <td>Interval (milliseconds) between each executor's heartbeats to the driver.  Heartbeats let
-    the driver know that the executor is still alive and update it with metrics for in-progress
-    tasks.</td>
 </tr>
 </table>
 
