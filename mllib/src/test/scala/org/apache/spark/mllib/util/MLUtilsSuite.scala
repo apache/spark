@@ -52,12 +52,27 @@ class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
       val values = indices.map(i => a(i))
       val v2 = Vectors.sparse(n, indices, values)
       val norm2 = Vectors.norm(v2, 2.0)
+      val v3 = Vectors.sparse(n, indices, indices.map(i => a(i) + 0.5))
+      val norm3 = Vectors.norm(v3, 2.0)
       val squaredDist = breezeSquaredDistance(v1.toBreeze, v2.toBreeze)
       val fastSquaredDist1 = fastSquaredDistance(v1, norm1, v2, norm2, precision)
       assert((fastSquaredDist1 - squaredDist) <= precision * squaredDist, s"failed with m = $m")
       val fastSquaredDist2 =
         fastSquaredDistance(v1, norm1, Vectors.dense(v2.toArray), norm2, precision)
       assert((fastSquaredDist2 - squaredDist) <= precision * squaredDist, s"failed with m = $m")
+      val squaredDist2 = breezeSquaredDistance(v2.toBreeze, v3.toBreeze)
+      val fastSquaredDist3 =
+        fastSquaredDistance(v2, norm2, v3, norm3, precision)
+      assert((fastSquaredDist3 - squaredDist2) <= precision * squaredDist2, s"failed with m = $m")
+      if (m > 10) { 
+        val v4 = Vectors.sparse(n, indices.slice(0, m - 10),
+          indices.map(i => a(i) + 0.5).slice(0, m - 10))
+        val norm4 = Vectors.norm(v4, 2.0)
+        val squaredDist = breezeSquaredDistance(v2.toBreeze, v4.toBreeze)
+        val fastSquaredDist =
+          fastSquaredDistance(v2, norm2, v4, norm4, precision)
+        assert((fastSquaredDist - squaredDist) <= precision * squaredDist, s"failed with m = $m")
+      }
     }
   }
 
