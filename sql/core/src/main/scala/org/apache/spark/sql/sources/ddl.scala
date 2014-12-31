@@ -209,17 +209,22 @@ private[sql] case class CreateTableUsing(
             sys.error(s"Failed to load class for data source: $provider")
         }
     }
-    val relation = if(tableCols.isEmpty) {
-      val dataSource =
-        clazz.newInstance().asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
-
-      dataSource.createRelation(sqlContext, new CaseInsensitiveMap(options))
-    } else {
-      val dataSource =
-        clazz.newInstance().asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
-
-      dataSource.createRelation(
-        sqlContext, new CaseInsensitiveMap(options), Some(StructType(tableCols)))
+    val relation = clazz.newInstance match {
+      case dataSource: org.apache.spark.sql.sources.RelationProvider  =>
+        dataSource
+          .asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
+          .createRelation(sqlContext, new CaseInsensitiveMap(options))
+      case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
+        if(tableCols.isEmpty) {
+          dataSource
+            .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
+            .createRelation(sqlContext, new CaseInsensitiveMap(options))
+        } else {
+          dataSource
+            .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
+            .createRelation(
+              sqlContext, new CaseInsensitiveMap(options), Some(StructType(tableCols)))
+        }
     }
 
     sqlContext.baseRelationToSchemaRDD(relation).registerTempTable(tableName)
