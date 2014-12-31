@@ -17,20 +17,21 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.hadoop.hive.ql.parse.ASTNode
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LowerCaseSchema}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.types.StringType
-import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.{DescribeCommand, OutputFaker, SparkPlan}
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.{SQLContext, SchemaRDD}
+import org.apache.spark.sql.{SQLContext, SchemaRDD, Strategy}
 
 import scala.collection.JavaConversions._
 
@@ -55,14 +56,20 @@ private[hive] trait HiveStrategies {
   object ParquetConversion extends Strategy {
     implicit class LogicalPlanHacks(s: SchemaRDD) {
       def lowerCase =
-        new SchemaRDD(s.sqlContext, LowerCaseSchema(s.logicalPlan))
+        new SchemaRDD(s.sqlContext, s.logicalPlan)
 
-      def addPartitioningAttributes(attrs: Seq[Attribute]) =
-        new SchemaRDD(
-          s.sqlContext,
-          s.logicalPlan transform {
-            case p: ParquetRelation => p.copy(partitioningAttributes = attrs)
-          })
+      def addPartitioningAttributes(attrs: Seq[Attribute]) = {
+        // Don't add the partitioning key if its already present in the data.
+        if (attrs.map(_.name).toSet.subsetOf(s.logicalPlan.output.map(_.name).toSet)) {
+          s
+        } else {
+          new SchemaRDD(
+            s.sqlContext,
+            s.logicalPlan transform {
+              case p: ParquetRelation => p.copy(partitioningAttributes = attrs)
+            })
+        }
+      }
     }
 
     implicit class PhysicalPlanHacks(originalPlan: SparkPlan) {
@@ -160,21 +167,19 @@ private[hive] trait HiveStrategies {
   object DataSinks extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
-        InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
-      case logical.InsertIntoTable(
-             InMemoryRelation(_, _, _,
-               HiveTableScan(_, table, _)), partition, child, overwrite) =>
-        InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
-      case logical.CreateTableAsSelect(database, tableName, child) =>
-        val query = planLater(child)
+        execution.InsertIntoHiveTable(
+          table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+      case hive.InsertIntoHiveTable(table: MetastoreRelation, partition, child, overwrite) =>
+        execution.InsertIntoHiveTable(
+          table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+      case logical.CreateTableAsSelect(
+             Some(database), tableName, child, allowExisting, Some(extra: ASTNode)) =>
         CreateTableAsSelect(
-          database.get,
+          database,
           tableName,
-          query,
-          InsertIntoHiveTable(_: MetastoreRelation, 
-            Map(), 
-            query, 
-            true)(hiveContext)) :: Nil
+          child,
+          allowExisting,
+          extra) :: Nil
       case _ => Nil
     }
   }
@@ -210,6 +215,8 @@ private[hive] trait HiveStrategies {
       case hive.DropTable(tableName, ifExists) => execution.DropTable(tableName, ifExists) :: Nil
 
       case hive.AddJar(path) => execution.AddJar(path) :: Nil
+
+      case hive.AddFile(path) => execution.AddFile(path) :: Nil
 
       case hive.AnalyzeTable(tableName) => execution.AnalyzeTable(tableName) :: Nil
 

@@ -34,7 +34,7 @@ private[spark] class SparkDeploySchedulerBackend(
   var client: AppClient = null
   var stopping = false
   var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
-  var appId: String = _
+  @volatile var appId: String = _
 
   val registrationLock = new Object()
   var registrationDone = false
@@ -51,7 +51,8 @@ private[spark] class SparkDeploySchedulerBackend(
       conf.get("spark.driver.host"),
       conf.get("spark.driver.port"),
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
-    val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}", "{{WORKER_URL}}")
+    val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}", "{{APP_ID}}",
+      "{{WORKER_URL}}")
     val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions")
       .map(Utils.splitCommandString).getOrElse(Seq.empty)
     val classPathEntries = sc.conf.getOption("spark.executor.extraClassPath").toSeq.flatMap { cp =>
@@ -68,9 +69,8 @@ private[spark] class SparkDeploySchedulerBackend(
     val command = Command("org.apache.spark.executor.CoarseGrainedExecutorBackend",
       args, sc.executorEnvs, classPathEntries, libraryPathEntries, javaOpts)
     val appUIAddress = sc.ui.map(_.appUIAddress).getOrElse("")
-    val eventLogDir = sc.eventLogger.map(_.logDir)
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
-      appUIAddress, eventLogDir)
+      appUIAddress, sc.eventLogDir)
 
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
@@ -129,7 +129,11 @@ private[spark] class SparkDeploySchedulerBackend(
     totalCoreCount.get() >= totalExpectedCores * minRegisteredRatio
   }
 
-  override def applicationId(): Option[String] = Option(appId)
+  override def applicationId(): String =
+    Option(appId).getOrElse {
+      logWarning("Application ID is not initialized yet.")
+      super.applicationId
+    }
 
   private def waitForRegistration() = {
     registrationLock.synchronized {

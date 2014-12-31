@@ -11,14 +11,14 @@ insert overwrite table nzhang_part partition (ds='2010-08-15', hr) select key, v
 
 insert overwrite table nzhang_part partition (ds='2010-08-15', hr) select key, value, hr from srcpart where ds='2008-04-08';
 
-select * from nzhang_part;
+select * from nzhang_part ORDER BY key, value, ds, hr;
 
 explain
 insert overwrite table nzhang_part partition (ds='2010-08-15', hr=11) select key, value from srcpart where ds='2008-04-08';
 
 insert overwrite table nzhang_part partition (ds='2010-08-15', hr=11) select key, value from srcpart where ds='2008-04-08';
 
-select * from nzhang_part;
+select * from nzhang_part ORDER BY key, value, ds, hr;
 
 explain
 insert overwrite table nzhang_part partition (ds='2010-08-15', hr) 

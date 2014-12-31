@@ -30,21 +30,28 @@ import org.apache.spark.api.python.Converter
 import org.apache.spark.SparkException
 
 
-/**
- * Implementation of [[org.apache.spark.api.python.Converter]] that converts
- * an Avro Record wrapped in an AvroKey (or AvroValue) to a Java Map. It tries
- * to work with all 3 Avro data mappings (Generic, Specific and Reflect).
- */
-class AvroWrapperToJavaConverter extends Converter[Any, Any] {
-  override def convert(obj: Any): Any = {
+object AvroConversionUtil extends Serializable {
+  def fromAvro(obj: Any, schema: Schema): Any = {
     if (obj == null) {
       return null
     }
-    obj.asInstanceOf[AvroWrapper[_]].datum() match {
-      case null => null
-      case record: IndexedRecord => unpackRecord(record)
-      case other => throw new SparkException(
-        s"Unsupported top-level Avro data type ${other.getClass.getName}")
+    schema.getType match {
+      case UNION   => unpackUnion(obj, schema)
+      case ARRAY   => unpackArray(obj, schema)
+      case FIXED   => unpackFixed(obj, schema)
+      case MAP     => unpackMap(obj, schema)
+      case BYTES   => unpackBytes(obj)
+      case RECORD  => unpackRecord(obj)
+      case STRING  => obj.toString
+      case ENUM    => obj.toString
+      case NULL    => obj
+      case BOOLEAN => obj
+      case DOUBLE  => obj
+      case FLOAT   => obj
+      case INT     => obj
+      case LONG    => obj
+      case other   => throw new SparkException(
+        s"Unknown Avro schema type ${other.getName}")
     }
   }
 
@@ -103,28 +110,37 @@ class AvroWrapperToJavaConverter extends Converter[Any, Any] {
         "Unions may only consist of a concrete type and null")
     }
   }
+}
 
-  def fromAvro(obj: Any, schema: Schema): Any = {
+/**
+ * Implementation of [[org.apache.spark.api.python.Converter]] that converts
+ * an Avro IndexedRecord (e.g., derived from AvroParquetInputFormat) to a Java Map.
+ */
+class IndexedRecordToJavaConverter extends Converter[IndexedRecord, JMap[String, Any]]{
+  override def convert(record: IndexedRecord): JMap[String, Any] = {
+    if (record == null) {
+      return null
+    }
+    val map = new java.util.HashMap[String, Any]
+    AvroConversionUtil.unpackRecord(record)
+  }
+}
+
+/**
+ * Implementation of [[org.apache.spark.api.python.Converter]] that converts
+ * an Avro Record wrapped in an AvroKey (or AvroValue) to a Java Map. It tries
+ * to work with all 3 Avro data mappings (Generic, Specific and Reflect).
+ */
+class AvroWrapperToJavaConverter extends Converter[Any, Any] {
+  override def convert(obj: Any): Any = {
     if (obj == null) {
       return null
     }
-    schema.getType match {
-      case UNION   => unpackUnion(obj, schema)
-      case ARRAY   => unpackArray(obj, schema)
-      case FIXED   => unpackFixed(obj, schema)
-      case MAP     => unpackMap(obj, schema)
-      case BYTES   => unpackBytes(obj)
-      case RECORD  => unpackRecord(obj)
-      case STRING  => obj.toString
-      case ENUM    => obj.toString
-      case NULL    => obj
-      case BOOLEAN => obj
-      case DOUBLE  => obj
-      case FLOAT   => obj
-      case INT     => obj
-      case LONG    => obj
-      case other   => throw new SparkException(
-        s"Unknown Avro schema type ${other.getName}")
+    obj.asInstanceOf[AvroWrapper[_]].datum() match {
+      case null => null
+      case record: IndexedRecord => AvroConversionUtil.unpackRecord(record)
+      case other => throw new SparkException(
+        s"Unsupported top-level Avro data type ${other.getClass.getName}")
     }
   }
 }

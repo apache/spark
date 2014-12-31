@@ -1,7 +1,7 @@
 DROP TABLE infertypes;
 CREATE TABLE infertypes(ti TINYINT, si SMALLINT, i INT, bi BIGINT, fl FLOAT, db DOUBLE, str STRING);
 
-LOAD DATA LOCAL INPATH '../data/files/infer_const_type.txt' OVERWRITE INTO TABLE infertypes;
+LOAD DATA LOCAL INPATH '../../data/files/infer_const_type.txt' OVERWRITE INTO TABLE infertypes;
 
 SELECT * FROM infertypes;
 

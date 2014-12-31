@@ -22,7 +22,7 @@ with serdeproperties (
 )
 stored as textfile;
 
-load data local inpath '../data/files/flights_tiny.txt.1' overwrite into table date_serde_regex;
+load data local inpath '../../data/files/flights_tiny.txt.1' overwrite into table date_serde_regex;
 
 select * from date_serde_regex;
 select fl_date, count(*) from date_serde_regex group by fl_date;

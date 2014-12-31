@@ -58,7 +58,13 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
               </h4> ++
               appTable
             } else {
-              <h4>No Completed Applications Found</h4>
+              <h4>No completed applications found!</h4> ++
+              <p>Did you specify the correct logging directory?
+                Please verify your setting of <span style="font-style:italic">
+                spark.history.fs.logDirectory</span> and whether you have the permissions to
+                access it.<br /> It is also possible that your application did not run to
+                completion or did not stop the SparkContext.
+              </p>
             }
           }
         </div>
@@ -67,6 +73,7 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
   }
 
   private val appHeader = Seq(
+    "App ID",
     "App Name",
     "Started",
     "Completed",
@@ -81,12 +88,13 @@ private[spark] class HistoryPage(parent: HistoryServer) extends WebUIPage("") {
     val duration = UIUtils.formatDuration(info.endTime - info.startTime)
     val lastUpdated = UIUtils.formatDate(info.lastUpdated)
     <tr>
-      <td><a href={uiAddress}>{info.name}</a></td>
-      <td>{startTime}</td>
-      <td>{endTime}</td>
-      <td>{duration}</td>
+      <td><a href={uiAddress}>{info.id}</a></td>
+      <td>{info.name}</td>
+      <td sorttable_customkey={info.startTime.toString}>{startTime}</td>
+      <td sorttable_customkey={info.endTime.toString}>{endTime}</td>
+      <td sorttable_customkey={(info.endTime - info.startTime).toString}>{duration}</td>
       <td>{info.sparkUser}</td>
-      <td>{lastUpdated}</td>
+      <td sorttable_customkey={info.lastUpdated.toString}>{lastUpdated}</td>
     </tr>
   }
 }

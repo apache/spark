@@ -23,11 +23,14 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.{SQLContext, StructType => SStructType}
+import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
+import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
+import org.apache.spark.sql.sources.{LogicalRelation, BaseRelation}
+import org.apache.spark.sql.types.util.DataTypeConversions
 import org.apache.spark.sql.types.util.DataTypeConversions.asScalaDataType
 import org.apache.spark.util.Utils
 
@@ -37,6 +40,10 @@ import org.apache.spark.util.Utils
 class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
 
   def this(sparkContext: JavaSparkContext) = this(new SQLContext(sparkContext.sc))
+
+  def baseRelationToSchemaRDD(baseRelation: BaseRelation): JavaSchemaRDD = {
+    new JavaSchemaRDD(sqlContext, LogicalRelation(baseRelation))
+  }
 
   /**
    * Executes a SQL query using Spark, returning the result as a SchemaRDD.  The dialect that is
@@ -85,9 +92,12 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
 
   /**
    * Applies a schema to an RDD of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
    */
   def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): JavaSchemaRDD = {
-    val schema = getSchema(beanClass)
+    val attributeSeq = getSchema(beanClass)
     val className = beanClass.getName
     val rowRdd = rdd.rdd.mapPartitions { iter =>
       // BeanInfo is not serializable so we must rediscover it remotely for each partition.
@@ -97,10 +107,14 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
         localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
 
       iter.map { row =>
-        new GenericRow(extractors.map(e => e.invoke(row)).toArray[Any]): ScalaRow
+        new GenericRow(
+          extractors.zip(attributeSeq).map { case (e, attr) =>
+            DataTypeConversions.convertJavaToCatalyst(e.invoke(row), attr.dataType)
+          }.toArray[Any]
+        ): ScalaRow
       }
     }
-    new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd))(sqlContext))
+    new JavaSchemaRDD(sqlContext, LogicalRDD(attributeSeq, rowRdd)(sqlContext))
   }
 
   /**
@@ -114,7 +128,7 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
     val scalaRowRDD = rowRDD.rdd.map(r => r.row)
     val scalaSchema = asScalaDataType(schema).asInstanceOf[SStructType]
     val logicalPlan =
-      SparkLogicalPlan(ExistingRdd(scalaSchema.toAttributes, scalaRowRDD))(sqlContext)
+      LogicalRDD(scalaSchema.toAttributes, scalaRowRDD)(sqlContext)
     new JavaSchemaRDD(sqlContext, logicalPlan)
   }
 
@@ -148,10 +162,14 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
    * It goes through the entire dataset once to determine the schema.
    */
   def jsonRDD(json: JavaRDD[String]): JavaSchemaRDD = {
-    val appliedScalaSchema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json.rdd, 1.0))
-    val scalaRowRDD = JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema)
+    val columnNameOfCorruptJsonRecord = sqlContext.columnNameOfCorruptRecord
+    val appliedScalaSchema =
+      JsonRDD.nullTypeToStringType(
+        JsonRDD.inferSchema(json.rdd, 1.0, columnNameOfCorruptJsonRecord))
+    val scalaRowRDD =
+      JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema, columnNameOfCorruptJsonRecord)
     val logicalPlan =
-      SparkLogicalPlan(ExistingRdd(appliedScalaSchema.toAttributes, scalaRowRDD))(sqlContext)
+      LogicalRDD(appliedScalaSchema.toAttributes, scalaRowRDD)(sqlContext)
     new JavaSchemaRDD(sqlContext, logicalPlan)
   }
 
@@ -162,12 +180,16 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
    */
   @Experimental
   def jsonRDD(json: JavaRDD[String], schema: StructType): JavaSchemaRDD = {
+    val columnNameOfCorruptJsonRecord = sqlContext.columnNameOfCorruptRecord
     val appliedScalaSchema =
       Option(asScalaDataType(schema)).getOrElse(
-        JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json.rdd, 1.0))).asInstanceOf[SStructType]
-    val scalaRowRDD = JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema)
+        JsonRDD.nullTypeToStringType(
+          JsonRDD.inferSchema(
+            json.rdd, 1.0, columnNameOfCorruptJsonRecord))).asInstanceOf[SStructType]
+    val scalaRowRDD = JsonRDD.jsonStringToRow(
+      json.rdd, appliedScalaSchema, columnNameOfCorruptJsonRecord)
     val logicalPlan =
-      SparkLogicalPlan(ExistingRdd(appliedScalaSchema.toAttributes, scalaRowRDD))(sqlContext)
+      LogicalRDD(appliedScalaSchema.toAttributes, scalaRowRDD)(sqlContext)
     new JavaSchemaRDD(sqlContext, logicalPlan)
   }
 
@@ -179,14 +201,21 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
     sqlContext.registerRDDAsTable(rdd.baseSchemaRDD, tableName)
   }
 
-  /** Returns a Catalyst Schema for the given java bean class. */
+  /**
+   * Returns a Catalyst Schema for the given java bean class.
+   */
   protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
     // TODO: All of this could probably be moved to Catalyst as it is mostly not Spark specific.
     val beanInfo = Introspector.getBeanInfo(beanClass)
 
+    // Note: The ordering of elements may differ from when the schema is inferred in Scala.
+    //       This is because beanInfo.getPropertyDescriptors gives no guarantees about
+    //       element ordering.
     val fields = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
     fields.map { property =>
       val (dataType, nullable) = property.getPropertyType match {
+        case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+          (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
         case c: Class[_] if c == classOf[java.lang.String] =>
           (org.apache.spark.sql.StringType, true)
         case c: Class[_] if c == java.lang.Short.TYPE =>
@@ -218,6 +247,12 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
           (org.apache.spark.sql.FloatType, true)
         case c: Class[_] if c == classOf[java.lang.Boolean] =>
           (org.apache.spark.sql.BooleanType, true)
+        case c: Class[_] if c == classOf[java.math.BigDecimal] =>
+          (org.apache.spark.sql.DecimalType(), true)
+        case c: Class[_] if c == classOf[java.sql.Date] =>
+          (org.apache.spark.sql.DateType, true)
+        case c: Class[_] if c == classOf[java.sql.Timestamp] =>
+          (org.apache.spark.sql.TimestampType, true)
       }
       AttributeReference(property.getName, dataType, nullable)()
     }

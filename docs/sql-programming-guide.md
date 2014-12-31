@@ -14,7 +14,7 @@ title: Spark SQL Programming Guide
 Spark SQL allows relational queries expressed in SQL, HiveQL, or Scala to be executed using
 Spark.  At the core of this component is a new type of RDD,
 [SchemaRDD](api/scala/index.html#org.apache.spark.sql.SchemaRDD).  SchemaRDDs are composed of
-[Row](api/scala/index.html#org.apache.spark.sql.catalyst.expressions.Row) objects, along with
+[Row](api/scala/index.html#org.apache.spark.sql.package@Row:org.apache.spark.sql.catalyst.expressions.Row.type) objects, along with
 a schema that describes the data types of each column in the row.  A SchemaRDD is similar to a table
 in a traditional relational database.  A SchemaRDD can be created from an existing RDD, a [Parquet](http://parquet.io)
 file, a JSON dataset, or by running HiveQL against data stored in [Apache Hive](http://hive.apache.org/).
@@ -128,7 +128,7 @@ feature parity with a HiveContext.
 
 </div>
 
-The specific variant of SQL that is used to parse queries can also be selected using the 
+The specific variant of SQL that is used to parse queries can also be selected using the
 `spark.sql.dialect` option.  This parameter can be changed using either the `setConf` method on
 a SQLContext or by using a `SET key=value` command in SQL.  For a SQLContext, the only dialect
 available is "sql" which uses a simple SQL parser provided by Spark SQL.  In a HiveContext, the
@@ -139,7 +139,7 @@ default is "hiveql", though "sql" is also available.  Since the HiveQL parser is
 
 Spark SQL supports operating on a variety of data sources through the `SchemaRDD` interface.
 A SchemaRDD can be operated on as normal RDDs and can also be registered as a temporary table.
-Registering a SchemaRDD as a table allows you to run SQL queries over its data.  This section 
+Registering a SchemaRDD as a table allows you to run SQL queries over its data.  This section
 describes the various methods for loading data into a SchemaRDD.
 
 ## RDDs
@@ -152,7 +152,7 @@ while writing your Spark application.
 The second method for creating SchemaRDDs is through a programmatic interface that allows you to
 construct a schema and then apply it to an existing RDD.  While this method is more verbose, it allows
 you to construct SchemaRDDs when the columns and their types are not known until runtime.
- 
+
 ### Inferring the Schema Using Reflection
 <div class="codetabs">
 
@@ -193,7 +193,7 @@ teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 <div data-lang="java"  markdown="1">
 
 Spark SQL supports automatically converting an RDD of [JavaBeans](http://stackoverflow.com/questions/3295496/what-is-a-javabean-exactly)
-into a Schema RDD.  The BeanInfo, obtained using reflection, defines the schema of the table. 
+into a Schema RDD.  The BeanInfo, obtained using reflection, defines the schema of the table.
 Currently, Spark SQL does not support JavaBeans that contain
 nested or contain complex types such as Lists or Arrays.  You can create a JavaBean by creating a
 class that implements Serializable and has getters and setters for all of its fields.
@@ -480,7 +480,7 @@ for name in names.collect():
 
 [Parquet](http://parquet.io) is a columnar format that is supported by many other data processing systems.
 Spark SQL provides support for both reading and writing Parquet files that automatically preserves the schema
-of the original data.  
+of the original data.
 
 ### Loading Data Programmatically
 
@@ -562,7 +562,7 @@ for teenName in teenNames.collect():
 
 </div>
 
-</div>                                                                             
+</div>
 
 ### Configuration
 
@@ -582,17 +582,25 @@ Configuration of Parquet can be done using the `setConf` method on SQLContext or
 </tr>
 <tr>
   <td><code>spark.sql.parquet.cacheMetadata</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Turns on caching of Parquet schema metadata.  Can speed up querying of static data.
   </td>
 </tr>
 <tr>
   <td><code>spark.sql.parquet.compression.codec</code></td>
-  <td>snappy</td>
+  <td>gzip</td>
   <td>
     Sets the compression codec use when writing Parquet files. Acceptable values include: 
     uncompressed, snappy, gzip, lzo.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.convertMetastoreParquet</code></td>
+  <td>true</td>
+  <td>
+    When set to false, Spark SQL will use the Hive SerDe for parquet tables instead of the built in
+    support.
   </td>
 </tr>
 </table>
@@ -605,7 +613,7 @@ Spark SQL can automatically infer the schema of a JSON dataset and load it as a 
 This conversion can be done using one of two methods in a SQLContext:
 
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
-* `jsonRdd` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
+* `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
 
 {% highlight scala %}
 // sc is an existing SparkContext.
@@ -620,8 +628,8 @@ val people = sqlContext.jsonFile(path)
 // The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
 // root
-//  |-- age: IntegerType
-//  |-- name: StringType
+//  |-- age: integer (nullable = true)
+//  |-- name: string (nullable = true)
 
 // Register this SchemaRDD as a table.
 people.registerTempTable("people")
@@ -643,7 +651,7 @@ Spark SQL can automatically infer the schema of a JSON dataset and load it as a 
 This conversion can be done using one of two methods in a JavaSQLContext :
 
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
-* `jsonRdd` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
+* `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
 
 {% highlight java %}
 // sc is an existing JavaSparkContext.
@@ -658,8 +666,8 @@ JavaSchemaRDD people = sqlContext.jsonFile(path);
 // The inferred schema can be visualized using the printSchema() method.
 people.printSchema();
 // root
-//  |-- age: IntegerType
-//  |-- name: StringType
+//  |-- age: integer (nullable = true)
+//  |-- name: string (nullable = true)
 
 // Register this JavaSchemaRDD as a table.
 people.registerTempTable("people");
@@ -681,7 +689,7 @@ Spark SQL can automatically infer the schema of a JSON dataset and load it as a 
 This conversion can be done using one of two methods in a SQLContext:
 
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
-* `jsonRdd` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
+* `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
 
 {% highlight python %}
 # sc is an existing SparkContext.
@@ -697,8 +705,8 @@ people = sqlContext.jsonFile(path)
 # The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
 # root
-#  |-- age: IntegerType
-#  |-- name: StringType
+#  |-- age: integer (nullable = true)
+#  |-- name: string (nullable = true)
 
 # Register this SchemaRDD as a table.
 people.registerTempTable("people")
@@ -720,7 +728,7 @@ anotherPeople = sqlContext.jsonRDD(anotherPeopleRDD)
 
 Spark SQL also supports reading and writing data stored in [Apache Hive](http://hive.apache.org/).
 However, since Hive has a large number of dependencies, it is not included in the default Spark assembly.
-In order to use Hive you must first run "`sbt/sbt -Phive assembly/assembly`" (or use `-Phive` for maven).
+Hive support is enabled by adding the `-Phive` and `-Phive-thriftserver` flags to Spark's build.
 This command builds a new assembly jar that includes Hive. Note that this Hive assembly jar must also be present
 on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
 (SerDes) in order to access data stored in Hive.
@@ -732,7 +740,7 @@ Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 <div data-lang="scala"  markdown="1">
 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
-adds support for finding tables in in the MetaStore and writing queries using HiveQL. Users who do
+adds support for finding tables in the MetaStore and writing queries using HiveQL. Users who do
 not have an existing Hive deployment can still create a HiveContext.  When not configured by the
 hive-site.xml, the context automatically creates `metastore_db` and `warehouse` in the current
 directory.
@@ -753,7 +761,7 @@ sqlContext.sql("FROM src SELECT key, value").collect().foreach(println)
 <div data-lang="java"  markdown="1">
 
 When working with Hive one must construct a `JavaHiveContext`, which inherits from `JavaSQLContext`, and
-adds support for finding tables in in the MetaStore and writing queries using HiveQL. In addition to
+adds support for finding tables in the MetaStore and writing queries using HiveQL. In addition to
 the `sql` method a `JavaHiveContext` also provides an `hql` methods, which allows queries to be
 expressed in HiveQL.
 
@@ -774,7 +782,7 @@ Row[] results = sqlContext.sql("FROM src SELECT key, value").collect();
 <div data-lang="python"  markdown="1">
 
 When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
-adds support for finding tables in in the MetaStore and writing queries using HiveQL. In addition to
+adds support for finding tables in the MetaStore and writing queries using HiveQL. In addition to
 the `sql` method a `HiveContext` also provides an `hql` methods, which allows queries to be
 expressed in HiveQL.
 
@@ -801,21 +809,21 @@ turning on some experimental options.
 
 ## Caching Data In Memory
 
-Spark SQL can cache tables using an in-memory columnar format by calling `cacheTable("tableName")`.
+Spark SQL can cache tables using an in-memory columnar format by calling `sqlContext.cacheTable("tableName")`.
 Then Spark SQL will scan only required columns and will automatically tune compression to minimize
-memory usage and GC pressure. You can call `uncacheTable("tableName")` to remove the table from memory.
+memory usage and GC pressure. You can call `sqlContext.uncacheTable("tableName")` to remove the table from memory.
 
-Note that if you call `cache` rather than `cacheTable`, tables will _not_ be cached using
-the in-memory columnar format, and therefore `cacheTable` is strongly recommended for this use case.
+Note that if you call `schemaRDD.cache()` rather than `sqlContext.cacheTable(...)`, tables will _not_ be cached using
+the in-memory columnar format, and therefore `sqlContext.cacheTable(...)` is strongly recommended for this use case.
 
-Configuration of in-memory caching can be done using the `setConf` method on SQLContext or by running 
+Configuration of in-memory caching can be done using the `setConf` method on SQLContext or by running
 `SET key=value` commands using SQL.
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.sql.inMemoryColumnarStorage.compressed</code></td>
-  <td>false</td>
+  <td>true</td>
   <td>
     When set to true Spark SQL will automatically select a compression codec for each column based
     on statistics of the data.
@@ -823,7 +831,7 @@ Configuration of in-memory caching can be done using the `setConf` method on SQL
 </tr>
 <tr>
   <td><code>spark.sql.inMemoryColumnarStorage.batchSize</code></td>
-  <td>1000</td>
+  <td>10000</td>
   <td>
     Controls the size of batches for columnar caching.  Larger batch sizes can improve memory utilization
     and compression, but risk OOMs when caching data.
@@ -841,7 +849,7 @@ that these options will be deprecated in future release as more optimizations ar
   <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
   <tr>
     <td><code>spark.sql.autoBroadcastJoinThreshold</code></td>
-    <td>10000</td>
+    <td>10485760 (10 MB)</td>
     <td>
       Configures the maximum size in bytes for a table that will be broadcast to all worker nodes when
       performing a join.  By setting this value to -1 broadcasting can be disabled.  Note that currently
@@ -872,23 +880,43 @@ that these options will be deprecated in future release as more optimizations ar
 Spark SQL also supports interfaces for running SQL queries directly without the need to write any
 code.
 
-## Running the Thrift JDBC server
+## Running the Thrift JDBC/ODBC server
 
-The Thrift JDBC server implemented here corresponds to the [`HiveServer2`](https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2)
+The Thrift JDBC/ODBC server implemented here corresponds to the [`HiveServer2`](https://cwiki.apache.org/confluence/display/Hive/Setting+Up+HiveServer2)
 in Hive 0.12. You can test the JDBC server with the beeline script that comes with either Spark or Hive 0.12.
 
-To start the JDBC server, run the following in the Spark directory:
+To start the JDBC/ODBC server, run the following in the Spark directory:
 
     ./sbin/start-thriftserver.sh
 
-The default port the server listens on is 10000.  To listen on customized host and port, please set
-the `HIVE_SERVER2_THRIFT_PORT` and `HIVE_SERVER2_THRIFT_BIND_HOST` environment variables. You may
-run `./sbin/start-thriftserver.sh --help` for a complete list of all available options.  Now you can
-use beeline to test the Thrift JDBC server:
+This script accepts all `bin/spark-submit` command line options, plus a `--hiveconf` option to
+specify Hive properties.  You may run `./sbin/start-thriftserver.sh --help` for a complete list of
+all available options.  By default, the server listens on localhost:10000. You may override this
+bahaviour via either environment variables, i.e.:
+
+{% highlight bash %}
+export HIVE_SERVER2_THRIFT_PORT=<listening-port>
+export HIVE_SERVER2_THRIFT_BIND_HOST=<listening-host>
+./sbin/start-thriftserver.sh \
+  --master <master-uri> \
+  ...
+{% endhighlight %}
+
+or system properties:
+
+{% highlight bash %}
+./sbin/start-thriftserver.sh \
+  --hiveconf hive.server2.thrift.port=<listening-port> \
+  --hiveconf hive.server2.thrift.bind.host=<listening-host> \
+  --master <master-uri>
+  ...
+{% endhighlight %}
+
+Now you can use beeline to test the Thrift JDBC/ODBC server:
 
     ./bin/beeline
 
-Connect to the JDBC server in beeline with:
+Connect to the JDBC/ODBC server in beeline with:
 
     beeline> !connect jdbc:hive2://localhost:10000
 
@@ -918,7 +946,6 @@ options.
 ## Migration Guide for Shark User
 
 ### Scheduling 
-s
 To set a [Fair Scheduler](job-scheduling.html#fair-scheduler-pools) pool for a JDBC client session,
 users can set the `spark.sql.thriftserver.scheduler.pool` variable:
 
@@ -931,7 +958,7 @@ SQL deprecates this property in favor of `spark.sql.shuffle.partitions`, whose d
 is 200. Users may customize this property via `SET`:
 
     SET spark.sql.shuffle.partitions=10;
-    SELECT page, count(*) c 
+    SELECT page, count(*) c
     FROM logs_last_month_cached
     GROUP BY page ORDER BY c DESC LIMIT 10;
 
@@ -1030,7 +1057,6 @@ in Hive deployments.
 
 **Major Hive Features**
 
-* Spark SQL does not currently support inserting to tables using dynamic partitioning.
 * Tables with buckets: bucket is the hash partitioning within a Hive table partition. Spark SQL
   doesn't support buckets yet.
 
@@ -1110,7 +1136,7 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
     The range of numbers is from `-9223372036854775808` to `9223372036854775807`.
     - `FloatType`: Represents 4-byte single-precision floating point numbers.
     - `DoubleType`: Represents 8-byte double-precision floating point numbers.
-    - `DecimalType`: 
+    - `DecimalType`: Represents arbitrary-precision signed decimal numbers. Backed internally by `java.math.BigDecimal`. A `BigDecimal` consists of an arbitrary precision integer unscaled value and a 32-bit integer scale.
 * String type
     - `StringType`: Represents character string values.
 * Binary type
@@ -1140,7 +1166,7 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
 <div data-lang="scala"  markdown="1">
 
 All data types of Spark SQL are located in the package `org.apache.spark.sql`.
-You can access them by doing 
+You can access them by doing
 {% highlight scala %}
 import  org.apache.spark.sql._
 {% endhighlight %}
@@ -1194,7 +1220,7 @@ import  org.apache.spark.sql._
 </tr>
 <tr>
   <td> <b>DecimalType</b> </td>
-  <td> scala.math.sql.BigDecimal </td>
+  <td> scala.math.BigDecimal </td>
   <td>
   DecimalType
   </td>
@@ -1232,7 +1258,7 @@ import  org.apache.spark.sql._
   <td> scala.collection.Seq </td>
   <td>
   ArrayType(<i>elementType</i>, [<i>containsNull</i>])<br />
-  <b>Note:</b> The default value of <i>containsNull</i> is <i>false</i>.
+  <b>Note:</b> The default value of <i>containsNull</i> is <i>true</i>.
   </td>
 </tr>
 <tr>
@@ -1246,7 +1272,7 @@ import  org.apache.spark.sql._
 <tr>
   <td> <b>StructType</b> </td>
   <td> org.apache.spark.sql.Row </td>
-  <td> 
+  <td>
   StructType(<i>fields</i>)<br />
   <b>Note:</b> <i>fields</i> is a Seq of StructFields. Also, two fields with the same
   name are not allowed.
@@ -1268,7 +1294,7 @@ import  org.apache.spark.sql._
 
 All data types of Spark SQL are located in the package of
 `org.apache.spark.sql.api.java`. To access or create a data type,
-please use factory methods provided in 
+please use factory methods provided in
 `org.apache.spark.sql.api.java.DataType`.
 
 <table class="table">
@@ -1358,7 +1384,7 @@ please use factory methods provided in
   <td> java.util.List </td>
   <td>
   DataType.createArrayType(<i>elementType</i>)<br />
-  <b>Note:</b> The value of <i>containsNull</i> will be <i>false</i><br />
+  <b>Note:</b> The value of <i>containsNull</i> will be <i>true</i><br />
   DataType.createArrayType(<i>elementType</i>, <i>containsNull</i>).
   </td>
 </tr>
@@ -1373,8 +1399,8 @@ please use factory methods provided in
 </tr>
 <tr>
   <td> <b>StructType</b> </td>
-  <td> org.apache.spark.sql.api.java </td>
-  <td> 
+  <td> org.apache.spark.sql.api.java.Row </td>
+  <td>
   DataType.createStructType(<i>fields</i>)<br />
   <b>Note:</b> <i>fields</i> is a List or an array of StructFields.
   Also, two fields with the same name are not allowed.
@@ -1395,7 +1421,7 @@ please use factory methods provided in
 <div data-lang="python"  markdown="1">
 
 All data types of Spark SQL are located in the package of `pyspark.sql`.
-You can access them by doing 
+You can access them by doing
 {% highlight python %}
 from pyspark.sql import *
 {% endhighlight %}
@@ -1505,7 +1531,7 @@ from pyspark.sql import *
   <td> list, tuple, or array </td>
   <td>
   ArrayType(<i>elementType</i>, [<i>containsNull</i>])<br />
-  <b>Note:</b> The default value of <i>containsNull</i> is <i>False</i>.
+  <b>Note:</b> The default value of <i>containsNull</i> is <i>True</i>.
   </td>
 </tr>
 <tr>
@@ -1519,7 +1545,7 @@ from pyspark.sql import *
 <tr>
   <td> <b>StructType</b> </td>
   <td> list or tuple </td>
-  <td> 
+  <td>
   StructType(<i>fields</i>)<br />
   <b>Note:</b> <i>fields</i> is a Seq of StructFields. Also, two fields with the same
   name are not allowed.

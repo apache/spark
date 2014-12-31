@@ -32,7 +32,8 @@ import org.apache.spark.mllib.linalg.Vector
  *
  * @param id integer node id, from 1
  * @param predict predicted value at the node
- * @param isLeaf whether the leaf is a node
+ * @param impurity current node impurity
+ * @param isLeaf whether the node is a leaf
  * @param split split to calculate left and right nodes
  * @param leftNode  left child
  * @param rightNode right child
@@ -41,25 +42,29 @@ import org.apache.spark.mllib.linalg.Vector
 @DeveloperApi
 class Node (
     val id: Int,
-    val predict: Double,
-    val isLeaf: Boolean,
-    val split: Option[Split],
+    var predict: Predict,
+    var impurity: Double,
+    var isLeaf: Boolean,
+    var split: Option[Split],
     var leftNode: Option[Node],
     var rightNode: Option[Node],
-    val stats: Option[InformationGainStats]) extends Serializable with Logging {
+    var stats: Option[InformationGainStats]) extends Serializable with Logging {
 
   override def toString = "id = " + id + ", isLeaf = " + isLeaf + ", predict = " + predict + ", " +
-    "split = " + split + ", stats = " + stats
+    "impurity =  " + impurity + "split = " + split + ", stats = " + stats
 
   /**
    * build the left node and right nodes if not leaf
    * @param nodes array of nodes
    */
+  @deprecated("build should no longer be used since trees are constructed on-the-fly in training",
+    "1.2.0")
   def build(nodes: Array[Node]): Unit = {
     logDebug("building node " + id + " at level " + Node.indexToLevel(id))
     logDebug("id = " + id + ", split = " + split)
     logDebug("stats = " + stats)
     logDebug("predict = " + predict)
+    logDebug("impurity = " + impurity)
     if (!isLeaf) {
       leftNode = Some(nodes(Node.leftChildIndex(id)))
       rightNode = Some(nodes(Node.rightChildIndex(id)))
@@ -75,7 +80,7 @@ class Node (
    */
   def predict(features: Vector) : Double = {
     if (isLeaf) {
-      predict
+      predict.predict
     } else{
       if (split.get.featureType == Continuous) {
         if (features(split.get.feature) <= split.get.threshold) {
@@ -91,6 +96,23 @@ class Node (
         }
       }
     }
+  }
+
+  /**
+   * Returns a deep copy of the subtree rooted at this node.
+   */
+  private[tree] def deepCopy(): Node = {
+    val leftNodeCopy = if (leftNode.isEmpty) {
+      None
+    } else {
+      Some(leftNode.get.deepCopy())
+    }
+    val rightNodeCopy = if (rightNode.isEmpty) {
+      None
+    } else {
+      Some(rightNode.get.deepCopy())
+    }
+    new Node(id, predict, impurity, isLeaf, split, leftNodeCopy, rightNodeCopy, stats)
   }
 
   /**
@@ -135,7 +157,7 @@ class Node (
     }
     val prefix: String = " " * indentFactor
     if (isLeaf) {
-      prefix + s"Predict: $predict\n"
+      prefix + s"Predict: ${predict.predict}\n"
     } else {
       prefix + s"If ${splitToString(split.get, left=true)}\n" +
         leftNode.get.subtreeToString(indentFactor + 1) +
@@ -147,6 +169,31 @@ class Node (
 }
 
 private[tree] object Node {
+
+  /**
+   * Return a node with the given node id (but nothing else set).
+   */
+  def emptyNode(nodeIndex: Int): Node = new Node(nodeIndex, new Predict(Double.MinValue), -1.0,
+    false, None, None, None, None)
+
+  /**
+   * Construct a node with nodeIndex, predict, impurity and isLeaf parameters.
+   * This is used in `DecisionTree.findBestSplits` to construct child nodes
+   * after finding the best splits for parent nodes.
+   * Other fields are set at next level.
+   * @param nodeIndex integer node id, from 1
+   * @param predict predicted value at the node
+   * @param impurity current node impurity
+   * @param isLeaf whether the node is a leaf
+   * @return new node instance
+   */
+  def apply(
+      nodeIndex: Int,
+      predict: Predict,
+      impurity: Double,
+      isLeaf: Boolean): Node = {
+    new Node(nodeIndex, predict, impurity, isLeaf, None, None, None, None)
+  }
 
   /**
    * Return the index of the left child of this node.
@@ -189,5 +236,23 @@ private[tree] object Node {
    * @param level  Level of tree (0 = root).
    */
   def startIndexInLevel(level: Int): Int = 1 << level
+
+  /**
+   * Traces down from a root node to get the node with the given node index.
+   * This assumes the node exists.
+   */
+  def getNode(nodeIndex: Int, rootNode: Node): Node = {
+    var tmpNode: Node = rootNode
+    var levelsToGo = indexToLevel(nodeIndex)
+    while (levelsToGo > 0) {
+      if ((nodeIndex & (1 << levelsToGo - 1)) == 0) {
+        tmpNode = tmpNode.leftNode.get
+      } else {
+        tmpNode = tmpNode.rightNode.get
+      }
+      levelsToGo -= 1
+    }
+    tmpNode
+  }
 
 }

@@ -22,7 +22,6 @@ import java.io.IOException
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.permission.FsAction
-
 import parquet.hadoop.ParquetOutputFormat
 import parquet.hadoop.metadata.CompressionCodecName
 import parquet.schema.MessageType
@@ -30,7 +29,7 @@ import parquet.schema.MessageType
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, LeafNode}
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 
 /**
  * Relation that consists of data stored in a Parquet columnar format.
@@ -85,6 +84,21 @@ private[sql] case class ParquetRelation(
 private[sql] object ParquetRelation {
 
   def enableLogForwarding() {
+    // Note: the parquet.Log class has a static initializer that
+    // sets the java.util.logging Logger for "parquet". This
+    // checks first to see if there's any handlers already set
+    // and if not it creates them. If this method executes prior
+    // to that class being loaded then:
+    //  1) there's no handlers installed so there's none to 
+    // remove. But when it IS finally loaded the desired affect
+    // of removing them is circumvented.
+    //  2) The parquet.Log static initializer calls setUseParentHanders(false)
+    // undoing the attempt to override the logging here.
+    //
+    // Therefore we need to force the class to be loaded.
+    // This should really be resolved by Parquet.
+    Class.forName(classOf[parquet.Log].getName())
+
     // Note: Logger.getLogger("parquet") has a default logger
     // that appends to Console which needs to be cleared.
     val parquetLogger = java.util.logging.Logger.getLogger("parquet")

@@ -193,6 +193,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(rdd.join(emptyKv).collect().size === 0)
     assert(rdd.rightOuterJoin(emptyKv).collect().size === 0)
     assert(rdd.leftOuterJoin(emptyKv).collect().size === 2)
+    assert(rdd.fullOuterJoin(emptyKv).collect().size === 2)
     assert(rdd.cogroup(emptyKv).collect().size === 2)
     assert(rdd.union(emptyKv).collect().size === 2)
   }
@@ -456,6 +457,11 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
     assert(sample.size === checkSample.size)
     for (i <- 0 until sample.size) assert(sample(i) === checkSample(i))
+  }
+
+  test("collect large number of empty partitions") {
+    // Regression test for SPARK-4019
+    assert(sc.makeRDD(0 until 10, 1000).repartition(2001).collect().toSet === (0 until 10).toSet)
   }
 
   test("take") {
@@ -731,6 +737,11 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     ranked.collect().foreach { x =>
       assert(x._1 === x._2)
     }
+  }
+
+  test("zipWithIndex chained with other RDDs (SPARK-4433)") {
+    val count = sc.parallelize(0 until 10, 2).zipWithIndex().repartition(4).count()
+    assert(count === 10)
   }
 
   test("zipWithUniqueId") {

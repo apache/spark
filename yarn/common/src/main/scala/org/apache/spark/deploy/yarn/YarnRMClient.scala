@@ -49,18 +49,18 @@ trait YarnRMClient {
       securityMgr: SecurityManager): YarnAllocator
 
   /**
-   * Shuts down the AM. Guaranteed to only be called once.
+   * Unregister the AM. Guaranteed to only be called once.
    *
    * @param status The final status of the AM.
    * @param diagnostics Diagnostics message to include in the final status.
    */
-  def shutdown(status: FinalApplicationStatus, diagnostics: String = ""): Unit
+  def unregister(status: FinalApplicationStatus, diagnostics: String = ""): Unit
 
   /** Returns the attempt ID. */
   def getAttemptId(): ApplicationAttemptId
 
-  /** Returns the RM's proxy host and port. */
-  def getProxyHostAndPort(conf: YarnConfiguration): String
+  /** Returns the configuration for the AmIpFilter to add to the Spark UI. */
+  def getAmIpFilterParams(conf: YarnConfiguration, proxyBase: String): Map[String, String]
 
   /** Returns the maximum number of attempts to register the AM. */
   def getMaxRegAttempts(conf: YarnConfiguration): Int

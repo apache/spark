@@ -1,0 +1,1 @@
+collect_list(x) - Returns a list of objects with duplicates

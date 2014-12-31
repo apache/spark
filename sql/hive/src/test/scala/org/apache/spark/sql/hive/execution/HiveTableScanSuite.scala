@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.{Row, SchemaRDD}
+
+import org.apache.spark.util.Utils
+
 class HiveTableScanSuite extends HiveComparisonTest {
 
   createQueryTest("partition_based_table_scan_with_different_serde",
@@ -38,4 +43,30 @@ class HiveTableScanSuite extends HiveComparisonTest {
       |
       |SELECT * from part_scan_test;
     """.stripMargin)
+
+  test("Spark-4041: lowercase issue") {
+    TestHive.sql("CREATE TABLE tb (KEY INT, VALUE STRING) STORED AS ORC")
+    TestHive.sql("insert into table tb select key, value from src")
+    TestHive.sql("select KEY from tb where VALUE='just_for_test' limit 5").collect()
+    TestHive.sql("drop table tb")
+  }
+  
+  test("Spark-4077: timestamp query for null value") {
+    TestHive.sql("DROP TABLE IF EXISTS timestamp_query_null")
+    TestHive.sql(
+      """
+        CREATE EXTERNAL TABLE timestamp_query_null (time TIMESTAMP,id INT)
+        ROW FORMAT DELIMITED
+        FIELDS TERMINATED BY ','
+        LINES TERMINATED BY '\n'
+      """.stripMargin)
+    val location = 
+      Utils.getSparkClassLoader.getResource("data/files/issue-4077-data.txt").getFile()
+     
+    TestHive.sql(s"LOAD DATA LOCAL INPATH '$location' INTO TABLE timestamp_query_null")
+    assert(TestHive.sql("SELECT time from timestamp_query_null limit 2").collect() 
+      === Array(Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")),Row(null)))
+    TestHive.sql("DROP TABLE timestamp_query_null")
+  }
+  
 }

@@ -83,6 +83,12 @@ class TaskMetrics extends Serializable {
   var inputMetrics: Option[InputMetrics] = None
 
   /**
+   * If this task writes data externally (e.g. to a distributed filesystem), metrics on how much
+   * data was written are stored here.
+   */
+  var outputMetrics: Option[OutputMetrics] = None
+
+  /**
    * If this task reads from shuffle output, metrics on getting shuffle data will be collected here.
    * This includes read metrics aggregated over all the task's shuffle dependencies.
    */
@@ -137,7 +143,6 @@ class TaskMetrics extends Serializable {
       merged.localBlocksFetched += depMetrics.localBlocksFetched
       merged.remoteBlocksFetched += depMetrics.remoteBlocksFetched
       merged.remoteBytesRead += depMetrics.remoteBytesRead
-      merged.shuffleFinishTime = math.max(merged.shuffleFinishTime, depMetrics.shuffleFinishTime)
     }
     _shuffleReadMetrics = Some(merged)
   }
@@ -160,6 +165,16 @@ object DataReadMethod extends Enumeration with Serializable {
 
 /**
  * :: DeveloperApi ::
+ * Method by which output data was written.
+ */
+@DeveloperApi
+object DataWriteMethod extends Enumeration with Serializable {
+  type DataWriteMethod = Value
+  val Hadoop = Value
+}
+
+/**
+ * :: DeveloperApi ::
  * Metrics about reading input data.
  */
 @DeveloperApi
@@ -170,6 +185,17 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
   var bytesRead: Long = 0L
 }
 
+/**
+ * :: DeveloperApi ::
+ * Metrics about writing output data.
+ */
+@DeveloperApi
+case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
+  /**
+   * Total bytes written
+   */
+  var bytesWritten: Long = 0L
+}
 
 /**
  * :: DeveloperApi ::
@@ -177,11 +203,6 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
  */
 @DeveloperApi
 class ShuffleReadMetrics extends Serializable {
-  /**
-   * Absolute time when this task finished reading shuffle data
-   */
-  var shuffleFinishTime: Long = -1
-
   /**
    * Number of blocks fetched in this shuffle by this task (remote or local)
    */

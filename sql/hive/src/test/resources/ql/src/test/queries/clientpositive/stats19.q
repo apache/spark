@@ -1,7 +1,7 @@
 set datanucleus.cache.collections=false;
 set hive.stats.autogather=true;
 set hive.stats.reliable=true;
-set hive.stats.dbclass=dummy;
+set hive.stats.dbclass=custom;
 set hive.stats.default.publisher=org.apache.hadoop.hive.ql.stats.DummyStatsPublisher;
 set hive.stats.default.aggregator=org.apache.hadoop.hive.ql.stats.KeyVerifyingStatsAggregator;
 
@@ -56,7 +56,7 @@ insert overwrite table stats_part partition (ds='2010-04-08', hr = '13') select 
 desc formatted stats_part partition (ds='2010-04-08', hr = '13');
 
 
-set hive.stats.dbclass=dummy;
+set hive.stats.dbclass=custom;
 set hive.stats.default.publisher=org.apache.hadoop.hive.ql.stats.DummyStatsPublisher;
 set hive.stats.default.aggregator=org.apache.hadoop.hive.ql.stats.KeyVerifyingStatsAggregator;
 set hive.stats.key.prefix.max.length=0;

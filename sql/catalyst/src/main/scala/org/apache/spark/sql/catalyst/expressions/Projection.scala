@@ -39,6 +39,8 @@ class InterpretedProjection(expressions: Seq[Expression]) extends Projection {
     }
     new GenericRow(outputArray)
   }
+
+  override def toString = s"Row => [${exprArray.mkString(",")}]"
 }
 
 /**
@@ -137,6 +139,9 @@ class JoinedRow extends Row {
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
 
+  override def getAs[T](i: Int): T =
+    if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)
+
   def copy() = {
     val totalSize = row1.size + row2.size
     val copiedValues = new Array[Any](totalSize)
@@ -226,6 +231,9 @@ class JoinedRow2 extends Row {
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
 
+  override def getAs[T](i: Int): T =
+    if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)
+
   def copy() = {
     val totalSize = row1.size + row2.size
     val copiedValues = new Array[Any](totalSize)
@@ -308,6 +316,9 @@ class JoinedRow3 extends Row {
 
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
+
+  override def getAs[T](i: Int): T =
+    if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)
 
   def copy() = {
     val totalSize = row1.size + row2.size
@@ -392,6 +403,9 @@ class JoinedRow4 extends Row {
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
 
+  override def getAs[T](i: Int): T =
+    if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)
+
   def copy() = {
     val totalSize = row1.size + row2.size
     val copiedValues = new Array[Any](totalSize)
@@ -474,6 +488,9 @@ class JoinedRow5 extends Row {
 
   def getString(i: Int): String =
     if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
+
+  override def getAs[T](i: Int): T =
+    if (i < row1.size) row1.getAs[T](i) else row2.getAs[T](i - row1.size)
 
   def copy() = {
     val totalSize = row1.size + row2.size

@@ -41,13 +41,14 @@ private[yarn] class YarnAllocationHandler(
     args: ApplicationMasterArguments,
     preferredNodes: collection.Map[String, collection.Set[SplitInfo]], 
     securityMgr: SecurityManager)
-  extends YarnAllocator(conf, sparkConf, args, preferredNodes, securityMgr) {
+  extends YarnAllocator(conf, sparkConf, appAttemptId, args, preferredNodes, securityMgr) {
 
   override protected def releaseContainer(container: Container) = {
     amClient.releaseAssignedContainer(container.getId())
   }
 
-  override protected def allocateContainers(count: Int): YarnAllocateResponse = {
+  // pending isn't used on stable as the AMRMClient handles incremental asks
+  override protected def allocateContainers(count: Int, pending: Int): YarnAllocateResponse = {
     addResourceRequests(count)
 
     // We have already set the container request. Poll the ResourceManager for a response.

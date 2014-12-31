@@ -105,8 +105,8 @@ case class InsertIntoTable(
     child: LogicalPlan,
     overwrite: Boolean)
   extends LogicalPlan {
-  // The table being inserted into is a child for the purposes of transformations.
-  override def children = table :: child :: Nil
+
+  override def children = child :: Nil
   override def output = child.output
 
   override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {
@@ -114,11 +114,13 @@ case class InsertIntoTable(
   }
 }
 
-case class CreateTableAsSelect(
+case class CreateTableAsSelect[T](
     databaseName: Option[String],
     tableName: String,
-    child: LogicalPlan) extends UnaryNode {
-  override def output = child.output
+    child: LogicalPlan,
+    allowExisting: Boolean,
+    desc: Option[T] = None) extends UnaryNode {
+  override def output = Seq.empty[Attribute]
   override lazy val resolved = (databaseName != None && childrenResolved)
 }
 
@@ -138,46 +140,26 @@ case class Aggregate(
     child: LogicalPlan)
   extends UnaryNode {
 
-  /** The set of all AttributeReferences required for this aggregation. */
-  def references =
-    AttributeSet(
-      groupingExpressions.flatMap(_.references) ++ aggregateExpressions.flatMap(_.references))
-
   override def output = aggregateExpressions.map(_.toAttribute)
 }
 
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output = child.output
+
+  override lazy val statistics: Statistics =
+    if (output.forall(_.dataType.isInstanceOf[NativeType])) {
+      val limit = limitExpr.eval(null).asInstanceOf[Int]
+      val sizeInBytes = (limit: Long) * output.map { a =>
+        NativeType.defaultSizeOf(a.dataType.asInstanceOf[NativeType])
+      }.sum
+      Statistics(sizeInBytes = sizeInBytes)
+    } else {
+      Statistics(sizeInBytes = children.map(_.statistics).map(_.sizeInBytes).product)
+    }
 }
 
 case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
   override def output = child.output.map(_.withQualifiers(alias :: Nil))
-}
-
-/**
- * Converts the schema of `child` to all lowercase, together with LowercaseAttributeReferences
- * this allows for optional case insensitive attribute resolution.  This node can be elided after
- * analysis.
- */
-case class LowerCaseSchema(child: LogicalPlan) extends UnaryNode {
-  protected def lowerCaseSchema(dataType: DataType): DataType = dataType match {
-    case StructType(fields) =>
-      StructType(fields.map(f =>
-        StructField(f.name.toLowerCase(), lowerCaseSchema(f.dataType), f.nullable)))
-    case ArrayType(elemType, containsNull) => ArrayType(lowerCaseSchema(elemType), containsNull)
-    case otherType => otherType
-  }
-
-  override val output = child.output.map {
-    case a: AttributeReference =>
-      AttributeReference(
-        a.name.toLowerCase,
-        lowerCaseSchema(a.dataType),
-        a.nullable)(
-        a.exprId,
-        a.qualifiers)
-    case other => other
-  }
 }
 
 case class Sample(fraction: Double, withReplacement: Boolean, seed: Long, child: LogicalPlan)

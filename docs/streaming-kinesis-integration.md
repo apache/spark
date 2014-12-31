@@ -108,7 +108,7 @@ A Kinesis stream can be set up at one of the valid Kinesis endpoints with 1 or m
 #### Running the Example
 To run the example,
 
-- Download Spark source and follow the [instructions](building-with-maven.html) to build Spark with profile *-Pkinesis-asl*.
+- Download Spark source and follow the [instructions](building-spark.html) to build Spark with profile *-Pkinesis-asl*.
 
         mvn -Pkinesis-asl -DskipTests clean package
 

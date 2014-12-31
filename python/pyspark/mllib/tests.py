@@ -20,19 +20,27 @@ Fuller unit tests for Python MLlib.
 """
 
 import sys
+import array as pyarray
+
 from numpy import array, array_equal
 
 if sys.version_info[:2] <= (2, 6):
-    import unittest2 as unittest
+    try:
+        import unittest2 as unittest
+    except ImportError:
+        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
+        sys.exit(1)
 else:
     import unittest
 
-from pyspark.mllib._common import _convert_vector, _serialize_double_vector, \
-    _deserialize_double_vector, _dot, _squared_distance
-from pyspark.mllib.linalg import SparseVector
+from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
+    DenseMatrix
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.tests import PySparkTestCase
-
+from pyspark.mllib.random import RandomRDDs
+from pyspark.mllib.stat import Statistics
+from pyspark.serializers import PickleSerializer
+from pyspark.sql import SQLContext
+from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
 _have_scipy = False
 try:
@@ -42,39 +50,55 @@ except:
     # No SciPy, but that's okay, we'll skip those tests
     pass
 
+ser = PickleSerializer()
 
-class VectorTests(unittest.TestCase):
+
+def _squared_distance(a, b):
+    if isinstance(a, Vector):
+        return a.squared_distance(b)
+    else:
+        return b.squared_distance(a)
+
+
+class VectorTests(PySparkTestCase):
+
+    def _test_serialize(self, v):
+        self.assertEqual(v, ser.loads(ser.dumps(v)))
+        jvec = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(v)))
+        nv = ser.loads(str(self.sc._jvm.SerDe.dumps(jvec)))
+        self.assertEqual(v, nv)
+        vs = [v] * 100
+        jvecs = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(vs)))
+        nvs = ser.loads(str(self.sc._jvm.SerDe.dumps(jvecs)))
+        self.assertEqual(vs, nvs)
 
     def test_serialize(self):
-        sv = SparseVector(4, {1: 1, 3: 2})
-        dv = array([1., 2., 3., 4.])
-        lst = [1, 2, 3, 4]
-        self.assertTrue(sv is _convert_vector(sv))
-        self.assertTrue(dv is _convert_vector(dv))
-        self.assertTrue(array_equal(dv, _convert_vector(lst)))
-        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(sv)))
-        self.assertTrue(array_equal(dv, _deserialize_double_vector(_serialize_double_vector(dv))))
-        self.assertTrue(array_equal(dv, _deserialize_double_vector(_serialize_double_vector(lst))))
+        self._test_serialize(DenseVector(range(10)))
+        self._test_serialize(DenseVector(array([1., 2., 3., 4.])))
+        self._test_serialize(DenseVector(pyarray.array('d', range(10))))
+        self._test_serialize(SparseVector(4, {1: 1, 3: 2}))
+        self._test_serialize(SparseVector(3, {}))
+        self._test_serialize(DenseMatrix(2, 3, range(6)))
 
     def test_dot(self):
         sv = SparseVector(4, {1: 1, 3: 2})
-        dv = array([1., 2., 3., 4.])
-        lst = [1, 2, 3, 4]
+        dv = DenseVector(array([1., 2., 3., 4.]))
+        lst = DenseVector([1, 2, 3, 4])
         mat = array([[1., 2., 3., 4.],
                      [1., 2., 3., 4.],
                      [1., 2., 3., 4.],
                      [1., 2., 3., 4.]])
-        self.assertEquals(10.0, _dot(sv, dv))
-        self.assertTrue(array_equal(array([3., 6., 9., 12.]), _dot(sv, mat)))
-        self.assertEquals(30.0, _dot(dv, dv))
-        self.assertTrue(array_equal(array([10., 20., 30., 40.]), _dot(dv, mat)))
-        self.assertEquals(30.0, _dot(lst, dv))
-        self.assertTrue(array_equal(array([10., 20., 30., 40.]), _dot(lst, mat)))
+        self.assertEquals(10.0, sv.dot(dv))
+        self.assertTrue(array_equal(array([3., 6., 9., 12.]), sv.dot(mat)))
+        self.assertEquals(30.0, dv.dot(dv))
+        self.assertTrue(array_equal(array([10., 20., 30., 40.]), dv.dot(mat)))
+        self.assertEquals(30.0, lst.dot(dv))
+        self.assertTrue(array_equal(array([10., 20., 30., 40.]), lst.dot(mat)))
 
     def test_squared_distance(self):
         sv = SparseVector(4, {1: 1, 3: 2})
-        dv = array([1., 2., 3., 4.])
-        lst = [4, 3, 2, 1]
+        dv = DenseVector(array([1., 2., 3., 4.]))
+        lst = DenseVector([4, 3, 2, 1])
         self.assertEquals(15.0, _squared_distance(sv, dv))
         self.assertEquals(25.0, _squared_distance(sv, lst))
         self.assertEquals(20.0, _squared_distance(dv, lst))
@@ -184,6 +208,56 @@ class ListTests(PySparkTestCase):
         self.assertTrue(dt_model.predict(features[3]) > 0)
 
 
+class StatTests(PySparkTestCase):
+    # SPARK-4023
+    def test_col_with_different_rdds(self):
+        # numpy
+        data = RandomRDDs.normalVectorRDD(self.sc, 1000, 10, 10)
+        summary = Statistics.colStats(data)
+        self.assertEqual(1000, summary.count())
+        # array
+        data = self.sc.parallelize([range(10)] * 10)
+        summary = Statistics.colStats(data)
+        self.assertEqual(10, summary.count())
+        # array
+        data = self.sc.parallelize([pyarray.array("d", range(10))] * 10)
+        summary = Statistics.colStats(data)
+        self.assertEqual(10, summary.count())
+
+
+class VectorUDTTests(PySparkTestCase):
+
+    dv0 = DenseVector([])
+    dv1 = DenseVector([1.0, 2.0])
+    sv0 = SparseVector(2, [], [])
+    sv1 = SparseVector(2, [1], [2.0])
+    udt = VectorUDT()
+
+    def test_json_schema(self):
+        self.assertEqual(VectorUDT.fromJson(self.udt.jsonValue()), self.udt)
+
+    def test_serialization(self):
+        for v in [self.dv0, self.dv1, self.sv0, self.sv1]:
+            self.assertEqual(v, self.udt.deserialize(self.udt.serialize(v)))
+
+    def test_infer_schema(self):
+        sqlCtx = SQLContext(self.sc)
+        rdd = self.sc.parallelize([LabeledPoint(1.0, self.dv1), LabeledPoint(0.0, self.sv1)])
+        srdd = sqlCtx.inferSchema(rdd)
+        schema = srdd.schema()
+        field = [f for f in schema.fields if f.name == "features"][0]
+        self.assertEqual(field.dataType, self.udt)
+        vectors = srdd.map(lambda p: p.features).collect()
+        self.assertEqual(len(vectors), 2)
+        for v in vectors:
+            if isinstance(v, SparseVector):
+                self.assertEqual(v, self.sv1)
+            elif isinstance(v, DenseVector):
+                self.assertEqual(v, self.dv1)
+            else:
+                raise ValueError("expecting a vector but got %r of type %r" % (v, type(v)))
+
+
 @unittest.skipIf(not _have_scipy, "SciPy not installed")
 class SciPyTests(PySparkTestCase):
 
@@ -198,41 +272,36 @@ class SciPyTests(PySparkTestCase):
         lil[1, 0] = 1
         lil[3, 0] = 2
         sv = SparseVector(4, {1: 1, 3: 2})
-        self.assertEquals(sv, _convert_vector(lil))
-        self.assertEquals(sv, _convert_vector(lil.tocsc()))
-        self.assertEquals(sv, _convert_vector(lil.tocoo()))
-        self.assertEquals(sv, _convert_vector(lil.tocsr()))
-        self.assertEquals(sv, _convert_vector(lil.todok()))
-        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(lil)))
-        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(lil.tocsc())))
-        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(lil.tocsr())))
-        self.assertEquals(sv, _deserialize_double_vector(_serialize_double_vector(lil.todok())))
+        self.assertEquals(sv, _convert_to_vector(lil))
+        self.assertEquals(sv, _convert_to_vector(lil.tocsc()))
+        self.assertEquals(sv, _convert_to_vector(lil.tocoo()))
+        self.assertEquals(sv, _convert_to_vector(lil.tocsr()))
+        self.assertEquals(sv, _convert_to_vector(lil.todok()))
+
+        def serialize(l):
+            return ser.loads(ser.dumps(_convert_to_vector(l)))
+        self.assertEquals(sv, serialize(lil))
+        self.assertEquals(sv, serialize(lil.tocsc()))
+        self.assertEquals(sv, serialize(lil.tocsr()))
+        self.assertEquals(sv, serialize(lil.todok()))
 
     def test_dot(self):
         from scipy.sparse import lil_matrix
         lil = lil_matrix((4, 1))
         lil[1, 0] = 1
         lil[3, 0] = 2
-        dv = array([1., 2., 3., 4.])
-        sv = SparseVector(4, {0: 1, 1: 2, 2: 3, 3: 4})
-        mat = array([[1., 2., 3., 4.],
-                     [1., 2., 3., 4.],
-                     [1., 2., 3., 4.],
-                     [1., 2., 3., 4.]])
-        self.assertEquals(10.0, _dot(lil, dv))
-        self.assertTrue(array_equal(array([3., 6., 9., 12.]), _dot(lil, mat)))
+        dv = DenseVector(array([1., 2., 3., 4.]))
+        self.assertEquals(10.0, dv.dot(lil))
 
     def test_squared_distance(self):
         from scipy.sparse import lil_matrix
         lil = lil_matrix((4, 1))
         lil[1, 0] = 3
         lil[3, 0] = 2
-        dv = array([1., 2., 3., 4.])
+        dv = DenseVector(array([1., 2., 3., 4.]))
         sv = SparseVector(4, {0: 1, 1: 2, 2: 3, 3: 4})
-        self.assertEquals(15.0, _squared_distance(lil, dv))
-        self.assertEquals(15.0, _squared_distance(lil, sv))
-        self.assertEquals(15.0, _squared_distance(dv, lil))
-        self.assertEquals(15.0, _squared_distance(sv, lil))
+        self.assertEquals(15.0, dv.squared_distance(lil))
+        self.assertEquals(15.0, sv.squared_distance(lil))
 
     def scipy_matrix(self, size, values):
         """Create a column SciPy matrix from a dictionary of values"""

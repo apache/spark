@@ -58,11 +58,7 @@ private[spark] class ResultTask[T, U](
       ByteBuffer.wrap(taskBinary.value), Thread.currentThread.getContextClassLoader)
 
     metrics = Some(context.taskMetrics)
-    try {
-      func(context, rdd.iterator(partition, context))
-    } finally {
-      context.markTaskCompleted()
-    }
+    func(context, rdd.iterator(partition, context))
   }
 
   // This is only callable on the driver side.

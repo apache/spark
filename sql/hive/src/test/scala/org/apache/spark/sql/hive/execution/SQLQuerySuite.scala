@@ -32,6 +32,70 @@ case class Nested3(f3: Int)
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest {
+  test("CTAS with serde") {
+    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect
+    sql(
+      """CREATE TABLE ctas2
+        | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
+        | WITH SERDEPROPERTIES("serde_p1"="p1","serde_p2"="p2")
+        | STORED AS RCFile
+        | TBLPROPERTIES("tbl_p1"="p11", "tbl_p2"="p22")
+        | AS
+        |   SELECT key, value
+        |   FROM src
+        |   ORDER BY key, value""".stripMargin).collect
+    sql(
+      """CREATE TABLE ctas3
+        | ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' LINES TERMINATED BY '\012'
+        | STORED AS textfile AS
+        |   SELECT key, value
+        |   FROM src
+        |   ORDER BY key, value""".stripMargin).collect
+
+    // the table schema may like (key: integer, value: string)
+    sql(
+      """CREATE TABLE IF NOT EXISTS ctas4 AS
+        | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin).collect
+    // do nothing cause the table ctas4 already existed.
+    sql(
+      """CREATE TABLE IF NOT EXISTS ctas4 AS
+        | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect
+
+    checkAnswer(
+      sql("SELECT k, value FROM ctas1 ORDER BY k, value"),
+      sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+    checkAnswer(
+      sql("SELECT key, value FROM ctas2 ORDER BY key, value"),
+      sql(
+        """
+          SELECT key, value
+          FROM src
+          ORDER BY key, value""").collect().toSeq)
+    checkAnswer(
+      sql("SELECT key, value FROM ctas3 ORDER BY key, value"),
+      sql(
+        """
+          SELECT key, value
+          FROM src
+          ORDER BY key, value""").collect().toSeq)
+    intercept[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] {
+      sql(
+        """CREATE TABLE ctas4 AS
+          | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect
+    }
+    checkAnswer(
+      sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
+      sql("SELECT key, value FROM ctas4 LIMIT 1").collect().toSeq)
+
+    checkExistence(sql("DESC EXTENDED ctas2"), true,
+      "name:key", "type:string", "name:value", "ctas2",
+      "org.apache.hadoop.hive.ql.io.RCFileInputFormat",
+      "org.apache.hadoop.hive.ql.io.RCFileOutputFormat",
+      "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe",
+      "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22","MANAGED_TABLE"
+    )
+  }
+
   test("ordering not in select") {
     checkAnswer(
       sql("SELECT key FROM src ORDER BY value"),
@@ -62,5 +126,46 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT key, value FROM test_ctas_123 ORDER BY key"), 
       sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
+  }
+
+  test("SPARK-3708 Backticks aren't handled correctly is aliases") {
+    checkAnswer(
+      sql("SELECT k FROM (SELECT `key` AS `k` FROM src) a"),
+      sql("SELECT `key` FROM src").collect().toSeq)
+  }
+
+  test("SPARK-3834 Backticks not correctly handled in subquery aliases") {
+    checkAnswer(
+      sql("SELECT a.key FROM (SELECT key FROM src) `a`"),
+      sql("SELECT `key` FROM src").collect().toSeq)
+  }
+
+  test("SPARK-3814 Support Bitwise & operator") {
+    checkAnswer(
+      sql("SELECT case when 1&1=1 then 1 else 0 end FROM src"),
+      sql("SELECT 1 FROM src").collect().toSeq)
+  }
+
+  test("SPARK-3814 Support Bitwise | operator") {
+    checkAnswer(
+      sql("SELECT case when 1|0=1 then 1 else 0 end FROM src"),
+      sql("SELECT 1 FROM src").collect().toSeq)
+  }
+
+  test("SPARK-3814 Support Bitwise ^ operator") {
+    checkAnswer(
+      sql("SELECT case when 1^0=1 then 1 else 0 end FROM src"),
+      sql("SELECT 1 FROM src").collect().toSeq)
+  }
+
+  test("SPARK-3814 Support Bitwise ~ operator") {
+    checkAnswer(
+      sql("SELECT case when ~1=-2 then 1 else 0 end FROM src"),
+      sql("SELECT 1 FROM src").collect().toSeq)
+  }
+  
+ test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
+    checkAnswer(sql("SELECT key FROM src WHERE key not between 0 and 10 order by key"), 
+        sql("SELECT key FROM src WHERE key between 11 and 500 order by key").collect().toSeq)
   }
 }

@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.File
 import java.net.URI
 
 import scala.collection.JavaConversions._
@@ -31,6 +30,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.util.Utils
 
 trait ExecutorRunnableUtil extends Logging {
 
@@ -44,9 +44,15 @@ trait ExecutorRunnableUtil extends Logging {
       hostname: String,
       executorMemory: Int,
       executorCores: Int,
+      appId: String,
       localResources: HashMap[String, LocalResource]): List[String] = {
     // Extra options for the JVM
     val javaOpts = ListBuffer[String]()
+
+    // Set the environment variable through a command prefix
+    // to append to the existing value of the variable
+    var prefixEnv: Option[String] = None
+
     // Set the JVM memory
     val executorMemoryString = executorMemory + "m"
     javaOpts += "-Xms" + executorMemoryString + " -Xmx" + executorMemoryString + " "
@@ -57,6 +63,9 @@ trait ExecutorRunnableUtil extends Logging {
     }
     sys.env.get("SPARK_JAVA_OPTS").foreach { opts =>
       javaOpts += opts
+    }
+    sys.props.get("spark.executor.extraLibraryPath").foreach { p =>
+      prefixEnv = Some(Utils.libraryPathEnvPrefix(Seq(p)))
     }
 
     javaOpts += "-Djava.io.tmpdir=" +
@@ -98,7 +107,10 @@ trait ExecutorRunnableUtil extends Logging {
         }
     */
 
-    val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java",
+    // For log4j configuration to reference
+    javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
+
+    val commands = prefixEnv ++ Seq(Environment.JAVA_HOME.$() + "/bin/java",
       "-server",
       // Kill if OOM is raised - leverage yarn's failure handling to cause rescheduling.
       // Not killing the task leaves various aspects of the executor and (to some extent) the jvm in
@@ -112,6 +124,7 @@ trait ExecutorRunnableUtil extends Logging {
       slaveId.toString,
       hostname.toString,
       executorCores.toString,
+      appId,
       "1>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout",
       "2>", ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 
@@ -125,9 +138,9 @@ trait ExecutorRunnableUtil extends Logging {
       localResources: HashMap[String, LocalResource],
       timestamp: String,
       size: String,
-      vis: String) = {
+      vis: String): Unit = {
     val uri = new URI(file)
-    val amJarRsrc = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
+    val amJarRsrc = Records.newRecord(classOf[LocalResource])
     amJarRsrc.setType(rtype)
     amJarRsrc.setVisibility(LocalResourceVisibility.valueOf(vis))
     amJarRsrc.setResource(ConverterUtils.getYarnUrlFromURI(uri))
@@ -172,14 +185,17 @@ trait ExecutorRunnableUtil extends Logging {
     ClientBase.populateClasspath(null, yarnConf, sparkConf, env, extraCp)
 
     sparkConf.getExecutorEnv.foreach { case (key, value) =>
-      YarnSparkHadoopUtil.addToEnvironment(env, key, value, File.pathSeparator)
+      // This assumes each executor environment variable set here is a path
+      // This is kept for backward compatibility and consistency with hadoop
+      YarnSparkHadoopUtil.addPathToEnvironment(env, key, value)
     }
 
     // Keep this for backwards compatibility but users should move to the config
-    YarnSparkHadoopUtil.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"),
-      File.pathSeparator)
+    sys.env.get("SPARK_YARN_USER_ENV").foreach { userEnvs =>
+      YarnSparkHadoopUtil.setEnvFromInputString(env, userEnvs)
+    }
 
-    System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }
+    System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k, v) => env(k) = v }
     env
   }
 

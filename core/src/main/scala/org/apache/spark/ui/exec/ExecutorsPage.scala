@@ -17,6 +17,7 @@
 
 package org.apache.spark.ui.exec
 
+import java.net.URLEncoder
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
@@ -41,7 +42,10 @@ private case class ExecutorSummaryInfo(
     totalShuffleWrite: Long,
     maxMemory: Long)
 
-private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
+private[ui] class ExecutorsPage(
+    parent: ExecutorsTab,
+    threadDumpEnabled: Boolean)
+  extends WebUIPage("") {
   private val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -53,7 +57,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
     val execInfoSorted = execInfo.sortBy(_.id)
 
     val execTable =
-      <table class={UIUtils.TABLE_CLASS}>
+      <table class={UIUtils.TABLE_CLASS_STRIPED}>
         <thead>
           <th>Executor ID</th>
           <th>Address</th>
@@ -75,6 +79,7 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
               Shuffle Write
             </span>
           </th>
+          {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
         </thead>
         <tbody>
           {execInfoSorted.map(execRow)}
@@ -133,6 +138,16 @@ private[ui] class ExecutorsPage(parent: ExecutorsTab) extends WebUIPage("") {
       <td sorttable_customkey={info.totalShuffleWrite.toString}>
         {Utils.bytesToString(info.totalShuffleWrite)}
       </td>
+      {
+        if (threadDumpEnabled) {
+          val encodedId = URLEncoder.encode(info.id, "UTF-8")
+          <td>
+            <a href={s"threadDump/?executorId=${encodedId}"}>Thread Dump</a>
+          </td>
+        } else {
+          Seq.empty
+        }
+      }
     </tr>
   }
 

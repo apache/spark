@@ -44,7 +44,9 @@ sbin="`cd "$sbin"; pwd`"
 # If the slaves file is specified in the command line,
 # then it takes precedence over the definition in
 # spark-env.sh. Save it here.
-HOSTLIST="$SPARK_SLAVES"
+if [ -f "$SPARK_SLAVES" ]; then
+  HOSTLIST=`cat "$SPARK_SLAVES"`
+fi
 
 # Check if --config is passed as an argument. It is an optional parameter.
 # Exit if the argument is not a directory.
@@ -67,23 +69,34 @@ fi
 
 if [ "$HOSTLIST" = "" ]; then
   if [ "$SPARK_SLAVES" = "" ]; then
-    export HOSTLIST="${SPARK_CONF_DIR}/slaves"
+    if [ -f "${SPARK_CONF_DIR}/slaves" ]; then
+      HOSTLIST=`cat "${SPARK_CONF_DIR}/slaves"`
+    else
+      HOSTLIST=localhost
+    fi
   else
-    export HOSTLIST="${SPARK_SLAVES}"
+    HOSTLIST=`cat "${SPARK_SLAVES}"`
   fi
 fi
+
+
 
 # By default disable strict host key checking
 if [ "$SPARK_SSH_OPTS" = "" ]; then
   SPARK_SSH_OPTS="-o StrictHostKeyChecking=no"
 fi
 
-for slave in `cat "$HOSTLIST"|sed  "s/#.*$//;/^$/d"`; do
- ssh $SPARK_SSH_OPTS "$slave" $"${@// /\\ }" \
-   2>&1 | sed "s/^/$slave: /" &
- if [ "$SPARK_SLAVE_SLEEP" != "" ]; then
-   sleep $SPARK_SLAVE_SLEEP
- fi
+for slave in `echo "$HOSTLIST"|sed  "s/#.*$//;/^$/d"`; do
+  if [ -n "${SPARK_SSH_FOREGROUND}" ]; then
+    ssh $SPARK_SSH_OPTS "$slave" $"${@// /\\ }" \
+      2>&1 | sed "s/^/$slave: /"
+  else
+    ssh $SPARK_SSH_OPTS "$slave" $"${@// /\\ }" \
+      2>&1 | sed "s/^/$slave: /" &
+  fi
+  if [ "$SPARK_SLAVE_SLEEP" != "" ]; then
+    sleep $SPARK_SLAVE_SLEEP
+  fi
 done
 
 wait
