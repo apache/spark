@@ -69,27 +69,4 @@ class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
     assert(model2.fittingParamMap.get(lr.regParam).get === 0.1)
     assert(model2.getPredictionCol == "thePred")
   }
-
-  test("linear regression: Predictor, Regressor methods") {
-    val sqlContext = this.sqlContext
-    import sqlContext._
-    val lr = new LinearRegression
-
-    // fit() vs. train()
-    val model1 = lr.fit(dataset)
-    val rdd = dataset.select('label, 'features).map { case Row(label: Double, features: Vector) =>
-      LabeledPoint(label, features)
-    }
-    val features = rdd.map(_.features)
-    val model2 = lr.train(rdd)
-    assert(model1.intercept == model2.intercept)
-    assert(model1.weights.equals(model2.weights))
-
-    // transform() vs. predict()
-    val trans = model1.transform(dataset).select('prediction)
-    val preds = model1.predict(rdd.map(_.features))
-    trans.zip(preds).collect().foreach { case (Row(pred1: Double), pred2: Double) =>
-      assert(pred1 == pred2)
-    }
-  }
 }
