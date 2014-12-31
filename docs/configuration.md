@@ -501,12 +501,10 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.rdd.compress</code></td>
-  <td>false</td>
+  <td><code>spark.closure.serializer</code></td>
+  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
-    Whether to compress serialized RDD partitions (e.g. for
-    <code>StorageLevel.MEMORY_ONLY_SER</code>). Can save substantial space at the cost of some
-    extra CPU time.
+    Serializer class to use for closures. Currently only the Java serializer is supported.
   </td>
 </tr>
 <tr>
@@ -523,14 +521,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.io.compression.snappy.block.size</code></td>
-  <td>32768</td>
-  <td>
-    Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec
-    is used. Lowering this block size will also lower shuffle memory usage when Snappy is used.
-  </td>
-</tr>
-<tr>
   <td><code>spark.io.compression.lz4.block.size</code></td>
   <td>32768</td>
   <td>
@@ -539,21 +529,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.closure.serializer</code></td>
-  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
+  <td><code>spark.io.compression.snappy.block.size</code></td>
+  <td>32768</td>
   <td>
-    Serializer class to use for closures. Currently only the Java serializer is supported.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.serializer.objectStreamReset</code></td>
-  <td>100</td>
-  <td>
-    When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches
-    objects to prevent writing redundant data, however that stops garbage collection of those
-    objects. By calling 'reset' you flush that info from the serializer, and allow old
-    objects to be collected. To turn off this periodic reset set it to -1.
-    By default it will reset the serializer every 100 objects.
+    Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec
+    is used. Lowering this block size will also lower shuffle memory usage when Snappy is used.
   </td>
 </tr>
 <tr>
@@ -578,6 +558,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.kryoserializer.buffer.max.mb</code></td>
+  <td>64</td>
+  <td>
+    Maximum allowable size of Kryo serialization buffer, in megabytes. This must be larger than any
+    object you attempt to serialize. Increase this if you get a "buffer limit exceeded" exception
+    inside Kryo.
+  </td>
+</tr>
+<tr>
   <td><code>spark.kryoserializer.buffer.mb</code></td>
   <td>0.064</td>
   <td>
@@ -587,12 +576,23 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.kryoserializer.buffer.max.mb</code></td>
-  <td>64</td>
+  <td><code>spark.rdd.compress</code></td>
+  <td>false</td>
   <td>
-    Maximum allowable size of Kryo serialization buffer, in megabytes. This must be larger than any
-    object you attempt to serialize. Increase this if you get a "buffer limit exceeded" exception
-    inside Kryo.
+    Whether to compress serialized RDD partitions (e.g. for
+    <code>StorageLevel.MEMORY_ONLY_SER</code>). Can save substantial space at the cost of some
+    extra CPU time.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.serializer.objectStreamReset</code></td>
+  <td>100</td>
+  <td>
+    When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches
+    objects to prevent writing redundant data, however that stops garbage collection of those
+    objects. By calling 'reset' you flush that info from the serializer, and allow old
+    objects to be collected. To turn off this periodic reset set it to -1.
+    By default it will reset the serializer every 100 objects.
   </td>
 </tr>
 </table>
