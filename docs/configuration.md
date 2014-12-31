@@ -275,6 +275,27 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.executor.home</code></td>
+  <td>driver side <code>SPARK_HOME</code></td>
+  <td>
+    Set the directory in which Spark is installed on the executors in Mesos. By default, the
+    executors will simply use the driver's Spark home directory, which may not be visible to
+    them. Note that this is only relevant if a Spark binary package is not specified through
+    <code>spark.executor.uri</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.memoryOverhead</code></td>
+  <td>executor memory * 0.07, with minimum of 384</td>
+  <td>
+    This value is an additive for <code>spark.executor.memory</code>, specified in MiB,
+    which is used to calculate the total Mesos task memory. A value of <code>384</code>
+    implies a 384MiB overhead. Additionally, there is a hard-coded 7% minimum
+    overhead. The final overhead will be the larger of either
+    `spark.mesos.executor.memoryOverhead` or 7% of `spark.executor.memory`.
+  </td>
+</tr>
+<tr>
   <td><code>spark.python.profile</code></td>
   <td>false</td>
   <td>
@@ -311,27 +332,6 @@ Apart from these, the following properties are also available, and may be useful
     does not need to fork() a Python process for every tasks. It will be very useful
     if there is large broadcast, then the broadcast will not be needed to transfered
     from JVM to Python worker for every task.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.mesos.executor.home</code></td>
-  <td>driver side <code>SPARK_HOME</code></td>
-  <td>
-    Set the directory in which Spark is installed on the executors in Mesos. By default, the
-    executors will simply use the driver's Spark home directory, which may not be visible to
-    them. Note that this is only relevant if a Spark binary package is not specified through
-    <code>spark.executor.uri</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.mesos.executor.memoryOverhead</code></td>
-  <td>executor memory * 0.07, with minimum of 384</td>
-  <td>
-    This value is an additive for <code>spark.executor.memory</code>, specified in MiB,
-    which is used to calculate the total Mesos task memory. A value of <code>384</code>
-    implies a 384MiB overhead. Additionally, there is a hard-coded 7% minimum
-    overhead. The final overhead will be the larger of either
-    `spark.mesos.executor.memoryOverhead` or 7% of `spark.executor.memory`.
   </td>
 </tr>
 </table>
