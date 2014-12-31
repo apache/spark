@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 
-import org.apache.spark.{LocalSparkContext, SparkContext, SparkEnv}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.storage.TaskResultBlockId
 
 /**
@@ -55,27 +55,20 @@ class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedule
 /**
  * Tests related to handling task results (both direct and indirect).
  */
-class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndAfterAll
-  with LocalSparkContext {
+class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 
-  override def beforeAll {
-    // Set the Akka frame size to be as small as possible (it must be an integer, so 1 is as small
-    // as we can make it) so the tests don't take too long.
-    System.setProperty("spark.akka.frameSize", "1")
-  }
-
-  override def afterAll {
-    System.clearProperty("spark.akka.frameSize")
-  }
+  // Set the Akka frame size to be as small as possible (it must be an integer, so 1 is as small
+  // as we can make it) so the tests don't take too long.
+  def conf: SparkConf = new SparkConf().set("spark.akka.frameSize", "1")
 
   test("handling results smaller than Akka frame size") {
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local", "test", conf)
     val result = sc.parallelize(Seq(1), 1).map(x => 2 * x).reduce((x, y) => x)
     assert(result === 2)
   }
 
   test("handling results larger than Akka frame size") {
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local", "test", conf)
     val akkaFrameSize =
       sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
     val result = sc.parallelize(Seq(1), 1).map(x => 1.to(akkaFrameSize).toArray).reduce((x, y) => x)
@@ -89,7 +82,7 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndA
   test("task retried if result missing from block manager") {
     // Set the maximum number of task failures to > 0, so that the task set isn't aborted
     // after the result is missing.
-    sc = new SparkContext("local[1,2]", "test")
+    sc = new SparkContext("local[1,2]", "test", conf)
     // If this test hangs, it's probably because no resource offers were made after the task
     // failed.
     val scheduler: TaskSchedulerImpl = sc.taskScheduler match {
