@@ -1705,7 +1705,8 @@ private[spark] object Utils extends Logging {
 
   /**
    * Attempt to start a service on the given port, or fail after a number of attempts.
-   * Each subsequent attempt uses random + the port used in the previous attempt (unless the port is 0).
+   * Each subsequent attempt uses random + the port used in the previous attempt 
+   * (unless the port is 0).
    *
    * @param startPort The initial port to start the service on.
    * @param maxRetries Maximum number of retries to attempt.
