@@ -14,9 +14,3 @@ class Param(object):
 
     def __repr_(self):
         return self.parent + "_" + self.name
-
-
-class Params(object):
-    """
-    Components that take parameters.
-    """

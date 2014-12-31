@@ -1,5 +1,5 @@
 from pyspark.sql import SchemaRDD
-from pyspark.ml import _keyword_only_secret, _assert_keyword_only_args, _jvm
+from pyspark.ml import _jvm
 from pyspark.ml.param import Param
 
 
@@ -8,45 +8,39 @@ class LogisticRegression(object):
     Logistic regression.
     """
 
-    _java_class = "org.apache.spark.ml.classification.LogisticRegression"
+    # _java_class = "org.apache.spark.ml.classification.LogisticRegression"
 
     def __init__(self):
         self._java_obj = _jvm().org.apache.spark.ml.classification.LogisticRegression()
-        self.paramMap = {}
         self.maxIter = Param(self, "maxIter", "max number of iterations", 100)
         self.regParam = Param(self, "regParam", "regularization constant", 0.1)
+        self.featuresCol = Param(self, "featuresCol", "features column name", "features")
 
-    def set(self, _keyword_only=_keyword_only_secret,
-            maxIter=None, regParam=None):
-        _assert_keyword_only_args()
-        if maxIter is not None:
-            self.paramMap[self.maxIter] = maxIter
-        if regParam is not None:
-            self.paramMap[self.regParam] = regParam
-        return self
-
-    # cannot chained
     def setMaxIter(self, value):
-        self.paramMap[self.maxIter] = value
-        return self
-
-    def setRegParam(self, value):
-        self.paramMap[self.regParam] = value
+        self._java_obj.setMaxIter(value)
         return self
 
     def getMaxIter(self):
-        if self.maxIter in self.paramMap:
-            return self.paramMap[self.maxIter]
-        else:
-            return self.maxIter.defaultValue
+        return self._java_obj.getMaxIter()
+
+    def setRegParam(self, value):
+        self._java_obj.setRegParam(value)
+        return self
 
     def getRegParam(self):
-        if self.regParam in self.paramMap:
-            return self.paramMap[self.regParam]
-        else:
-            return self.regParam.defaultValue
+        return self._java_obj.getRegParam()
 
-    def fit(self, dataset):
+    def setFeaturesCol(self, value):
+        self._java_obj.setFeaturesCol(value)
+        return self
+
+    def getFeaturesCol(self):
+        return self._java_obj.getFeaturesCol()
+
+    def fit(self, dataset, params=None):
+        """
+        Fits a dataset with optional parameters.
+        """
         java_model = self._java_obj.fit(dataset._jschema_rdd, _jvm().org.apache.spark.ml.param.ParamMap())
         return LogisticRegressionModel(java_model)
 
@@ -62,6 +56,3 @@ class LogisticRegressionModel(object):
     def transform(self, dataset):
         return SchemaRDD(self._java_model.transform(dataset._jschema_rdd, _jvm().org.apache.spark.ml.param.ParamMap()), dataset.sql_ctx)
 
-lr = LogisticRegression()
-
-lr.set(maxIter=10, regParam=0.1)

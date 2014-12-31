@@ -165,6 +165,13 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
+   * Sets a parameter (by name) in the embedded param map.
+   */
+  private[ml] def set(param: String, value: Any): this.type = {
+    set(getParam(param), value)
+  }
+
+  /**
    * Gets the value of a parameter in the embedded param map.
    */
   private[ml] def get[T](param: Param[T]): T = {
