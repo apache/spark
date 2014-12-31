@@ -312,6 +312,86 @@ object Vectors {
       math.pow(sum, 1.0 / p)
     }
   }
+ 
+  /**
+   * Returns the squared distance between two Vectors.
+   * @param v1 first Vector.
+   * @param v2 second Vector.
+   * @return squared distance between two Vectors.
+   */
+  def sqdist(v1: Vector, v2: Vector): Double = {
+    var squaredDistance = 0.0
+    (v1, v2) match { 
+      case (v1: SparseVector, v2: SparseVector) =>
+        val v1Values = v1.values
+        val v1Indices = v1.indices
+        val v2Values = v2.values
+        val v2Indices = v2.indices
+        val nnzv1 = v1Indices.size
+        val nnzv2 = v2Indices.size
+        
+        var kv1 = 0
+        var kv2 = 0
+        while (kv1 < nnzv1 || kv2 < nnzv2) {
+          var score = 0.0
+ 
+          if (kv2 >= nnzv2 || (kv1 < nnzv1 && v1Indices(kv1) < v2Indices(kv2))) {
+            score = v1Values(kv1)
+            kv1 += 1
+          } else if (kv1 >= nnzv1 || (kv2 < nnzv2 && v2Indices(kv2) < v1Indices(kv1))) {
+            score = v2Values(kv2)
+            kv2 += 1
+          } else {
+            score = v1Values(kv1) - v2Values(kv2)
+            kv1 += 1
+            kv2 += 1
+          }
+          squaredDistance += score * score
+        }
+
+      case (v1: SparseVector, v2: DenseVector) if v1.indices.length / v1.size < 0.5 =>
+        squaredDistance = sqdist(v1, v2)
+
+      case (v1: DenseVector, v2: SparseVector) if v2.indices.length / v2.size < 0.5 =>
+        squaredDistance = sqdist(v2, v1)
+
+      // When a SparseVector is approximately dense, we treat it as a DenseVector
+      case (v1, v2) =>
+        squaredDistance = v1.toArray.zip(v2.toArray).foldLeft(0.0){ (distance, elems) =>
+          val score = elems._1 - elems._2
+          distance + score * score
+        }
+    }
+    squaredDistance
+  }
+
+  /**
+   * Returns the squared distance between DenseVector and SparseVector.
+   */
+  private[mllib] def sqdist(v1: SparseVector, v2: DenseVector): Double = {
+    var kv1 = 0
+    var kv2 = 0
+    val indices = v1.indices
+    var squaredDistance = 0.0
+    var iv1 = indices(kv1)
+    val nnzv2 = v2.size
+   
+    while (kv2 < nnzv2) {
+      var score = 0.0
+      if (kv2 != iv1) {
+        score = v2(kv2)
+      } else {
+        score = v1.values(kv1) - v2(kv2)
+        if (kv1 < indices.length - 1) {
+          kv1 += 1
+          iv1 = indices(kv1)
+        }
+      }
+      squaredDistance += score * score
+      kv2 += 1
+    }
+    squaredDistance
+  }
 }
 
 /**
