@@ -46,7 +46,7 @@ private[streaming] case class DeregisterReceiver(streamId: Int, msg: String, err
   extends ReceiverTrackerMessage
 
 /**
- * This class manages the execution of the receivers of NetworkInputDStreams. Instance of
+ * This class manages the execution of the receivers of ReceiverInputDStreams. Instance of
  * this class must be created after all input streams have been added and StreamingContext.start()
  * has been called because it needs the final set of input streams at the time of instantiation.
  *
@@ -150,8 +150,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         logWarning("No prior receiver info")
         ReceiverInfo(streamId, "", null, false, "", lastErrorMessage = message, lastError = error)
     }
-    receiverInfo(streamId) = newReceiverInfo
-    listenerBus.post(StreamingListenerReceiverStopped(receiverInfo(streamId)))
+    receiverInfo -= streamId
+    listenerBus.post(StreamingListenerReceiverStopped(newReceiverInfo))
     val messageWithError = if (error != null && !error.isEmpty) {
       s"$message - $error"
     } else {

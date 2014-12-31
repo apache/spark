@@ -361,6 +361,22 @@ trait HiveTypeCoercion {
           DecimalType(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
         )
 
+      case LessThan(e1 @ DecimalType.Expression(p1, s1),
+          e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+        LessThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
+
+      case LessThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
+          e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+        LessThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
+
+      case GreaterThan(e1 @ DecimalType.Expression(p1, s1),
+          e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+        GreaterThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
+
+      case GreaterThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
+          e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+        GreaterThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
+
       // Promote integers inside a binary expression with fixed-precision decimals to decimals,
       // and fixed-precision decimals in an expression with floats / doubles to doubles
       case b: BinaryExpression if b.left.dataType != b.right.dataType =>

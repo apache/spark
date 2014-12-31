@@ -57,7 +57,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @Test
   public void testInitialization() {
-    Assert.assertNotNull(ssc.sc());
+    Assert.assertNotNull(ssc.sparkContext());
   }
 
   @SuppressWarnings("unchecked")
@@ -662,7 +662,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
       listOfDStreams1,
       new Function2<List<JavaRDD<?>>, Time, JavaRDD<Long>>() {
         public JavaRDD<Long> call(List<JavaRDD<?>> listOfRDDs, Time time) {
-          assert(listOfRDDs.size() == 2);
+          Assert.assertEquals(2, listOfRDDs.size());
           return null;
         }
       }
@@ -675,7 +675,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
       listOfDStreams2,
       new Function2<List<JavaRDD<?>>, Time, JavaPairRDD<Integer, Tuple2<Integer, String>>>() {
         public JavaPairRDD<Integer, Tuple2<Integer, String>> call(List<JavaRDD<?>> listOfRDDs, Time time) {
-          assert(listOfRDDs.size() == 3);
+          Assert.assertEquals(3, listOfRDDs.size());
           JavaRDD<Integer> rdd1 = (JavaRDD<Integer>)listOfRDDs.get(0);
           JavaRDD<Integer> rdd2 = (JavaRDD<Integer>)listOfRDDs.get(1);
           JavaRDD<Tuple2<Integer, String>> rdd3 = (JavaRDD<Tuple2<Integer, String>>)listOfRDDs.get(2);
@@ -969,7 +969,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
             });
 
     JavaTestUtils.attachTestOutputStream(reversed);
-    List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(expected, result);
   }
@@ -1012,7 +1012,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
           }
         });
     JavaTestUtils.attachTestOutputStream(flatMapped);
-    List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(expected, result);
   }
@@ -1163,9 +1163,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(groupWindowed);
     List<List<Tuple2<String, List<Integer>>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    assert(result.size() == expected.size());
+    Assert.assertEquals(expected.size(), result.size());
     for (int i = 0; i < result.size(); i++) {
-      assert(convert(result.get(i)).equals(convert(expected.get(i))));
+      Assert.assertEquals(convert(expected.get(i)), convert(result.get(i)));
     }
   }
 
@@ -1383,7 +1383,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         });
 
     JavaTestUtils.attachTestOutputStream(sorted);
-    List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<Integer, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(expected, result);
   }

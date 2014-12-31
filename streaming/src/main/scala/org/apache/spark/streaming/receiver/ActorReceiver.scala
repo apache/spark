@@ -123,7 +123,7 @@ private[streaming] case class ByteBufferData(bytes: ByteBuffer) extends ActorRec
  * As Actors can also be used to receive data from almost any stream source.
  * A nice set of abstraction(s) for actors as receivers is already provided for
  * a few general cases. It is thus exposed as an API where user may come with
- * his own Actor to run as receiver for Spark Streaming input source.
+ * their own Actor to run as receiver for Spark Streaming input source.
  *
  * This starts a supervisor actor which starts workers and also provides
  * [http://doc.akka.io/docs/akka/snapshot/scala/fault-tolerance.html fault-tolerance].

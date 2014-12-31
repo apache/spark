@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.sql.{DataType, StringType}
+import org.apache.spark.sql.{DataType, StringType, ArrayType}
 
 /**
  * :: AlphaComponent ::
@@ -36,4 +36,6 @@ class Tokenizer extends UnaryTransformer[String, Seq[String], Tokenizer] {
   protected override def validateInputType(inputType: DataType): Unit = {
     require(inputType == StringType, s"Input type must be string type but got $inputType.")
   }
+
+  override protected def outputDataType: DataType = new ArrayType(StringType, false)
 }

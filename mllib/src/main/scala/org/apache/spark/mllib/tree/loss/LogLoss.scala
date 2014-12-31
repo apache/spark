@@ -24,12 +24,12 @@ import org.apache.spark.rdd.RDD
 
 /**
  * :: DeveloperApi ::
- * Class for least squares error loss calculation.
+ * Class for log loss calculation (for classification).
+ * This uses twice the binomial negative log likelihood, called "deviance" in Friedman (1999).
  *
- * The features x and the corresponding label y is predicted using the function F.
- * For each instance:
- * Loss: log(1 + exp(-2yF)), y in {-1, 1}
- * Negative gradient: 2y / ( 1 + exp(2yF))
+ * The log loss is defined as:
+ *   2 log(1 + exp(-2 y F(x)))
+ * where y is a label in {-1, 1} and F(x) is the model prediction for features x.
  */
 @DeveloperApi
 object LogLoss extends Loss {
@@ -37,7 +37,8 @@ object LogLoss extends Loss {
   /**
    * Method to calculate the loss gradients for the gradient boosting calculation for binary
    * classification
-   * @param model Model of the weak learner
+   * The gradient with respect to F(x) is: - 4 y / (1 + exp(2 y F(x)))
+   * @param model Ensemble model
    * @param point Instance of the training dataset
    * @return Loss gradient
    */
@@ -45,19 +46,28 @@ object LogLoss extends Loss {
       model: TreeEnsembleModel,
       point: LabeledPoint): Double = {
     val prediction = model.predict(point.features)
-    1.0 / (1.0 + math.exp(-prediction)) - point.label
+    - 4.0 * point.label / (1.0 + math.exp(2.0 * point.label * prediction))
   }
 
   /**
-   * Method to calculate error of the base learner for the gradient boosting calculation.
+   * Method to calculate loss of the base learner for the gradient boosting calculation.
    * Note: This method is not used by the gradient boosting algorithm but is useful for debugging
    * purposes.
-   * @param model Model of the weak learner.
+   * @param model Ensemble model
    * @param data Training dataset: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]].
-   * @return
+   * @return Mean log loss of model on data
    */
   override def computeError(model: TreeEnsembleModel, data: RDD[LabeledPoint]): Double = {
-    val wrongPredictions = data.filter(lp => model.predict(lp.features) != lp.label).count()
-    wrongPredictions / data.count
+    data.map { case point =>
+      val prediction = model.predict(point.features)
+      val margin = 2.0 * point.label * prediction
+      // The following are equivalent to 2.0 * log(1 + exp(-margin)) but are more numerically
+      // stable.
+      if (margin >= 0) {
+        2.0 * math.log1p(math.exp(-margin))
+      } else {
+        2.0 * (-margin + math.log1p(math.exp(margin)))
+      }
+    }.mean()
   }
 }

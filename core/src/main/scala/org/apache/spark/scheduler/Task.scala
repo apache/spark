@@ -45,7 +45,7 @@ import org.apache.spark.util.Utils
 private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) extends Serializable {
 
   final def run(attemptId: Long): T = {
-    context = new TaskContextImpl(stageId, partitionId, attemptId, false)
+    context = new TaskContextImpl(stageId, partitionId, attemptId, runningLocally = false)
     TaskContextHelper.setTaskContext(context)
     context.taskMetrics.hostname = Utils.localHostName()
     taskThread = Thread.currentThread()
