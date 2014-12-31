@@ -27,13 +27,17 @@ import org.eclipse.paho.client.mqttv3._
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
 
 class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
-  val batchDuration = Seconds(1)
-  val master: String = "local[2]"
-  val framework: String = this.getClass.getSimpleName
-  val brokerUrl = "tcp://localhost:1883"
-  val topic = "def"
 
-  var ssc: StreamingContext = _
+  private val batchDuration = Seconds(1)
+  private val master: String = "local[2]"
+  private val framework: String = this.getClass.getSimpleName
+  private val brokerUrl = "tcp://localhost:1883"
+  private val topic = "def"
+  private var ssc: StreamingContext = _
+
+  before {
+    ssc = new StreamingContext(master, framework, batchDuration)
+  }
 
   after {
     if (ssc != null) {
@@ -43,7 +47,6 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
   }
 
   test("mqtt input stream") {
-    ssc = new StreamingContext(master, framework, batchDuration)
     val sendMessage = "MQTT demo for spark streaming"
     publishData(sendMessage)
     val receiveStream: ReceiverInputDStream[String] =
