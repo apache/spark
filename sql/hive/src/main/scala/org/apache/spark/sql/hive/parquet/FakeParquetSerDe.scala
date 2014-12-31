@@ -32,7 +32,7 @@ import org.apache.hadoop.io.Writable
  * when "spark.sql.hive.convertMetastoreParquet" is set to true.
  */
 @deprecated("No code should depend on FakeParquetHiveSerDe as it is only intended as a " +
-            "placeholder in the Hive MetaStore")
+            "placeholder in the Hive MetaStore", "1.2.0")
 class FakeParquetSerDe extends SerDe {
   override def getObjectInspector: ObjectInspector = new ObjectInspector {
     override def getCategory: Category = Category.PRIMITIVE

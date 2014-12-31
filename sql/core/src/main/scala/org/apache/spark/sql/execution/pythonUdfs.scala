@@ -132,7 +132,7 @@ object EvaluatePython {
       arr.asInstanceOf[Array[Any]].map(x => toJava(x, array.elementType))
 
     case (obj: Map[_, _], mt: MapType) => obj.map {
-      case (k, v) => (k, toJava(v, mt.valueType)) // key should be primitive type
+      case (k, v) => (toJava(k, mt.keyType), toJava(v, mt.valueType))
     }.asJava
 
     case (ud, udt: UserDefinedType[_]) => toJava(udt.serialize(ud), udt.sqlType)

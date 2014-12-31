@@ -33,6 +33,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object LeftSemiJoin extends Strategy with PredicateHelper {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right)
+        if sqlContext.autoBroadcastJoinThreshold > 0 &&
+          right.statistics.sizeInBytes <= sqlContext.autoBroadcastJoinThreshold =>
+        val semiJoin = joins.BroadcastLeftSemiJoinHash(
+          leftKeys, rightKeys, planLater(left), planLater(right))
+        condition.map(Filter(_, semiJoin)).getOrElse(semiJoin) :: Nil
       // Find left semi joins where at least some predicates can be evaluated by matching join keys
       case ExtractEquiJoinKeys(LeftSemi, leftKeys, rightKeys, condition, left, right) =>
         val semiJoin = joins.LeftSemiJoinHash(
@@ -190,7 +196,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object TakeOrdered extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, child)) =>
+      case logical.Limit(IntegerLiteral(limit), logical.Sort(order, true, child)) =>
         execution.TakeOrdered(limit, order, planLater(child)) :: Nil
       case _ => Nil
     }
@@ -257,19 +263,20 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Distinct(partial = false,
           execution.Distinct(partial = true, planLater(child))) :: Nil
 
-      case logical.Sort(sortExprs, child) if sqlContext.externalSortEnabled =>
-        execution.ExternalSort(sortExprs, global = true, planLater(child)):: Nil
-      case logical.Sort(sortExprs, child) =>
-        execution.Sort(sortExprs, global = true, planLater(child)):: Nil
-
       case logical.SortPartitions(sortExprs, child) =>
         // This sort only sorts tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.
         execution.Sort(sortExprs, global = false, planLater(child)) :: Nil
+      case logical.Sort(sortExprs, global, child) if sqlContext.externalSortEnabled =>
+        execution.ExternalSort(sortExprs, global, planLater(child)):: Nil
+      case logical.Sort(sortExprs, global, child) =>
+        execution.Sort(sortExprs, global, planLater(child)):: Nil
       case logical.Project(projectList, child) =>
         execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
         execution.Filter(condition, planLater(child)) :: Nil
+      case logical.Expand(projections, output, child) =>
+        execution.Expand(projections, output, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
         execution.Aggregate(partial = false, group, agg, planLater(child)) :: Nil
       case logical.Sample(fraction, withReplacement, seed, child) =>
@@ -302,17 +309,20 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  case class CommandStrategy(context: SQLContext) extends Strategy {
+  case object CommandStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
       case logical.SetCommand(kv) =>
-        Seq(execution.SetCommand(kv, plan.output)(context))
+        Seq(ExecutedCommand(execution.SetCommand(kv, plan.output)))
       case logical.ExplainCommand(logicalPlan, extended) =>
-        Seq(execution.ExplainCommand(logicalPlan, plan.output, extended)(context))
+        Seq(ExecutedCommand(
+          execution.ExplainCommand(logicalPlan, plan.output, extended)))
       case logical.CacheTableCommand(tableName, optPlan, isLazy) =>
-        Seq(execution.CacheTableCommand(tableName, optPlan, isLazy))
+        Seq(ExecutedCommand(
+          execution.CacheTableCommand(tableName, optPlan, isLazy)))
       case logical.UncacheTableCommand(tableName) =>
-        Seq(execution.UncacheTableCommand(tableName))
+        Seq(ExecutedCommand(
+          execution.UncacheTableCommand(tableName)))
       case _ => Nil
     }
   }
