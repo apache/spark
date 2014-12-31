@@ -55,15 +55,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
   }
-
-  createQueryTest("! operator",
-    """
-      |SELECT a FROM (
-      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
-      |  SELECT 2 AS a FROM src LIMIT 1) table
-      |WHERE !(a>1)
-    """.stripMargin)
-
+  
   createQueryTest("constant object inspector for generic udf",
     """SELECT named_struct(
       lower("AA"), "10",
