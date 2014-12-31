@@ -893,18 +893,90 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.task.cpus</code></td>
-  <td>1</td>
+  <td><code>spark.cores.max</code></td>
+  <td>(not set)</td>
   <td>
-    Number of cores to allocate for each task.
+    When running on a <a href="spark-standalone.html">standalone deploy cluster</a> or a
+    <a href="running-on-mesos.html#mesos-run-modes">Mesos cluster in "coarse-grained"
+    sharing mode</a>, the maximum amount of CPU cores to request for the application from
+    across the cluster (not from each machine). If not set, the default will be
+    <code>spark.deploy.defaultCores</code> on Spark's standalone cluster manager, or
+    infinite (all available cores) on Mesos.
   </td>
 </tr>
 <tr>
-  <td><code>spark.task.maxFailures</code></td>
-  <td>4</td>
+  <td><code>spark.localExecution.enabled</code></td>
+  <td>false</td>
   <td>
-    Number of individual task failures before giving up on the job.
-    Should be greater than or equal to 1. Number of allowed retries = this value - 1.
+    Enables Spark to run certain jobs, such as first() or take() on the driver, without sending
+    tasks to the cluster. This can make certain jobs execute very quickly, but may require
+    shipping a whole partition of data to the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.locality.wait</code></td>
+  <td>3000</td>
+  <td>
+    Number of milliseconds to wait to launch a data-local task before giving up and launching it
+    on a less-local node. The same wait will be used to step through multiple locality levels
+    (process-local, node-local, rack-local and then any). It is also possible to customize the
+    waiting time for each level by setting <code>spark.locality.wait.node</code>, etc.
+    You should increase this setting if your tasks are long and see poor locality, but the
+    default usually works well.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.locality.wait.node</code></td>
+  <td>spark.locality.wait</td>
+  <td>
+    Customize the locality wait for node locality. For example, you can set this to 0 to skip
+    node locality and search immediately for rack locality (if your cluster has rack information).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.locality.wait.process</code></td>
+  <td>spark.locality.wait</td>
+  <td>
+    Customize the locality wait for process locality. This affects tasks that attempt to access
+    cached data in a particular executor process.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.locality.wait.rack</code></td>
+  <td>spark.locality.wait</td>
+  <td>
+    Customize the locality wait for rack locality.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.coarse</code></td>
+  <td>false</td>
+  <td>
+    If set to "true", runs over Mesos clusters in
+    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
+    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per
+    Spark task. This gives lower-latency scheduling for short queries, but leaves resources in use
+    for the whole duration of the Spark job.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.maxRegisteredResourcesWaitingTime</code></td>
+  <td>30000</td>
+  <td>
+    Maximum amount of time to wait for resources to register before scheduling begins
+    (in milliseconds).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.scheduler.minRegisteredResourcesRatio</code></td>
+  <td>0.0 for Mesos and Standalone mode, 0.8 for YARN</td>
+  <td>
+    The minimum ratio of registered resources (registered resources / total expected resources)
+    (resources are executors in yarn mode, CPU cores in standalone mode)
+    to wait for before scheduling begins. Specified as a double between 0.0 and 1.0.
+    Regardless of whether the minimum ratio of resources has been reached,
+    the maximum amount of time it will wait before scheduling begins is controlled by config
+    <code>spark.scheduler.maxRegisteredResourcesWaitingTime</code>.
   </td>
 </tr>
 <tr>
@@ -918,26 +990,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.cores.max</code></td>
-  <td>(not set)</td>
+  <td><code>spark.scheduler.revive.interval</code></td>
+  <td>1000</td>
   <td>
-    When running on a <a href="spark-standalone.html">standalone deploy cluster</a> or a
-    <a href="running-on-mesos.html#mesos-run-modes">Mesos cluster in "coarse-grained"
-    sharing mode</a>, the maximum amount of CPU cores to request for the application from
-    across the cluster (not from each machine). If not set, the default will be
-    <code>spark.deploy.defaultCores</code> on Spark's standalone cluster manager, or
-    infinite (all available cores) on Mesos.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.mesos.coarse</code></td>
-  <td>false</td>
-  <td>
-    If set to "true", runs over Mesos clusters in
-    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
-    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per
-    Spark task. This gives lower-latency scheduling for short queries, but leaves resources in use
-    for the whole duration of the Spark job.
+    The interval length for the scheduler to revive the worker resource offers to run tasks
+    (in milliseconds).
   </td>
 </tr>
 <tr>
@@ -956,13 +1013,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.speculation.quantile</code></td>
-  <td>0.75</td>
-  <td>
-    Percentage of tasks which must be complete before speculation is enabled for a particular stage.
-  </td>
-</tr>
-<tr>
   <td><code>spark.speculation.multiplier</code></td>
   <td>1.5</td>
   <td>
@@ -970,75 +1020,25 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.locality.wait</code></td>
-  <td>3000</td>
+  <td><code>spark.speculation.quantile</code></td>
+  <td>0.75</td>
   <td>
-    Number of milliseconds to wait to launch a data-local task before giving up and launching it
-    on a less-local node. The same wait will be used to step through multiple locality levels
-    (process-local, node-local, rack-local and then any). It is also possible to customize the
-    waiting time for each level by setting <code>spark.locality.wait.node</code>, etc.
-    You should increase this setting if your tasks are long and see poor locality, but the
-    default usually works well.
+    Percentage of tasks which must be complete before speculation is enabled for a particular stage.
   </td>
 </tr>
 <tr>
-  <td><code>spark.locality.wait.process</code></td>
-  <td>spark.locality.wait</td>
+  <td><code>spark.task.cpus</code></td>
+  <td>1</td>
   <td>
-    Customize the locality wait for process locality. This affects tasks that attempt to access
-    cached data in a particular executor process.
+    Number of cores to allocate for each task.
   </td>
 </tr>
 <tr>
-  <td><code>spark.locality.wait.node</code></td>
-  <td>spark.locality.wait</td>
+  <td><code>spark.task.maxFailures</code></td>
+  <td>4</td>
   <td>
-    Customize the locality wait for node locality. For example, you can set this to 0 to skip
-    node locality and search immediately for rack locality (if your cluster has rack information).
-  </td>
-</tr>
-<tr>
-  <td><code>spark.locality.wait.rack</code></td>
-  <td>spark.locality.wait</td>
-  <td>
-    Customize the locality wait for rack locality.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.scheduler.revive.interval</code></td>
-  <td>1000</td>
-  <td>
-    The interval length for the scheduler to revive the worker resource offers to run tasks
-    (in milliseconds).
-  </td>
-</tr>
-</tr>
-  <td><code>spark.scheduler.minRegisteredResourcesRatio</code></td>
-  <td>0.0 for Mesos and Standalone mode, 0.8 for YARN</td>
-  <td>
-    The minimum ratio of registered resources (registered resources / total expected resources)
-    (resources are executors in yarn mode, CPU cores in standalone mode)
-    to wait for before scheduling begins. Specified as a double between 0.0 and 1.0.
-    Regardless of whether the minimum ratio of resources has been reached,
-    the maximum amount of time it will wait before scheduling begins is controlled by config
-    <code>spark.scheduler.maxRegisteredResourcesWaitingTime</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.scheduler.maxRegisteredResourcesWaitingTime</code></td>
-  <td>30000</td>
-  <td>
-    Maximum amount of time to wait for resources to register before scheduling begins
-    (in milliseconds).
-  </td>
-</tr>
-<tr>
-  <td><code>spark.localExecution.enabled</code></td>
-  <td>false</td>
-  <td>
-    Enables Spark to run certain jobs, such as first() or take() on the driver, without sending
-    tasks to the cluster. This can make certain jobs execute very quickly, but may require
-    shipping a whole partition of data to the driver.
+    Number of individual task failures before giving up on the job.
+    Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
 </table>
