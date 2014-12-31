@@ -21,6 +21,7 @@ import org.apache.spark.sql.QueryTest
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.util.Utils
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -196,7 +197,7 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT distinct key FROM src order by key").collect().toSeq)
   }
 
-  test("Spark-4963: SchemaRDD sample on mutable row return wrong result") {
+  test("SPARK-4963 SchemaRDD sample on mutable row return wrong result") {
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
     val location =
       Utils.getSparkClassLoader.getResource("data/files/kv1.txt").getFile()
