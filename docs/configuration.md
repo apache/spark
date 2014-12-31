@@ -94,30 +94,6 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
-  <td><code>spark.master</code></td>
-  <td>(none)</td>
-  <td>
-    The cluster manager to connect to. See the list of
-    <a href="submitting-applications.html#master-urls"> allowed master URL's</a>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.executor.memory</code></td>
-  <td>512m</td>
-  <td>
-    Amount of memory to use per executor process, in the same format as JVM memory strings
-    (e.g. <code>512m</code>, <code>2g</code>).
-  </td>
-</tr>
-<tr>
-  <td><code>spark.driver.memory</code></td>
-  <td>512m</td>
-  <td>
-    Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
-    (e.g. <code>512m</code>, <code>2g</code>).
-  </td>
-</tr>
-<tr>
   <td><code>spark.driver.maxResultSize</code></td>
   <td>1g</td>
   <td>
@@ -130,16 +106,19 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
-  <td><code>spark.serializer</code></td>
-  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
+  <td><code>spark.driver.memory</code></td>
+  <td>512m</td>
   <td>
-    Class to use for serializing objects that will be sent over the network or need to be cached
-    in serialized form. The default of Java serialization works with any Serializable Java object
-    but is quite slow, so we recommend <a href="tuning.html">using
-    <code>org.apache.spark.serializer.KryoSerializer</code> and configuring Kryo serialization</a>
-    when speed is necessary. Can be any subclass of
-    <a href="api/scala/index.html#org.apache.spark.serializer.Serializer">
-    <code>org.apache.spark.Serializer</code></a>.
+    Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
+    (e.g. <code>512m</code>, <code>2g</code>).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.memory</code></td>
+  <td>512m</td>
+  <td>
+    Amount of memory to use per executor process, in the same format as JVM memory strings
+    (e.g. <code>512m</code>, <code>2g</code>).
   </td>
 </tr>
 <tr>
@@ -181,6 +160,27 @@ of the most common options to set are:
   <td>false</td>
   <td>
     Logs the effective SparkConf as INFO when a SparkContext is started.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.master</code></td>
+  <td>(none)</td>
+  <td>
+    The cluster manager to connect to. See the list of
+    <a href="submitting-applications.html#master-urls"> allowed master URL's</a>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.serializer</code></td>
+  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
+  <td>
+    Class to use for serializing objects that will be sent over the network or need to be cached
+    in serialized form. The default of Java serialization works with any Serializable Java object
+    but is quite slow, so we recommend <a href="tuning.html">using
+    <code>org.apache.spark.serializer.KryoSerializer</code> and configuring Kryo serialization</a>
+    when speed is necessary. Can be any subclass of
+    <a href="api/scala/index.html#org.apache.spark.serializer.Serializer">
+    <code>org.apache.spark.Serializer</code></a>.
   </td>
 </tr>
 </table>
@@ -856,8 +856,8 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.io.preferDirectBufs</code></td>
   <td>true</td>
   <td>
-    (Netty only) Off-heap buffers are used to reduce garbage collection during shuffle and cache 
-    block transfer. For environments where off-heap memory is tightly limited, users may wish to 
+    (Netty only) Off-heap buffers are used to reduce garbage collection during shuffle and cache
+    block transfer. For environments where off-heap memory is tightly limited, users may wish to
     turn this off to force all allocations from Netty to be on-heap.
   </td>
 </tr>
@@ -865,7 +865,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.shuffle.io.numConnectionsPerPeer</code></td>
   <td>1</td>
   <td>
-    (Netty only) Connections between hosts are reused in order to reduce connection buildup for 
+    (Netty only) Connections between hosts are reused in order to reduce connection buildup for
     large clusters. For clusters with many hard disks and few hosts, this may result in insufficient
     concurrency to saturate all disks, and so users may consider increasing this value.
   </td>
@@ -875,7 +875,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>3</td>
   <td>
     (Netty only) Fetches that fail due to IO-related exceptions are automatically retried if this is
-    set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC 
+    set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC
     pauses or transient network connectivity issues.
   </td>
 </tr>
@@ -884,7 +884,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>5</td>
   <td>
     (Netty only) Seconds to wait between retries of fetches. The maximum delay caused by retrying
-    is simply <code>maxRetries * retryWait</code>, by default 15 seconds. 
+    is simply <code>maxRetries * retryWait</code>, by default 15 seconds.
   </td>
 </tr>
 </table>
