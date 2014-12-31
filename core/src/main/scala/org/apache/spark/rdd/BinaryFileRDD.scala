@@ -33,7 +33,6 @@ private[spark] class BinaryFileRDD[T](
   extends NewHadoopRDD[String, T](sc, inputFormatClass, keyClass, valueClass, conf) {
 
   override def getPartitions: Array[Partition] = {
-    val start = System.nanoTime
     val inputFormat = inputFormatClass.newInstance
     inputFormat match {
       case configurable: Configurable =>
@@ -47,7 +46,6 @@ private[spark] class BinaryFileRDD[T](
     for (i <- 0 until rawSplits.size) {
       result(i) = new NewHadoopPartition(id, i, rawSplits(i).asInstanceOf[InputSplit with Writable])
     }
-    logDebug("Get these partitions took %f s".format((System.nanoTime - start) / 1e9))
     result
   }
 }

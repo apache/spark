@@ -493,6 +493,15 @@ class DAGScheduler(
     }
 
     assert(partitions.size > 0)
+    /**
+     * Makes sure that doPreGetPartitions occurs before
+     * the job submitter sends a message into the DAGScheduler actor.
+     * Although getPartitions may be called in rdd.partitions.length
+     * before doPreGetPartitions occurs.
+     */
+    val start = System.nanoTime
+    rdd.doPreGetPartitions()
+    logInfo("Get these partitions took %f s".format((System.nanoTime - start) / 1e9))
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
     eventProcessActor ! JobSubmitted(

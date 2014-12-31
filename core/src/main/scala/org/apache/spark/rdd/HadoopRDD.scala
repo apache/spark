@@ -191,7 +191,6 @@ class HadoopRDD[K, V](
   }
 
   override def getPartitions: Array[Partition] = {
-    val start = System.nanoTime
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized
     SparkHadoopUtil.get.addCredentials(jobConf)
@@ -204,10 +203,9 @@ class HadoopRDD[K, V](
     for (i <- 0 until inputSplits.size) {
       array(i) = new HadoopPartition(id, i, inputSplits(i))
     }
-    logDebug("Get these partitions took %f s".format((System.nanoTime - start) / 1e9))
     array
   }
-  
+ 
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
     val iter = new NextIterator[(K, V)] {
 

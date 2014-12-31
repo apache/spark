@@ -178,7 +178,7 @@ abstract class RDD[T: ClassTag](
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
   private var dependencies_ : Seq[Dependency[_]] = null
-  @transient private var partitions_ : Array[Partition] = getPartitions
+  @transient private var partitions_ : Array[Partition] = null
 
   /** An Option holding our checkpoint RDD, if we are checkpointed */
   private def checkpointRDD: Option[RDD[T]] = checkpointData.flatMap(_.checkpointRDD)
@@ -202,6 +202,9 @@ abstract class RDD[T: ClassTag](
    */
   final def partitions: Array[Partition] = {
     checkpointRDD.map(_.partitions).getOrElse {
+      if (partitions_ == null) {
+        partitions_ = getPartitions
+      }
       partitions_
     }
   }
@@ -1321,6 +1324,14 @@ abstract class RDD[T: ClassTag](
         dependencies.foreach(_.rdd.doCheckpoint())
       }
     }
+  }
+
+  /**
+   * Traverses the lineage chain and calls partitions on each RDD.
+   */
+  private[spark] def doPreGetPartitions() {
+    dependencies.foreach(_.rdd.doPreGetPartitions())
+    partitions
   }
 
   /**
