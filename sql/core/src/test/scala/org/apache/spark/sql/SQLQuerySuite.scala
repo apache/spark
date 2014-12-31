@@ -19,8 +19,6 @@ package org.apache.spark.sql
 
 import java.util.TimeZone
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -28,20 +26,10 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext._
 
-class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
+class SQLQuerySuite extends QueryTest {
 
-  var origZone: TimeZone = _
-  override protected def beforeAll() {
-    origZone = TimeZone.getDefault
-    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
-
-    // Make sure the tables are loaded.
-    TestData
-  }
-
-  override protected def afterAll() {
-    TimeZone.setDefault(origZone)
-  }
+  // Make sure the tables are loaded.
+  TestData
 
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
     checkAnswer(
@@ -128,6 +116,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-3173 Timestamp support in the parser") {
+    // change time zone to UTC,keep the origin one
+    val originZone: TimeZone = TimeZone.getDefault
+    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time=CAST('1970-01-01 00:00:00.001' AS TIMESTAMP)"),
       Seq(Seq(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001"))))
@@ -153,9 +145,12 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time='123'"),
       Nil)
+
+    // change time zone to default one, in order not to affect other tests
+    TimeZone.setDefault(originZone)
   }
 
-  test("support cast date data type") {
+  test("SPARK-5003 Cast support date data type") {
     checkAnswer(sql(
       "SELECT d from dates where d = cast('2011-01-11' as date)"),
       java.sql.Date.valueOf("2011-01-11"))
