@@ -65,7 +65,7 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
   }
 
   test("TaskContext.attemptNumber should return attempt number, not task id (SPARK-4014)") {
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local[1,2]", "test")  // use maxRetries = 2 because we test failed tasks
     // Check that attemptIds are 0 for all tasks' initial attempts
     val attemptIds = sc.parallelize(Seq(1, 2), 2).mapPartitions { iter =>
       Seq(TaskContext.get().attemptNumber).iterator
@@ -84,7 +84,7 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
   }
 
   test("TaskContext.attemptId returns taskAttemptId for backwards-compatibility (SPARK-4014)") {
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    sc = new SparkContext("local", "test")
     val attemptIds = sc.parallelize(Seq(1, 2, 3, 4), 4).mapPartitions { iter =>
       Seq(TaskContext.get().attemptId).iterator
     }.collect()
