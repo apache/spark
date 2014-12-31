@@ -733,63 +733,13 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.driver.host</code></td>
-  <td>(local hostname)</td>
+  <td><code>spark.akka.failure-detector.threshold</code></td>
+  <td>300.0</td>
   <td>
-    Hostname or IP address for the driver to listen on.
-    This is used for communicating with the executors and the standalone Master.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.driver.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver to listen on.
-    This is used for communicating with the executors and the standalone Master.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.fileserver.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver's HTTP file server to listen on.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.broadcast.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver's HTTP broadcast server to listen on.
-    This is not relevant for torrent broadcast.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.replClassServer.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the driver's HTTP class server to listen on.
-    This is only relevant for the Spark shell.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.blockManager.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for all block managers to listen on. These exist on both the driver and the executors.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.executor.port</code></td>
-  <td>(random)</td>
-  <td>
-    Port for the executor to listen on. This is used for communicating with the driver.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.port.maxRetries</code></td>
-  <td>16</td>
-  <td>
-    Default maximum number of retries when binding to a port before giving up.
+     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
+     enabled again, if you plan to use this feature (Not recommended). This maps to akka's
+     `akka.remote.transport-failure-detector.threshold`. Tune this in combination of
+     `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
   </td>
 </tr>
 <tr>
@@ -799,42 +749,6 @@ Apart from these, the following properties are also available, and may be useful
     Maximum message size to allow in "control plane" communication (for serialized tasks and task
     results), in MB. Increase this if your tasks need to send back large results to the driver
     (e.g. using <code>collect()</code> on a large dataset).
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.threads</code></td>
-  <td>4</td>
-  <td>
-    Number of actor threads to use for communication. Can be useful to increase on large clusters
-    when the driver has a lot of CPU cores.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.timeout</code></td>
-  <td>100</td>
-  <td>
-    Communication timeout between Spark nodes, in seconds.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.heartbeat.pauses</code></td>
-  <td>6000</td>
-  <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
-     enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause
-     in seconds for akka. This can be used to control sensitivity to gc pauses. Tune this in
-     combination of `spark.akka.heartbeat.interval` and `spark.akka.failure-detector.threshold`
-     if you need to.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.akka.failure-detector.threshold</code></td>
-  <td>300.0</td>
-  <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
-     enabled again, if you plan to use this feature (Not recommended). This maps to akka's
-     `akka.remote.transport-failure-detector.threshold`. Tune this in combination of
-     `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
   </td>
 </tr>
 <tr>
@@ -853,12 +767,98 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.io.preferDirectBufs</code></td>
-  <td>true</td>
+  <td><code>spark.akka.heartbeat.pauses</code></td>
+  <td>6000</td>
   <td>
-    (Netty only) Off-heap buffers are used to reduce garbage collection during shuffle and cache
-    block transfer. For environments where off-heap memory is tightly limited, users may wish to
-    turn this off to force all allocations from Netty to be on-heap.
+     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be
+     enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause
+     in seconds for akka. This can be used to control sensitivity to gc pauses. Tune this in
+     combination of `spark.akka.heartbeat.interval` and `spark.akka.failure-detector.threshold`
+     if you need to.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.akka.threads</code></td>
+  <td>4</td>
+  <td>
+    Number of actor threads to use for communication. Can be useful to increase on large clusters
+    when the driver has a lot of CPU cores.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.akka.timeout</code></td>
+  <td>100</td>
+  <td>
+    Communication timeout between Spark nodes, in seconds.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.blockManager.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for all block managers to listen on. These exist on both the driver and the executors.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.broadcast.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the driver's HTTP broadcast server to listen on.
+    This is not relevant for torrent broadcast.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.host</code></td>
+  <td>(local hostname)</td>
+  <td>
+    Hostname or IP address for the driver to listen on.
+    This is used for communicating with the executors and the standalone Master.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the driver to listen on.
+    This is used for communicating with the executors and the standalone Master.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the executor to listen on. This is used for communicating with the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.fileserver.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the driver's HTTP file server to listen on.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.port.maxRetries</code></td>
+  <td>16</td>
+  <td>
+    Default maximum number of retries when binding to a port before giving up.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.replClassServer.port</code></td>
+  <td>(random)</td>
+  <td>
+    Port for the driver's HTTP class server to listen on.
+    This is only relevant for the Spark shell.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.io.maxRetries</code></td>
+  <td>3</td>
+  <td>
+    (Netty only) Fetches that fail due to IO-related exceptions are automatically retried if this is
+    set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC
+    pauses or transient network connectivity issues.
   </td>
 </tr>
 <tr>
@@ -871,12 +871,12 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.shuffle.io.maxRetries</code></td>
-  <td>3</td>
+  <td><code>spark.shuffle.io.preferDirectBufs</code></td>
+  <td>true</td>
   <td>
-    (Netty only) Fetches that fail due to IO-related exceptions are automatically retried if this is
-    set to a non-zero value. This retry logic helps stabilize large shuffles in the face of long GC
-    pauses or transient network connectivity issues.
+    (Netty only) Off-heap buffers are used to reduce garbage collection during shuffle and cache
+    block transfer. For environments where off-heap memory is tightly limited, users may wish to
+    turn this off to force all allocations from Netty to be on-heap.
   </td>
 </tr>
 <tr>
