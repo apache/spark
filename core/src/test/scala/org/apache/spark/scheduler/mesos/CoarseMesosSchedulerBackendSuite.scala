@@ -86,28 +86,47 @@ class CoarseMesosSchedulerBackendSuite extends FunSuite with LocalSparkContext w
       driver.killTask(TaskID.newBuilder().setValue("0").build())
     ).andReturn(Status.valueOf(1))
 
+    EasyMock.expect(
+      driver.declineOffer(OfferID.newBuilder().setValue("o2").build())
+    ).andReturn(Status.valueOf(1))
+
     EasyMock.replay(driver)
 
     val backend = new CoarseMesosSchedulerBackend(taskScheduler, sc, "master")
     backend.driver = driver
     backend.resourceOffers(driver, mesosOffers)
 
-    assert(backend.doKillExecutors(Seq("s1")))
-    EasyMock.verify(driver)
+    assert(backend.doKillExecutors(Seq("s1/0")))
     assert(backend.executorLimit.get.equals(0))
 
     val mesosOffers2 = new java.util.ArrayList[Offer]
     mesosOffers2.add(createOffer(2, minMem, minCpu))
-    backend.resourceOffers(driver, mesosOffers)
+    backend.resourceOffers(driver, mesosOffers2)
     // Verify we didn't launch any new executor
     assert(backend.slaveIdsWithTasks.size.equals(1))
     assert(backend.pendingRemovedSlaveIds.size.equals(1))
 
+    EasyMock.verify(driver)
+
+    EasyMock.reset(driver)
+
+    EasyMock.expect(
+      driver.launchTasks(
+        EasyMock.eq(Collections.singleton(mesosOffers2.get(0).getId)),
+        EasyMock.anyObject(),
+        EasyMock.anyObject(classOf[Filters])
+      )
+    ).andReturn(Status.valueOf(1)).once
+
+    EasyMock.replay(driver)
+
     backend.doRequestTotalExecutors(2)
-    backend.resourceOffers(driver, mesosOffers)
+    backend.resourceOffers(driver, mesosOffers2)
     assert(backend.slaveIdsWithTasks.size.equals(2))
     backend.slaveLost(driver, SlaveID.newBuilder().setValue("s1").build())
     assert(backend.slaveIdsWithTasks.size.equals(1))
     assert(backend.pendingRemovedSlaveIds.size.equals(0))
+
+    EasyMock.verify(driver)
   }
 }
