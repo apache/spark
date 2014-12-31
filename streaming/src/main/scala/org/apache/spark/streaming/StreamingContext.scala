@@ -20,6 +20,8 @@ package org.apache.spark.streaming
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicInteger
 
+import org.apache.spark.util.Utils
+
 import scala.collection.Map
 import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
@@ -369,6 +371,28 @@ class StreamingContext private[streaming] (
    */
   def textFileStream(directory: String): DStream[String] = {
     fileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
+  }
+
+  /**
+   * Create an input stream by reflection on a
+   * [[org.apache.spark.streaming.dstream.ReflectedDStreamFactory]] subclass.
+   *
+   * This allows InputDStream implementations to be loaded dynamically, without having to be
+   * compiled in to the org.apache.spark hierarchy.
+   *
+   * @param reflectedStreamFactoryClass Fully-qualified classname of a ReflectedDStreamFactory
+   *    subclass (e.g. "org.apache.spark.streaming.zeromq.ReflectedZeroMQStreamFactory")
+   * @param factoryClassParams String parameters to be passed into factory constructor
+   * @return new InputDStream[T] instance
+   */
+  def reflectedStream[T: ClassTag]
+  (reflectedStreamFactoryClass: String,
+   factoryClassParams: String*): InputDStream[T] = {
+    val streamFactoryClazz: Class[_ <:ReflectedDStreamFactory[T]] =
+      Utils.classForName(reflectedStreamFactoryClass)
+        .asInstanceOf[Class[_ <:ReflectedDStreamFactory[T]]]
+    val cons = streamFactoryClazz.getConstructor(classOf[Seq[String]])
+    cons.newInstance(factoryClassParams).instantiateStream(this)
   }
 
   /**
