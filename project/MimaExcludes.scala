@@ -52,6 +52,18 @@ object MimaExcludes {
               "org.apache.spark.mllib.linalg.Matrices.randn"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrices.rand")
+          ) ++ Seq(
+            // SPARK-3623
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.graphx.Graph.checkpoint"),
+            // SPARK-4444
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.graphx.EdgeRDD.fromEdges"),
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.EdgeRDD.filter"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.graphx.impl.EdgeRDDImpl.filter"),
+            // SPARK-4620
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.graphx.Graph.unpersist")
           )
 
         case v if v.startsWith("1.2") =>
