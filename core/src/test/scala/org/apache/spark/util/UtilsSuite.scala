@@ -29,7 +29,7 @@ import com.google.common.base.Charsets
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 
-class UtilsSuite extends FunSuite {
+class UtilsSuite extends FunSuite with ResetSystemProperties {
 
   test("bytesToString") {
     assert(Utils.bytesToString(10) === "10.0 B")

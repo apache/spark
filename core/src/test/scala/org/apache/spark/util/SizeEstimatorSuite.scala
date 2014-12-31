@@ -17,9 +17,7 @@
 
 package org.apache.spark.util
 
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.FunSuite
-import org.scalatest.PrivateMethodTester
+import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, FunSuite, PrivateMethodTester}
 
 class DummyClass1 {}
 
@@ -46,20 +44,12 @@ class DummyString(val arr: Array[Char]) {
 }
 
 class SizeEstimatorSuite
-  extends FunSuite with BeforeAndAfterAll with PrivateMethodTester {
+  extends FunSuite with BeforeAndAfterEach with PrivateMethodTester with ResetSystemProperties {
 
-  var oldArch: String = _
-  var oldOops: String = _
-
-  override def beforeAll() {
+  override def beforeEach() {
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
-    oldArch = System.setProperty("os.arch", "amd64")
-    oldOops = System.setProperty("spark.test.useCompressedOops", "true")
-  }
-
-  override def afterAll() {
-    resetOrClear("os.arch", oldArch)
-    resetOrClear("spark.test.useCompressedOops", oldOops)
+    System.setProperty("os.arch", "amd64")
+    System.setProperty("spark.test.useCompressedOops", "true")
   }
 
   test("simple classes") {
@@ -122,7 +112,7 @@ class SizeEstimatorSuite
   }
 
   test("32-bit arch") {
-    val arch = System.setProperty("os.arch", "x86")
+    System.setProperty("os.arch", "x86")
 
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
@@ -131,14 +121,13 @@ class SizeEstimatorSuite
     assertResult(48)(SizeEstimator.estimate(DummyString("a")))
     assertResult(48)(SizeEstimator.estimate(DummyString("ab")))
     assertResult(56)(SizeEstimator.estimate(DummyString("abcdefgh")))
-    resetOrClear("os.arch", arch)
   }
 
   // NOTE: The String class definition varies across JDK versions (1.6 vs. 1.7) and vendors
   // (Sun vs IBM). Use a DummyString class to make tests deterministic.
   test("64-bit arch with no compressed oops") {
-    val arch = System.setProperty("os.arch", "amd64")
-    val oops = System.setProperty("spark.test.useCompressedOops", "false")
+    System.setProperty("os.arch", "amd64")
+    System.setProperty("spark.test.useCompressedOops", "false")
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
 
@@ -146,16 +135,5 @@ class SizeEstimatorSuite
     assertResult(64)(SizeEstimator.estimate(DummyString("a")))
     assertResult(64)(SizeEstimator.estimate(DummyString("ab")))
     assertResult(72)(SizeEstimator.estimate(DummyString("abcdefgh")))
-
-    resetOrClear("os.arch", arch)
-    resetOrClear("spark.test.useCompressedOops", oops)
-  }
-
-  def resetOrClear(prop: String, oldValue: String) {
-    if (oldValue != null) {
-      System.setProperty(prop, oldValue)
-    } else {
-      System.clearProperty(prop)
-    }
   }
 }

@@ -23,12 +23,14 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, TestUtils}
 import org.apache.spark.deploy.SparkSubmit._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ResetSystemProperties, Utils}
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 import com.google.common.io.Files
 
-class SparkSubmitSuite extends FunSuite with Matchers {
+// Note: this suite mixes in ResetSystemProperties because SparkSubmit.main() sets a bunch
+// of properties that neeed to be cleared after tests.
+class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties {
   def beforeAll() {
     System.setProperty("spark.testing", "true")
   }
