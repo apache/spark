@@ -205,7 +205,7 @@ class HadoopRDD[K, V](
     }
     array
   }
- 
+
   override def compute(theSplit: Partition, context: TaskContext): InterruptibleIterator[(K, V)] = {
     val iter = new NextIterator[(K, V)] {
 
