@@ -32,10 +32,11 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   @transient var tmpFile: File = _
   @transient var tmpJarUrl: String = _
 
+  def newConf: SparkConf = new SparkConf(loadDefaults = false).set("spark.authenticate", "false")
+
   override def beforeEach() {
     super.beforeEach()
     resetSparkContext()
-    System.setProperty("spark.authenticate", "false")
   }
 
   override def beforeAll() {
@@ -53,7 +54,6 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     val jarFile = new File(testTempDir, "test.jar")
     val jarStream = new FileOutputStream(jarFile)
     val jar = new JarOutputStream(jarStream, new java.util.jar.Manifest())
-    System.setProperty("spark.authenticate", "false")
 
     val jarEntry = new JarEntry(textFile.getName)
     jar.putNextEntry(jarEntry)
@@ -75,7 +75,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Distributing files locally") {
-    sc = new SparkContext("local[4]", "test")
+    sc = new SparkContext("local[4]", "test", newConf)
     sc.addFile(tmpFile.toString)
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
     val result = sc.parallelize(testData).reduceByKey {
@@ -109,7 +109,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
 
   test("Distributing files locally using URL as input") {
     // addFile("file:///....")
-    sc = new SparkContext("local[4]", "test")
+    sc = new SparkContext("local[4]", "test", newConf)
     sc.addFile(new File(tmpFile.toString).toURI.toString)
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
     val result = sc.parallelize(testData).reduceByKey {
@@ -123,7 +123,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   }
 
   test ("Dynamically adding JARS locally") {
-    sc = new SparkContext("local[4]", "test")
+    sc = new SparkContext("local[4]", "test", newConf)
     sc.addJar(tmpJarUrl)
     val testData = Array((1, 1))
     sc.parallelize(testData).foreach { x =>
@@ -134,7 +134,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Distributing files on a standalone cluster") {
-    sc = new SparkContext("local-cluster[1,1,512]", "test")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", newConf)
     sc.addFile(tmpFile.toString)
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
     val result = sc.parallelize(testData).reduceByKey {
@@ -148,7 +148,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   }
 
   test ("Dynamically adding JARS on a standalone cluster") {
-    sc = new SparkContext("local-cluster[1,1,512]", "test")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", newConf)
     sc.addJar(tmpJarUrl)
     val testData = Array((1,1))
     sc.parallelize(testData).foreach { x =>
@@ -159,7 +159,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   }
 
   test ("Dynamically adding JARS on a standalone cluster using local: URL") {
-    sc = new SparkContext("local-cluster[1,1,512]", "test")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", newConf)
     sc.addJar(tmpJarUrl.replace("file", "local"))
     val testData = Array((1,1))
     sc.parallelize(testData).foreach { x =>
