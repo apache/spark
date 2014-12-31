@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import java.sql.Date
 import java.util
+import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.hive.serde2.io.DoubleWritable
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
@@ -62,6 +63,11 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
       .get(0)
       .get())
   }
+
+  // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
+  TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+  // Add Locale setting
+  Locale.setDefault(Locale.US)
 
   val data =
     Literal(true) ::
@@ -121,11 +127,11 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
 
   def checkValues(row1: Seq[Any], row2: Seq[Any]): Unit = {
     row1.zip(row2).map {
-      case (r1, r2) => checkValues(r1, r2)
+      case (r1, r2) => checkValue(r1, r2)
     }
   }
 
-  def checkValues(v1: Any, v2: Any): Unit = {
+  def checkValue(v1: Any, v2: Any): Unit = {
     (v1, v2) match {
       case (r1: Decimal, r2: Decimal) =>
         // Ignore the Decimal precision
@@ -195,26 +201,26 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     })
 
     checkValues(row, unwrap(wrap(row, toInspector(dt)), toInspector(dt)).asInstanceOf[Row])
-    checkValues(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
+    checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
   }
 
   test("wrap / unwrap Array Type") {
     val dt = ArrayType(dataTypes(0))
 
     val d = row(0) :: row(0) :: Nil
-    checkValues(d, unwrap(wrap(d, toInspector(dt)), toInspector(dt)))
-    checkValues(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
-    checkValues(d, unwrap(wrap(d, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
-    checkValues(d, unwrap(wrap(null, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
+    checkValue(d, unwrap(wrap(d, toInspector(dt)), toInspector(dt)))
+    checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
+    checkValue(d, unwrap(wrap(d, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
+    checkValue(d, unwrap(wrap(null, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
   }
 
   test("wrap / unwrap Map Type") {
     val dt = MapType(dataTypes(0), dataTypes(1))
 
     val d = Map(row(0) -> row(1))
-    checkValues(d, unwrap(wrap(d, toInspector(dt)), toInspector(dt)))
-    checkValues(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
-    checkValues(d, unwrap(wrap(d, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
-    checkValues(d, unwrap(wrap(null, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
+    checkValue(d, unwrap(wrap(d, toInspector(dt)), toInspector(dt)))
+    checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
+    checkValue(d, unwrap(wrap(d, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
+    checkValue(d, unwrap(wrap(null, toInspector(Literal(d, dt))), toInspector(Literal(d, dt))))
   }
 }
