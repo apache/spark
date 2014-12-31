@@ -340,6 +340,33 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><code>spark.reducer.maxMbInFlight</code></td>
+  <td>48</td>
+  <td>
+    Maximum size (in megabytes) of map outputs to fetch simultaneously from each reduce task. Since
+    each output requires us to create a buffer to receive it, this represents a fixed memory
+    overhead per reduce task, so keep it small unless you have a large amount of memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.blockTransferService</code></td>
+  <td>netty</td>
+  <td>
+    Implementation to use for transferring shuffle and cached blocks between executors. There
+    are two implementations available: <code>netty</code> and <code>nio</code>. Netty-based
+    block transfer is intended to be simpler but equally efficient and is the default option
+    starting in 1.2.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.compress</code></td>
+  <td>true</td>
+  <td>
+    Whether to compress map output files. Generally a good idea. Compression will use
+    <code>spark.io.compression.codec</code>.
+  </td>
+</tr>
+<tr>
   <td><code>spark.shuffle.consolidateFiles</code></td>
   <td>false</td>
   <td>
@@ -347,6 +374,42 @@ Apart from these, the following properties are also available, and may be useful
     files can improve filesystem performance for shuffles with large numbers of reduce tasks. It
     is recommended to set this to "true" when using ext4 or xfs filesystems. On ext3, this option
     might degrade performance on machines with many (>8) cores due to filesystem limitations.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.file.buffer.kb</code></td>
+  <td>32</td>
+  <td>
+    Size of the in-memory buffer for each shuffle file output stream, in kilobytes. These buffers
+    reduce the number of disk seeks and system calls made in creating intermediate shuffle files.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.manager</code></td>
+  <td>sort</td>
+  <td>
+    Implementation to use for shuffling data. There are two implementations available:
+    <code>sort</code> and <code>hash</code>. Sort-based shuffle is more memory-efficient and is
+    the default option starting in 1.2.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.memoryFraction</code></td>
+  <td>0.2</td>
+  <td>
+    Fraction of Java heap to use for aggregation and cogroups during shuffles, if
+    <code>spark.shuffle.spill</code> is true. At any given time, the collective size of
+    all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
+    begin to spill to disk. If spills are often, consider increasing this value at the expense of
+    <code>spark.storage.memoryFraction</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.shuffle.sort.bypassMergeThreshold</code></td>
+  <td>200</td>
+  <td>
+    (Advanced) In the sort-based shuffle manager, avoid merge-sorting data if there is no
+    map-side aggregation and there are at most this many reduce partitions.
   </td>
 </tr>
 <tr>
@@ -363,69 +426,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Whether to compress data spilled during shuffles. Compression will use
     <code>spark.io.compression.codec</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.memoryFraction</code></td>
-  <td>0.2</td>
-  <td>
-    Fraction of Java heap to use for aggregation and cogroups during shuffles, if
-    <code>spark.shuffle.spill</code> is true. At any given time, the collective size of
-    all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
-    begin to spill to disk. If spills are often, consider increasing this value at the expense of
-    <code>spark.storage.memoryFraction</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.compress</code></td>
-  <td>true</td>
-  <td>
-    Whether to compress map output files. Generally a good idea. Compression will use
-    <code>spark.io.compression.codec</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.file.buffer.kb</code></td>
-  <td>32</td>
-  <td>
-    Size of the in-memory buffer for each shuffle file output stream, in kilobytes. These buffers
-    reduce the number of disk seeks and system calls made in creating intermediate shuffle files.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.reducer.maxMbInFlight</code></td>
-  <td>48</td>
-  <td>
-    Maximum size (in megabytes) of map outputs to fetch simultaneously from each reduce task. Since
-    each output requires us to create a buffer to receive it, this represents a fixed memory
-    overhead per reduce task, so keep it small unless you have a large amount of memory.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.manager</code></td>
-  <td>sort</td>
-  <td>
-    Implementation to use for shuffling data. There are two implementations available:
-    <code>sort</code> and <code>hash</code>. Sort-based shuffle is more memory-efficient and is
-    the default option starting in 1.2.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.sort.bypassMergeThreshold</code></td>
-  <td>200</td>
-  <td>
-    (Advanced) In the sort-based shuffle manager, avoid merge-sorting data if there is no
-    map-side aggregation and there are at most this many reduce partitions.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.blockTransferService</code></td>
-  <td>netty</td>
-  <td>
-    Implementation to use for transferring shuffle and cached blocks between executors. There
-    are two implementations available: <code>netty</code> and <code>nio</code>. Netty-based
-    block transfer is intended to be simpler but equally efficient and is the default option
-    starting in 1.2.
   </td>
 </tr>
 </table>
