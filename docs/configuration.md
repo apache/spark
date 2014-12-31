@@ -434,44 +434,6 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td><code>spark.ui.port</code></td>
-  <td>4040</td>
-  <td>
-    Port for your application's dashboard, which shows memory and workload data.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.ui.retainedStages</code></td>
-  <td>1000</td>
-  <td>
-    How many stages the Spark UI and status APIs remember before garbage
-    collecting.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.ui.retainedJobs</code></td>
-  <td>1000</td>
-  <td>
-    How many jobs the Spark UI and status APIs remember before garbage
-    collecting.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.ui.killEnabled</code></td>
-  <td>true</td>
-  <td>
-    Allows stages and corresponding jobs to be killed from the web ui.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.eventLog.enabled</code></td>
-  <td>false</td>
-  <td>
-    Whether to log Spark events, useful for reconstructing the Web UI after the application has
-    finished.
-  </td>
-</tr>
-<tr>
   <td><code>spark.eventLog.compress</code></td>
   <td>false</td>
   <td>
@@ -486,6 +448,44 @@ Apart from these, the following properties are also available, and may be useful
     Within this base directory, Spark creates a sub-directory for each application, and logs the
     events specific to the application in this directory. Users may want to set this to
     a unified location like an HDFS directory so history files can be read by the history server.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.eventLog.enabled</code></td>
+  <td>false</td>
+  <td>
+    Whether to log Spark events, useful for reconstructing the Web UI after the application has
+    finished.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.killEnabled</code></td>
+  <td>true</td>
+  <td>
+    Allows stages and corresponding jobs to be killed from the web ui.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.port</code></td>
+  <td>4040</td>
+  <td>
+    Port for your application's dashboard, which shows memory and workload data.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.retainedJobs</code></td>
+  <td>1000</td>
+  <td>
+    How many jobs the Spark UI and status APIs remember before garbage
+    collecting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.retainedStages</code></td>
+  <td>1000</td>
+  <td>
+    How many stages the Spark UI and status APIs remember before garbage
+    collecting.
   </td>
 </tr>
 </table>
