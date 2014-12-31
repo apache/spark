@@ -23,9 +23,9 @@ import java.util.Arrays
 import akka.actor._
 import org.apache.spark.SparkConf
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
-import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
+import org.apache.spark.util._
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfterEach, BeforeAndAfter, FunSuite, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
 import org.scalatest.matchers.ShouldMatchers._
@@ -34,18 +34,18 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
-import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
 
 import scala.language.implicitConversions
 import scala.language.postfixOps
 
-class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester {
+class BlockManagerSuite extends FunSuite with BeforeAndAfterEach with PrivateMethodTester
+  with ResetSystemProperties {
+
   private val conf = new SparkConf(false)
   var store: BlockManager = null
   var store2: BlockManager = null
   var actorSystem: ActorSystem = null
   var master: BlockManagerMaster = null
-  var oldArch: String = null
   conf.set("spark.authenticate", "false")
   val securityMgr = new SecurityManager(conf)
   val mapOutputTracker = new MapOutputTrackerMaster(conf)
@@ -58,7 +58,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
   def rdd(rddId: Int, splitId: Int) = RDDBlockId(rddId, splitId)
 
-  before {
+  override def beforeEach(): Unit = {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("test", "localhost", 0, conf = conf,
       securityManager = securityMgr)
     this.actorSystem = actorSystem
@@ -69,7 +69,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
       conf)
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
-    oldArch = System.setProperty("os.arch", "amd64")
+    System.setProperty("os.arch", "amd64")
     conf.set("os.arch", "amd64")
     conf.set("spark.test.useCompressedOops", "true")
     conf.set("spark.storage.disableBlockManagerHeartBeat", "true")
@@ -77,9 +77,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     SizeEstimator invokePrivate initialize()
   }
 
-  after {
-    System.clearProperty("spark.driver.port")
-
+  override def afterEach(): Unit = {
     if (store != null) {
       store.stop()
       store = null
@@ -92,14 +90,6 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     actorSystem.awaitTermination()
     actorSystem = null
     master = null
-
-    if (oldArch != null) {
-      conf.set("os.arch", oldArch)
-    } else {
-      System.clearProperty("os.arch")
-    }
-
-    System.clearProperty("spark.test.useCompressedOops")
   }
 
   test("StorageLevel object caching") {

@@ -22,13 +22,13 @@ import org.scalatest.FunSuite
 import akka.actor._
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.util.{ResetSystemProperties, AkkaUtils}
 import scala.concurrent.Await
 
 /**
   * Test the AkkaUtils with various security settings.
   */
-class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
+class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemProperties {
 
   test("remote fetch security bad password") {
     val conf = new SparkConf
