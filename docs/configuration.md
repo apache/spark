@@ -1108,6 +1108,25 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><code>spark.acls.enable</code></td>
+  <td>false</td>
+  <td>
+    Whether Spark acls should are enabled. If enabled, this checks to see if the user has
+    access permissions to view or modify the job.  Note this requires the user to be known,
+    so if the user comes across as null no checks are done. Filters can be used with the UI
+    to authenticate and set the user.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.admin.acls</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of users/administrators that have view and modify access to all Spark jobs.
+    This can be used if you run on a shared cluster and have a set of administrators or devs who
+    help debug when things work.
+  </td>
+</tr>
+<tr>
   <td><code>spark.authenticate</code></td>
   <td>false</td>
   <td>
@@ -1124,6 +1143,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.core.connection.ack.wait.timeout</code></td>
+  <td>60</td>
+  <td>
+    Number of seconds for the connection to wait for ack to occur before timing
+    out and giving up. To avoid unwilling timeout caused by long pause like GC,
+    you can set larger value.
+  </td>
+</tr>
+<tr>
   <td><code>spark.core.connection.auth.wait.timeout</code></td>
   <td>30</td>
   <td>
@@ -1132,12 +1160,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.core.connection.ack.wait.timeout</code></td>
-  <td>60</td>
+  <td><code>spark.modify.acls</code></td>
+  <td>Empty</td>
   <td>
-    Number of seconds for the connection to wait for ack to occur before timing
-    out and giving up. To avoid unwilling timeout caused by long pause like GC,
-    you can set larger value.
+    Comma separated list of users that have modify access to the Spark job. By default only the
+    user that started the Spark job has access to modify it (kill it for example).
   </td>
 </tr>
 <tr>
@@ -1155,38 +1182,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.acls.enable</code></td>
-  <td>false</td>
-  <td>
-    Whether Spark acls should are enabled. If enabled, this checks to see if the user has
-    access permissions to view or modify the job.  Note this requires the user to be known,
-    so if the user comes across as null no checks are done. Filters can be used with the UI
-    to authenticate and set the user.
-  </td>
-</tr>
-<tr>
   <td><code>spark.ui.view.acls</code></td>
   <td>Empty</td>
   <td>
     Comma separated list of users that have view access to the Spark web ui. By default only the
     user that started the Spark job has view access.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.modify.acls</code></td>
-  <td>Empty</td>
-  <td>
-    Comma separated list of users that have modify access to the Spark job. By default only the
-    user that started the Spark job has access to modify it (kill it for example).
-  </td>
-</tr>
-<tr>
-  <td><code>spark.admin.acls</code></td>
-  <td>Empty</td>
-  <td>
-    Comma separated list of users/administrators that have view and modify access to all Spark jobs.
-    This can be used if you run on a shared cluster and have a set of administrators or devs who
-    help debug when things work.
   </td>
 </tr>
 </table>
