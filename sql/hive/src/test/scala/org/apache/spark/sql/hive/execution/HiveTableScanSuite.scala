@@ -18,7 +18,8 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.{Row, SchemaRDD}
+import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.Row
 
 import org.apache.spark.util.Utils
 
@@ -75,5 +76,16 @@ class HiveTableScanSuite extends HiveComparisonTest {
     assert(TestHive.sql("SELECT time from timestamp_query_null limit 2").collect() 
       === Array(Row(java.sql.Timestamp.valueOf("2014-12-11 00:00:00")),Row(null)))
     TestHive.sql("DROP TABLE timestamp_query_null")
+  }
+
+  test("Spark-4959 Attributes are case sensitive when using a select query from a projection") {
+    sql("create table spark_4959 (col1 string)")
+    sql("""insert into table spark_4959 select "hi" from src limit 1""")
+    table("spark_4959").select(
+      'col1.as('CaseSensitiveColName),
+      'col1.as('CaseSensitiveColName2)).registerTempTable("spark_4959_2")
+
+    assert(sql("select CaseSensitiveColName from spark_4959_2").first() === Row("hi"))
+    assert(sql("select casesensitivecolname from spark_4959_2").first() === Row("hi"))
   }
 }
