@@ -357,8 +357,13 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def statusUpdate(d: SchedulerDriver, status: TaskStatus) {
     val taskId = status.getTaskId.getValue.toInt
     val state = status.getState
-    logInfo("Mesos task " + taskId + " is now " + state)
     stateLock.synchronized {
+      if(!taskIdToSlaveId.containsKey(taskId)) {
+        return
+      }
+
+      logInfo("Mesos task " + taskId + " is now " + state)
+
       if (isFinished(state)) {
         val slaveId = taskIdToSlaveId(taskId)
         // Remove the cores we have remembered for this task, if it's in the hashmap
