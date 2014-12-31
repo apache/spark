@@ -136,7 +136,7 @@ package object dsl {
     implicit def symbolToUnresolvedAttribute(s: Symbol) = analysis.UnresolvedAttribute(s.name)
 
     /** Converts $"col name" into an [[analysis.UnresolvedAttribute]]. */
-    implicit class StrongToAttributeConversionHelper(val sc: StringContext) {
+    implicit class StringToAttributeConversionHelper(val sc: StringContext) {
       // Note that if we make ExpressionConversions an object rather than a trait, we can
       // then make this a value class to avoid the small penalty of runtime instantiation.
       def $(args: Any*): analysis.UnresolvedAttribute = {
