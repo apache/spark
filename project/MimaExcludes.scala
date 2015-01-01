@@ -56,7 +56,7 @@ object MimaExcludes {
           ) ++ Seq(
             // SPARK-3325
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.streaming.api.java.JavaDStreamLike.print")
+              "org.apache.spark.streaming.api.java.JavaDStreamLike.print"),
             // SPARK-2757
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.streaming.flume.sink.SparkAvroCallbackHandler." +
