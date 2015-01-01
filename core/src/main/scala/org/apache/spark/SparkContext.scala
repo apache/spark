@@ -1708,19 +1708,19 @@ object SparkContext extends Logging {
 
   // Implicit conversions to common Writable types, for saveAsSequenceFile
 
-  implicit def intToIntWritable(i: Int) = new IntWritable(i)
+  implicit def intToIntWritable(i: Int): IntWritable = new IntWritable(i)
 
-  implicit def longToLongWritable(l: Long) = new LongWritable(l)
+  implicit def longToLongWritable(l: Long): LongWritable = new LongWritable(l)
 
-  implicit def floatToFloatWritable(f: Float) = new FloatWritable(f)
+  implicit def floatToFloatWritable(f: Float): FloatWritable = new FloatWritable(f)
 
-  implicit def doubleToDoubleWritable(d: Double) = new DoubleWritable(d)
+  implicit def doubleToDoubleWritable(d: Double): DoubleWritable = new DoubleWritable(d)
 
-  implicit def boolToBoolWritable (b: Boolean) = new BooleanWritable(b)
+  implicit def boolToBoolWritable (b: Boolean): BooleanWritable = new BooleanWritable(b)
 
-  implicit def bytesToBytesWritable (aob: Array[Byte]) = new BytesWritable(aob)
+  implicit def bytesToBytesWritable (aob: Array[Byte]): BytesWritable = new BytesWritable(aob)
 
-  implicit def stringToText(s: String) = new Text(s)
+  implicit def stringToText(s: String): Text = new Text(s)
 
   private implicit def arrayToArrayWritable[T <% Writable: ClassTag](arr: Traversable[T])
     : ArrayWritable = {
