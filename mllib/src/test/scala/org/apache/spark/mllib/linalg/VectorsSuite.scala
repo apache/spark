@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.linalg
 
-import breeze.linalg.{DenseMatrix => BDM}
+import breeze.linalg.{DenseMatrix => BDM, squaredDistance => breezeSquaredDistance}
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkException
@@ -173,6 +173,42 @@ class VectorsSuite extends FunSuite {
     val x = BDM.zeros[Double](10, 10)
     val v = Vectors.fromBreeze(x(::, 0))
     assert(v.size === x.rows)
+  }
+
+  test("sqdist") {
+    val a = (30 to 0 by -1).map(math.pow(2.0, _)).toArray
+    val n = a.length
+    val v1 = Vectors.dense(a)
+    for (m <- 0 until n) {
+      val indices = (0 to m).toArray
+      val values = indices.map(i => a(i))
+      val v2 = Vectors.sparse(n, indices, values)
+      val v3 = Vectors.sparse(n, indices, indices.map(i => a(i) + 0.5))
+
+      // DenseVector vs. SparseVector
+      val squaredDist = breezeSquaredDistance(v1.toBreeze, v2.toBreeze)
+      val fastSquaredDist1 = Vectors.sqdist(v1, v2)
+      assert(fastSquaredDist1 == squaredDist)
+
+      // DenseVector vs. DenseVector
+      val fastSquaredDist2 = Vectors.sqdist(v1, Vectors.dense(v2.toArray))
+      assert(fastSquaredDist2 === squaredDist)
+
+      // SparseVector vs. SparseVector
+      val squaredDist2 = breezeSquaredDistance(v2.toBreeze, v3.toBreeze)
+      val fastSquaredDist3 = Vectors.sqdist(v2, v3)
+      assert(fastSquaredDist3 === squaredDist2)
+
+      // SparseVector vs. SparseVector: with values at different indices
+      if (m > 10) {
+        val v4 = Vectors.sparse(n, indices.slice(0, m - 10),
+          indices.map(i => a(i) + 0.5).slice(0, m - 10))
+        val squaredDist = breezeSquaredDistance(v2.toBreeze, v4.toBreeze)
+        val fastSquaredDist =
+          Vectors.sqdist(v2, v4)
+        assert(fastSquaredDist === squaredDist)
+      }
+    }
   }
 
   test("foreachActive") {
