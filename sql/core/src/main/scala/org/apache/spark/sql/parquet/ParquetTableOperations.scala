@@ -77,6 +77,21 @@ case class ParquetTableScan(
   assert(normalOutput.size + partOutput.size == attributes.size,
     s"$normalOutput + $partOutput != $attributes, ${relation.output}")
 
+  // Keep indexes of the attributes to fill output rows correctly 
+  val attributesWithIndex = attributes.zipWithIndex
+ 
+  // Indexes of the non-partition columns 
+  val normalOutputIndexes = 
+    normalOutput
+      .flatMap(a => attributesWithIndex.find(aI => aI._1.exprId == a.exprId))
+      .map(_._2)
+  
+  // Indexes of the partition columns 
+  val partOutputIndexes = 
+    partOutput
+      .flatMap(a => attributesWithIndex.find(aI => aI._1.exprId == a.exprId))
+      .map(_._2)
+
   override def execute(): RDD[Row] = {
     import parquet.filter2.compat.FilterCompat.FilterPredicateCompat
 
@@ -142,11 +157,23 @@ case class ParquetTableScan(
           partOutput.map(a => Cast(Literal(partValues(a.name)), a.dataType).eval(EmptyRow))
 
         new Iterator[Row] {
-          private[this] val joinedRow = new JoinedRow5(Row(partitionRowValues:_*), null)
+          private[this] val outputRow = new Array[Any](attributes.length)
+         
+          // Fill outputRow with partitionRowValues at the correct indexes using partOutputIndexes
+          partitionRowValues
+            .zipWithIndex 
+            .foreach(pI => outputRow(partOutputIndexes(pI._2)) = pI._1)
 
           def hasNext = iter.hasNext
 
-          def next() = joinedRow.withRight(iter.next()._2)
+          def next() = {
+            // Fill outputRow with iter.next()._2 at the correct indexes using normalOutputIndexes
+            iter.next()._2
+              .zipWithIndex
+              .foreach(nI => outputRow(normalOutputIndexes(nI._2)) = nI._1)
+            
+            new GenericRow(outputRow) 
+          }
         }
       }
     } else {
