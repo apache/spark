@@ -30,6 +30,7 @@ set -e
 # Figure out where the Spark framework is installed
 FWDIR="$(cd "`dirname "$0"`"; pwd)"
 DISTDIR="$FWDIR/dist"
+MVN_BIN="$FWDIR/build/mvn"
 
 SPARK_TACHYON=false
 MAKE_TGZ=false
@@ -109,17 +110,11 @@ if which git &>/dev/null; then
     unset GITREV
 fi
 
-if ! which mvn &>/dev/null; then
-    echo -e "You need Maven installed to build Spark."
-    echo -e "Download Maven from https://maven.apache.org/"
-    exit -1;
-fi
-
-VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
-SPARK_HADOOP_VERSION=$(mvn help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
+VERSION=$($MVN_BIN help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
+SPARK_HADOOP_VERSION=$($MVN_BIN help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
     | grep -v "INFO"\
     | tail -n 1)
-SPARK_HIVE=$(mvn help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ 2>/dev/null\
+SPARK_HIVE=$($MVN_BIN help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ 2>/dev/null\
     | grep -v "INFO"\
     | fgrep --count "<id>hive</id>";\
     # Reset exit status to 0, otherwise the script stops here if the last grep finds nothing\
@@ -165,7 +160,7 @@ cd "$FWDIR"
 
 export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 
-BUILD_COMMAND="mvn clean package -DskipTests $@"
+BUILD_COMMAND="$MVN_BIN clean package -DskipTests $@"
 
 # Actually build the jar
 echo -e "\nBuilding with..."
