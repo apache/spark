@@ -53,6 +53,10 @@ object MimaExcludes {
               "org.apache.spark.mllib.linalg.Matrices.randn"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrices.rand")
+          ) ++ Seq(
+            // SPARK-3325
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.api.java.JavaDStreamLike.print")
           )
 
         case v if v.startsWith("1.2") =>
