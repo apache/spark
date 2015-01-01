@@ -18,6 +18,8 @@
 package org.apache.spark.streaming.scheduler
 
 
+import org.apache.spark.streaming.util.TimeoutUtils
+
 import scala.collection.mutable.{HashMap, SynchronizedMap}
 import scala.language.existentials
 
@@ -87,10 +89,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   }
 
   /** Stop the receiver execution thread. */
-  def stop() = synchronized {
+  def stop(graceful: Boolean) = synchronized {
     if (!receiverInputStreams.isEmpty && actor != null) {
       // First, stop the receivers
-      if (!skipReceiverLaunch) receiverExecutor.stop()
+      if (!skipReceiverLaunch) receiverExecutor.stop(graceful)
 
       // Finally, stop the actor
       ssc.env.actorSystem.stop(actor)
@@ -208,6 +210,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** This thread class runs all the receivers on the cluster.  */
   class ReceiverLauncher {
     @transient val env = ssc.env
+    private var terminated = true
+    private val conf = ssc.conf
     @transient val thread  = new Thread() {
       override def run() {
         try {
@@ -223,21 +227,39 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       thread.start()
     }
 
-    def stop() {
+    def stop(graceful: Boolean) {
       // Send the stop signal to all the receivers
       stopReceivers()
 
       // Wait for the Spark job that runs the receivers to be over
       // That is, for the receivers to quit gracefully.
+      val stopTimeout = conf.getLong(
+        "spark.streaming.gracefulStopTimeout",
+        10 * ssc.graph.batchDuration.milliseconds)
+
+
       thread.join(10000)
 
       // Check if all the receivers have been deregistered or not
-      if (!receiverInfo.isEmpty) {
-        logWarning("All of the receivers have not deregistered, " + receiverInfo)
+      def done = { receiverInfo.isEmpty && terminated }
+
+      if (graceful) {
+        TimeoutUtils.waitUntilDone(stopTimeout,() => done ) match {
+          case true =>
+            logInfo("All of the receivers have deregistered successfully and job terminated")
+          case false =>
+            logError("Timeout waiting for receivers to deregister")
+        }
       } else {
-        logInfo("All of the receivers have deregistered successfully")
+        if (!receiverInfo.isEmpty) {
+          logWarning("All of the receivers have not deregistered, " + receiverInfo)
+        } else {
+          logInfo("All of the receivers have deregistered successfully")
+        }
       }
     }
+
+
 
     /**
      * Get the receivers from the ReceiverInputDStreams, distributes them to the
@@ -285,16 +307,18 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       // Distribute the receivers and start them
       logInfo("Starting " + receivers.length + " receivers")
+      terminated = false
       ssc.sparkContext.runJob(tempRDD, ssc.sparkContext.clean(startReceiver))
+      terminated = true
       logInfo("All of the receivers have been terminated")
     }
 
     /** Stops the receivers. */
     private def stopReceivers() {
       // Signal the receivers to stop
-      receiverInfo.values.flatMap { info => Option(info.actor)}
-                         .foreach { _ ! StopReceiver }
-      logInfo("Sent stop signal to all " + receiverInfo.size + " receivers")
+      val receivers = receiverInfo.values.flatMap { info => Option(info.actor) }
+      receivers.foreach { _ ! StopReceiver }
+      logInfo("Sent stop signal to all " + receivers.size + " receivers")
     }
   }
 }

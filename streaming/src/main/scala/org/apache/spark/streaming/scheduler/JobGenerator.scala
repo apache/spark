@@ -20,7 +20,7 @@ package org.apache.spark.streaming.scheduler
 import akka.actor.{ActorRef, ActorSystem, Props, Actor}
 import org.apache.spark.{SparkException, SparkEnv, Logging}
 import org.apache.spark.streaming.{Checkpoint, Time, CheckpointWriter}
-import org.apache.spark.streaming.util.{ManualClock, RecurringTimer, Clock}
+import org.apache.spark.streaming.util.{TimeoutUtils, ManualClock, RecurringTimer, Clock}
 import scala.util.{Failure, Success, Try}
 
 /** Event classes for JobGenerator */
@@ -93,27 +93,18 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
     if (processReceivedData) {
       logInfo("Stopping JobGenerator gracefully")
-      val timeWhenStopStarted = System.currentTimeMillis()
       val stopTimeout = conf.getLong(
         "spark.streaming.gracefulStopTimeout",
         10 * ssc.graph.batchDuration.milliseconds
       )
-      val pollTime = 100
 
-      // To prevent graceful stop to get stuck permanently
-      def hasTimedOut = {
-        val timedOut = System.currentTimeMillis() - timeWhenStopStarted > stopTimeout
-        if (timedOut) {
-          logWarning("Timed out while stopping the job generator (timeout = " + stopTimeout + ")")
-        }
-        timedOut
-      }
 
       // Wait until all the received blocks in the network input tracker has
       // been consumed by network input DStreams, and jobs have been generated with them
       logInfo("Waiting for all received blocks to be consumed for job generation")
-      while(!hasTimedOut && jobScheduler.receiverTracker.hasUnallocatedBlocks) {
-        Thread.sleep(pollTime)
+      if (!TimeoutUtils.waitUntilDone(stopTimeout,
+          () => !jobScheduler.receiverTracker.hasUnallocatedBlocks)) {
+        logError("Timeout waiting for unallocated blocks in receiverTracker")
       }
       logInfo("Waited for all received blocks to be consumed for job generation")
 
@@ -127,8 +118,8 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
         lastProcessedBatch != null && lastProcessedBatch.milliseconds == stopTime
       }
       logInfo("Waiting for jobs to be processed and checkpoints to be written")
-      while (!hasTimedOut && !haveAllBatchesBeenProcessed) {
-        Thread.sleep(pollTime)
+      if (!TimeoutUtils.waitUntilDone(stopTimeout, () => haveAllBatchesBeenProcessed)) {
+        logError("Timeout waiting for all batches to be processed")
       }
       logInfo("Waited for jobs to be processed and checkpoints to be written")
     } else {
