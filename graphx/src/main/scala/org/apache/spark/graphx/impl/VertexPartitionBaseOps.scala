@@ -238,8 +238,8 @@ private[graphx] abstract class VertexPartitionBaseOps
    * because these methods return a `Self` and this implicit conversion re-wraps that in a
    * `VertexPartitionBaseOps`. This relies on the context bound on `Self`.
    */
-  private implicit def toOps[VD2: ClassTag](
-      partition: Self[VD2]): VertexPartitionBaseOps[VD2, Self] = {
+  private implicit def toOps[VD2: ClassTag](partition: Self[VD2])
+    : VertexPartitionBaseOps[VD2, Self] = {
     implicitly[VertexPartitionBaseOpsConstructor[Self]].toOps(partition)
   }
 }
