@@ -20,6 +20,7 @@ package org.apache.spark.mllib.optimization
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, dot, scal}
+import scala.math.pow
 
 /**
  * :: DeveloperApi ::
@@ -115,6 +116,69 @@ class LeastSquaresGradient extends Gradient {
     val diff = dot(data, weights) - label
     axpy(diff, data, cumGradient)
     diff * diff / 2.0
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ * Compute gradient and loss for Huber objective function, as used in robust regression.
+ * The Huber M-estimator corresponds to a probability distribution for the errors which is normal
+ * in the centre but like a double exponential distribution in the tails (Hogg 1979: 109).
+ *              L = 1/2 ||A weights-y||^2       if |A weights-y| <= k
+ *              L = k |A weights-y| - 1/2 K^2   if |A weights-y| > k
+ * where k = 1.345 which produce 95% efficiency when the errors are normal and
+ * substantial resistance to outliers otherwise.
+ * See also the documentation for the precise formulation.
+ */
+@DeveloperApi
+class HuberRobustGradient extends Gradient {
+  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
+    val diff = dot(data, weights) - label
+    val loss = diff * diff
+    val gradient = data.copy
+    val k = 1.345
+
+    /**
+    * Tuning constant is generally picked to give reasonably high efficiency in the normal case.
+    * Smaller values produce more resistance to outliers while at the expense of
+    * lower efficiency when the errors are normally distributed.
+    */
+
+    if(diff < -k){
+      scal(-k, gradient)
+      (gradient, (-k * diff - 1.0 / 2.0 * pow(k, 2)))
+    }else if(diff >= -k && diff <= k){
+      scal(diff, gradient)
+      (gradient, (1.0 / 2.0 * loss))
+    }else {
+      scal(k, gradient)
+      (gradient, (k * diff - 1.0 / 2.0 * pow(k, 2)))
+    }
+  }
+
+  override def compute(
+                        data: Vector,
+                        label: Double,
+                        weights: Vector,
+                        cumGradient: Vector): Double = {
+    val diff = dot(data, weights) - label
+    val loss = diff * diff
+    val k = 1.345
+    
+    if(diff < -k){
+      axpy(-k, data, cumGradient)
+    }else if(diff >= -k && diff <= k){
+      axpy(diff, data, cumGradient)
+    }else {
+      axpy(k, data, cumGradient)
+    }
+    if(diff < -k){
+      -k * diff - 1.0 / 2.0 * pow(k, 2)
+    }else if(diff >= -k && diff <= k){
+      1.0 / 2.0 * loss
+    }else {
+      k * diff - 1.0 /2.0 * pow(k, 2)
+    }
   }
 }
 
