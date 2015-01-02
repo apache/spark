@@ -19,13 +19,13 @@ package org.apache.spark.streaming.flume
 
 import java.net.{InetSocketAddress, ServerSocket}
 import java.nio.ByteBuffer
-import java.nio.charset.Charset
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
+import com.google.common.base.Charsets
 import org.apache.avro.ipc.NettyTransceiver
 import org.apache.avro.ipc.specific.SpecificRequestor
 import org.apache.flume.source.avro
@@ -138,7 +138,7 @@ class FlumeStreamSuite extends FunSuite with BeforeAndAfter with Matchers with L
       status should be (avro.Status.OK)
     }
     
-    val decoder = Charset.forName("UTF-8").newDecoder()    
+    val decoder = Charsets.UTF_8.newDecoder()
     eventually(timeout(10 seconds), interval(100 milliseconds)) {
       val outputEvents = outputBuffer.flatten.map { _.event }
       outputEvents.foreach {

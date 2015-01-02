@@ -18,11 +18,11 @@
 package org.apache.spark.streaming
 
 import java.io.File
-import java.nio.charset.Charset
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
+import com.google.common.base.Charsets
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -45,8 +45,6 @@ class CheckpointSuite extends TestSuiteBase {
 
   override def batchDuration = Milliseconds(500)
 
-  override def actuallyWait = true // to allow checkpoints to be written
-
   override def beforeFunction() {
     super.beforeFunction()
     Utils.deleteRecursively(new File(checkpointDir))
@@ -60,9 +58,7 @@ class CheckpointSuite extends TestSuiteBase {
 
   test("basic rdd checkpoints + dstream graph checkpoint recovery") {
 
-    assert(batchDuration === Milliseconds(500), "batchDuration for this test must be 1 second")
-
-    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+    assert(batchDuration === Milliseconds(500), "batchDuration for this test must be 500 ms")
 
     val stateStreamCheckpointInterval = Seconds(1)
     val fs = FileSystem.getLocal(new Configuration())
@@ -87,7 +83,7 @@ class CheckpointSuite extends TestSuiteBase {
     // Run till a time such that at least one RDD in the stream should have been checkpointed,
     // then check whether some RDD has been checkpointed or not
     ssc.start()
-    advanceTimeWithRealDelay(ssc, firstNumBatches)
+    advanceTimeWithRealDelay(ssc, firstNumBatches.toInt)
     logInfo("Checkpoint data of state stream = \n" + stateStream.checkpointData)
     assert(!stateStream.checkpointData.currentCheckpointFiles.isEmpty,
       "No checkpointed RDDs in state stream before first failure")
@@ -101,7 +97,7 @@ class CheckpointSuite extends TestSuiteBase {
     // Run till a further time such that previous checkpoint files in the stream would be deleted
     // and check whether the earlier checkpoint files are deleted
     val checkpointFiles = stateStream.checkpointData.currentCheckpointFiles.map(x => new File(x._2))
-    advanceTimeWithRealDelay(ssc, secondNumBatches)
+    advanceTimeWithRealDelay(ssc, secondNumBatches.toInt)
     checkpointFiles.foreach(file =>
       assert(!file.exists, "Checkpoint file '" + file + "' was not deleted"))
     ssc.stop()
@@ -153,6 +149,7 @@ class CheckpointSuite extends TestSuiteBase {
     val key = "spark.mykey"
     val value = "myvalue"
     System.setProperty(key, value)
+    // This purposely doesn't use the `conf` from this test suite:
     ssc = new StreamingContext(master, framework, batchDuration)
     val originalConf = ssc.conf
 
@@ -280,34 +277,45 @@ class CheckpointSuite extends TestSuiteBase {
   // failure, are re-processed or not.
   test("recovery with file input stream") {
     // Set up the streaming context and input streams
+    val batchDuration = Seconds(2)  // Due to 1-second resolution of setLastModified() on some OS's.
     val testDir = Utils.createTempDir()
-    var ssc = new StreamingContext(master, framework, Seconds(1))
+    var ssc = new StreamingContext(conf, batchDuration)
     ssc.checkpoint(checkpointDir)
+    // This is a var because it's re-assigned when we restart from a checkpoint:
+    var clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    clock.setTime(1000000)  // So that we don't have negative offsets due to windowing
+    val waiter = new StreamingTestWaiter(ssc)
     val fileStream = ssc.textFileStream(testDir.toString)
     // Making value 3 take large time to process, to ensure that the master
     // shuts down in the middle of processing the 3rd batch
     val mappedStream = fileStream.map(s => {
       val i = s.toInt
-      if (i == 3) Thread.sleep(2000)
+      if (i == 3) Thread.sleep(4000)
       i
     })
 
     // Reducing over a large window to ensure that recovery from master failure
     // requires reprocessing of all the files seen before the failure
-    val reducedStream = mappedStream.reduceByWindow(_ + _, Seconds(30), Seconds(1))
+    val reducedStream = mappedStream.reduceByWindow(_ + _, batchDuration * 30, batchDuration)
     val outputBuffer = new ArrayBuffer[Seq[Int]]
     var outputStream = new TestOutputStream(reducedStream, outputBuffer)
     outputStream.register()
     ssc.start()
 
+    clock.addToTime(batchDuration.milliseconds)
     // Create files and advance manual clock to process them
-    // var clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    Thread.sleep(1000)
     for (i <- Seq(1, 2, 3)) {
-      Files.write(i + "\n", new File(testDir, i.toString), Charset.forName("UTF-8"))
-      // wait to make sure that the file is written such that it gets shown in the file listings
-      Thread.sleep(1000)
+      val file = new File(testDir, i.toString)
+      Files.write(i + "\n", file, Charsets.UTF_8)
+      assert(file.setLastModified(clock.currentTime()) && file.lastModified() === clock.currentTime())
+      clock.addToTime(batchDuration.milliseconds)
+      if (i != 3) {  // Since we want to shut down while the 3rd batch is processing
+        waiter.waitForTotalBatchesCompleted(i, Seconds(10))
+      }
     }
+    clock.addToTime(batchDuration.milliseconds)
+    waiter.waitForTotalBatchesStarted(3, Seconds(10))
+    Thread.sleep(1000)  // To wait for execution to actually begin
     logInfo("Output = " + outputStream.output.mkString(","))
     assert(outputStream.output.size > 0, "No files processed before restart")
     ssc.stop()
@@ -315,45 +323,58 @@ class CheckpointSuite extends TestSuiteBase {
     // Verify whether files created have been recorded correctly or not
     var fileInputDStream = ssc.graph.getInputStreams().head.asInstanceOf[FileInputDStream[_, _, _]]
     def recordedFiles = fileInputDStream.batchTimeToSelectedFiles.values.flatten
-    assert(!recordedFiles.filter(_.endsWith("1")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("2")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("3")).isEmpty)
+    assert(recordedFiles.exists(_.endsWith("1")))
+    assert(recordedFiles.exists(_.endsWith("2")))
+    assert(recordedFiles.exists(_.endsWith("3")))
 
     // Create files while the master is down
     for (i <- Seq(4, 5, 6)) {
-      Files.write(i + "\n", new File(testDir, i.toString), Charset.forName("UTF-8"))
-      Thread.sleep(1000)
+      val file = new File(testDir, i.toString)
+      Files.write(i + "\n", file, Charsets.UTF_8)
+      assert(file.setLastModified(clock.currentTime()) && file.lastModified() === clock.currentTime())
+      clock.addToTime(1000)
     }
 
     // Recover context from checkpoint file and verify whether the files that were
     // recorded before failure were saved and successfully recovered
     logInfo("*********** RESTARTING ************")
     ssc = new StreamingContext(checkpointDir)
+    // Copy over the time from the old clock so that we don't appear to have time-traveled:
+    clock = {
+      val newClock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+      newClock.setTime(clock.currentTime())
+      newClock
+    }
     fileInputDStream = ssc.graph.getInputStreams().head.asInstanceOf[FileInputDStream[_, _, _]]
-    assert(!recordedFiles.filter(_.endsWith("1")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("2")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("3")).isEmpty)
+    assert(recordedFiles.exists(_.endsWith("1")))
+    assert(recordedFiles.exists(_.endsWith("2")))
+    assert(recordedFiles.exists(_.endsWith("3")))
 
     // Restart stream computation
+    val postRestartWaiter = new StreamingTestWaiter(ssc)
     ssc.start()
-    for (i <- Seq(7, 8, 9)) {
-      Files.write(i + "\n", new File(testDir, i.toString), Charset.forName("UTF-8"))
-      Thread.sleep(1000)
+    clock.addToTime(batchDuration.milliseconds)
+    for ((i, index) <- Seq(7, 8, 9).zipWithIndex) {
+      val file = new File(testDir, i.toString)
+      Files.write(i + "\n", file, Charsets.UTF_8)
+      assert(file.setLastModified(clock.currentTime()) && file.lastModified() === clock.currentTime())
+      clock.addToTime(batchDuration.milliseconds)
+      postRestartWaiter.waitForTotalBatchesCompleted(index + 1, Seconds(10))
     }
-    Thread.sleep(1000)
+    clock.addToTime(batchDuration.milliseconds)
     logInfo("Output = " + outputStream.output.mkString("[", ", ", "]"))
     assert(outputStream.output.size > 0, "No files processed after restart")
     ssc.stop()
 
     // Verify whether files created while the driver was down have been recorded or not
-    assert(!recordedFiles.filter(_.endsWith("4")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("5")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("6")).isEmpty)
+    assert(recordedFiles.exists(_.endsWith("4")))
+    assert(recordedFiles.exists(_.endsWith("5")))
+    assert(recordedFiles.exists(_.endsWith("6")))
 
     // Verify whether new files created after recover have been recorded or not
-    assert(!recordedFiles.filter(_.endsWith("7")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("8")).isEmpty)
-    assert(!recordedFiles.filter(_.endsWith("9")).isEmpty)
+    assert(recordedFiles.exists(_.endsWith("7")))
+    assert(recordedFiles.exists(_.endsWith("8")))
+    assert(recordedFiles.exists(_.endsWith("9")))
 
     // Append the new output to the old buffer
     outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]
@@ -408,8 +429,7 @@ class CheckpointSuite extends TestSuiteBase {
     ssc.start()
     val output = advanceTimeWithRealDelay[V](ssc, initialNumBatches)
     ssc.stop()
-    verifyOutput[V](output, expectedOutput.take(initialNumBatches), true)
-    Thread.sleep(1000)
+    verifyOutput(output, expectedOutput.take(initialNumBatches), useSet = true)
 
     // Restart and complete the computation from checkpoint file
     logInfo(
@@ -418,10 +438,13 @@ class CheckpointSuite extends TestSuiteBase {
       "\n-------------------------------------------\n"
     )
     ssc = new StreamingContext(checkpointDir)
+    val waiter = new StreamingTestWaiter(ssc)
     ssc.start()
+    // Wait for the last batch before restart to be re-processed:
+    waiter.waitForTotalBatchesCompleted(1, timeout = Durations.seconds(10))
     val outputNew = advanceTimeWithRealDelay[V](ssc, nextNumBatches)
     // the first element will be re-processed data of the last batch before restart
-    verifyOutput[V](outputNew, expectedOutput.takeRight(nextNumExpectedOutputs), true)
+    verifyOutput(outputNew, expectedOutput.takeRight(nextNumExpectedOutputs), useSet = true)
     ssc.stop()
     ssc = null
   }
@@ -430,15 +453,15 @@ class CheckpointSuite extends TestSuiteBase {
    * Advances the manual clock on the streaming scheduler by given number of batches.
    * It also waits for the expected amount of time for each batch.
    */
-  def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Long): Seq[Seq[V]] = {
+  def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Int): Seq[Seq[V]] = {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-    logInfo("Manual clock before advancing = " + clock.time)
-    for (i <- 1 to numBatches.toInt) {
+    val waiter = new StreamingTestWaiter(ssc)
+    logInfo("Manual clock before advancing = " + clock.currentTime())
+    for (i <- 1 to numBatches) {
       clock.addToTime(batchDuration.milliseconds)
-      Thread.sleep(batchDuration.milliseconds)
+      waiter.waitForTotalBatchesCompleted(i, timeout = Durations.seconds(10))
     }
-    logInfo("Manual clock after advancing = " + clock.time)
-    Thread.sleep(batchDuration.milliseconds)
+    logInfo("Manual clock after advancing = " + clock.currentTime())
 
     val outputStream = ssc.graph.getOutputStreams.filter { dstream =>
       dstream.isInstanceOf[TestOutputStreamWithPartitions[V]]
