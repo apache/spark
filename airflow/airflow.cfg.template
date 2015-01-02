@@ -6,6 +6,7 @@ DAGS_FOLDER: %(AIRFLOW_HOME)s/dags
 BASE_FOLDER: %(AIRFLOW_HOME)s/airflow
 BASE_URL: http://localhost:8080
 SQL_ALCHEMY_CONN: mysql://airflow:airflow@localhost:3306/airflow
+EXECUTOR: LocalExecutor
 
 [server]
 WEB_SERVER_HOST: 0.0.0.0
@@ -19,9 +20,9 @@ SMTP_PASSWORD: None
 SMTP_MAIL_FROM: 'airflow_alerts@mydomain.com'
 
 [celery]
-CELERY_APP_NAME: airflow.executors.celery_worker
-CELERY_BROKER: amqp
-CELERY_RESULTS_BACKEND:  amqp://
+CELERY_APP_NAME: airflow.executors.celery_executor
+BROKER_URL = sqla+mysql://airflow:airflow@localhost:3306/airflow
+CELERY_RESULT_BACKEND = db+mysql://airflow:airflow@localhost:3306/airflow
 
 [hooks]
 HIVE_HOME_PY: '/usr/lib/hive/lib/py'

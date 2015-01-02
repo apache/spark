@@ -1,76 +1,63 @@
 import logging
-import multiprocessing
 import time
 
 from airflow.executors.base_executor import BaseExecutor
 from airflow.configuration import conf
 from airflow.utils import State
-from celery_worker import execute_command
+
+import subprocess
+
+from celery import Celery
+from celery import states as celery_states
+
+'''
+To start the celery worker, run the command:
+airflow worker
+'''
+
+
+class CeleryConfig(object):
+    BROKER_URL = conf.get('celery', 'BROKER_URL')
+    CELERY_RESULT_BACKEND = conf.get('celery', 'CELERY_RESULT_BACKEND')
+    CELERY_ACCEPT_CONTENT = ['json', 'pickle']
+
+app = Celery(
+    conf.get('celery', 'CELERY_APP_NAME'),
+    config_source=CeleryConfig)
+
+
+@app.task
+def execute_command(command):
+    logging.info("Executing command in Celery " + command)
+    rc = subprocess.Popen(command, shell=True).wait()
+    if rc:
+        logging.error(rc)
+        raise Exception('Celery command failed')
 
 
 class CeleryExecutor(BaseExecutor):
-    """ Submits the task to RabbitMQ, which is picked up and executed by a bunch
-        of worker processes """
-    def __init__(self, parallelism=1):
-        super(CeleryExecutor, self).__init__()
-        self.parallelism = parallelism
 
     def start(self):
-        self.queue = multiprocessing.JoinableQueue()
-        self.result_queue = multiprocessing.Queue()
-        self.workers = [
-            CelerySubmitter(self.queue, self.result_queue)
-            for i in xrange(self.parallelism)]
-
-        for w in self.workers:
-            w.start()
+        self.tasks = {}
+        self.last_state = {}
 
     def execute_async(self, key, command):
-        self.queue.put((key, command))
+        self.tasks[key] = execute_command.delay(command)
+        self.last_state[key] = celery_states.PENDING
 
     def heartbeat(self):
-        while not self.result_queue.empty():
-            results = self.result_queue.get()
-            self.change_state(*results)
+        for key, async in self.tasks.items():
+            if self.last_state[key] != async.state:
+                if async.state == celery_states.SUCCESS:
+                    self.change_state(key, State.SUCCESS)
+                elif async.state == celery_states.FAILURE:
+                    self.change_state(key, State.FAILED)
+                self.last_state[key] = async.state
 
     def end(self):
-        # Sending poison pill to all worker
-        [self.queue.put(None) for w in self.workers]
-        self.queue.join()
-
-
-class CelerySubmitter(multiprocessing.Process):
-
-    def __init__(self, task_queue, result_queue):
-        multiprocessing.Process.__init__(self)
-        self.task_queue = task_queue
-        self.result_queue = result_queue
-
-    def run(self):
-        while True:
-            work = self.task_queue.get()
-            if work is None:
-                # Received poison pill, no more tasks to run
-                self.task_queue.task_done()
-                break
-            key, command = work
-            BASE_FOLDER = conf.get('core', 'BASE_FOLDER')
-            command = (
-                "exec bash -c '"
-                "cd $AIRFLOW_HOME;\n" +
-                "source init.sh;\n" +
-                command +
-                "'"
-            ).format(**locals())
-
-            try:
-                res = execute_command.delay(command)
-                result = res.get()
-            except Exception as e:
-                self.result_queue.put((key, State.FAILED))
-                logging.exception(e)
-                raise e
-            self.result_queue.put((key, State.SUCCESS))
-            self.task_queue.task_done()
-            time.sleep(1)
-
+        print('entering end')
+        while any([
+                async.state not in celery_states.READY_STATES
+                for async in self.tasks.values()]):
+            print str([async.state for async in self.tasks.values()])
+            time.sleep(5)
