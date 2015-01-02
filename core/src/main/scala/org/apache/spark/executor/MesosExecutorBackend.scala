@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import scala.collection.JavaConversions._
 
 import org.apache.mesos.protobuf.ByteString
-import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver, MesosNativeLibrary}
+import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver}
 import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
 
 import org.apache.spark.{Logging, TaskState}
