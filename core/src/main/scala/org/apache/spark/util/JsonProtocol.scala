@@ -255,6 +255,13 @@ private[spark] object JsonProtocol {
           ("Status" -> blockStatusToJson(status))
         })
       }.getOrElse(JNothing)
+    val accessedBlocks =
+      taskMetrics.accessedBlocks.map { blocks =>
+        JArray(blocks.toList.map { case (id, access) =>
+          ("Block ID" -> id.toString) ~
+          ("Access" -> blockAccessToJson(access))
+        })
+      }.getOrElse(JNothing)
     ("Host Name" -> taskMetrics.hostname) ~
     ("Executor Deserialize Time" -> taskMetrics.executorDeserializeTime) ~
     ("Executor Run Time" -> taskMetrics.executorRunTime) ~
@@ -267,7 +274,8 @@ private[spark] object JsonProtocol {
     ("Shuffle Write Metrics" -> shuffleWriteMetrics) ~
     ("Input Metrics" -> inputMetrics) ~
     ("Output Metrics" -> outputMetrics) ~
-    ("Updated Blocks" -> updatedBlocks)
+    ("Updated Blocks" -> updatedBlocks) ~
+    ("Accessed Blocks" -> accessedBlocks)
   }
 
   def shuffleReadMetricsToJson(shuffleReadMetrics: ShuffleReadMetrics): JValue = {
@@ -290,6 +298,11 @@ private[spark] object JsonProtocol {
   def outputMetricsToJson(outputMetrics: OutputMetrics): JValue = {
     ("Data Write Method" -> outputMetrics.writeMethod.toString) ~
     ("Bytes Written" -> outputMetrics.bytesWritten)
+  }
+  
+  def blockAccessToJson(blockAccess: BlockAccess): JValue = {
+    ("Access Type" -> blockAccess.accessType.toString) ~
+    ("Input Metrics" -> blockAccess.inputMetrics.map(inputMetricsToJson).getOrElse(JNothing))
   }
 
   def taskEndReasonToJson(taskEndReason: TaskEndReason): JValue = {
@@ -616,6 +629,14 @@ private[spark] object JsonProtocol {
           (id, status)
         }
       }
+    metrics.accessedBlocks =
+      Utils.jsonOption(json \ "Accessed Blocks").map { value =>
+        value.extract[List[JValue]].map { block =>
+          val id = BlockId((block \ "Block ID").extract[String])
+          val access = blockAccessFromJson(block \ "Access")
+          (id, access)
+        }
+      }
     metrics
   }
 
@@ -647,6 +668,14 @@ private[spark] object JsonProtocol {
       DataWriteMethod.withName((json \ "Data Write Method").extract[String]))
     metrics.bytesWritten = (json \ "Bytes Written").extract[Long]
     metrics
+  }
+  
+  def blockAccessFromJson(json: JValue): BlockAccess = {
+    val access = new BlockAccess(
+      BlockAccessType.withName((json \ "Access Type").extract[String]),
+      Utils.jsonOption(json \ "Input Metrics").map(inputMetricsFromJson)
+    )
+    access
   }
 
   def taskEndReasonFromJson(json: JValue): TaskEndReason = {

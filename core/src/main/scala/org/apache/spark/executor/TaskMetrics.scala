@@ -122,6 +122,19 @@ class TaskMetrics extends Serializable {
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
 
   /**
+   * Records of each attempted explicit block access and its result, in chronological order.
+   *
+   * This record should not include blocks that are not accessed directly by this task, for
+   * example blocks which are evicted to disk because this task stores a block.
+   */
+  var accessedBlocks: Option[Seq[(BlockId, BlockAccess)]] = None
+
+  private[spark] def recordBlockAccess(blockId: BlockId, blockAccess: BlockAccess) = {
+     val oldBlocksAccessed = accessedBlocks.getOrElse(Seq[(BlockId, BlockAccess)]())
+     accessedBlocks = Some(oldBlocksAccessed ++ Seq(blockId -> blockAccess))
+  }
+
+  /**
    * A task may have multiple shuffle readers for multiple dependencies. To avoid synchronization
    * issues from readers in different threads, in-progress tasks use a ShuffleReadMetrics for each
    * dependency, and merge these metrics before reporting them to the driver. This method returns
@@ -195,6 +208,26 @@ case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
    * Total bytes written
    */
   var bytesWritten: Long = 0L
+}
+
+/**
+ * :: DeveloperApi ::
+ * Type of block access made by the task.
+ */
+@DeveloperApi
+object BlockAccessType extends Enumeration with Serializable {
+  type BlockAccessType = Value
+  val Read, Write = Value
+}
+
+/**
+ * :: DeveloperApi ::
+ * Record of a block access (read or write). For reads, includes metrics on how much was read
+ * or None if the block was not found.
+ */
+@DeveloperApi
+case class BlockAccess(accessType: BlockAccessType.Value,
+                       inputMetrics: Option[InputMetrics] = None) { 
 }
 
 /**

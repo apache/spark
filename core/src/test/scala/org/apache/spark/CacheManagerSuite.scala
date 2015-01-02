@@ -20,7 +20,7 @@ package org.apache.spark
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.mock.EasyMockSugar
 
-import org.apache.spark.executor.{DataReadMethod, TaskMetrics}
+import org.apache.spark.executor.{BlockAccess, BlockAccessType, InputMetrics, DataReadMethod, TaskMetrics}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 
@@ -100,10 +100,36 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     }
   }
 
-  test("verify task metrics updated correctly") {
+  test("verify task metrics updated correctly on write") {
     cacheManager = sc.env.cacheManager
     val context = new TaskContextImpl(0, 0, 0)
     cacheManager.getOrCompute(rdd3, split, context, StorageLevel.MEMORY_ONLY)
     assert(context.taskMetrics.updatedBlocks.getOrElse(Seq()).size === 2)
+    assert(context.taskMetrics.accessedBlocks == Some(Seq(
+        RDDBlockId(rdd3.id, split.index) -> BlockAccess(BlockAccessType.Read, None),
+        RDDBlockId(rdd2.id, split.index) -> BlockAccess(BlockAccessType.Read, None),
+        RDDBlockId(rdd2.id, split.index) -> BlockAccess(BlockAccessType.Write),
+        RDDBlockId(rdd3.id, split.index) -> BlockAccess(BlockAccessType.Write)
+    )))
+    assert(context.taskMetrics.inputMetrics == None)
+  }
+
+  test("verify task metrics updated correctly on read") {
+    expecting {
+      val result = new BlockResult(Array(5, 6, 7).iterator, DataReadMethod.Memory, 12)
+      blockManager.get(RDDBlockId(0, 0)).andReturn(Some(result))
+    }
+
+    whenExecuting(blockManager) {
+      val context = new TaskContextImpl(0, 0, 0)
+      cacheManager.getOrCompute(rdd, split, context, StorageLevel.MEMORY_ONLY)
+      assert(context.taskMetrics.updatedBlocks.getOrElse(Seq()).size === 0)
+      val expectInputMetrics = InputMetrics(DataReadMethod.Memory)
+      expectInputMetrics.bytesRead = 12
+      assert(context.taskMetrics.inputMetrics == Some(expectInputMetrics))
+      assert(context.taskMetrics.accessedBlocks == Some(Seq(
+            RDDBlockId(rdd.id, split.index) -> BlockAccess(BlockAccessType.Read, Some(expectInputMetrics))
+      )))
+    }
   }
 }

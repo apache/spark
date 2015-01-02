@@ -29,6 +29,7 @@ import org.apache.spark.storage._
 class StorageTabSuite extends FunSuite with BeforeAndAfter {
   private var bus: LiveListenerBus = _
   private var storageStatusListener: StorageStatusListener = _
+  private var missRateListener: MissRateListener = _
   private var storageListener: StorageListener = _
   private val memAndDisk = StorageLevel.MEMORY_AND_DISK
   private val memOnly = StorageLevel.MEMORY_ONLY
@@ -44,7 +45,8 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
   before {
     bus = new LiveListenerBus
     storageStatusListener = new StorageStatusListener
-    storageListener = new StorageListener(storageStatusListener)
+    missRateListener = new MissRateListener
+    storageListener = new StorageListener(storageStatusListener, missRateListener)
     bus.addListener(storageStatusListener)
     bus.addListener(storageListener)
   }
