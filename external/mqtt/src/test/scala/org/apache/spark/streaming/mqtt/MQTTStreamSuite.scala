@@ -45,7 +45,7 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
 
   before {
     ssc = new StreamingContext(master, framework, batchDuration)
-    startUp()
+    setupMQTT
   }
 
   after {
@@ -76,7 +76,7 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
     ssc.stop()
   }
 
-  private def startUp() {
+  private def setupMQTT() {
     broker = new BrokerService()
     connector = new TransportConnector()
     connector.setName("mqtt")
