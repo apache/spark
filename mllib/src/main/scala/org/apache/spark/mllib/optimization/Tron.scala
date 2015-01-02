@@ -158,7 +158,7 @@ object TRON extends Logging {
       lossHistory.append(state.adjFval)
       state = states.next()
     }
-    lossHistory.append(state.fval)
+    lossHistory.append(state.adjFval)
     val weights = Vectors.fromBreeze(state.x)
 
     logInfo("TRON.runTRON finished. Last 10 losses %s".format(
@@ -196,7 +196,8 @@ class SecondOrderCostFun(
             (grad1, loss1 + loss2)
           })
       hessian.setw(bcW)
-      (lossSum, gradientSum.toBreeze.toDenseVector, hessian)
+      scal(1.0 / numExamples, gradientSum)
+      (lossSum / numExamples, gradientSum.toBreeze.toDenseVector, hessian)
   }
 }
 
@@ -204,6 +205,7 @@ class HessianMatrix extends Serializable{
   private var data: RDD[(Double, Vector)] = null
   private var w: Broadcast[Vector] = null
   private var Hv: HessianVector = null
+  private var numExamples: Long = 0
 
   def setHv(Hv: HessianVector) = {
     this.Hv = Hv
@@ -217,6 +219,7 @@ class HessianMatrix extends Serializable{
 
   def setdata(data: RDD[(Double, Vector)]) = {
     this.data = data
+    this.numExamples = data.count()
     this
   }
 
@@ -236,6 +239,7 @@ class HessianMatrix extends Serializable{
       hv1
     })
     bcD.unpersist()
+    scal(1.0 / numExamples, hv)
     hv.toBreeze.toDenseVector
   }
 }

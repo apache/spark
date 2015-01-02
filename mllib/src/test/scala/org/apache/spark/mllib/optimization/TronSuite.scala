@@ -39,7 +39,6 @@ class TronSSuite extends FunSuite with MLlibTestSparkContext with Matchers {
   val hessian = new LogisticHessian()
   val numCorrections = 10
 
-  val simpleUpdater = new SimpleUpdater()
   val squaredL2Updater = new SquaredL2Updater()
 
   // Add an extra variable consisting of all 1.0's for the intercept.
@@ -55,7 +54,7 @@ class TronSSuite extends FunSuite with MLlibTestSparkContext with Matchers {
 
     val initialWeightsWithIntercept = Vectors.dense(1.0 +: initialWeights.toArray)
     val convergenceTol = 1e-5
-    val numIterations = 100
+    val numIterations = 10
     val (_, loss) = TRON.runTRON(
       dataRDD,
       gradient,
@@ -65,35 +64,33 @@ class TronSSuite extends FunSuite with MLlibTestSparkContext with Matchers {
       regParam,
       initialWeightsWithIntercept)
 
-    val lbfgs_reg = (1.0/regParam)/ nPoints
     val (_, lossLBFGS) = LBFGS.runLBFGS(
       dataRDD,
       gradient,
-      simpleUpdater,
+      squaredL2Updater,
       numCorrections,
       convergenceTol,
       numIterations,
-      lbfgs_reg,
+      regParam,
       initialWeightsWithIntercept)
 
     // Since the cost function is convex, the loss is guaranteed to be monotonically decreasing
     // with Tron optimizer.
     assert((loss, loss.tail).zipped.forall(_ > _), "loss should be monotonically decreasing.")
 
-    assert(Math.abs((lossLBFGS.last / lbfgs_reg - loss.last) / loss.last) < 0.02,
+    assert(Math.abs((lossLBFGS.last - loss.last) / loss.last) < 0.02,
       "LBFGS should match TRON result within 2% difference.")
     // Note that in TRON, the objective function is 1/2 w^T w + regparam \sum loss,
     // while in LBFGS, the function is regparam/2 w^T w + 1/nPoints \sum loss
   }
 
   test("TRON and LBFGS with L2 regularization should get the same result.") {
-    val regParam = 0.2
-    val lbfgs_reg = (1.0/regParam)/ nPoints
+    val regParam = 3.0
 
     // Prepare another non-zero weights to compare the loss in the first iteration.
     val initialWeightsWithIntercept = Vectors.dense(0.3, 0.12)
     val convergenceTol = 1e-5
-    val numIterations = 100
+    val numIterations = 10
 
     val (weightTRON, lossTRON) = TRON.runTRON(
       dataRDD,
@@ -111,14 +108,14 @@ class TronSSuite extends FunSuite with MLlibTestSparkContext with Matchers {
       numCorrections,
       convergenceTol,
       numIterations,
-      lbfgs_reg,
+      regParam,
       initialWeightsWithIntercept)
 
-    assert(lossTRON(0) ~= lossLBFGS(0)/lbfgs_reg absTol 1E-5,
+    assert(lossTRON(0) ~= lossLBFGS(0) absTol 1E-5,
       "The first losses of LBFGS and TRON should be the same.")
 
     // The 2% difference here is based on observation, but is not theoretically guaranteed.
-    assert(lossLBFGS.last / lbfgs_reg ~= lossTRON.last relTol 0.02,
+    assert(lossLBFGS.last ~= lossTRON.last relTol 0.02,
       "The last losses of LBFGS and TRON should be within 2% difference.")
 
     assert(
@@ -134,7 +131,7 @@ class TronSSuite extends FunSuite with MLlibTestSparkContext with Matchers {
      * run up to the numIterations which is 8 here.
      */
     val initialWeightsWithIntercept = Vectors.dense(0.0, 0.0)
-    val numIterations = 2
+    val numIterations = 8
     var convergenceTol = 0.0
 
     val (_, lossTRON1) = TRON.runTRON(
@@ -149,7 +146,7 @@ class TronSSuite extends FunSuite with MLlibTestSparkContext with Matchers {
 
     // Note that the first loss is computed with initial weights,
     // so the total numbers of loss will be numbers of iterations + 1
-    assert(lossTRON1.length == 3)
+    assert(lossTRON1.length == 9)
 
     convergenceTol = 0.1
     val (_, lossTRON2) = TRON.runTRON(
@@ -176,19 +173,18 @@ class TronSSuite extends FunSuite with MLlibTestSparkContext with Matchers {
   }
 
   test("Optimize via class TRON.") {
-    val regParam = 0.2
-    val lbfgs_reg = (1.0/regParam)/ nPoints
+    val regParam = 2.0
 
     // Prepare another non-zero weights to compare the loss in the first iteration.
     val initialWeightsWithIntercept = Vectors.dense(0.3, 0.12)
     val convergenceTol = 1e-5
-    val numIterations = 100
+    val numIterations = 10
 
     val lbfgsOptimizer = new LBFGS(gradient, squaredL2Updater)
       .setNumCorrections(numCorrections)
       .setConvergenceTol(convergenceTol)
       .setNumIterations(numIterations)
-      .setRegParam(lbfgs_reg)
+      .setRegParam(regParam)
 
     val weightLBFGS = lbfgsOptimizer.optimize(dataRDD, initialWeightsWithIntercept)
 
@@ -210,7 +206,7 @@ class TRONClusterSuite extends FunSuite with LocalClusterSparkContext {
 
   test("task size should be small") {
     val m = 10
-    val n = 200000
+    val n = 50000
     val examples = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
       val random = new Random(idx)
       iter.map(i => (1.0, Vectors.dense(Array.fill(n)(random.nextDouble))))
