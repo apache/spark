@@ -2,12 +2,14 @@ from datetime import datetime, timedelta
 import dateutil.parser
 import json
 import logging
+import sys
 
 from flask import Flask, url_for, Markup, Blueprint, redirect, flash, Response
 from flask.ext.admin import Admin, BaseView, expose, AdminIndexView
 from flask.ext.admin.form import DateTimePickerWidget
 from flask.ext.admin import base
 from flask.ext.admin.contrib.sqla import ModelView
+from flask.ext.cache import Cache
 from flask import request
 from wtforms import Form, DateTimeField, SelectField, TextAreaField
 from cgi import escape
@@ -45,6 +47,14 @@ session = Session()
 app = Flask(__name__)
 login_manager.init_app(app)
 app.secret_key = 'airflowified'
+
+cache = Cache(app=app, config={'CACHE_TYPE': 'filesystem', 'CACHE_DIR': '/tmp'})
+
+
+def make_cache_key(*args, **kwargs):
+    path = request.path
+    args = str(hash(frozenset(request.args.items())))
+    return (path + args).encode('ascii', 'ignore')
 
 # Init for chartkick, the python wrapper for highcharts
 ck = Blueprint(
@@ -199,6 +209,7 @@ class Airflow(BaseView):
 
     @expose('/chart_data')
     @login_required
+    @cache.cached(timeout=3600, key_prefix=make_cache_key)
     def chart_data(self):
         session = settings.Session()
         chart_id = request.args.get('chart_id')
@@ -259,47 +270,111 @@ class Airflow(BaseView):
 
             # Trying to convert time to something Highcharts likes
             x_col = 1 if chart.sql_layout == 'series' else 0
-            x_is_dt = True
-            df[df.columns[x_col]] = pd.to_datetime(df[df.columns[x_col]])
-            try:
-                # From string to datetime
-                df[df.columns[x_col]] = pd.to_datetime(df[df.columns[x_col]])
-            except Exception as e:
-                x_is_dt = False
-                raise Exception(str(e))
-            if x_is_dt:
+            if chart.x_is_date:
+                try:
+                    # From string to datetime
+                    df[df.columns[x_col]] = pd.to_datetime(
+                        df[df.columns[x_col]])
+                except Exception as e:
+                    raise Exception(str(e))
                 df[df.columns[x_col]] = df[df.columns[x_col]].apply(
                     lambda x: int(x.strftime("%s")) * 1000)
 
-            if chart.sql_layout == 'series':
-                # User provides columns (series, x, y)
+            series = []
+            colorAxis = None
+            if chart.chart_type == 'heatmap':
+                color_perc_lbound = float(request.args.get('color_perc_lbound', 0))
+                color_perc_rbound = float(request.args.get('color_perc_rbound', 1))
+                color_scheme = request.args.get('color_scheme', 'blue_red')
+
+                if color_scheme == 'blue_red':
+                    stops = [
+                        [color_perc_lbound, '#3060CF'],
+                        [color_perc_lbound + ((color_perc_rbound - color_perc_lbound)/2), '#FFFBBC'],
+                        [color_perc_rbound, '#C4463A']
+                    ]
+                elif color_scheme == 'blue_scale':
+                    stops = [
+                        [color_perc_lbound, '#FFFFFF'],
+                        [color_perc_rbound, '#2222FF']
+                    ]
+                elif color_scheme == 'fire':
+                    diff = float(color_perc_rbound - color_perc_lbound)
+                    stops = [
+                        [color_perc_lbound, '#FFFFFF'],
+                        [color_perc_lbound + 0.33*diff, '#FFFF00'],
+                        [color_perc_lbound + 0.66*diff, '#FF0000'],
+                        [color_perc_rbound, '#000000']
+                    ]
+                else:
+                    stops = [
+                        [color_perc_lbound, '#FFFFFF'],
+                        [color_perc_lbound + ((color_perc_rbound - color_perc_lbound)/2), '#888888'],
+                        [color_perc_rbound, '#000000'],
+                    ]
+
+
+
                 xaxis_label = df.columns[1]
                 yaxis_label = df.columns[2]
-                df[df.columns[2]] = df[df.columns[2]].astype(np.float)
-                df = df.pivot_table(
-                    index=df.columns[1],
-                    columns=df.columns[0],
-                    values=df.columns[2], aggfunc=np.sum)
-            else:
-                # User provides columns (x, y, metric1, metric2, ...)
-                xaxis_label = df.columns[0]
-                yaxis_label = 'y'
-                df.index = df[df.columns[0]]
-                df = df.sort('ds')
-                del df[df.columns[0]]
-                for col in df.columns:
-                    df[col] = df[col].astype(np.float)
-
-            series = []
-            for col in df.columns:
+                data = []
+                for row in df.itertuples():
+                    data.append({
+                        'x': row[2],
+                        'y': row[3],
+                        'value': row[4],
+                    })
+                x_format = '{point.x:%Y-%m-%d}' if chart.x_is_date else '{point.x}'
                 series.append({
-                    'name': col,
-                    'data': [
-                        (i, v)
-                        for i, v in df[col].iteritems() if not np.isnan(v)]
+                    'data': data,
+                    'borderWidth': 0,
+                    'colsize': 24 * 36e5,
+                    'turboThreshold': sys.float_info.max,
+                    'tooltip': {
+                        'headerFormat': '',
+                        'pointFormat': (
+                            df.columns[1] + ': ' + x_format + '<br/>' +
+                            df.columns[2] + ': {point.y}<br/>' +
+                            df.columns[3] + ': <b>{point.value}</b>'
+                        ),
+                    },
                 })
-            series = [serie for serie in sorted(
-                series, key=lambda s: s['data'][0][1], reverse=True)]
+                colorAxis = {
+                    'stops': stops,
+                    'minColor': '#FFFFFF',
+                    'maxColor': '#000000',
+                    'min': 50,
+                    'max': 2200,
+                }
+            else:
+                if chart.sql_layout == 'series':
+                    # User provides columns (series, x, y)
+                    xaxis_label = df.columns[1]
+                    yaxis_label = df.columns[2]
+                    df[df.columns[2]] = df[df.columns[2]].astype(np.float)
+                    df = df.pivot_table(
+                        index=df.columns[1],
+                        columns=df.columns[0],
+                        values=df.columns[2], aggfunc=np.sum)
+                else:
+                    # User provides columns (x, y, metric1, metric2, ...)
+                    xaxis_label = df.columns[0]
+                    yaxis_label = 'y'
+                    df.index = df[df.columns[0]]
+                    df = df.sort('ds')
+                    del df[df.columns[0]]
+                    for col in df.columns:
+                        df[col] = df[col].astype(np.float)
+
+                for col in df.columns:
+                    series.append({
+                        'name': col,
+                        'data': [
+                            (i, v)
+                            for i, v in df[col].iteritems() if not np.isnan(v)]
+                    })
+                series = [serie for serie in sorted(
+                    series, key=lambda s: s['data'][0][1], reverse=True)]
 
             chart_type = chart.chart_type
             if chart.chart_type == "stacked_area":
@@ -325,11 +400,17 @@ class Airflow(BaseView):
                 'title': {'text': ''},
                 'xAxis': {
                     'title': {'text': xaxis_label},
-                    'type': 'datetime' if x_is_dt else None,
+                    'type': 'datetime' if chart.x_is_date else None,
                 },
                 'yAxis': {
                     'min': 0,
                     'title': {'text': yaxis_label},
+                },
+                'colorAxis': colorAxis,
+                'tooltip': {
+                    'useHTML': True,
+                    'backgroundColor': None,
+                    'borderWidth': 0,
                 },
                 'series': series,
             }
@@ -345,6 +426,7 @@ class Airflow(BaseView):
 
         def date_handler(obj):
             return obj.isoformat() if hasattr(obj, 'isoformat') else obj
+
         response = Response(
             response=json.dumps(payload, indent=4, default=date_handler),
             status=200,
@@ -970,6 +1052,7 @@ class ChartModelView(LoginMixin, ModelView):
         'db',
         'chart_type',
         'show_datatable',
+        'x_is_date',
         'y_log_scale',
         'show_sql',
         'height',
@@ -994,6 +1077,7 @@ class ChartModelView(LoginMixin, ModelView):
             ('stacked_area', 'Stacked Area Chart'),
             ('percent_area', 'Percent Area Chart'),
             ('datatable', 'No chart, data table only'),
+            ('heatmap', 'Heatmap'),
         ],
         'sql_layout': [
             ('series', 'SELECT series, x, y FROM ...'),
@@ -1002,7 +1086,7 @@ class ChartModelView(LoginMixin, ModelView):
     }
 
     def on_model_change(self, form, model, is_created):
-        if not model.user_id and flask_login.current_user:
+        if AUTHENTICATE and not model.user_id and flask_login.current_user:
             model.user_id = flask_login.current_user.id
 
 mv = ChartModelView(
