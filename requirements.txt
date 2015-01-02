@@ -4,6 +4,7 @@ flake8
 flask
 flask-admin
 flask-bootstrap
+flask-cache
 hive-thrift-py
 ipython[all]
 jinja2

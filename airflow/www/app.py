@@ -43,6 +43,7 @@ if AUTHENTICATE is False:
 
 dagbag = models.DagBag(conf.get('core', 'DAGS_FOLDER'))
 session = Session()
+settings.pessimistic_connection_handling()
 
 app = Flask(__name__)
 login_manager.init_app(app)
