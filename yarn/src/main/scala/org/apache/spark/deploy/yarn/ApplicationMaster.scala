@@ -102,7 +102,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
             logInfo("Invoking sc stop from shutdown hook")
             sc.stop()
           }
-          val maxAppAttempts = client.getMaxRegAttempts(yarnConf)
+          val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
           val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
 
           if (!finished) {

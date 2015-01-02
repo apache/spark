@@ -149,6 +149,14 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   In cluster mode, use spark.driver.extraJavaOptions instead.
   </td>
 </tr>
+<tr>
+  <td><code>spark.yarn.amMaxAttempts</code></td>
+  <td>YARN default</td>
+  <td>
+  The maximum number of ApplicationMaster attempts.
+  It should not be larger than the global number set by resourcemanager. Otherwise, it will be override.
+  </td>
+</tr>
 </table>
 
 # Launching Spark on YARN
