@@ -151,7 +151,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
 </tr>
 <tr>
   <td><code>spark.yarn.amMaxAttempts</code></td>
-  <td>YARN default</td>
+  <td>yarn.resourcemanager.am.max-attempts in YARN</td>
   <td>
   The maximum number of ApplicationMaster attempts.
   It should not be larger than the global number set by resourcemanager. Otherwise, it will be override.
