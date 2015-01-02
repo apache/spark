@@ -1160,5 +1160,5 @@ class Chart(Base):
     height = Column(Integer, default=600)
     default_params = Column(String(5000), default="{}")
     owner = relationship("User", cascade=False, cascade_backrefs=False)
-    db = relationship("DatabaseConnection")
     x_is_date = Column(Boolean, default=True)
+    db = relationship("DatabaseConnection")
