@@ -200,7 +200,8 @@ private[spark] object AkkaUtils extends Logging {
         case ie: InterruptedException => throw ie
         case e: Exception =>
           lastException = e
-          logWarning("Error sending message in " + attempts + " attempts", e)
+          logWarning("Error sending message [message = " + message + "]" +
+              " in " + attempts + " attempts", e)
       }
       Thread.sleep(retryInterval)
     }
