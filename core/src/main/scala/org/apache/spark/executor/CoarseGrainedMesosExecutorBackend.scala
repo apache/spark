@@ -49,7 +49,7 @@ private[spark] class CoarseGrainedMesosExecutorBackend(val sparkConf: SparkConf)
       frameworkInfo: FrameworkInfo,
       slaveInfo: SlaveInfo) {
     this.driver = driver
-    logInfo("Coarse Grain Mesos Executor '" + executorInfo.getExecutorId.getValue +
+    logInfo("Coarse Grained Mesos Executor '" + executorInfo.getExecutorId.getValue +
       "' is registered.")
 
     if (shuffleService == null) {
