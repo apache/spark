@@ -290,6 +290,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
       "--master", "local",
+      "--conf", "spark.ui.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -304,6 +305,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "--name", "testApp",
       "--master", "local-cluster[2,1,512]",
       "--jars", jarsString,
+      "--conf", "spark.ui.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
