@@ -965,8 +965,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val outfmt = job.getOutputFormatClass
     val jobFormat = outfmt.newInstance
 
-    val validationDisabled = PairRDDFunctions.disableOutputSpecValidation.value
-    if (!validationDisabled && self.conf.getBoolean("spark.hadoop.validateOutputSpecs", true)) {
+    if (isOutputSpecValidationEnabled) {
       // FileOutputFormat ignores the filesystem parameter
       jobFormat.checkOutputSpecs(job)
     }
@@ -1044,8 +1043,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
       valueClass.getSimpleName + ")")
 
-    val validationDisabled = PairRDDFunctions.disableOutputSpecValidation.value
-    if (!validationDisabled && self.conf.getBoolean("spark.hadoop.validateOutputSpecs", true)) {
+    if (isOutputSpecValidationEnabled) {
       // FileOutputFormat ignores the filesystem parameter
       val ignoredFs = FileSystem.get(hadoopConf)
       hadoopConf.getOutputFormat.checkOutputSpecs(ignoredFs, hadoopConf)
@@ -1120,6 +1118,14 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   private[spark] def valueClass: Class[_] = vt.runtimeClass
 
   private[spark] def keyOrdering: Option[Ordering[K]] = Option(ord)
+
+  // Note: this needs to be a function instead of a 'val' so that the disableOutputSpecValidation
+  // setting can take effect:
+  private def isOutputSpecValidationEnabled: Boolean = {
+    val validationDisabled = PairRDDFunctions.disableOutputSpecValidation.value
+    val enabledInConf = self.conf.getBoolean("spark.hadoop.validateOutputSpecs", true)
+    enabledInConf && !validationDisabled
+  }
 }
 
 private[spark] object PairRDDFunctions {
