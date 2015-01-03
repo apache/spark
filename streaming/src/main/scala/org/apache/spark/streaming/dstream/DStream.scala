@@ -26,7 +26,7 @@ import scala.reflect.ClassTag
 import scala.util.matching.Regex
 
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.rdd.{BlockRDD, RDD}
+import org.apache.spark.rdd.{BlockRDD, PairRDDFunctions, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext.rddToFileName
@@ -292,7 +292,13 @@ abstract class DStream[T: ClassTag] (
         // set this DStream's creation site, generate RDDs and then restore the previous call site.
         val prevCallSite = ssc.sparkContext.getCallSite()
         ssc.sparkContext.setCallSite(creationSite)
-        val rddOption = compute(time)
+        // Disable checks for existing output directories in jobs launched by the streaming
+        // scheduler, since we may need to write output to an existing directory during checkpoint
+        // recovery; see SPARK-4835 for more details. We need to have this call here because
+        // compute() might cause Spark jobs to be launched.
+        val rddOption = PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
+          compute(time)
+        }
         ssc.sparkContext.setCallSite(prevCallSite)
 
         rddOption.foreach { case newRDD =>

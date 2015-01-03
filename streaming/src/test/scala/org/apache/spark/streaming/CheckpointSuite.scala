@@ -255,6 +255,31 @@ class CheckpointSuite extends TestSuiteBase {
     }
   }
 
+  test("recovery with saveAsHadoopFile inside transform operation") {
+    // Regression test for SPARK-4835
+    val tempDir = Files.createTempDir()
+    try {
+      testCheckpointedOperation(
+        Seq(Seq("a", "a", "b"), Seq("", ""), Seq(), Seq("a", "a", "b"), Seq("", ""), Seq()),
+        (s: DStream[String]) => {
+          s.transform { (rdd, time) =>
+            val output = rdd.map(x => (x, 1)).reduceByKey(_ + _)
+            output.saveAsHadoopFile(
+              new File(tempDir, "result-" + time.milliseconds).getAbsolutePath,
+              classOf[Text],
+              classOf[IntWritable],
+              classOf[TextOutputFormat[Text, IntWritable]])
+            output
+          }
+        },
+        Seq(Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq(), Seq(("a", 2), ("b", 1)), Seq(("", 2)), Seq()),
+        3
+      )
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+
   // This tests whether the StateDStream's RDD checkpoints works correctly such
   // that the system can recover from a master failure. This assumes as reliable,
   // replayable input source - TestInputDStream.
