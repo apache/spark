@@ -25,14 +25,14 @@ import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.catalyst.types.IntegerType
 import org.apache.spark.sql.catalyst.CatalystConf
-import org.apache.spark.sql.catalyst.EmptyConf
+import org.apache.spark.sql.catalyst.test.SimpleConf
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
  * when all relations are already filled in and the analyser needs only to resolve attribute
  * references.
  */
-object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, EmptyConf)
+object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, new SimpleConf)
 
 /**
  * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
