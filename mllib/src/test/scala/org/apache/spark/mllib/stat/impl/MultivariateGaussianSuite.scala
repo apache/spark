@@ -28,26 +28,26 @@ class MultivariateGaussianSuite extends FunSuite with MLlibTestSparkContext {
     val x = Vectors.dense(0.0).toBreeze.toDenseVector
     
     val mu = Vectors.dense(0.0).toBreeze.toDenseVector
-    var sigma = Matrices.dense(1, 1, Array(1.0)).toBreeze.toDenseMatrix
-    var dist = new MultivariateGaussian(mu, sigma)
-    assert(dist.pdf(x) ~== 0.39894 absTol 1E-5)
+    val sigma1 = Matrices.dense(1, 1, Array(1.0)).toBreeze.toDenseMatrix
+    val dist1 = new MultivariateGaussian(mu, sigma1)
+    assert(dist1.pdf(x) ~== 0.39894 absTol 1E-5)
     
-    sigma = Matrices.dense(1, 1, Array(4.0)).toBreeze.toDenseMatrix
-    dist = new MultivariateGaussian(mu, sigma)
-    assert(dist.pdf(x) ~== 0.19947 absTol 1E-5)
+    val sigma2 = Matrices.dense(1, 1, Array(4.0)).toBreeze.toDenseMatrix
+    val dist2 = new MultivariateGaussian(mu, sigma2)
+    assert(dist2.pdf(x) ~== 0.19947 absTol 1E-5)
   }
   
   test("multivariate") {
     val x = Vectors.dense(0.0, 0.0).toBreeze.toDenseVector
     
     val mu = Vectors.dense(0.0, 0.0).toBreeze.toDenseVector
-    var sigma = Matrices.dense(2, 2, Array(1.0, 0.0, 0.0, 1.0)).toBreeze.toDenseMatrix
-    var dist = new MultivariateGaussian(mu, sigma)
-    assert(dist.pdf(x) ~== 0.15915 absTol 1E-5)
+    val sigma1 = Matrices.dense(2, 2, Array(1.0, 0.0, 0.0, 1.0)).toBreeze.toDenseMatrix
+    val dist1 = new MultivariateGaussian(mu, sigma1)
+    assert(dist1.pdf(x) ~== 0.15915 absTol 1E-5)
     
-    sigma = Matrices.dense(2, 2, Array(4.0, -1.0, -1.0, 2.0)).toBreeze.toDenseMatrix
-    dist = new MultivariateGaussian(mu, sigma)
-    assert(dist.pdf(x) ~== 0.060155 absTol 1E-5)
+    val sigma2 = Matrices.dense(2, 2, Array(4.0, -1.0, -1.0, 2.0)).toBreeze.toDenseMatrix
+    val dist2 = new MultivariateGaussian(mu, sigma2)
+    assert(dist2.pdf(x) ~== 0.060155 absTol 1E-5)
   }
   
   test("multivariate degenerate") {
