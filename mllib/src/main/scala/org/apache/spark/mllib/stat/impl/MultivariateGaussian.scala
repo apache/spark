@@ -22,7 +22,10 @@ import breeze.linalg.{DenseVector => DBV, DenseMatrix => DBM, max, diag, eigSym}
 import org.apache.spark.mllib.util.MLUtils
 
 /*
- * This class provides basic functionality for a Multivariate Gaussian (Normal) Distribution
+ * This class provides basic functionality for a Multivariate Gaussian (Normal) Distribution. In
+ * the event that the covariance matrix is singular, the density will be computed in a
+ * reduced dimensional subspace under which the distribution is supported.
+ * (see http://en.wikipedia.org/wiki/Multivariate_normal_distribution#Degenerate_case)
  * 
  * @param mu The mean vector of the distribution
  * @param sigma The covariance matrix of the distribution
@@ -31,7 +34,12 @@ private[mllib] class MultivariateGaussian(
     val mu: DBV[Double], 
     val sigma: DBM[Double]) extends Serializable {
 
-  private val (sigmaInv2, u) = calculateCovarianceConstants
+  /**
+   * Compute distribution dependent constants:
+   *    sigmaInv2 = (-1/2) * inv(sigma)
+   *    u = (2*pi)^(-k/2) * det(sigma)^(-1/2) 
+   */
+  private val (sigmaInv2: DBM[Double], u: Double) = calculateCovarianceConstants
   
   /** Returns density of this multivariate Gaussian at given point, x */
   def pdf(x: DBV[Double]): Double = {
@@ -39,7 +47,7 @@ private[mllib] class MultivariateGaussian(
     u * math.exp(delta.t * sigmaInv2 * delta)
   }
   
-  /*
+  /**
    * Calculate distribution dependent components used for the density function:
    *    pdf(x) = (2*pi)^(-k/2) * det(sigma)^(-1/2) * exp( (-1/2) * (x-mu).t * inv(sigma) * (x-mu) )
    * where k is length of the mean vector.
@@ -51,13 +59,12 @@ private[mllib] class MultivariateGaussian(
    *  
    * Both the determinant and the inverse can be computed from the singular value decomposition
    * of sigma.  Noting that covariance matrices are always symmetric and positive semi-definite,
-   * we can use the eigendecomposition (breeze provides one specifically for symmetric matrices,
-   * so I am making an assumption here that there is some efficiency gain).
+   * we can use the eigendecomposition.
    * 
    * To guard against singular covariance matrices, this method computes both the 
    * pseudo-determinant and the pseudo-inverse (Moore-Penrose).  Singular values are considered
    * to be non-zero only if they exceed a tolerance based on machine precision, matrix size, and
-   * relation to the maximum singular value (same tolerance used by, ie, Octave).
+   * relation to the maximum singular value (same tolerance used by, e.g., Octave).
    */
   private def calculateCovarianceConstants: (DBM[Double], Double) = {
     val eigSym.EigSym(d, u) = eigSym(sigma) // sigma = u * diag(d) * u.t
@@ -67,10 +74,10 @@ private[mllib] class MultivariateGaussian(
     val tol = MLUtils.EPSILON * max(d) * d.length
     
     // pseudo-determinant is product of all non-zero eigenvalues
-    val pdetSigma = (0 until d.length).map(i => if (d(i) > tol) d(i) else 1.0).reduce(_ * _)
+    val pdetSigma = d.activeValuesIterator.filter(_ > tol).reduce(_ * _)
     
     // calculate pseudo-inverse by inverting all non-zero eigenvalues
-    val pinvS = new DBV((0 until d.length).map(i => if (d(i) > tol) (1.0 / d(i)) else 0.0).toArray)
+    val pinvS = new DBV(d.map(v => if (v > tol) (1.0 / v) else 0.0).toArray)
     val pinvSigma = u * diag(pinvS) * u.t
     
     (pinvSigma * -0.5, math.pow(2.0 * math.Pi, -mu.length / 2.0) * math.pow(pdetSigma, -0.5))
