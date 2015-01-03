@@ -19,6 +19,7 @@ package org.apache.spark.mllib.linalg
 
 import breeze.linalg.{DenseMatrix => BDM, squaredDistance => breezeSquaredDistance}
 import org.scalatest.FunSuite
+import scala.util.Random
 
 import org.apache.spark.SparkException
 import org.apache.spark.mllib.util.TestingUtils._
@@ -176,39 +177,30 @@ class VectorsSuite extends FunSuite {
   }
 
   test("sqdist") {
-    val a = (30 to 0 by -1).map(math.pow(2.0, _)).toArray
-    val n = a.length
-    val v1 = Vectors.dense(a)
-    for (m <- 0 until n) {
-      val indices = (0 to m).toArray
-      val values = indices.map(i => a(i))
-      val v2 = Vectors.sparse(n, indices, values)
-      val v3 = Vectors.sparse(n, indices, indices.map(i => a(i) + 0.5))
+    val random = new Random(System.nanoTime())
+    for (m <- 1 until 1000) {
+      val length = random.nextInt(m) + 1
 
-      // DenseVector vs. SparseVector
-      val squaredDist = breezeSquaredDistance(v1.toBreeze, v2.toBreeze)
-      val fastSquaredDist1 = Vectors.sqdist(v1, v2)
-      assert(fastSquaredDist1 == squaredDist)
+      val indices1 = random.shuffle(0 to m - 1).toArray.slice(0, length).sorted
+      val values1 = indices1.map(i => random.nextInt(m) * random.nextDouble())
+      val sparseVector1 = Vectors.sparse(m, indices1, values1)
 
-      // DenseVector vs. DenseVector
-      val fastSquaredDist2 = Vectors.sqdist(v1, Vectors.dense(v2.toArray))
-      assert(fastSquaredDist2 === squaredDist)
+      val indices2 = random.shuffle(0 to m - 1).toArray.slice(0, length).sorted
+      val values2 = indices2.map(i => random.nextInt(m) * random.nextDouble())
+      val sparseVector2 = Vectors.sparse(m, indices2, values2)
 
-      // SparseVector vs. SparseVector
-      val squaredDist2 = breezeSquaredDistance(v2.toBreeze, v3.toBreeze)
-      val fastSquaredDist3 = Vectors.sqdist(v2, v3)
-      assert(fastSquaredDist3 === squaredDist2)
+      val denseVector1 = Vectors.dense(sparseVector1.toArray)
+      val denseVector2 = Vectors.dense(sparseVector2.toArray)
 
-      // SparseVector vs. SparseVector: with values at different indices
-      if (m > 10) {
-        val v4 = Vectors.sparse(n, indices.slice(0, m - 10),
-          indices.map(i => a(i) + 0.5).slice(0, m - 10))
-        val squaredDist = breezeSquaredDistance(v2.toBreeze, v4.toBreeze)
-        val fastSquaredDist =
-          Vectors.sqdist(v2, v4)
-        assert(fastSquaredDist === squaredDist)
-      }
-    }
+      val squaredDist = breezeSquaredDistance(sparseVector1.toBreeze, sparseVector2.toBreeze)
+
+      // SparseVector vs. SparseVector 
+      assert(Vectors.sqdist(sparseVector1, sparseVector2) === squaredDist) 
+      // DenseVector  vs. SparseVector
+      assert(Vectors.sqdist(denseVector1, sparseVector2) === squaredDist)
+      // DenseVector  vs. DenseVector
+      assert(Vectors.sqdist(denseVector1, denseVector2) === squaredDist)
+    }    
   }
 
   test("foreachActive") {
