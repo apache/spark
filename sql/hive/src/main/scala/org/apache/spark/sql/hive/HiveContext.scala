@@ -73,6 +73,9 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
+  /* By default it should be case insensitive to match Hive */
+  setConf(CatalystConf.CASE_SENSITIVE, "false")
+
   // Change the default SQL dialect to HiveQL
   override private[spark] def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
 
@@ -248,9 +251,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     super.setConf(key, value)
     runSqlHive(s"SET $key=$value")
   }
-
-  /* By default it should be case insensitive to match Hive */
-  this.setConf(CatalystConf.CASE_SENSITIVE, "false")
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
