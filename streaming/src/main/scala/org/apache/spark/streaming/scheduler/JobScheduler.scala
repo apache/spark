@@ -40,8 +40,6 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
 
   private val jobSets = new ConcurrentHashMap[Time, JobSet]
   private val numConcurrentJobs = ssc.conf.getInt("spark.streaming.concurrentJobs", 1)
-  private val validateOutputSpecs =
-    ssc.conf.getBoolean("spark.streaming.hadoop.validateOutputSpecs", false)
   private val jobExecutor = Executors.newFixedThreadPool(numConcurrentJobs)
   private val jobGenerator = new JobGenerator(this)
   val clock = jobGenerator.clock
@@ -174,7 +172,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       // Disable checks for existing output directories in jobs launched by the streaming scheduler,
       // since we may need to write output to an existing directory during checkpoint recovery;
       // see SPARK-4835 for more details.
-      PairRDDFunctions.disableOutputSpecValidation.withValue(!validateOutputSpecs) {
+      PairRDDFunctions.disableOutputSpecValidation.withValue(true) {
         job.run()
       }
       eventActor ! JobCompleted(job)
