@@ -1130,10 +1130,10 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
 private[spark] object PairRDDFunctions {
   val RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES = 256
+
   /**
-   * Used by Spark Streaming in order to bypass the `spark.hadoop.validateOutputSpecs` checks
-   * for save actions launched by Spark Streaming, since the validation may break Spark Streaming's
-   * ability to recover from checkpoints.  See SPARK-4835 for more details.
+   * Allows for the `spark.hadoop.validateOutputSpecs` checks to be disabled on a case-by-case
+   * basis; see SPARK-4835 for more details.
    */
   val disableOutputSpecValidation: DynamicVariable[Boolean] = new DynamicVariable[Boolean](false)
 }
