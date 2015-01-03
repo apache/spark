@@ -182,11 +182,11 @@ class VectorsSuite extends FunSuite {
       val length = random.nextInt(m) + 1
 
       val indices1 = random.shuffle(0 to m - 1).toArray.slice(0, length).sorted
-      val values1 = indices1.map(i => random.nextInt(m) * random.nextDouble())
+      val values1 = indices1.map(i => random.nextInt(m + 1) * random.nextDouble())
       val sparseVector1 = Vectors.sparse(m, indices1, values1)
 
       val indices2 = random.shuffle(0 to m - 1).toArray.slice(0, length).sorted
-      val values2 = indices2.map(i => random.nextInt(m) * random.nextDouble())
+      val values2 = indices2.map(i => random.nextInt(m + 1) * random.nextDouble())
       val sparseVector2 = Vectors.sparse(m, indices2, values2)
 
       val denseVector1 = Vectors.dense(sparseVector1.toArray)
