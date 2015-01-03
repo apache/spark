@@ -54,6 +54,15 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrices.rand")
           ) ++ Seq(
+            // SPARK-3325
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.api.java.JavaDStreamLike.print"),
+            // SPARK-2757
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.streaming.flume.sink.SparkAvroCallbackHandler." +
+                "removeAndGetProcessor")
+          ) ++ Seq(
+            // SPARK-4014
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.TaskContext.taskAttemptId"),
             ProblemFilters.exclude[MissingMethodProblem](
