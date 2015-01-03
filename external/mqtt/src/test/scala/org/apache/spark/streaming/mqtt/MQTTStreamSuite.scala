@@ -45,7 +45,7 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
 
   before {
     ssc = new StreamingContext(master, framework, batchDuration)
-    setupMQTT
+    setupMQTT()
   }
 
   after {
@@ -54,7 +54,7 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
       ssc = null
     }
     Utils.deleteRecursively(persistenceDir)
-    tearDownMQTT
+    tearDownMQTT()
   }
 
   test("mqtt input stream") {
@@ -115,13 +115,10 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
         val message: MqttMessage = new MqttMessage(data.getBytes("utf-8"))
         message.setQos(1)
         message.setRetained(true)
-        for (i <- 0 to 10)
+        for (i <- 0 to 100)
           msgTopic.publish(message)
       }
-    } catch {
-      case e: MqttException => println("Exception Caught: " + e)
-    }
-    finally {
+    } finally {
       client.disconnect()
       client.close()
       client = null
