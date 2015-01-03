@@ -21,7 +21,7 @@ import breeze.linalg.{DenseVector => DBV, DenseMatrix => DBM, max, diag, eigSym}
 
 import org.apache.spark.mllib.util.MLUtils
 
-/*
+/**
  * This class provides basic functionality for a Multivariate Gaussian (Normal) Distribution. In
  * the event that the covariance matrix is singular, the density will be computed in a
  * reduced dimensional subspace under which the distribution is supported.
@@ -73,13 +73,18 @@ private[mllib] class MultivariateGaussian(
     // This prevents any inverted value from exceeding (eps * n * max(d))^-1
     val tol = MLUtils.EPSILON * max(d) * d.length
     
-    // pseudo-determinant is product of all non-zero eigenvalues
-    val pdetSigma = d.activeValuesIterator.filter(_ > tol).reduce(_ * _)
+    try {
+      // pseudo-determinant is product of all non-zero singular values
+      val pdetSigma = d.activeValuesIterator.filter(_ > tol).reduce(_ * _)
+      
+      // calculate pseudo-inverse by inverting all non-zero singular values
+      val pinvS = new DBV(d.map(v => if (v > tol) (1.0 / v) else 0.0).toArray)
+      val pinvSigma = u * diag(pinvS) * u.t
     
-    // calculate pseudo-inverse by inverting all non-zero eigenvalues
-    val pinvS = new DBV(d.map(v => if (v > tol) (1.0 / v) else 0.0).toArray)
-    val pinvSigma = u * diag(pinvS) * u.t
-    
-    (pinvSigma * -0.5, math.pow(2.0 * math.Pi, -mu.length / 2.0) * math.pow(pdetSigma, -0.5))
+      (pinvSigma * -0.5, math.pow(2.0 * math.Pi, -mu.length / 2.0) * math.pow(pdetSigma, -0.5))
+    } catch {
+      case uex: UnsupportedOperationException =>
+        throw new IllegalArgumentException("Covariance matrix has no non-zero singular values")
+    }
   }
 }
