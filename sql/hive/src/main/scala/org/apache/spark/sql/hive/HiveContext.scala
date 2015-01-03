@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DecimalType
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.execution.{SparkPlan, ExecutedCommand, ExtractPythonUdfs, QueryExecutionException}
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTableCommand}
 import org.apache.spark.sql.sources.DataSourceStrategy
@@ -248,9 +249,13 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     runSqlHive(s"SET $key=$value")
   }
 
+  /* By default it should be case insensitive to match Hive */
+  this.setConf(CatalystConf.CASE_SENSITIVE, "false")
+
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   @transient
-  override protected[sql] lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
+  override protected[sql] lazy val catalog =
+    new HiveMetastoreCatalog(this, this) with OverrideCatalog
 
   // Note that HiveUDFs will be overridden by functions registered in this context.
   @transient
@@ -260,7 +265,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /* An analyzer that uses the Hive metastore. */
   @transient
   override protected[sql] lazy val analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = false) {
+    new Analyzer(catalog, functionRegistry, this) {
       override val extendedRules =
         catalog.CreateTables ::
         catalog.PreInsertionCasts ::

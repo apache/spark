@@ -58,14 +58,14 @@ class SQLContext(@transient val sparkContext: SparkContext)
   self =>
 
   @transient
-  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(true)
+  protected[sql] lazy val catalog: Catalog = new SimpleCatalog(this)
 
   @transient
   protected[sql] lazy val functionRegistry: FunctionRegistry = new SimpleFunctionRegistry
 
   @transient
   protected[sql] lazy val analyzer: Analyzer =
-    new Analyzer(catalog, functionRegistry, caseSensitive = true)
+    new Analyzer(catalog, functionRegistry, this)
 
   @transient
   protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
