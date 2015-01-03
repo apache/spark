@@ -76,9 +76,21 @@ import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, Bernoulli
  * on RDD internals.
  */
 abstract class RDD[T: ClassTag](
-    @transient private var sc: SparkContext,
+    @transient private var _sc: SparkContext,
     @transient private var deps: Seq[Dependency[_]]
   ) extends Serializable with Logging {
+
+  if (classOf[RDD[_]].isAssignableFrom(elementClassTag.runtimeClass)) {
+    throw new SparkException("Spark does not support nested RDDs (see SPARK-5063)")
+  }
+
+  private def sc: SparkContext = {
+    if (_sc == null) {
+      throw new SparkException(
+        "Can only define RDDs and perform actions on the driver, not in tasks (see SPARK-5063)")
+    }
+    _sc
+  }
 
   /** Construct an RDD with just a one-to-one dependency on one parent */
   def this(@transient oneParent: RDD[_]) =

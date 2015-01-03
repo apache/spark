@@ -897,4 +897,23 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       mutableDependencies += dep
     }
   }
+
+  test("Nested RDDs are not supported (SPARK-5063)") {
+    val rdd: RDD[Int] = sc.parallelize(1 to 100)
+    val rdd2: RDD[Int] = sc.parallelize(1 to 100)
+    val thrown = intercept[SparkException] {
+      val nestedRDD: RDD[RDD[Int]] = rdd.mapPartitions { x => Seq(rdd2.map(x => x)).iterator }
+    }
+    assert(thrown.getMessage.contains("SPARK-5063"))
+    assert(thrown.getMessage.toLowerCase.contains("nested"))
+  }
+
+  test("Actions cannot be performed inside of transformations (SPARK-5063)") {
+    val rdd: RDD[Int] = sc.parallelize(1 to 100)
+    val rdd2: RDD[Int] = sc.parallelize(1 to 100)
+    val thrown = intercept[SparkException] {
+      rdd.map(x => x * rdd2.count).collect()
+    }
+    assert(thrown.getMessage.contains("SPARK-5063"))
+  }
 }
