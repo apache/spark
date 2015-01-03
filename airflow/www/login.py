@@ -15,7 +15,6 @@ def load_user(userid):
     session = settings.Session()
     user = session.query(User).filter(User.id == userid).first()
     if not user:
-    	#user = User(username=username)
         raise Exception(userid)
     session.expunge_all()
     session.commit()

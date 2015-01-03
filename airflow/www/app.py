@@ -21,7 +21,6 @@ from pygments.lexers import PythonLexer, SqlLexer, BashLexer
 from pygments.formatters import HtmlFormatter
 
 import jinja2
-
 import markdown
 import chartkick
 
@@ -32,10 +31,12 @@ from airflow.models import State
 from airflow import settings
 from airflow.configuration import conf
 from airflow import utils
+from airflow.www import utils as wwwutils
 
 from airflow.www.login import login_manager
 import flask_login
 from flask_login import login_required
+
 
 AUTHENTICATE = conf.getboolean('core', 'AUTHENTICATE')
 if AUTHENTICATE is False:
@@ -51,38 +52,12 @@ app.secret_key = 'airflowified'
 
 cache = Cache(app=app, config={'CACHE_TYPE': 'filesystem', 'CACHE_DIR': '/tmp'})
 
-
-def make_cache_key(*args, **kwargs):
-    path = request.path
-    args = str(hash(frozenset(request.args.items())))
-    return (path + args).encode('ascii', 'ignore')
-
 # Init for chartkick, the python wrapper for highcharts
 ck = Blueprint(
     'ck_page', __name__,
     static_folder=chartkick.js(), static_url_path='/static')
 app.register_blueprint(ck, url_prefix='/ck')
 app.jinja_env.add_extension("chartkick.ext.charts")
-
-
-class AceEditorWidget(wtforms.widgets.TextArea):
-    """
-    Renders an ACE code editor.
-    """
-    def __call__(self, field, **kwargs):
-        kwargs.setdefault('id', field.id)
-        html = '''
-        <div id="{el_id}" style="height:100px;">{contents}</div>
-        <textarea
-            id="{el_id}_ace" name="{form_name}"
-            style="display:none;visibility:hidden;">
-        </textarea>
-        '''.format(
-            el_id=kwargs.get('id', field.id),
-            contents=escape(text_type(field._value())),
-            form_name=field.id,
-        )
-        return wtforms.widgets.core.HTMLString(html)
 
 
 class DateTimeForm(Form):
@@ -172,7 +147,7 @@ class Airflow(BaseView):
 
         class QueryForm(Form):
             db_id = SelectField("Layout", choices=db_choices)
-            sql = TextAreaField("SQL", widget=AceEditorWidget())
+            sql = TextAreaField("SQL", widget=wwwutils.AceEditorWidget())
         data = {
             'db_id': db_id_str,
             'sql': sql,
@@ -210,7 +185,8 @@ class Airflow(BaseView):
 
     @expose('/chart_data')
     @login_required
-    @cache.cached(timeout=3600, key_prefix=make_cache_key)
+    @wwwutils.gzipped
+    @cache.cached(timeout=3600, key_prefix=wwwutils.make_cache_key)
     def chart_data(self):
         session = settings.Session()
         chart_id = request.args.get('chart_id')
@@ -310,11 +286,13 @@ class Airflow(BaseView):
                 else:
                     stops = [
                         [color_perc_lbound, '#FFFFFF'],
-                        [color_perc_lbound + ((color_perc_rbound - color_perc_lbound)/2), '#888888'],
+                        [
+                            color_perc_lbound +
+                            ((color_perc_rbound - color_perc_lbound)/2),
+                            '#888888'
+                        ],
                         [color_perc_rbound, '#000000'],
                     ]
-
-
 
                 xaxis_label = df.columns[1]
                 yaxis_label = df.columns[2]
@@ -325,7 +303,8 @@ class Airflow(BaseView):
                         'y': row[3],
                         'value': row[4],
                     })
-                x_format = '{point.x:%Y-%m-%d}' if chart.x_is_date else '{point.x}'
+                x_format = '{point.x:%Y-%m-%d}' \
+                    if chart.x_is_date else '{point.x}'
                 series.append({
                     'data': data,
                     'borderWidth': 0,
@@ -477,6 +456,13 @@ class Airflow(BaseView):
     def noaccess(self):
         return self.render('airflow/noaccess.html')
 
+    @expose('/headers')
+    def headers(self):
+        d = {k: v for k, v in request.headers}
+        return Response(
+            response=json.dumps(d, indent=4),
+            status=200, mimetype="application/json")
+
     @expose('/login')
     def login(u):
         session = settings.Session()
@@ -487,11 +473,14 @@ class Airflow(BaseView):
         has_access = role in request.headers.get('X-Internalauth-Groups')
 
         d = {k: v for k, v in request.headers}
-        import urllib2
-        cookie = urllib2.unquote(d.get('Cookie'))
-        cookie = ''.join(cookie.split('j:')[1:]).split('; _ga=')[0]
-        cookie = json.loads(cookie)
-        email = str(cookie['data']['userData']['mail'][0])
+        try:
+            import urllib2
+            cookie = urllib2.unquote(d.get('Cookie'))
+            cookie = ''.join(cookie.split('j:')[1:]).split('; _ga=')[0]
+            cookie = json.loads(cookie)
+            email = str(cookie['data']['userData']['mail'][0])
+        except:
+            email = ""
         if has_access:
             user = session.query(models.User).filter(
                 models.User.username == username).first()
@@ -499,6 +488,7 @@ class Airflow(BaseView):
                 user = models.User(username=username)
             user.email = email
             session.merge(user)
+            session.commit()
             flask_login.login_user(user)
             session.commit()
             session.close()
@@ -1042,7 +1032,9 @@ def label_link(v, c, m, p):
         default_params = eval(m.default_params)
     except:
         default_params = {}
-    url = url_for('airflow.chart', chart_id=m.id, **default_params)
+    url = url_for(
+        'airflow.chart', chart_id=m.id, iteration_no=m.iteration_no,
+        **default_params)
     return Markup("<a href='{url}'>{m.label}</a>".format(**locals()))
 
 
@@ -1087,6 +1079,7 @@ class ChartModelView(LoginMixin, ModelView):
     }
 
     def on_model_change(self, form, model, is_created):
+        model.iteration_no += 1
         if AUTHENTICATE and not model.user_id and flask_login.current_user:
             model.user_id = flask_login.current_user.id
 
