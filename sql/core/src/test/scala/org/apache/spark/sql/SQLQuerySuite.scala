@@ -19,10 +19,10 @@ package org.apache.spark.sql
 
 import java.util.TimeZone
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.CatalystConf
+import org.scalatest.BeforeAndAfterAll
 
 /* Implicits */
 import org.apache.spark.sql.TestData._
@@ -987,6 +987,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     )
   }
 
+  test("oder by asc by default when not specify ascending and descending") {
+    checkAnswer(
+      sql("SELECT a, b FROM testData2 ORDER BY a desc, b"),
+      Seq((3, 1), (3, 2), (2, 1), (2,2), (1, 1), (1, 2))
+    )
+  }
+
   test("Supporting relational operator '<=>' in Spark SQL") {
     val nullCheckData1 = TestData(1,"1") :: TestData(2,null) :: Nil
     val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
@@ -1004,5 +1011,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
     rdd.registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), 2)
+  }
+
+  test("SPARK-4699 case sensitivity SQL query") {
+    setConf(CatalystConf.CASE_SENSITIVE, "false")
+    val data = TestData(1,"val_1") :: TestData(2,"val_2") :: Nil
+    val rdd = sparkContext.parallelize((0 to 1).map(i => data(i)))
+    rdd.registerTempTable("testTable1")
+    checkAnswer(sql("SELECT VALUE FROM TESTTABLE1 where KEY = 1"), "val_1")
+    setConf(CatalystConf.CASE_SENSITIVE, "true")
   }
 }

@@ -65,11 +65,11 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
     val logPath = new Path(eventLogger.logPath + EventLoggingListener.IN_PROGRESS)
     assert(fileSystem.exists(logPath))
     val logStatus = fileSystem.getFileStatus(logPath)
-    assert(logStatus.isFile)
+    assert(!logStatus.isDir)
 
     // Verify log is renamed after stop()
     eventLogger.stop()
-    assert(fileSystem.getFileStatus(new Path(eventLogger.logPath)).isFile())
+    assert(!fileSystem.getFileStatus(new Path(eventLogger.logPath)).isDir)
   }
 
   test("Basic event logging") {
