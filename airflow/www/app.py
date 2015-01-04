@@ -113,18 +113,8 @@ admin = Admin(
 admin.add_link(
     base.MenuLink(
         category='Tools',
-        name='Query',
+        name='Ad Hoc Query',
         url='/admin/airflow/query'))
-admin.add_link(
-    base.MenuLink(
-        category='Docs',
-        name='@readthedocs.org',
-        url='http://airflow.readthedocs.org/en/latest/'))
-admin.add_link(
-    base.MenuLink(
-        category='Docs',
-        name='Github',
-        url='https://github.com/mistercrunch/Airflow'))
 
 
 class Airflow(BaseView):
@@ -269,13 +259,13 @@ class Airflow(BaseView):
 
                 if color_scheme == 'blue_red':
                     stops = [
-                        [color_perc_lbound, '#3060CF'],
+                        [color_perc_lbound, '#00D1C1'],
                         [
                             color_perc_lbound +
                             ((color_perc_rbound - color_perc_lbound)/2),
-                            '#FFFBBC'
+                            '#FFFFCC'
                         ],
-                        [color_perc_rbound, '#C4463A']
+                        [color_perc_rbound, '#FF5A5F']
                     ]
                 elif color_scheme == 'blue_scale':
                     stops = [
@@ -1133,3 +1123,14 @@ mv = ChartModelView(
     models.Chart, session,
     name="Charts", category="Tools")
 admin.add_view(mv)
+
+admin.add_link(
+    base.MenuLink(
+        category='Docs',
+        name='@readthedocs.org',
+        url='http://airflow.readthedocs.org/en/latest/'))
+admin.add_link(
+    base.MenuLink(
+        category='Docs',
+        name='Github',
+        url='https://github.com/mistercrunch/Airflow'))

@@ -11,7 +11,7 @@
 {% endblock %}
 
 {% block body %}
-  <h2>Query</h2>
+  <h2>Ad Hoc Query</h2>
   <form method="get">
     <div class="form-inline">
       {{ form.db_id }}
@@ -34,21 +34,23 @@
     $( document ).ready(function() {
         var editor = ace.edit("sql");
         var textarea = $('textarea[name="sql"]').hide();
+        function sync() {
+            textarea.val(editor.getSession().getValue());
+        }
         editor.setTheme("ace/theme/crimson_editor");
         editor.setOptions({
             minLines: 3,
             maxLines: Infinity,
         });
         editor.getSession().setMode("ace/mode/sql");
-        editor.getSession().on('change', function(){
-            textarea.val(editor.getSession().getValue());
-        });
+        editor.getSession().on('change', sync);
         editor.focus(); 
         $('table.dataframe').dataTable({
             "scrollX": true,
             "iDisplayLength": 25,
         });
         $('select').addClass("form-control");
+        sync();
     });
   </script>
 {% endblock %}

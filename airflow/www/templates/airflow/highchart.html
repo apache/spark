@@ -22,6 +22,17 @@
     padding: 8px;
     z-index: 2;
   }
+.panel-heading .accordion-toggle:after {
+    /* symbol for "opening" panels */
+    font-family: 'Glyphicons Halflings';  /* essential for enabling glyphicon */
+    content: "\e114";    /* adjust as needed, taken from bootstrap.css */
+    float: right;        /* adjust as needed */
+    color: grey;         /* adjust as needed */
+}
+.panel-heading .accordion-toggle.collapsed:after {
+    /* symbol for "collapsed" panels */
+    content: "\e080";    /* adjust as needed, taken from bootstrap.css */
+}
 </style>
 {% endblock %}
 {% block title %}
@@ -45,10 +56,8 @@
       <div class="panel panel-default">
         <div class="panel-heading" role="tab" id="headingTwo">
           <h4 class="panel-title">
-            <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#sql_panel" aria-expanded="true" aria-controls="sql_panel">
+            <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion" href="#sql_panel" aria-expanded="true" aria-controls="sql_panel">
                     SQL
-                    <span class="glyphicon glyphicon-chevron-up" aria-hidden="true"></span>
-                    <span class="glyphicon glyphicon-chevron-down" aria-hidden="true"></span>
             </a>
           </h4>
         </div>
@@ -63,10 +72,8 @@
       <div id="chart_section" class="panel panel-default">
         <div class="panel-heading" role="tab" id="headingTwo">
           <h4 class="panel-title">
-            <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#chart_panel" aria-expanded="true" aria-controls="chart_panel">
+            <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion" href="#chart_panel" aria-expanded="true" aria-controls="chart_panel">
                 Chart
-                <span class="glyphicon glyphicon-chevron-up" aria-hidden="true"></span>
-                <span class="glyphicon glyphicon-chevron-down" aria-hidden="true"></span>
             </a>
           </h4>
         </div>
@@ -83,10 +90,8 @@
       <div id="datatable_section" class="panel panel-default">
         <div class="panel-heading" role="tab" id="headingTwo">
           <h4 class="panel-title">
-            <a class="collapsed" data-toggle="collapse" data-parent="#accordion" href="#datatable_panel" aria-expanded="true" aria-controls="datatable_panel">
+            <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion" href="#datatable_panel" aria-expanded="true" aria-controls="datatable_panel">
                     Data
-                    <span class="glyphicon glyphicon-chevron-up" aria-hidden="true"></span>
-                    <span class="glyphicon glyphicon-chevron-down" aria-hidden="true"></span>
             </a>
           </h4>
         </div>
