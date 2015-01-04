@@ -19,7 +19,16 @@
             textarea.val(editor.getSession().getValue());
         });
         editor.focus(); 
+
+        // Getting column_descriptions in tooltips
         $(":checkbox").removeClass("form-control");
+        $("span.help-block").each(function(){
+            $(this).parent().attr("title", $(this).text());
+            $(this).parent().attr("data-toggle", "tooltip");
+            $(this).remove();
+        });
+
+        $('[data-toggle="tooltip"]').tooltip();
     });
   </script>
 {% endblock %}

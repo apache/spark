@@ -2,9 +2,7 @@ import sys
 
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy import create_engine
-from sqlalchemy import event
 from sqlalchemy import exc
-from sqlalchemy.pool import Pool
 
 from airflow.configuration import conf
 
@@ -15,20 +13,6 @@ _____  |__|_______/ ____\  |   ______  _  __
  / __ \|  ||  | \/|  |  |  |_(  <_> )     /
 (____  /__||__|   |__|  |____/\____/ \/\_/
      \/"""
-
-def pessimistic_connection_handling():
-    @event.listens_for(Pool, "checkout")
-    def ping_connection(dbapi_connection, connection_record, connection_proxy):
-        '''
-        Disconnect Handling - Pessimistic, taken from:
-        http://docs.sqlalchemy.org/en/rel_0_9/core/pooling.html
-        '''
-        cursor = dbapi_connection.cursor()
-        try:
-            cursor.execute("SELECT 1")
-        except:
-            raise exc.DisconnectionError()
-        cursor.close()
 
 
 BASE_FOLDER = conf.get('core', 'BASE_FOLDER')

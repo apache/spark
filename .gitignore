@@ -11,3 +11,4 @@ logs
 *.cfg
 MANIFEST
 secrets.py
+*.egg-info

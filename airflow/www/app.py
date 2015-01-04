@@ -2,16 +2,16 @@ from datetime import datetime, timedelta
 import dateutil.parser
 import json
 import logging
+import sys
 
 from flask import Flask, url_for, Markup, Blueprint, redirect, flash, Response
 from flask.ext.admin import Admin, BaseView, expose, AdminIndexView
 from flask.ext.admin.form import DateTimePickerWidget
 from flask.ext.admin import base
 from flask.ext.admin.contrib.sqla import ModelView
+from flask.ext.cache import Cache
 from flask import request
 from wtforms import Form, DateTimeField, SelectField, TextAreaField
-from cgi import escape
-from wtforms.compat import text_type
 import wtforms
 
 from pygments import highlight
@@ -19,7 +19,6 @@ from pygments.lexers import PythonLexer, SqlLexer, BashLexer
 from pygments.formatters import HtmlFormatter
 
 import jinja2
-
 import markdown
 import chartkick
 
@@ -30,10 +29,12 @@ from airflow.models import State
 from airflow import settings
 from airflow.configuration import conf
 from airflow import utils
+from airflow.www import utils as wwwutils
 
 from airflow.www.login import login_manager
 import flask_login
 from flask_login import login_required
+
 
 AUTHENTICATE = conf.getboolean('core', 'AUTHENTICATE')
 if AUTHENTICATE is False:
@@ -41,10 +42,16 @@ if AUTHENTICATE is False:
 
 dagbag = models.DagBag(conf.get('core', 'DAGS_FOLDER'))
 session = Session()
+utils.pessimistic_connection_handling()
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_POOL_RECYCLE'] = 3600
+
 login_manager.init_app(app)
 app.secret_key = 'airflowified'
+
+cache = Cache(
+    app=app, config={'CACHE_TYPE': 'filesystem', 'CACHE_DIR': '/tmp'})
 
 # Init for chartkick, the python wrapper for highcharts
 ck = Blueprint(
@@ -52,26 +59,6 @@ ck = Blueprint(
     static_folder=chartkick.js(), static_url_path='/static')
 app.register_blueprint(ck, url_prefix='/ck')
 app.jinja_env.add_extension("chartkick.ext.charts")
-
-
-class AceEditorWidget(wtforms.widgets.TextArea):
-    """
-    Renders an ACE code editor.
-    """
-    def __call__(self, field, **kwargs):
-        kwargs.setdefault('id', field.id)
-        html = '''
-        <div id="{el_id}" style="height:100px;">{contents}</div>
-        <textarea
-            id="{el_id}_ace" name="{form_name}"
-            style="display:none;visibility:hidden;">
-        </textarea>
-        '''.format(
-            el_id=kwargs.get('id', field.id),
-            contents=escape(text_type(field._value())),
-            form_name=field.id,
-        )
-        return wtforms.widgets.core.HTMLString(html)
 
 
 class DateTimeForm(Form):
@@ -126,18 +113,8 @@ admin = Admin(
 admin.add_link(
     base.MenuLink(
         category='Tools',
-        name='Query',
+        name='Ad Hoc Query',
         url='/admin/airflow/query'))
-admin.add_link(
-    base.MenuLink(
-        category='Docs',
-        name='@readthedocs.org',
-        url='http://airflow.readthedocs.org/en/latest/'))
-admin.add_link(
-    base.MenuLink(
-        category='Docs',
-        name='Github',
-        url='https://github.com/mistercrunch/Airflow'))
 
 
 class Airflow(BaseView):
@@ -161,7 +138,7 @@ class Airflow(BaseView):
 
         class QueryForm(Form):
             db_id = SelectField("Layout", choices=db_choices)
-            sql = TextAreaField("SQL", widget=AceEditorWidget())
+            sql = TextAreaField("SQL", widget=wwwutils.AceEditorWidget())
         data = {
             'db_id': db_id_str,
             'sql': sql,
@@ -199,6 +176,8 @@ class Airflow(BaseView):
 
     @expose('/chart_data')
     @login_required
+    @wwwutils.gzipped
+    @cache.cached(timeout=3600, key_prefix=wwwutils.make_cache_key)
     def chart_data(self):
         session = settings.Session()
         chart_id = request.args.get('chart_id')
@@ -259,47 +238,120 @@ class Airflow(BaseView):
 
             # Trying to convert time to something Highcharts likes
             x_col = 1 if chart.sql_layout == 'series' else 0
-            x_is_dt = True
-            df[df.columns[x_col]] = pd.to_datetime(df[df.columns[x_col]])
-            try:
-                # From string to datetime
-                df[df.columns[x_col]] = pd.to_datetime(df[df.columns[x_col]])
-            except Exception as e:
-                x_is_dt = False
-                raise Exception(str(e))
-            if x_is_dt:
+            if chart.x_is_date:
+                try:
+                    # From string to datetime
+                    df[df.columns[x_col]] = pd.to_datetime(
+                        df[df.columns[x_col]])
+                except Exception as e:
+                    raise Exception(str(e))
                 df[df.columns[x_col]] = df[df.columns[x_col]].apply(
                     lambda x: int(x.strftime("%s")) * 1000)
 
-            if chart.sql_layout == 'series':
-                # User provides columns (series, x, y)
+            series = []
+            colorAxis = None
+            if chart.chart_type == 'heatmap':
+                color_perc_lbound = float(
+                    request.args.get('color_perc_lbound', 0))
+                color_perc_rbound = float(
+                    request.args.get('color_perc_rbound', 1))
+                color_scheme = request.args.get('color_scheme', 'blue_red')
+
+                if color_scheme == 'blue_red':
+                    stops = [
+                        [color_perc_lbound, '#00D1C1'],
+                        [
+                            color_perc_lbound +
+                            ((color_perc_rbound - color_perc_lbound)/2),
+                            '#FFFFCC'
+                        ],
+                        [color_perc_rbound, '#FF5A5F']
+                    ]
+                elif color_scheme == 'blue_scale':
+                    stops = [
+                        [color_perc_lbound, '#FFFFFF'],
+                        [color_perc_rbound, '#2222FF']
+                    ]
+                elif color_scheme == 'fire':
+                    diff = float(color_perc_rbound - color_perc_lbound)
+                    stops = [
+                        [color_perc_lbound, '#FFFFFF'],
+                        [color_perc_lbound + 0.33*diff, '#FFFF00'],
+                        [color_perc_lbound + 0.66*diff, '#FF0000'],
+                        [color_perc_rbound, '#000000']
+                    ]
+                else:
+                    stops = [
+                        [color_perc_lbound, '#FFFFFF'],
+                        [
+                            color_perc_lbound +
+                            ((color_perc_rbound - color_perc_lbound)/2),
+                            '#888888'
+                        ],
+                        [color_perc_rbound, '#000000'],
+                    ]
+
                 xaxis_label = df.columns[1]
                 yaxis_label = df.columns[2]
-                df[df.columns[2]] = df[df.columns[2]].astype(np.float)
-                df = df.pivot_table(
-                    index=df.columns[1],
-                    columns=df.columns[0],
-                    values=df.columns[2], aggfunc=np.sum)
-            else:
-                # User provides columns (x, y, metric1, metric2, ...)
-                xaxis_label = df.columns[0]
-                yaxis_label = 'y'
-                df.index = df[df.columns[0]]
-                df = df.sort('ds')
-                del df[df.columns[0]]
-                for col in df.columns:
-                    df[col] = df[col].astype(np.float)
-
-            series = []
-            for col in df.columns:
+                data = []
+                for row in df.itertuples():
+                    data.append({
+                        'x': row[2],
+                        'y': row[3],
+                        'value': row[4],
+                    })
+                x_format = '{point.x:%Y-%m-%d}' \
+                    if chart.x_is_date else '{point.x}'
                 series.append({
-                    'name': col,
-                    'data': [
-                        (i, v)
-                        for i, v in df[col].iteritems() if not np.isnan(v)]
+                    'data': data,
+                    'borderWidth': 0,
+                    'colsize': 24 * 36e5,
+                    'turboThreshold': sys.float_info.max,
+                    'tooltip': {
+                        'headerFormat': '',
+                        'pointFormat': (
+                            df.columns[1] + ': ' + x_format + '<br/>' +
+                            df.columns[2] + ': {point.y}<br/>' +
+                            df.columns[3] + ': <b>{point.value}</b>'
+                        ),
+                    },
                 })
-            series = [serie for serie in sorted(
-                series, key=lambda s: s['data'][0][1], reverse=True)]
+                colorAxis = {
+                    'stops': stops,
+                    'minColor': '#FFFFFF',
+                    'maxColor': '#000000',
+                    'min': 50,
+                    'max': 2200,
+                }
+            else:
+                if chart.sql_layout == 'series':
+                    # User provides columns (series, x, y)
+                    xaxis_label = df.columns[1]
+                    yaxis_label = df.columns[2]
+                    df[df.columns[2]] = df[df.columns[2]].astype(np.float)
+                    df = df.pivot_table(
+                        index=df.columns[1],
+                        columns=df.columns[0],
+                        values=df.columns[2], aggfunc=np.sum)
+                else:
+                    # User provides columns (x, y, metric1, metric2, ...)
+                    xaxis_label = df.columns[0]
+                    yaxis_label = 'y'
+                    df.index = df[df.columns[0]]
+                    df = df.sort('ds')
+                    del df[df.columns[0]]
+                    for col in df.columns:
+                        df[col] = df[col].astype(np.float)
+
+                for col in df.columns:
+                    series.append({
+                        'name': col,
+                        'data': [
+                            (i, v)
+                            for i, v in df[col].iteritems() if not np.isnan(v)]
+                    })
+                series = [serie for serie in sorted(
+                    series, key=lambda s: s['data'][0][1], reverse=True)]
 
             chart_type = chart.chart_type
             if chart.chart_type == "stacked_area":
@@ -325,11 +377,17 @@ class Airflow(BaseView):
                 'title': {'text': ''},
                 'xAxis': {
                     'title': {'text': xaxis_label},
-                    'type': 'datetime' if x_is_dt else None,
+                    'type': 'datetime' if chart.x_is_date else None,
                 },
                 'yAxis': {
                     'min': 0,
                     'title': {'text': yaxis_label},
+                },
+                'colorAxis': colorAxis,
+                'tooltip': {
+                    'useHTML': True,
+                    'backgroundColor': None,
+                    'borderWidth': 0,
                 },
                 'series': series,
             }
@@ -345,6 +403,7 @@ class Airflow(BaseView):
 
         def date_handler(obj):
             return obj.isoformat() if hasattr(obj, 'isoformat') else obj
+
         response = Response(
             response=json.dumps(payload, indent=4, default=date_handler),
             status=200,
@@ -394,6 +453,13 @@ class Airflow(BaseView):
     def noaccess(self):
         return self.render('airflow/noaccess.html')
 
+    @expose('/headers')
+    def headers(self):
+        d = {k: v for k, v in request.headers}
+        return Response(
+            response=json.dumps(d, indent=4),
+            status=200, mimetype="application/json")
+
     @expose('/login')
     def login(u):
         session = settings.Session()
@@ -404,11 +470,14 @@ class Airflow(BaseView):
         has_access = role in request.headers.get('X-Internalauth-Groups')
 
         d = {k: v for k, v in request.headers}
-        import urllib2
-        cookie = urllib2.unquote(d.get('Cookie'))
-        cookie = ''.join(cookie.split('j:')[1:]).split('; _ga=')[0]
-        cookie = json.loads(cookie)
-        email = str(cookie['data']['userData']['mail'][0])
+        try:
+            import urllib2
+            cookie = urllib2.unquote(d.get('Cookie'))
+            cookie = ''.join(cookie.split('j:')[1:]).split('; _ga=')[0]
+            cookie = json.loads(cookie)
+            email = str(cookie['data']['userData']['mail'][0])
+        except:
+            email = ""
         if has_access:
             user = session.query(models.User).filter(
                 models.User.username == username).first()
@@ -416,6 +485,7 @@ class Airflow(BaseView):
                 user = models.User(username=username)
             user.email = email
             session.merge(user)
+            session.commit()
             flask_login.login_user(user)
             session.commit()
             session.close()
@@ -959,7 +1029,9 @@ def label_link(v, c, m, p):
         default_params = eval(m.default_params)
     except:
         default_params = {}
-    url = url_for('airflow.chart', chart_id=m.id, **default_params)
+    url = url_for(
+        'airflow.chart', chart_id=m.id, iteration_no=m.iteration_no,
+        **default_params)
     return Markup("<a href='{url}'>{m.label}</a>".format(**locals()))
 
 
@@ -970,6 +1042,7 @@ class ChartModelView(LoginMixin, ModelView):
         'db',
         'chart_type',
         'show_datatable',
+        'x_is_date',
         'y_log_scale',
         'show_sql',
         'height',
@@ -984,6 +1057,45 @@ class ChartModelView(LoginMixin, ModelView):
     edit_template = 'airflow/chart/edit.html'
     column_filters = ('owner.username', 'db_id',)
     column_searchable_list = ('owner.username', 'label', 'sql')
+    column_descriptions = {
+        'label': "Can include {{ templated_fields }} and {{ macros }}",
+        'chart_type': "The type of chart to be displayed",
+        'sql': "Can include {{ templated_fields }} and {{ macros }}.",
+        'height': "Height of the chart, in pixels.",
+        'x_is_date': (
+            "Whether the X axis should be casted as a date field. Expect most "
+            "intelligible date formats to get casted properly."
+        ),
+        'owner': (
+            "The chart's owner, mostly used for reference and filtering in "
+            "the list view."
+        ),
+        'show_datatable':
+            "Whether to display an interactive data table under the chart.",
+        'default_params': (
+            'A dictionary of {"key": "values",} that define what the '
+            'templated fields (parameters) values should be by default. '
+            'To be valid, it needs to "eval" as a Python dict. '
+            'The key values will show up in the url\'s querystring '
+            'and can be altered there.'
+        ),
+        'show_sql': "Whether to display the SQL statement as a collapsible "
+            "section in the chart page.",
+        'y_log_scale': "Whether to use a log scale for the Y axis.",
+        'sql_layout': (
+            "Defines the layout of the SQL that the application should "
+            "expect. Depending on the tables you are sourcing from, it may "
+            "make more sense to pivot / unpivot the metrics."
+        ),
+    }
+    column_labels = {
+        'db': "Source Database",
+        'sql': "SQL",
+        'height': "Chart Height",
+        'sql_layout': "SQL Layout",
+        'show_sql': "Display the SQL Statement",
+        'default_params': "Default Parameters",
+    }
     form_choices = {
         'chart_type': [
             ('line', 'Line Chart'),
@@ -993,6 +1105,7 @@ class ChartModelView(LoginMixin, ModelView):
             ('area', 'Overlapping Area Chart'),
             ('stacked_area', 'Stacked Area Chart'),
             ('percent_area', 'Percent Area Chart'),
+            ('heatmap', 'Heatmap'),
             ('datatable', 'No chart, data table only'),
         ],
         'sql_layout': [
@@ -1002,10 +1115,22 @@ class ChartModelView(LoginMixin, ModelView):
     }
 
     def on_model_change(self, form, model, is_created):
-        if not model.user_id and flask_login.current_user:
+        model.iteration_no += 1
+        if AUTHENTICATE and not model.user_id and flask_login.current_user:
             model.user_id = flask_login.current_user.id
 
 mv = ChartModelView(
     models.Chart, session,
     name="Charts", category="Tools")
 admin.add_view(mv)
+
+admin.add_link(
+    base.MenuLink(
+        category='Docs',
+        name='@readthedocs.org',
+        url='http://airflow.readthedocs.org/en/latest/'))
+admin.add_link(
+    base.MenuLink(
+        category='Docs',
+        name='Github',
+        url='https://github.com/mistercrunch/Airflow'))

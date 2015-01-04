@@ -1160,4 +1160,6 @@ class Chart(Base):
     height = Column(Integer, default=600)
     default_params = Column(String(5000), default="{}")
     owner = relationship("User", cascade=False, cascade_backrefs=False)
+    x_is_date = Column(Boolean, default=True)
     db = relationship("DatabaseConnection")
+    iteration_no = Column(Integer, default=0)

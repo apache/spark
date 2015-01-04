@@ -3,6 +3,10 @@ from functools import wraps
 import inspect
 import logging
 import re
+
+from sqlalchemy import event
+from sqlalchemy.pool import Pool
+
 from airflow.configuration import conf
 
 
@@ -30,6 +34,22 @@ class State(object):
     @classmethod
     def runnable(cls):
         return [None, cls.FAILED, cls.UP_FOR_RETRY]
+
+
+def pessimistic_connection_handling():
+    @event.listens_for(Pool, "checkout")
+    def ping_connection(dbapi_connection, connection_record, connection_proxy):
+        '''
+        Disconnect Handling - Pessimistic, taken from:
+        http://docs.sqlalchemy.org/en/rel_0_9/core/pooling.html
+        '''
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("SELECT 1")
+        except:
+            raise exc.DisconnectionError()
+        cursor.close()
+
 
 
 def validate_key(k, max_length=250):
