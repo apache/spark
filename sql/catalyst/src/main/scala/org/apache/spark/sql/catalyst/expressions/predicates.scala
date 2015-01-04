@@ -119,6 +119,20 @@ case class InSet(value: Expression, hset: Set[Any])
   }
 }
 
+/**
+ * Evaluates to `true` if `list` contains `value`.
+ */
+case class InSubquery(value: Expression) extends Predicate {
+  def children = Seq(value)
+
+  def nullable = true // TODO: Figure out correct nullability semantics of IN.
+  override def toString = s"$value IN subquery"
+
+  override def eval(input: Row): Any = {
+    null
+  }
+}
+
 case class And(left: Expression, right: Expression) extends BinaryPredicate {
   def symbol = "&&"
 

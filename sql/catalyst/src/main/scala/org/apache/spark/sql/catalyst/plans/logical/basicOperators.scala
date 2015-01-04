@@ -64,6 +64,11 @@ case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
   override def output = child.output
 }
 
+case class DynamicFilter(condition: Expression, left: LogicalPlan, right: LogicalPlan)
+  extends BinaryNode {
+  override def output = left.output
+}
+
 case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   // TODO: These aren't really the same attributes as nullability etc might change.
   override def output = left.output
