@@ -22,13 +22,11 @@ import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.postfixOps
 
 import akka.actor._
-import akka.pattern.ask
 import akka.util.Timeout
 
 import org.mockito.Mockito.{mock, when}
@@ -40,6 +38,8 @@ import org.scalatest.concurrent.Timeouts._
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SecurityManager}
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.network.nio.NioBlockTransferService
+import org.apache.spark.rpc.akka.AkkaRpcEnv
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.hash.HashShuffleManager
@@ -53,6 +53,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
   private val conf = new SparkConf(false)
   var store: BlockManager = null
   var store2: BlockManager = null
+  var rpcEnv: RpcEnv = null
   var actorSystem: ActorSystem = null
   var master: BlockManagerMaster = null
   conf.set("spark.authenticate", "false")
@@ -72,7 +73,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val transfer = new NioBlockTransferService(conf, securityMgr)
-    val manager = new BlockManager(name, actorSystem, master, serializer, maxMem, conf,
+    val manager = new BlockManager(name, rpcEnv, master, serializer, maxMem, conf,
       mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
     manager.initialize("app-id")
     manager
@@ -82,6 +83,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
       "test", "localhost", 0, conf = conf, securityManager = securityMgr)
     this.actorSystem = actorSystem
+    this.rpcEnv = new AkkaRpcEnv(actorSystem, conf)
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     System.setProperty("os.arch", "amd64")
@@ -92,7 +94,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     conf.set("spark.storage.unrollMemoryThreshold", "512")
 
     master = new BlockManagerMaster(
-      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
+      rpcEnv.setupEndpoint("block-manager-master",
+        new BlockManagerMasterActor(rpcEnv, true, conf, new LiveListenerBus)),
       conf, true)
 
     val initialize = PrivateMethod[Unit]('initialize)
@@ -108,6 +111,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
       store2.stop()
       store2 = null
     }
+    rpcEnv.stopAll()
+    rpcEnv = null
     actorSystem.shutdown()
     actorSystem.awaitTermination()
     actorSystem = null
@@ -357,11 +362,9 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
     master.removeExecutor(store.blockManagerId.executorId)
     assert(master.getLocations("a1").size == 0, "a1 was not removed from master")
 
-    implicit val timeout = Timeout(30, TimeUnit.SECONDS)
-    val reregister = !Await.result(
-      master.driverActor ? BlockManagerHeartbeat(store.blockManagerId),
-      timeout.duration).asInstanceOf[Boolean]
-    assert(reregister == true)
+    val reregister = ! master.driverActor.askWithReply[Boolean](
+      BlockManagerHeartbeat(store.blockManagerId))
+    assert(reregister === true)
   }
 
   test("reregistration on block update") {
@@ -785,7 +788,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
     val transfer = new NioBlockTransferService(conf, securityMgr)
-    store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, actorSystem, master,
+    store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, rpcEnv, master,
       new JavaSerializer(conf), 1200, conf, mapOutputTracker, shuffleManager, transfer, securityMgr,
       0)
 

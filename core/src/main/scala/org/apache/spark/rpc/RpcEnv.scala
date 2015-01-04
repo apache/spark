@@ -19,6 +19,10 @@ package org.apache.spark.rpc
 
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.concurrent.Future
+import scala.concurrent.duration.{FiniteDuration, Duration}
+import scala.reflect.ClassTag
+
 /**
  * An RPC environment.
  */
@@ -133,7 +137,17 @@ trait RpcEndpointRef {
 
   def address: String
 
+  def host: Option[String]
+
+  def port: Option[Int]
+
+  def ask[T: ClassTag](message: Any): Future[T]
+
+  def ask[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T]
+
   def askWithReply[T](message: Any): T
+
+  def askWithReply[T](message: Any, timeout: FiniteDuration): T
 
   /**
    * Send a message to the remote endpoint asynchronously. No delivery guarantee is provided.

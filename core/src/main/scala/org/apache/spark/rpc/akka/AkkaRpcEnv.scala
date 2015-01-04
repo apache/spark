@@ -20,16 +20,19 @@ package org.apache.spark.rpc.akka
 import java.util.concurrent.CountDownLatch
 
 import scala.concurrent.Await
-import scala.concurrent.duration.Duration
+import scala.concurrent.duration._
+import scala.concurrent.Future
+import scala.language.postfixOps
 
 import akka.actor.{ActorRef, Actor, Props, ActorSystem}
-import akka.pattern.ask
+import akka.pattern.{ask => akkaAsk}
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
 import org.apache.spark.{Logging, SparkException, SparkConf}
 import org.apache.spark.rpc._
 import org.apache.spark.util.AkkaUtils
 
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
@@ -112,12 +115,23 @@ private[akka] class AkkaRpcEndpointRef(val actorRef: ActorRef, @transient conf: 
 
   private[this] val maxRetries = conf.getInt("spark.akka.num.retries", 3)
   private[this] val retryWaitMs = conf.getInt("spark.akka.retry.wait", 3000)
-  private[this] val timeout =
-    Duration.create(conf.getLong("spark.akka.lookupTimeout", 30), "seconds")
+  private[this] val defaultTimeout = conf.getLong("spark.akka.lookupTimeout", 30) seconds
 
   override val address: String = actorRef.path.address.toString
 
-  override def askWithReply[T](message: Any): T = {
+  override val host: Option[String] = actorRef.path.address.host
+
+  override val port: Option[Int] = actorRef.path.address.port
+
+  override def ask[T: ClassTag](message: Any): Future[T] = ask(message, defaultTimeout)
+
+  override def ask[T: ClassTag](message: Any, timeout: FiniteDuration): Future[T] = {
+    actorRef.ask(message)(timeout).mapTo[T]
+  }
+
+  override def askWithReply[T](message: Any): T = askWithReply(message, defaultTimeout)
+
+  override def askWithReply[T](message: Any, timeout: FiniteDuration): T = {
     var attempts = 0
     var lastException: Exception = null
     while (attempts < maxRetries) {

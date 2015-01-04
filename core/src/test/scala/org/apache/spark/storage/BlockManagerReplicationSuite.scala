@@ -22,7 +22,7 @@ import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.postfixOps
 
-import akka.actor.{ActorSystem, Props}
+import akka.actor.ActorSystem
 import org.mockito.Mockito.{mock, when}
 import org.scalatest.{BeforeAndAfter, FunSuite, Matchers, PrivateMethodTester}
 import org.scalatest.concurrent.Eventually._
@@ -30,6 +30,8 @@ import org.scalatest.concurrent.Eventually._
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SecurityManager}
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
+import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.hash.HashShuffleManager
@@ -41,6 +43,7 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
 
   private val conf = new SparkConf(false)
   var actorSystem: ActorSystem = null
+  var rpcEnv: RpcEnv = null
   var master: BlockManagerMaster = null
   val securityMgr = new SecurityManager(conf)
   val mapOutputTracker = new MapOutputTrackerMaster(conf)
@@ -61,7 +64,7 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
       maxMem: Long,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val transfer = new NioBlockTransferService(conf, securityMgr)
-    val store = new BlockManager(name, actorSystem, master, serializer, maxMem, conf,
+    val store = new BlockManager(name, rpcEnv, master, serializer, maxMem, conf,
       mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
     store.initialize("app-id")
     allStores += store
@@ -72,6 +75,7 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
       "test", "localhost", 0, conf = conf, securityManager = securityMgr)
     this.actorSystem = actorSystem
+    this.rpcEnv = new AkkaRpcEnv(actorSystem, conf)
 
     conf.set("spark.authenticate", "false")
     conf.set("spark.driver.port", boundPort.toString)
@@ -84,7 +88,8 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
     conf.set("spark.storage.cachedPeersTtl", "10")
 
     master = new BlockManagerMaster(
-      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
+      rpcEnv.setupEndpoint("block-manager-master",
+        new BlockManagerMasterActor(rpcEnv, true, conf, new LiveListenerBus)),
       conf, true)
     allStores.clear()
   }
@@ -92,6 +97,8 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
   after {
     allStores.foreach { _.stop() }
     allStores.clear()
+    rpcEnv.stopAll()
+    rpcEnv = null
     actorSystem.shutdown()
     actorSystem.awaitTermination()
     actorSystem = null
@@ -262,7 +269,7 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
     val failableTransfer = mock(classOf[BlockTransferService]) // this wont actually work
     when(failableTransfer.hostName).thenReturn("some-hostname")
     when(failableTransfer.port).thenReturn(1000)
-    val failableStore = new BlockManager("failable-store", actorSystem, master, serializer,
+    val failableStore = new BlockManager("failable-store", rpcEnv, master, serializer,
       10000, conf, mapOutputTracker, shuffleManager, failableTransfer, securityMgr, 0)
     failableStore.initialize("app-id")
     allStores += failableStore // so that this gets stopped after test
