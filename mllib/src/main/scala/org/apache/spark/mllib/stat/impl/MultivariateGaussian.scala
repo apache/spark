@@ -25,7 +25,7 @@ import org.apache.spark.mllib.util.MLUtils
  * This class provides basic functionality for a Multivariate Gaussian (Normal) Distribution. In
  * the event that the covariance matrix is singular, the density will be computed in a
  * reduced dimensional subspace under which the distribution is supported.
- * (see http://en.wikipedia.org/wiki/Multivariate_normal_distribution#Degenerate_case)
+ * (see [[http://en.wikipedia.org/wiki/Multivariate_normal_distribution#Degenerate_case]])
  * 
  * @param mu The mean vector of the distribution
  * @param sigma The covariance matrix of the distribution
