@@ -170,6 +170,16 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     testPackage.runCallSiteTest(sc)
   }
 
+  test("RDDs cannot be broadcasted (SPARK-5063)") {
+    sc = new SparkContext("local", "test")
+    val rdd = sc.parallelize(1 to 100)
+    val thrown = intercept[SparkException] {
+      sc.broadcast(rdd)
+    }
+    assert(thrown.getMessage.contains("SPARK-5063"))
+    assert(thrown.getMessage.toLowerCase.contains("broadcast"))
+  }
+
   /**
    * Verify the persistence of state associated with an HttpBroadcast in either local mode or
    * local-cluster mode (when distributed = true).

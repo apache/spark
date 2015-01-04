@@ -951,6 +951,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * The variable will be sent to each cluster only once.
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
+    if (classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass)) {
+      throw new SparkException("Can not directly broadcast RDDs; instead, call collect() and "
+        + "broadcast the result (see SPARK-5063)")
+    }
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)
     val callSite = getCallSite
     logInfo("Created broadcast " + bc.id + " from " + callSite.shortForm)
