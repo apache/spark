@@ -2,6 +2,7 @@
 
 from airflow.configuration import conf 
 from airflow import settings
+from airflow import utils
 from airflow import jobs
 from airflow.models import DagBag, TaskInstance, DagPickle
 
@@ -42,7 +43,7 @@ def backfill(args):
 
 def run(args):
 
-    settings.pessimistic_connection_handling()
+    utils.pessimistic_connection_handling()
 
     # Setting up logging
     directory = conf.get('core', 'BASE_LOG_FOLDER') + \

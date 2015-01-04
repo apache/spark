@@ -12,8 +12,6 @@ from flask.ext.admin.contrib.sqla import ModelView
 from flask.ext.cache import Cache
 from flask import request
 from wtforms import Form, DateTimeField, SelectField, TextAreaField
-from cgi import escape
-from wtforms.compat import text_type
 import wtforms
 
 from pygments import highlight
@@ -44,13 +42,16 @@ if AUTHENTICATE is False:
 
 dagbag = models.DagBag(conf.get('core', 'DAGS_FOLDER'))
 session = Session()
-settings.pessimistic_connection_handling()
+utils.pessimistic_connection_handling()
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_POOL_RECYCLE'] = 3600
+
 login_manager.init_app(app)
 app.secret_key = 'airflowified'
 
-cache = Cache(app=app, config={'CACHE_TYPE': 'filesystem', 'CACHE_DIR': '/tmp'})
+cache = Cache(
+    app=app, config={'CACHE_TYPE': 'filesystem', 'CACHE_DIR': '/tmp'})
 
 # Init for chartkick, the python wrapper for highcharts
 ck = Blueprint(
@@ -260,14 +261,20 @@ class Airflow(BaseView):
             series = []
             colorAxis = None
             if chart.chart_type == 'heatmap':
-                color_perc_lbound = float(request.args.get('color_perc_lbound', 0))
-                color_perc_rbound = float(request.args.get('color_perc_rbound', 1))
+                color_perc_lbound = float(
+                    request.args.get('color_perc_lbound', 0))
+                color_perc_rbound = float(
+                    request.args.get('color_perc_rbound', 1))
                 color_scheme = request.args.get('color_scheme', 'blue_red')
 
                 if color_scheme == 'blue_red':
                     stops = [
                         [color_perc_lbound, '#3060CF'],
-                        [color_perc_lbound + ((color_perc_rbound - color_perc_lbound)/2), '#FFFBBC'],
+                        [
+                            color_perc_lbound +
+                            ((color_perc_rbound - color_perc_lbound)/2),
+                            '#FFFBBC'
+                        ],
                         [color_perc_rbound, '#C4463A']
                     ]
                 elif color_scheme == 'blue_scale':
@@ -1060,6 +1067,45 @@ class ChartModelView(LoginMixin, ModelView):
     edit_template = 'airflow/chart/edit.html'
     column_filters = ('owner.username', 'db_id',)
     column_searchable_list = ('owner.username', 'label', 'sql')
+    column_descriptions = {
+        'label': "Can include {{ templated_fields }} and {{ macros }}",
+        'chart_type': "The type of chart to be displayed",
+        'sql': "Can include {{ templated_fields }} and {{ macros }}.",
+        'height': "Height of the chart, in pixels.",
+        'x_is_date': (
+            "Whether the X axis should be casted as a date field. Expect most "
+            "intelligible date formats to get casted properly."
+        ),
+        'owner': (
+            "The chart's owner, mostly used for reference and filtering in "
+            "the list view."
+        ),
+        'show_datatable':
+            "Whether to display an interactive data table under the chart.",
+        'default_params': (
+            'A dictionary of {"key": "values",} that define what the '
+            'templated fields (parameters) values should be by default. '
+            'To be valid, it needs to "eval" as a Python dict. '
+            'The key values will show up in the url\'s querystring '
+            'and can be altered there.'
+        ),
+        'show_sql': "Whether to display the SQL statement as a collapsible "
+            "section in the chart page.",
+        'y_log_scale': "Whether to use a log scale for the Y axis.",
+        'sql_layout': (
+            "Defines the layout of the SQL that the application should "
+            "expect. Depending on the tables you are sourcing from, it may "
+            "make more sense to pivot / unpivot the metrics."
+        ),
+    }
+    column_labels = {
+        'db': "Source Database",
+        'sql': "SQL",
+        'height': "Chart Height",
+        'sql_layout': "SQL Layout",
+        'show_sql': "Display the SQL Statement",
+        'default_params': "Default Parameters",
+    }
     form_choices = {
         'chart_type': [
             ('line', 'Line Chart'),
@@ -1069,8 +1115,8 @@ class ChartModelView(LoginMixin, ModelView):
             ('area', 'Overlapping Area Chart'),
             ('stacked_area', 'Stacked Area Chart'),
             ('percent_area', 'Percent Area Chart'),
-            ('datatable', 'No chart, data table only'),
             ('heatmap', 'Heatmap'),
+            ('datatable', 'No chart, data table only'),
         ],
         'sql_layout': [
             ('series', 'SELECT series, x, y FROM ...'),

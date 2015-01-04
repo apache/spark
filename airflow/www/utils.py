@@ -1,9 +1,11 @@
-import functools
-import gzip
+from cgi import escape
 from cStringIO import StringIO as IO
+import gzip
+import functools
 
 from flask import after_this_request, request
 import wtforms
+from wtforms.compat import text_type
 
 
 def gzipped(f):
