@@ -19,8 +19,6 @@ package org.apache.spark.executor
 
 import java.nio.ByteBuffer
 
-import akka.actor.Props
-
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -144,7 +142,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       env.rpcEnv.setupEndpoint("Executor", new CoarseGrainedExecutorBackend(
           driverUrl, executorId, sparkHostPort, cores, env))
       workerUrl.foreach { url =>
-        env.actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
+        env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
       env.actorSystem.awaitTermination()
     }
