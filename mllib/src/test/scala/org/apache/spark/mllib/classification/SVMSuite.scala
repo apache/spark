@@ -68,7 +68,7 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
     assert(numOffPredictions < input.length / 5)
   }
 
-  test("SVM with threshold") {
+  test("SVM with threshold using local random SGD") {
     val nPoints = 10000
 
     // NOTE: Intercept should be small for generating equal 0s and 1s
@@ -83,6 +83,44 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
 
     val svm = new SVMWithSGD().setIntercept(true)
     svm.optimizer.setStepSize(1.0).setRegParam(1.0).setNumIterations(100)
+
+    val model = svm.run(testRDD)
+
+    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 17)
+    val validationRDD  = sc.parallelize(validationData, 2)
+
+    // Test prediction on RDD.
+
+    var predictions = model.predict(validationRDD.map(_.features)).collect()
+    assert(predictions.count(_ == 0.0) != predictions.length)
+
+    // High threshold makes all the predictions 0.0
+    model.setThreshold(10000.0)
+    predictions = model.predict(validationRDD.map(_.features)).collect()
+    assert(predictions.count(_ == 0.0) == predictions.length)
+
+    // Low threshold makes all the predictions 1.0
+    model.setThreshold(-10000.0)
+    predictions = model.predict(validationRDD.map(_.features)).collect()
+    assert(predictions.count(_ == 1.0) == predictions.length)
+  }
+  
+  test("SVM with threshold using local LBFGS") {
+    val nPoints = 10000
+
+    // NOTE: Intercept should be small for generating equal 0s and 1s
+    val A = 0.01
+    val B = -1.5
+    val C = 1.0
+
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
+
+    val testRDD = sc.parallelize(testData, 2)
+    testRDD.cache()
+
+
+    val svm = new SVMWithLBFGS().setIntercept(true)
+    svm.optimizer.setNumIterations(100)
 
     val model = svm.run(testRDD)
 
@@ -132,8 +170,36 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
+  
+  test("SVM using local LBFGS") {
+    val nPoints = 10000
 
-  test("SVM local random SGD with initial weights") {
+    // NOTE: Intercept should be small for generating equal 0s and 1s
+    val A = 0.01
+    val B = -1.5
+    val C = 1.0
+
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+
+    val testRDD = sc.parallelize(testData, 2)
+    testRDD.cache()
+
+    val svm = new SVMWithLBFGS().setIntercept(true)
+    svm.optimizer.setNumIterations(100)
+
+    val model = svm.run(testRDD)
+
+    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 17)
+    val validationRDD  = sc.parallelize(validationData, 2)
+
+    // Test prediction on RDD.
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+
+    // Test prediction on Array.
+    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+  }
+
+  test("SVM with initial weights using local random SGD") {
     val nPoints = 10000
 
     // NOTE: Intercept should be small for generating equal 0s and 1s
@@ -164,8 +230,40 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
     // Test prediction on Array.
     validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
   }
+  
+  test("SVM with initial weights using LBFGS") {
+    val nPoints = 10000
 
-  test("SVM with invalid labels") {
+    // NOTE: Intercept should be small for generating equal 0s and 1s
+    val A = 0.01
+    val B = -1.5
+    val C = 1.0
+
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+
+    val initialB = -1.0
+    val initialC = -1.0
+    val initialWeights = Vectors.dense(initialB, initialC)
+
+    val testRDD = sc.parallelize(testData, 2)
+    testRDD.cache()
+
+    val svm = new SVMWithLBFGS().setIntercept(true)
+    svm.optimizer.setNumIterations(100)
+
+    val model = svm.run(testRDD, initialWeights)
+
+    val validationData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 17)
+    val validationRDD  = sc.parallelize(validationData,2)
+
+    // Test prediction on RDD.
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+
+    // Test prediction on Array.
+    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+  }
+  
+  test("SVM with invalid labels using local random SGD") {
     val nPoints = 10000
 
     // NOTE: Intercept should be small for generating equal 0s and 1s
@@ -191,11 +289,41 @@ class SVMSuite extends FunSuite with MLlibTestSparkContext {
     // Turning off data validation should not throw an exception
     new SVMWithSGD().setValidateData(false).run(testRDDInvalid)
   }
+  
+  test("SVM with invalid labels using LBFGS") {
+    val nPoints = 10000
+
+    // NOTE: Intercept should be small for generating equal 0s and 1s
+    val A = 0.01
+    val B = -1.5
+    val C = 1.0
+
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B,C), nPoints, 42)
+    val testRDD = sc.parallelize(testData, 2)
+
+    val testRDDInvalid = testRDD.map { lp =>
+      if (lp.label == 0.0) {
+        LabeledPoint(-1.0, lp.features)
+      } else {
+        lp
+      }
+    }
+
+    intercept[SparkException] {
+       val svm = new  SVMWithLBFGS()
+       svm.optimizer.setNumIterations(100)
+       svm.run(testRDDInvalid)
+    }
+
+    // Turning off data validation should not throw an exception
+    new SVMWithLBFGS().setValidateData(false).run(testRDDInvalid)
+  }
+  
 }
 
 class SVMClusterSuite extends FunSuite with LocalClusterSparkContext {
 
-  test("task size should be small in both training and prediction") {
+  test("task size should be small in both training and prediction using random SGD") {
     val m = 4
     val n = 200000
     val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
@@ -207,4 +335,21 @@ class SVMClusterSuite extends FunSuite with LocalClusterSparkContext {
     val model = SVMWithSGD.train(points, 2)
     val predictions = model.predict(points.map(_.features))
   }
+  
+
+  test("task size should be small in both training and prediction using LBFGS") {
+    val m = 4
+    val n = 200000
+    val points = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
+      val random = new Random(idx)
+      iter.map(i => LabeledPoint(1.0, Vectors.dense(Array.fill(n)(random.nextDouble()))))
+    }.cache()
+    // If we serialize data directly in the task closure, the size of the serialized task would be
+    // greater than 1MB and hence Spark would throw an error.
+    val svm = new  SVMWithLBFGS()
+    svm.optimizer.setNumIterations(2)
+    val model = svm.run(points)    
+    val predictions = model.predict(points.map(_.features))
+  }
+  
 }
