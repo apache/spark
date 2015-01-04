@@ -153,9 +153,10 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   }
 
   /**
-   * we should distinct the default final status between client and cluster,
-   * because the SUCCEEDED status may cause the HA failed in client mode and
-   * UNDEFINED may cause the error reporter in cluster when using sys.exit.
+   * Set the default final application status for client mode to UNDEFINED to handle
+   * if YARN HA restarts the application so that it properly retries. Set the final
+   * status to SUCCEEDED in cluster mode to handle if the user calls System.exit
+   * from the application code.
    */
   final def getDefaultFinalStatus() = {
     if (isDriver) {
