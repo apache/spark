@@ -20,17 +20,15 @@ package org.apache.spark.deploy.master
 import java.io.FileNotFoundException
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
+import java.util.concurrent.{ScheduledFuture, TimeUnit, Executors}
 import java.util.Date
 
+import org.apache.spark.rpc.akka.AkkaRpcEnv
+
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.concurrent.Await
-import scala.concurrent.duration._
-import scala.language.postfixOps
 import scala.util.Random
 
-import akka.actor._
-import akka.pattern.ask
-import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
+import akka.actor.ActorSystem
 import akka.serialization.Serialization
 import akka.serialization.SerializationExtension
 import org.apache.hadoop.fs.Path
@@ -44,18 +42,23 @@ import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.rpc.{RpcEndpoint, RpcEnv, RpcEndpointRef}
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
+import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
 
 private[spark] class Master(
+    override val rpcEnv: RpcEnv,
     host: String,
     port: Int,
     webUiPort: Int,
     val securityMgr: SecurityManager)
-  extends Actor with ActorLogReceive with Logging with LeaderElectable {
+  extends RpcEndpoint with Logging with LeaderElectable {
 
-  import context.dispatcher   // to use Akka's scheduler.schedule()
+  val scheduler = Executors.newScheduledThreadPool(1,
+    Utils.namedThreadFactory("check-worker-timeout"))
+
+  private def internalActorSystem: ActorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
 
   val conf = new SparkConf
   val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
@@ -69,12 +72,12 @@ private[spark] class Master(
 
   val workers = new HashSet[WorkerInfo]
   val idToWorker = new HashMap[String, WorkerInfo]
-  val addressToWorker = new HashMap[Address, WorkerInfo]
+  val addressToWorker = new HashMap[String, WorkerInfo]
 
   val apps = new HashSet[ApplicationInfo]
   val idToApp = new HashMap[String, ApplicationInfo]
-  val actorToApp = new HashMap[ActorRef, ApplicationInfo]
-  val addressToApp = new HashMap[Address, ApplicationInfo]
+  val actorToApp = new HashMap[RpcEndpointRef, ApplicationInfo]
+  val addressToApp = new HashMap[String, ApplicationInfo]
   val waitingApps = new ArrayBuffer[ApplicationInfo]
   val completedApps = new ArrayBuffer[ApplicationInfo]
   var nextAppNumber = 0
@@ -108,7 +111,7 @@ private[spark] class Master(
 
   var leaderElectionAgent: LeaderElectionAgent = _
 
-  private var recoveryCompletionTask: Cancellable = _
+  private var recoveryCompletionTask: ScheduledFuture[_] = _
 
   // As a temporary workaround before better ways of configuring memory, we allow users to set
   // a flag that will perform round-robin scheduling across the nodes (spreading out each app
@@ -125,10 +128,11 @@ private[spark] class Master(
     logInfo("Starting Spark master at " + masterUrl)
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
-    context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     webUi.bind()
     masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
-    context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis, self, CheckForWorkerTimeOut)
+    scheduler.scheduleAtFixedRate(new Runnable {
+      override def run(): Unit = self.send(CheckForWorkerTimeOut)
+    }, 0, WORKER_TIMEOUT, TimeUnit.MILLISECONDS)
 
     masterMetricsSystem.registerSource(masterSource)
     masterMetricsSystem.start()
@@ -142,16 +146,16 @@ private[spark] class Master(
       case "ZOOKEEPER" =>
         logInfo("Persisting recovery state to ZooKeeper")
         val zkFactory =
-          new ZooKeeperRecoveryModeFactory(conf, SerializationExtension(context.system))
+          new ZooKeeperRecoveryModeFactory(conf, SerializationExtension(internalActorSystem))
         (zkFactory.createPersistenceEngine(), zkFactory.createLeaderElectionAgent(this))
       case "FILESYSTEM" =>
         val fsFactory =
-          new FileSystemRecoveryModeFactory(conf, SerializationExtension(context.system))
+          new FileSystemRecoveryModeFactory(conf, SerializationExtension(internalActorSystem))
         (fsFactory.createPersistenceEngine(), fsFactory.createLeaderElectionAgent(this))
       case "CUSTOM" =>
         val clazz = Class.forName(conf.get("spark.deploy.recoveryMode.factory"))
         val factory = clazz.getConstructor(conf.getClass, Serialization.getClass)
-          .newInstance(conf, SerializationExtension(context.system))
+          .newInstance(conf, SerializationExtension(internalActorSystem))
           .asInstanceOf[StandaloneRecoveryModeFactory]
         (factory.createPersistenceEngine(), factory.createLeaderElectionAgent(this))
       case _ =>
@@ -161,9 +165,9 @@ private[spark] class Master(
     leaderElectionAgent = leaderElectionAgent_
   }
 
-  override def preRestart(reason: Throwable, message: Option[Any]) {
-    super.preRestart(reason, message) // calls postStop()!
-    logError("Master actor restarted due to exception", reason)
+  override def onError(reason: Throwable) {
+    logError("Master actor is crashed due to exception", reason)
+    throw reason // throw it so that the master will be restarted
   }
 
   override def postStop() {
@@ -171,7 +175,7 @@ private[spark] class Master(
     applicationMetricsSystem.report()
     // prevent the CompleteRecovery message sending to restarted master
     if (recoveryCompletionTask != null) {
-      recoveryCompletionTask.cancel()
+      recoveryCompletionTask.cancel(true)
     }
     webUi.stop()
     masterMetricsSystem.stop()
@@ -181,14 +185,14 @@ private[spark] class Master(
   }
 
   override def electedLeader() {
-    self ! ElectedLeader
+    self.send(ElectedLeader)
   }
 
   override def revokedLeadership() {
-    self ! RevokedLeadership
+    self.send(RevokedLeadership)
   }
 
-  override def receiveWithLogging = {
+  override def receive(sender: RpcEndpointRef) = {
     case ElectedLeader => {
       val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData()
       state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty) {
@@ -199,8 +203,9 @@ private[spark] class Master(
       logInfo("I have been elected leader! New state: " + state)
       if (state == RecoveryState.RECOVERING) {
         beginRecovery(storedApps, storedDrivers, storedWorkers)
-        recoveryCompletionTask = context.system.scheduler.scheduleOnce(WORKER_TIMEOUT millis, self,
-          CompleteRecovery)
+        recoveryCompletionTask = scheduler.schedule(new Runnable {
+          override def run(): Unit = self.send(CompleteRecovery)
+        }, WORKER_TIMEOUT, TimeUnit.MILLISECONDS)
       }
     }
 
@@ -218,20 +223,20 @@ private[spark] class Master(
       if (state == RecoveryState.STANDBY) {
         // ignore, don't send response
       } else if (idToWorker.contains(id)) {
-        sender ! RegisterWorkerFailed("Duplicate worker ID")
+        sender.send(RegisterWorkerFailed("Duplicate worker ID"))
       } else {
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
           sender, workerUiPort, publicAddress)
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
-          sender ! RegisteredWorker(masterUrl, masterWebUiUrl)
+          sender.send(RegisteredWorker(masterUrl, masterWebUiUrl))
           schedule()
         } else {
-          val workerAddress = worker.actor.path.address
+          val workerAddress = worker.actor.address
           logWarning("Worker registration failed. Attempted to re-register worker at same " +
             "address: " + workerAddress)
-          sender ! RegisterWorkerFailed("Attempted to re-register worker at same address: "
-            + workerAddress)
+          sender.send(RegisterWorkerFailed("Attempted to re-register worker at same address: "
+            + workerAddress))
         }
       }
     }
@@ -239,7 +244,7 @@ private[spark] class Master(
     case RequestSubmitDriver(description) => {
       if (state != RecoveryState.ALIVE) {
         val msg = s"Can only accept driver submissions in ALIVE state. Current state: $state."
-        sender ! SubmitDriverResponse(false, None, msg)
+        sender.send(SubmitDriverResponse(false, None, msg))
       } else {
         logInfo("Driver submitted " + description.command.mainClass)
         val driver = createDriver(description)
@@ -251,15 +256,15 @@ private[spark] class Master(
         // TODO: It might be good to instead have the submission client poll the master to determine
         //       the current status of the driver. For now it's simply "fire and forget".
 
-        sender ! SubmitDriverResponse(true, Some(driver.id),
-          s"Driver successfully submitted as ${driver.id}")
+        sender.send(SubmitDriverResponse(true, Some(driver.id),
+          s"Driver successfully submitted as ${driver.id}"))
       }
     }
 
     case RequestKillDriver(driverId) => {
       if (state != RecoveryState.ALIVE) {
         val msg = s"Can only kill drivers in ALIVE state. Current state: $state."
-        sender ! KillDriverResponse(driverId, success = false, msg)
+        sender.send(KillDriverResponse(driverId, success = false, msg))
       } else {
         logInfo("Asked to kill driver " + driverId)
         val driver = drivers.find(_.id == driverId)
@@ -267,23 +272,23 @@ private[spark] class Master(
           case Some(d) =>
             if (waitingDrivers.contains(d)) {
               waitingDrivers -= d
-              self ! DriverStateChanged(driverId, DriverState.KILLED, None)
+              self.send(DriverStateChanged(driverId, DriverState.KILLED, None))
             } else {
               // We just notify the worker to kill the driver here. The final bookkeeping occurs
               // on the return path when the worker submits a state change back to the master
               // to notify it that the driver was successfully killed.
               d.worker.foreach { w =>
-                w.actor ! KillDriver(driverId)
+                w.actor.send(KillDriver(driverId))
               }
             }
             // TODO: It would be nice for this to be a synchronous response
             val msg = s"Kill request for $driverId submitted"
             logInfo(msg)
-            sender ! KillDriverResponse(driverId, success = true, msg)
+            sender.send(KillDriverResponse(driverId, success = true, msg))
           case None =>
             val msg = s"Driver $driverId has already finished or does not exist"
             logWarning(msg)
-            sender ! KillDriverResponse(driverId, success = false, msg)
+            sender.send(KillDriverResponse(driverId, success = false, msg))
         }
       }
     }
@@ -291,10 +296,10 @@ private[spark] class Master(
     case RequestDriverStatus(driverId) => {
       (drivers ++ completedDrivers).find(_.id == driverId) match {
         case Some(driver) =>
-          sender ! DriverStatusResponse(found = true, Some(driver.state),
-            driver.worker.map(_.id), driver.worker.map(_.hostPort), driver.exception)
+          sender.send(DriverStatusResponse(found = true, Some(driver.state),
+            driver.worker.map(_.id), driver.worker.map(_.hostPort), driver.exception))
         case None =>
-          sender ! DriverStatusResponse(found = false, None, None, None, None)
+          sender.send(DriverStatusResponse(found = false, None, None, None, None))
       }
     }
 
@@ -307,7 +312,7 @@ private[spark] class Master(
         registerApplication(app)
         logInfo("Registered app " + description.name + " with ID " + app.id)
         persistenceEngine.addApplication(app)
-        sender ! RegisteredApplication(app.id, masterUrl)
+        sender.send(RegisteredApplication(app.id, masterUrl))
         schedule()
       }
     }
@@ -319,7 +324,7 @@ private[spark] class Master(
           val appInfo = idToApp(appId)
           exec.state = state
           if (state == ExecutorState.RUNNING) { appInfo.resetRetryCount() }
-          exec.application.driver ! ExecutorUpdated(execId, state, message, exitStatus)
+          exec.application.driver.send(ExecutorUpdated(execId, state, message, exitStatus))
           if (ExecutorState.isFinished(state)) {
             // Remove this executor from the worker and app
             logInfo(s"Removing executor ${exec.fullId} because it is $state")
@@ -364,7 +369,7 @@ private[spark] class Master(
           if (workers.map(_.id).contains(workerId)) {
             logWarning(s"Got heartbeat from unregistered worker $workerId." +
               " Asking it to re-register.")
-            sender ! ReconnectWorker(masterUrl)
+            sender.send(ReconnectWorker(masterUrl))
           } else {
             logWarning(s"Got heartbeat from unregistered worker $workerId." +
               " This worker was never registered, so ignoring the heartbeat.")
@@ -412,17 +417,9 @@ private[spark] class Master(
       if (canCompleteRecovery) { completeRecovery() }
     }
 
-    case DisassociatedEvent(_, address, _) => {
-      // The disconnected client could've been either a worker or an app; remove whichever it was
-      logInfo(s"$address got disassociated, removing it.")
-      addressToWorker.get(address).foreach(removeWorker)
-      addressToApp.get(address).foreach(finishApplication)
-      if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
-    }
-
     case RequestMasterState => {
-      sender ! MasterStateResponse(host, port, workers.toArray, apps.toArray, completedApps.toArray,
-        drivers.toArray, completedDrivers.toArray, state)
+      sender.send(MasterStateResponse(host, port, workers.toArray, apps.toArray, completedApps.toArray,
+        drivers.toArray, completedDrivers.toArray, state))
     }
 
     case CheckForWorkerTimeOut => {
@@ -430,8 +427,16 @@ private[spark] class Master(
     }
 
     case RequestWebUIPort => {
-      sender ! WebUIPortResponse(webUi.boundPort)
+      sender.send(WebUIPortResponse(webUi.boundPort))
     }
+  }
+
+  override def remoteConnectionTerminated(address: String): Unit = {
+    // The disconnected client could've been either a worker or an app; remove whichever it was
+    logInfo(s"$address got disassociated, removing it.")
+    addressToWorker.get(address).foreach(removeWorker)
+    addressToApp.get(address).foreach(finishApplication)
+    if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
   }
 
   def canCompleteRecovery =
@@ -445,7 +450,7 @@ private[spark] class Master(
       try {
         registerApplication(app)
         app.state = ApplicationState.UNKNOWN
-        app.driver ! MasterChanged(masterUrl, masterWebUiUrl)
+        app.driver.send(MasterChanged(masterUrl, masterWebUiUrl))
       } catch {
         case e: Exception => logInfo("App " + app.id + " had exception on reconnect")
       }
@@ -462,7 +467,7 @@ private[spark] class Master(
       try {
         registerWorker(worker)
         worker.state = WorkerState.UNKNOWN
-        worker.actor ! MasterChanged(masterUrl, masterWebUiUrl)
+        worker.actor.send(MasterChanged(masterUrl, masterWebUiUrl))
       } catch {
         case e: Exception => logInfo("Worker " + worker.id + " had exception on reconnect")
       }
@@ -584,10 +589,10 @@ private[spark] class Master(
   def launchExecutor(worker: WorkerInfo, exec: ExecutorInfo) {
     logInfo("Launching executor " + exec.fullId + " on worker " + worker.id)
     worker.addExecutor(exec)
-    worker.actor ! LaunchExecutor(masterUrl,
-      exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory)
-    exec.application.driver ! ExecutorAdded(
-      exec.id, worker.id, worker.hostPort, exec.cores, exec.memory)
+    worker.actor.send(LaunchExecutor(masterUrl,
+      exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory))
+    exec.application.driver.send(ExecutorAdded(
+      exec.id, worker.id, worker.hostPort, exec.cores, exec.memory))
   }
 
   def registerWorker(worker: WorkerInfo): Boolean = {
@@ -599,7 +604,7 @@ private[spark] class Master(
       workers -= w
     }
 
-    val workerAddress = worker.actor.path.address
+    val workerAddress = worker.actor.address
     if (addressToWorker.contains(workerAddress)) {
       val oldWorker = addressToWorker(workerAddress)
       if (oldWorker.state == WorkerState.UNKNOWN) {
@@ -622,11 +627,11 @@ private[spark] class Master(
     logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
     worker.setState(WorkerState.DEAD)
     idToWorker -= worker.id
-    addressToWorker -= worker.actor.path.address
+    addressToWorker -= worker.actor.address
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
-      exec.application.driver ! ExecutorUpdated(
-        exec.id, ExecutorState.LOST, Some("worker lost"), None)
+      exec.application.driver.send(ExecutorUpdated(
+        exec.id, ExecutorState.LOST, Some("worker lost"), None))
       exec.application.removeExecutor(exec)
     }
     for (driver <- worker.drivers.values) {
@@ -648,14 +653,14 @@ private[spark] class Master(
     schedule()
   }
 
-  def createApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
+  def createApplication(desc: ApplicationDescription, driver: RpcEndpointRef): ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
     new ApplicationInfo(now, newApplicationId(date), desc, date, driver, defaultCores)
   }
 
   def registerApplication(app: ApplicationInfo): Unit = {
-    val appAddress = app.driver.path.address
+    val appAddress = app.driver.address
     if (addressToWorker.contains(appAddress)) {
       logInfo("Attempted to re-register application at same address: " + appAddress)
       return
@@ -679,7 +684,7 @@ private[spark] class Master(
       apps -= app
       idToApp -= app.id
       actorToApp -= app.driver
-      addressToApp -= app.driver.path.address
+      addressToApp -= app.driver.address
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
         completedApps.take(toRemove).foreach( a => {
@@ -696,19 +701,19 @@ private[spark] class Master(
 
       for (exec <- app.executors.values) {
         exec.worker.removeExecutor(exec)
-        exec.worker.actor ! KillExecutor(masterUrl, exec.application.id, exec.id)
+        exec.worker.actor.send(KillExecutor(masterUrl, exec.application.id, exec.id))
         exec.state = ExecutorState.KILLED
       }
       app.markFinished(state)
       if (state != ApplicationState.FINISHED) {
-        app.driver ! ApplicationRemoved(state.toString)
+        app.driver.send(ApplicationRemoved(state.toString))
       }
       persistenceEngine.removeApplication(app)
       schedule()
 
       // Tell all workers that the application has finished, so they can clean up any app state.
       workers.foreach { w =>
-        w.actor ! ApplicationFinished(app.id)
+        w.actor.send(ApplicationFinished(app.id))
       }
     }
   }
@@ -817,7 +822,7 @@ private[spark] class Master(
     logInfo("Launching driver " + driver.id + " on worker " + worker.id)
     worker.addDriver(driver)
     driver.worker = Some(worker)
-    worker.actor ! LaunchDriver(driver.id, driver.desc)
+    worker.actor.send(LaunchDriver(driver.id, driver.desc))
     driver.state = DriverState.RUNNING
   }
 
@@ -873,11 +878,10 @@ private[spark] object Master extends Logging {
     val securityMgr = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf,
       securityManager = securityMgr)
-    val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort,
-      securityMgr), actorName)
-    val timeout = AkkaUtils.askTimeout(conf)
-    val respFuture = actor.ask(RequestWebUIPort)(timeout)
-    val resp = Await.result(respFuture, timeout).asInstanceOf[WebUIPortResponse]
+    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+    val actor = rpcEnv.setupEndpoint(actorName,
+      new Master(rpcEnv, host, boundPort, webUiPort, securityMgr))
+    val resp = actor.askWithReply[WebUIPortResponse](RequestWebUIPort)
     (actorSystem, boundPort, resp.webUIBoundPort)
   }
 }

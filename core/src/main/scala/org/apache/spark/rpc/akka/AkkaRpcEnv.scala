@@ -35,7 +35,7 @@ import org.apache.spark.util.AkkaUtils
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-class AkkaRpcEnv(actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
+class AkkaRpcEnv(val actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
   // TODO Once finishing the new Rpc mechanism, make actorSystem be a private val
 
   override def setupEndpoint(name: String, endpointCreator: => RpcEndpoint): RpcEndpointRef = {

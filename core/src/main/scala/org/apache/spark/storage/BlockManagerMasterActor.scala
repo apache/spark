@@ -43,7 +43,7 @@ class BlockManagerMasterActor(override val rpcEnv: RpcEnv, val isLocal: Boolean,
     Utils.namedThreadFactory("block-manager-master-actor-heartbeat-scheduler"))
 
   implicit val executor = ExecutionContext.fromExecutor(
-    Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors(),
+    Executors.newFixedThreadPool(Runtime.getRuntime.availableProcessors(),
       Utils.namedThreadFactory("block-manager-master-actor-ask-timeout-executor")))
 
   // Mapping from block manager id to the block manager's information.
