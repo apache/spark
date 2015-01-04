@@ -17,9 +17,10 @@
 
 package org.apache.spark.mllib.linalg
 
+import scala.util.Random
+
 import breeze.linalg.{DenseMatrix => BDM, squaredDistance => breezeSquaredDistance}
 import org.scalatest.FunSuite
-import scala.util.Random
 
 import org.apache.spark.SparkException
 import org.apache.spark.mllib.util.TestingUtils._
@@ -178,14 +179,14 @@ class VectorsSuite extends FunSuite {
 
   test("sqdist") {
     val random = new Random(System.nanoTime())
-    for (m <- 1 until 1000) {
-      val length = random.nextInt(m) + 1
+    for (m <- 1 until 1000 by 10) {
+      val nnz = random.nextInt(m) + 1
 
-      val indices1 = random.shuffle(0 to m - 1).toArray.slice(0, length).sorted
+      val indices1 = random.shuffle(0 to m - 1).toArray.slice(0, nnz).sorted
       val values1 = indices1.map(i => random.nextInt(m + 1) * random.nextDouble())
       val sparseVector1 = Vectors.sparse(m, indices1, values1)
 
-      val indices2 = random.shuffle(0 to m - 1).toArray.slice(0, length).sorted
+      val indices2 = random.shuffle(0 to m - 1).toArray.slice(0, nnz).sorted
       val values2 = indices2.map(i => random.nextInt(m + 1) * random.nextDouble())
       val sparseVector2 = Vectors.sparse(m, indices2, values2)
 
