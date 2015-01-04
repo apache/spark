@@ -158,6 +158,11 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
         " INPUT_BYTES=" + metrics.bytesRead
       case None => ""
     }
+    val outputMetrics = taskMetrics.outputMetrics match {
+      case Some(metrics) =>
+        " OUTPUT_BYTES=" + metrics.bytesWritten
+      case None => ""
+    }
     val shuffleReadMetrics = taskMetrics.shuffleReadMetrics match {
       case Some(metrics) =>
         " BLOCK_FETCHED_TOTAL=" + metrics.totalBlocksFetched +
@@ -173,7 +178,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
         " SHUFFLE_WRITE_TIME=" + metrics.shuffleWriteTime
       case None => ""
     }
-    stageLogInfo(stageId, status + info + executorRunTime + gcTime + inputMetrics +
+    stageLogInfo(stageId, status + info + executorRunTime + gcTime + inputMetrics + outputMetrics +
       shuffleReadMetrics + writeMetrics)
   }
 
@@ -215,7 +220,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
         taskStatus += " STATUS=RESUBMITTED TID=" + taskInfo.taskId +
                       " STAGE_ID=" + taskEnd.stageId
         stageLogInfo(taskEnd.stageId, taskStatus)
-      case FetchFailed(bmAddress, shuffleId, mapId, reduceId) =>
+      case FetchFailed(bmAddress, shuffleId, mapId, reduceId, message) =>
         taskStatus += " STATUS=FETCHFAILED TID=" + taskInfo.taskId + " STAGE_ID=" +
                       taskEnd.stageId + " SHUFFLE_ID=" + shuffleId + " MAP_ID=" +
                       mapId + " REDUCE_ID=" + reduceId

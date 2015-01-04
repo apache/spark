@@ -17,23 +17,21 @@
 
 package org.apache.spark.streaming.kafka
 
+import java.util.Properties
+
 import scala.collection.Map
 import scala.reflect.{classTag, ClassTag}
 
-import java.util.Properties
-import java.util.concurrent.Executors
-
-import kafka.consumer._
+import kafka.consumer.{KafkaStream, Consumer, ConsumerConfig, ConsumerConnector}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
-import kafka.utils.ZKStringSerializer
-import org.I0Itec.zkclient._
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.util.Utils
 
 /**
  * Input stream that pulls messages from a Kafka Broker.
@@ -53,12 +51,16 @@ class KafkaInputDStream[
     @transient ssc_ : StreamingContext,
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
+    useReliableReceiver: Boolean,
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[(K, V)](ssc_) with Logging {
 
   def getReceiver(): Receiver[(K, V)] = {
-    new KafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)
-        .asInstanceOf[Receiver[(K, V)]]
+    if (!useReliableReceiver) {
+      new KafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)
+    } else {
+      new ReliableKafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)
+    }
   }
 }
 
@@ -71,14 +73,15 @@ class KafkaReceiver[
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
     storageLevel: StorageLevel
-  ) extends Receiver[Any](storageLevel) with Logging {
+  ) extends Receiver[(K, V)](storageLevel) with Logging {
 
   // Connection to Kafka
-  var consumerConnector : ConsumerConnector = null
+  var consumerConnector: ConsumerConnector = null
 
   def onStop() {
     if (consumerConnector != null) {
       consumerConnector.shutdown()
+      consumerConnector = null
     }
   }
 
@@ -97,12 +100,6 @@ class KafkaReceiver[
     consumerConnector = Consumer.create(consumerConfig)
     logInfo("Connected to " + zkConnect)
 
-    // When auto.offset.reset is defined, it is our responsibility to try and whack the
-    // consumer group zk node.
-    if (kafkaParams.contains("auto.offset.reset")) {
-      tryZookeeperConsumerGroupCleanup(zkConnect, kafkaParams("group.id"))
-    }
-
     val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
       .newInstance(consumerConfig.props)
       .asInstanceOf[Decoder[K]]
@@ -110,11 +107,11 @@ class KafkaReceiver[
       .newInstance(consumerConfig.props)
       .asInstanceOf[Decoder[V]]
 
-    // Create Threads for each Topic/Message Stream we are listening
+    // Create threads for each topic/message Stream we are listening
     val topicMessageStreams = consumerConnector.createMessageStreams(
       topics, keyDecoder, valueDecoder)
 
-    val executorPool = Executors.newFixedThreadPool(topics.values.sum)
+    val executorPool = Utils.newDaemonFixedThreadPool(topics.values.sum, "KafkaMessageHandler")
     try {
       // Start the messages handler for each partition
       topicMessageStreams.values.foreach { streams =>
@@ -125,40 +122,20 @@ class KafkaReceiver[
     }
   }
 
-  // Handles Kafka Messages
-  private class MessageHandler[K: ClassTag, V: ClassTag](stream: KafkaStream[K, V])
+  // Handles Kafka messages
+  private class MessageHandler(stream: KafkaStream[K, V])
     extends Runnable {
     def run() {
       logInfo("Starting MessageHandler.")
       try {
-        for (msgAndMetadata <- stream) {
+        val streamIterator = stream.iterator()
+        while (streamIterator.hasNext()) {
+          val msgAndMetadata = streamIterator.next()
           store((msgAndMetadata.key, msgAndMetadata.message))
         }
       } catch {
         case e: Throwable => logError("Error handling message; exiting", e)
       }
-    }
-  }
-
-  // It is our responsibility to delete the consumer group when specifying auto.offset.reset. This
-  // is because Kafka 0.7.2 only honors this param when the group is not in zookeeper.
-  //
-  // The kafka high level consumer doesn't expose setting offsets currently, this is a trick copied
-  // from Kafka's ConsoleConsumer. See code related to 'auto.offset.reset' when it is set to
-  // 'smallest'/'largest':
-  // scalastyle:off
-  // https://github.com/apache/kafka/blob/0.7.2/core/src/main/scala/kafka/consumer/ConsoleConsumer.scala
-  // scalastyle:on
-  private def tryZookeeperConsumerGroupCleanup(zkUrl: String, groupId: String) {
-    val dir = "/consumers/" + groupId
-    logInfo("Cleaning up temporary Zookeeper data under " + dir + ".")
-    val zk = new ZkClient(zkUrl, 30*1000, 30*1000, ZKStringSerializer)
-    try {
-      zk.deleteRecursive(dir)
-    } catch {
-      case e: Throwable => logWarning("Error cleaning up temporary Zookeeper data", e)
-    } finally {
-      zk.close()
     }
   }
 }

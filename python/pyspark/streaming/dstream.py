@@ -157,18 +157,20 @@ class DStream(object):
         api = self._ssc._jvm.PythonDStream
         api.callForeachRDD(self._jdstream, jfunc)
 
-    def pprint(self):
+    def pprint(self, num=10):
         """
-        Print the first ten elements of each RDD generated in this DStream.
+        Print the first num elements of each RDD generated in this DStream.
+
+        @param num: the number of elements from the first will be printed.
         """
         def takeAndPrint(time, rdd):
-            taken = rdd.take(11)
+            taken = rdd.take(num + 1)
             print "-------------------------------------------"
             print "Time: %s" % time
             print "-------------------------------------------"
-            for record in taken[:10]:
+            for record in taken[:num]:
                 print record
-            if len(taken) > 10:
+            if len(taken) > num:
                 print "..."
             print
 
@@ -441,9 +443,11 @@ class DStream(object):
 
         if `invReduceFunc` is not None, the reduction is done incrementally
         using the old window's reduced value :
-         1. reduce the new values that entered the window (e.g., adding new counts)
-         2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
-         This is more efficient than `invReduceFunc` is None.
+
+        1. reduce the new values that entered the window (e.g., adding new counts)
+
+        2. "inverse reduce" the old values that left the window (e.g., subtracting old counts)
+        This is more efficient than `invReduceFunc` is None.
 
         @param reduceFunc:     associative reduce function
         @param invReduceFunc:  inverse reduce function of `reduceFunc`

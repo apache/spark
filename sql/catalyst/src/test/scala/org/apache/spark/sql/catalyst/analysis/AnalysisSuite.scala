@@ -19,11 +19,13 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
+
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 
 class AnalysisSuite extends FunSuite with BeforeAndAfter {
   val caseSensitiveCatalog = new SimpleCatalog(true)
@@ -38,12 +40,20 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     AttributeReference("a", StringType)(),
     AttributeReference("b", StringType)(),
     AttributeReference("c", DoubleType)(),
-    AttributeReference("d", DecimalType)(),
+    AttributeReference("d", DecimalType.Unlimited)(),
     AttributeReference("e", ShortType)())
 
   before {
     caseSensitiveCatalog.registerTable(None, "TaBlE", testRelation)
     caseInsensitiveCatalog.registerTable(None, "TaBlE", testRelation)
+  }
+
+  test("union project *") {
+    val plan = (1 to 100)
+      .map(_ => testRelation)
+      .fold[LogicalPlan](testRelation)((a,b) => a.select(Star(None)).select('a).unionAll(b.select(Star(None))))
+
+    assert(caseInsensitiveAnalyze(plan).resolved)
   }
 
   test("analyze project") {
@@ -119,7 +129,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
       AttributeReference("a", StringType)(),
       AttributeReference("b", StringType)(),
       AttributeReference("c", DoubleType)(),
-      AttributeReference("d", DecimalType)(),
+      AttributeReference("d", DecimalType.Unlimited)(),
       AttributeReference("e", ShortType)())
 
     val expr0 = 'a / 2
@@ -137,7 +147,7 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     assert(pl(0).dataType == DoubleType)
     assert(pl(1).dataType == DoubleType)
     assert(pl(2).dataType == DoubleType)
-    assert(pl(3).dataType == DecimalType)
+    assert(pl(3).dataType == DecimalType.Unlimited)
     assert(pl(4).dataType == DoubleType)
   }
 }

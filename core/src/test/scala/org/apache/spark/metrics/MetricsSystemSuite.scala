@@ -121,7 +121,7 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter with PrivateMethod
     }
 
     val appId = "testId"
-    val executorId = "executor.1"
+    val executorId = "1"
     conf.set("spark.app.id", appId)
     conf.set("spark.executor.id", executorId)
 
@@ -138,7 +138,7 @@ class MetricsSystemSuite extends FunSuite with BeforeAndAfter with PrivateMethod
       override val metricRegistry = new MetricRegistry()
     }
 
-    val executorId = "executor.1"
+    val executorId = "1"
     conf.set("spark.executor.id", executorId)
 
     val instanceName = "executor"

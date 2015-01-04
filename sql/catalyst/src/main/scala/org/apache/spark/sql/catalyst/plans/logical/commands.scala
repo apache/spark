@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, BoundReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.types.StringType
 
 /**
@@ -30,15 +30,7 @@ abstract class Command extends LeafNode {
 }
 
 /**
- * Returned for commands supported by a given parser, but not catalyst.  In general these are DDL
- * commands that are passed directly to another system.
- */
-case class NativeCommand(cmd: String) extends Command {
-  override def output =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
-
-/**
+ *
  * Commands of the form "SET [key [= value] ]".
  */
 case class SetCommand(kv: Option[(String, Option[String])]) extends Command {
@@ -81,14 +73,3 @@ case class DescribeCommand(
     AttributeReference("data_type", StringType, nullable = false)(),
     AttributeReference("comment", StringType, nullable = false)())
 }
-
-/**
- * Returned for the "! shellCommand" command
- */
-case class ShellCommand(cmd: String) extends Command
-
-
-/**
- * Returned for the "SOURCE file" command
- */
-case class SourceCommand(filePath: String) extends Command

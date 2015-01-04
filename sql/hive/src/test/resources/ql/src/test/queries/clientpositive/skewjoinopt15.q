@@ -4,7 +4,7 @@ set hive.optimize.skewjoin.compiletime = true;
 
 CREATE TABLE tmpT1(key STRING, val STRING) STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../data/files/T1.txt' INTO TABLE tmpT1;
+LOAD DATA LOCAL INPATH '../../data/files/T1.txt' INTO TABLE tmpT1;
 
 -- testing skew on other data types - int
 CREATE TABLE T1(key INT, val STRING) SKEWED BY (key) ON ((2));
@@ -12,7 +12,7 @@ INSERT OVERWRITE TABLE T1 SELECT key, val FROM tmpT1;
 
 CREATE TABLE tmpT2(key STRING, val STRING) STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../data/files/T2.txt' INTO TABLE tmpT2;
+LOAD DATA LOCAL INPATH '../../data/files/T2.txt' INTO TABLE tmpT2;
 
 CREATE TABLE T2(key INT, val STRING) SKEWED BY (key) ON ((3));
 

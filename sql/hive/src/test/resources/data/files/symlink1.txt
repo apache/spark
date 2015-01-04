@@ -1,2 +1,2 @@
-../data/files/T1.txt
-../data/files/T3.txt
+../../data/files/T1.txt
+../../data/files/T3.txt

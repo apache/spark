@@ -57,7 +57,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @Test
   public void testInitialization() {
-    Assert.assertNotNull(ssc.sc());
+    Assert.assertNotNull(ssc.sparkContext());
   }
 
   @SuppressWarnings("unchecked")
@@ -662,7 +662,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
       listOfDStreams1,
       new Function2<List<JavaRDD<?>>, Time, JavaRDD<Long>>() {
         public JavaRDD<Long> call(List<JavaRDD<?>> listOfRDDs, Time time) {
-          assert(listOfRDDs.size() == 2);
+          Assert.assertEquals(2, listOfRDDs.size());
           return null;
         }
       }
@@ -675,7 +675,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
       listOfDStreams2,
       new Function2<List<JavaRDD<?>>, Time, JavaPairRDD<Integer, Tuple2<Integer, String>>>() {
         public JavaPairRDD<Integer, Tuple2<Integer, String>> call(List<JavaRDD<?>> listOfRDDs, Time time) {
-          assert(listOfRDDs.size() == 3);
+          Assert.assertEquals(3, listOfRDDs.size());
           JavaRDD<Integer> rdd1 = (JavaRDD<Integer>)listOfRDDs.get(0);
           JavaRDD<Integer> rdd2 = (JavaRDD<Integer>)listOfRDDs.get(1);
           JavaRDD<Tuple2<Integer, String>> rdd3 = (JavaRDD<Tuple2<Integer, String>>)listOfRDDs.get(2);
@@ -806,15 +806,17 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
    * Performs an order-invariant comparison of lists representing two RDD streams. This allows
    * us to account for ordering variation within individual RDD's which occurs during windowing.
    */
-  public static <T extends Comparable<T>> void assertOrderInvariantEquals(
+  public static <T> void assertOrderInvariantEquals(
       List<List<T>> expected, List<List<T>> actual) {
+    List<Set<T>> expectedSets = new ArrayList<Set<T>>();
     for (List<T> list: expected) {
-      Collections.sort(list);
+      expectedSets.add(Collections.unmodifiableSet(new HashSet<T>(list)));
     }
+    List<Set<T>> actualSets = new ArrayList<Set<T>>();
     for (List<T> list: actual) {
-      Collections.sort(list);
+      actualSets.add(Collections.unmodifiableSet(new HashSet<T>(list)));
     }
-    Assert.assertEquals(expected, actual);
+    Assert.assertEquals(expectedSets, actualSets);
   }
 
 
@@ -967,7 +969,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
             });
 
     JavaTestUtils.attachTestOutputStream(reversed);
-    List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(expected, result);
   }
@@ -1010,7 +1012,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
           }
         });
     JavaTestUtils.attachTestOutputStream(flatMapped);
-    List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(expected, result);
   }
@@ -1161,9 +1163,9 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaTestUtils.attachTestOutputStream(groupWindowed);
     List<List<Tuple2<String, List<Integer>>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
-    assert(result.size() == expected.size());
+    Assert.assertEquals(expected.size(), result.size());
     for (int i = 0; i < result.size(); i++) {
-      assert(convert(result.get(i)).equals(convert(expected.get(i))));
+      Assert.assertEquals(convert(expected.get(i)), convert(result.get(i)));
     }
   }
 
@@ -1237,6 +1239,49 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
     Assert.assertEquals(expected, result);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void testUpdateStateByKeyWithInitial() {
+    List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
+
+    List<Tuple2<String, Integer>> initial = Arrays.asList (
+            new Tuple2<String, Integer> ("california", 1),
+            new Tuple2<String, Integer> ("new york", 2));
+
+    JavaRDD<Tuple2<String, Integer>> tmpRDD = ssc.sparkContext().parallelize(initial);
+    JavaPairRDD<String, Integer> initialRDD = JavaPairRDD.fromJavaRDD (tmpRDD);
+
+    List<List<Tuple2<String, Integer>>> expected = Arrays.asList(
+        Arrays.asList(new Tuple2<String, Integer>("california", 5),
+            new Tuple2<String, Integer>("new york", 7)),
+        Arrays.asList(new Tuple2<String, Integer>("california", 15),
+            new Tuple2<String, Integer>("new york", 11)),
+        Arrays.asList(new Tuple2<String, Integer>("california", 15),
+            new Tuple2<String, Integer>("new york", 11)));
+
+    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
+
+    JavaPairDStream<String, Integer> updated = pairStream.updateStateByKey(
+        new Function2<List<Integer>, Optional<Integer>, Optional<Integer>>() {
+        @Override
+        public Optional<Integer> call(List<Integer> values, Optional<Integer> state) {
+          int out = 0;
+          if (state.isPresent()) {
+            out = out + state.get();
+          }
+          for (Integer v: values) {
+            out = out + v;
+          }
+          return Optional.of(out);
+        }
+        }, new HashPartitioner(1), initialRDD);
+    JavaTestUtils.attachTestOutputStream(updated);
+    List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
+
+    assertOrderInvariantEquals(expected, result);
   }
 
   @SuppressWarnings("unchecked")
@@ -1338,7 +1383,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         });
 
     JavaTestUtils.attachTestOutputStream(sorted);
-    List<List<Tuple2<String, String>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<Integer, Integer>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(expected, result);
   }

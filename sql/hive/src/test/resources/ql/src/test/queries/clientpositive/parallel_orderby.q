@@ -1,6 +1,6 @@
 create table src5 (key string, value string);
-load data local inpath '../data/files/kv5.txt' into table src5;
-load data local inpath '../data/files/kv5.txt' into table src5;
+load data local inpath '../../data/files/kv5.txt' into table src5;
+load data local inpath '../../data/files/kv5.txt' into table src5;
 
 set mapred.reduce.tasks = 4;
 set hive.optimize.sampling.orderby=true;

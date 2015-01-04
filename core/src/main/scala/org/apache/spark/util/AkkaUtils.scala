@@ -77,7 +77,7 @@ private[spark] object AkkaUtils extends Logging {
 
     val logAkkaConfig = if (conf.getBoolean("spark.akka.logAkkaConfig", false)) "on" else "off"
 
-    val akkaHeartBeatPauses = conf.getInt("spark.akka.heartbeat.pauses", 600)
+    val akkaHeartBeatPauses = conf.getInt("spark.akka.heartbeat.pauses", 6000)
     val akkaFailureDetector =
       conf.getDouble("spark.akka.failure-detector.threshold", 300.0)
     val akkaHeartBeatInterval = conf.getInt("spark.akka.heartbeat.interval", 1000)
@@ -134,9 +134,16 @@ private[spark] object AkkaUtils extends Logging {
     Duration.create(conf.getLong("spark.akka.lookupTimeout", 30), "seconds")
   }
 
+  private val AKKA_MAX_FRAME_SIZE_IN_MB = Int.MaxValue / 1024 / 1024
+
   /** Returns the configured max frame size for Akka messages in bytes. */
   def maxFrameSizeBytes(conf: SparkConf): Int = {
-    conf.getInt("spark.akka.frameSize", 10) * 1024 * 1024
+    val frameSizeInMB = conf.getInt("spark.akka.frameSize", 10)
+    if (frameSizeInMB > AKKA_MAX_FRAME_SIZE_IN_MB) {
+      throw new IllegalArgumentException("spark.akka.frameSize should not be greater than "
+        + AKKA_MAX_FRAME_SIZE_IN_MB + "MB")
+    }
+    frameSizeInMB * 1024 * 1024
   }
 
   /** Space reserved for extra data in an Akka message besides serialized task or task result. */
@@ -159,17 +166,28 @@ private[spark] object AkkaUtils extends Logging {
   def askWithReply[T](
       message: Any,
       actor: ActorRef,
-      retryAttempts: Int,
+      timeout: FiniteDuration): T = {
+    askWithReply[T](message, actor, maxAttempts = 1, retryInterval = Int.MaxValue, timeout)
+  }
+
+  /**
+   * Send a message to the given actor and get its result within a default timeout, or
+   * throw a SparkException if this fails even after the specified number of retries.
+   */
+  def askWithReply[T](
+      message: Any,
+      actor: ActorRef,
+      maxAttempts: Int,
       retryInterval: Int,
       timeout: FiniteDuration): T = {
     // TODO: Consider removing multiple attempts
     if (actor == null) {
-      throw new SparkException("Error sending message as driverActor is null " +
+      throw new SparkException("Error sending message as actor is null " +
         "[message = " + message + "]")
     }
     var attempts = 0
     var lastException: Exception = null
-    while (attempts < retryAttempts) {
+    while (attempts < maxAttempts) {
       attempts += 1
       try {
         val future = actor.ask(message)(timeout)
@@ -197,6 +215,20 @@ private[spark] object AkkaUtils extends Logging {
     val driverPort: Int = conf.getInt("spark.driver.port", 7077)
     Utils.checkHost(driverHost, "Expected hostname")
     val url = s"akka.tcp://$driverActorSystemName@$driverHost:$driverPort/user/$name"
+    val timeout = AkkaUtils.lookupTimeout(conf)
+    logInfo(s"Connecting to $name: $url")
+    Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
+  }
+
+  def makeExecutorRef(
+      name: String,
+      conf: SparkConf,
+      host: String,
+      port: Int,
+      actorSystem: ActorSystem): ActorRef = {
+    val executorActorSystemName = SparkEnv.executorActorSystemName
+    Utils.checkHost(host, "Expected hostname")
+    val url = s"akka.tcp://$executorActorSystemName@$host:$port/user/$name"
     val timeout = AkkaUtils.lookupTimeout(conf)
     logInfo(s"Connecting to $name: $url")
     Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)

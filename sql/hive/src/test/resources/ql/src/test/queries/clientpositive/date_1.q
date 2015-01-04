@@ -1,21 +1,23 @@
+set hive.fetch.task.conversion=more;
+
 drop table date_1;
 
 create table date_1 (d date);
 
 insert overwrite table date_1 
-  select cast('2011-01-01' as date) from src limit 1;
+  select cast('2011-01-01' as date) from src tablesample (1 rows);
 
 select * from date_1 limit 1;
 select d, count(d) from date_1 group by d;
 
 insert overwrite table date_1 
-  select date '2011-01-01' from src limit 1;
+  select date '2011-01-01' from src tablesample (1 rows);
 
 select * from date_1 limit 1;
 select d, count(d) from date_1 group by d;
 
 insert overwrite table date_1 
-  select cast(cast('2011-01-01 00:00:00' as timestamp) as date) from src limit 1;
+  select cast(cast('2011-01-01 00:00:00' as timestamp) as date) from src tablesample (1 rows);
 
 select * from date_1 limit 1;
 select d, count(d) from date_1 group by d;

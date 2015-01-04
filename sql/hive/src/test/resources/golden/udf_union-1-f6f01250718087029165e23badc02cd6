@@ -1,4 +1,0 @@
-create_union(tag, obj1, obj2, obj3, ...) - Creates a union with the object for given tag
-Example:
-  > SELECT create_union(1, 1, "one") FROM src LIMIT 1;
-  one
