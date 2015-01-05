@@ -106,10 +106,10 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
 }
 
 /**
- * This is an interface that can be used to block until certain events occur, such as
- * the start/completion of batches.  This is much less brittle than waiting on wall-clock time.
- * Internally, this is implemented using a StreamingListener.  Constructing a new instance of this
- * class automatically registers a StreamingListener on the given StreamingContext.
+ * An object that can be used to block until certain events occur, such as batch start/completion.
+ * This is much less brittle than waiting on wall-clock time. Internally, this is implemented using
+ * a StreamingListener.  Constructing a new instance automatically registers a StreamingListener on
+ * the given StreamingContext.
  */
 class StreamingTestWaiter(ssc: StreamingContext) {
 

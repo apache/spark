@@ -338,14 +338,14 @@ class CheckpointSuite extends TestSuiteBase {
     }
 
     try {
-      // This is a var because it's re-assigned when we restart from a checkpoint:
+      // This is a var because it's re-assigned when we restart from a checkpoint
       var clock: ManualClock = null
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
         ssc.checkpoint(checkpointDir)
         clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         val waiter = new StreamingTestWaiter(ssc)
         val fileStream = ssc.textFileStream(testDir.toString)
-        // MKW value 3 take a large time to process, to ensure that the driver
+        // Make value 3 take a large time to process, to ensure that the driver
         // shuts down in the middle of processing the 3rd batch
         val mappedStream = fileStream.map(s => {
           val i = s.toInt
@@ -373,13 +373,15 @@ class CheckpointSuite extends TestSuiteBase {
         clock.addToTime(batchDuration.milliseconds)
         waiter.waitForTotalBatchesStarted(3, batchDuration * 5)
         Thread.sleep(1000) // To wait for execution to actually begin
-        logInfo("Output = " + outputStream.output.mkString("[", ", ", "]"))
-        assert(outputStream.output.size > 0, "No files processed after restart")
+        logInfo("Output after first start = " + outputStream.output.mkString("[", ", ", "]"))
+        assert(outputStream.output.size > 0, "No files processed before restart")
         ssc.stop()
 
         // Verify whether files created have been recorded correctly or not
         assert(recordedFiles(ssc) === Seq(1, 2, 3))
       }
+
+      // The original StreamingContext has now been stopped.
 
       // Create files while the streaming driver is down
       for (i <- Seq(4, 5, 6)) {
@@ -391,7 +393,7 @@ class CheckpointSuite extends TestSuiteBase {
       // recorded before failure were saved and successfully recovered
       logInfo("*********** RESTARTING ************")
       withStreamingContext(new StreamingContext(checkpointDir)) { ssc =>
-        // Copy over the time from the old clock so that we don't appear to have time-traveled:
+        // Copy over the time from the old clock so that we don't appear to have time-traveled
         clock = {
           val newClock = ssc.scheduler.clock.asInstanceOf[ManualClock]
           newClock.setTime(clock.currentTime())
@@ -399,6 +401,7 @@ class CheckpointSuite extends TestSuiteBase {
         }
         val waiter = new StreamingTestWaiter(ssc)
         val outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]
+        // Check that we remember files that were recorded before the restart
         assert(recordedFiles(ssc) === Seq(1, 2, 3))
 
         // Restart stream computation
@@ -410,12 +413,12 @@ class CheckpointSuite extends TestSuiteBase {
           waiter.waitForTotalBatchesCompleted(index + 1, batchDuration * 5)
         }
         clock.addToTime(batchDuration.milliseconds)
-        logInfo("Output = " + outputStream.output.mkString("[", ", ", "]"))
+        logInfo("Output after restart = " + outputStream.output.mkString("[", ", ", "]"))
         assert(outputStream.output.size > 0, "No files processed after restart")
         ssc.stop()
 
         // Verify whether files created while the driver was down (4, 5, 6) and files created after
-        // recovery (7, 8, 9), have been recorded or not
+        // recovery (7, 8, 9) have been recorded
         assert(recordedFiles(ssc) === (1 to 9))
 
         // Append the new output to the old buffer
