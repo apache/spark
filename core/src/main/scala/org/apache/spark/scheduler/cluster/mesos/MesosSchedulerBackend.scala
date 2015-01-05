@@ -21,6 +21,8 @@ import java.io.File
 import java.util.{ArrayList => JArrayList, List => JList}
 import java.util.Collections
 
+import org.apache.spark.executor.MesosExecutorBackend
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
 
@@ -123,14 +125,16 @@ private[spark] class MesosSchedulerBackend(
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
     val uri = sc.conf.get("spark.executor.uri", null)
+    val executorBackendName = classOf[MesosExecutorBackend].getName
     if (uri == null) {
-      val executorPath = new File(executorSparkHome, "/sbin/spark-executor").getCanonicalPath
+      val executorPath = new File(executorSparkHome, s"/bin/spark-class $executorBackendName")
+        .getCanonicalPath
       command.setValue("%s %s".format(prefixEnv, executorPath))
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
       val basename = uri.split('/').last.split('.').head
-      command.setValue("cd %s*; %s ./sbin/spark-executor".format(basename, prefixEnv))
+      command.setValue(s"cd ${basename}*; $prefixEnv ./bin/spark-class $executorBackendName")
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
     val cpus = Resource.newBuilder()
