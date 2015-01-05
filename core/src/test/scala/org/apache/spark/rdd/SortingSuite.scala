@@ -140,6 +140,10 @@ class SortingSuite extends FunSuite with SharedSparkContext with Matchers with L
     val pairs = sc.parallelize(Array((5, "c"), (1, "a"), (5, "b"), (1, "c"), (1, "b")))
     val top2 = pairs.groupByKeyAndSortValues(2).mapValues(_.toIterator.take(2).mkString(""))
     assert(top2.collect.toSet === Set((1, "ab"), (5, "bc")))
+
+    val collusionPairs = sc.parallelize(Array(("Aa", 1), ("BB", 1), ("Aa", 2), ("BB", 2))) // Aa and BB have same hashCode
+    val sortedLists = collusionPairs.groupByKeyAndSortValues(2).mapValues(_.toList)
+    assert(sortedLists.collect.toSet === Set(("Aa", List(1, 2)), ("BB", List(1, 2))))
   }
 }
 
