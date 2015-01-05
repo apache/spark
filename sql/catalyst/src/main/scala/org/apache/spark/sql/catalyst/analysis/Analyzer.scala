@@ -446,29 +446,23 @@ class Analyzer(catalog: Catalog,
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case p: LogicalPlan if !p.childrenResolved => p
       case filter @ Filter(conditions, child) =>
-        val subqueryExprs = new scala.collection.mutable.ArrayBuffer[In]()
-        val nonSubQueryConds = new scala.collection.mutable.ArrayBuffer[Expression]()
-        conditions.collect {
-          case s @ In(exp, Seq(SubqueryExpression(subquery))) =>
-            subqueryExprs += s
+        val subqueryExprs = conditions.collect {
+          case In(exp, Seq(SubqueryExpression(subquery))) => (exp, subquery)
         }
+        // Replace subqueries with a dummy true literal since they are evaluated separately now.
         val transformedConds = conditions.transform {
-          // Replace with dummy
-          case s @ In(exp,Seq(SubqueryExpression(subquery))) =>
-            Literal(true)
+          case In(_, Seq(SubqueryExpression(_))) => Literal(true)
         }
-        if (subqueryExprs.size == 1) {
-          val subqueryExpr = subqueryExprs.remove(0)
-          createLeftSemiJoin(
-            child,
-            subqueryExpr.value,
-            subqueryExpr.list(0).asInstanceOf[SubqueryExpression].subquery,
-            transformedConds)
-        } else if (subqueryExprs.size > 1) {
-          // Only one subquery expression is supported.
-          throw new TreeNodeException(filter, "Only one SubQuery expression is supported.")
-        } else {
-          filter
+        subqueryExprs match {
+          case Seq() => filter // No subqueries.
+          case Seq((exp, subquery)) =>
+            createLeftSemiJoin(
+              child,
+              exp,
+              subquery,
+              transformedConds)
+          case _ =>
+            throw new TreeNodeException(filter, "Only one SubQuery expression is supported.")
         }
     }
 
@@ -481,9 +475,9 @@ class Analyzer(catalog: Catalog,
         subquery: LogicalPlan,
         parentConds: Expression) : LogicalPlan = {
       val (transformedPlan, subqueryConds) = transformAndGetConditions(value, subquery)
-      // Unify the parent query conditions and subquery conditions and add these as join conditions
-      val unifyConds = And(parentConds, subqueryConds)
-      Join(left, transformedPlan, LeftSemi, Some(unifyConds))
+      // Add both parent query conditions and subquery conditions as join conditions
+      val allPredicates = And(parentConds, subqueryConds)
+      Join(left, transformedPlan, LeftSemi, Some(allPredicates))
     }
 
     /**
@@ -493,6 +487,9 @@ class Analyzer(catalog: Catalog,
     def transformAndGetConditions(value: Expression,
           subquery: LogicalPlan): (LogicalPlan, Expression) = {
       val expr = new scala.collection.mutable.ArrayBuffer[Expression]()
+      // TODO : we only decorelate subqueries in very specific cases like the cases mentioned above
+      // in documentation. The more complex queries like using of subqueries inside subqueries can 
+      // be supported in future.
       val transformedPlan = subquery transform {
         case project @ Project(projectList, f @ Filter(condition, child)) =>
           // Don't support more than one item in select list of subquery
@@ -537,7 +534,7 @@ class Analyzer(catalog: Catalog,
           Project(witAliases, child)
       }
       // Add alias to Subquery as 'subquery'
-      (transformedPlan, expr.reduce(And(_, _)))
+      (transformedPlan, expr.reduce(And))
     }
   }
 }

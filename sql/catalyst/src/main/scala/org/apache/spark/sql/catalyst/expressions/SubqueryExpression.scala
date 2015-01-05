@@ -30,7 +30,7 @@ case class SubqueryExpression(subquery: LogicalPlan) extends Expression {
   def dataType = subquery.output.head.dataType
   override def foldable = false
   def nullable = true
-  override def toString = s"SubqueryExpression($subquery)"
+  override def toString = s"SubqueryExpression(${subquery.output.mkString(",")})"
   override lazy val resolved = false
   def children = Nil
   override def eval(input: Row): Any =
