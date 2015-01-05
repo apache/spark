@@ -74,9 +74,14 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   /** Sets up the system initially or after a RESET command */
   protected def configure(): Unit = {
-    setConf("javax.jdo.option.ConnectionURL",
-      s"jdbc:derby:;databaseName=$metastorePath;create=true")
-    setConf("hive.metastore.warehouse.dir", warehousePath)
+    Option(getConf("javax.jdo.option.ConnectionURL")).getOrElse(
+      setConf("javax.jdo.option.ConnectionURL",
+        s"jdbc:derby:;databaseName=$metastorePath;create=true")
+    )
+    // only set for derby
+    if (getConf("javax.jdo.option.ConnectionURL").indexOf("derby") > 0) {
+      setConf("hive.metastore.warehouse.dir", warehousePath)
+    }
     Utils.registerShutdownDeleteDir(new File(warehousePath))
     Utils.registerShutdownDeleteDir(new File(metastorePath))
   }
