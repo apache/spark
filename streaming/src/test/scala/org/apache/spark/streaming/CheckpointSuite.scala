@@ -256,7 +256,21 @@ class CheckpointSuite extends TestSuiteBase {
   }
 
   test("recovery with saveAsHadoopFile inside transform operation") {
-    // Regression test for SPARK-4835
+    // Regression test for SPARK-4835.
+    //
+    // In that issue, the problem was that `saveAsHadoopFile(s)` would fail when the last batch
+    // was restarted from a checkpoint since the output directory would already exist.  However,
+    // the other saveAsHadoopFile* tests couldn't catch this because they only tested whether the
+    // output matched correctly and not whether the post-restart batch had successfully finished
+    // without throwing any errors.  The following test reproduces the same bug with a test that
+    // actually fails because the error in saveAsHadoopFile causes transform() to fail, which
+    // prevents the expected output from being written to the output stream.
+    //
+    // This is not actually a valid use of transform, but it's being used here so that we can test
+    // the fix for SPARK-4835 independently of additional test cleanup.
+    //
+    // After SPARK-5079 is addressed, should be able to remove this test since a strengthened
+    // version of the other saveAsHadoopFile* tests would prevent regressions for this issue.
     val tempDir = Files.createTempDir()
     try {
       testCheckpointedOperation(
