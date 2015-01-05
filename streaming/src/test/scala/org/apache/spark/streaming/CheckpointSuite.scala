@@ -379,17 +379,19 @@ class CheckpointSuite extends TestSuiteBase {
           }
         }
         clock.addToTime(batchDuration.milliseconds)
-        Thread.sleep(1000) // To wait for execution to actually begin
         eventually(timeout(batchDuration * 5)) {
-          assert(waiter.getNumStartedBatches === 3)
+          // Wait until all files have been recorded and all batches have started
+          assert(recordedFiles(ssc) === Seq(1, 2, 3) && waiter.getNumStartedBatches === 3)
         }
-        assert(waiter.getNumCompletedBatches === 2)
-        logInfo("Output after first start = " + outputStream.output.mkString("[", ", ", "]"))
-        assert(outputStream.output.size > 0, "No files processed before restart")
+        // Wait for a checkpoint to be written
+        val fs = new Path(checkpointDir).getFileSystem(ssc.sc.hadoopConfiguration)
+        eventually(timeout(batchDuration * 5)) {
+          assert(Checkpoint.getCheckpointFiles(checkpointDir, fs).size === 5)
+        }
         ssc.stop()
-
-        // Verify whether files created have been recorded correctly or not
-        assert(recordedFiles(ssc) === Seq(1, 2, 3))
+        // Check that we shut down while the third batch was being processed
+        assert(waiter.getNumCompletedBatches === 2)
+        assert(outputStream.output.flatten === Seq(1, 3))
       }
 
       // The original StreamingContext has now been stopped.
