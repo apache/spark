@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.math.{min, max}
+import scala.util.control.NonFatal
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
@@ -458,17 +459,16 @@ private[spark] class TaskSetManager(
           }
           // Serialize and return the task
           val startTime = clock.getTime()
-          var serializedTask : ByteBuffer = null
-          try {
-            serializedTask = Task.serializeWithDependencies(task, sched.sc.addedFiles,
+          val serializedTask : ByteBuffer = try {
+            Task.serializeWithDependencies(task, sched.sc.addedFiles,
                 sched.sc.addedJars, ser)
           } catch {
             // If the task cannot be serialized, then there's no point to re-attempt the task,
             // as it will always fail. So just abort the whole task-set.
-            case e : Throwable =>
+            case NonFatal(e) =>
               logError(s"Failed to serialize task $taskId, not attempting to retry it.", e)
-              abort(s"Failed to serialize task $taskId, not attempt to retry it. Exception" +
-                s"duringserialization is: $e")
+              abort(s"Failed to serialize task $taskId, not attempt to retry it. Exception " +
+                s"during serialization is: $e")
               throw new TaskNotSerializableException(e)
           }
           if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&

@@ -894,10 +894,10 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("parallelize with exception thrown on serialization should not hang") {
     class BadSerializable extends Serializable {
       @throws(classOf[IOException])
-      private def writeObject(out: ObjectOutputStream): Unit = throw new KryoException("Bad serialization")
+      private def writeObject(out: ObjectOutputStream) : Unit = throw new KryoException("Bad serialization")
 
       @throws(classOf[IOException])
-      private def readObject(in: ObjectInputStream): Unit = {}
+      private def readObject(in: ObjectInputStream) : Unit = {}
     }
     // Note that in the original bug, SPARK-4349, that this verifies, the job would only hang if there were
     // more threads in the Spark Context than there were number of objects in this sequence.

@@ -21,6 +21,8 @@ import java.nio.ByteBuffer
 import java.util.{TimerTask, Timer}
 import java.util.concurrent.atomic.AtomicLong
 
+import org.apache.spark.scheduler.TaskLocality.TaskLocality
+
 import scala.concurrent.duration._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
@@ -249,31 +251,34 @@ private[spark] class TaskSchedulerImpl(
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     // NOTE: the preferredLocality order: PROCESS_LOCAL, NODE_LOCAL, NO_PREF, RACK_LOCAL, ANY
     var launchedTask = false
-    for (taskSet <- sortedTaskSets; maxLocality <- taskSet.myLocalityLevels) {
-      do {
-        launchedTask = false
-        for (i <- 0 until shuffledOffers.size) {
-          val execId = shuffledOffers(i).executorId
-          val host = shuffledOffers(i).host
-          if (availableCpus(i) >= CPUS_PER_TASK) {
-            try {
-              for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
-                tasks(i) += task
-                val tid = task.taskId
-                taskIdToTaskSetId(tid) = taskSet.taskSet.id
-                taskIdToExecutorId(tid) = execId
-                executorsByHost(host) += execId
-                availableCpus(i) -= CPUS_PER_TASK
-                assert(availableCpus(i) >= 0)
-                launchedTask = true
-              }
-            } catch {
-              case e: TaskNotSerializableException => {
-                return Seq.empty[Seq[TaskDescription]]
-              }
+    def resourceOfferSingleTaskSet(taskSet: TaskSetManager, maxLocality: TaskLocality) : Unit = {
+      for (i <- 0 until shuffledOffers.size) {
+        val execId = shuffledOffers(i).executorId
+        val host = shuffledOffers(i).host
+        if (availableCpus(i) >= CPUS_PER_TASK) {
+          try {
+            for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
+              tasks(i) += task
+              val tid = task.taskId
+              taskIdToTaskSetId(tid) = taskSet.taskSet.id
+              taskIdToExecutorId(tid) = execId
+              executorsByHost(host) += execId
+              availableCpus(i) -= CPUS_PER_TASK
+              assert(availableCpus(i) >= 0)
+              launchedTask = true
+            }
+          } catch {
+            case e: TaskNotSerializableException => {
+              return
             }
           }
         }
+      }
+    }
+    for (taskSet <- sortedTaskSets; maxLocality <- taskSet.myLocalityLevels) {
+      do {
+        launchedTask = false
+        resourceOfferSingleTaskSet(taskSet, maxLocality)
       } while (launchedTask)
     }
 

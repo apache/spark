@@ -354,11 +354,11 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
     assert(0 === taskDescriptions.length)
 
     // Now check that we can still submit tasks
-    taskSet = FakeTask.createTaskSet(1)
+    // Even if one of the tasks has not-serializable tasks, the other task set should still be processed without error
     taskScheduler.submitTasks(taskSet)
+    taskScheduler.submitTasks(FakeTask.createTaskSet(1))
     taskDescriptions = taskScheduler.resourceOffers(multiCoreWorkerOffers).flatten
-    assert(1 === taskDescriptions.length)
-    assert("executor0" === taskDescriptions(0).executorId)
+    assert(taskDescriptions.map(_.executorId) === Seq("executor0"))
   }
 
 }
