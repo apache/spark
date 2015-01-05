@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.{LinkedBlockingQueue, Semaphore}
 
 import org.apache.spark.Logging
@@ -27,7 +28,8 @@ import org.apache.spark.util.Utils
  *
  * Until start() is called, all posted events are only buffered. Only after this listener bus
  * has started will events be actually propagated to all attached listeners. This listener bus
- * is stopped when it receives a SparkListenerShutdown event, which is posted using stop().
+ * will be stopped when stop() is called. After `stop()` is called, it won't accept new events.
+ * However, for the events in the bufer, it will still process them before it exits.
  */
 private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
 
@@ -35,8 +37,9 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
    * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */
   private val EVENT_QUEUE_CAPACITY = 10000
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
-  private var queueFullErrorMessageLogged = false
+  private val queueFullErrorMessageLogged = new AtomicBoolean(false)
   private var started = false
+  @volatile private var stopped = false
 
   // A counter that represents the number of events produced and consumed in the queue
   private val eventLock = new Semaphore(0)
@@ -49,7 +52,8 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
         // Atomically remove and process this event
         LiveListenerBus.this.synchronized {
           val event = eventQueue.poll
-          if (event == SparkListenerShutdown) {
+          if (event == null) {
+            assert(stopped)
             // Get out of the while loop and shutdown the daemon thread
             return
           }
@@ -75,6 +79,11 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
   }
 
   def post(event: SparkListenerEvent) {
+    if (stopped) {
+      // Drop further events to make `listenerThread` exit ASAP
+      logError("LiveListenerBus has been stopped! Drop " + event)
+      return
+    }
     val eventAdded = eventQueue.offer(event)
     if (eventAdded) {
       eventLock.release()
@@ -118,7 +127,7 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
    * Log an error message to indicate that the event queue is full. Do this only once.
    */
   private def logQueueFullErrorMessage(): Unit = {
-    if (!queueFullErrorMessageLogged) {
+    if (queueFullErrorMessageLogged.compareAndSet(false, true)) {
       if (listenerThread.isAlive) {
         logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
           "This likely means one of the SparkListeners is too slow and cannot keep up with" +
@@ -127,7 +136,6 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
         logError("SparkListenerBus thread is dead! This means SparkListenerEvents have not" +
           "been (and will no longer be) propagated to listeners for some time.")
       }
-      queueFullErrorMessageLogged = true
     }
   }
 
@@ -135,7 +143,10 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
     if (!started) {
       throw new IllegalStateException("Attempted to stop a listener bus that has not yet started!")
     }
-    post(SparkListenerShutdown)
+    stopped = true
+    // Call eventLock.release() so that listenerThread will poll `null` from `eventQueue` and know
+    // `stop` is called.
+    eventLock.release()
     listenerThread.join()
   }
 }

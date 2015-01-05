@@ -85,7 +85,6 @@ private[spark] object JsonProtocol {
         applicationEndToJson(applicationEnd)
 
       // These aren't used, but keeps compiler happy
-      case SparkListenerShutdown => JNothing
       case SparkListenerExecutorMetricsUpdate(_, _) => JNothing
     }
   }
