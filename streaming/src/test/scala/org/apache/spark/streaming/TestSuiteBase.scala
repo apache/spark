@@ -25,7 +25,9 @@ import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.scalatest.time.{Span, Milliseconds => ScalaTestMilliseconds}
+import org.scalatest.time.{Span, Seconds => ScalaTestSeconds}
+import org.scalatest.concurrent.Eventually.timeout
+import org.scalatest.concurrent.PatienceConfiguration
 
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
 import org.apache.spark.streaming.scheduler.{StreamingListenerBatchStarted, StreamingListenerBatchCompleted, StreamingListener}
@@ -179,6 +181,9 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
     .setMaster(master)
     .setAppName(framework)
 
+  // Timeout for use in ScalaTest `eventually` blocks
+  val eventuallyTimeout: PatienceConfiguration.Timeout = timeout(Span(10, ScalaTestSeconds))
+
   // Default before function for any streaming test suite. Override this
   // if you want to add your stuff to "before" (i.e., don't call before { } )
   def beforeFunction() {
@@ -199,14 +204,6 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
 
   before(beforeFunction)
   after(afterFunction)
-
-  /**
-   * Implicit conversion which allows streaming Durations to be used with ScalaTest methods,
-   * such as `eventually`.
-   */
-  implicit def streamingDurationToScalatestSpan(duration: Duration): Span = {
-    Span(duration.milliseconds, ScalaTestMilliseconds)
-  }
 
   /**
    * Run a block of code with the given StreamingContext and automatically

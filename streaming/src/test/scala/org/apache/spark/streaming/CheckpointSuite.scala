@@ -373,19 +373,19 @@ class CheckpointSuite extends TestSuiteBase {
           clock.addToTime(batchDuration.milliseconds)
           if (i != 3) {
             // Since we want to shut down while the 3rd batch is processing
-            eventually(timeout(batchDuration * 5)) {
+            eventually(eventuallyTimeout) {
               assert(batchCounter.getNumCompletedBatches === i)
             }
           }
         }
         clock.addToTime(batchDuration.milliseconds)
-        eventually(timeout(batchDuration * 5)) {
+        eventually(eventuallyTimeout) {
           // Wait until all files have been recorded and all batches have started
           assert(recordedFiles(ssc) === Seq(1, 2, 3) && batchCounter.getNumStartedBatches === 3)
         }
         // Wait for a checkpoint to be written
         val fs = new Path(checkpointDir).getFileSystem(ssc.sc.hadoopConfiguration)
-        eventually(timeout(batchDuration * 5)) {
+        eventually(eventuallyTimeout) {
           assert(Checkpoint.getCheckpointFiles(checkpointDir, fs).size === 5)
         }
         ssc.stop()
@@ -424,7 +424,7 @@ class CheckpointSuite extends TestSuiteBase {
         for ((i, index) <- Seq(7, 8, 9).zipWithIndex) {
           writeFile(i, clock)
           clock.addToTime(batchDuration.milliseconds)
-          eventually(timeout(batchDuration * 5)) {
+          eventually(eventuallyTimeout) {
             assert(batchCounter.getNumCompletedBatches === index + 1)
           }
         }

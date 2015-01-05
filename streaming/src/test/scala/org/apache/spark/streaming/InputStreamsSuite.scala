@@ -263,7 +263,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
           assert(file.setLastModified(clock.currentTime()))
           assert(file.lastModified === clock.currentTime)
           logInfo("Created file " + file)
-          eventually(timeout(batchDuration * 5)) {
+          eventually(eventuallyTimeout) {
             assert(batchCounter.getNumCompletedBatches === i)
           }
         }
