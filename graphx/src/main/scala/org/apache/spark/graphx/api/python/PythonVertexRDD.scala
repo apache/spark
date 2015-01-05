@@ -83,7 +83,8 @@ object PythonVertexRDD {
                      broadcastVars: JList[Broadcast[PythonBroadcast]],
                      accumulator: Accumulator[JList[Array[Byte]]],
                      targetStorageLevel : StorageLevel = StorageLevel.MEMORY_ONLY) = {
-    new PythonVertexRDD(JavaRDD.fromRDD(parent), command, envVars, pythonIncludes, preservePartitioning,
+    new PythonVertexRDD(JavaRDD.fromRDD(parent), command, envVars, pythonIncludes,
+      preservePartitioning,
       pythonExec, broadcastVars, accumulator, targetStorageLevel)
   }
 }

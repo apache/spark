@@ -201,6 +201,9 @@ class VertexRDD(object):
         """
         Return a list that contains all of the elements in this RDD.
         """
+        pyrdd = self.getJavaVertexRDD(self.jvertex_rdd, self.jvertex_rdd_deserializer)
+        pyrdd.collect()
+
 
 
     def getJavaVertexRDD(self, rdd, rdd_deserializer):
