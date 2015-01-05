@@ -21,6 +21,7 @@ import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.{Date, HashMap => JHashMap}
 
+import org.apache.commons.lang.ClassUtils
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.mapred.lib.MultipleTextOutputFormat
 
@@ -860,14 +861,24 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   class RDDMultipleTextOutputFormat extends MultipleTextOutputFormat[Any, Any] {
+    def init() = {
+      println("Initializing multiple text output format saver")
+    }
+    
     override def generateActualKey(key: Any, value: Any): Any =
+    {
       NullWritable.get()
+    }
 
     override def generateFileNameForKeyValue(key: Any, value: Any, name: String): String =
+    {
       key.asInstanceOf[String]
+    }
   }
 
   /**
+   * TODO: This only works if the key is a java Object (can't work with primitive types)
+   * 
    * Output the RDD to multiple files by key on any Hadoop-supported file system, using a Hadoop 
    * `OutputFormat` class supporting the key and value types K and V in this RDD.
    * 
@@ -879,13 +890,17 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String, numPartitions : Int)
                                                     (implicit fm: ClassTag[F]) {
+    
     partitionBy(new HashPartitioner(numPartitions)).
       saveAsHadoopFileByKey(path)
   }
 
   def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
-    saveAsHadoopFile(path, keyClass, valueClass, classOf[RDDMultipleTextOutputFormat])
+    saveAsHadoopFile(path, ClassUtils.primitiveToWrapper(keyClass), 
+      ClassUtils.primitiveToWrapper(valueClass), 
+      classOf[RDDMultipleTextOutputFormat])
   }
+  
   /**
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD. Compress the result with the
