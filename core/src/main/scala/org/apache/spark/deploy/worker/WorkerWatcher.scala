@@ -21,7 +21,8 @@ import akka.remote.{AssociatedEvent, AssociationErrorEvent, AssociationEvent}
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.DeployMessages.SendHeartbeat
-import org.apache.spark.rpc.{RpcEnv, RpcEndpointRef, RpcEndpoint}
+import org.apache.spark.rpc.{RpcAddress, RpcEnv, RpcEndpointRef, RpcEndpoint}
+import org.apache.spark.util.AkkaUtils
 
 /**
  * Actor which connects to a worker process and terminates the JVM if the connection is severed.
@@ -45,20 +46,19 @@ private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: Strin
 
   // Lets us filter events only from the worker's actor system
   private val expectedHostPort = new java.net.URI(workerUrl)
-  private def isWorker(address: String) = {
-    val uri = new java.net.URI(address)
-    expectedHostPort.getHost == uri.getHost && expectedHostPort.getPort == uri.getPort
+  private def isWorker(address: RpcAddress) = {
+    expectedHostPort.getHost == address.host && expectedHostPort.getPort == address.port
   }
 
   def exitNonZero() = if (isTesting) isShutDown = true else System.exit(-1)
 
   override def receive(sender: RpcEndpointRef) = {
     case AssociatedEvent(localAddress, remoteAddress, inbound)
-        if isWorker(remoteAddress.toString) =>
+        if isWorker(AkkaUtils.akkaAddressToRpcAddress(remoteAddress)) =>
       logInfo(s"Successfully connected to $workerUrl")
 
     case AssociationErrorEvent(cause, localAddress, remoteAddress, inbound, _)
-        if isWorker(remoteAddress.toString) =>
+        if isWorker(AkkaUtils.akkaAddressToRpcAddress(remoteAddress)) =>
       // These logs may not be seen if the worker (and associated pipe) has died
       logError(s"Could not initialize connection to worker $workerUrl. Exiting.")
       logError(s"Error was: $cause")
@@ -70,7 +70,7 @@ private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: Strin
     case e => logWarning(s"Received unexpected actor system event: $e")
   }
 
-  override def remoteConnectionTerminated(remoteAddress: String): Unit = {
+  override def remoteConnectionTerminated(remoteAddress: RpcAddress): Unit = {
     if(isWorker(remoteAddress)) {
       // This log message will never be seen
       logError(s"Lost connection to worker actor $workerUrl. Exiting.")

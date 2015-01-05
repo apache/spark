@@ -24,7 +24,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.rpc.akka.AkkaRpcEnv
-import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEndpointRef}
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
@@ -88,7 +88,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       env.actorSystem.shutdown()
   }
 
-  override def remoteConnectionTerminated(remoteAddress: String): Unit = {
+  override def remoteConnectionTerminated(remoteAddress: RpcAddress): Unit = {
     logError(s"Driver $remoteAddress disassociated! Shutting down.")
     System.exit(1)
   }

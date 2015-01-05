@@ -23,7 +23,7 @@ import java.util.concurrent.{TimeUnit, Executors}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.spark.{ExecutorAllocationClient, Logging, SparkEnv, SparkException, TaskState}
-import org.apache.spark.rpc.{RpcEndpoint, RpcEnv, RpcEndpointRef}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEnv, RpcEndpointRef}
 import org.apache.spark.scheduler.{SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{SerializableBuffer, AkkaUtils, Utils}
@@ -69,7 +69,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     extends RpcEndpoint with Logging {
 
     override protected def log = CoarseGrainedSchedulerBackend.this.log
-    private val addressToExecutorId = new HashMap[String, String]
+    private val addressToExecutorId = new HashMap[RpcAddress, String]
 
     private val reviveScheduler =
       Executors.newScheduledThreadPool(1, Utils.namedThreadFactory("driver-revive-scheduler"))
@@ -195,7 +195,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     }
 
-    override def remoteConnectionTerminated(remoteAddress: String): Unit = {
+    override def remoteConnectionTerminated(remoteAddress: RpcAddress): Unit = {
       addressToExecutorId.get(remoteAddress).foreach(removeExecutor(_,
         "remote Akka client disassociated"))
     }

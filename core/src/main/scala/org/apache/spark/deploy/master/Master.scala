@@ -42,7 +42,7 @@ import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.rpc.{RpcEndpoint, RpcEnv, RpcEndpointRef}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEnv, RpcEndpointRef}
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
@@ -72,12 +72,12 @@ private[spark] class Master(
 
   val workers = new HashSet[WorkerInfo]
   val idToWorker = new HashMap[String, WorkerInfo]
-  val addressToWorker = new HashMap[String, WorkerInfo]
+  val addressToWorker = new HashMap[RpcAddress, WorkerInfo]
 
   val apps = new HashSet[ApplicationInfo]
   val idToApp = new HashMap[String, ApplicationInfo]
   val actorToApp = new HashMap[RpcEndpointRef, ApplicationInfo]
-  val addressToApp = new HashMap[String, ApplicationInfo]
+  val addressToApp = new HashMap[RpcAddress, ApplicationInfo]
   val waitingApps = new ArrayBuffer[ApplicationInfo]
   val completedApps = new ArrayBuffer[ApplicationInfo]
   var nextAppNumber = 0
@@ -431,7 +431,7 @@ private[spark] class Master(
     }
   }
 
-  override def remoteConnectionTerminated(address: String): Unit = {
+  override def remoteConnectionTerminated(address: RpcAddress): Unit = {
     // The disconnected client could've been either a worker or an app; remove whichever it was
     logInfo(s"$address got disassociated, removing it.")
     addressToWorker.get(address).foreach(removeWorker)

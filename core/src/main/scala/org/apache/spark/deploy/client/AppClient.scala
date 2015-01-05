@@ -17,20 +17,19 @@
 
 package org.apache.spark.deploy.client
 
-import java.util.concurrent.TimeoutException
+import java.util.concurrent.{ScheduledFuture, TimeUnit, Executors, TimeoutException}
 
-import scala.concurrent.Await
 import scala.concurrent.duration._
 
 import akka.actor._
-import akka.pattern.ask
-import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
+import akka.remote.AssociationErrorEvent
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.util.{ActorLogReceive, Utils, AkkaUtils}
+import org.apache.spark.rpc.{RpcAddress, RpcEnv, RpcEndpointRef, RpcEndpoint}
+import org.apache.spark.util.Utils
 
 /**
  * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
@@ -40,74 +39,77 @@ import org.apache.spark.util.{ActorLogReceive, Utils, AkkaUtils}
  * @param masterUrls Each url should look like spark://host:port.
  */
 private[spark] class AppClient(
-    actorSystem: ActorSystem,
+    rpcEnv: RpcEnv,
     masterUrls: Array[String],
     appDescription: ApplicationDescription,
     listener: AppClientListener,
     conf: SparkConf)
   extends Logging {
 
-  val REGISTRATION_TIMEOUT = 20.seconds
+  val REGISTRATION_TIMEOUT = 20.seconds.toMillis
   val REGISTRATION_RETRIES = 3
 
-  var masterAddress: Address = null
-  var actor: ActorRef = null
+  var masterAddress: RpcAddress = null
+  var actor: RpcEndpointRef = null
   var appId: String = null
   var registered = false
   var activeMasterUrl: String = null
 
-  class ClientActor extends Actor with ActorLogReceive with Logging {
-    var master: ActorSelection = null
+  class ClientActor(override val rpcEnv: RpcEnv) extends RpcEndpoint with Logging {
+    var master: RpcEndpointRef = null
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
     var alreadyDead = false  // To avoid calling listener.dead() multiple times
-    var registrationRetryTimer: Option[Cancellable] = None
+    var registrationRetryTimer: Option[ScheduledFuture[_]] = None
+
+    private val scheduler =
+      Executors.newScheduledThreadPool(1, Utils.namedThreadFactory("client-actor"))
 
     override def preStart() {
-      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
       try {
         registerWithMaster()
       } catch {
         case e: Exception =>
           logWarning("Failed to connect to master", e)
           markDisconnected()
-          context.stop(self)
+          stop()
       }
     }
 
     def tryRegisterAllMasters() {
       for (masterUrl <- masterUrls) {
         logInfo("Connecting to master " + masterUrl + "...")
-        val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
-        actor ! RegisterApplication(appDescription)
+        val actor = rpcEnv.setupEndpointRefByUrl(Master.toAkkaUrl(masterUrl))
+        actor.send(RegisterApplication(appDescription))
       }
     }
 
     def registerWithMaster() {
       tryRegisterAllMasters()
-      import context.dispatcher
       var retries = 0
       registrationRetryTimer = Some {
-        context.system.scheduler.schedule(REGISTRATION_TIMEOUT, REGISTRATION_TIMEOUT) {
-          Utils.tryOrExit {
-            retries += 1
-            if (registered) {
-              registrationRetryTimer.foreach(_.cancel())
-            } else if (retries >= REGISTRATION_RETRIES) {
-              markDead("All masters are unresponsive! Giving up.")
-            } else {
-              tryRegisterAllMasters()
+        scheduler.scheduleAtFixedRate(new Runnable {
+          override def run(): Unit = {
+            Utils.tryOrExit {
+              retries += 1
+              if (registered) {
+                registrationRetryTimer.foreach(_.cancel(true))
+              } else if (retries >= REGISTRATION_RETRIES) {
+                markDead("All masters are unresponsive! Giving up.")
+              } else {
+                tryRegisterAllMasters()
+              }
             }
           }
-        }
+        }, REGISTRATION_TIMEOUT, REGISTRATION_TIMEOUT, TimeUnit.MILLISECONDS)
       }
     }
 
     def changeMaster(url: String) {
       activeMasterUrl = url
-      master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
+      master = rpcEnv.setupEndpointRefByUrl(Master.toAkkaUrl(activeMasterUrl))
       masterAddress = activeMasterUrl match {
         case Master.sparkUrlRegex(host, port) =>
-          Address("akka.tcp", Master.systemName, host, port.toInt)
+          RpcAddress(host, port.toInt)
         case x =>
           throw new SparkException("Invalid spark URL: " + x)
       }
@@ -119,7 +121,7 @@ private[spark] class AppClient(
         .contains(remoteUrl.hostPort)
     }
 
-    override def receiveWithLogging = {
+    override def receive(sender: RpcEndpointRef) = {
       case RegisteredApplication(appId_, masterUrl) =>
         appId = appId_
         registered = true
@@ -128,13 +130,13 @@ private[spark] class AppClient(
 
       case ApplicationRemoved(message) =>
         markDead("Master removed our application: %s".format(message))
-        context.stop(self)
+        stop()
 
       case ExecutorAdded(id: Int, workerId: String, hostPort: String, cores: Int, memory: Int) =>
         val fullId = appId + "/" + id
         logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, hostPort,
           cores))
-        master ! ExecutorStateChanged(appId, id, ExecutorState.RUNNING, None, None)
+        master.send(ExecutorStateChanged(appId, id, ExecutorState.RUNNING, None, None))
         listener.executorAdded(fullId, workerId, hostPort, cores, memory)
 
       case ExecutorUpdated(id, state, message, exitStatus) =>
@@ -149,19 +151,22 @@ private[spark] class AppClient(
         logInfo("Master has changed, new master is at " + masterUrl)
         changeMaster(masterUrl)
         alreadyDisconnected = false
-        sender ! MasterChangeAcknowledged(appId)
-
-      case DisassociatedEvent(_, address, _) if address == masterAddress =>
-        logWarning(s"Connection to $address failed; waiting for master to reconnect...")
-        markDisconnected()
+        sender.send(MasterChangeAcknowledged(appId))
 
       case AssociationErrorEvent(cause, _, address, _, _) if isPossibleMaster(address) =>
         logWarning(s"Could not connect to $address: $cause")
 
       case StopAppClient =>
         markDead("Application has been stopped.")
-        sender ! true
-        context.stop(self)
+        sender.send(true)
+        stop()
+    }
+
+    override def remoteConnectionTerminated(address: RpcAddress): Unit = {
+      if (address == masterAddress) {
+        logWarning(s"Connection to $address failed; waiting for master to reconnect...")
+        markDisconnected()
+      }
     }
 
     /**
@@ -182,22 +187,20 @@ private[spark] class AppClient(
     }
 
     override def postStop() {
-      registrationRetryTimer.foreach(_.cancel())
+      registrationRetryTimer.foreach(_.cancel(true))
     }
 
   }
 
   def start() {
     // Just launch an actor; it will call back into the listener.
-    actor = actorSystem.actorOf(Props(new ClientActor))
+    actor = rpcEnv.setupEndpoint("client-actor", new ClientActor(rpcEnv))
   }
 
   def stop() {
     if (actor != null) {
       try {
-        val timeout = AkkaUtils.askTimeout(conf)
-        val future = actor.ask(StopAppClient)(timeout)
-        Await.result(future, timeout)
+        actor.askWithReply(StopAppClient)
       } catch {
         case e: TimeoutException =>
           logInfo("Stop request to Master timed out; it may already be shut down.")

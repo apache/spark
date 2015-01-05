@@ -59,7 +59,9 @@ class AkkaRpcEnv(val actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
         override def receive: Receive = {
           case DisassociatedEvent(_, remoteAddress, _) =>
             try {
-              endpoint.remoteConnectionTerminated(remoteAddress.toString)
+              // TODO How to handle that a remoteAddress doesn't have host & port
+              endpoint.remoteConnectionTerminated(
+                AkkaUtils.akkaAddressToRpcAddress(remoteAddress))
             } catch {
               case NonFatal(e) => endpoint.onError(e)
             }
@@ -117,11 +119,7 @@ private[akka] class AkkaRpcEndpointRef(val actorRef: ActorRef, @transient conf: 
   private[this] val retryWaitMs = conf.getInt("spark.akka.retry.wait", 3000)
   private[this] val defaultTimeout = conf.getLong("spark.akka.lookupTimeout", 30) seconds
 
-  override val address: String = actorRef.path.address.toString
-
-  override val host: Option[String] = actorRef.path.address.host
-
-  override val port: Option[Int] = actorRef.path.address.port
+  override val address: RpcAddress = AkkaUtils.akkaAddressToRpcAddress(actorRef.path.address)
 
   override def ask[T: ClassTag](message: Any): Future[T] = ask(message, defaultTimeout)
 

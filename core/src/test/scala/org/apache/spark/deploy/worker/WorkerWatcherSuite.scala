@@ -20,18 +20,19 @@ package org.apache.spark.deploy.worker
 import akka.actor.{ActorSystem, AddressFromURIString}
 import org.apache.spark.SparkConf
 import org.apache.spark.rpc.akka.AkkaRpcEnv
+import org.apache.spark.util.AkkaUtils
 import org.scalatest.FunSuite
 
 class WorkerWatcherSuite extends FunSuite {
   test("WorkerWatcher shuts down on valid disassociation") {
     val actorSystem = ActorSystem("test")
     val rpcEnv = new AkkaRpcEnv(actorSystem, new SparkConf())
-    val targetWorkerUrl = "akka://1.2.3.4/user/Worker"
+    val targetWorkerUrl = "akka://test@1.2.3.4:1234/user/Worker"
     val targetWorkerAddress = AddressFromURIString(targetWorkerUrl)
     val workerWatcher = new WorkerWatcher(rpcEnv, targetWorkerUrl)
     workerWatcher.setTesting(testing = true)
     rpcEnv.setupEndpoint("worker-watcher", workerWatcher)
-    workerWatcher.remoteConnectionTerminated(targetWorkerAddress.toString)
+    workerWatcher.remoteConnectionTerminated(AkkaUtils.akkaAddressToRpcAddress(targetWorkerAddress))
     assert(workerWatcher.isShutDown)
     rpcEnv.stopAll()
     actorSystem.shutdown()
@@ -40,13 +41,13 @@ class WorkerWatcherSuite extends FunSuite {
   test("WorkerWatcher stays alive on invalid disassociation") {
     val actorSystem = ActorSystem("test")
     val rpcEnv = new AkkaRpcEnv(actorSystem, new SparkConf())
-    val targetWorkerUrl = "akka://1.2.3.4/user/Worker"
-    val otherAkkaURL = "akka://4.3.2.1/user/OtherActor"
+    val targetWorkerUrl = "akka://test@1.2.3.4:1234/user/Worker"
+    val otherAkkaURL = "akka://test@4.3.2.1:1234/user/OtherActor"
     val otherAkkaAddress = AddressFromURIString(otherAkkaURL)
     val workerWatcher = new WorkerWatcher(rpcEnv, targetWorkerUrl)
     workerWatcher.setTesting(testing = true)
     rpcEnv.setupEndpoint("worker-watcher", workerWatcher)
-    workerWatcher.remoteConnectionTerminated(otherAkkaAddress.toString)
+    workerWatcher.remoteConnectionTerminated(AkkaUtils.akkaAddressToRpcAddress(otherAkkaAddress))
     assert(!workerWatcher.isShutDown)
     rpcEnv.stopAll()
     actorSystem.shutdown()

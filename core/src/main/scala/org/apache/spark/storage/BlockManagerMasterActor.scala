@@ -418,11 +418,9 @@ class BlockManagerMasterActor(override val rpcEnv: RpcEnv, val isLocal: Boolean,
   private def getActorSystemHostPortForExecutor(executorId: String): Option[(String, Int)] = {
     for (
       blockManagerId <- blockManagerIdByExecutor.get(executorId);
-      info <- blockManagerInfo.get(blockManagerId);
-      host <- info.slaveActor.host;
-      port <- info.slaveActor.port
+      info <- blockManagerInfo.get(blockManagerId)
     ) yield {
-      (host, port)
+      (info.slaveActor.address.host, info.slaveActor.address.port)
     }
   }
 }

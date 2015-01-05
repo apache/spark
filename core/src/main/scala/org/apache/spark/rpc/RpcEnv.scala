@@ -114,7 +114,7 @@ trait RpcEndpoint {
     throw e
   }
 
-  def remoteConnectionTerminated(remoteAddress: String): Unit = {
+  def remoteConnectionTerminated(remoteAddress: RpcAddress): Unit = {
     // By default, do nothing.
   }
 
@@ -135,11 +135,7 @@ object RpcEndpoint {
  */
 trait RpcEndpointRef {
 
-  def address: String
-
-  def host: Option[String]
-
-  def port: Option[Int]
+  def address: RpcAddress
 
   def ask[T: ClassTag](message: Any): Future[T]
 
@@ -153,4 +149,11 @@ trait RpcEndpointRef {
    * Send a message to the remote endpoint asynchronously. No delivery guarantee is provided.
    */
   def send(message: Any)(implicit sender: RpcEndpointRef = RpcEndpoint.noSender): Unit
+}
+
+case class RpcAddress(host: String, port: Int) {
+
+  val hostPort: String = host + ":" + port
+
+  override val toString: String = hostPort
 }

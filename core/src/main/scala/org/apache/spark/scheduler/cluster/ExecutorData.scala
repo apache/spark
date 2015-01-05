@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 
 /**
  * Grouping of data for an executor used by CoarseGrainedSchedulerBackend.
@@ -30,7 +30,7 @@ import org.apache.spark.rpc.RpcEndpointRef
  */
 private[cluster] class ExecutorData(
    val executorActor: RpcEndpointRef,
-   val executorAddress: String,
+   val executorAddress: RpcAddress,
    val executorHost: String ,
    var freeCores: Int,
    val totalCores: Int
