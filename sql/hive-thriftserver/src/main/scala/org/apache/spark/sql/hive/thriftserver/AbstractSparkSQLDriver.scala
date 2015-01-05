@@ -60,7 +60,7 @@ private[hive] abstract class AbstractSparkSQLDriver(
     } catch {
       case cause: Throwable =>
         logError(s"Failed in [$command]", cause)
-        new CommandProcessorResponse(0, ExceptionUtils.getFullStackTrace(cause), null)
+        new CommandProcessorResponse(1, ExceptionUtils.getFullStackTrace(cause), null)
     }
   }
 
