@@ -372,7 +372,7 @@ class CheckpointSuite extends TestSuiteBase {
         }
         clock.addToTime(batchDuration.milliseconds)
         waiter.waitForTotalBatchesStarted(3, batchDuration * 5)
-        assert(waiter.getNumCompletedBatches === 2)
+        Thread.sleep(1000) // To wait for execution to actually begin
         logInfo("Output after first start = " + outputStream.output.mkString("[", ", ", "]"))
         assert(outputStream.output.size > 0, "No files processed before restart")
         ssc.stop()
