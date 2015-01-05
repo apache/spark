@@ -128,9 +128,6 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           args = tail
 
         case ("--driver-cores") :: IntParam(value) :: tail =>
-          if (args(0) == "--master-cores") {
-            println("--master-cores is deprecated. Use --driver-cores instead.")
-          }
           amCores = value
           args = tail
 
