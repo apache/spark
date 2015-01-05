@@ -427,6 +427,13 @@ private[hive] case class MetastoreRelation
           .getOrElse(sqlContext.defaultSizeInBytes))
     }
   )
+  override def sameResult(plan: LogicalPlan): Boolean = {
+    val new_plan = plan.asInstanceOf[MetastoreRelation];
+    plan.getClass == this.getClass &&
+    plan.children.size == children.size &&
+    databaseName == new_plan.databaseName &&
+    tableName == new_plan.tableName
+  }
 
   val tableDesc = HiveShim.getTableDesc(
     Class.forName(
