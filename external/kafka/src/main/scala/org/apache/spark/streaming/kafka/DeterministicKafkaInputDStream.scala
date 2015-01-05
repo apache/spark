@@ -64,9 +64,9 @@ class DeterministicKafkaInputDStream[
   private val kc = new KafkaCluster(kafkaParams)
 
   private val maxMessagesPerPartition: Option[Long] = {
-    val ratePerSec = ssc.sparkContext.getConf.getInt("spark.streaming.receiver.maxRate", 0)
+    val ratePerSec = context.sparkContext.getConf.getInt("spark.streaming.receiver.maxRate", 0)
     if (ratePerSec > 0) {
-      val secsPerBatch = ssc.graph.batchDuration.milliseconds.toDouble / 1000
+      val secsPerBatch = context.graph.batchDuration.milliseconds.toDouble / 1000
       Some((secsPerBatch * ratePerSec).toLong)
     } else {
       None
@@ -105,7 +105,7 @@ class DeterministicKafkaInputDStream[
   override def compute(validTime: Time): Option[KafkaRDD[K, V, U, T, R]] = {
     val untilOffsets = clamp(latestLeaderOffsets(maxRetries))
     val rdd = new KafkaRDD[K, V, U, T, R](
-      ssc_.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
+      context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
 
     currentOffsets = untilOffsets
     Some(rdd)

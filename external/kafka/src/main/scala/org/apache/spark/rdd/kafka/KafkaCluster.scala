@@ -31,7 +31,7 @@ import kafka.consumer.{ConsumerConfig, SimpleConsumer}
   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form
   */
-class KafkaCluster(val kafkaParams: Map[String, String]) {
+class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   import KafkaCluster.Err
 
   val seedBrokers: Array[(String, Int)] =
@@ -43,7 +43,15 @@ class KafkaCluster(val kafkaParams: Map[String, String]) {
         (hpa(0), hpa(1).toInt)
       }
 
-  val config: ConsumerConfig = KafkaCluster.consumerConfig(kafkaParams)
+  // ConsumerConfig isn't serializable
+  @transient private var _config: ConsumerConfig = null
+
+  def config: ConsumerConfig = this.synchronized {
+    if (_config == null) {
+      _config = KafkaCluster.consumerConfig(kafkaParams)
+    }
+    _config
+  }
 
   def connect(host: String, port: Int): SimpleConsumer =
     new SimpleConsumer(host, port, config.socketTimeoutMs,
