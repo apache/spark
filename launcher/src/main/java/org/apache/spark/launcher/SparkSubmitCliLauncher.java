@@ -49,16 +49,16 @@ public class SparkSubmitCliLauncher extends SparkLauncher {
   }
 
   private final List<String> driverArgs;
-  private boolean isShell;
+  private boolean hasMixedArguments;
 
   SparkSubmitCliLauncher(List<String> args) {
     this(false, args);
   }
 
-  SparkSubmitCliLauncher(boolean isShell, List<String> args) {
+  SparkSubmitCliLauncher(boolean hasMixedArguments, List<String> args) {
     boolean sparkSubmitOptionsEnded = false;
     this.driverArgs = new ArrayList<String>();
-    this.isShell = isShell;
+    this.hasMixedArguments = hasMixedArguments;
     new OptionParser().parse(args);
   }
 
@@ -126,7 +126,7 @@ public class SparkSubmitCliLauncher extends SparkLauncher {
         // non-spark-submit arguments.
         setClass(value);
         if (shells.containsKey(value)) {
-          isShell = true;
+          hasMixedArguments = true;
           setAppResource(shells.get(value));
         }
       } else {
@@ -137,10 +137,10 @@ public class SparkSubmitCliLauncher extends SparkLauncher {
 
     @Override
     protected boolean handleUnknown(String opt) {
-      // When running a shell, add unrecognized parameters directly to the user arguments list.
+      // When mixing arguments, add unrecognized parameters directly to the user arguments list.
       // In normal mode, any unrecognized parameter triggers the end of command line parsing.
       // The remaining params will be appended to the list of SparkSubmit arguments.
-      if (isShell) {
+      if (hasMixedArguments) {
         addArgs(opt);
         return true;
       } else {

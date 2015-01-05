@@ -124,7 +124,7 @@ fi
 
 case $option in
 
-  (start|spark-submit)
+  (start)
 
     mkdir -p "$SPARK_PID_DIR"
 
@@ -142,14 +142,7 @@ case $option in
 
     spark_rotate_log "$log"
     echo starting $command, logging to $log
-    if [ $option == spark-submit ]; then
-      source "$SPARK_HOME"/bin/utils.sh
-      gatherSparkSubmitOpts "$@"
-      nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-submit --class $command \
-        "${SUBMISSION_OPTS[@]}" spark-internal "${APPLICATION_OPTS[@]}" >> "$log" 2>&1 < /dev/null &
-    else
-      nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
-    fi
+    nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/bin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
     newpid=$!
     echo $newpid > $pid
     sleep 2

@@ -194,15 +194,15 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
     }
 
     boolean prependClasses = !isEmpty(getenv("SPARK_PREPEND_CLASSES"));
-    boolean isTesting = !isEmpty(getenv("SPARK_TESTING"));
+    boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     if (prependClasses || isTesting) {
-      System.err.println(
-        "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark classes ahead of " +
-        "assembly.");
       List<String> projects = Arrays.asList("core", "repl", "mllib", "bagel", "graphx",
         "streaming", "tools", "sql/catalyst", "sql/core", "sql/hive", "sql/hive-thriftserver",
         "yarn", "launcher");
       if (prependClasses) {
+        System.err.println(
+          "NOTE: SPARK_PREPEND_CLASSES is set, placing locally compiled Spark classes ahead of " +
+          "assembly.");
         for (String project : projects) {
           addToClassPath(cp, String.format("%s/%s/target/scala-%s/classes", sparkHome, project,
             scala));

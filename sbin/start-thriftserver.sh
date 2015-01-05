@@ -50,4 +50,4 @@ fi
 
 export SUBMIT_USAGE_FUNCTION=usage
 
-exec "$FWDIR"/sbin/spark-daemon.sh spark-submit $CLASS 1 "$@"
+exec "$FWDIR"/sbin/spark-daemon.sh start $CLASS 1 "$@"
