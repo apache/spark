@@ -311,7 +311,6 @@ class CheckpointSuite extends TestSuiteBase {
     testCheckpointedOperation(input, operation, output, 7)
   }
 
-
   // This tests whether file input stream remembers what files were seen before
   // the master failure and uses them again to process a large window operation.
   // It also tests whether batches, whose processing was incomplete due to the
@@ -348,9 +347,14 @@ class CheckpointSuite extends TestSuiteBase {
         val fileStream = ssc.textFileStream(testDir.toString)
         // Make value 3 take a large time to process, to ensure that the driver
         // shuts down in the middle of processing the 3rd batch
+        TaskControlFlags.taskThreeShouldBlockIndefinitely = true
         val mappedStream = fileStream.map(s => {
           val i = s.toInt
-          if (i == 3) Thread.sleep(4000)
+          if (i == 3) {
+            while (TaskControlFlags.taskThreeShouldBlockIndefinitely) {
+              Thread.sleep(Long.MaxValue)
+            }
+          }
           i
         })
 
@@ -389,6 +393,7 @@ class CheckpointSuite extends TestSuiteBase {
       }
 
       // The original StreamingContext has now been stopped.
+      TaskControlFlags.taskThreeShouldBlockIndefinitely = false
 
       // Create files while the streaming driver is down
       for (i <- Seq(4, 5, 6)) {
@@ -522,4 +527,9 @@ class CheckpointSuite extends TestSuiteBase {
     }.head.asInstanceOf[TestOutputStreamWithPartitions[V]]
     outputStream.output.map(_.flatten)
   }
+}
+
+// Global object with flags for controlling tasks' behavior.
+private object TaskControlFlags extends Serializable {
+  var taskThreeShouldBlockIndefinitely: Boolean = true
 }
