@@ -34,4 +34,4 @@ private[cluster] class ExecutorData(
    override val executorHost: String,
    var freeCores: Int,
    override val totalCores: Int
-) extends ExecutorInfo(executorHost, totalCores)
+) extends ExecutorDetails(executorHost, totalCores)

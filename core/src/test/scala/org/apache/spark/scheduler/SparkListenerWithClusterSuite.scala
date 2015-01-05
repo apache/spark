@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.scheduler.cluster.ExecutorInfo
+import org.apache.spark.scheduler.cluster.ExecutorDetails
 import org.apache.spark.{SparkContext, LocalSparkContext}
 
 import org.scalatest.{FunSuite, BeforeAndAfter, BeforeAndAfterAll}
@@ -38,7 +38,7 @@ class SparkListenerWithClusterSuite extends FunSuite with LocalSparkContext
   }
 
   test("SparkListener sends executor added message") {
-    val listener = new SaveExecutorInfo
+    val listener = new SaveExecutorDetails
     sc.addSparkListener(listener)
 
     val rdd1 = sc.parallelize(1 to 100, 4)
@@ -47,16 +47,16 @@ class SparkListenerWithClusterSuite extends FunSuite with LocalSparkContext
     rdd2.count()
 
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
-    assert(listener.addedExecutorInfos.size == 2)
-    assert(listener.addedExecutorInfos("0").totalCores == 1)
-    assert(listener.addedExecutorInfos("1").totalCores == 1)
+    assert(listener.addedExecutorDetails.size == 2)
+    assert(listener.addedExecutorDetails("0").totalCores == 1)
+    assert(listener.addedExecutorDetails("1").totalCores == 1)
   }
 
-  private class SaveExecutorInfo extends SparkListener {
-    val addedExecutorInfos = mutable.Map[String, ExecutorInfo]()
+  private class SaveExecutorDetails extends SparkListener {
+    val addedExecutorDetails = mutable.Map[String, ExecutorDetails]()
 
-    override def onExecutorAdded(executor : SparkListenerExecutorAdded) {
-      addedExecutorInfos(executor.executorId) = executor.executorInfo
+    override def onExecutorAdded(executor: SparkListenerExecutorAdded) {
+      addedExecutorDetails(executor.executorId) = executor.executorDetails
     }
   }
 }

@@ -19,14 +19,13 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import org.apache.spark.scheduler.cluster.ExecutorInfo
-
 import scala.collection.Map
 import scala.collection.mutable
 
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.scheduler.cluster.ExecutorDetails
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{Distribution, Utils}
 
@@ -87,11 +86,11 @@ case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockMan
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerExecutorAdded(executorId: String, executorInfo : ExecutorInfo)
+case class SparkListenerExecutorAdded(executorId: String, executorDetails: ExecutorDetails)
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerExecutorRemoved(executorId: String, executorInfo : ExecutorInfo)
+case class SparkListenerExecutorRemoved(executorId: String, executorDetails: ExecutorDetails)
   extends SparkListenerEvent
 
 /**
