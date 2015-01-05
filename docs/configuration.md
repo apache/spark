@@ -709,7 +709,9 @@ Apart from these, the following properties are also available, and may be useful
     <td>If set to true, validates the output specification (e.g. checking if the output directory already exists)
     used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
     output directories. We recommend that users do not disable this except if trying to achieve compatibility with
-    previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
+    previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.
+    This setting is ignored for jobs generated through Spark Streaming's StreamingContext, since
+    data may need to be rewritten to pre-existing output directories during checkpoint recovery.</td>
 </tr>
 <tr>
     <td><code>spark.hadoop.cloneConf</code></td>
