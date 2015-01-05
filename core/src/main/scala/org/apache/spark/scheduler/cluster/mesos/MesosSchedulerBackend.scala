@@ -21,8 +21,6 @@ import java.io.File
 import java.util.{ArrayList => JArrayList, List => JList}
 import java.util.Collections
 
-import org.apache.spark.executor.MesosExecutorBackend
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
 
@@ -32,6 +30,7 @@ import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState,
   ExecutorInfo => MesosExecutorInfo, _}
 
+import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.{Logging, SparkContext, SparkException, TaskState}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.scheduler._
