@@ -44,8 +44,13 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
   // Additional memory to allocate to containers
   // For now, use driver's memory overhead as our AM container's memory overhead
-  val amMemoryOverhead = sparkConf.getInt("spark.yarn.driver.memoryOverhead",
-    math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
+  val amMemoryOverhead = if (userClass != null) {
+    sparkConf.getInt("spark.yarn.driver.memoryOverhead",
+      math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
+  } else {
+    sparkConf.getInt("spark.yarn.am.memoryOverhead",
+      math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
+    }
 
   val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
@@ -122,7 +127,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           amMemory = value
           args = tail
 
-        case ("--master-cores" | "--driver-cores") :: IntParam(value) :: tail =>
+        case ("--driver-cores") :: IntParam(value) :: tail =>
           if (args(0) == "--master-cores") {
             println("--master-cores is deprecated. Use --driver-cores instead.")
           }
