@@ -166,7 +166,7 @@ class ReceivedBlockTrackerSuite
     // Cleanup first batch but not second batch
     val oldestLogFile = getWriteAheadLogFiles().head
     incrementTime()
-    tracker3.cleanupOldBatches(batchTime2)
+    tracker3.cleanupOldBatches(batchTime2, waitForCompletion = true)
 
     // Verify that the batch allocations have been cleaned, and the act has been written to log
     tracker3.getBlocksOfBatchAndStream(batchTime1, streamId) shouldEqual Seq.empty
