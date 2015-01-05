@@ -21,13 +21,13 @@ import java.io._
 
 import scala.collection.JavaConversions._
 
-import akka.actor.ActorRef
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.logging.FileAppender
 
 /**
@@ -40,7 +40,7 @@ private[spark] class ExecutorRunner(
     val appDesc: ApplicationDescription,
     val cores: Int,
     val memory: Int,
-    val worker: ActorRef,
+    val worker: RpcEndpointRef,
     val workerId: String,
     val host: String,
     val sparkHome: File,
@@ -94,7 +94,7 @@ private[spark] class ExecutorRunner(
       }
       exitCode = Some(process.waitFor())
     }
-    worker ! ExecutorStateChanged(appId, execId, state, message, exitCode)
+    worker.send(ExecutorStateChanged(appId, execId, state, message, exitCode))
   }
 
   /** Stop this executor runner, including killing the process it launched */
@@ -151,7 +151,7 @@ private[spark] class ExecutorRunner(
       val exitCode = process.waitFor()
       state = ExecutorState.EXITED
       val message = "Command exited with code " + exitCode
-      worker ! ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode))
+      worker.send(ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode)))
     } catch {
       case interrupted: InterruptedException => {
         logInfo("Runner thread for executor " + fullId + " interrupted")

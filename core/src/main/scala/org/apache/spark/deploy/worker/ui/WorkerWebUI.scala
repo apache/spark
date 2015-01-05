@@ -38,8 +38,6 @@ class WorkerWebUI(
   extends WebUI(worker.securityMgr, requestedPort, worker.conf, name = "WorkerUI")
   with Logging {
 
-  val timeout = AkkaUtils.askTimeout(worker.conf)
-
   initialize()
 
   /** Initialize all components of the server. */

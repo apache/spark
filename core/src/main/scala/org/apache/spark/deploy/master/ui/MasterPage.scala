@@ -19,10 +19,8 @@ package org.apache.spark.deploy.master.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.concurrent.Await
 import scala.xml.Node
 
-import akka.pattern.ask
 import org.json4s.JValue
 
 import org.apache.spark.deploy.JsonProtocol
@@ -33,7 +31,6 @@ import org.apache.spark.util.Utils
 
 private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private def master = parent.masterActorRef
-  private val timeout = parent.timeout
 
   override def renderJson(request: HttpServletRequest): JValue = {
     val state = master.askWithReply[MasterStateResponse](RequestMasterState)
