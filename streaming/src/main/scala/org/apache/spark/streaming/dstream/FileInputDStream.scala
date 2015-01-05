@@ -20,9 +20,10 @@ package org.apache.spark.streaming.dstream
 import java.io.{IOException, ObjectInputStream}
 
 import scala.collection.mutable
+import scala.collection.mutable.{TreeSet, Queue}
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
+import org.apache.hadoop.fs.{FileSystem, Path, PathFilter, FileStatus}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark.rdd.{RDD, UnionRDD}
@@ -80,6 +81,15 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   // Initial ignore threshold based on which old, existing files in the directory (at the time of
   // starting the streaming application) will be ignored or considered
   private val initialModTimeIgnoreThreshold = if (newFilesOnly) System.currentTimeMillis() else 0L
+
+  // the max input data size in once batch processing
+  private val segmentThreshold = (ssc_.conf.get("spark.streaming.segmentSizeThreshold", "0")).trim
+  val segmentSize = if (segmentThreshold.matches("[1-9][0-9]*")) {
+    segmentThreshold.toLong * 1024
+  } else 0L
+
+  // all find new files queue
+  private val pretreatmentFileQueue = new Queue[(String, Long)]()
 
   /*
    * Make sure that the information of files selected in the last few batches are remembered.
@@ -163,7 +173,8 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
       val filter = new PathFilter {
         def accept(path: Path): Boolean = isNewFile(path, currentTime, modTimeIgnoreThreshold)
       }
-      val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
+      val listStatus = fs.listStatus(directoryPath, filter)
+      val newFiles = packageSegmentFiles(listStatus)
       val timeTaken = System.currentTimeMillis - lastNewFileFindingTime
       logInfo("Finding new files took " + timeTaken + " ms")
       logDebug("# cached file times = " + fileToModTime.size)
@@ -180,6 +191,31 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
         logWarning("Error finding new files", e)
         reset()
         Array.empty
+    }
+  }
+
+  /**
+   * The total size of input files threshold setting in each batch process.
+   * packaging the input files in one batch processing.According to the number of
+   * "spark.streaming.filesThreshold" and `pretreatmentFileQueue.size`
+   * determined the number of input files in one batch processing.When the value of
+   * "spark.streaming.filesThreshold" is < 0, the logic while ignore the function
+   * packageBatchFiles.
+   */
+  private def packageSegmentFiles(listStatus: Array[FileStatus]): Array[String] = {
+    if (segmentSize <= 0) {
+      listStatus.map(_.getPath.toString)
+    } else {
+      val newFiles = listStatus.map(status => (status.getPath.toString,status.getLen))
+      pretreatmentFileQueue ++= newFiles
+      var bufferSize = segmentSize
+      val segmentFiles = TreeSet[String]()
+      while (bufferSize > 0 && pretreatmentFileQueue.size > 0) {
+        val fileStatus = pretreatmentFileQueue.dequeue
+        bufferSize = bufferSize - fileStatus._2
+        segmentFiles += fileStatus._1
+      }
+      segmentFiles.toArray
     }
   }
 
