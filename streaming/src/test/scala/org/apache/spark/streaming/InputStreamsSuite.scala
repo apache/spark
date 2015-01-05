@@ -97,7 +97,44 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   test("binary records stream") {
-    testBinaryRecordsStream()
+    var ssc: StreamingContext = null
+    val testDir: File = null
+    try {
+      val testDir = Utils.createTempDir()
+
+      Thread.sleep(1000)
+      // Set up the streaming context and input streams
+      val newConf = conf.clone.set(
+        "spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
+      ssc = new StreamingContext(newConf, batchDuration)
+
+      val fileStream = ssc.binaryRecordsStream(testDir.toString, 1)
+
+      val outputBuffer = new ArrayBuffer[Seq[Array[Byte]]]
+        with SynchronizedBuffer[Seq[Array[Byte]]]
+      val outputStream = new TestOutputStream(fileStream, outputBuffer)
+      outputStream.register()
+      ssc.start()
+
+      // Create files in the directory with binary data
+      val input = Seq(1, 2, 3, 4, 5)
+      input.foreach { i =>
+        Thread.sleep(batchDuration.milliseconds)
+        val file = new File(testDir, i.toString)
+        Files.write(Array[Byte](i.toByte), file)
+        logInfo("Created file " + file)
+      }
+
+      // Verify contents of output
+      eventually(timeout(maxWaitTimeMillis milliseconds), interval(100 milliseconds)) {
+        val expectedOutput = input.map(i => i.toByte)
+        val obtainedOutput = outputBuffer.flatten.toList.map(i => i(0).toByte)
+        assert(obtainedOutput === expectedOutput)
+      }
+    } finally {
+      if (ssc != null) ssc.stop()
+      if (testDir != null) Utils.deleteRecursively(testDir)
+    }
   }
 
   test("file input stream - newFilesOnly = true") {
@@ -233,47 +270,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     assert(output.size === expectedOutput.size)
     for (i <- 0 until output.size) {
       assert(output(i) === expectedOutput(i))
-    }
-  }
-
-  def testBinaryRecordsStream() {
-    var ssc: StreamingContext = null
-    val testDir: File = null
-    try {
-      val testDir = Utils.createTempDir()
-
-      Thread.sleep(1000)
-      // Set up the streaming context and input streams
-      val newConf = conf.clone.set(
-        "spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
-      ssc = new StreamingContext(newConf, batchDuration)
-
-      val fileStream = ssc.binaryRecordsStream(testDir.toString, 1)
-
-      val outputBuffer = new ArrayBuffer[Seq[Array[Byte]]]
-        with SynchronizedBuffer[Seq[Array[Byte]]]
-      val outputStream = new TestOutputStream(fileStream, outputBuffer)
-      outputStream.register()
-      ssc.start()
-
-      // Create files in the directory with binary data
-      val input = Seq(1, 2, 3, 4, 5)
-      input.foreach { i =>
-        Thread.sleep(batchDuration.milliseconds)
-        val file = new File(testDir, i.toString)
-        Files.write(Array[Byte](i.toByte), file)
-        logInfo("Created file " + file)
-      }
-
-      // Verify contents of output
-      eventually(timeout(maxWaitTimeMillis milliseconds), interval(100 milliseconds)) {
-        val expectedOutput = input.map(i => i.toByte)
-        val obtainedOutput = outputBuffer.flatten.toList.map(i => i(0).toByte)
-        assert(obtainedOutput === expectedOutput)
-      }
-    } finally {
-      if (ssc != null) ssc.stop()
-      if (testDir != null) Utils.deleteRecursively(testDir)
     }
   }
 
