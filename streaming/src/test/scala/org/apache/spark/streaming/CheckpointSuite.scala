@@ -343,7 +343,7 @@ class CheckpointSuite extends TestSuiteBase {
       withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
         ssc.checkpoint(checkpointDir)
         clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-        val waiter = new StreamingTestWaiter(ssc)
+        val batchCounter = new BatchCounter(ssc)
         val fileStream = ssc.textFileStream(testDir.toString)
         // Make value 3 take a large time to process, to ensure that the driver
         // shuts down in the middle of processing the 3rd batch
@@ -374,14 +374,14 @@ class CheckpointSuite extends TestSuiteBase {
           if (i != 3) {
             // Since we want to shut down while the 3rd batch is processing
             eventually(timeout(batchDuration * 5)) {
-              assert(waiter.getNumCompletedBatches === i)
+              assert(batchCounter.getNumCompletedBatches === i)
             }
           }
         }
         clock.addToTime(batchDuration.milliseconds)
         eventually(timeout(batchDuration * 5)) {
           // Wait until all files have been recorded and all batches have started
-          assert(recordedFiles(ssc) === Seq(1, 2, 3) && waiter.getNumStartedBatches === 3)
+          assert(recordedFiles(ssc) === Seq(1, 2, 3) && batchCounter.getNumStartedBatches === 3)
         }
         // Wait for a checkpoint to be written
         val fs = new Path(checkpointDir).getFileSystem(ssc.sc.hadoopConfiguration)
@@ -390,7 +390,7 @@ class CheckpointSuite extends TestSuiteBase {
         }
         ssc.stop()
         // Check that we shut down while the third batch was being processed
-        assert(waiter.getNumCompletedBatches === 2)
+        assert(batchCounter.getNumCompletedBatches === 2)
         assert(outputStream.output.flatten === Seq(1, 3))
       }
 
@@ -413,7 +413,7 @@ class CheckpointSuite extends TestSuiteBase {
           newClock.setTime(clock.currentTime())
           newClock
         }
-        val waiter = new StreamingTestWaiter(ssc)
+        val batchCounter = new BatchCounter(ssc)
         val outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]
         // Check that we remember files that were recorded before the restart
         assert(recordedFiles(ssc) === Seq(1, 2, 3))
@@ -425,7 +425,7 @@ class CheckpointSuite extends TestSuiteBase {
           writeFile(i, clock)
           clock.addToTime(batchDuration.milliseconds)
           eventually(timeout(batchDuration * 5)) {
-            assert(waiter.getNumCompletedBatches === index + 1)
+            assert(batchCounter.getNumCompletedBatches === index + 1)
           }
         }
         clock.addToTime(batchDuration.milliseconds)

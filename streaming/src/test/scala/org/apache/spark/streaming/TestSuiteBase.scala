@@ -107,27 +107,26 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
 }
 
 /**
- * An object that can be used to block until certain events occur, such as batch start/completion.
- * This is much less brittle than waiting on wall-clock time. Internally, this is implemented using
- * a StreamingListener.  Constructing a new instance automatically registers a StreamingListener on
+ * An object that counts the number of started / completed batches. This is implemented using a
+ * StreamingListener. Constructing a new instance automatically registers a StreamingListener on
  * the given StreamingContext.
  */
-class StreamingTestWaiter(ssc: StreamingContext) {
+class BatchCounter(ssc: StreamingContext) {
 
-  // All access to this state should be guarded by `StreamingTestWaiter.this.synchronized`
+  // All access to this state should be guarded by `BatchCounter.this.synchronized`
   private var numCompletedBatches = 0
   private var numStartedBatches = 0
 
   private val listener = new StreamingListener {
     override def onBatchStarted(batchStarted: StreamingListenerBatchStarted): Unit =
-      StreamingTestWaiter.this.synchronized {
+      BatchCounter.this.synchronized {
         numStartedBatches += 1
-        StreamingTestWaiter.this.notifyAll()
+        BatchCounter.this.notifyAll()
       }
     override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit =
-      StreamingTestWaiter.this.synchronized {
+      BatchCounter.this.synchronized {
         numCompletedBatches += 1
-        StreamingTestWaiter.this.notifyAll()
+        BatchCounter.this.notifyAll()
       }
   }
   ssc.addStreamingListener(listener)

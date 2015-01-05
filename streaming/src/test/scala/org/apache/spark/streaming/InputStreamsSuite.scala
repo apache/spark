@@ -246,7 +246,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         // This `setTime` call ensures that the clock is past the creation time of `existingFile`
         clock.setTime(existingFile.lastModified + 1000)
-        val waiter = new StreamingTestWaiter(ssc)
+        val batchCounter = new BatchCounter(ssc)
         val fileStream = ssc.fileStream[LongWritable, Text, TextInputFormat](
           testDir.toString, (x: Path) => true, newFilesOnly = newFilesOnly).map(_._2.toString)
         val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
@@ -264,7 +264,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
           assert(file.lastModified === clock.currentTime)
           logInfo("Created file " + file)
           eventually(timeout(batchDuration * 5)) {
-            assert(waiter.getNumCompletedBatches === i)
+            assert(batchCounter.getNumCompletedBatches === i)
           }
         }
 
