@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.worker
 
-import akka.actor._
+import org.apache.spark.rpc.akka.AkkaRpcEnv
 
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.util.{AkkaUtils, Utils}
@@ -32,13 +32,15 @@ object DriverWrapper {
         val conf = new SparkConf()
         val (actorSystem, _) = AkkaUtils.createActorSystem("Driver",
           Utils.localHostName(), 0, conf, new SecurityManager(conf))
-        actorSystem.actorOf(Props(classOf[WorkerWatcher], workerUrl), name = "workerWatcher")
+        val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+        rpcEnv.setupEndpoint("workerWatcher", new WorkerWatcher(rpcEnv, workerUrl))
 
         // Delegate to supplied main class
         val clazz = Class.forName(args(1))
         val mainMethod = clazz.getMethod("main", classOf[Array[String]])
         mainMethod.invoke(null, extraArgs.toArray[String])
 
+        rpcEnv.stopAll()
         actorSystem.shutdown()
 
       case _ =>

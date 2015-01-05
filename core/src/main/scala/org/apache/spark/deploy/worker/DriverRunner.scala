@@ -24,7 +24,6 @@ import org.apache.spark.rpc.RpcEndpointRef
 import scala.collection.JavaConversions._
 import scala.collection.Map
 
-import akka.actor.ActorRef
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration

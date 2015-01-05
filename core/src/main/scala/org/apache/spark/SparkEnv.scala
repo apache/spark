@@ -24,7 +24,7 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.util.Properties
 
-import akka.actor._
+import akka.actor.ActorSystem
 import com.google.common.collect.MapMaker
 
 import org.apache.spark.annotation.DeveloperApi
@@ -263,16 +263,7 @@ object SparkEnv extends Logging {
     val closureSerializer = instantiateClassFromConf[Serializer](
       "spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer")
 
-    def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
-      if (isDriver) {
-        logInfo("Registering " + name)
-        actorSystem.actorOf(Props(newActor), name = name)
-      } else {
-        AkkaUtils.makeDriverRef(name, conf, actorSystem)
-      }
-    }
-
-    def registerOrLookupEndpoint(name: String, endpointCreator: => RpcEndpoint): RpcEndpointRef = {
+    def registerOrLookup(name: String, endpointCreator: => RpcEndpoint): RpcEndpointRef = {
       if (isDriver) {
         logInfo("Registering " + name)
         rpcEnv.setupEndpoint(name, endpointCreator)
@@ -289,7 +280,7 @@ object SparkEnv extends Logging {
 
     // Have to assign trackerActor after initialization as MapOutputTrackerActor
     // requires the MapOutputTracker itself
-    mapOutputTracker.trackerActor = registerOrLookupEndpoint("MapOutputTracker",
+    mapOutputTracker.trackerActor = registerOrLookup("MapOutputTracker",
       new MapOutputTrackerMasterActor(
         rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
@@ -311,7 +302,7 @@ object SparkEnv extends Logging {
           new NioBlockTransferService(conf, securityManager)
       }
 
-    val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
+    val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
       new BlockManagerMasterActor(rpcEnv, isLocal, conf, listenerBus)), conf, isDriver)
 
