@@ -57,6 +57,7 @@ function run_core_tests() {
     PYSPARK_DOC_TEST=1 run_test "pyspark/broadcast.py"
     PYSPARK_DOC_TEST=1 run_test "pyspark/accumulators.py"
     run_test "pyspark/serializers.py"
+    run_test "pyspark/profiler.py" 
     run_test "pyspark/shuffle.py"
     run_test "pyspark/tests.py"
 }
