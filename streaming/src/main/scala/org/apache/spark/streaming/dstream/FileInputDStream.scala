@@ -18,8 +18,10 @@
 package org.apache.spark.streaming.dstream
 
 import java.io.{IOException, ObjectInputStream}
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
@@ -94,8 +96,9 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   remember(durationToRemember)
 
   // Map of batch-time to selected file info for the remembered batches
+  // This is a concurrent map because it's also accessed in unit tests
   @transient private[streaming] var batchTimeToSelectedFiles =
-    new mutable.HashMap[Time, Array[String]]
+    new ConcurrentHashMap[Time, Array[String]].asScala
 
   // Set of files that were selected in the remembered batches
   @transient private var recentlySelectedFiles = new mutable.HashSet[String]()
@@ -270,7 +273,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
     generatedRDDs = new mutable.HashMap[Time, RDD[(K,V)]] ()
-    batchTimeToSelectedFiles = new mutable.HashMap[Time, Array[String]]()
+    batchTimeToSelectedFiles = new ConcurrentHashMap[Time, Array[String]].asScala
     recentlySelectedFiles = new mutable.HashSet[String]()
     fileToModTime = new TimeStampedHashMap[String, Long](true)
   }
