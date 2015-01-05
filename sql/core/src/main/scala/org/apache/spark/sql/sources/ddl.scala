@@ -55,8 +55,8 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected val USING = Keyword("USING")
   protected val OPTIONS = Keyword("OPTIONS")
   protected val WITH = Keyword("WITH")
-  protected val SERDEPROP = Keyword("SERDEPROP")
-  protected val TBLPROP = Keyword("TBLPROP")
+  protected val SERDEPROPERTIES = Keyword("SERDEPROPERTIES")
+  protected val TBLPROPERTIES = Keyword("TBLPROPERTIES")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -74,22 +74,24 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")
    * OR,
-   * For other external datasources not only a kind of file like:avro, parquet, json, but a cluster database, like: cassandra an hbase etc...
+   * For other external datasources not only a kind of file like:avro, parquet, json, but a cluster
+   * database, like: cassandra an hbase etc...
    * DDL like this:
    * CREATE TEMPORARY TABLE cassandraTable
    * USING org.apache.spark.sql.cassandra
-   * WITH SERDEPROP("serialization.format"="1", "cassandra.columns.mapping"="key,data")
+   * WITH SERDEPROPERTIES("serialization.format"="1", "cassandra.columns.mapping"="key,data")
    * TBLPROPERTIES("cassandra.keyspace.name" = "cassandra_keyspace")
    */
   protected lazy val createTable: Parser[LogicalPlan] =
     CREATE ~ TEMPORARY ~ TABLE ~> ident ~ (USING ~> className) ~
-      (OPTIONS ~> options).? ~ (WITH ~ SERDEPROP ~> properties).? ~
-      (TBLPROP ~> properties).? ^^ {
+      (OPTIONS ~> options).? ~ (WITH ~ SERDEPROPERTIES ~> properties).? ~
+      (TBLPROPERTIES ~> properties).? ^^ {
       case tableName ~ provider ~ opts ~ serdeprop ~ tblprop =>
         val optionParams = opts.getOrElse(Map[String,String]())
         val serdeParams = serdeprop.getOrElse(Map[String,String]())
         val tblParams = tblprop.getOrElse(Map[String,String]())
-        //TODO: in order to not break current interface, simple union them, if interface changes, also change this
+        // TODO: in order to not break current interface, simple union them, if interface changes,
+        // also change this
         val passedParams = optionParams ++ serdeParams ++ tblParams
         passedParams.foreach(println)
         CreateTableUsing(tableName, provider, passedParams)
@@ -98,7 +100,8 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected lazy val properties: Parser[Map[String,String]] =
     "(" ~> repsep(equalStrKVPair, ",") <~ ")" ^^ { case s: Seq[(String, String)] => s.toMap }
 
-  protected lazy val equalStrKVPair: Parser[(String, String)] = stringLit ~ "=" ~ stringLit ^^ { case k ~ "=" ~ v => (k,v) }
+  protected lazy val equalStrKVPair: Parser[(String, String)] = stringLit ~ "=" ~ stringLit ^^
+    { case k ~ "=" ~ v => (k,v) }
 
   protected lazy val options: Parser[Map[String, String]] =
     "(" ~> repsep(pair, ",") <~ ")" ^^ { case s: Seq[(String, String)] => s.toMap }
