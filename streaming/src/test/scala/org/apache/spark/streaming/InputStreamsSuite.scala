@@ -32,6 +32,7 @@ import scala.language.postfixOps
 
 import com.google.common.io.Files
 import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
@@ -262,7 +263,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
           assert(file.setLastModified(clock.currentTime()))
           assert(file.lastModified === clock.currentTime)
           logInfo("Created file " + file)
-          waiter.waitForTotalBatchesCompleted(i, timeout = batchDuration * 5)
+          eventually(timeout(batchDuration * 5)) {
+            assert(waiter.getNumCompletedBatches === i)
+          }
         }
 
         // Verify that all the files have been read

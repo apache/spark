@@ -21,10 +21,11 @@ import java.io.{ObjectInputStream, IOException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.SynchronizedBuffer
-import scala.concurrent.TimeoutException
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.time.{Span, Milliseconds => ScalaTestMilliseconds}
 
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
 import org.apache.spark.streaming.scheduler.{StreamingListenerBatchStarted, StreamingListenerBatchCompleted, StreamingListener}
@@ -138,42 +139,6 @@ class StreamingTestWaiter(ssc: StreamingContext) {
   def getNumStartedBatches: Int = this.synchronized {
     numStartedBatches
   }
-
-  /**
-   * Block until the number of completed batches reaches the given threshold.
-   */
-  def waitForTotalBatchesCompleted(
-      targetNumBatches: Int,
-      timeout: Duration): Unit = this.synchronized {
-    val startTime = System.currentTimeMillis()
-    def successful = getNumCompletedBatches >= targetNumBatches
-    def timedOut = (System.currentTimeMillis() - startTime) >= timeout.milliseconds
-    while (!timedOut && !successful) {
-      this.wait(timeout.milliseconds)
-    }
-    if (!successful && timedOut) {
-      throw new TimeoutException(s"Waited for $targetNumBatches completed batches, but only" +
-        s" $numCompletedBatches have completed after $timeout")
-    }
-  }
-
-  /**
-   * Block until the number of started batches reaches the given threshold.
-   */
-  def waitForTotalBatchesStarted(
-    targetNumBatches: Int,
-    timeout: Duration): Unit = this.synchronized {
-    val startTime = System.currentTimeMillis()
-    def successful = getNumStartedBatches >= targetNumBatches
-    def timedOut = (System.currentTimeMillis() - startTime) >= timeout.milliseconds
-    while (!timedOut && !successful) {
-      this.wait(timeout.milliseconds)
-    }
-    if (!successful && timedOut) {
-      throw new TimeoutException(s"Waited for $targetNumBatches started batches, but only" +
-        s" $numStartedBatches have started after $timeout")
-    }
-  }
 }
 
 /**
@@ -235,6 +200,14 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
 
   before(beforeFunction)
   after(afterFunction)
+
+  /**
+   * Implicit conversion which allows streaming Durations to be used with ScalaTest methods,
+   * such as `eventually`.
+   */
+  implicit def streamingDurationToScalatestSpan(duration: Duration): Span = {
+    Span(duration.milliseconds, ScalaTestMilliseconds)
+  }
 
   /**
    * Run a block of code with the given StreamingContext and automatically

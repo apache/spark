@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{IntWritable, Text}
 import org.apache.hadoop.mapred.TextOutputFormat
 import org.apache.hadoop.mapreduce.lib.output.{TextOutputFormat => NewTextOutputFormat}
+import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
 import org.apache.spark.streaming.util.ManualClock
@@ -360,19 +361,25 @@ class CheckpointSuite extends TestSuiteBase {
         outputStream.register()
         ssc.start()
 
-        clock.addToTime(batchDuration.milliseconds)
+        // Advance half a batch so that the first file is created after the StreamingContext starts
+        clock.addToTime(batchDuration.milliseconds / 2)
         // Create files and advance manual clock to process them
         for (i <- Seq(1, 2, 3)) {
           writeFile(i, clock)
           clock.addToTime(batchDuration.milliseconds)
           if (i != 3) {
             // Since we want to shut down while the 3rd batch is processing
-            waiter.waitForTotalBatchesCompleted(i, batchDuration * 5)
+            eventually(timeout(batchDuration * 5)) {
+              assert(waiter.getNumCompletedBatches === i)
+            }
           }
         }
         clock.addToTime(batchDuration.milliseconds)
-        waiter.waitForTotalBatchesStarted(3, batchDuration * 5)
         Thread.sleep(1000) // To wait for execution to actually begin
+        eventually(timeout(batchDuration * 5)) {
+          assert(waiter.getNumStartedBatches === 3)
+        }
+        assert(waiter.getNumCompletedBatches === 2)
         logInfo("Output after first start = " + outputStream.output.mkString("[", ", ", "]"))
         assert(outputStream.output.size > 0, "No files processed before restart")
         ssc.stop()
@@ -410,7 +417,9 @@ class CheckpointSuite extends TestSuiteBase {
         for ((i, index) <- Seq(7, 8, 9).zipWithIndex) {
           writeFile(i, clock)
           clock.addToTime(batchDuration.milliseconds)
-          waiter.waitForTotalBatchesCompleted(index + 1, batchDuration * 5)
+          eventually(timeout(batchDuration * 5)) {
+            assert(waiter.getNumCompletedBatches === index + 1)
+          }
         }
         clock.addToTime(batchDuration.milliseconds)
         logInfo("Output after restart = " + outputStream.output.mkString("[", ", ", "]"))
