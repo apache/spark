@@ -127,6 +127,8 @@ class DAGScheduler(
     "DAGSchedulerEventProcessActor-" + DAGScheduler.nextId,
     new DAGSchedulerEventProcessActor(rpcEnv, this))
 
+  taskScheduler.setDAGScheduler(this)
+
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
     eventProcessActor.send(BeginEvent(task, taskInfo))
@@ -1341,12 +1343,6 @@ class DAGScheduler(
 
 private[scheduler] class DAGSchedulerEventProcessActor(
   override val rpcEnv: RpcEnv, dagScheduler: DAGScheduler) extends RpcEndpoint with Logging {
-
-  override def preStart() {
-    // set DAGScheduler for taskScheduler to ensure eventProcessActor is always
-    // valid when the messages arrive
-    dagScheduler.taskScheduler.setDAGScheduler(dagScheduler)
-  }
 
   /**
    * The main event loop of the DAG scheduler.
