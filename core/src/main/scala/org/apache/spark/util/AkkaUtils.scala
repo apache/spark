@@ -89,7 +89,7 @@ private[spark] object AkkaUtils extends Logging {
     }
     val requireCookie = if (isAuthOn) "on" else "off"
     val secureCookie = if (isAuthOn) secretKey else ""
-    logDebug("In createActorSystem, requireCookie is: " + requireCookie)
+    logDebug(s"In createActorSystem, requireCookie is: $requireCookie")
 
     val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String]).withFallback(
       ConfigFactory.parseString(
@@ -140,8 +140,8 @@ private[spark] object AkkaUtils extends Logging {
   def maxFrameSizeBytes(conf: SparkConf): Int = {
     val frameSizeInMB = conf.getInt("spark.akka.frameSize", 10)
     if (frameSizeInMB > AKKA_MAX_FRAME_SIZE_IN_MB) {
-      throw new IllegalArgumentException("spark.akka.frameSize should not be greater than "
-        + AKKA_MAX_FRAME_SIZE_IN_MB + "MB")
+      throw new IllegalArgumentException(
+        s"spark.akka.frameSize should not be greater than $AKKA_MAX_FRAME_SIZE_IN_MB MB")
     }
     frameSizeInMB * 1024 * 1024
   }
@@ -182,8 +182,8 @@ private[spark] object AkkaUtils extends Logging {
       timeout: FiniteDuration): T = {
     // TODO: Consider removing multiple attempts
     if (actor == null) {
-      throw new SparkException("Error sending message as actor is null " +
-        "[message = " + message + "]")
+      throw new SparkException(s"Error sending message [message = $message]" +
+        " as actor is null ")
     }
     var attempts = 0
     var lastException: Exception = null
@@ -200,13 +200,13 @@ private[spark] object AkkaUtils extends Logging {
         case ie: InterruptedException => throw ie
         case e: Exception =>
           lastException = e
-          logWarning("Error sending message in " + attempts + " attempts", e)
+          logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
       }
       Thread.sleep(retryInterval)
     }
 
     throw new SparkException(
-      "Error sending message [message = " + message + "]", lastException)
+      s"Error sending message [message = $message]", lastException)
   }
 
   def makeDriverRef(name: String, conf: SparkConf, actorSystem: ActorSystem): ActorRef = {
