@@ -820,12 +820,12 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.network.timeout</code></td>
-  <td>100</td>
+  <td>120</td>
   <td>
     Default timeout for all network interactions, in seconds. This config will be used in 
     place of <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>, 
-    <code>spark.storage.blockManagerSlaveTimeoutMs</code> or <code>spark.shuffle.io.connectionTimeout</code>, 
-    if they are not configured.  
+    <code>spark.storage.blockManagerSlaveTimeoutMs</code> or
+    <code>spark.shuffle.io.connectionTimeout</code>, if they are not configured.
   </td>
 </tr>
 <tr>
