@@ -231,13 +231,15 @@ See the [configuration page](configuration.html) for information on Spark config
   <td>1</td>
   <td>
     The amount of CPU that the Mesos coarse grained scheduler will request for launching the shuffle service. The shuffle service is launched on each slave.
+    This will only apply if shuffle service is enabled and is running under coarse grained mode.
   </td>
 </tr>
 <tr>
   <td><code>spark.mesos.shuffle.service.mem</code></td>
-  <td>384</td>
+  <td>1024</td>
   <td>
     The amount of memory that Mesos coarse grained scheduler will request for launching the shuffle service. The shuffle service is launched on each slave.
+    This will only apply if shuffle service is enabled and is running under coarse grained mode.
   </td>
 </tr>
 </table>
