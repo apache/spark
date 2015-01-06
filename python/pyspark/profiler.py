@@ -30,12 +30,17 @@ class ProfilerCollector(object):
     the different stages.
     """
 
-    def __init__(self, profiler):
+    def __init__(self, profiler_cls):
         self.profilers = []
         self.profile_dump_path = None
-        self.profiler = profiler if profiler else BasicProfiler
+        self.profiler_cls = profiler_cls if profiler_cls else BasicProfiler
+
+    def new_profiler(self, ctx):
+        """ Create a new profiler using class `profiler_cls` """
+        return self.profiler_cls(ctx)
 
     def add_profiler(self, id, profiler):
+        """ Add a profiler for RDD `id` """
         if not self.profilers:
             if self.profile_dump_path:
                 atexit.register(self.dump_profiles, self.profile_dump_path)
@@ -45,6 +50,7 @@ class ProfilerCollector(object):
         self.profilers.append([id, profiler, False])
 
     def dump_profiles(self, path):
+        """ Dump the profile stats into directory `path` """
         for id, profiler, _ in self.profilers:
             profiler.dump(id, path)
         self.profilers = []
@@ -56,9 +62,6 @@ class ProfilerCollector(object):
                 profiler.show(id)
                 # mark it as showed
                 self.profilers[i][2] = True
-
-    def new_profiler(self, ctx):
-        return self.profiler(ctx)
 
 
 class Profiler(object):
