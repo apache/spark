@@ -373,8 +373,9 @@ object Vectors {
     var kv2 = 0
     val indices = v1.indices
     var squaredDistance = 0.0
-    var iv1 = indices(kv1)
+    val nnzv1 = indices.size
     val nnzv2 = v2.size
+    var iv1 = if (nnzv1 > 0) indices(kv1) else -1
    
     while (kv2 < nnzv2) {
       var score = 0.0
@@ -382,7 +383,7 @@ object Vectors {
         score = v2(kv2)
       } else {
         score = v1.values(kv1) - v2(kv2)
-        if (kv1 < indices.length - 1) {
+        if (kv1 < nnzv1 - 1) {
           kv1 += 1
           iv1 = indices(kv1)
         }
