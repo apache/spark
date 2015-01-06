@@ -84,7 +84,8 @@ private class ClientActor(override val rpcEnv: RpcEnv, driverArgs: ClientArgumen
     println(s"... waiting before polling master for driver state")
     Thread.sleep(5000)
     println("... polling master for driver state")
-    val statusResponse = masterActor.askWithReply[DriverStatusResponse](RequestDriverStatus(driverId))
+    val statusResponse =
+      masterActor.askWithReply[DriverStatusResponse](RequestDriverStatus(driverId))
 
     statusResponse.found match {
       case false =>

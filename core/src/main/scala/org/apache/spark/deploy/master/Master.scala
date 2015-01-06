@@ -418,8 +418,8 @@ private[spark] class Master(
     }
 
     case RequestMasterState => {
-      sender.send(MasterStateResponse(host, port, workers.toArray, apps.toArray, completedApps.toArray,
-        drivers.toArray, completedDrivers.toArray, state))
+      sender.send(MasterStateResponse(host, port, workers.toArray, apps.toArray,
+        completedApps.toArray, drivers.toArray, completedDrivers.toArray, state))
     }
 
     case CheckForWorkerTimeOut => {

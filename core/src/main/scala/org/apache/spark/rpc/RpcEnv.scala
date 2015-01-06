@@ -19,6 +19,8 @@ package org.apache.spark.rpc
 
 import java.util.concurrent.ConcurrentHashMap
 
+import org.apache.spark.deploy.master.Master
+
 import scala.concurrent.Future
 import scala.concurrent.duration.{FiniteDuration, Duration}
 import scala.reflect.ClassTag
@@ -146,7 +148,7 @@ object RpcEndpoint {
 /**
  * A reference for a remote [[RpcEndpoint]].
  */
-trait RpcEndpointRef {
+trait RpcEndpointRef {Master
 
   def address: RpcAddress
 

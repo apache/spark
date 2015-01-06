@@ -43,7 +43,8 @@ class BlockManagerMaster(
   }
 
   /** Register the BlockManager's id with the driver. */
-  def registerBlockManager(blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: RpcEndpointRef) {
+  def registerBlockManager(blockManagerId: BlockManagerId, maxMemSize: Long,
+      slaveActor: RpcEndpointRef) {
     logInfo("Trying to register BlockManager")
     tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveActor))
     logInfo("Registered BlockManager")
