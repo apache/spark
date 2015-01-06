@@ -178,16 +178,16 @@ class VectorsSuite extends FunSuite {
   }
 
   test("sqdist") {
-    val random = new Random(System.nanoTime())
-    for (m <- 1 until 1000 by 10) {
-      val nnz = random.nextInt(m) + 1
+    val random = new Random()
+    for (m <- 1 until 1000 by 100) {
+      val nnz = random.nextInt(m)
 
-      val indices1 = random.shuffle(0 to m - 1).toArray.slice(0, nnz).sorted
-      val values1 = indices1.map(i => random.nextInt(m + 1) * random.nextDouble())
+      val indices1 = random.shuffle(0 to m - 1).slice(0, nnz).sorted.toArray
+      val values1 = Array.fill(nnz)(random.nextDouble)
       val sparseVector1 = Vectors.sparse(m, indices1, values1)
 
-      val indices2 = random.shuffle(0 to m - 1).toArray.slice(0, nnz).sorted
-      val values2 = indices2.map(i => random.nextInt(m + 1) * random.nextDouble())
+      val indices2 = random.shuffle(0 to m - 1).slice(0, nnz).sorted.toArray
+      val values2 = Array.fill(nnz)(random.nextDouble)
       val sparseVector2 = Vectors.sparse(m, indices2, values2)
 
       val denseVector1 = Vectors.dense(sparseVector1.toArray)
@@ -196,11 +196,11 @@ class VectorsSuite extends FunSuite {
       val squaredDist = breezeSquaredDistance(sparseVector1.toBreeze, sparseVector2.toBreeze)
 
       // SparseVector vs. SparseVector 
-      assert(Vectors.sqdist(sparseVector1, sparseVector2) === squaredDist) 
+      assert(Vectors.sqdist(sparseVector1, sparseVector2) ~== squaredDist relTol 1E-8) 
       // DenseVector  vs. SparseVector
-      assert(Vectors.sqdist(denseVector1, sparseVector2) === squaredDist)
+      assert(Vectors.sqdist(denseVector1, sparseVector2) ~== squaredDist relTol 1E-8)
       // DenseVector  vs. DenseVector
-      assert(Vectors.sqdist(denseVector1, denseVector2) === squaredDist)
+      assert(Vectors.sqdist(denseVector1, denseVector2) ~== squaredDist relTol 1E-8)
     }    
   }
 
