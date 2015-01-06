@@ -48,6 +48,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       case j: LeftSemiJoinBNL => j
       case j: CartesianProduct => j
       case j: BroadcastNestedLoopJoin => j
+      case j: BroadcastLeftSemiJoinHash => j
     }
 
     assert(operators.size === 1)
@@ -381,5 +382,42 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
           |GROUP BY r.a
         """.stripMargin),
       (null, 10) :: Nil)
+  }
+
+  test("broadcasted left semi join operator selection") {
+    clearCache()
+    sql("CACHE TABLE testData")
+    val tmp = autoBroadcastJoinThreshold
+
+    sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=1000000000")
+    Seq(
+      ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
+        classOf[BroadcastLeftSemiJoinHash])
+    ).foreach {
+      case (query, joinClass) => assertJoin(query, joinClass)
+    }
+
+    sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1")
+
+    Seq(
+      ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash])
+    ).foreach {
+      case (query, joinClass) => assertJoin(query, joinClass)
+    }
+
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, tmp.toString)
+    sql("UNCACHE TABLE testData")
+  }
+
+  test("left semi join") {
+    val rdd = sql("SELECT * FROM testData2 LEFT SEMI JOIN testData ON key = a")
+    checkAnswer(rdd,
+      (1, 1) ::
+      (1, 2) ::
+      (2, 1) ::
+      (2, 2) ::
+      (3, 1) ::
+      (3, 2) :: Nil)
+
   }
 }

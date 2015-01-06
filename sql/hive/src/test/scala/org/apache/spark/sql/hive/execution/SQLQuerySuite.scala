@@ -32,6 +32,13 @@ case class Nested3(f3: Int)
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest {
+  test("SPARK-4512 Fix attribute reference resolution error when using SORT BY") {
+    checkAnswer(
+      sql("SELECT * FROM (SELECT key + key AS a FROM src SORT BY value) t ORDER BY t.a"),
+      sql("SELECT key + key as a FROM src ORDER BY a").collect().toSeq
+    )
+  }
+
   test("CTAS with serde") {
     sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect
     sql(
@@ -185,9 +192,14 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT case when ~1=-2 then 1 else 0 end FROM src"),
       sql("SELECT 1 FROM src").collect().toSeq)
   }
-  
- test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
-    checkAnswer(sql("SELECT key FROM src WHERE key not between 0 and 10 order by key"), 
-        sql("SELECT key FROM src WHERE key between 11 and 500 order by key").collect().toSeq)
+
+  test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
+    checkAnswer(sql("SELECT key FROM src WHERE key not between 0 and 10 order by key"),
+      sql("SELECT key FROM src WHERE key between 11 and 500 order by key").collect().toSeq)
+  }
+
+  test("SPARK-2554 SumDistinct partial aggregation") {
+    checkAnswer(sql("SELECT sum( distinct key) FROM src group by key order by key"),
+      sql("SELECT distinct key FROM src order by key").collect().toSeq)
   }
 }

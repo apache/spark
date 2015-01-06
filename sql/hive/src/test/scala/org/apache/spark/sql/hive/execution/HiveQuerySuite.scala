@@ -56,6 +56,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
   }
 
+  test("SPARK-4908: concurent hive native commands") {
+    (1 to 100).par.map { _ =>
+      sql("USE default")
+      sql("SHOW TABLES")
+    }
+  }
+
   createQueryTest("constant object inspector for generic udf",
     """SELECT named_struct(
       lower("AA"), "10",
@@ -410,6 +417,15 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   createQueryTest("select null from table",
     "SELECT null FROM src LIMIT 1")
+
+  test("predicates contains an empty AttributeSet() references") {
+    sql(
+      """
+        |SELECT a FROM (
+        |  SELECT 1 AS a FROM src LIMIT 1 ) table
+        |WHERE abs(20141202) is not null
+      """.stripMargin).collect()
+  }
 
   test("implement identity function using case statement") {
     val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")

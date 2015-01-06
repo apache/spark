@@ -101,6 +101,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "describe_comment_nonascii",
 
     "create_merge_compressed",
+    "create_view",
     "create_view_partitioned",
     "database_location",
     "database_properties",
@@ -110,7 +111,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // Weird DDL differences result in failures on jenkins.
     "create_like2",
-    "create_view_translate",
     "partitions_json",
 
     // This test is totally fine except that it includes wrong queries and expects errors, but error
@@ -349,6 +349,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "create_nested_type",
     "create_skewed_table1",
     "create_struct_table",
+    "create_view_translate",
     "cross_join",
     "cross_product_check_1",
     "cross_product_check_2",
@@ -403,6 +404,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby11",
     "groupby12",
     "groupby1_limit",
+    "groupby_grouping_id1",
+    "groupby_grouping_id2",
+    "groupby_grouping_sets1",
+    "groupby_grouping_sets2",
+    "groupby_grouping_sets3",
+    "groupby_grouping_sets4",
+    "groupby_grouping_sets5",
     "groupby1_map",
     "groupby1_map_nomap",
     "groupby1_map_skew",

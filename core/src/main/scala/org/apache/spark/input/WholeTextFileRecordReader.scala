@@ -26,6 +26,7 @@ import org.apache.hadoop.mapreduce.InputSplit
 import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, CombineFileRecordReader}
 import org.apache.hadoop.mapreduce.RecordReader
 import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.spark.deploy.SparkHadoopUtil
 
 
 /**
@@ -51,7 +52,8 @@ private[spark] class WholeTextFileRecordReader(
   extends RecordReader[String, String] with Configurable {
 
   private[this] val path = split.getPath(index)
-  private[this] val fs = path.getFileSystem(context.getConfiguration)
+  private[this] val fs = path.getFileSystem(
+    SparkHadoopUtil.get.getConfigurationFromJobContext(context))
 
   // True means the current file has been processed, then skip it.
   private[this] var processed = false
