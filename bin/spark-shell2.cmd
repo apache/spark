@@ -26,7 +26,7 @@ if %ERRORLEVEL% equ 0 (
 )
 
 rem SPARK-4161: scala does not assume use of the java classpath,
-rem so we need to add the "-Dscala.usejavacp=true" flag mnually. We
+rem so we need to add the "-Dscala.usejavacp=true" flag manually. We
 rem do this specifically for the Spark shell because the scala REPL
 rem has its own class loader, and any additional classpath specified
 rem through spark.driver.extraClassPath is not automatically propagated.

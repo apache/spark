@@ -242,6 +242,13 @@ private[spark] trait ClientBase extends Logging {
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
 
+    // Propagate SPARK_HOME to the containers. This is needed for pyspark to
+    // work, since the executor's PYTHONPATH is built based on the location
+    // of SPARK_HOME.
+    sparkConf.getOption("spark.home").orElse(sys.env.get("SPARK_HOME")).foreach { path =>
+      env("SPARK_HOME") = path
+    }
+
     // Set the environment variables to be passed on to the executors.
     distCacheMgr.setDistFilesEnv(env)
     distCacheMgr.setDistArchivesEnv(env)

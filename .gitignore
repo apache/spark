@@ -6,6 +6,7 @@
 *.iml
 *.iws
 *.pyc
+*.pyo
 .idea/
 .idea_modules/
 build/*.jar

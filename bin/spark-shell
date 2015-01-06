@@ -42,7 +42,7 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
 fi
 
 # SPARK-4161: scala does not assume use of the java classpath,
-# so we need to add the "-Dscala.usejavacp=true" flag mnually. We
+# so we need to add the "-Dscala.usejavacp=true" flag manually. We
 # do this specifically for the Spark shell because the scala REPL
 # has its own class loader, and any additional classpath specified
 # through spark.driver.extraClassPath is not automatically propagated.

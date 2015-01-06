@@ -331,11 +331,20 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
   protected List<String> prepareForOs(List<String> cmd,
       String libPath,
       Map<String, String> env) {
-    if (isWindows()) {
-      return prepareForWindows(cmd, libPath, env);
+
+    // If SPARK_HOME does not come from the environment, explicitly set it
+    // in the child's environment.
+    Map<String, String> childEnv = env;
+    if (System.getenv("SPARK_HOME") == null && !env.containsKey("SPARK_HOME")) {
+      childEnv = new HashMap<String, String>(env);
+      childEnv.put("SPARK_HOME", sparkHome);
     }
 
-    if (isEmpty(libPath) && env.isEmpty()) {
+    if (isWindows()) {
+      return prepareForWindows(cmd, libPath, childEnv);
+    }
+
+    if (isEmpty(libPath) && childEnv.isEmpty()) {
       return cmd;
     }
 
@@ -348,7 +357,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
       String newEnvValue = join(File.pathSeparator, currEnvValue, libPath);
       newCmd.add(String.format("%s=%s", envName, newEnvValue));
     }
-    for (Map.Entry<String, String> e : env.entrySet()) {
+    for (Map.Entry<String, String> e : childEnv.entrySet()) {
       newCmd.add(String.format("%s=%s", e.getKey(), e.getValue()));
     }
     newCmd.addAll(cmd);
