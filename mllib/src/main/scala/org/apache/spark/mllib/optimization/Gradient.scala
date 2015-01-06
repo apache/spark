@@ -66,9 +66,24 @@ class LogisticGradient extends Gradient {
     scal(gradientMultiplier, gradient)
     val loss =
       if (label > 0) {
-        math.log1p(math.exp(margin)) // log1p is log(1+p) but more accurate for small p
+        // log1p is log(1+p) but more accurate for small p
+ 
+        // Following two equations are the same analytically but not numerically, e.g.,
+        // math.log1p(math.exp(1000)) == Infinity
+        // 1000 + math.log1p(math.exp(-1000)) == 1000.0
+ 
+        if (margin < 0) {
+          math.log1p(math.exp(margin))
+        } else {
+          math.log1p(math.exp(-margin)) + margin
+        }
       } else {
-        math.log1p(math.exp(-margin))
+        // Same case as above
+        if (margin >= 0) {
+          math.log1p(math.exp(-margin))
+        } else {
+          math.log1p(math.exp(margin)) - margin
+        }
       }
 
     (gradient, loss)
