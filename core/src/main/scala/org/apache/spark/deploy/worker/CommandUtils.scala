@@ -19,11 +19,14 @@ package org.apache.spark.deploy.worker
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
 import java.lang.System._
+import java.util.{ArrayList, List => JList}
 
+import scala.collection.JavaConversions._
 import scala.collection.Map
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.Command
+import org.apache.spark.launcher.AbstractLauncher
 import org.apache.spark.util.Utils
 
 /**
@@ -54,12 +57,10 @@ object CommandUtils extends Logging {
   }
 
   private def buildCommandSeq(command: Command, memory: Int, sparkHome: String): Seq[String] = {
-    val runner = sys.env.get("JAVA_HOME").map(_ + "/bin/java").getOrElse("java")
-
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
-    Seq(runner) ++ buildJavaOpts(command, memory, sparkHome) ++ Seq(command.mainClass) ++
-      command.arguments
+    val cmd = new CommandLauncher(sparkHome, memory, command.environment).buildLauncherCommand()
+    cmd.toSeq ++ Seq(command.mainClass) ++ command.arguments
   }
 
   /**
@@ -92,34 +93,6 @@ object CommandUtils extends Logging {
       command.javaOpts)
   }
 
-  /**
-   * Attention: this must always be aligned with the environment variables in the run scripts and
-   * the way the JAVA_OPTS are assembled there.
-   */
-  private def buildJavaOpts(command: Command, memory: Int, sparkHome: String): Seq[String] = {
-    val memoryOpts = Seq(s"-Xms${memory}M", s"-Xmx${memory}M")
-
-    // Exists for backwards compatibility with older Spark versions
-    val workerLocalOpts = Option(getenv("SPARK_JAVA_OPTS")).map(Utils.splitCommandString)
-      .getOrElse(Nil)
-    if (workerLocalOpts.length > 0) {
-      logWarning("SPARK_JAVA_OPTS was set on the worker. It is deprecated in Spark 1.0.")
-      logWarning("Set SPARK_LOCAL_DIRS for node-specific storage locations.")
-    }
-
-    // Figure out our classpath with the external compute-classpath script
-    val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
-    val classPath = Utils.executeAndGetOutput(
-      Seq(sparkHome + "/bin/compute-classpath" + ext),
-      extraEnvironment = command.environment)
-    val userClassPath = command.classPathEntries ++ Seq(classPath)
-
-    val javaVersion = System.getProperty("java.version")
-    val permGenOpt = if (!javaVersion.startsWith("1.8")) Some("-XX:MaxPermSize=128m") else None
-    Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
-      permGenOpt ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts
-  }
-
   /** Spawn a thread that will redirect a given stream to a file */
   def redirectStream(in: InputStream, file: File) {
     val out = new FileOutputStream(file, true)
@@ -136,4 +109,21 @@ object CommandUtils extends Logging {
       }
     }.start()
   }
+}
+
+private class CommandLauncher(sparkHome: String, memory: Int, env: Map[String, String])
+    extends AbstractLauncher[CommandLauncher](env) {
+
+  setSparkHome(sparkHome)
+
+  override def buildLauncherCommand(): JList[String] = {
+    val cmd = createJavaCommand()
+    cmd.add("-cp")
+    cmd.add(buildClassPath(null).mkString(File.pathSeparator))
+    cmd.add(s"-Xms${memory}M")
+    cmd.add(s"-Xmx${memory}M")
+    addOptionString(cmd, getenv("SPARK_JAVA_OPTS"))
+    cmd
+  }
+
 }

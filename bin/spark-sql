@@ -25,10 +25,10 @@ set -o posix
 
 # NOTE: This exact class name is matched downstream by SparkSubmit.
 # Any changes need to be reflected there.
-CLASS="org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
+export CLASS="org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
 
 # Figure out where Spark is installed
-FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
+export FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 function usage {
   echo "Usage: ./bin/spark-sql [options] [cli option]"
@@ -43,15 +43,12 @@ function usage {
   echo
   echo "CLI options:"
   "$FWDIR"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
+  exit $1
 }
+export -f usage
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
-  usage
-  exit 0
+  usage 0
 fi
 
-source "$FWDIR"/bin/utils.sh
-SUBMIT_USAGE_FUNCTION=usage
-gatherSparkSubmitOpts "$@"
-
-exec "$FWDIR"/bin/spark-submit --class $CLASS "${SUBMISSION_OPTS[@]}" spark-internal "${APPLICATION_OPTS[@]}"
+exec "$FWDIR"/bin/spark-submit --class $CLASS "$@"
