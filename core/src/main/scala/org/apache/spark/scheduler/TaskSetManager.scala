@@ -459,7 +459,7 @@ private[spark] class TaskSetManager(
           }
           // Serialize and return the task
           val startTime = clock.getTime()
-          val serializedTask : ByteBuffer = try {
+          val serializedTask: ByteBuffer = try {
             Task.serializeWithDependencies(task, sched.sc.addedFiles,
                 sched.sc.addedJars, ser)
           } catch {
