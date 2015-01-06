@@ -21,11 +21,16 @@ import java.io.{ObjectInputStream, IOException}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.SynchronizedBuffer
+import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.time.{Span, Seconds => ScalaTestSeconds}
+import org.scalatest.concurrent.Eventually.timeout
+import org.scalatest.concurrent.PatienceConfiguration
 
 import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
+import org.apache.spark.streaming.scheduler.{StreamingListenerBatchStarted, StreamingListenerBatchCompleted, StreamingListener}
 import org.apache.spark.streaming.util.ManualClock
 import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.rdd.RDD
@@ -104,6 +109,40 @@ class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
 }
 
 /**
+ * An object that counts the number of started / completed batches. This is implemented using a
+ * StreamingListener. Constructing a new instance automatically registers a StreamingListener on
+ * the given StreamingContext.
+ */
+class BatchCounter(ssc: StreamingContext) {
+
+  // All access to this state should be guarded by `BatchCounter.this.synchronized`
+  private var numCompletedBatches = 0
+  private var numStartedBatches = 0
+
+  private val listener = new StreamingListener {
+    override def onBatchStarted(batchStarted: StreamingListenerBatchStarted): Unit =
+      BatchCounter.this.synchronized {
+        numStartedBatches += 1
+        BatchCounter.this.notifyAll()
+      }
+    override def onBatchCompleted(batchCompleted: StreamingListenerBatchCompleted): Unit =
+      BatchCounter.this.synchronized {
+        numCompletedBatches += 1
+        BatchCounter.this.notifyAll()
+      }
+  }
+  ssc.addStreamingListener(listener)
+
+  def getNumCompletedBatches: Int = this.synchronized {
+    numCompletedBatches
+  }
+
+  def getNumStartedBatches: Int = this.synchronized {
+    numStartedBatches
+  }
+}
+
+/**
  * This is the base trait for Spark Streaming testsuites. This provides basic functionality
  * to run user-defined set of input on user-defined stream operations, and verify the output.
  */
@@ -141,6 +180,9 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   val conf = new SparkConf()
     .setMaster(master)
     .setAppName(framework)
+
+  // Timeout for use in ScalaTest `eventually` blocks
+  val eventuallyTimeout: PatienceConfiguration.Timeout = timeout(Span(10, ScalaTestSeconds))
 
   // Default before function for any streaming test suite. Override this
   // if you want to add your stuff to "before" (i.e., don't call before { } )
@@ -291,7 +333,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
 
       // Advance manual clock
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-      logInfo("Manual clock before advancing = " + clock.time)
+      logInfo("Manual clock before advancing = " + clock.currentTime())
       if (actuallyWait) {
         for (i <- 1 to numBatches) {
           logInfo("Actually waiting for " + batchDuration)
@@ -301,7 +343,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       } else {
         clock.addToTime(numBatches * batchDuration.milliseconds)
       }
-      logInfo("Manual clock after advancing = " + clock.time)
+      logInfo("Manual clock after advancing = " + clock.currentTime())
 
       // Wait until expected number of output items have been generated
       val startTime = System.currentTimeMillis()
