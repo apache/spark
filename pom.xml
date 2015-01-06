@@ -105,6 +105,7 @@
     <module>external/zeromq</module>
     <module>examples</module>
     <module>repl</module>
+    <module>launcher</module>
   </modules>
 
   <properties>
