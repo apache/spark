@@ -67,12 +67,13 @@ class LogisticGradient extends Gradient {
      * However, the first part of gradientMultiplier can be potentially suffered from overflow,
      * so we use the equivalent formula but more numerically stable.
      */
-    val gradientMultiplier = if (margin > 0.0) {
-      val temp = math.exp(-margin)
-      temp / (1.0 + temp) - label
-    } else {
-      1.0 / (1.0 + math.exp(margin)) - label
-    }
+    val gradientMultiplier =
+      if (margin > 0.0) {
+        val temp = math.exp(-margin)
+        temp / (1.0 + temp) - label
+      } else {
+        1.0 / (1.0 + math.exp(margin)) - label
+      }
 
     val gradient = data.copy
     scal(gradientMultiplier, gradient)
