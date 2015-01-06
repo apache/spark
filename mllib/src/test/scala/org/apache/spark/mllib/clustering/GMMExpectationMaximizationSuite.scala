@@ -37,10 +37,11 @@ class GMMExpectationMaximizationSuite extends FunSuite with MLlibTestSparkContex
     val Esigma = Matrices.dense(2, 2, Array(2.0 / 3.0, -2.0 / 3.0, -2.0 / 3.0, 2.0 / 3.0))
     
     val gmm = new GaussianMixtureEM().setK(1).run(data)
+    val gaussians = gmm.gaussians
                 
     assert(gmm.weight(0) ~== Ew absTol 1E-5)
-    assert(gmm.mu(0) ~== Emu absTol 1E-5)
-    assert(gmm.sigma(0) ~== Esigma absTol 1E-5)
+    assert(Vectors.fromBreeze(gaussians(0).mu) ~== Emu absTol 1E-5)
+    assert(Matrices.fromBreeze(gaussians(0).sigma) ~== Esigma absTol 1E-5)
   }
   
   test("two clusters") {
@@ -67,12 +68,13 @@ class GMMExpectationMaximizationSuite extends FunSuite with MLlibTestSparkContex
       .setK(2)
       .setInitialModel(initialGmm)
       .run(data)
+    val gaussians = gmm.gaussians
       
     assert(gmm.weight(0) ~== Ew(0) absTol 1E-3)
     assert(gmm.weight(1) ~== Ew(1) absTol 1E-3)
-    assert(gmm.mu(0) ~== Emu(0) absTol 1E-3)
-    assert(gmm.mu(1) ~== Emu(1) absTol 1E-3)
-    assert(gmm.sigma(0) ~== Esigma(0) absTol 1E-3)
-    assert(gmm.sigma(1) ~== Esigma(1) absTol 1E-3)
+    assert(Vectors.fromBreeze(gaussians(0).mu) ~== Emu(0) absTol 1E-3)
+    assert(Vectors.fromBreeze(gaussians(1).mu) ~== Emu(1) absTol 1E-3)
+    assert(Matrices.fromBreeze(gaussians(0).sigma) ~== Esigma(0) absTol 1E-3)
+    assert(Matrices.fromBreeze(gaussians(1).sigma) ~== Esigma(1) absTol 1E-3)
   }
 }

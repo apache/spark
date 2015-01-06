@@ -52,9 +52,10 @@ object DenseGmmEM {
       .setMaxIterations(maxIterations)
       .run(data)
     
+    val gaussians = clusters.gaussians
     for (i <- 0 until clusters.k) {
       println("weight=%f\nmu=%s\nsigma=\n%s\n" format 
-        (clusters.weight(i), clusters.mu(i), clusters.sigma(i)))
+        (clusters.weight(i), gaussians(i).mu, gaussians(i).sigma))
     }
     
     println("Cluster labels (first <= 100):")
