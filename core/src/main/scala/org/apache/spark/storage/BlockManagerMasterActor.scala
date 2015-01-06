@@ -61,8 +61,8 @@ class BlockManagerMasterActor(override val rpcEnv: RpcEnv, val isLocal: Boolean,
 
   var timeoutCheckingTask: ScheduledFuture[_] = null
 
-  override def preStart() {
-    super.preStart()
+  override def onStart() {
+    super.onStart()
     timeoutCheckingTask = scheduler.scheduleAtFixedRate(new Runnable {
       override def run(): Unit = self.send(ExpireDeadHosts)
     }, 0, checkTimeoutInterval, TimeUnit.MILLISECONDS)

@@ -161,7 +161,7 @@ private[spark] class Worker(
     }
   }
 
-  override def preStart() {
+  override def onStart() {
     assert(!registered)
     logInfo("Starting Spark worker %s:%d with %d cores, %s RAM".format(
       host, port, cores, Utils.megabytesToString(memory)))
@@ -479,7 +479,7 @@ private[spark] class Worker(
       maybeCleanupApplication(id)
   }
 
-  override def remoteConnectionTerminated(remoteAddress: RpcAddress): Unit = {
+  override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     if (remoteAddress == masterAddress ) {
       logInfo(s"$remoteAddress Disassociated !")
       masterDisconnected()
@@ -509,7 +509,7 @@ private[spark] class Worker(
     "worker-%s-%s-%d".format(createDateFormat.format(new Date), host, port)
   }
 
-  override def postStop() {
+  override def onStop() {
     metricsSystem.report()
     registrationRetryTimer.foreach(_.cancel(true))
     executors.values.foreach(_.kill())

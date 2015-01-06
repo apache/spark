@@ -44,7 +44,7 @@ private[spark] class CoarseGrainedExecutorBackend(
   var executor: Executor = null
   var driver: RpcEndpointRef = _
 
-  override def preStart(): Unit = {
+  override def onStart(): Unit = {
     // self is valid now. So now we can use `send`
     logInfo("Connecting to driver: " + driverUrl)
     driver = rpcEnv.setupEndpointRefByUrl(driverUrl)
@@ -88,7 +88,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       env.actorSystem.shutdown()
   }
 
-  override def remoteConnectionTerminated(remoteAddress: RpcAddress): Unit = {
+  override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     logError(s"Driver $remoteAddress disassociated! Shutting down.")
     System.exit(1)
   }

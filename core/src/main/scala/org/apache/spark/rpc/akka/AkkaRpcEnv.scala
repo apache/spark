@@ -26,7 +26,7 @@ import scala.language.postfixOps
 
 import akka.actor.{ActorRef, Actor, Props, ActorSystem}
 import akka.pattern.{ask => akkaAsk}
-import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
+import akka.remote._
 
 import org.apache.spark.{Logging, SparkException, SparkConf}
 import org.apache.spark.rpc._
@@ -50,21 +50,39 @@ class AkkaRpcEnv(val actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
         registerEndpoint(endpoint, endpointRef)
 
         override def preStart(): Unit = {
-          endpoint.preStart()
+          endpoint.onStart()
           // Listen for remote client disconnection events,
           // since they don't go through Akka's watch()
           context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
         }
 
         override def receiveWithLogging: Receive = {
-          case DisassociatedEvent(_, remoteAddress, _) =>
+          case AssociatedEvent(_, remoteAddress, _) =>
             try {
               // TODO How to handle that a remoteAddress doesn't have host & port
-              endpoint.remoteConnectionTerminated(
-                AkkaUtils.akkaAddressToRpcAddress(remoteAddress))
+              endpoint.onConnected(AkkaUtils.akkaAddressToRpcAddress(remoteAddress))
             } catch {
               case NonFatal(e) => endpoint.onError(e)
             }
+
+          case DisassociatedEvent(_, remoteAddress, _) =>
+            try {
+              // TODO How to handle that a remoteAddress doesn't have host & port
+              endpoint.onDisconnected(AkkaUtils.akkaAddressToRpcAddress(remoteAddress))
+            } catch {
+              case NonFatal(e) => endpoint.onError(e)
+            }
+
+          case AssociationErrorEvent(cause, localAddress, remoteAddress, inbound, _) =>
+            try {
+              // TODO How to handle that a remoteAddress doesn't have host & port
+              endpoint.onNetworkError(cause, AkkaUtils.akkaAddressToRpcAddress(remoteAddress))
+            } catch {
+              case NonFatal(e) => endpoint.onError(e)
+            }
+          case e: RemotingLifecycleEvent =>
+            // ignore?
+
           case message: Any =>
             try {
               logInfo("Received RPC message: " + message)
@@ -78,7 +96,7 @@ class AkkaRpcEnv(val actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
         }
 
         override def postStop(): Unit = {
-          endpoint.postStop()
+          endpoint.onStop()
         }
 
         }), name = name)

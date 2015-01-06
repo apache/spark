@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy
 
-import akka.remote.AssociationErrorEvent
 import org.apache.log4j.{Level, Logger}
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
@@ -35,7 +34,7 @@ private class ClientActor(override val rpcEnv: RpcEnv, driverArgs: ClientArgumen
 
   var masterActor: RpcEndpointRef = _
 
-  override def preStart() = {
+  override def onStart() = {
     masterActor = rpcEnv.setupEndpointRefByUrl(Master.toAkkaUrl(driverArgs.master))
 
     println(s"Sending ${driverArgs.cmd} command to ${driverArgs.master}")
@@ -110,7 +109,6 @@ private class ClientActor(override val rpcEnv: RpcEnv, driverArgs: ClientArgumen
   }
 
   override def receive(sender: RpcEndpointRef) = {
-
     case SubmitDriverResponse(success, driverId, message) =>
       println(message)
       if (success) pollAndReportStatus(driverId.get) else System.exit(-1)
@@ -119,14 +117,16 @@ private class ClientActor(override val rpcEnv: RpcEnv, driverArgs: ClientArgumen
       println(message)
       if (success) pollAndReportStatus(driverId) else System.exit(-1)
 
-    case AssociationErrorEvent(cause, _, remoteAddress, _, _) =>
-      println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
-      println(s"Cause was: $cause")
-      System.exit(-1)
   }
 
-  override def remoteConnectionTerminated(remoteAddress: RpcAddress): Unit = {
+  override def onDisconnected(remoteAddress: RpcAddress): Unit = {
     println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
+    System.exit(-1)
+  }
+
+  override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
+    println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
+    println(s"Cause was: $cause")
     System.exit(-1)
   }
 }

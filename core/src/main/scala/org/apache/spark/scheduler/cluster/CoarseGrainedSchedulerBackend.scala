@@ -74,7 +74,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     private val reviveScheduler =
       Executors.newScheduledThreadPool(1, Utils.namedThreadFactory("driver-revive-scheduler"))
 
-    override def preStart() {
+    override def onStart() {
       // Periodically revive offers to allow delay scheduling to work
       val reviveInterval = conf.getLong("spark.scheduler.revive.interval", 1000)
       reviveScheduler.scheduleAtFixedRate(new Runnable {
@@ -195,7 +195,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
       }
     }
 
-    override def remoteConnectionTerminated(remoteAddress: RpcAddress): Unit = {
+    override def onDisconnected(remoteAddress: RpcAddress): Unit = {
       addressToExecutorId.get(remoteAddress).foreach(removeExecutor(_,
         "remote Akka client disassociated"))
     }

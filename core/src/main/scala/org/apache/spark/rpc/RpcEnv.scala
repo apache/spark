@@ -85,8 +85,6 @@ trait RpcEndpoint {
 
   val rpcEnv: RpcEnv
 
-  def preStart(): Unit = {}
-
   /**
    * Provide the implicit sender. `self` will become valid when `preStart` is called.
    */
@@ -94,6 +92,8 @@ trait RpcEndpoint {
     require(rpcEnv != null, "rpcEnv has not been initialized")
     rpcEnv.endpointRef(this)
   }
+
+  def onStart(): Unit = {}
 
   /**
    * Same assumption like Actor: messages sent to a RpcEndpoint will be delivered in sequence, and
@@ -107,18 +107,26 @@ trait RpcEndpoint {
   /**
    * Call onError when any exception is thrown during handling messages.
    *
-   * @param e
+   * @param cause
    */
-  def onError(e: Throwable): Unit = {
+  def onError(cause: Throwable): Unit = {
     // By default, throw e and let RpcEnv handle it
-    throw e
+    throw cause
   }
 
-  def remoteConnectionTerminated(remoteAddress: RpcAddress): Unit = {
+  def onConnected(remoteAddress: RpcAddress): Unit = {
     // By default, do nothing.
   }
 
-  def postStop(): Unit = {}
+  def onDisconnected(remoteAddress: RpcAddress): Unit = {
+    // By default, do nothing.
+  }
+
+  def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
+    // By default, throw e and let RpcEnv handle it
+  }
+
+  def onStop(): Unit = {}
 
   final def stop(): Unit = {
     rpcEnv.stop(self)

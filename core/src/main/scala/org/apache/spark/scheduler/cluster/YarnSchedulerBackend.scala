@@ -120,7 +120,7 @@ private[spark] abstract class YarnSchedulerBackend(
         sender.send(true)
     }
 
-    override def remoteConnectionTerminated(remoteAddress: RpcAddress): Unit = {
+    override def onDisconnected(remoteAddress: RpcAddress): Unit = {
       if (amActor.isDefined && remoteAddress == amActor.get.address) {
         logWarning(s"ApplicationMaster has disassociated: $remoteAddress")
       }

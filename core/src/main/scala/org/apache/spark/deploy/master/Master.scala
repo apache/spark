@@ -124,7 +124,7 @@ private[spark] class Master(
     throw new SparkException("spark.deploy.defaultCores must be positive")
   }
 
-  override def preStart() {
+  override def onStart() {
     logInfo("Starting Spark master at " + masterUrl)
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
@@ -170,7 +170,7 @@ private[spark] class Master(
     throw reason // throw it so that the master will be restarted
   }
 
-  override def postStop() {
+  override def onStop() {
     masterMetricsSystem.report()
     applicationMetricsSystem.report()
     // prevent the CompleteRecovery message sending to restarted master
@@ -431,7 +431,7 @@ private[spark] class Master(
     }
   }
 
-  override def remoteConnectionTerminated(address: RpcAddress): Unit = {
+  override def onDisconnected(address: RpcAddress): Unit = {
     // The disconnected client could've been either a worker or an app; remove whichever it was
     logInfo(s"$address got disassociated, removing it.")
     addressToWorker.get(address).foreach(removeWorker)

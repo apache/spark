@@ -64,7 +64,7 @@ private[spark] class AppClient(
     private val scheduler =
       Executors.newScheduledThreadPool(1, Utils.namedThreadFactory("client-actor"))
 
-    override def preStart() {
+    override def onStart() {
       try {
         registerWithMaster()
       } catch {
@@ -162,7 +162,7 @@ private[spark] class AppClient(
         stop()
     }
 
-    override def remoteConnectionTerminated(address: RpcAddress): Unit = {
+    override def onDisconnected(address: RpcAddress): Unit = {
       if (address == masterAddress) {
         logWarning(s"Connection to $address failed; waiting for master to reconnect...")
         markDisconnected()
@@ -186,7 +186,7 @@ private[spark] class AppClient(
       }
     }
 
-    override def postStop() {
+    override def onStop() {
       registrationRetryTimer.foreach(_.cancel(true))
     }
 

@@ -1386,7 +1386,7 @@ private[scheduler] class DAGSchedulerEventProcessActor(
       dagScheduler.resubmitFailedStages()
   }
 
-  override def postStop() {
+  override def onStop() {
     // Cancel any active jobs in postStop hook
     dagScheduler.cleanUpAfterSchedulerStop()
   }
