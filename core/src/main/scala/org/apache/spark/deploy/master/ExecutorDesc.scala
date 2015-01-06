@@ -19,7 +19,7 @@ package org.apache.spark.deploy.master
 
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
 
-private[spark] class ExecutorInfo(
+private[spark] class ExecutorDesc(
     val id: Int,
     val application: ApplicationInfo,
     val worker: WorkerInfo,
@@ -37,7 +37,7 @@ private[spark] class ExecutorInfo(
 
   override def equals(other: Any): Boolean = {
     other match {
-      case info: ExecutorInfo =>
+      case info: ExecutorDesc =>
         fullId == info.fullId &&
         worker.id == info.worker.id &&
         cores == info.cores &&

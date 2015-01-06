@@ -19,7 +19,7 @@ package org.apache.spark.util
 
 import java.util.{Properties, UUID}
 
-import org.apache.spark.scheduler.cluster.ExecutorDetails
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
@@ -202,13 +202,13 @@ private[spark] object JsonProtocol {
   def executorAddedToJson(executorAdded: SparkListenerExecutorAdded): JValue = {
     ("Event" -> Utils.getFormattedClassName(executorAdded)) ~
     ("Executor ID" -> executorAdded.executorId) ~
-    ("Executor Info" -> executorInfoToJson(executorAdded.executorDetails))
+    ("Executor Info" -> executorInfoToJson(executorAdded.executorInfo))
   }
 
   def executorRemovedToJson(executorRemoved: SparkListenerExecutorRemoved): JValue = {
     ("Event" -> Utils.getFormattedClassName(executorRemoved)) ~
     ("Executor ID" -> executorRemoved.executorId) ~
-    ("Executor Info" -> executorInfoToJson(executorRemoved.executorDetails))
+    ("Executor Info" -> executorInfoToJson(executorRemoved.executorInfo))
   }
 
   /** ------------------------------------------------------------------- *
@@ -378,9 +378,9 @@ private[spark] object JsonProtocol {
     ("Disk Size" -> blockStatus.diskSize)
   }
 
-  def executorInfoToJson(executorDetails: ExecutorDetails): JValue = {
-    ("Host" -> executorDetails.executorHost) ~
-    ("Total Cores" -> executorDetails.totalCores)
+  def executorInfoToJson(executorInfo: ExecutorInfo): JValue = {
+    ("Host" -> executorInfo.executorHost) ~
+    ("Total Cores" -> executorInfo.totalCores)
   }
 
   /** ------------------------------ *
@@ -780,10 +780,10 @@ private[spark] object JsonProtocol {
     BlockStatus(storageLevel, memorySize, diskSize, tachyonSize)
   }
 
-  def executorInfoFromJson(json: JValue): ExecutorDetails = {
+  def executorInfoFromJson(json: JValue): ExecutorInfo = {
     val executorHost = (json \ "Host").extract[String]
     val totalCores = (json \ "Total Cores").extract[Int]
-    new ExecutorDetails(executorHost, totalCores)
+    new ExecutorInfo(executorHost, totalCores)
   }
 
   /** -------------------------------- *

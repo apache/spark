@@ -45,7 +45,7 @@ import org.apache.spark.scheduler.SparkListenerUnpersistRDD;
  * new events get added to both the SparkListener and this adapter
  * in lockstep.
  */
-public class SparkListenerAdapter implements SparkListener {
+public class JavaSparkListener implements SparkListener {
 
   @Override
   public void onStageCompleted(SparkListenerStageCompleted stageCompleted) { }

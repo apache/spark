@@ -25,7 +25,7 @@ import scala.collection.mutable
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.cluster.ExecutorDetails
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{Distribution, Utils}
 
@@ -86,11 +86,11 @@ case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockMan
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerExecutorAdded(executorId: String, executorDetails: ExecutorDetails)
+case class SparkListenerExecutorAdded(executorId: String, executorInfo: ExecutorInfo)
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerExecutorRemoved(executorId: String, executorDetails: ExecutorDetails)
+case class SparkListenerExecutorRemoved(executorId: String, executorInfo: ExecutorInfo)
   extends SparkListenerEvent
 
 /**
@@ -119,7 +119,7 @@ private[spark] case object SparkListenerShutdown extends SparkListenerEvent
  * :: DeveloperApi ::
  * Interface for listening to events from the Spark scheduler. Note that this is an internal
  * interface which might change in different Spark releases. Java clients should extend
- * {@link SparkListenerAdapter}
+ * {@link JavaSparkListener}
  */
 @DeveloperApi
 trait SparkListener {

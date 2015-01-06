@@ -23,7 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
  * Stores information about an executor to pass from the scheduler to SparkListeners.
  */
 @DeveloperApi
-class ExecutorDetails(
+class ExecutorInfo(
    val executorHost: String,
    val totalCores: Int
 )
