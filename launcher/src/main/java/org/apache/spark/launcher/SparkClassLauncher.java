@@ -69,11 +69,11 @@ class SparkClassLauncher extends AbstractLauncher<SparkClassLauncher> {
       memKey = "SPARK_EXECUTOR_MEMORY";
     } else if (className.startsWith("org.apache.spark.tools.")) {
       String sparkHome = getSparkHome();
-      File toolsDir = new File(join(sparkHome, "tools", "target",
+      File toolsDir = new File(join(File.separator, sparkHome, "tools", "target",
         "scala-" + getScalaVersion()));
       checkState(toolsDir.isDirectory(), "Cannot find tools build directory.");
 
-      Pattern re = Pattern.compile("spark-tools-.*\\.jar");
+      Pattern re = Pattern.compile("spark-tools_.*\\.jar");
       for (File f : toolsDir.listFiles()) {
         if (re.matcher(f.getName()).matches()) {
           extraClassPath = f.getAbsolutePath();
