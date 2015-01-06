@@ -55,8 +55,7 @@ class BlockManagerMasterActor(override val rpcEnv: RpcEnv, val isLocal: Boolean,
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
-  val slaveTimeout = conf.getLong("spark.storage.blockManagerSlaveTimeoutMs",
-    math.max(conf.getInt("spark.executor.heartbeatInterval", 10000) * 3, 45000))
+  val slaveTimeout = conf.getLong("spark.storage.blockManagerSlaveTimeoutMs", 120 * 1000)
 
   val checkTimeoutInterval = conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000)
 
