@@ -25,6 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.runtime.ScalaRunTime
 
 import org.apache.spark.Logging
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.collection.OpenHashSet
 
 
@@ -35,7 +36,8 @@ import org.apache.spark.util.collection.OpenHashSet
  * Based on the following JavaWorld article:
  * http://www.javaworld.com/javaworld/javaqa/2003-12/02-qa-1226-sizeof.html
  */
-private[spark] object SizeEstimator extends Logging {
+@DeveloperApi
+object SizeEstimator extends Logging {
 
   // Sizes of primitive types
   private val BYTE_SIZE    = 1
