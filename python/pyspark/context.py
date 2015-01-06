@@ -32,7 +32,7 @@ from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deseria
 from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 from pyspark.traceback_utils import CallSite, first_spark_call
-from pyspark.profiler import ProfilerCollector
+from pyspark.profiler import ProfilerCollector, BasicProfiler
 
 from py4j.java_collections import ListConverter
 
@@ -66,7 +66,7 @@ class SparkContext(object):
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
                  environment=None, batchSize=0, serializer=PickleSerializer(), conf=None,
-                 gateway=None, jsc=None, profiler=None):
+                 gateway=None, jsc=None, profiler_cls=BasicProfiler):
         """
         Create a new SparkContext. At least the master and app name should be set,
         either through the named parameters here or through C{conf}.
@@ -102,14 +102,14 @@ class SparkContext(object):
         SparkContext._ensure_initialized(self, gateway=gateway)
         try:
             self._do_init(master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
-                          conf, jsc, profiler)
+                          conf, jsc, profiler_cls)
         except:
             # If an error occurs, clean up in order to allow future SparkContext creation:
             self.stop()
             raise
 
     def _do_init(self, master, appName, sparkHome, pyFiles, environment, batchSize, serializer,
-                 conf, jsc, profiler):
+                 conf, jsc, profiler_cls):
         self.environment = environment or {}
         self._conf = conf or SparkConf(_jvm=self._jvm)
         self._batchSize = batchSize  # -1 represents an unlimited batch size
@@ -193,9 +193,8 @@ class SparkContext(object):
 
         # profiling stats collected for each PythonRDD
         if self._conf.get("spark.python.profile", "false") == "true":
-            self.profiler_collector = ProfilerCollector(profiler)
-            self.profiler_collector.profiles_dump_path = self._conf.get("spark.python.profile.dump",
-                                                                        None)
+            dump_path = self._conf.get("spark.python.profile.dump", None)
+            self.profiler_collector = ProfilerCollector(profiler_cls, dump_path)
         else:
             self.profiler_collector = None
 

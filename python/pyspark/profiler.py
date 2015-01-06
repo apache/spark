@@ -30,10 +30,10 @@ class ProfilerCollector(object):
     the different stages.
     """
 
-    def __init__(self, profiler_cls):
+    def __init__(self, profiler_cls, dump_path=None):
+        self.profiler_cls = profiler_cls
+        self.profile_dump_path = dump_path
         self.profilers = []
-        self.profile_dump_path = None
-        self.profiler_cls = profiler_cls if profiler_cls else BasicProfiler
 
     def new_profiler(self, ctx):
         """ Create a new profiler using class `profiler_cls` """
