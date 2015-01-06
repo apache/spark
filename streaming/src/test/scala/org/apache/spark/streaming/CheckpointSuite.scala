@@ -445,22 +445,9 @@ class CheckpointSuite extends TestSuiteBase {
         // Append the new output to the old buffer
         outputBuffer ++= outputStream.output
 
-        val expectedOutput = Seq(1, 3, 6, 10, 15, 21, 28, 36, 45)
-        logInfo("--------------------------------")
-        logInfo(s"output, size = ${outputBuffer.size}")
-        outputBuffer.foreach(x => logInfo(s"[${x.mkString(",")}]"))
-        logInfo(s"expected output, size = ${expectedOutput.size}")
-        expectedOutput.foreach(x => logInfo(s"[$x]"))
-        logInfo("--------------------------------")
-
         // Verify whether all the elements received are as expected
-        val output = outputBuffer.flatMap(x => x)
-        assert(output.contains(6))  // To ensure that the 3rd input (i.e., 3) was processed
-        output.foreach(o =>         // To ensure all the inputs are correctly added cumulatively
-          assert(expectedOutput.contains(o), s"Expected value $o not found")
-        )
-        // To ensure that all the inputs were received correctly
-        assert(expectedOutput.last === output.last)
+        val expectedOutput = Seq(1, 3, 6, 10, 15, 21, 28, 36, 45)
+        assert(outputBuffer.flatten.toSet === expectedOutput.toSet)
       }
     } finally {
       Utils.deleteRecursively(testDir)
