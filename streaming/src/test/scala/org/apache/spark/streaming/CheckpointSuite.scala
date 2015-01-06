@@ -320,6 +320,10 @@ class CheckpointSuite extends TestSuiteBase {
     val testDir = Utils.createTempDir()
     val outputBuffer = new ArrayBuffer[Seq[Int]] with SynchronizedBuffer[Seq[Int]]
 
+    /**
+     * Writes a file named `i` (which contains the number `i`) to the test directory and sets its
+     * modification time to `clock`'s current time.
+     */
     def writeFile(i: Int, clock: ManualClock): Unit = {
       val file = new File(testDir, i.toString)
       Files.write(i + "\n", file, Charsets.UTF_8)
@@ -329,6 +333,9 @@ class CheckpointSuite extends TestSuiteBase {
       assert(file.lastModified() === clock.currentTime())
     }
 
+    /**
+     * Returns ids that identify which files which have been recorded by the file input stream.
+     */
     def recordedFiles(ssc: StreamingContext): Seq[Int] = {
       val fileInputDStream =
         ssc.graph.getInputStreams().head.asInstanceOf[FileInputDStream[_, _, _]]
@@ -369,6 +376,8 @@ class CheckpointSuite extends TestSuiteBase {
         // Create files and advance manual clock to process them
         for (i <- Seq(1, 2, 3)) {
           writeFile(i, clock)
+          // Advance the clock after creating the file to avoid a race when
+          // setting its modification time
           clock.addToTime(batchDuration.milliseconds)
           if (i != 3) {
             // Since we want to shut down while the 3rd batch is processing
@@ -399,6 +408,8 @@ class CheckpointSuite extends TestSuiteBase {
       // Create files while the streaming driver is down
       for (i <- Seq(4, 5, 6)) {
         writeFile(i, clock)
+        // Advance the clock after creating the file to avoid a race when
+        // setting its modification time
         clock.addToTime(batchDuration.milliseconds)
       }
 
@@ -428,6 +439,8 @@ class CheckpointSuite extends TestSuiteBase {
         }
         for ((i, index) <- Seq(7, 8, 9).zipWithIndex) {
           writeFile(i, clock)
+          // Advance the clock after creating the file to avoid a race when
+          // setting its modification time
           clock.addToTime(batchDuration.milliseconds)
           eventually(eventuallyTimeout) {
             assert(batchCounter.getNumCompletedBatches === index + numBatchesAfterRestart + 1)
