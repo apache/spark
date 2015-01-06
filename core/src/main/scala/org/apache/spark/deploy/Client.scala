@@ -23,14 +23,14 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.rpc.akka.AkkaRpcEnv
-import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEnv, RpcEndpointRef}
+import org.apache.spark.rpc.{RpcAddress, RpcEnv, RpcEndpointRef, NetworkRpcEndpoint}
 import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Proxy that relays messages to the driver.
  */
 private class ClientActor(override val rpcEnv: RpcEnv, driverArgs: ClientArguments, conf: SparkConf)
-  extends RpcEndpoint with Logging {
+  extends NetworkRpcEndpoint with Logging {
 
   var masterActor: RpcEndpointRef = _
 

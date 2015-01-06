@@ -19,14 +19,14 @@ package org.apache.spark.deploy.worker
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.DeployMessages.SendHeartbeat
-import org.apache.spark.rpc.{RpcAddress, RpcEnv, RpcEndpointRef, RpcEndpoint}
+import org.apache.spark.rpc._
 
 /**
  * Actor which connects to a worker process and terminates the JVM if the connection is severed.
  * Provides fate sharing between a worker and its associated child processes.
  */
 private[spark] class WorkerWatcher(override val rpcEnv: RpcEnv, workerUrl: String)
-  extends RpcEndpoint with Logging {
+  extends NetworkRpcEndpoint with Logging {
 
   override def onStart() {
     logInfo(s"Connecting to worker $workerUrl")

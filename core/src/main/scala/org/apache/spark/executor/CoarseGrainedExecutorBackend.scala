@@ -24,7 +24,7 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.rpc.akka.AkkaRpcEnv
-import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEndpointRef}
+import org.apache.spark.rpc.{RpcAddress, NetworkRpcEndpoint, RpcEndpointRef}
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
@@ -35,7 +35,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     hostPort: String,
     cores: Int,
     env: SparkEnv)
-  extends RpcEndpoint with ExecutorBackend with Logging {
+  extends NetworkRpcEndpoint with ExecutorBackend with Logging {
 
   override val rpcEnv = env.rpcEnv
 

@@ -51,32 +51,34 @@ class AkkaRpcEnv(val actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
 
         override def preStart(): Unit = {
           endpoint.onStart()
-          // Listen for remote client disconnection events,
-          // since they don't go through Akka's watch()
-          context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+          if (endpoint.isInstanceOf[NetworkRpcEndpoint]) {
+            // Listen for remote client disconnection events,
+            // since they don't go through Akka's watch()
+            context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+          }
         }
 
         override def receiveWithLogging: Receive = {
           case AssociatedEvent(_, remoteAddress, _) =>
             try {
-              // TODO How to handle that a remoteAddress doesn't have host & port
-              endpoint.onConnected(AkkaUtils.akkaAddressToRpcAddress(remoteAddress))
+              endpoint.asInstanceOf[NetworkRpcEndpoint].
+                onConnected(AkkaUtils.akkaAddressToRpcAddress(remoteAddress))
             } catch {
               case NonFatal(e) => endpoint.onError(e)
             }
 
           case DisassociatedEvent(_, remoteAddress, _) =>
             try {
-              // TODO How to handle that a remoteAddress doesn't have host & port
-              endpoint.onDisconnected(AkkaUtils.akkaAddressToRpcAddress(remoteAddress))
+              endpoint.asInstanceOf[NetworkRpcEndpoint].
+                onDisconnected(AkkaUtils.akkaAddressToRpcAddress(remoteAddress))
             } catch {
               case NonFatal(e) => endpoint.onError(e)
             }
 
           case AssociationErrorEvent(cause, localAddress, remoteAddress, inbound, _) =>
             try {
-              // TODO How to handle that a remoteAddress doesn't have host & port
-              endpoint.onNetworkError(cause, AkkaUtils.akkaAddressToRpcAddress(remoteAddress))
+              endpoint.asInstanceOf[NetworkRpcEndpoint].
+                onNetworkError(cause, AkkaUtils.akkaAddressToRpcAddress(remoteAddress))
             } catch {
               case NonFatal(e) => endpoint.onError(e)
             }

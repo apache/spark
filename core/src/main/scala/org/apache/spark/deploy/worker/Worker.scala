@@ -23,9 +23,6 @@ import java.text.SimpleDateFormat
 import java.util.concurrent.{ScheduledFuture, TimeUnit, Executors}
 import java.util.{UUID, Date}
 
-import org.apache.spark.rpc.akka.AkkaRpcEnv
-import org.apache.spark.rpc.{RpcAddress, RpcEnv, RpcEndpointRef, RpcEndpoint}
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.ExecutionContext
@@ -41,6 +38,8 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.rpc.akka.AkkaRpcEnv
+import org.apache.spark.rpc.{RpcAddress, RpcEnv, RpcEndpointRef, NetworkRpcEndpoint}
 import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
 
 /**
@@ -59,7 +58,7 @@ private[spark] class Worker(
     workDirPath: String = null,
     val conf: SparkConf,
     val securityMgr: SecurityManager)
-  extends RpcEndpoint with Logging {
+  extends NetworkRpcEndpoint with Logging {
 
   val scheduler = Executors.newScheduledThreadPool(1,
     Utils.namedThreadFactory("worker-scheduler"))

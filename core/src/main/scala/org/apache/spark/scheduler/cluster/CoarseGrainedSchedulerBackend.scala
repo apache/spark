@@ -23,7 +23,7 @@ import java.util.concurrent.{TimeUnit, Executors}
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.spark.{ExecutorAllocationClient, Logging, SparkEnv, SparkException, TaskState}
-import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEnv, RpcEndpointRef}
+import org.apache.spark.rpc.{RpcAddress, NetworkRpcEndpoint, RpcEnv, RpcEndpointRef}
 import org.apache.spark.scheduler.{SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{SerializableBuffer, AkkaUtils, Utils}
@@ -66,7 +66,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
   private val executorsPendingToRemove = new HashSet[String]
 
   class DriverActor(override val rpcEnv: RpcEnv, sparkProperties: Seq[(String, String)])
-    extends RpcEndpoint with Logging {
+    extends NetworkRpcEndpoint with Logging {
 
     override protected def log = CoarseGrainedSchedulerBackend.this.log
     private val addressToExecutorId = new HashMap[RpcAddress, String]

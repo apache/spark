@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.spark.SparkContext
-import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcEndpoint}
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, NetworkRpcEndpoint}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.ui.JettyUtils
@@ -88,7 +88,7 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * An actor that communicates with the ApplicationMaster.
    */
-  private class YarnSchedulerActor(override val rpcEnv: RpcEnv) extends RpcEndpoint {
+  private class YarnSchedulerActor(override val rpcEnv: RpcEnv) extends NetworkRpcEndpoint {
     private var amActor: Option[RpcEndpointRef] = None
 
     override def receive(sender: RpcEndpointRef) = {

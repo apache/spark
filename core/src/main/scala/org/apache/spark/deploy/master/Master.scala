@@ -42,7 +42,7 @@ import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.rpc.{RpcAddress, RpcEndpoint, RpcEnv, RpcEndpointRef}
+import org.apache.spark.rpc.{RpcAddress, NetworkRpcEndpoint, RpcEnv, RpcEndpointRef}
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
@@ -53,7 +53,7 @@ private[spark] class Master(
     port: Int,
     webUiPort: Int,
     val securityMgr: SecurityManager)
-  extends RpcEndpoint with Logging with LeaderElectable {
+  extends NetworkRpcEndpoint with Logging with LeaderElectable {
 
   val scheduler = Executors.newScheduledThreadPool(1,
     Utils.namedThreadFactory("check-worker-timeout"))

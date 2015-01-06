@@ -237,6 +237,7 @@ private[spark] object AkkaUtils extends Logging {
   }
 
   def akkaAddressToRpcAddress(akkaAddress: Address): RpcAddress = {
+    // TODO How to handle that a remoteAddress doesn't have host & port
     RpcAddress(akkaAddress.host.getOrElse("localhost"), akkaAddress.port.getOrElse(-1))
   }
 }

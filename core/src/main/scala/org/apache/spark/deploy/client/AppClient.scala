@@ -28,7 +28,7 @@ import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.rpc.{RpcAddress, RpcEnv, RpcEndpointRef, RpcEndpoint}
+import org.apache.spark.rpc._
 import org.apache.spark.util.Utils
 
 /**
@@ -55,7 +55,7 @@ private[spark] class AppClient(
   var registered = false
   var activeMasterUrl: String = null
 
-  class ClientActor(override val rpcEnv: RpcEnv) extends RpcEndpoint with Logging {
+  class ClientActor(override val rpcEnv: RpcEnv) extends NetworkRpcEndpoint with Logging {
     var master: RpcEndpointRef = null
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
     var alreadyDead = false  // To avoid calling listener.dead() multiple times

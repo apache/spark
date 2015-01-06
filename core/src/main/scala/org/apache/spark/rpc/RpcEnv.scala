@@ -114,6 +114,18 @@ trait RpcEndpoint {
     throw cause
   }
 
+  def onStop(): Unit = {}
+
+  final def stop(): Unit = {
+    rpcEnv.stop(self)
+  }
+}
+
+/**
+ * A RpcEndoint interested in network events.
+ */
+trait NetworkRpcEndpoint extends RpcEndpoint {
+
   def onConnected(remoteAddress: RpcAddress): Unit = {
     // By default, do nothing.
   }
@@ -125,14 +137,7 @@ trait RpcEndpoint {
   def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
     // By default, throw e and let RpcEnv handle it
   }
-
-  def onStop(): Unit = {}
-
-  final def stop(): Unit = {
-    rpcEnv.stop(self)
-  }
 }
-
 
 object RpcEndpoint {
   final val noSender: RpcEndpointRef = null
