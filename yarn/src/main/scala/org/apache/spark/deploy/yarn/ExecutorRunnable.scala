@@ -53,12 +53,11 @@ class ExecutorRunnable(
     securityMgr: SecurityManager)
   extends Runnable with Logging {
 
-  lazy val env = prepareEnvironment
-
   var rpc: YarnRPC = YarnRPC.create(conf)
   var nmClient: NMClient = _
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
-
+  lazy val env = prepareEnvironment
+  
   def run = {
     logInfo("Starting Executor Container")
     nmClient = NMClient.createNMClient()
