@@ -37,10 +37,10 @@ dlog () {
 }
 
 acquire_sbt_jar () {
-  SBT_VERSION=`awk -F "=" '/sbt\\.version/ {print $2}' ./project/build.properties`
+  SBT_VERSION=`awk -F "=" '/sbt\.version/ {print $2}' ./project/build.properties`
   URL1=http://typesafe.artifactoryonline.com/typesafe/ivy-releases/org.scala-sbt/sbt-launch/${SBT_VERSION}/sbt-launch.jar
   URL2=http://repo.typesafe.com/typesafe/ivy-releases/org.scala-sbt/sbt-launch/${SBT_VERSION}/sbt-launch.jar
-  JAR=sbt/sbt-launch-${SBT_VERSION}.jar
+  JAR=build/sbt-launch-${SBT_VERSION}.jar
 
   sbt_jar=$JAR
 
@@ -150,7 +150,7 @@ process_args () {
      -java-home) require_arg path "$1" "$2" && java_cmd="$2/bin/java" && export JAVA_HOME=$2 && shift 2 ;;
 
             -D*) addJava "$1" && shift ;;
-            -J*) addJava "${1:2}" && shift ;; 
+            -J*) addJava "${1:2}" && shift ;;
             -P*) enableProfile "$1" && shift ;;
               *) addResidual "$1" && shift ;;
     esac

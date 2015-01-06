@@ -87,8 +87,8 @@ if [[ ! "$@" =~ --package-only ]]; then
   git commit -a -m "Preparing development version $next_ver"
   git push origin $GIT_TAG
   git push origin HEAD:$GIT_BRANCH
-  git checkout -f $GIT_TAG 
-  
+  git checkout -f $GIT_TAG
+
   # Using Nexus API documented here:
   # https://support.sonatype.com/entries/39720203-Uploading-to-a-Staging-Repository-via-REST-API
   echo "Creating Nexus staging repository"
@@ -106,7 +106,7 @@ if [[ ! "$@" =~ --package-only ]]; then
     clean install
 
   ./dev/change-version-to-2.11.sh
-  
+
   mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
     -Dscala-2.11 -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
@@ -174,7 +174,7 @@ make_binary_release() {
   NAME=$1
   FLAGS=$2
   cp -r spark spark-$RELEASE_VERSION-bin-$NAME
-  
+
   cd spark-$RELEASE_VERSION-bin-$NAME
 
   # TODO There should probably be a flag to make-distribution to allow 2.11 support
@@ -219,7 +219,7 @@ scp spark-* \
 
 # Docs
 cd spark
-sbt/sbt clean
+build/sbt clean
 cd docs
 # Compile docs with Java 7 to use nicer format
 JAVA_HOME=$JAVA_7_HOME PRODUCTION=1 jekyll build
