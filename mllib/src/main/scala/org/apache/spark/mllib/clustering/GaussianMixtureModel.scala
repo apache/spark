@@ -43,7 +43,7 @@ class GaussianMixtureModel(
   /** Number of gaussians in mixture */
   def k: Int = weight.length
 
-  /** Multivariate Gaussian models which compose GMM **/
+  /** Multivariate Gaussian models which compose GMM */
   val gaussians: Array[MultivariateGaussian] = (0 until k).map {i =>
     new MultivariateGaussian(mu(i).toBreeze.toDenseVector, sigma(i).toBreeze.toDenseMatrix)
   }.toArray
