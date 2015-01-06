@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import java.sql.{Date, Timestamp}
+import java.text.SimpleDateFormat
 import scala.language.implicitConversions
 
 /**
@@ -43,6 +44,12 @@ class RichDate(milliseconds: Long) extends Date(milliseconds) {
   def <= (that: Date): Boolean = (this.before(that) || this.equals(that))
   def >= (that: Date): Boolean = (this.after(that) || this.equals(that))
   def === (that: Date): Boolean = this.equals(that)
+  def compare(that: Date): Int = this.getTime.compare(that.getTime)
+  def format(format: String): String = {
+    val sdf = new SimpleDateFormat(format)
+    val d = new Date(this.getTime)
+    sdf.format(d)
+  }
 }
 
 object RichDate {
@@ -72,6 +79,11 @@ class RichTimestamp(milliseconds: Long) extends Timestamp(milliseconds) {
   def <= (that: Timestamp): Boolean = (this.before(that) || this.equals(that))
   def >= (that: Timestamp): Boolean = (this.after(that) || this.equals(that))
   def === (that: Timestamp): Boolean = this.equals(that)
+   def format(format: String): String = {
+    val sdf = new SimpleDateFormat(format)
+    val ts = new Timestamp(this.getTime)
+    sdf.format(ts)
+  }
 }
 
 object RichTimestamp {
