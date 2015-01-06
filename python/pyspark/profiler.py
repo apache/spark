@@ -19,7 +19,8 @@ import cProfile
 import pstats
 import os
 import atexit
-from pyspark.accumulators import PStatsParam
+
+from pyspark.accumulators import AccumulatorParam
 
 
 class ProfilerCollector(object):
@@ -37,15 +38,15 @@ class ProfilerCollector(object):
     def add_profiler(self, id, profiler):
         if not self.profilers:
             if self.profile_dump_path:
-                atexit.register(self.dump_profiles)
+                atexit.register(self.dump_profiles, self.profile_dump_path)
             else:
                 atexit.register(self.show_profiles)
 
         self.profilers.append([id, profiler, False])
 
-    def dump_profiles(self):
+    def dump_profiles(self, path):
         for id, profiler, _ in self.profilers:
-            profiler.dump(id, self.profile_dump_path)
+            profiler.dump(id, path)
         self.profilers = []
 
     def show_profiles(self):
@@ -60,10 +61,9 @@ class ProfilerCollector(object):
         return self.profiler(ctx)
 
 
-class BasicProfiler(object):
+class Profiler(object):
     """
-
-    :: DeveloperApi ::
+    .. note:: DeveloperApi
 
     PySpark supports custom profilers, this is to allow for different profilers to
     be used as well as outputting to different formats than what is provided in the
@@ -71,15 +71,14 @@ class BasicProfiler(object):
 
     A custom profiler has to define or inherit the following methods:
         profile - will produce a system profile of some sort.
-        show - shows collected profiles for this profiler in a readable format
+        stats - return the collected stats.
         dump - dumps the profiles to a path
         add - adds a profile to the existing accumulated profile
 
     The profiler class is chosen when creating a SparkContext
 
-    >>> from pyspark.context import SparkContext
-    >>> from pyspark.conf import SparkConf
-    >>> from pyspark.profiler import BasicProfiler
+    >>> from pyspark import SparkConf, SparkContext
+    >>> from pyspark import BasicProfiler
     >>> class MyCustomProfiler(BasicProfiler):
     ...     def show(self, id):
     ...         print "My custom profiles for RDD:%s" % id
@@ -95,20 +94,19 @@ class BasicProfiler(object):
     """
 
     def __init__(self, ctx):
-        self._new_profile_accumulator(ctx)
+        pass
 
-    def profile(self, to_profile):
-        """ Runs and profiles the method to_profile passed in. A profile object is returned. """
-        pr = cProfile.Profile()
-        pr.runcall(to_profile)
-        st = pstats.Stats(pr)
-        st.stream = None  # make it picklable
-        st.strip_dirs()
-        return st
+    def profile(self, func):
+        """ Do profiling on the function `func`"""
+        raise NotImplemented
+
+    def stats(self):
+        """ Return the collected profiling stats (pstats.Stats)"""
+        raise NotImplemented
 
     def show(self, id):
         """ Print the profile stats to stdout, id is the RDD id """
-        stats = self._accumulator.value
+        stats = self.stats()
         if stats:
             print "=" * 60
             print "Profile of RDD<id=%d>" % id
@@ -119,18 +117,53 @@ class BasicProfiler(object):
         """ Dump the profile into path, id is the RDD id """
         if not os.path.exists(path):
             os.makedirs(path)
-        stats = self._accumulator.value
+        stats = self.stats()
         if stats:
             p = os.path.join(path, "rdd_%d.pstats" % id)
             stats.dump_stats(p)
 
-    def _new_profile_accumulator(self, ctx):
-        """
-        Creates a new accumulator for combining the profiles of different
-        partitions of a stage
-        """
+
+class PStatsParam(AccumulatorParam):
+    """PStatsParam is used to merge pstats.Stats"""
+
+    @staticmethod
+    def zero(value):
+        return None
+
+    @staticmethod
+    def addInPlace(value1, value2):
+        if value1 is None:
+            return value2
+        value1.add(value2)
+        return value1
+
+
+class BasicProfiler(Profiler):
+    """
+    BasicProfiler is the default profiler, which is implemented based on
+    cProfile and Accumulator
+    """
+    def __init__(self, ctx):
+        Profiler.__init__(self, ctx)
+        # Creates a new accumulator for combining the profiles of different
+        # partitions of a stage
         self._accumulator = ctx.accumulator(None, PStatsParam)
 
-    def add(self, accum_value):
-        """ Adds a new profile to the existing accumulated value """
-        self._accumulator.add(accum_value)
+    def profile(self, func):
+        """ Runs and profiles the method to_profile passed in. A profile object is returned. """
+        pr = cProfile.Profile()
+        pr.runcall(func)
+        st = pstats.Stats(pr)
+        st.stream = None  # make it picklable
+        st.strip_dirs()
+
+        # Adds a new profile to the existing accumulated value
+        self._accumulator.add(st)
+
+    def stats(self):
+        return self._accumulator.value
+
+
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()

@@ -96,8 +96,7 @@ def main(infile, outfile):
             serializer.dump_stream(func(split_index, iterator), outfile)
 
         if profiler:
-            st = profiler.profile(process)
-            profiler.add(st)
+            profiler.profile(process)
         else:
             process()
     except Exception:

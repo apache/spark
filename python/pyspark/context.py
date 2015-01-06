@@ -824,10 +824,11 @@ class SparkContext(object):
         return list(mappedRDD._collect_iterator_through_file(it))
 
     def show_profiles(self):
+
         self.profiler_collector.show_profiles()
 
-    def dump_profiles(self):
-        self.profiler_collector.dump_profiles()
+    def dump_profiles(self, path):
+        self.profiler_collector.dump_profiles(path)
 
 
 def _test():

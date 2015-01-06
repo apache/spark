@@ -45,7 +45,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.accumulators import Accumulator, AccumulatorParam
 from pyspark.broadcast import Broadcast
 from pyspark.serializers import MarshalSerializer, PickleSerializer
-from pyspark.profiler import BasicProfiler
+from pyspark.profiler import Profiler, BasicProfiler
 
 # for back compatibility
 from pyspark.sql import SQLContext, HiveContext, SchemaRDD, Row
@@ -53,5 +53,5 @@ from pyspark.sql import SQLContext, HiveContext, SchemaRDD, Row
 __all__ = [
     "SparkConf", "SparkContext", "SparkFiles", "RDD", "StorageLevel", "Broadcast",
     "Accumulator", "AccumulatorParam", "MarshalSerializer", "PickleSerializer",
-    "BasicProfiler",
+    "Profiler", "BasicProfiler",
 ]

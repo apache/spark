@@ -729,8 +729,8 @@ class ProfilerTests(PySparkTestCase):
 
         profilers = self.sc.profiler_collector.profilers
         self.assertEqual(1, len(profilers))
-        id, acc, _ = profilers[0]
-        stats = acc.value
+        id, profiler, _ = profilers[0]
+        stats = profiler.stats()
         self.assertTrue(stats is not None)
         width, stat_list = stats.get_print_list([])
         func_names = [func_name for fname, n, func_name in stat_list]
@@ -743,8 +743,8 @@ class ProfilerTests(PySparkTestCase):
 
     def test_custom_profiler(self):
         class TestCustomProfiler(BasicProfiler):
-            def show_profiles(self, profilers):
-                return "Custom formatting"
+            def show(self, id):
+                self.result = "Custom formatting"
 
         self.sc.profiler_collector.profiler = TestCustomProfiler
 
@@ -752,10 +752,11 @@ class ProfilerTests(PySparkTestCase):
 
         profilers = self.sc.profiler_collector.profilers
         self.assertEqual(1, len(profilers))
-        id, profiler, _ = profilers[0]
+        _, profiler, _ = profilers[0]
         self.assertTrue(isinstance(profiler, TestCustomProfiler))
 
-        self.assertEqual("Custom formatting", self.sc.show_profiles())
+        self.sc.show_profiles()
+        self.assertEqual("Custom formatting", profiler.result)
 
     def do_computation(self):
         def heavy_foo(x):
