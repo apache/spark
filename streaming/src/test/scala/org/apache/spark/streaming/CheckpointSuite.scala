@@ -142,7 +142,6 @@ class CheckpointSuite extends TestSuiteBase {
     ssc.start()
     advanceTimeWithRealDelay(ssc, 4)
     ssc.stop()
-    System.clearProperty("spark.streaming.manualClock.jump")
     ssc = null
   }
 
@@ -347,11 +346,11 @@ class CheckpointSuite extends TestSuiteBase {
         val fileStream = ssc.textFileStream(testDir.toString)
         // Make value 3 take a large time to process, to ensure that the driver
         // shuts down in the middle of processing the 3rd batch
-        TaskControlFlags.taskThreeShouldBlockIndefinitely = true
+        CheckpointSuite.batchThreeShouldBlockIndefinitely = true
         val mappedStream = fileStream.map(s => {
           val i = s.toInt
           if (i == 3) {
-            while (TaskControlFlags.taskThreeShouldBlockIndefinitely) {
+            while (CheckpointSuite.batchThreeShouldBlockIndefinitely) {
               Thread.sleep(Long.MaxValue)
             }
           }
@@ -386,7 +385,7 @@ class CheckpointSuite extends TestSuiteBase {
         // Wait for a checkpoint to be written
         val fs = new Path(checkpointDir).getFileSystem(ssc.sc.hadoopConfiguration)
         eventually(eventuallyTimeout) {
-          assert(Checkpoint.getCheckpointFiles(checkpointDir, fs).size === 5)
+          assert(Checkpoint.getCheckpointFiles(checkpointDir, fs).size === 6)
         }
         ssc.stop()
         // Check that we shut down while the third batch was being processed
@@ -395,24 +394,22 @@ class CheckpointSuite extends TestSuiteBase {
       }
 
       // The original StreamingContext has now been stopped.
-      TaskControlFlags.taskThreeShouldBlockIndefinitely = false
+      CheckpointSuite.batchThreeShouldBlockIndefinitely = false
 
       // Create files while the streaming driver is down
       for (i <- Seq(4, 5, 6)) {
         writeFile(i, clock)
-        clock.addToTime(1000)
+        clock.addToTime(batchDuration.milliseconds)
       }
 
       // Recover context from checkpoint file and verify whether the files that were
       // recorded before failure were saved and successfully recovered
       logInfo("*********** RESTARTING ************")
       withStreamingContext(new StreamingContext(checkpointDir)) { ssc =>
-        // Copy over the time from the old clock so that we don't appear to have time-traveled
-        clock = {
-          val newClock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-          newClock.setTime(clock.currentTime())
-          newClock
-        }
+        // So that the restarted StreamingContext's clock has gone forward in time since failure
+        ssc.conf.set("spark.streaming.manualClock.jump", (batchDuration * 3).milliseconds.toString)
+        val oldClockTime = clock.currentTime()
+        clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
         val batchCounter = new BatchCounter(ssc)
         val outputStream = ssc.graph.getOutputStreams().head.asInstanceOf[TestOutputStream[Int]]
         // Check that we remember files that were recorded before the restart
@@ -420,12 +417,20 @@ class CheckpointSuite extends TestSuiteBase {
 
         // Restart stream computation
         ssc.start()
-        clock.addToTime(batchDuration.milliseconds)
+        // Verify that the clock has traveled forward to the expected time
+        eventually(eventuallyTimeout) {
+          clock.currentTime() === oldClockTime
+        }
+        // Wait for pre-failure batch to be recomputed (3 while SSC was down plus last batch)
+        val numBatchesAfterRestart = 4
+        eventually(eventuallyTimeout) {
+          assert(batchCounter.getNumCompletedBatches === numBatchesAfterRestart)
+        }
         for ((i, index) <- Seq(7, 8, 9).zipWithIndex) {
           writeFile(i, clock)
           clock.addToTime(batchDuration.milliseconds)
           eventually(eventuallyTimeout) {
-            assert(batchCounter.getNumCompletedBatches === index + 1)
+            assert(batchCounter.getNumCompletedBatches === index + numBatchesAfterRestart + 1)
           }
         }
         clock.addToTime(batchDuration.milliseconds)
@@ -531,7 +536,6 @@ class CheckpointSuite extends TestSuiteBase {
   }
 }
 
-// Global object with flags for controlling tasks' behavior.
-private object TaskControlFlags extends Serializable {
-  var taskThreeShouldBlockIndefinitely: Boolean = true
+private object CheckpointSuite extends Serializable {
+  var batchThreeShouldBlockIndefinitely: Boolean = true
 }
