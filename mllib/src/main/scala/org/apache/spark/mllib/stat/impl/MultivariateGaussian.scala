@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.stat.impl
 
-import breeze.linalg.{DenseVector => DBV, DenseMatrix => DBM, max, diag, eigSym}
+import breeze.linalg.{DenseVector => DBV, DenseMatrix => DBM, diag, max, eigSym}
 
 import org.apache.spark.mllib.util.MLUtils
 
@@ -36,15 +36,16 @@ private[mllib] class MultivariateGaussian(
 
   /**
    * Compute distribution dependent constants:
-   *    sigmaInv2 = (-1/2) * inv(sigma)
+   *    rootSigmaInv = D^(-1/2) * U, where sigma = U * D * U.t
    *    u = (2*pi)^(-k/2) * det(sigma)^(-1/2) 
    */
-  private val (sigmaInv2: DBM[Double], u: Double) = calculateCovarianceConstants
+  private val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
   
   /** Returns density of this multivariate Gaussian at given point, x */
   def pdf(x: DBV[Double]): Double = {
     val delta = x - mu
-    u * math.exp(delta.t * sigmaInv2 * delta)
+    val v = rootSigmaInv * delta
+    u * math.exp(v.t * v * -0.5)
   }
   
   /**
@@ -55,12 +56,21 @@ private[mllib] class MultivariateGaussian(
    * We here compute distribution-fixed parts 
    *  (2*pi)^(-k/2) * det(sigma)^(-1/2)
    * and
-   *  (-1/2) * inv(sigma)
+   *  D^(-1/2) * U, where sigma = U * D * U.t
    *  
    * Both the determinant and the inverse can be computed from the singular value decomposition
    * of sigma.  Noting that covariance matrices are always symmetric and positive semi-definite,
-   * we can use the eigendecomposition.
+   * we can use the eigendecomposition. We also do not compute the inverse directly; noting
+   * that 
    * 
+   *    sigma = U * D * U.t
+   *    inv(Sigma) = U * inv(D) * U.t 
+   *               = (D^{-1/2} * U).t * (D^{-1/2} * U)
+   * 
+   * and thus
+   * 
+   *    -0.5 * (x-mu).t * inv(Sigma) * (x-mu) = -0.5 * norm(D^{-1/2} * U  * (x-mu))^2
+   *  
    * To guard against singular covariance matrices, this method computes both the 
    * pseudo-determinant and the pseudo-inverse (Moore-Penrose).  Singular values are considered
    * to be non-zero only if they exceed a tolerance based on machine precision, matrix size, and
@@ -77,11 +87,11 @@ private[mllib] class MultivariateGaussian(
       // pseudo-determinant is product of all non-zero singular values
       val pdetSigma = d.activeValuesIterator.filter(_ > tol).reduce(_ * _)
       
-      // calculate pseudo-inverse by inverting all non-zero singular values
-      val pinvS = new DBV(d.map(v => if (v > tol) (1.0 / v) else 0.0).toArray)
-      val pinvSigma = u * diag(pinvS) * u.t
+      // calculate the root-pseudo-inverse of the diagonal matrix of singular values 
+      // by inverting the square root of all non-zero values
+      val pinvS = diag(new DBV(d.map(v => if (v > tol) math.sqrt(1.0 / v) else 0.0).toArray))
     
-      (pinvSigma * -0.5, math.pow(2.0 * math.Pi, -mu.length / 2.0) * math.pow(pdetSigma, -0.5))
+      (pinvS * u, math.pow(2.0 * math.Pi, -mu.length / 2.0) * math.pow(pdetSigma, -0.5))
     } catch {
       case uex: UnsupportedOperationException =>
         throw new IllegalArgumentException("Covariance matrix has no non-zero singular values")
