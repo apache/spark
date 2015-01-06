@@ -172,3 +172,12 @@ case class RpcAddress(host: String, port: Int) {
 
   override val toString: String = hostPort
 }
+
+object RpcAddress {
+
+  def fromURIString(uri: String): RpcAddress = {
+    val u = new java.net.URI(uri)
+    RpcAddress(u.getHost, u.getPort)
+  }
+
+}

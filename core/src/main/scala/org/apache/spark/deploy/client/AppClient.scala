@@ -21,9 +21,6 @@ import java.util.concurrent.{ScheduledFuture, TimeUnit, Executors, TimeoutExcept
 
 import scala.concurrent.duration._
 
-import akka.actor._
-import akka.remote.AssociationErrorEvent
-
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
@@ -115,9 +112,8 @@ private[spark] class AppClient(
       }
     }
 
-    private def isPossibleMaster(remoteUrl: Address) = {
-      masterUrls.map(s => Master.toAkkaUrl(s))
-        .map(u => AddressFromURIString(u).hostPort)
+    private def isPossibleMaster(remoteUrl: RpcAddress) = {
+      masterUrls.map(RpcAddress.fromURIString(_).hostPort)
         .contains(remoteUrl.hostPort)
     }
 
@@ -153,9 +149,6 @@ private[spark] class AppClient(
         alreadyDisconnected = false
         sender.send(MasterChangeAcknowledged(appId))
 
-      case AssociationErrorEvent(cause, _, address, _, _) if isPossibleMaster(address) =>
-        logWarning(s"Could not connect to $address: $cause")
-
       case StopAppClient =>
         markDead("Application has been stopped.")
         sender.send(true)
@@ -166,6 +159,12 @@ private[spark] class AppClient(
       if (address == masterAddress) {
         logWarning(s"Connection to $address failed; waiting for master to reconnect...")
         markDisconnected()
+      }
+    }
+
+    override def onNetworkError(cause: Throwable, remoteAddress: RpcAddress): Unit = {
+      if (isPossibleMaster(remoteAddress)) {
+        logWarning(s"Could not connect to $remoteAddress: $cause")
       }
     }
 
