@@ -138,7 +138,7 @@ class AkkaRpcEnv private (val actorSystem: ActorSystem, conf: SparkConf, val bou
   override def toString = s"${getClass.getSimpleName}($actorSystem)"
 }
 
-object AkkaRpcEnv {
+private[rpc] object AkkaRpcEnv {
 
   def apply(
       name: String,

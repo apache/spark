@@ -17,10 +17,10 @@
 
 package org.apache.spark.deploy.worker
 
-import org.apache.spark.rpc.akka.AkkaRpcEnv
+import org.apache.spark.rpc.RpcEnv
 
 import org.apache.spark.{SecurityManager, SparkConf}
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Utility object for launching driver programs such that they share fate with the Worker process.
@@ -30,7 +30,7 @@ object DriverWrapper {
     args.toList match {
       case workerUrl :: mainClass :: extraArgs =>
         val conf = new SparkConf()
-        val rpcEnv = AkkaRpcEnv("Driver",
+        val rpcEnv = RpcEnv.create("Driver",
           Utils.localHostName(), 0, conf, new SecurityManager(conf))
         rpcEnv.setupEndpoint("workerWatcher", new WorkerWatcher(rpcEnv, workerUrl))
 

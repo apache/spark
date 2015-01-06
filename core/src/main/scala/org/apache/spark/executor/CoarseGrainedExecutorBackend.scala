@@ -23,8 +23,7 @@ import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.worker.WorkerWatcher
-import org.apache.spark.rpc.akka.AkkaRpcEnv
-import org.apache.spark.rpc.{RpcAddress, NetworkRpcEndpoint, RpcEndpointRef}
+import org.apache.spark.rpc.{RpcEnv, RpcAddress, NetworkRpcEndpoint, RpcEndpointRef}
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{SignalLogger, Utils}
@@ -116,7 +115,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf
       val port = executorConf.getInt("spark.executor.port", 0)
-      val rpcEnv = AkkaRpcEnv(
+      val rpcEnv = RpcEnv.create(
         "driverPropsFetcher", hostname, port, executorConf, new SecurityManager(executorConf))
       val driver = rpcEnv.setupEndpointRefByUrl(driverUrl)
       val props = driver.askWithReply[Seq[(String, String)]](RetrieveSparkProps) ++

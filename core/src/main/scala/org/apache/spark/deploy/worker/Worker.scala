@@ -36,7 +36,6 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.rpc.{RpcAddress, RpcEnv, RpcEndpointRef, NetworkRpcEndpoint}
 import org.apache.spark.util.{SignalLogger, Utils}
 
@@ -542,7 +541,7 @@ private[spark] object Worker extends Logging {
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
     val actorName = "Worker"
     val securityMgr = new SecurityManager(conf)
-    val rpcEnv = AkkaRpcEnv(systemName, host, port, conf = conf, securityManager = securityMgr)
+    val rpcEnv = RpcEnv.create(systemName, host, port, conf = conf, securityManager = securityMgr)
     rpcEnv.setupEndpoint(actorName, new Worker(rpcEnv, host, rpcEnv.boundPort, webUiPort, cores,
       memory, masterUrls, systemName, actorName,  workDir, conf, securityMgr))
     rpcEnv

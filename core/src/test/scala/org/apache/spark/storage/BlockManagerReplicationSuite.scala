@@ -30,7 +30,6 @@ import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, Securi
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.rpc.RpcEnv
-import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.hash.HashShuffleManager
@@ -69,7 +68,7 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
   }
 
   before {
-    this.rpcEnv = AkkaRpcEnv(
+    this.rpcEnv = RpcEnv.create(
       "test", "localhost", 0, conf = conf, securityManager = securityMgr)
 
     conf.set("spark.authenticate", "false")

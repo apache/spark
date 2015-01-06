@@ -19,11 +19,15 @@ package org.apache.spark.rpc
 
 import java.util.concurrent.ConcurrentHashMap
 
-import org.apache.spark.deploy.master.Master
-
 import scala.concurrent.Future
-import scala.concurrent.duration.{FiniteDuration, Duration}
+import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
+
+import com.google.common.annotations.VisibleForTesting
+
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.deploy.master.Master
+import org.apache.spark.util.Utils
 
 /**
  * An RPC environment.
@@ -74,6 +78,42 @@ trait RpcEnv {
   def awaitTermination(): Unit
 }
 
+object RpcEnv {
+
+  private def getRpcEnvCompanion(conf: SparkConf): AnyRef = {
+    val rpcEnvNames = Map("akka" -> "org.apache.spark.rpc.akka.AkkaRpcEnv")
+    val rpcEnvName = conf.get("spark.rpc", "akka")
+    val rpcEnvClassName = rpcEnvNames.getOrElse(rpcEnvName.toLowerCase, rpcEnvName)
+    val companion = Class.forName(
+      rpcEnvClassName + "$", true, Utils.getContextOrSparkClassLoader).getField("MODULE$").get(null)
+    companion
+  }
+
+  def create(
+       name: String,
+       host: String,
+       port: Int,
+       conf: SparkConf,
+       securityManager: SecurityManager): RpcEnv = {
+    val companion = getRpcEnvCompanion(conf)
+    companion.getClass.getMethod("apply",
+        classOf[String],
+        classOf[String],
+        java.lang.Integer.TYPE,
+        classOf[SparkConf],
+        classOf[SecurityManager]).
+      invoke(companion, name, host, port: java.lang.Integer, conf, securityManager).
+      asInstanceOf[RpcEnv]
+  }
+
+  @VisibleForTesting
+  def create(name: String, conf: SparkConf): RpcEnv = {
+    val companion = getRpcEnvCompanion(conf)
+    companion.getClass.getMethod("apply", classOf[String], classOf[SparkConf]).
+      invoke(companion, name, conf).asInstanceOf[RpcEnv]
+  }
+
+}
 
 /**
  * An end point for the RPC that defines what functions to trigger given a message.

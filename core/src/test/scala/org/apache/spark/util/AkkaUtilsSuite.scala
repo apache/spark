@@ -17,10 +17,10 @@
 
 package org.apache.spark.util
 
+import org.apache.spark.rpc.RpcEnv
 import org.scalatest.FunSuite
 
 import org.apache.spark._
-import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId
 
@@ -37,7 +37,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     val securityManager = new SecurityManager(conf)
     val hostname = "localhost"
-    val rpcEnv = AkkaRpcEnv("spark", hostname, 0,
+    val rpcEnv = RpcEnv.create("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
     System.setProperty("spark.hostPort", hostname + ":" + rpcEnv.boundPort)
     assert(securityManager.isAuthenticationEnabled() === true)
@@ -52,7 +52,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     assert(securityManagerBad.isAuthenticationEnabled() === true)
 
-    val slaveRpcEnv = AkkaRpcEnv("spark-slave", hostname, 0,
+    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0,
       conf = conf, securityManager = securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = s"akka.tcp://spark@localhost:${rpcEnv.boundPort}/user/MapOutputTracker"
@@ -71,7 +71,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val securityManager = new SecurityManager(conf)
 
     val hostname = "localhost"
-    val rpcEnv = AkkaRpcEnv("spark", hostname, 0,
+    val rpcEnv = RpcEnv.create("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
     System.setProperty("spark.hostPort", hostname + ":" + rpcEnv.boundPort)
 
@@ -86,7 +86,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     badconf.set("spark.authenticate.secret", "good")
     val securityManagerBad = new SecurityManager(badconf)
 
-    val slaveRpcEnv = AkkaRpcEnv("spark-slave", hostname, 0,
+    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0,
       conf = badconf, securityManager = securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = s"akka.tcp://spark@localhost:${rpcEnv.boundPort}/user/MapOutputTracker"
@@ -119,7 +119,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val securityManager = new SecurityManager(conf)
 
     val hostname = "localhost"
-    val rpcEnv = AkkaRpcEnv("spark", hostname, 0,
+    val rpcEnv = RpcEnv.create("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
     System.setProperty("spark.hostPort", hostname + ":" + rpcEnv.boundPort)
 
@@ -136,7 +136,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     assert(securityManagerGood.isAuthenticationEnabled() === true)
 
-    val slaveRpcEnv = AkkaRpcEnv("spark-slave", hostname, 0,
+    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0,
       conf = goodconf, securityManager = securityManagerGood)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = s"akka.tcp://spark@localhost:${rpcEnv.boundPort}/user/MapOutputTracker"
@@ -168,7 +168,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val securityManager = new SecurityManager(conf)
 
     val hostname = "localhost"
-    val rpcEnv = AkkaRpcEnv("spark", hostname, 0,
+    val rpcEnv = RpcEnv.create("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
     System.setProperty("spark.hostPort", hostname + ":" + rpcEnv.boundPort)
 
@@ -185,7 +185,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     assert(securityManagerBad.isAuthenticationEnabled() === false)
 
-    val slaveRpcEnv = AkkaRpcEnv("spark-slave", hostname, 0,
+    val slaveRpcEnv = RpcEnv.create("spark-slave", hostname, 0,
       conf = badconf, securityManager = securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = s"akka.tcp://spark@localhost:${rpcEnv.boundPort}/user/MapOutputTracker"

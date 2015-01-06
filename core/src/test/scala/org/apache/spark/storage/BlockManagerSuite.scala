@@ -34,7 +34,6 @@ import org.scalatest.concurrent.Timeouts._
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SecurityManager}
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.network.nio.NioBlockTransferService
-import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
@@ -75,7 +74,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
   }
 
   override def beforeEach(): Unit = {
-    this.rpcEnv = AkkaRpcEnv(
+    this.rpcEnv = RpcEnv.create(
       "test", "localhost", 0, conf = conf, securityManager = securityMgr)
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case

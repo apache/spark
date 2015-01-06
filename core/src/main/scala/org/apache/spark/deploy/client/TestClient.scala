@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.client
 
-import org.apache.spark.rpc.akka.AkkaRpcEnv
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.{SecurityManager, SparkConf, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.util.Utils
@@ -47,7 +47,7 @@ private[spark] object TestClient {
   def main(args: Array[String]) {
     val url = args(0)
     val conf = new SparkConf
-    val rpcEnv = AkkaRpcEnv("spark", Utils.localIpAddress, 0,
+    val rpcEnv = RpcEnv.create("spark", Utils.localIpAddress, 0,
       conf = conf, securityManager = new SecurityManager(conf))
     val desc = new ApplicationDescription("TestClient", Some(1), 512,
       Command("spark.deploy.client.TestExecutor", Seq(), Map(), Seq(), Seq(), Seq()), "ignored")

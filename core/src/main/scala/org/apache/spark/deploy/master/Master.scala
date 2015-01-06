@@ -875,7 +875,7 @@ private[spark] object Master extends Logging {
       webUiPort: Int,
       conf: SparkConf): (RpcEnv, Int) = {
     val securityMgr = new SecurityManager(conf)
-    val rpcEnv = AkkaRpcEnv(systemName, host, port, conf = conf, securityManager = securityMgr)
+    val rpcEnv = RpcEnv.create(systemName, host, port, conf = conf, securityManager = securityMgr)
     val actor = rpcEnv.setupEndpoint(actorName,
       new Master(rpcEnv, host, rpcEnv.boundPort, webUiPort, securityMgr))
     val resp = actor.askWithReply[WebUIPortResponse](RequestWebUIPort)

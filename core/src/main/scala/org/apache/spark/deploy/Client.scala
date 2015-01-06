@@ -22,7 +22,6 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
-import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.rpc.{RpcAddress, RpcEnv, RpcEndpointRef, NetworkRpcEndpoint}
 import org.apache.spark.util.Utils
 
@@ -152,7 +151,7 @@ object Client {
     conf.set("akka.loglevel", driverArgs.logLevel.toString.replace("WARN", "WARNING"))
     Logger.getRootLogger.setLevel(driverArgs.logLevel)
 
-    val rpcEnv = AkkaRpcEnv(
+    val rpcEnv = RpcEnv.create(
       "driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
     rpcEnv.setupEndpoint("client-actor", new ClientActor(rpcEnv, driverArgs, conf))
