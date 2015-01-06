@@ -64,26 +64,17 @@ class LogisticGradient extends Gradient {
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
     val gradient = data.copy
     scal(gradientMultiplier, gradient)
+    val minusYP = label * margin
+
+    // log1p is log(1+p) but more accurate for small p
+    // Following two equations are the same analytically but not numerically, e.g.,
+    // math.log1p(math.exp(1000)) == Infinity
+    // 1000 + math.log1p(math.exp(-1000)) == 1000.0
     val loss =
-      if (label > 0) {
-        // log1p is log(1+p) but more accurate for small p
- 
-        // Following two equations are the same analytically but not numerically, e.g.,
-        // math.log1p(math.exp(1000)) == Infinity
-        // 1000 + math.log1p(math.exp(-1000)) == 1000.0
- 
-        if (margin < 0) {
-          math.log1p(math.exp(margin))
-        } else {
-          math.log1p(math.exp(-margin)) + margin
-        }
+      if (minusYP < 0) {
+        math.log1p(math.exp(minusYP))
       } else {
-        // Same case as above
-        if (margin >= 0) {
-          math.log1p(math.exp(-margin))
-        } else {
-          math.log1p(math.exp(margin)) - margin
-        }
+        math.log1p(math.exp(-minusYP)) + minusYP
       }
 
     (gradient, loss)
