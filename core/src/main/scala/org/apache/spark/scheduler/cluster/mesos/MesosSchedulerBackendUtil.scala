@@ -79,6 +79,7 @@ private[spark] object MesosSchedulerBackendUtil extends Logging {
     portmaps.split(",").map(_.split(":")).map({ spec: Array[String] =>
       val portmap: DockerInfo.PortMapping.Builder = DockerInfo.PortMapping
         .newBuilder()
+        .setProtocol("tcp")
       spec match {
         case Array(host_port, container_port) =>
           Some(portmap.setHostPort(host_port.toInt)
