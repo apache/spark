@@ -88,6 +88,9 @@ class SparkContext(object):
         :param conf: A L{SparkConf} object setting Spark properties.
         :param gateway: Use an existing gateway and JVM, otherwise a new JVM
                will be instantiated.
+        :param jsc: The JavaSparkContext instance (optional).
+        :param profiler_cls: A class of custom Profiler used to do profiling
+               (default is pyspark.profiler.BasicProfiler).
 
 
         >>> from pyspark.context import SparkContext
