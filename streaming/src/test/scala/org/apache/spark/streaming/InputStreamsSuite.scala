@@ -28,7 +28,6 @@ import java.util.concurrent.{Executors, TimeUnit, ArrayBlockingQueue}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer, SynchronizedQueue}
-import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import com.google.common.io.Files
@@ -234,45 +233,57 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
   }
 
   def testFileStream(newFilesOnly: Boolean) {
-    var ssc: StreamingContext = null
     val testDir: File = null
     try {
+      val batchDuration = Seconds(2)
       val testDir = Utils.createTempDir()
+      // Create a file that exists before the StreamingContext is created:
       val existingFile = new File(testDir, "0")
       Files.write("0\n", existingFile, Charset.forName("UTF-8"))
+      assert(existingFile.setLastModified(10000) && existingFile.lastModified === 10000)
 
-      Thread.sleep(1000)
       // Set up the streaming context and input streams
-      val newConf = conf.clone.set(
-        "spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
-      ssc = new StreamingContext(newConf, batchDuration)
-      val fileStream = ssc.fileStream[LongWritable, Text, TextInputFormat](
-        testDir.toString, (x: Path) => true, newFilesOnly = newFilesOnly).map(_._2.toString)
-      val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
-      val outputStream = new TestOutputStream(fileStream, outputBuffer)
-      outputStream.register()
-      ssc.start()
+      withStreamingContext(new StreamingContext(conf, batchDuration)) { ssc =>
+        val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+        // This `setTime` call ensures that the clock is past the creation time of `existingFile`
+        clock.setTime(existingFile.lastModified + batchDuration.milliseconds)
+        val batchCounter = new BatchCounter(ssc)
+        val fileStream = ssc.fileStream[LongWritable, Text, TextInputFormat](
+          testDir.toString, (x: Path) => true, newFilesOnly = newFilesOnly).map(_._2.toString)
+        val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
+        val outputStream = new TestOutputStream(fileStream, outputBuffer)
+        outputStream.register()
+        ssc.start()
 
-      // Create files in the directory
-      val input = Seq(1, 2, 3, 4, 5)
-      input.foreach { i =>
-        Thread.sleep(batchDuration.milliseconds)
-        val file = new File(testDir, i.toString)
-        Files.write(i + "\n", file, Charset.forName("UTF-8"))
-        logInfo("Created file " + file)
-      }
+        // Advance the clock so that the files are created after StreamingContext starts, but
+        // not enough to trigger a batch
+        clock.addToTime(batchDuration.milliseconds / 2)
 
-      // Verify that all the files have been read
-      val expectedOutput = if (newFilesOnly) {
-        input.map(_.toString).toSet
-      } else {
-        (Seq(0) ++ input).map(_.toString).toSet
-      }
-      eventually(timeout(maxWaitTimeMillis milliseconds), interval(100 milliseconds)) {
+        // Over time, create files in the directory
+        val input = Seq(1, 2, 3, 4, 5)
+        input.foreach { i =>
+          val file = new File(testDir, i.toString)
+          Files.write(i + "\n", file, Charset.forName("UTF-8"))
+          assert(file.setLastModified(clock.currentTime()))
+          assert(file.lastModified === clock.currentTime)
+          logInfo("Created file " + file)
+          // Advance the clock after creating the file to avoid a race when
+          // setting its modification time
+          clock.addToTime(batchDuration.milliseconds)
+          eventually(eventuallyTimeout) {
+            assert(batchCounter.getNumCompletedBatches === i)
+          }
+        }
+
+        // Verify that all the files have been read
+        val expectedOutput = if (newFilesOnly) {
+          input.map(_.toString).toSet
+        } else {
+          (Seq(0) ++ input).map(_.toString).toSet
+        }
         assert(outputBuffer.flatten.toSet === expectedOutput)
       }
     } finally {
-      if (ssc != null) ssc.stop()
       if (testDir != null) Utils.deleteRecursively(testDir)
     }
   }
