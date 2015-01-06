@@ -85,6 +85,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   val startTime = System.currentTimeMillis()
 
+  @volatile private var stopped: Boolean = false
+
+  private def assertNotStopped(): Unit = {
+    if (stopped) {
+      throw new SparkException("Cannot call methods on a stopped SparkContext")
+    }
+  }
+
   /**
    * Create a SparkContext that loads settings from system properties (for instance, when
    * launching with ./bin/spark-submit).
@@ -522,6 +530,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * the argument to avoid this.
    */
   def parallelize[T: ClassTag](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
+    assertNotStopped()
     new ParallelCollectionRDD[T](this, seq, numSlices, Map[Int, Seq[String]]())
   }
 
@@ -537,6 +546,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     * location preferences (hostnames of Spark nodes) for each object.
     * Create a new partition for each collection item. */
   def makeRDD[T: ClassTag](seq: Seq[(T, Seq[String])]): RDD[T] = {
+    assertNotStopped()
     val indexToPrefs = seq.zipWithIndex.map(t => (t._2, t._1._2)).toMap
     new ParallelCollectionRDD[T](this, seq.map(_._1), seq.size, indexToPrefs)
   }
@@ -546,6 +556,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
   def textFile(path: String, minPartitions: Int = defaultMinPartitions): RDD[String] = {
+    assertNotStopped()
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
       minPartitions).map(pair => pair._2.toString).setName(path)
   }
@@ -579,6 +590,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def wholeTextFiles(path: String, minPartitions: Int = defaultMinPartitions):
   RDD[(String, String)] = {
+    assertNotStopped()
     val job = new NewHadoopJob(hadoopConfiguration)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updateConf = job.getConfiguration
@@ -624,6 +636,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   @Experimental
   def binaryFiles(path: String, minPartitions: Int = defaultMinPartitions):
       RDD[(String, PortableDataStream)] = {
+    assertNotStopped()
     val job = new NewHadoopJob(hadoopConfiguration)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updateConf = job.getConfiguration
@@ -648,6 +661,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   @Experimental
   def binaryRecords(path: String, recordLength: Int, conf: Configuration = hadoopConfiguration)
       : RDD[Array[Byte]] = {
+    assertNotStopped()
     conf.setInt(FixedLengthBinaryInputFormat.RECORD_LENGTH_PROPERTY, recordLength)
     val br = newAPIHadoopFile[LongWritable, BytesWritable, FixedLengthBinaryInputFormat](path,
       classOf[FixedLengthBinaryInputFormat],
@@ -681,6 +695,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       valueClass: Class[V],
       minPartitions: Int = defaultMinPartitions
       ): RDD[(K, V)] = {
+    assertNotStopped()
     // Add necessary security credentials to the JobConf before broadcasting it.
     SparkHadoopUtil.get.addCredentials(conf)
     new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minPartitions)
@@ -700,6 +715,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       valueClass: Class[V],
       minPartitions: Int = defaultMinPartitions
       ): RDD[(K, V)] = {
+    assertNotStopped()
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
     val confBroadcast = broadcast(new SerializableWritable(hadoopConfiguration))
     val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
@@ -779,6 +795,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       kClass: Class[K],
       vClass: Class[V],
       conf: Configuration = hadoopConfiguration): RDD[(K, V)] = {
+    assertNotStopped()
     val job = new NewHadoopJob(conf)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updatedConf = job.getConfiguration
@@ -799,6 +816,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V]): RDD[(K, V)] = {
+    assertNotStopped()
     new NewHadoopRDD(this, fClass, kClass, vClass, conf)
   }
 
@@ -814,6 +832,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       valueClass: Class[V],
       minPartitions: Int
       ): RDD[(K, V)] = {
+    assertNotStopped()
     val inputFormatClass = classOf[SequenceFileInputFormat[K, V]]
     hadoopFile(path, inputFormatClass, keyClass, valueClass, minPartitions)
   }
@@ -825,9 +844,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     * If you plan to directly cache Hadoop writable objects, you should first copy them using
     * a `map` function.
     * */
-  def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]
-      ): RDD[(K, V)] =
+  def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]): RDD[(K, V)] = {
+    assertNotStopped()
     sequenceFile(path, keyClass, valueClass, defaultMinPartitions)
+  }
 
   /**
    * Version of sequenceFile() for types implicitly convertible to Writables through a
@@ -855,6 +875,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
        (implicit km: ClassTag[K], vm: ClassTag[V],
         kcf: () => WritableConverter[K], vcf: () => WritableConverter[V])
       : RDD[(K, V)] = {
+    assertNotStopped()
     val kc = kcf()
     val vc = vcf()
     val format = classOf[SequenceFileInputFormat[Writable, Writable]]
@@ -876,6 +897,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       path: String,
       minPartitions: Int = defaultMinPartitions
       ): RDD[T] = {
+    assertNotStopped()
     sequenceFile(path, classOf[NullWritable], classOf[BytesWritable], minPartitions)
       .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes, Utils.getContextOrSparkClassLoader))
   }
@@ -887,14 +909,22 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /** Build the union of a list of RDDs. */
-  def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = new UnionRDD(this, rdds)
+  def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = {
+    assertNotStopped()
+    new UnionRDD(this, rdds)
+  }
 
   /** Build the union of a list of RDDs passed as variable-length arguments. */
-  def union[T: ClassTag](first: RDD[T], rest: RDD[T]*): RDD[T] =
+  def union[T: ClassTag](first: RDD[T], rest: RDD[T]*): RDD[T] = {
+    assertNotStopped()
     new UnionRDD(this, Seq(first) ++ rest)
+  }
 
   /** Get an RDD that has no partitions or elements. */
-  def emptyRDD[T: ClassTag] = new EmptyRDD[T](this)
+  def emptyRDD[T: ClassTag] = {
+    assertNotStopped()
+    new EmptyRDD[T](this)
+  }
 
   // Methods for creating shared variables
 
@@ -902,8 +932,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
    * values to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
-  def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
+  def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) = {
+    assertNotStopped()
     new Accumulator(initialValue, param)
+  }
 
   /**
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, with a name for display
@@ -911,6 +943,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * driver can access the accumulator's `value`.
    */
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T]) = {
+    assertNotStopped()
     new Accumulator(initialValue, param, Some(name))
   }
 
@@ -920,8 +953,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
-  def accumulable[R, T](initialValue: R)(implicit param: AccumulableParam[R, T]) =
+  def accumulable[R, T](initialValue: R)(implicit param: AccumulableParam[R, T]) = {
+    assertNotStopped()
     new Accumulable(initialValue, param)
+  }
 
   /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, with a name for display in the
@@ -930,8 +965,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
-  def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T]) =
+  def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T]) = {
+    assertNotStopped()
     new Accumulable(initialValue, param, Some(name))
+  }
 
   /**
    * Create an accumulator from a "mutable collection" type.
@@ -941,6 +978,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
       (initialValue: R): Accumulable[R, T] = {
+    assertNotStopped()
     val param = new GrowableAccumulableParam[R,T]
     new Accumulable(initialValue, param)
   }
@@ -951,6 +989,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * The variable will be sent to each cluster only once.
    */
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
+    assertNotStopped()
     if (classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass)) {
       throw new SparkException("Can not directly broadcast RDDs; instead, call collect() and "
         + "broadcast the result (see SPARK-5063)")
@@ -969,6 +1008,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * use `SparkFiles.get(fileName)` to find its download location.
    */
   def addFile(path: String) {
+    assertNotStopped()
     val uri = new URI(path)
     val key = uri.getScheme match {
       case null | "file" => env.httpFileServer.addFile(new File(uri.getPath))
@@ -992,6 +1032,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   def addSparkListener(listener: SparkListener) {
+    assertNotStopped()
     listenerBus.addListener(listener)
   }
 
@@ -1002,6 +1043,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
+    assertNotStopped()
     assert(master.contains("yarn") || dynamicAllocationTesting,
       "Requesting executors is currently only supported in YARN mode")
     schedulerBackend match {
@@ -1020,6 +1062,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   override def killExecutors(executorIds: Seq[String]): Boolean = {
+    assertNotStopped()
     assert(master.contains("yarn") || dynamicAllocationTesting,
       "Killing executors is currently only supported in YARN mode")
     schedulerBackend match {
@@ -1037,7 +1080,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  override def killExecutor(executorId: String): Boolean = super.killExecutor(executorId)
+  override def killExecutor(executorId: String): Boolean = {
+    assertNotStopped()
+    super.killExecutor(executorId)
+  }
 
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
@@ -1047,6 +1093,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * memory available for caching.
    */
   def getExecutorMemoryStatus: Map[String, (Long, Long)] = {
+    assertNotStopped()
     env.blockManager.master.getMemoryStatus.map { case(blockManagerId, mem) =>
       (blockManagerId.host + ":" + blockManagerId.port, mem)
     }
@@ -1059,6 +1106,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   def getRDDStorageInfo: Array[RDDInfo] = {
+    assertNotStopped()
     val rddInfos = persistentRdds.values.map(RDDInfo.fromRdd).toArray
     StorageUtils.updateRddInfo(rddInfos, getExecutorStorageStatus)
     rddInfos.filter(_.isCached)
@@ -1068,7 +1116,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Returns an immutable map of RDDs that have marked themselves as persistent via cache() call.
    * Note that this does not necessarily mean the caching or computation was successful.
    */
-  def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
+  def getPersistentRDDs: Map[Int, RDD[_]] = {
+    assertNotStopped()
+    persistentRdds.toMap
+  }
 
   /**
    * :: DeveloperApi ::
@@ -1076,6 +1127,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   def getExecutorStorageStatus: Array[StorageStatus] = {
+    assertNotStopped()
     env.blockManager.master.getStorageStatus
   }
 
@@ -1085,6 +1137,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   def getAllPools: Seq[Schedulable] = {
+    assertNotStopped()
     // TODO(xiajunluan): We should take nested pools into account
     taskScheduler.rootPool.schedulableQueue.toSeq
   }
@@ -1095,6 +1148,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   def getPoolForName(pool: String): Option[Schedulable] = {
+    assertNotStopped()
     Option(taskScheduler.rootPool.schedulableNameToSchedulable.get(pool))
   }
 
@@ -1102,6 +1156,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Return current scheduling mode
    */
   def getSchedulingMode: SchedulingMode.SchedulingMode = {
+    assertNotStopped()
     taskScheduler.schedulingMode
   }
 
@@ -1111,6 +1166,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @deprecated("adding files no longer creates local copies that need to be deleted", "1.0.0")
   def clearFiles() {
+    assertNotStopped()
     addedFiles.clear()
   }
 
@@ -1146,6 +1202,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    */
   def addJar(path: String) {
+    assertNotStopped()
     if (path == null) {
       logWarning("null specified as parameter to addJar")
     } else {
@@ -1199,6 +1256,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @deprecated("adding jars no longer creates local copies that need to be deleted", "1.0.0")
   def clearJars() {
+    assertNotStopped()
     addedJars.clear()
   }
 
@@ -1207,16 +1265,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     SparkContext.SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
       postApplicationEnd()
       ui.foreach(_.stop())
-      // Do this only if not stopped already - best case effort.
-      // prevent NPE if stopped more than once.
-      val dagSchedulerCopy = dagScheduler
-      dagScheduler = null
-      if (dagSchedulerCopy != null) {
+      if (!stopped) {
+        stopped = true
         env.metricsSystem.report()
         metadataCleaner.cancel()
         env.actorSystem.stop(heartbeatReceiver)
         cleaner.foreach(_.stop())
-        dagSchedulerCopy.stop()
+        dagScheduler.stop()
+        dagScheduler = null
         taskScheduler = null
         // TODO: Cache.stop()?
         env.stop()
@@ -1290,7 +1346,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       partitions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
-    if (dagScheduler == null) {
+    if (stopped) {
       throw new SparkException("SparkContext has been shutdown")
     }
     val callSite = getCallSite
@@ -1378,6 +1434,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       func: (TaskContext, Iterator[T]) => U,
       evaluator: ApproximateEvaluator[U, R],
       timeout: Long): PartialResult[R] = {
+    assertNotStopped()
     val callSite = getCallSite
     logInfo("Starting job: " + callSite.shortForm)
     val start = System.nanoTime
@@ -1400,6 +1457,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       resultHandler: (Int, U) => Unit,
       resultFunc: => R): SimpleFutureAction[R] =
   {
+    assertNotStopped()
     val cleanF = clean(processPartition)
     val callSite = getCallSite
     val waiter = dagScheduler.submitJob(
@@ -1418,11 +1476,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * for more information.
    */
   def cancelJobGroup(groupId: String) {
+    assertNotStopped()
     dagScheduler.cancelJobGroup(groupId)
   }
 
   /** Cancel all jobs that have been scheduled or are running.  */
   def cancelAllJobs() {
+    assertNotStopped()
     dagScheduler.cancelAllJobs()
   }
 
@@ -1458,6 +1518,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * be a HDFS path if running on a cluster.
    */
   def setCheckpointDir(directory: String) {
+    assertNotStopped()
     checkpointDir = Option(directory).map { dir =>
       val path = new Path(dir, UUID.randomUUID().toString)
       val fs = path.getFileSystem(hadoopConfiguration)
@@ -1466,17 +1527,29 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
   }
 
-  def getCheckpointDir = checkpointDir
+  def getCheckpointDir = {
+    assertNotStopped()
+    checkpointDir
+  }
 
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
-  def defaultParallelism: Int = taskScheduler.defaultParallelism
+  def defaultParallelism: Int = {
+    assertNotStopped()
+    taskScheduler.defaultParallelism
+  }
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
   @deprecated("use defaultMinPartitions", "1.0.0")
-  def defaultMinSplits: Int = math.min(defaultParallelism, 2)
+  def defaultMinSplits: Int = {
+    assertNotStopped()
+    math.min(defaultParallelism, 2)
+  }
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
-  def defaultMinPartitions: Int = math.min(defaultParallelism, 2)
+  def defaultMinPartitions: Int = {
+    assertNotStopped()
+    math.min(defaultParallelism, 2)
+  }
 
   private val nextShuffleId = new AtomicInteger(0)
 

@@ -916,4 +916,26 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
     assert(thrown.getMessage.contains("SPARK-5063"))
   }
+
+  test("cannot run actions after SparkContext has been stopped (SPARK-5063)") {
+    val existingRDD = sc.parallelize(1 to 100)
+    sc.stop()
+    val thrown = intercept[SparkException] {
+      existingRDD.count()
+    }
+    assert(thrown.getMessage.contains("shutdown"))
+  }
+
+  test("cannot call methods on a stopped SparkContext (SPARK-5063)") {
+    sc.stop()
+    def assertFails(block: => Any): Unit = {
+      val thrown = intercept[SparkException] {
+        block
+      }
+      assert(thrown.getMessage.contains("stopped"))
+    }
+    assertFails { sc.parallelize(1 to 100) }
+    assertFails { sc.accumulator(10) }
+    assertFails { sc.textFile("/nonexistent-path") }
+  }
 }
