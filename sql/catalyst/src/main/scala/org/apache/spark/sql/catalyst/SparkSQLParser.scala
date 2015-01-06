@@ -57,7 +57,7 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
     override def toString = chars
   }
 
-  reserved ++= keywords.flatMap(w => allCaseVersions(w))
+  reserved ++= keywords.flatMap(w => Stream(w.toLowerCase()) )
 
   delimiters += (
     "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
@@ -66,7 +66,10 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
 
   override lazy val token: Parser[Token] =
     ( identChar ~ (identChar | digit).* ^^
-      { case first ~ rest => processIdent((first :: rest).mkString) }
+      { case first ~ rest => 
+          val rsIdent = processIdent((first :: rest).mkString.toLowerCase)
+          if(rsIdent.getClass.getCanonicalName.contains("StdTokens.Keyword")) Keyword(rsIdent.chars.toLowerCase()) else rsIdent
+      }
     | rep1(digit) ~ ('.' ~> digit.*).? ^^ {
         case i ~ None    => NumericLit(i.mkString)
         case i ~ Some(d) => FloatLit(i.mkString + "." + d.mkString)
@@ -95,15 +98,6 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
     | '/' ~ '*' ~ failure("unclosed comment")
     ).*
 
-  /** Generate all variations of upper and lower case of a given string */
-  def allCaseVersions(s: String, prefix: String = ""): Stream[String] = {
-    if (s.isEmpty) {
-      Stream(prefix)
-    } else {
-      allCaseVersions(s.tail, prefix + s.head.toLower) #:::
-        allCaseVersions(s.tail, prefix + s.head.toUpper)
-    }
-  }
 }
 
 /**
@@ -139,8 +133,7 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
   protected val TABLE   = Keyword("TABLE")
   protected val UNCACHE = Keyword("UNCACHE")
 
-  protected implicit def asParser(k: Keyword): Parser[String] =
-    lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
+  protected implicit def asParser(k: Keyword): Parser[String] = k.str.toLowerCase
 
   private val reservedWords: Seq[String] =
     this

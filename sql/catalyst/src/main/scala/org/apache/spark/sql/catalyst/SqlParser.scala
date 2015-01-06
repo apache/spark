@@ -36,8 +36,7 @@ import org.apache.spark.sql.catalyst.types._
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  */
 class SqlParser extends AbstractSparkSQLParser {
-  protected implicit def asParser(k: Keyword): Parser[String] =
-    lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
+  protected implicit def asParser(k: Keyword): Parser[String] = k.str.toLowerCase
 
   protected val ABS = Keyword("ABS")
   protected val ALL = Keyword("ALL")
