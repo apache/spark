@@ -995,7 +995,7 @@ private[spark] object Utils extends Logging {
     // compute-classpath.{cmd,sh} and makes all needed jars available to child processes
     // when the assembly is built with the "*-provided" profiles enabled.
     if (sys.props.contains("spark.testing")) {
-      environment.put("SPARK_TEST_PARENT_CLASS_PATH", sys.props("java.class.path"))
+      environment.put("SPARK_DIST_CLASSPATH", sys.props("java.class.path"))
     }
 
     val process = builder.start()
@@ -1097,7 +1097,7 @@ private[spark] object Utils extends Logging {
     var firstUserLine = 0
     var insideSpark = true
     var callStack = new ArrayBuffer[String]() :+ "<unknown>"
- 
+
     Thread.currentThread.getStackTrace().foreach { ste: StackTraceElement =>
       // When running under some profilers, the current stack trace might contain some bogus
       // frames. This is intended to ensure that we don't crash in these situations by

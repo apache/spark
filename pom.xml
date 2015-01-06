@@ -887,7 +887,7 @@
       <dependency>
         <groupId>org.codehaus.jackson</groupId>
         <artifactId>jackson-core-asl</artifactId>
-        <version>${jackson.version}</version>
+        <version>${codehaus.jackson.version}</version>
         <scope>${hadoop.deps.scope}</scope>
       </dependency>
       <dependency>

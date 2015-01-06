@@ -142,6 +142,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
              |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=http
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT}=$port
+             |  --driver-class-path ${sys.props("java.class.path")}
            """.stripMargin.split("\\s+").toSeq
       } else {
           s"""$startScript
@@ -151,6 +152,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
              |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_PORT}=$port
+             |  --driver-class-path ${sys.props("java.class.path")}
            """.stripMargin.split("\\s+").toSeq
       }
 
@@ -181,10 +183,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
 
     val env = Seq(
       // Resets SPARK_TESTING to avoid loading Log4J configurations in testing class paths
-      "SPARK_TESTING" -> "0",
-      // Allows the child process to inherit the parent's class path so the server works when
-      // *-provided profiles are used.
-      "SPARK_TEST_PARENT_CLASS_PATH" -> sys.props("java.class.path"))
+      "SPARK_TESTING" -> "0")
 
     Process(command, None, env: _*).run(ProcessLogger(
       captureThriftServerOutput("stdout"),

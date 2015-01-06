@@ -98,23 +98,6 @@ if "x%SPARK_TESTING%"=="x1" (
   set CLASSPATH=%SPARK_CLASSES%;%SPARK_TEST_CLASSES%;%CLASSPATH%
 )
 
-rem Append the parent class path if requested by the test code. Note this is outside of
-rem the check for SPARK_TESTING because some tests reset that variable.
-if not "x%SPARK_TEST_PARENT_CLASS_PATH%"=="x" (
-  set CLASSPATH=%CLASSPATH%;%SPARK_TEST_PARENT_CLASS_PATH%
-)
-
-rem Add hadoop conf dir - else FileSystem.*, etc fail
-rem Note, this assumes that there is either a HADOOP_CONF_DIR or YARN_CONF_DIR which hosts
-rem the configurtion files.
-if "x%HADOOP_CONF_DIR%"=="x" goto no_hadoop_conf_dir
-  set CLASSPATH=%CLASSPATH%;%HADOOP_CONF_DIR%
-:no_hadoop_conf_dir
-
-if "x%YARN_CONF_DIR%"=="x" goto no_yarn_conf_dir
-  set CLASSPATH=%CLASSPATH%;%YARN_CONF_DIR%
-:no_yarn_conf_dir
-
 rem Add hadoop conf dir - else FileSystem.*, etc fail
 rem Note, this assumes that there is either a HADOOP_CONF_DIR or YARN_CONF_DIR which hosts
 rem the configurtion files.
