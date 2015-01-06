@@ -74,14 +74,13 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Mo
   }
 
   test("spark docker properties correctly populate the DockerInfo message") {
-    val taskScheduler = EasyMock.createMock(classOf[TaskSchedulerImpl])
+    val taskScheduler = EasyMock.createNiceMock(classOf[TaskSchedulerImpl])
 
-    val conf = EasyMock.createMock(classOf[SparkConf])
-    EasyMock.expect(conf.getOption("spark.executor.docker.image")).andReturn(Option("spark/mock")).anyTimes()
-    EasyMock.expect(conf.getOption("spark.executor.docker.volumes")).andReturn(Option("/a,/b:/b,/c:/c:rw,/d:/d:ro")).anyTimes()
-    EasyMock.expect(conf.getOption("spark.executor.docker.portmaps")).andReturn(Option("80:8080,53:53:tcp")).anyTimes()
-    EasyMock.replay(conf)
-
+    val conf = new SparkConf()
+      .set("spark.executor.docker.image", "spark/mock")
+      .set("spark.executor.docker.volumes", "/a,/b:/b,/c:/c:rw,/d:ro,/e:/e:ro")
+      .set("spark.executor.docker.portmaps", "80:8080,53:53:tcp")
+                              
     val sc = EasyMock.createMock(classOf[SparkContext])
     EasyMock.expect(sc.executorMemory).andReturn(100).anyTimes()
     EasyMock.expect(sc.getSparkHome()).andReturn(Option("/path")).anyTimes()
@@ -90,16 +89,10 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Mo
     EasyMock.replay(sc)
 
     val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
-
-    val capture = new Capture[util.Collection[ExecutorInfo]]
-    EasyMock.expect(
-      backend.createExecutorInfo("mockExecutor")
-    ).andReturn(Status.valueOf(1)).once
     EasyMock.replay(taskScheduler)
-
     EasyMock.verify(taskScheduler)
-    assert(capture.getValue.size() == 1)
-    val execInfo = capture.getValue.iterator().next()
+
+    val execInfo = backend.createExecutorInfo("mockExecutor")
     assert(execInfo.getContainer.getDocker.getImage.equals("spark/mock"))
     val portmaps = execInfo.getContainer.getDocker.getPortMappingsList
     assert(portmaps.get(0).getHostPort.equals(80))
@@ -108,6 +101,20 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Mo
     assert(portmaps.get(1).getHostPort.equals(53))
     assert(portmaps.get(1).getContainerPort.equals(53))
     assert(portmaps.get(1).getProtocol.equals("tcp"))
+    val volumes = execInfo.getContainer.getVolumesList
+    assert(volumes.get(0).getContainerPath.equals("/a"))
+    assert(volumes.get(0).getMode.equals(Volume.Mode.RW))
+    assert(volumes.get(1).getContainerPath.equals("/b"))
+    assert(volumes.get(1).getHostPath.equals("/b"))
+    assert(volumes.get(1).getMode.equals(Volume.Mode.RW))
+    assert(volumes.get(2).getContainerPath.equals("/c"))
+    assert(volumes.get(2).getHostPath.equals("/c"))
+    assert(volumes.get(2).getMode.equals(Volume.Mode.RW))
+    assert(volumes.get(3).getContainerPath.equals("/d"))
+    assert(volumes.get(3).getMode.equals(Volume.Mode.RO))
+    assert(volumes.get(4).getContainerPath.equals("/e"))
+    assert(volumes.get(4).getHostPath.equals("/e"))
+    assert(volumes.get(4).getMode.equals(Volume.Mode.RO))
   }
 
   test("mesos resource offers result in launching tasks") {
