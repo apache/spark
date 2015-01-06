@@ -830,6 +830,13 @@ class ExpressionEvaluationSuite extends FunSuite {
 	   .===(false))
   }
 
+  test("format methods for RichDate and RichTimestamp") {
+    val s1:String = RichDate("2014-11-22").format("MMMM d yyyy")
+    val s2:String = RichTimestamp("2014-11-22 12:34:56").format("MMMM d HH:mm") 
+    assert(s1 == "November 22 2014")
+    assert(s2 == "November 22 12:34")
+  }
+
   test("implicit conversions for RichDate and RichTimestamp") {
     import org.apache.spark.sql.catalyst.expressions.TimeConversions._
     val d1 = RichDate("2014-01-01")
