@@ -337,6 +337,69 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   }
 
   /**
+   * An additional functionality for [[Pregel]] of partially sending message.
+   *
+   * Execute a Pregel-like iterative vertex-parallel abstraction with current iterative number.
+   * Part of the vertexes(called `ActiveVertexes`) send messages to their neighbours
+   * in each iteration.
+   *
+   * In some cases, `ActiveVertexes` are the vertexes that their attributes do not change
+   * between the previous and current iteration, so they need not to send message.
+   * At first, user can set Int value(eg. `flag:Int`) with `vprog`'s first parameter `curIter`
+   * to vertex's attribute in function `vprog`.
+   * Then in `sendMsg`, compare the Int value (`flag`) of Vertex attribute with `curIter` of
+   * `sendMsg`'s first parameter.
+   * In this way, it can determine whether sending message in current iteration.
+   * Provide a `isTerminal` to determine end up the loop with Int value `curIter` and the number
+   * of message count number previous iterate.
+   *
+   * Provide a `isTerminal` to determine end up the loop with Int value `curIter` and the number
+   * of message count number previous iterate.
+   *
+   * @tparam A the Pregel message type
+   *
+   * @param originGraph the input graph.
+   *
+   * @param initialMsg the message each vertex will receive at the on
+   * the first iteration. default is [[None]]
+   *
+   * @param isTerminal checking whether can finish loop
+   * Parameter Int is the current iteration variable `curIter`
+   * Parameter Long is the aggregate message number of previous iteration
+   *
+   * @param tripletFields which fields should be included in the [[EdgeContext]] passed to the
+   * `sendMsg` function. If not all fields are needed, specifying this can improve performance.
+   * default is [[TripletFields.All]]
+   *
+   * @param vprog the user-defined vertex program which runs on each
+   * vertex and receives the inbound message and computes a new vertex
+   * value.  On the first iteration the vertex program is invoked on
+   * all vertices and is passed the default message.  On subsequent
+   * iterations the vertex program is only invoked on those vertices
+   * that receive messages.
+   *
+   * @param sendMsg a user supplied function that is applied to out
+   * edges of vertices that received messages in the current iteration
+   *
+   * @param mergeMsg a user supplied function that takes two incoming
+   * messages of type A and merges them into a single message of type A.
+   * ''This function must be commutative and associative and
+   * ideally the size of A should not increase.''
+   *
+   * @return the resulting graph at the end of the computation
+   */
+  def pregelOps[A: ClassTag](
+    originGraph: Graph[VD, ED],
+    initialMsg: Option[A],
+    isTerminal: (Int, Long) => Boolean,
+    tripletFields: TripletFields = TripletFields.All)
+    (vprog: (Int, VertexId, VD, A) => VD,
+      sendMsg: (Int, EdgeContext[VD, ED, A]) => Unit,
+      mergeMsg: (A, A) => A): Graph[VD, ED] = {
+    PregelOps(originGraph, initialMsg, isTerminal, tripletFields)(vprog, sendMsg, mergeMsg)
+  }
+
+  /**
    * Run a dynamic version of PageRank returning a graph with vertex attributes containing the
    * PageRank and edge attributes containing the normalized edge weight.
    *
