@@ -8,3 +8,4 @@ from sensors import HivePartitionSensor
 from sensors import HdfsSensor
 from email_operator import EmailOperator
 from dummy_operator import DummyOperator
+from hive2samba_operator import Hive2SambaOperator

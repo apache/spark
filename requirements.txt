@@ -15,6 +15,7 @@ mysql-python
 pandas
 pygments
 pyhive
+PySmbClient
 python-dateutil
 requests
 setproctitle
