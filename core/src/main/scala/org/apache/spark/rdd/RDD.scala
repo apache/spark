@@ -87,7 +87,10 @@ abstract class RDD[T: ClassTag](
   private def sc: SparkContext = {
     if (_sc == null) {
       throw new SparkException(
-        "Can only define RDDs and perform actions on the driver, not in tasks (see SPARK-5063)")
+        "RDD transformations and actions can only be invoked by the driver, not inside of other " +
+        "transformations; for example, rdd1.map(x => rdd2.values.count() * x) is invalid because " +
+        "the values transformation and count action cannot be performed inside of the rdd1.map " +
+        "transformation. For more information, see SPARK-5063.")
     }
     _sc
   }
