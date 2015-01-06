@@ -22,9 +22,6 @@
 # Environment variables are populated by the code here:
 #+ https://github.com/jenkinsci/ghprb-plugin/blob/master/src/main/java/org/jenkinsci/plugins/ghprb/GhprbTrigger.java#L139
 
-rm -rf ~/.ivy2/cache/org.apache.spark/
-rm -rf ~/.ivy2/local/org.apache.spark/
-
 # Go to the Spark project root directory
 FWDIR="$(cd `dirname $0`/..; pwd)"
 cd "$FWDIR"

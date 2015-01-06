@@ -21,8 +21,10 @@
 FWDIR="$(cd "`dirname $0`"/..; pwd)"
 cd "$FWDIR"
 
-# Remove work directory
+# Clean up work directory and caches
 rm -rf ./work
+rm -rf ~/.ivy2/local/org.apache.spark
+rm -rf ~/.ivy2/cache/org.apache.spark
 
 source "$FWDIR/dev/run-tests-codes.sh"
 
