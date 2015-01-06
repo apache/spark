@@ -37,6 +37,7 @@ private[streaming] case class RegisterReceiver(
     streamId: Int,
     typ: String,
     host: String,
+    numAttempts: Int,
     receiverActor: ActorRef
   ) extends ReceiverTrackerMessage
 private[streaming] case class AddBlock(receivedBlockInfo: ReceivedBlockInfo)
@@ -129,6 +130,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       streamId: Int,
       typ: String,
       host: String,
+      numAttempts: Int,
       receiverActor: ActorRef,
       sender: ActorRef
     ) {
@@ -138,7 +140,17 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     receiverInfo(streamId) = ReceiverInfo(
       streamId, s"${typ}-${streamId}", receiverActor, true, host)
     listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
-    logInfo("Registered receiver for stream " + streamId + " from " + sender.path.address)
+    if(numAttempts == 0) {
+      logInfo("Receiver for stream " + streamId + " from " + sender.path.address +
+        " attempts to register.")
+    } else if(numAttempts == 1) {
+      logInfo("Receiver for stream " + streamId + " from " + sender.path.address +
+        " attempts to start for the " + numAttempts + " time.")
+    } else {
+      logInfo("Receiver for stream " + streamId + " from " + sender.path.address +
+        " failed " + (numAttempts - 1) + " times, and attempts to start for the " +
+        numAttempts + " time.")
+    }
   }
 
   /** Deregister a receiver */
@@ -192,8 +204,8 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** Actor to receive messages from the receivers. */
   private class ReceiverTrackerActor extends Actor {
     def receive = {
-      case RegisterReceiver(streamId, typ, host, receiverActor) =>
-        registerReceiver(streamId, typ, host, receiverActor, sender)
+      case RegisterReceiver(streamId, typ, host, numAttempts, receiverActor) =>
+        registerReceiver(streamId, typ, host, numAttempts, receiverActor, sender)
         sender ! true
       case AddBlock(receivedBlockInfo) =>
         sender ! addBlock(receivedBlockInfo)
