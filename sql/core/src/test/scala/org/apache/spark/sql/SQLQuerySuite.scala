@@ -997,6 +997,17 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     dropTempTable("data")
   }
 
+  test("SPARK-4296 Grouping field with UDF as sub expression") {
+    registerFunction("triple", (_: Int) * 3)
+    jsonRDD(sparkContext.makeRDD("""{"a": 1}""" :: Nil)).registerTempTable("data")
+    checkAnswer(sql("SELECT triple(a) FROM data GROUP BY triple(a)"), 3)
+    dropTempTable("data")
+
+    jsonRDD(sparkContext.makeRDD("""{"a": 1}""" :: Nil)).registerTempTable("data")
+    checkAnswer(sql("SELECT triple(a) + 1 FROM data GROUP BY triple(a) + 1"), 4)
+    dropTempTable("data")
+  }
+
   test("SPARK-4432 Fix attribute reference resolution error when using ORDER BY") {
     checkAnswer(
       sql("SELECT a + b FROM testData2 ORDER BY a"),

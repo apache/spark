@@ -153,11 +153,11 @@ object PartialAggregation {
             partialEvaluations(new TreeNodeRef(e)).finalEvaluation
 
           case e: Expression =>
-            // Should trim aliases around `GetField`s. These aliases are introduced while
-            // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
-            // (Should we just turn `GetField` into a `NamedExpression`?)
             namedGroupingExpressions
-              .get(e.transform { case Alias(g: GetField, _) => g })
+              // Should trim aliases. These aliases can only be introduced while resolving unnamed
+              // expressions like `GetField` and UDF calls, because GROUP BY clause doesn't allow
+              // aliasing.
+              .get(e.transform { case a: Alias => a.child })
               .map(_.toAttribute)
               .getOrElse(e)
         }).asInstanceOf[Seq[NamedExpression]]
