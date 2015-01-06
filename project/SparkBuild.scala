@@ -114,17 +114,6 @@ object SparkBuild extends PomBuild {
 
   override val userPropertiesMap = System.getProperties.toMap
 
-  // Handle case where hadoop.version is set via profile.
-  // Needed only because we read back this property in sbt
-  // when we create the assembly jar.
-  val pom = loadEffectivePom(new File("pom.xml"),
-    profiles = profiles,
-    userProps = userPropertiesMap)
-  if (System.getProperty("hadoop.version") == null) {
-    System.setProperty("hadoop.version",
-      pom.getProperties.get("hadoop.version").asInstanceOf[String])
-  }
-
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
@@ -303,16 +292,15 @@ object Assembly {
   import sbtassembly.Plugin._
   import AssemblyKeys._
 
+  val hadoopVersion = taskKey[String]("The version of hadoop that spark is compiled against.")
+
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
-    jarName in assembly <<= (version, moduleName) map { (v, mName) =>
-      if (mName.contains("network-yarn")) {
-        // This must match the same name used in maven (see network/yarn/pom.xml)
-        "spark-" + v + "-yarn-shuffle.jar"
-      } else {
-        mName + "-" + v + "-hadoop" + System.getProperty("hadoop.version") + ".jar"
-      }
+    hadoopVersion := {
+      sys.props.get("hadoop.version")
+        .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
+    jarName in assembly := s"${moduleName.value}-${version.value}-hadoop${hadoopVersion.value}.jar",
     mergeStrategy in assembly := {
       case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
@@ -323,7 +311,6 @@ object Assembly {
       case _                                                   => MergeStrategy.first
     }
   )
-
 }
 
 object Unidoc {
