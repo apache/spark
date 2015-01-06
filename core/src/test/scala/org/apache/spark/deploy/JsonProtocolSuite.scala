@@ -111,7 +111,7 @@ class JsonProtocolSuite extends FunSuite {
     createDriverDesc(), new Date())
 
   def createWorkerInfo(): WorkerInfo = {
-    val workerInfo = new WorkerInfo("id", "host", 8080, 4, 1234, null, 80, "publicAddress")
+    val workerInfo = new WorkerInfo("id", "host", 8080, 4, 1234, null, "http://publicAddress:80")
     workerInfo.lastHeartbeat = JsonConstants.currTimeInMillis
     workerInfo
   }

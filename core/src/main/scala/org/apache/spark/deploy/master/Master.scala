@@ -211,7 +211,7 @@ private[spark] class Master(
       System.exit(0)
     }
 
-    case RegisterWorker(id, workerHost, workerPort, cores, memory, workerUiPort, publicAddress) =>
+    case RegisterWorker(id, workerHost, workerPort, cores, memory, workerWebUiUrl) =>
     {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         workerHost, workerPort, cores, Utils.megabytesToString(memory)))
@@ -221,7 +221,7 @@ private[spark] class Master(
         sender ! RegisterWorkerFailed("Duplicate worker ID")
       } else {
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-          sender, workerUiPort, publicAddress)
+          sender, workerWebUiUrl)
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
           sender ! RegisteredWorker(masterUrl, masterWebUiUrl)

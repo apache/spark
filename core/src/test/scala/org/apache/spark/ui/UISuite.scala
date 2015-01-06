@@ -124,6 +124,30 @@ class UISuite extends FunSuite {
     server.close()
   }
 
+  test("jetty with https selects different port under contention") {
+    val server = new ServerSocket(0)
+    val startPort = server.getLocalPort
+
+    val sparkConf = new SparkConf()
+      .set("spark.ui.https.enabled", "true")
+      .set("spark.ui.ssl.server.keystore.location", "./src/test/resources/spark.keystore")
+      .set("spark.ui.ssl.server.keystore.password", "123456")
+      .set("spark.ui.ssl.server.keystore.keypassword", "123456")
+    val serverInfo1 = JettyUtils.startJettyServer(
+      "0.0.0.0", startPort, Seq[ServletContextHandler](), sparkConf, "server1")
+    val serverInfo2 = JettyUtils.startJettyServer(
+      "0.0.0.0", startPort, Seq[ServletContextHandler](), sparkConf, "server2")
+    // Allow some wiggle room in case ports on the machine are under contention
+    val boundPort1 = serverInfo1.boundPort
+    val boundPort2 = serverInfo2.boundPort
+    assert(boundPort1 != startPort)
+    assert(boundPort2 != startPort)
+    assert(boundPort1 != boundPort2)
+    serverInfo1.server.stop()
+    serverInfo2.server.stop()
+    server.close()
+  }
+
   test("jetty binds to port 0 correctly") {
     val serverInfo = JettyUtils.startJettyServer(
       "0.0.0.0", 0, Seq[ServletContextHandler](), new SparkConf)
@@ -135,6 +159,25 @@ class UISuite extends FunSuite {
       case Success(s) => fail("Port %s doesn't seem used by jetty server".format(boundPort))
       case Failure(e) =>
     }
+  }
+
+  test("jetty with https binds to port 0 correctly") {
+    val sparkConf = new SparkConf()
+      .set("spark.ui.https.enabled", "false")
+      .set("spark.ui.ssl.server.keystore.location", "./src/test/resources/spark.keystore")
+      .set("spark.ui.ssl.server.keystore.password", "123456")
+      .set("spark.ui.ssl.server.keystore.keypassword", "123456")
+    val serverInfo = JettyUtils.startJettyServer(
+      "0.0.0.0", 0, Seq[ServletContextHandler](), sparkConf)
+    val server = serverInfo.server
+    val boundPort = serverInfo.boundPort
+    assert(server.getState === "STARTED")
+    assert(boundPort != 0)
+    Try { new ServerSocket(boundPort) } match {
+      case Success(s) => fail("Port %s doesn't seem used by jetty server".format(boundPort))
+      case Failure(e) =>
+    }
+    serverInfo.server.stop()
   }
 
   test("verify appUIAddress contains the scheme") {
