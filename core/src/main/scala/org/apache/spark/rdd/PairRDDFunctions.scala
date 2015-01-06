@@ -861,7 +861,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   }
 
   class RDDMultipleTextOutputFormat extends MultipleTextOutputFormat[Any, Any] {
-    def init() = {
+    def init() : Unit = {
       println("Initializing multiple text output format saver")
     }
     
@@ -890,7 +890,6 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def saveAsHadoopFileByKey[F <: OutputFormat[K, V]](path: String, numPartitions : Int)
                                                     (implicit fm: ClassTag[F]) {
-    
     partitionBy(new HashPartitioner(numPartitions)).
       saveAsHadoopFileByKey(path)
   }
