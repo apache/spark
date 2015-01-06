@@ -81,8 +81,8 @@ private[streaming] class ReceiverSupervisorImpl(
       override def preStart() {
         numRegisterAttemps += 1
         logInfo("Register receiver " + streamId + " before it starts ")
-        val msg = RegisterReceiver(
-          streamId, receiver.getClass.getSimpleName, Utils.localHostName(), numRegisterAttemps, self)
+        val msg = RegisterReceiver(streamId, receiver.getClass.getSimpleName,
+          Utils.localHostName(), numRegisterAttemps, self)
         val future = trackerActor.ask(msg)(askTimeout)
         Await.result(future, askTimeout)
       }
