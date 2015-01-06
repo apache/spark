@@ -30,9 +30,8 @@ object DriverWrapper {
     args.toList match {
       case workerUrl :: mainClass :: extraArgs =>
         val conf = new SparkConf()
-        val (actorSystem, _) = AkkaUtils.createActorSystem("Driver",
+        val rpcEnv = AkkaRpcEnv("Driver",
           Utils.localHostName(), 0, conf, new SecurityManager(conf))
-        val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
         rpcEnv.setupEndpoint("workerWatcher", new WorkerWatcher(rpcEnv, workerUrl))
 
         // Delegate to supplied main class
@@ -41,7 +40,6 @@ object DriverWrapper {
         mainMethod.invoke(null, extraArgs.toArray[String])
 
         rpcEnv.stopAll()
-        actorSystem.shutdown()
 
       case _ =>
         System.err.println("Usage: DriverWrapper <workerUrl> <driverMainClass> [options]")

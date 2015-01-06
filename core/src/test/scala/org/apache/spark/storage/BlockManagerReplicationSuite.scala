@@ -22,9 +22,8 @@ import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.postfixOps
 
-import akka.actor.ActorSystem
 import org.mockito.Mockito.{mock, when}
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers, PrivateMethodTester}
+import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SecurityManager}
@@ -36,13 +35,11 @@ import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage.StorageLevel._
-import org.apache.spark.util.{AkkaUtils, SizeEstimator}
 
 /** Testsuite that tests block replication in BlockManager */
 class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAndAfter {
 
   private val conf = new SparkConf(false)
-  var actorSystem: ActorSystem = null
   var rpcEnv: RpcEnv = null
   var master: BlockManagerMaster = null
   val securityMgr = new SecurityManager(conf)
@@ -72,13 +69,11 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
   }
 
   before {
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
+    this.rpcEnv = AkkaRpcEnv(
       "test", "localhost", 0, conf = conf, securityManager = securityMgr)
-    this.actorSystem = actorSystem
-    this.rpcEnv = new AkkaRpcEnv(actorSystem, conf)
 
     conf.set("spark.authenticate", "false")
-    conf.set("spark.driver.port", boundPort.toString)
+    conf.set("spark.driver.port", rpcEnv.boundPort.toString)
     conf.set("spark.storage.unrollFraction", "0.4")
     conf.set("spark.storage.unrollMemoryThreshold", "512")
 
@@ -98,10 +93,8 @@ class BlockManagerReplicationSuite extends FunSuite with Matchers with BeforeAnd
     allStores.foreach { _.stop() }
     allStores.clear()
     rpcEnv.stopAll()
+    rpcEnv.awaitTermination()
     rpcEnv = null
-    actorSystem.shutdown()
-    actorSystem.awaitTermination()
-    actorSystem = null
     master = null
   }
 

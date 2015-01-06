@@ -19,6 +19,8 @@ package org.apache.spark.rpc.akka
 
 import java.util.concurrent.CountDownLatch
 
+import com.google.common.annotations.VisibleForTesting
+
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.concurrent.Future
@@ -28,15 +30,15 @@ import akka.actor.{ActorRef, Actor, Props, ActorSystem}
 import akka.pattern.{ask => akkaAsk}
 import akka.remote._
 
-import org.apache.spark.{Logging, SparkException, SparkConf}
+import org.apache.spark.{SecurityManager, Logging, SparkException, SparkConf}
 import org.apache.spark.rpc._
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils}
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-class AkkaRpcEnv(val actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
-  // TODO Once finishing the new Rpc mechanism, make actorSystem be a private val
+class AkkaRpcEnv private (val actorSystem: ActorSystem, conf: SparkConf, val boundPort: Int)
+  extends RpcEnv {
 
   override def setupEndpoint(name: String, endpointCreator: => RpcEndpoint): RpcEndpointRef = {
     val latch = new CountDownLatch(1)
@@ -120,7 +122,7 @@ class AkkaRpcEnv(val actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
   }
 
   override def stopAll(): Unit = {
-    // Do nothing since actorSystem was created outside.
+    actorSystem.shutdown()
   }
 
   override def stop(endpoint: RpcEndpointRef): Unit = {
@@ -129,7 +131,30 @@ class AkkaRpcEnv(val actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
     actorSystem.stop(endpoint.asInstanceOf[AkkaRpcEndpointRef].actorRef)
   }
 
+  override def awaitTermination(): Unit = {
+    actorSystem.awaitTermination()
+  }
+
   override def toString = s"${getClass.getSimpleName}($actorSystem)"
+}
+
+object AkkaRpcEnv {
+
+  def apply(
+      name: String,
+      host: String,
+      port: Int,
+      conf: SparkConf,
+      securityManager: SecurityManager): AkkaRpcEnv = {
+    val (actorSystem, boundPort) =
+      AkkaUtils.createActorSystem(name, host, port, conf, securityManager)
+    new AkkaRpcEnv(actorSystem, conf, boundPort)
+  }
+
+  @VisibleForTesting
+  def apply(name: String, conf: SparkConf): AkkaRpcEnv = {
+    new AkkaRpcEnv(ActorSystem(name), conf, -1)
+  }
 }
 
 private[akka] class AkkaRpcEndpointRef(val actorRef: ActorRef, @transient conf: SparkConf)

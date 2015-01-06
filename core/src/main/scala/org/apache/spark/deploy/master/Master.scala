@@ -23,12 +23,9 @@ import java.text.SimpleDateFormat
 import java.util.concurrent.{ScheduledFuture, TimeUnit, Executors}
 import java.util.Date
 
-import org.apache.spark.rpc.akka.AkkaRpcEnv
-
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.util.Random
 
-import akka.actor.ActorSystem
 import akka.serialization.Serialization
 import akka.serialization.SerializationExtension
 import org.apache.hadoop.fs.Path
@@ -42,10 +39,11 @@ import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.rpc.{RpcAddress, NetworkRpcEndpoint, RpcEnv, RpcEndpointRef}
 import org.apache.spark.scheduler.{EventLoggingListener, ReplayListenerBus}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
+import org.apache.spark.util.{SignalLogger, Utils}
 
 private[spark] class Master(
     override val rpcEnv: RpcEnv,
@@ -58,7 +56,8 @@ private[spark] class Master(
   val scheduler = Executors.newScheduledThreadPool(1,
     Utils.namedThreadFactory("check-worker-timeout"))
 
-  private def internalActorSystem: ActorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
+  // TODO hide the actor system
+  private def internalActorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
 
   val conf = new SparkConf
   val hadoopConf = SparkHadoopUtil.get.newConfiguration(conf)
@@ -856,8 +855,8 @@ private[spark] object Master extends Logging {
     SignalLogger.register(log)
     val conf = new SparkConf
     val args = new MasterArguments(argStrings, conf)
-    val (actorSystem, _, _) = startSystemAndActor(args.host, args.port, args.webUiPort, conf)
-    actorSystem.awaitTermination()
+    val (rpcEnv, _) = startSystemAndActor(args.host, args.port, args.webUiPort, conf)
+    rpcEnv.awaitTermination()
   }
 
   /** Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:ip`. */
@@ -874,14 +873,12 @@ private[spark] object Master extends Logging {
       host: String,
       port: Int,
       webUiPort: Int,
-      conf: SparkConf): (ActorSystem, Int, Int) = {
+      conf: SparkConf): (RpcEnv, Int) = {
     val securityMgr = new SecurityManager(conf)
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf,
-      securityManager = securityMgr)
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+    val rpcEnv = AkkaRpcEnv(systemName, host, port, conf = conf, securityManager = securityMgr)
     val actor = rpcEnv.setupEndpoint(actorName,
-      new Master(rpcEnv, host, boundPort, webUiPort, securityMgr))
+      new Master(rpcEnv, host, rpcEnv.boundPort, webUiPort, securityMgr))
     val resp = actor.askWithReply[WebUIPortResponse](RequestWebUIPort)
-    (actorSystem, boundPort, resp.webUIBoundPort)
+    (rpcEnv, resp.webUIBoundPort)
   }
 }

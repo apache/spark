@@ -19,11 +19,10 @@ package org.apache.spark.deploy
 
 import scala.collection.mutable.ArrayBuffer
 
-import akka.actor.ActorSystem
-
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.deploy.master.Master
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.util.Utils
 
 /**
@@ -37,22 +36,22 @@ class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: I
   extends Logging {
 
   private val localHostname = Utils.localHostName()
-  private val masterActorSystems = ArrayBuffer[ActorSystem]()
-  private val workerActorSystems = ArrayBuffer[ActorSystem]()
+  private val masterActorSystems = ArrayBuffer[RpcEnv]()
+  private val workerActorSystems = ArrayBuffer[RpcEnv]()
 
   def start(): Array[String] = {
     logInfo("Starting a local Spark cluster with " + numWorkers + " workers.")
 
     /* Start the Master */
     val conf = new SparkConf(false)
-    val (masterSystem, masterPort, _) = Master.startSystemAndActor(localHostname, 0, 0, conf)
+    val (masterSystem, _) = Master.startSystemAndActor(localHostname, 0, 0, conf)
     masterActorSystems += masterSystem
-    val masterUrl = "spark://" + localHostname + ":" + masterPort
+    val masterUrl = "spark://" + localHostname + ":" + masterSystem.boundPort
     val masters = Array(masterUrl)
 
     /* Start the Workers */
     for (workerNum <- 1 to numWorkers) {
-      val (workerSystem, _) = Worker.startSystemAndActor(localHostname, 0, 0, coresPerWorker,
+      val workerSystem = Worker.startSystemAndActor(localHostname, 0, 0, coresPerWorker,
         memoryPerWorker, masters, null, Some(workerNum))
       workerActorSystems += workerSystem
     }
@@ -65,9 +64,9 @@ class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: I
     // Stop the workers before the master so they don't get upset that it disconnected
     // TODO: In Akka 2.1.x, ActorSystem.awaitTermination hangs when you have remote actors!
     //       This is unfortunate, but for now we just comment it out.
-    workerActorSystems.foreach(_.shutdown())
+    workerActorSystems.foreach(_.stopAll())
     // workerActorSystems.foreach(_.awaitTermination())
-    masterActorSystems.foreach(_.shutdown())
+    masterActorSystems.foreach(_.stopAll())
     // masterActorSystems.foreach(_.awaitTermination())
     masterActorSystems.clear()
     workerActorSystems.clear()

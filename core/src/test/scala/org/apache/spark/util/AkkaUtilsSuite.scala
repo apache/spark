@@ -37,11 +37,10 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     val securityManager = new SecurityManager(conf)
     val hostname = "localhost"
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0,
+    val rpcEnv = AkkaRpcEnv("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
-    System.setProperty("spark.hostPort", hostname + ":" + boundPort)
+    System.setProperty("spark.hostPort", hostname + ":" + rpcEnv.boundPort)
     assert(securityManager.isAuthenticationEnabled() === true)
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
     val masterTracker = new MapOutputTrackerMaster(conf)
     masterTracker.trackerActor = rpcEnv.setupEndpoint(
       "MapOutputTracker", new MapOutputTrackerMasterActor(rpcEnv, masterTracker, conf))
@@ -53,19 +52,16 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     assert(securityManagerBad.isAuthenticationEnabled() === true)
 
-    val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0,
+    val slaveRpcEnv = AkkaRpcEnv("spark-slave", hostname, 0,
       conf = conf, securityManager = securityManagerBad)
-    val slaveRpcEnv = new AkkaRpcEnv(slaveSystem, conf)
     val slaveTracker = new MapOutputTrackerWorker(conf)
-    val selection = s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker"
+    val selection = s"akka.tcp://spark@localhost:${rpcEnv.boundPort}/user/MapOutputTracker"
     intercept[akka.actor.ActorNotFound] {
       slaveTracker.trackerActor = slaveRpcEnv.setupEndpointRefByUrl(selection)
     }
 
     rpcEnv.stopAll()
-    actorSystem.shutdown()
     slaveRpcEnv.stopAll()
-    slaveSystem.shutdown()
   }
 
   test("remote fetch security off") {
@@ -75,10 +71,9 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val securityManager = new SecurityManager(conf)
 
     val hostname = "localhost"
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0,
+    val rpcEnv = AkkaRpcEnv("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
-    System.setProperty("spark.hostPort", hostname + ":" + boundPort)
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+    System.setProperty("spark.hostPort", hostname + ":" + rpcEnv.boundPort)
 
     assert(securityManager.isAuthenticationEnabled() === false)
 
@@ -91,11 +86,10 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     badconf.set("spark.authenticate.secret", "good")
     val securityManagerBad = new SecurityManager(badconf)
 
-    val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0,
+    val slaveRpcEnv = AkkaRpcEnv("spark-slave", hostname, 0,
       conf = badconf, securityManager = securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
-    val slaveRpcEnv = new AkkaRpcEnv(slaveSystem, conf)
-    val selection = s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker"
+    val selection = s"akka.tcp://spark@localhost:${rpcEnv.boundPort}/user/MapOutputTracker"
     slaveTracker.trackerActor = slaveRpcEnv.setupEndpointRefByUrl(selection)
 
     assert(securityManagerBad.isAuthenticationEnabled() === false)
@@ -115,9 +109,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
            Seq((BlockManagerId("a", "hostA", 1000), size1000)))
 
     rpcEnv.stopAll()
-    actorSystem.shutdown()
     slaveRpcEnv.stopAll()
-    slaveSystem.shutdown()
   }
 
   test("remote fetch security pass") {
@@ -127,10 +119,9 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val securityManager = new SecurityManager(conf)
 
     val hostname = "localhost"
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0,
+    val rpcEnv = AkkaRpcEnv("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
-    System.setProperty("spark.hostPort", hostname + ":" + boundPort)
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+    System.setProperty("spark.hostPort", hostname + ":" + rpcEnv.boundPort)
 
     assert(securityManager.isAuthenticationEnabled() === true)
 
@@ -145,11 +136,10 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     assert(securityManagerGood.isAuthenticationEnabled() === true)
 
-    val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0,
+    val slaveRpcEnv = AkkaRpcEnv("spark-slave", hostname, 0,
       conf = goodconf, securityManager = securityManagerGood)
     val slaveTracker = new MapOutputTrackerWorker(conf)
-    val slaveRpcEnv = new AkkaRpcEnv(slaveSystem, conf)
-    val selection = s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker"
+    val selection = s"akka.tcp://spark@localhost:${rpcEnv.boundPort}/user/MapOutputTracker"
     slaveTracker.trackerActor = slaveRpcEnv.setupEndpointRefByUrl(selection)
 
     masterTracker.registerShuffle(10, 1)
@@ -167,9 +157,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
            Seq((BlockManagerId("a", "hostA", 1000), size1000)))
 
     rpcEnv.stopAll()
-    actorSystem.shutdown()
     slaveRpcEnv.stopAll()
-    slaveSystem.shutdown()
   }
 
   test("remote fetch security off client") {
@@ -180,10 +168,9 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
     val securityManager = new SecurityManager(conf)
 
     val hostname = "localhost"
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0,
+    val rpcEnv = AkkaRpcEnv("spark", hostname, 0,
       conf = conf, securityManager = securityManager)
-    System.setProperty("spark.hostPort", hostname + ":" + boundPort)
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+    System.setProperty("spark.hostPort", hostname + ":" + rpcEnv.boundPort)
 
     assert(securityManager.isAuthenticationEnabled() === true)
 
@@ -198,19 +185,16 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
 
     assert(securityManagerBad.isAuthenticationEnabled() === false)
 
-    val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0,
+    val slaveRpcEnv = AkkaRpcEnv("spark-slave", hostname, 0,
       conf = badconf, securityManager = securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
-    val slaveRpcEnv = new AkkaRpcEnv(slaveSystem, conf)
-    val selection = s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker"
+    val selection = s"akka.tcp://spark@localhost:${rpcEnv.boundPort}/user/MapOutputTracker"
     intercept[akka.actor.ActorNotFound] {
       slaveTracker.trackerActor = slaveRpcEnv.setupEndpointRefByUrl(selection)
     }
 
     rpcEnv.stopAll()
-    actorSystem.shutdown()
     slaveRpcEnv.stopAll()
-    slaveSystem.shutdown()
   }
 
 }

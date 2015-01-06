@@ -27,6 +27,7 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.storage.TaskResultBlockId
 
 /**
@@ -86,7 +87,8 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with LocalSpark
   test("handling results larger than Akka frame size") {
     sc = new SparkContext("local", "test", conf)
     val akkaFrameSize =
-      sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
+      sc.env.rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem.settings.
+        config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
     val result = sc.parallelize(Seq(1), 1).map(x => 1.to(akkaFrameSize).toArray).reduce((x, y) => x)
     assert(result === 1.to(akkaFrameSize).toArray)
 
@@ -111,7 +113,8 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with LocalSpark
     val resultGetter = new ResultDeletingTaskResultGetter(sc.env, scheduler)
     scheduler.taskResultGetter = resultGetter
     val akkaFrameSize =
-      sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
+      sc.env.rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem.settings.
+        config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
     val result = sc.parallelize(Seq(1), 1).map(x => 1.to(akkaFrameSize).toArray).reduce((x, y) => x)
     assert(resultGetter.removeBlockSuccessfully)
     assert(result === 1.to(akkaFrameSize).toArray)

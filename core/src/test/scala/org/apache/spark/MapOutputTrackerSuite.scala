@@ -19,7 +19,6 @@ package org.apache.spark
 
 import org.apache.spark.rpc.akka.AkkaRpcEnv
 
-import akka.actor._
 import org.mockito.Mockito._
 import org.scalatest.FunSuite
 
@@ -27,25 +26,21 @@ import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.AkkaUtils
 
 class MapOutputTrackerSuite extends FunSuite {
   private val conf = new SparkConf
 
   test("master start and stop") {
-    val actorSystem = ActorSystem("test")
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+    val rpcEnv = AkkaRpcEnv("test", conf)
     val tracker = new MapOutputTrackerMaster(conf)
     tracker.trackerActor = rpcEnv.setupEndpoint(
       "MapOutputTracker", new MapOutputTrackerMasterActor(rpcEnv, tracker, conf))
     tracker.stop()
     rpcEnv.stopAll()
-    actorSystem.shutdown()
   }
 
   test("master register shuffle and fetch") {
-    val actorSystem = ActorSystem("test")
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+    val rpcEnv = AkkaRpcEnv("test", conf)
     val tracker = new MapOutputTrackerMaster(conf)
     tracker.trackerActor = rpcEnv.setupEndpoint(
       "MapOutputTracker", new MapOutputTrackerMasterActor(rpcEnv, tracker, conf))
@@ -62,12 +57,10 @@ class MapOutputTrackerSuite extends FunSuite {
                                   (BlockManagerId("b", "hostB", 1000), size10000)))
     tracker.stop()
     rpcEnv.stopAll()
-    actorSystem.shutdown()
   }
 
   test("master register and unregister shuffle") {
-    val actorSystem = ActorSystem("test")
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+    val rpcEnv =  AkkaRpcEnv("test", conf)
     val tracker = new MapOutputTrackerMaster(conf)
     tracker.trackerActor = rpcEnv.setupEndpoint(
       "MapOutputTracker", new MapOutputTrackerMasterActor(rpcEnv, tracker, conf))
@@ -86,12 +79,10 @@ class MapOutputTrackerSuite extends FunSuite {
 
     tracker.stop()
     rpcEnv.stopAll()
-    actorSystem.shutdown()
   }
 
   test("master register shuffle and unregister map output and fetch") {
-    val actorSystem = ActorSystem("test")
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+    val rpcEnv = AkkaRpcEnv("test", conf)
     val tracker = new MapOutputTrackerMaster(conf)
     tracker.trackerActor = rpcEnv.setupEndpoint(
       "MapOutputTracker", new MapOutputTrackerMasterActor(rpcEnv, tracker, conf))
@@ -114,24 +105,21 @@ class MapOutputTrackerSuite extends FunSuite {
 
     tracker.stop()
     rpcEnv.stopAll()
-    actorSystem.shutdown()
   }
 
   test("remote fetch") {
     val hostname = "localhost"
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0, conf = conf,
+    val rpcEnv = AkkaRpcEnv("spark", hostname, 0, conf = conf,
       securityManager = new SecurityManager(conf))
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
 
     val masterTracker = new MapOutputTrackerMaster(conf)
     masterTracker.trackerActor = rpcEnv.setupEndpoint(
       "MapOutputTracker", new MapOutputTrackerMasterActor(rpcEnv, masterTracker, conf))
 
-    val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0, conf = conf,
+    val slaveRpcEnv = AkkaRpcEnv("spark-slave", hostname, 0, conf = conf,
       securityManager = new SecurityManager(conf))
-    val slaveRpcEnv = new AkkaRpcEnv(slaveSystem, conf)
     val slaveTracker = new MapOutputTrackerWorker(conf)
-    val selection = s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker"
+    val selection = s"akka.tcp://spark@localhost:${rpcEnv.boundPort}/user/MapOutputTracker"
     slaveTracker.trackerActor = slaveRpcEnv.setupEndpointRefByUrl(selection)
 
     masterTracker.registerShuffle(10, 1)
@@ -158,9 +146,7 @@ class MapOutputTrackerSuite extends FunSuite {
     masterTracker.stop()
     slaveTracker.stop()
     rpcEnv.stopAll()
-    actorSystem.shutdown()
     slaveRpcEnv.stopAll()
-    slaveSystem.shutdown()
   }
 
   test("remote fetch below akka frame size") {
@@ -169,8 +155,7 @@ class MapOutputTrackerSuite extends FunSuite {
     newConf.set("spark.akka.askTimeout", "1") // Fail fast
 
     val masterTracker = new MapOutputTrackerMaster(conf)
-    val actorSystem = ActorSystem("test")
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+    val rpcEnv = AkkaRpcEnv("test", conf)
     val masterActor = new MapOutputTrackerMasterActor(rpcEnv, masterTracker, newConf)
     rpcEnv.setupEndpoint("MapOutputTracker", masterActor)
 
@@ -183,7 +168,6 @@ class MapOutputTrackerSuite extends FunSuite {
 
 //    masterTracker.stop() // this throws an exception
     rpcEnv.stopAll()
-    actorSystem.shutdown()
   }
 
   test("remote fetch exceeds akka frame size") {
@@ -192,8 +176,7 @@ class MapOutputTrackerSuite extends FunSuite {
     newConf.set("spark.akka.askTimeout", "1") // Fail fast
 
     val masterTracker = new MapOutputTrackerMaster(conf)
-    val actorSystem = ActorSystem("test")
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+    val rpcEnv = AkkaRpcEnv("test", conf)
     val masterActor = new MapOutputTrackerMasterActor(rpcEnv, masterTracker, newConf)
 
     // Frame size should be ~1.1MB, and MapOutputTrackerMasterActor should throw exception.
@@ -210,6 +193,5 @@ class MapOutputTrackerSuite extends FunSuite {
 
 //    masterTracker.stop() // this throws an exception
     rpcEnv.stopAll()
-    actorSystem.shutdown()
   }
 }

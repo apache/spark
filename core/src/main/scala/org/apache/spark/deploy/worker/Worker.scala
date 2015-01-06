@@ -30,8 +30,6 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
 
-import akka.actor.ActorSystem
-
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
@@ -40,7 +38,7 @@ import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.rpc.{RpcAddress, RpcEnv, RpcEndpointRef, NetworkRpcEndpoint}
-import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
+import org.apache.spark.util.{SignalLogger, Utils}
 
 /**
   * @param masterUrls Each url should look like spark://host:port.
@@ -524,9 +522,9 @@ private[spark] object Worker extends Logging {
     SignalLogger.register(log)
     val conf = new SparkConf
     val args = new WorkerArguments(argStrings, conf)
-    val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
+    val rpcEnv = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
       args.memory, args.masters, args.workDir)
-    actorSystem.awaitTermination()
+    rpcEnv.awaitTermination()
   }
 
   def startSystemAndActor(
@@ -537,19 +535,17 @@ private[spark] object Worker extends Logging {
       memory: Int,
       masterUrls: Array[String],
       workDir: String,
-      workerNumber: Option[Int] = None): (ActorSystem, Int) = {
+      workerNumber: Option[Int] = None): RpcEnv = {
 
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
     val conf = new SparkConf
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
     val actorName = "Worker"
     val securityMgr = new SecurityManager(conf)
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port,
-      conf = conf, securityManager = securityMgr)
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
-    rpcEnv.setupEndpoint(actorName, new Worker(rpcEnv, host, boundPort, webUiPort, cores, memory,
-      masterUrls, systemName, actorName,  workDir, conf, securityMgr))
-    (actorSystem, boundPort)
+    val rpcEnv = AkkaRpcEnv(systemName, host, port, conf = conf, securityManager = securityMgr)
+    rpcEnv.setupEndpoint(actorName, new Worker(rpcEnv, host, rpcEnv.boundPort, webUiPort, cores,
+      memory, masterUrls, systemName, actorName,  workDir, conf, securityMgr))
+    rpcEnv
   }
 
 }

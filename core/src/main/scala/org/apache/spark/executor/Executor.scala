@@ -350,10 +350,7 @@ private[spark] class Executor(
 
   def startDriverHeartbeater() {
     val interval = conf.getInt("spark.executor.heartbeatInterval", 10000)
-    val timeout = AkkaUtils.lookupTimeout(conf)
-    val retryAttempts = AkkaUtils.numRetries(conf)
-    val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
-    val heartbeatReceiverRef = AkkaUtils.makeDriverRef("HeartbeatReceiver", conf, env.actorSystem)
+    val heartbeatReceiverRef = env.rpcEnv.setupDriverEndpointRef("HeartbeatReceiver")
 
     val t = new Thread() {
       override def run() {
@@ -385,8 +382,7 @@ private[spark] class Executor(
 
           val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
           try {
-            val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
-              retryAttempts, retryIntervalMs, timeout)
+            val response = heartbeatReceiverRef.askWithReply[HeartbeatResponse](message)
             if (response.reregisterBlockManager) {
               logWarning("Told to re-register on heartbeat")
               env.blockManager.reregister()

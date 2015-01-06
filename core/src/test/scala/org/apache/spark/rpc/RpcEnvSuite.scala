@@ -36,13 +36,11 @@ abstract class RpcEnvSuite extends FunSuite with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     if(env != null) {
-      destroyRpcEnv(env)
+      env.stopAll()
     }
   }
 
   def createRpcEnv: RpcEnv
-
-  def destroyRpcEnv(rpcEnv: RpcEnv)
 
   test("send a message locally") {
     @volatile var message: String = null

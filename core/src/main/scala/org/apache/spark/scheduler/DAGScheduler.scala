@@ -1071,7 +1071,6 @@ class DAGScheduler(
           // in that case the event will already have been scheduled. eventProcessActor may be
           // null during unit tests.
           // TODO: Cancel running tasks in the stage
-          import env.actorSystem.dispatcher
           logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
             s"$failedStage (${failedStage.name}) due to fetch failure")
           messageScheduler.schedule(new Runnable {

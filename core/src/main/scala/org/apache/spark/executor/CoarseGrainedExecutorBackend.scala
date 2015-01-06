@@ -27,7 +27,7 @@ import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.rpc.{RpcAddress, NetworkRpcEndpoint, RpcEndpointRef}
 import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{AkkaUtils, SignalLogger, Utils}
+import org.apache.spark.util.{SignalLogger, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     driverUrl: String,
@@ -85,7 +85,6 @@ private[spark] class CoarseGrainedExecutorBackend(
       executor.stop()
       stop()
       rpcEnv.stopAll()
-      env.actorSystem.shutdown()
   }
 
   override def onDisconnected(remoteAddress: RpcAddress): Unit = {
@@ -117,16 +116,14 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       // Bootstrap to fetch the driver's Spark properties.
       val executorConf = new SparkConf
       val port = executorConf.getInt("spark.executor.port", 0)
-      val (fetcher, _) = AkkaUtils.createActorSystem(
+      val rpcEnv = AkkaRpcEnv(
         "driverPropsFetcher", hostname, port, executorConf, new SecurityManager(executorConf))
-      val rpcEnv = new AkkaRpcEnv(fetcher, executorConf)
       val driver = rpcEnv.setupEndpointRefByUrl(driverUrl)
       val props = driver.askWithReply[Seq[(String, String)]](RetrieveSparkProps) ++
         Seq[(String, String)](("spark.app.id", appId))
 
       rpcEnv.stopAll()
-      fetcher.shutdown()
-      fetcher.awaitTermination()
+      rpcEnv.awaitTermination()
 
       // Create SparkEnv using properties we fetched from the driver.
       val driverConf = new SparkConf().setAll(props)
@@ -144,7 +141,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
       workerUrl.foreach { url =>
         env.rpcEnv.setupEndpoint("WorkerWatcher", new WorkerWatcher(env.rpcEnv, url))
       }
-      env.actorSystem.awaitTermination()
+      env.rpcEnv.awaitTermination()
     }
   }
 

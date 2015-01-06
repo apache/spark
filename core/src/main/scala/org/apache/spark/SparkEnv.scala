@@ -24,7 +24,6 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.util.Properties
 
-import akka.actor.ActorSystem
 import com.google.common.collect.MapMaker
 
 import org.apache.spark.annotation.DeveloperApi
@@ -40,7 +39,7 @@ import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
 import org.apache.spark.storage._
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -55,7 +54,6 @@ import org.apache.spark.util.{AkkaUtils, Utils}
 @DeveloperApi
 class SparkEnv (
     val executorId: String,
-    val actorSystem: ActorSystem,
     val rpcEnv: RpcEnv,
     val serializer: Serializer,
     val closureSerializer: Serializer,
@@ -71,6 +69,9 @@ class SparkEnv (
     val metricsSystem: MetricsSystem,
     val shuffleMemoryManager: ShuffleMemoryManager,
     val conf: SparkConf) extends Logging {
+
+  // TODO actorSystem is used by Streaming
+  val actorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
 
   private[spark] var isStopped = false
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
@@ -89,7 +90,6 @@ class SparkEnv (
     blockManager.stop()
     blockManager.master.stop()
     metricsSystem.stop()
-    actorSystem.shutdown()
     rpcEnv.stopAll()
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
@@ -216,18 +216,14 @@ object SparkEnv extends Logging {
     val securityManager = new SecurityManager(conf)
 
     // Create the ActorSystem for Akka and get the port it binds to.
-    val (actorSystem, boundPort) = {
-      val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
-      AkkaUtils.createActorSystem(actorSystemName, hostname, port, conf, securityManager)
-    }
-
-    val rpcEnv = new AkkaRpcEnv(actorSystem, conf)
+    val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
+    val rpcEnv = AkkaRpcEnv(actorSystemName, hostname, port, conf, securityManager)
 
     // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
     if (isDriver) {
-      conf.set("spark.driver.port", boundPort.toString)
+      conf.set("spark.driver.port", rpcEnv.boundPort.toString)
     } else {
-      conf.set("spark.executor.port", boundPort.toString)
+      conf.set("spark.executor.port", rpcEnv.boundPort.toString)
     }
 
     // Create an instance of the class with the given name, possibly initializing it with our conf
@@ -354,7 +350,6 @@ object SparkEnv extends Logging {
 
     new SparkEnv(
       executorId,
-      actorSystem,
       rpcEnv,
       serializer,
       closureSerializer,

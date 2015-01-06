@@ -59,6 +59,8 @@ trait RpcEnv {
     endpointRef
   }
 
+  def boundPort: Int
+
   def setupEndpoint(name: String, endpointCreator: => RpcEndpoint): RpcEndpointRef
 
   def setupDriverEndpointRef(name: String): RpcEndpointRef
@@ -68,6 +70,8 @@ trait RpcEnv {
   def stop(endpoint: RpcEndpointRef): Unit
 
   def stopAll(): Unit
+
+  def awaitTermination(): Unit
 }
 
 
@@ -148,7 +152,8 @@ object RpcEndpoint {
 /**
  * A reference for a remote [[RpcEndpoint]].
  */
-trait RpcEndpointRef {Master
+trait RpcEndpointRef {
+  Master
 
   def address: RpcAddress
 

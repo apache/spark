@@ -19,15 +19,11 @@ package org.apache.spark.storage
 
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
-import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.postfixOps
-
-import akka.actor._
-import akka.util.Timeout
 
 import org.mockito.Mockito.{mock, when}
 
@@ -54,7 +50,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
   var store: BlockManager = null
   var store2: BlockManager = null
   var rpcEnv: RpcEnv = null
-  var actorSystem: ActorSystem = null
   var master: BlockManagerMaster = null
   conf.set("spark.authenticate", "false")
   val securityMgr = new SecurityManager(conf)
@@ -80,16 +75,14 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
   }
 
   override def beforeEach(): Unit = {
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
+    this.rpcEnv = AkkaRpcEnv(
       "test", "localhost", 0, conf = conf, securityManager = securityMgr)
-    this.actorSystem = actorSystem
-    this.rpcEnv = new AkkaRpcEnv(actorSystem, conf)
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
     System.setProperty("os.arch", "amd64")
     conf.set("os.arch", "amd64")
     conf.set("spark.test.useCompressedOops", "true")
-    conf.set("spark.driver.port", boundPort.toString)
+    conf.set("spark.driver.port", rpcEnv.boundPort.toString)
     conf.set("spark.storage.unrollFraction", "0.4")
     conf.set("spark.storage.unrollMemoryThreshold", "512")
 
@@ -112,10 +105,8 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
       store2 = null
     }
     rpcEnv.stopAll()
+    rpcEnv.awaitTermination()
     rpcEnv = null
-    actorSystem.shutdown()
-    actorSystem.awaitTermination()
-    actorSystem = null
     master = null
   }
 
