@@ -17,31 +17,111 @@
 
 package org.apache.spark.streaming.mqtt
 
-import org.scalatest.FunSuite
+import java.net.{URI, ServerSocket}
 
-import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.apache.activemq.broker.{TransportConnector, BrokerService}
+import org.apache.spark.util.Utils
+import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.concurrent.Eventually
+import scala.concurrent.duration._
+import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
+import org.eclipse.paho.client.mqttv3._
+import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
 
-class MQTTStreamSuite extends FunSuite {
+class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
 
-  val batchDuration = Seconds(1)
-
+  private val batchDuration = Milliseconds(500)
   private val master: String = "local[2]"
-
   private val framework: String = this.getClass.getSimpleName
+  private val freePort = findFreePort()
+  private val brokerUri = "//localhost:" + freePort
+  private val topic = "def"
+  private var ssc: StreamingContext = _
+  private val persistenceDir = Utils.createTempDir()
+  private var broker: BrokerService = _
+  private var connector: TransportConnector = _
+
+  before {
+    ssc = new StreamingContext(master, framework, batchDuration)
+    setupMQTT()
+  }
+
+  after {
+    if (ssc != null) {
+      ssc.stop()
+      ssc = null
+    }
+    Utils.deleteRecursively(persistenceDir)
+    tearDownMQTT()
+  }
 
   test("mqtt input stream") {
-    val ssc = new StreamingContext(master, framework, batchDuration)
-    val brokerUrl = "abc"
-    val topic = "def"
-
-    // tests the API, does not actually test data receiving
-    val test1: ReceiverInputDStream[String] = MQTTUtils.createStream(ssc, brokerUrl, topic)
-    val test2: ReceiverInputDStream[String] =
-      MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_AND_DISK_SER_2)
-
-    // TODO: Actually test receiving data
+    val sendMessage = "MQTT demo for spark streaming"
+    val receiveStream: ReceiverInputDStream[String] =
+      MQTTUtils.createStream(ssc, "tcp:" + brokerUri, topic, StorageLevel.MEMORY_ONLY)
+    var receiveMessage: List[String] = List()
+    receiveStream.foreachRDD { rdd =>
+      if (rdd.collect.length > 0) {
+        receiveMessage = receiveMessage ::: List(rdd.first)
+        receiveMessage
+      }
+    }
+    ssc.start()
+    publishData(sendMessage)
+    eventually(timeout(10000 milliseconds), interval(100 milliseconds)) {
+      assert(sendMessage.equals(receiveMessage(0)))
+    }
     ssc.stop()
+  }
+
+  private def setupMQTT() {
+    broker = new BrokerService()
+    connector = new TransportConnector()
+    connector.setName("mqtt")
+    connector.setUri(new URI("mqtt:" + brokerUri))
+    broker.addConnector(connector)
+    broker.start()
+  }
+
+  private def tearDownMQTT() {
+    if (broker != null) {
+      broker.stop()
+      broker = null
+    }
+    if (connector != null) {
+      connector.stop()
+      connector = null
+    }
+  }
+
+  private def findFreePort(): Int = {
+    Utils.startServiceOnPort(23456, (trialPort: Int) => {
+      val socket = new ServerSocket(trialPort)
+      socket.close()
+      (null, trialPort)
+    })._2
+  }
+
+  def publishData(data: String): Unit = {
+    var client: MqttClient = null
+    try {
+      val persistence: MqttClientPersistence = new MqttDefaultFilePersistence(persistenceDir.getAbsolutePath)
+      client = new MqttClient("tcp:" + brokerUri, MqttClient.generateClientId(), persistence)
+      client.connect()
+      if (client.isConnected) {
+        val msgTopic: MqttTopic = client.getTopic(topic)
+        val message: MqttMessage = new MqttMessage(data.getBytes("utf-8"))
+        message.setQos(1)
+        message.setRetained(true)
+        for (i <- 0 to 100)
+          msgTopic.publish(message)
+      }
+    } finally {
+      client.disconnect()
+      client.close()
+      client = null
+    }
   }
 }
