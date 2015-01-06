@@ -746,7 +746,7 @@ class ProfilerTests(PySparkTestCase):
             def show(self, id):
                 self.result = "Custom formatting"
 
-        self.sc.profiler_collector.profiler = TestCustomProfiler
+        self.sc.profiler_collector.profiler_cls = TestCustomProfiler
 
         self.do_computation()
 

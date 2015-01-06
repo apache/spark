@@ -87,7 +87,7 @@ class Profiler(object):
     ...         print "My custom profiles for RDD:%s" % id
     ...
     >>> conf = SparkConf().set("spark.python.profile", "true")
-    >>> sc = SparkContext('local', 'test', conf=conf, profiler=MyCustomProfiler)
+    >>> sc = SparkContext('local', 'test', conf=conf, profiler_cls=MyCustomProfiler)
     >>> sc.parallelize(list(range(1000))).map(lambda x: 2 * x).take(10)
     [0, 2, 4, 6, 8, 10, 12, 14, 16, 18]
     >>> sc.show_profiles()
