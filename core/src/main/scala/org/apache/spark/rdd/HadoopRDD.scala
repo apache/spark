@@ -26,7 +26,16 @@ import scala.reflect.ClassTag
 import scala.collection.mutable.ListBuffer
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
-import org.apache.hadoop.mapred._
+import org.apache.hadoop.mapred.FileSplit
+import org.apache.hadoop.mapred.InputFormat
+import org.apache.hadoop.mapred.InputSplit
+import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.mapred.RecordReader
+import org.apache.hadoop.mapred.Reporter
+import org.apache.hadoop.mapred.JobID
+import org.apache.hadoop.mapred.TaskAttemptID
+import org.apache.hadoop.mapred.TaskID
+import org.apache.hadoop.mapred.InvalidInputException
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
@@ -200,6 +209,7 @@ class HadoopRDD[K, V](
       array
     } catch {
       case e: InvalidInputException => {
+        logWarning("InvalidInput!", e)
         new Array[Partition](0)
       }
     }
