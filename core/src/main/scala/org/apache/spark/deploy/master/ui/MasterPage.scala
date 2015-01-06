@@ -30,7 +30,7 @@ import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
 private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
-  private def master = parent.masterActorRef
+  private def master = parent.masterEndpointRef
 
   override def renderJson(request: HttpServletRequest): JValue = {
     val state = master.askWithReply[MasterStateResponse](RequestMasterState)

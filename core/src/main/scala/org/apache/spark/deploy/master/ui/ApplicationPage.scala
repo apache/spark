@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils
 
 private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") {
 
-  private def master = parent.masterActorRef
+  private def master = parent.masterEndpointRef
 
   /** Executor details for a particular application */
   override def renderJson(request: HttpServletRequest): JValue = {

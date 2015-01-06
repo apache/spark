@@ -30,7 +30,7 @@ import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
 import org.apache.spark.{Logging, SparkException, SparkConf}
 import org.apache.spark.rpc._
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.util.{ActorLogReceive, AkkaUtils}
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -42,7 +42,7 @@ class AkkaRpcEnv(val actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
     val latch = new CountDownLatch(1)
     try {
       @volatile var endpointRef: AkkaRpcEndpointRef = null
-      val actorRef = actorSystem.actorOf(Props(new Actor with Logging {
+      val actorRef = actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
 
         val endpoint = endpointCreator
         latch.await()
@@ -56,7 +56,7 @@ class AkkaRpcEnv(val actorSystem: ActorSystem, conf: SparkConf) extends RpcEnv {
           context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
         }
 
-        override def receive: Receive = {
+        override def receiveWithLogging: Receive = {
           case DisassociatedEvent(_, remoteAddress, _) =>
             try {
               // TODO How to handle that a remoteAddress doesn't have host & port

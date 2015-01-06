@@ -17,10 +17,8 @@
 
 package org.apache.spark.scheduler.cluster
 
-import akka.actor.{Actor, ActorRef, Props}
-import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
-
 import org.apache.spark.SparkContext
+import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, RpcEndpoint}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.ui.JettyUtils
@@ -35,18 +33,14 @@ private[spark] abstract class YarnSchedulerBackend(
     sc: SparkContext)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv) {
 
-  val actorSystem = sc.env.actorSystem
-
   if (conf.getOption("spark.scheduler.minRegisteredResourcesRatio").isEmpty) {
     minRegisteredRatio = 0.8
   }
 
   protected var totalExpectedExecutors = 0
 
-  private val yarnSchedulerActor: ActorRef =
-    actorSystem.actorOf(
-      Props(new YarnSchedulerActor),
-      name = YarnSchedulerBackend.ACTOR_NAME)
+  private val yarnSchedulerActor: RpcEndpointRef =
+    rpcEnv.setupEndpoint(YarnSchedulerBackend.ACTOR_NAME, new YarnSchedulerActor(rpcEnv))
 
   private implicit val askTimeout = AkkaUtils.askTimeout(sc.conf)
 
@@ -55,16 +49,14 @@ private[spark] abstract class YarnSchedulerBackend(
    * This includes executors already pending or running.
    */
   override def doRequestTotalExecutors(requestedTotal: Int): Boolean = {
-    AkkaUtils.askWithReply[Boolean](
-      RequestExecutors(requestedTotal), yarnSchedulerActor, askTimeout)
+    yarnSchedulerActor.askWithReply(RequestExecutors(requestedTotal))
   }
 
   /**
    * Request that the ApplicationMaster kill the specified executors.
    */
   override def doKillExecutors(executorIds: Seq[String]): Boolean = {
-    AkkaUtils.askWithReply[Boolean](
-      KillExecutors(executorIds), yarnSchedulerActor, askTimeout)
+    yarnSchedulerActor.askWithReply(KillExecutors(executorIds))
   }
 
   override def sufficientResourcesRegistered(): Boolean = {
@@ -96,15 +88,10 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * An actor that communicates with the ApplicationMaster.
    */
-  private class YarnSchedulerActor extends Actor {
-    private var amActor: Option[ActorRef] = None
+  private class YarnSchedulerActor(override val rpcEnv: RpcEnv) extends RpcEndpoint {
+    private var amActor: Option[RpcEndpointRef] = None
 
-    override def preStart(): Unit = {
-      // Listen for disassociation events
-      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-    }
-
-    override def receive = {
+    override def receive(sender: RpcEndpointRef) = {
       case RegisterClusterManager =>
         logInfo(s"ApplicationMaster registered as $sender")
         amActor = Some(sender)
@@ -112,29 +99,31 @@ private[spark] abstract class YarnSchedulerBackend(
       case r: RequestExecutors =>
         amActor match {
           case Some(actor) =>
-            sender ! AkkaUtils.askWithReply[Boolean](r, actor, askTimeout)
+            actor.askWithReply(r)
+            sender.send(actor.askWithReply[Boolean](r))
           case None =>
             logWarning("Attempted to request executors before the AM has registered!")
-            sender ! false
+            sender.send(false)
         }
 
       case k: KillExecutors =>
         amActor match {
           case Some(actor) =>
-            sender ! AkkaUtils.askWithReply[Boolean](k, actor, askTimeout)
+            sender.send(actor.askWithReply[Boolean](k))
           case None =>
             logWarning("Attempted to kill executors before the AM has registered!")
-            sender ! false
+            sender.send(false)
         }
 
       case AddWebUIFilter(filterName, filterParams, proxyBase) =>
         addWebUIFilter(filterName, filterParams, proxyBase)
-        sender ! true
+        sender.send(true)
+    }
 
-      case d: DisassociatedEvent =>
-        if (amActor.isDefined && sender == amActor.get) {
-          logWarning(s"ApplicationMaster has disassociated: $d")
-        }
+    override def remoteConnectionTerminated(remoteAddress: RpcAddress): Unit = {
+      if (amActor.isDefined && remoteAddress == amActor.get.address) {
+        logWarning(s"ApplicationMaster has disassociated: $remoteAddress")
+      }
     }
   }
 }
