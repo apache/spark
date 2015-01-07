@@ -50,7 +50,7 @@ class BinaryClassificationMetricsSuite extends FunSuite with MLlibTestSparkConte
     assertSequencesMatch(metrics.thresholds().collect(), expectedThresholds)
     assertTupleSequencesMatch(metrics.roc().collect(), expectedROCCurve)
     assert(metrics.areaUnderROC() ~== AreaUnderCurve.of(expectedROCCurve) absTol 1E-5)
-    assertTupleSequencesMatch(metrics.pr().collect(), expectedPRCurve)
+    assertTupleSequencesMatch(metrics.rp().collect(), expectedPRCurve)
     assert(metrics.areaUnderPR() ~== AreaUnderCurve.of(expectedPRCurve) absTol 1E-5)
     assertTupleSequencesMatch(metrics.fMeasureByThreshold().collect(),
       expectedThresholds.zip(expectedFMeasures1))
@@ -77,10 +77,10 @@ class BinaryClassificationMetricsSuite extends FunSuite with MLlibTestSparkConte
     val recalls = numTruePositives.map(t => t.toDouble / numPositives)
     val fpr = numFalsePositives.map(f => f.toDouble / numNegatives)
     val rocCurve = Seq((0.0, 0.0)) ++ fpr.zip(recalls) ++ Seq((1.0, 1.0))
-    val pr = recalls.zip(precisions)
-    val prCurve = Seq((0.0, 1.0)) ++ pr
-    val f1 = pr.map { case (r, p) => 2.0 * (p * r) / (p + r)}
-    val f2 = pr.map { case (r, p) => 5.0 * (p * r) / (4.0 * p + r)}
+    val rp = recalls.zip(precisions)
+    val prCurve = Seq((0.0, 1.0)) ++ rp
+    val f1 = rp.map { case (r, p) => 2.0 * (p * r) / (p + r)}
+    val f2 = rp.map { case (r, p) => 5.0 * (p * r) / (4.0 * p + r)}
 
     validateMetrics(metrics, thresholds, rocCurve, prCurve, f1, f2, precisions, recalls)
   }
@@ -94,10 +94,10 @@ class BinaryClassificationMetricsSuite extends FunSuite with MLlibTestSparkConte
     val recalls = Seq(1.0)
     val fpr = Seq(0.0)
     val rocCurve = Seq((0.0, 0.0)) ++ fpr.zip(recalls) ++ Seq((1.0, 1.0))
-    val pr = recalls.zip(precisions)
-    val prCurve = Seq((0.0, 1.0)) ++ pr
-    val f1 = pr.map { case (r, p) => 2.0 * (p * r) / (p + r)}
-    val f2 = pr.map { case (r, p) => 5.0 * (p * r) / (4.0 * p + r)}
+    val rp = recalls.zip(precisions)
+    val prCurve = Seq((0.0, 1.0)) ++ rp
+    val f1 = rp.map { case (r, p) => 2.0 * (p * r) / (p + r)}
+    val f2 = rp.map { case (r, p) => 5.0 * (p * r) / (4.0 * p + r)}
 
     validateMetrics(metrics, thresholds, rocCurve, prCurve, f1, f2, precisions, recalls)
   }
@@ -111,13 +111,13 @@ class BinaryClassificationMetricsSuite extends FunSuite with MLlibTestSparkConte
     val recalls = Seq(0.0)
     val fpr = Seq(1.0)
     val rocCurve = Seq((0.0, 0.0)) ++ fpr.zip(recalls) ++ Seq((1.0, 1.0))
-    val pr = recalls.zip(precisions)
-    val prCurve = Seq((0.0, 1.0)) ++ pr
-    val f1 = pr.map {
+    val rp = recalls.zip(precisions)
+    val prCurve = Seq((0.0, 1.0)) ++ rp
+    val f1 = rp.map {
       case (0, 0) => 0.0
       case (r, p) => 2.0 * (p * r) / (p + r)
     }
-    val f2 = pr.map {
+    val f2 = rp.map {
       case (0, 0) => 0.0
       case (r, p) => 5.0 * (p * r) / (4.0 * p + r)
     }
