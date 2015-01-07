@@ -23,6 +23,7 @@ import java.lang.ThreadLocal
 
 import scala.collection.generic.Growable
 import scala.collection.mutable.Map
+import scala.ref.WeakReference
 import scala.reflect.ClassTag
 
 import org.apache.spark.serializer.JavaSerializer
@@ -281,9 +282,12 @@ object AccumulatorParam {
 // if there's a more intuitive way of doing it right
 private[spark] object Accumulators {
   // TODO: Use soft references? => need to make readObject work properly then
-  val originals = Map[Long, Accumulable[_, _]]()
-  val localAccums = new ThreadLocal[Map[Long, Accumulable[_, _]]]() {
-    override protected def initialValue() = Map[Long, Accumulable[_, _]]()
+  // Store a WeakReference instead of a StrongReference because this way accumulators can be
+  // appropriately garbage collected during long-running jobs and release memory
+  type WeakAcc = WeakReference[Accumulable[_, _]]
+  val originals = Map[Long, WeakAcc]()
+  val localAccums = new ThreadLocal[Map[Long, WeakAcc]]() {
+    override protected def initialValue() = Map[Long, WeakAcc]()
   }
   var lastId: Long = 0
 
@@ -294,9 +298,9 @@ private[spark] object Accumulators {
 
   def register(a: Accumulable[_, _], original: Boolean): Unit = synchronized {
     if (original) {
-      originals(a.id) = a
+      originals(a.id) = new WeakAcc(a)
     } else {
-      localAccums.get()(a.id) = a
+      localAccums.get()(a.id) = new WeakAcc(a)
     }
   }
 
@@ -311,7 +315,12 @@ private[spark] object Accumulators {
   def values: Map[Long, Any] = synchronized {
     val ret = Map[Long, Any]()
     for ((id, accum) <- localAccums.get) {
-      ret(id) = accum.localValue
+      // Since we are now storing weak references, we must check whether the underlying data
+      // is valid. 
+      ret(id) = accum.get match {
+        case Some(values) => values.localValue
+        case None => None // TODO Is this the right thing to return here?
+      }
     }
     return ret
   }
@@ -320,7 +329,12 @@ private[spark] object Accumulators {
   def add(values: Map[Long, Any]): Unit = synchronized {
     for ((id, value) <- values) {
       if (originals.contains(id)) {
-        originals(id).asInstanceOf[Accumulable[Any, Any]] ++= value
+        // Since we are now storing weak references, we must check whether the underlying data
+        // is valid. 
+        originals(id).get match {
+          case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]] ++= value
+          case None => // Do nothing   
+        }
       }
     }
   }
