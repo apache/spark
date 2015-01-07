@@ -27,8 +27,7 @@ from numpy.numarray.numerictypes import Long
 
 from py4j.java_collections import MapConverter, ListConverter
 from pyspark.accumulators import PStatsParam
-from pyspark.serializers import CloudPickleSerializer, NoOpSerializer, AutoBatchedSerializer, \
-    BatchedSerializer
+from pyspark.serializers import CloudPickleSerializer, NoOpSerializer, AutoBatchedSerializer
 from pyspark import RDD, PickleSerializer, StorageLevel, SparkContext
 from pyspark.traceback_utils import SCCallSiteSync
 
@@ -109,7 +108,8 @@ class VertexRDD(object):
         self.jvertex_rdd.rdd().checkpoint()
 
     def count(self):
-        return self.jvertex_rdd.count()
+        return self.mapPartitions(lambda i: [sum(1 for _ in i)]).sum()
+        # return self.jvertex_rdd.count()
 
     def take(self, num=10):
         return self.jvertex_rdd.take(num)
@@ -175,7 +175,8 @@ class VertexRDD(object):
             return [(v, w) for v in vbuf for w in wbuf]
         vs = self.map(lambda (k, v): (k, (1, v)))
         ws = other.map(lambda (k, v): (k, (2, v)))
-        return vs.union(ws).groupByKey(numPartitions).flatMapValues(lambda x: dispatch(x.__iter__()))
+        return vs.union(ws).groupByKey(numPartitions)\
+                .flatMapValues(lambda x: dispatch(x.__iter__()))
 
 
     def innerJoin(self, other, numPartitions=None):
