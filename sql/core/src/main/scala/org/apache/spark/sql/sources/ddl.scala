@@ -22,7 +22,10 @@ import scala.util.parsing.combinator.syntactical.StandardTokenParsers
 import scala.util.parsing.combinator.PackratParsers
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.SqlLexical
 
@@ -176,6 +179,44 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected def cleanIdentifier(ident: String): String = ident match {
     case escapedIdentifier(i) => i
     case plainIdent => plainIdent
+  }
+}
+
+private[sql] case class CreateTableUsing(
+    tableName: String,
+    tableCols: Seq[StructField],
+    provider: String,
+    options: Map[String, String]) extends RunnableCommand {
+
+  def run(sqlContext: SQLContext) = {
+    val loader = Utils.getContextOrSparkClassLoader
+    val clazz: Class[_] = try loader.loadClass(provider) catch {
+      case cnf: java.lang.ClassNotFoundException =>
+        try loader.loadClass(provider + ".DefaultSource") catch {
+          case cnf: java.lang.ClassNotFoundException =>
+            sys.error(s"Failed to load class for data source: $provider")
+        }
+    }
+    val relation = clazz.newInstance match {
+      case dataSource: org.apache.spark.sql.sources.RelationProvider  =>
+        dataSource
+          .asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
+          .createRelation(sqlContext, new CaseInsensitiveMap(options))
+      case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
+        if(tableCols.isEmpty) {
+          dataSource
+            .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
+            .createRelation(sqlContext, new CaseInsensitiveMap(options))
+        } else {
+          dataSource
+            .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
+            .createRelation(
+              sqlContext, new CaseInsensitiveMap(options), Some(StructType(tableCols)))
+        }
+    }
+
+    sqlContext.baseRelationToSchemaRDD(relation).registerTempTable(tableName)
+    Seq.empty
   }
 }
 
