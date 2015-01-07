@@ -181,7 +181,6 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     testFileStream(newFilesOnly = false, 3)
   }
 
-
   test("multi-thread receiver") {
     // set up the test receiver
     val numThreads = 10
@@ -344,7 +343,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
       for (i <- 2 until depth) {
         testDir = Utils.createTempDir(testDir.toString)
       }
-
+      // Create a file that exists before the StreamingContext is created:
       val existingFile = new File(testDir, "0")
       Files.write("0\n", existingFile, Charset.forName("UTF-8"))
       assert(existingFile.setLastModified(10000) && existingFile.lastModified === 10000)
@@ -383,20 +382,18 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
           }
         }
 
-      // Verify that all the files have been read
-      val expectedOutput = if (newFilesOnly) {
-        input.map(_.toString).toSet
-      } else {
-        (Seq(0) ++ input).map(_.toString).toSet
+        // Verify that all the files have been read
+        val expectedOutput = if (newFilesOnly) {
+          input.map(_.toString).toSet
+        } else {
+          (Seq(0) ++ input).map(_.toString).toSet
+        }
+        assert(outputBuffer.flatten.toSet === expectedOutput)
       }
-      assert(outputBuffer.flatten.toSet === expectedOutput)
+    } finally {
+      if (testDir != null) Utils.deleteRecursively(testDir)
     }
-  }finally
-  {
-    if (testDir != null) Utils.deleteRecursively(testDir)
   }
-}
-
 }
 
 

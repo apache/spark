@@ -364,6 +364,7 @@ class StreamingContext private[streaming] (
    * Files must be written to the monitored directory by "moving" them from another
    * location within the same file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
+   * @param depth Searching depth of directory
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
    * @tparam F Input format for reading HDFS file
@@ -372,7 +373,7 @@ class StreamingContext private[streaming] (
     K: ClassTag,
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
-  ](directory: String, depth: Int = 1): InputDStream[(K, V)] = {
+  ] (directory: String, depth: Int = 1): InputDStream[(K, V)] = {
     new FileInputDStream[K, V, F](this, directory, depth)
   }
 
@@ -384,6 +385,7 @@ class StreamingContext private[streaming] (
    * @param directory HDFS directory to monitor for new file
    * @param filter Function to filter paths to process
    * @param newFilesOnly Should process only new files and ignore existing files in the directory
+   * @param depth Searching depth of directory
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
    * @tparam F Input format for reading HDFS file
@@ -392,7 +394,7 @@ class StreamingContext private[streaming] (
     K: ClassTag,
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
-  ](
+  ] (
      directory: String,
      filter: Path => Boolean,
      newFilesOnly: Boolean,
@@ -432,6 +434,7 @@ class StreamingContext private[streaming] (
    * monitored directory by "moving" them from another location within the same
    * file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
+   * @param depth Searching depth of directory
    */
   def textFileStream(
       directory: String,
