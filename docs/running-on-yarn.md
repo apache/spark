@@ -150,7 +150,7 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
-  <td><code>spark.yarn.amMaxAttempts</code></td>
+  <td><code>spark.yarn.maxAppAttempts</code></td>
   <td>yarn.resourcemanager.am.max-attempts in YARN</td>
   <td>
   The maximum number of attempts that will be made to submit the application.
