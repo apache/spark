@@ -130,7 +130,16 @@ case class WriteToFile(
   override def output = child.output
 }
 
-case class Sort(order: Seq[SortOrder], child: LogicalPlan) extends UnaryNode {
+/**
+ * @param order  The ordering expressions 
+ * @param global True means global sorting apply for entire data set, 
+ *               False means sorting only apply within the partition.
+ * @param child  Child logical plan              
+ */
+case class Sort(
+    order: Seq[SortOrder],
+    global: Boolean,
+    child: LogicalPlan) extends UnaryNode {
   override def output = child.output
 }
 

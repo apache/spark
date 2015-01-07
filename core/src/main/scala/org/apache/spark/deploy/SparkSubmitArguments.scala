@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy
 
+import java.net.URI
 import java.util.jar.JarFile
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
@@ -125,14 +126,23 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
 
     // Try to set main class from JAR if no --class argument is given
     if (mainClass == null && !isPython && primaryResource != null) {
-      try {
-        val jar = new JarFile(primaryResource)
-        // Note that this might still return null if no main-class is set; we catch that later
-        mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
-      } catch {
-        case e: Exception =>
-          SparkSubmit.printErrorAndExit("Cannot load main class from JAR: " + primaryResource)
-          return
+      val uri = new URI(primaryResource)
+      val uriScheme = uri.getScheme()
+
+      uriScheme match {
+        case "file" =>
+          try {
+            val jar = new JarFile(uri.getPath)
+            // Note that this might still return null if no main-class is set; we catch that later
+            mainClass = jar.getManifest.getMainAttributes.getValue("Main-Class")
+          } catch {
+            case e: Exception =>
+              SparkSubmit.printErrorAndExit(s"Cannot load main class from JAR $primaryResource")
+          }
+        case _ =>
+          SparkSubmit.printErrorAndExit(
+            s"Cannot load main class from JAR $primaryResource with URI $uriScheme. " +
+            "Please specify a class through --class.")
       }
     }
 

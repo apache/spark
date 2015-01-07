@@ -27,12 +27,10 @@ import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 import org.apache.spark.{HashPartitioner, Partitioner, SerializableWritable}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Duration, Time}
-import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.StreamingContext.rddToFileName
 
 /**
  * Extra functions available on DStream of (key, value) pairs through an implicit conversion.
- * Import `org.apache.spark.streaming.StreamingContext._` at the top of your program to use
- * these functions.
  */
 class PairDStreamFunctions[K, V](self: DStream[(K,V)])
     (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K])

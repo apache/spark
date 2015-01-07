@@ -178,7 +178,7 @@ class DenseVector(Vector):
         elif not isinstance(ar, np.ndarray):
             ar = np.array(ar, dtype=np.float64)
         if ar.dtype != np.float64:
-            ar.astype(np.float64)
+            ar = ar.astype(np.float64)
         self.array = ar
 
     def __reduce__(self):

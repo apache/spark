@@ -123,6 +123,7 @@ private[spark] class Master(
 
   override def preStart() {
     logInfo("Starting Spark master at " + masterUrl)
+    logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     webUi.bind()
