@@ -805,11 +805,7 @@ def deploy_files(conn, root_dir, opts, master_nodes, slave_nodes, modules):
 
     if "." in opts.spark_version:
         # Pre-built Spark deploy
-        version = opts.spark_version.replace("v", "")
-        if version not in VALID_SPARK_VERSIONS:
-            print >> stderr, "Don't know about Spark version: {v}".format(v=version)
-            sys.exit(1)
-        spark_v = version
+        spark_v = opts.spark_version.replace("v", "")
     else:
         # Spark-only custom deploy
         spark_v = "%s|%s" % (opts.spark_git_repo, opts.spark_version)
@@ -973,6 +969,12 @@ def real_main():
     (opts, action, cluster_name) = parse_args()
 
     # Input parameter validation
+    if "." in opts.spark_version:
+        version = opts.spark_version.replace("v", "")
+        if version not in VALID_SPARK_VERSIONS:
+            print >> stderr, "Don't know about Spark version: {v}".format(v=version)
+            sys.exit(1)
+
     if opts.wait is not None:
         # NOTE: DeprecationWarnings are silent in 2.7+ by default.
         #       To show them, run Python with the -Wdefault switch.
