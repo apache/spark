@@ -23,11 +23,12 @@ import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.session.SessionManager
+import org.apache.hive.service.cli.thrift.TProtocolVersion
 
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
-import org.apache.hive.service.cli.SessionHandle
+import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 
 private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
   extends SessionManager
@@ -50,6 +51,7 @@ private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
   }
 
   override def closeSession(sessionHandle: SessionHandle) {
+    SparkSQLEnv.sqlEventListener.onDisconnected(super.getSession(sessionHandle))
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool -= sessionHandle
   }

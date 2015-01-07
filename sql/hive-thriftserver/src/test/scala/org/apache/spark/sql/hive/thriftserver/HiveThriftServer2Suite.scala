@@ -22,10 +22,13 @@ import java.net.ServerSocket
 import java.sql.{Date, DriverManager, Statement}
 import java.util.concurrent.TimeoutException
 
+import org.scalatest.concurrent.Eventually._
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
+import scala.io.Source
 import scala.sys.process.{Process, ProcessLogger}
 import scala.util.Try
 
@@ -68,6 +71,34 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     val port = socket.getLocalPort
     socket.close()
     port
+  }
+
+  def withThriftUIAndJDBC(
+      uiPort: Int,
+      serverStartTimeout: FiniteDuration = 1.minute,
+      httpMode: Boolean = false)(
+      f: Statement => Unit) {
+    val port = randomListeningPort
+
+    startThriftServerWithUIPort(port, uiPort, serverStartTimeout, httpMode) {
+      val jdbcUri = if (httpMode) {
+        s"jdbc:hive2://${"localhost"}:$port/" +
+          "default?hive.server2.transport.mode=http;hive.server2.thrift.http.path=cliservice"
+      } else {
+        s"jdbc:hive2://${"localhost"}:$port/"
+      }
+
+      val user = System.getProperty("user.name")
+      val connection = DriverManager.getConnection(jdbcUri, user, "")
+      val statement = connection.createStatement()
+
+      try {
+        f(statement)
+      } finally {
+        statement.close()
+        connection.close()
+      }
+    }
   }
 
   def withJdbcStatement(
@@ -121,7 +152,16 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   }
 
   def startThriftServer(
+      thriftPort: Int,
+      serverStartTimeout: FiniteDuration = 1.minute,
+      httpMode: Boolean = false)(
+      f: => Unit): Unit = {
+    startThriftServerWithUIPort(thriftPort, randomListeningPort, serverStartTimeout, httpMode)(f)
+  }
+
+  def startThriftServerWithUIPort(
       port: Int,
+      uiPort: Int,
       serverStartTimeout: FiniteDuration = 1.minute,
       httpMode: Boolean = false)(
       f: => Unit) {
@@ -143,7 +183,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
              |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=http
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT}=$port
              |  --driver-class-path ${sys.props("java.class.path")}
-             |  --conf spark.ui.enabled=false
+             |  --conf spark.ui.port=$uiPort
            """.stripMargin.split("\\s+").toSeq
       } else {
           s"""$startScript
@@ -154,7 +194,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_PORT}=$port
              |  --driver-class-path ${sys.props("java.class.path")}
-             |  --conf spark.ui.enabled=false
+             |  --conf spark.ui.port=$uiPort
            """.stripMargin.split("\\s+").toSeq
       }
 
@@ -381,6 +421,35 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
           "SELECT ARRAY(CAST(key AS STRING), value) FROM test_map LIMIT 1")
         resultSet.next()
         resultSet.getString(1)
+      }
+    }
+  }
+
+  test("SPARK-5100 monitor page") {
+    val uiPort = randomListeningPort
+    withThriftUIAndJDBC(uiPort) { statement =>
+      val queries = Seq(
+        "DROP TABLE IF EXISTS test_map",
+        "CREATE TABLE test_map(key INT, value STRING)",
+        s"LOAD DATA LOCAL INPATH '${TestData.smallKv}' OVERWRITE INTO TABLE test_map")
+
+      queries.foreach(statement.execute)
+
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        val html = Source.fromURL(s"http://localhost:$uiPort").mkString
+
+        // check whether new page exists
+        assert(html.toLowerCase.contains("thriftserver"))
+      }
+
+      eventually(timeout(10 seconds), interval(50 milliseconds)) {
+        val html = Source.fromURL(s"http://localhost:$uiPort/ThriftServer/").mkString
+        assert(!html.contains("random data that should not be present"))
+
+        // check whether statements exists
+        queries.foreach{ line =>
+          assert(html.toLowerCase.contains(line.toLowerCase))
+        }
       }
     }
   }

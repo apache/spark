@@ -28,6 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.scheduler.{SparkListenerApplicationEnd, SparkListener}
+import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
 
 /**
  * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSQLContext` and a
@@ -92,6 +93,13 @@ object HiveThriftServer2 extends Logging {
 private[hive] class HiveThriftServer2(hiveContext: HiveContext)
   extends HiveServer2
   with ReflectedCompositeService {
+
+  private[hive] val uiTab: Option[ThriftServerTab] =
+    if (hiveContext.hiveconf.getBoolean("spark.ui.enabled", true)) {
+      Some(new ThriftServerTab())
+    } else {
+      None
+    }
 
   override def init(hiveConf: HiveConf) {
     val sparkSqlCliService = new SparkSQLCLIService(hiveContext)

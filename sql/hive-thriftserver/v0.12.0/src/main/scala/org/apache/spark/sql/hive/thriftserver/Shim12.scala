@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.thriftserver
 
 import java.sql.{Date, Timestamp}
-import java.util.{ArrayList => JArrayList, Map => JMap}
+import java.util.{ArrayList => JArrayList, Map => JMap, UUID}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
@@ -183,8 +183,10 @@ private[hive] class SparkExecuteStatementOperation(
   }
 
   def run(): Unit = {
+    val sid = UUID.randomUUID().toString
     logInfo(s"Running query '$statement'")
     setState(OperationState.RUNNING)
+    SparkSQLEnv.sqlEventListener.onStart(sid, parentSession, statement)
     try {
       result = hiveContext.sql(statement)
       logDebug(result.queryExecution.toString())
@@ -198,6 +200,7 @@ private[hive] class SparkExecuteStatementOperation(
       sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
         hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }
+      SparkSQLEnv.sqlEventListener.onParse(sid, result.queryExecution.toString(), groupId)
       iter = {
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
@@ -214,9 +217,11 @@ private[hive] class SparkExecuteStatementOperation(
       // HiveServer will silently swallow them.
       case e: Throwable =>
         setState(OperationState.ERROR)
+        SparkSQLEnv.sqlEventListener.onError(sid, e.getMessage, e.getStackTraceString)
         logError("Error executing query:",e)
         throw new HiveSQLException(e.toString)
     }
     setState(OperationState.FINISHED)
+    SparkSQLEnv.sqlEventListener.onFinish(sid)
   }
 }
