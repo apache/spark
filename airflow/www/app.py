@@ -997,6 +997,8 @@ class DatabaseConnectionModelView(LoginMixin, ModelView):
             ('presto', 'Presto',),
             ('mysql', 'MySQL',),
             ('oracle', 'Oracle',),
+            ('samba', 'Samba',),
+            ('ftp', 'FTP',),
         ]
     }
 mv = DatabaseConnectionModelView(
