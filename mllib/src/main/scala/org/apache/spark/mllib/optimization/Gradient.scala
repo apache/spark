@@ -64,8 +64,9 @@ class LogisticGradient extends Gradient {
     val margin = -1.0 * dot(data, weights)
     /**
      * gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
-     * However, the first part of gradientMultiplier can be potentially suffered from overflow,
-     * so we use the equivalent formula but more numerically stable.
+     * However, the first part of gradientMultiplier will be suffered from overflow if there are
+     * samples far away from hyperplane, and this happens when there are outliers in data.
+     * As a result, we use the equivalent formula but more numerically stable.
      */
     val gradientMultiplier =
       if (margin > 0.0) {
@@ -96,8 +97,9 @@ class LogisticGradient extends Gradient {
     val margin = -1.0 * dot(data, weights)
     /**
      * gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
-     * However, the first part of gradientMultiplier can be potentially suffered from overflow,
-     * so we use the equivalent formula but more numerically stable.
+     * However, the first part of gradientMultiplier will be suffered from overflow if there are
+     * samples far away from hyperplane, and this happens when there are outliers in data.
+     * As a result, we use the equivalent formula but more numerically stable.
      */
     val gradientMultiplier =
       if (margin > 0.0) {
