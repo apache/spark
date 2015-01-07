@@ -231,7 +231,7 @@ abstract class DataType {
 /**
  * :: DeveloperApi ::
  *
- * The data type representing `NULL` values.
+ * The data type representing `NULL` values. Please use the singleton [[DataTypes.NullType]].
  *
  * @group dataType
  */
@@ -292,7 +292,7 @@ abstract class NativeType extends DataType {
 /**
  * :: DeveloperApi ::
  *
- * The data type representing `String` values
+ * The data type representing `String` values. Please use the singleton [[DataTypes.StringType]].
  *
  * @group dataType
  */
@@ -308,6 +308,7 @@ case object StringType extends NativeType with PrimitiveType {
  * :: DeveloperApi ::
  *
  * The data type representing `Array[Byte]` values.
+ * Please use the singleton [[DataTypes.BinaryType]].
  *
  * @group dataType
  */
@@ -330,7 +331,7 @@ case object BinaryType extends NativeType with PrimitiveType {
 /**
  * :: DeveloperApi ::
  *
- * The data type representing `Boolean` values.
+ * The data type representing `Boolean` values. Please use the singleton [[DataTypes.BooleanType]].
  *
  *@group dataType
  */
@@ -346,6 +347,7 @@ case object BooleanType extends NativeType with PrimitiveType {
  * :: DeveloperApi ::
  *
  * The data type representing `java.sql.Timestamp` values.
+ * Please use the singleton [[DataTypes.TimestampType]].
  *
  * @group dataType
  */
@@ -365,6 +367,7 @@ case object TimestampType extends NativeType {
  * :: DeveloperApi ::
  *
  * The data type representing `java.sql.Date` values.
+ * Please use the singleton [[DataTypes.DateType]].
  *
  * @group dataType
  */
@@ -412,7 +415,7 @@ sealed abstract class IntegralType extends NumericType {
 /**
  * :: DeveloperApi ::
  *
- * The data type representing `Long` values.
+ * The data type representing `Long` values. Please use the singleton [[DataTypes.LongType]].
  *
  * @group dataType
  */
@@ -429,7 +432,7 @@ case object LongType extends IntegralType {
 /**
  * :: DeveloperApi ::
  *
- * The data type representing `Int` values.
+ * The data type representing `Int` values. Please use the singleton [[DataTypes.IntegerType]].
  *
  * @group dataType
  */
@@ -446,7 +449,7 @@ case object IntegerType extends IntegralType {
 /**
  * :: DeveloperApi ::
  *
- * The data type representing `Short` values.
+ * The data type representing `Short` values. Please use the singleton [[DataTypes.ShortType]].
  *
  * @group dataType
  */
@@ -463,7 +466,7 @@ case object ShortType extends IntegralType {
 /**
  * :: DeveloperApi ::
  *
- * The data type representing `Byte` values.
+ * The data type representing `Byte` values. Please use the singleton [[DataTypes.ByteType]].
  *
  * @group dataType
  */
@@ -502,7 +505,7 @@ case class PrecisionInfo(precision: Int, scale: Int)
  * The data type representing `scala.math.BigDecimal` values.
  * A Decimal that might have fixed precision and scale, or unlimited values for these.
  *
- * TODO(matei): explain precision and scale
+ * Please use [[DataTypes.createDecimalType()]] to create a specific instance.
  *
  * @group dataType
  */
@@ -514,6 +517,10 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
   private[sql] val fractional = Decimal.DecimalIsFractional
   private[sql] val ordering = Decimal.DecimalIsFractional
   private[sql] val asIntegral = Decimal.DecimalAsIfIntegral
+
+  def precision: Int = precisionInfo.map(_.precision).getOrElse(-1)
+
+  def scale: Int = precisionInfo.map(_.scale).getOrElse(-1)
 
   override def typeName: String = precisionInfo match {
     case Some(PrecisionInfo(precision, scale)) => s"decimal($precision,$scale)"
@@ -562,7 +569,7 @@ object DecimalType {
 /**
  * :: DeveloperApi ::
  *
- * The data type representing `Double` values.
+ * The data type representing `Double` values. Please use the singleton [[DataTypes.DoubleType]].
  *
  * @group dataType
  */
@@ -580,7 +587,7 @@ case object DoubleType extends FractionalType {
 /**
  * :: DeveloperApi ::
  *
- * The data type representing `Float` values.
+ * The data type representing `Float` values. Please use the singleton [[DataTypes.FloatType]].
  *
  * @group dataType
  */
@@ -606,6 +613,8 @@ object ArrayType {
  *
  * The data type for collections of multiple values.
  * Internally these are represented as columns that contain a ``scala.collection.Seq``.
+ *
+ * Please use [[DataTypes.createArrayType()]] to create a specific instance.
  *
  * An [[ArrayType]] object comprises two fields, `elementType: [[DataType]]` and
  * `containsNull: Boolean`. The field of `elementType` is used to specify the type of
@@ -633,6 +642,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
 
 /**
  * A field inside a StructType.
+ *
  * @param name The name of this field.
  * @param dataType The data type of this field.
  * @param nullable Indicates if values of this field can be `null` values.
@@ -807,6 +817,8 @@ object MapType {
  * :: DeveloperApi ::
  *
  * The data type for Maps. Keys in a map are not allowed to have `null` values.
+ *
+ * Please use [[DataTypes.createMapType()]] to create a specific instance.
  *
  * @param keyType The data type of map keys.
  * @param valueType The data type of map values.
