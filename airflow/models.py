@@ -139,7 +139,8 @@ class DatabaseConnection(Base):
     """
     __tablename__ = "db_connection"
 
-    db_id = Column(String(ID_LEN), primary_key=True)
+    id = Column(Integer(), primary_key=True)
+    db_id = Column(String(ID_LEN), unique=True)
     db_type = Column(String(500))
     host = Column(String(500))
     schema = Column(String(500))
