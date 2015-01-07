@@ -98,6 +98,11 @@ private[spark] class Client(
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(containerContext)
     appContext.setApplicationType("SPARK")
+    sparkConf.getOption("spark.yarn.maxAppAttempts").map(_.toInt) match {
+      case Some(v) => appContext.setMaxAppAttempts(v)
+      case None => logDebug("spark.yarn.maxAppAttempts is not set. " +
+          "Cluster's default value will be used.")
+    }
     val capability = Records.newRecord(classOf[Resource])
     capability.setMemory(args.amMemory + amMemoryOverhead)
     appContext.setResource(capability)
