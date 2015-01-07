@@ -21,7 +21,7 @@ import org.apache.spark.sql._
 import java.sql.{Timestamp, Date}
 import org.apache.spark.sql.execution.RDDConversions
 
-case class PrimaryData(
+case class AllDataTypesData(
     stringField: String,
     intField: Int,
     longField: Long,
@@ -32,7 +32,10 @@ case class PrimaryData(
     booleanField: Boolean,
     decimalField: BigDecimal,
     date: Date,
-    timestampField: Timestamp)
+    timestampField: Timestamp,
+    arrayFiled: Seq[Int],
+    mapField: Map[Int, String],
+    structField: Row)
 
 class AllDataTypesScanSource extends SchemaRelationProvider {
   override def createRelation(
@@ -53,7 +56,7 @@ case class AllDataTypesScan(
 
   override def buildScan() = {
     val rdd = sqlContext.sparkContext.parallelize(from to to).map { i =>
-      PrimaryData(
+      AllDataTypesData(
         i.toString,
         i,
         i.toLong,
@@ -64,7 +67,10 @@ case class AllDataTypesScan(
         true,
         BigDecimal(i),
         new Date(12345),
-        new Timestamp(12345))
+        new Timestamp(12345),
+        Seq(i, i+1),
+        Map(i -> i.toString),
+        Row(i, i.toString))
     }
 
     RDDConversions.productToRowRdd(rdd, schema)
@@ -87,7 +93,10 @@ class NewTableScanSuite extends DataSourceTest {
         true,
         BigDecimal(i),
         new Date(12345),
-        new Timestamp(12345))
+        new Timestamp(12345),
+        Seq(i, i+1),
+        Map(i -> i.toString),
+        Row(i, i.toString))
     }.toSeq
 
   before {
@@ -95,7 +104,9 @@ class NewTableScanSuite extends DataSourceTest {
       """
         |CREATE TEMPORARY TABLE oneToTen(stringField stRIng, intField iNt, longField Bigint,
         |floatField flOat, doubleField doubLE, shortField smaLlint, byteField tinyint,
-        |booleanField boolean, decimalField decimal(10,2), dateField dAte, timestampField tiMestamp)
+        |booleanField boolean, decimalField decimal(10,2), dateField dAte,
+        |timestampField tiMestamp, arrayField Array<inT>, mapField MAP<iNt, StRing>,
+        |structField StRuct<key:INt, value:STrINg>)
         |USING org.apache.spark.sql.sources.AllDataTypesScanSource
         |OPTIONS (
         |  From '1',
@@ -107,6 +118,10 @@ class NewTableScanSuite extends DataSourceTest {
   sqlTest(
     "SELECT * FROM oneToTen",
     records)
+
+  sqlTest(
+    "SELECT count(*) FROM oneToTen",
+    10)
 
   sqlTest(
     "SELECT stringField FROM oneToTen",
@@ -132,5 +147,17 @@ class NewTableScanSuite extends DataSourceTest {
   sqlTest(
     "SELECT distinct(a.timestampField) FROM oneToTen a",
     Some(new Timestamp(12345)).map(Row(_)).toSeq)
+
+  sqlTest(
+    "SELECT distinct(arrayField) FROM oneToTen a where intField=1",
+    Some(Seq(1, 2)).map(Row(_)).toSeq)
+
+  sqlTest(
+    "SELECT distinct(mapField) FROM oneToTen a where intField=1",
+    Some(Map(1 -> 1.toString)).map(Row(_)).toSeq)
+
+  sqlTest(
+    "SELECT distinct(structField) FROM oneToTen a where intField=1",
+    Some(Row(1, "1")).map(Row(_)).toSeq)
 
 }
