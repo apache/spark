@@ -30,3 +30,24 @@ launchBackend <- function(
   cat("Launching java with command ", command, "\n")
   invisible(system(command, intern=FALSE, ignore.stdout=F, ignore.stderr=F, wait=F))
 }
+
+invokeJava <- function(rpcName, ...) {
+  if (!exists(".sparkRCon", .sparkREnv)) {
+    stop("No connection to backend found")
+  }
+  
+  rc <- rawConnection(raw(0), "r+")
+  
+  writeString(rpcName)
+  writeList(list(...))
+
+  bytesToSend <- rawConnectionValue(rc)
+  conn <- get(".sparkRCon", .sparkREnv)
+  writeInt(conn, length(bytesToSend))
+  writeBin(bytesToSend, conn)
+  
+  # TODO: check the status code to output error information
+  returnStatus <- readInt(conn)
+  stopifnot(returnStatus == 0)
+  readObject(conn)
+} 

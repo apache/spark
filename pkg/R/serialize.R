@@ -1,59 +1,83 @@
 # Utility functions to serialize, deserialize etc.
 
-writeString <- function(con, value) {
+writeString <- function(con, value, withType = FALSE) {
+  if (withType) {
+    writeString(con, typeof(value))
+  }
   writeInt(con, as.integer(nchar(value) + 1))
   writeBin(value, con, endian="big")
 }
 
-writeInt <- function(con, value) {
+writeInt <- function(con, value, withType = FALSE) {
+  if (withType) {
+    writeString(con, typeof(value))
+  }
   writeBin(as.integer(value), con, endian="big")
 }
 
-writeDouble <- function(con, value) {
+writeDouble <- function(con, value, withType = FALSE) {
+  if (withType) {
+    writeString(con, typeof(value))
+  }
   writeBin(value, con, endian="big")
 }
 
-writeBoolean <- function(con, value) {
+writeBoolean <- function(con, value, withType = FALSE) {
+  if (withType) {
+    writeString(con, typeof(value))
+  }
   # TRUE becomes 1, FALSE becomes 0
   writeInt(con, as.integer(value))
 }
 
-writeRaw <- function(con, batch, serialized = FALSE) {
+writeRaw <- function(con, batch, serialized = FALSE, withType = FALSE) {
   if (serialized) {
     outputSer <- batch
   } else {
     outputSer <- serialize(batch, ascii = FALSE, conn = NULL)
   }
+  if (withType) {
+    writeString(con, typeof(outputSer))
+  }
   writeInt(con, length(outputSer))
   writeBin(outputSer, con, endian="big")
 }
 
+writeObject <- function(con, object, withType = FALSE) {
+  switch(typeof(object),
+    integer = writeInt(con, object, withType),
+    character = writeString(con, object, withType),
+    logical = writeBoolean(con, object, withType),
+    double = writeDouble(con, object, withType),
+    raw = writeRaw(con, object, withType),
+    stop("Unsupported type for serialization"))
+}
+
 # Used to pass arrays
-writeVector <- function(con, arr) {
+writeVector <- function(con, arr, withType = FALSE) {
   if (!is.vector(arr) || typeof(arr) == "list") {
     stop("writeVector cannot be used for non-vectors or lists")
+  }
+  if (withType) {
+    writeString(con, "vector")
   }
   writeInt(con, length(arr))
   writeString(con, typeof(arr))
   if (length(arr) > 0) { 
-    if (typeof(arr) == "integer") {
-      for (a in arr) {
-        writeInt(con, a)
-      }
-    } else if (typeof(arr) == "character") {
-      for (a in arr) {
-        writeString(con, a)
-      }
-    } else if (typeof(arr) == "logical") {
-      for (a in arr) {
-        writeBoolean(con, a)
-      }
-    } else if (typeof(arr) == "double") {
-      for (a in arr) {
-        writeDouble(con, a)
-      }
-    } else if (typeof(arr) == "raw") {
-      writeBin(con, arr, endian="big")
+    for (a in arr) {
+      writeObject(con, a)
+    }
+  }
+}
+
+writeList <- function(con, list, withType = FALSE) {
+  if (withType) {
+    writeString(con, "list")
+  }
+  writeInt(con, length(list))
+  if (length(list) > 0) { 
+    for (a in list) {
+      writeObject(con, a, TRUE)
     }
   }
 }

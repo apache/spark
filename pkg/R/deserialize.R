@@ -1,9 +1,16 @@
 # Utility functions to serialize, deserialize etc.
 
-readString <- function(con) {
-  stringLen <- readInt(con)
-  string <- readBin(con, raw(), stringLen, endian="big")
-  rawToChar(string)
+readString <- function(con, num = 1) {
+  readSingleString <- function() {
+    stringLen <- readInt(con)
+    string <- readBin(con, raw(), stringLen, endian="big")
+    rawToChar(string)  
+  }
+  if (num == 1) {
+    readSingleString
+  } else {
+    sapply(1:num, readSingleString)    
+  }
 }
 
 readInt <- function(con, num = 1) {
@@ -18,27 +25,39 @@ readBoolean <- function(con, num = 1) {
   as.logical(readInt(con, num))
 }
 
+readObject <- function(con, num = 1) {
+  # Read type first
+  type <- readString(con)
+  switch (type,
+    integer = readInt(con, num),
+    character = readString(con, num),
+    logical = readBoolean(con, num),
+    double = readDouble(con, num),
+    raw = readRawLen(con, num),
+    vector = readVector(con),
+    list = readList(con),
+    void = NULL,
+    stop("Unsupported type for deserialization"))
+}
+
 readVector <- function(con) {
   len <- readInt(con)
-  type <- readString(con)
   if (length > 0) {
-    if (type == "integer") {
-      out <- readInt(con, num=len) 
-    } else if (type == "character") {
-      out <- sapply(1:len, function(x) {
-        readString(con)
-      })
-    } else if (type == "logical") {
-      out <- readBoolean(con, num=len)
-    } else if (type == "double") {
-      out <- readDouble(con, num=len)
-    } else if (type == "raw") {
-      out <- readRawLen(con, len)
-    } else {
-    }
-    out
+    readObject(con, len)
   } else {
     vector(mode=type)
+  }
+}
+
+readList <- function(con) {
+  len <- readInt(con)
+  if (length > 0) {
+    l <- vector("list", len)
+    for (i in 1:len) {
+      l[[i]] <- readObject(con)
+    }
+  } else {
+    list()
   }
 }
 
