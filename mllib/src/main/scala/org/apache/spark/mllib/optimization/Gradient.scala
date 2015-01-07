@@ -61,7 +61,19 @@ abstract class Gradient extends Serializable {
 class LogisticGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val margin = -1.0 * dot(data, weights)
-    val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
+    /**
+     * gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
+     * However, the first part of gradientMultiplier will be suffered from overflow if there are
+     * samples far away from hyperplane, and this happens when there are outliers in data.
+     * As a result, we use the equivalent formula but more numerically stable one.
+     */
+    val gradientMultiplier =
+      if (margin > 0.0) {
+        val temp = math.exp(-margin)
+        temp / (1.0 + temp) - label
+      } else {
+        1.0 / (1.0 + math.exp(margin)) - label
+      }
     val gradient = data.copy
     scal(gradientMultiplier, gradient)
     val minusYP = if (label > 0) margin else -margin
@@ -86,7 +98,19 @@ class LogisticGradient extends Gradient {
       weights: Vector,
       cumGradient: Vector): Double = {
     val margin = -1.0 * dot(data, weights)
-    val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
+    /**
+     * gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
+     * However, the first part of gradientMultiplier will be suffered from overflow if there are
+     * samples far away from hyperplane, and this happens when there are outliers in data.
+     * As a result, we use the equivalent formula but more numerically stable one.
+     */
+    val gradientMultiplier =
+      if (margin > 0.0) {
+        val temp = math.exp(-margin)
+        temp / (1.0 + temp) - label
+      } else {
+        1.0 / (1.0 + math.exp(margin)) - label
+      }
     axpy(gradientMultiplier, data, cumGradient)
     if (label > 0) {
       math.log1p(math.exp(margin))
