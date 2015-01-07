@@ -16,6 +16,7 @@
 #
 
 import sys
+import ast
 
 from pyspark import SparkContext
 
@@ -61,6 +62,8 @@ if __name__ == "__main__":
     table = sys.argv[2]
     sc = SparkContext(appName="HBaseInputFormat")
 
+    # Other options for configuring scan behavior are available. More information available at
+    # https://github.com/apache/hbase/blob/master/hbase-server/src/main/java/org/apache/hadoop/hbase/mapreduce/TableInputFormat.java
     conf = {"hbase.zookeeper.quorum": host, "hbase.mapreduce.inputtable": table}
     keyConv = "org.apache.spark.examples.pythonconverters.ImmutableBytesWritableToStringConverter"
     valueConv = "org.apache.spark.examples.pythonconverters.HBaseResultToStringConverter"
@@ -72,6 +75,9 @@ if __name__ == "__main__":
         keyConverter=keyConv,
         valueConverter=valueConv,
         conf=conf)
+    # hbase_rdd is a RDD[dict]
+    hbase_rdd = hbase_rdd.flatMapValues(lambda v: v.split(" ")).mapValues(ast.literal_eval)
+
     output = hbase_rdd.collect()
     for (k, v) in output:
         print (k, v)
