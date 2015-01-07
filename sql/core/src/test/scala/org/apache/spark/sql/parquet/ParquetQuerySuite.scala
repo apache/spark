@@ -911,20 +911,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     Utils.deleteRecursively(tmpdir)
   }
 
-  test("DataType string parser compatibility") {
-    val schema = StructType(List(
-      StructField("c1", IntegerType, false),
-      StructField("c2", BinaryType, false)))
-
-    val fromCaseClassString = ParquetTypesConverter.convertFromString(schema.toString)
-    val fromJson = ParquetTypesConverter.convertFromString(schema.json)
-
-    (fromCaseClassString, fromJson).zipped.foreach { (a, b) =>
-      assert(a.name == b.name)
-      assert(a.dataType === b.dataType)
-    }
-  }
-
   test("read/write fixed-length decimals") {
     for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
       val tempDir = getTempFilePath("parquetTest").getCanonicalPath
