@@ -154,7 +154,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
     if(numStartAttempts > 1) {
       logInfo(s"Receiver for stream ${streamId} from ${sender.path.address} " +
-        s"failed ${numAttempts -1} times, and attempts to restart.")
+        s"failed ${numStartAttempts -1} times, and attempts to restart.")
     } else {
       logInfo(s"Receiver for stream ${streamId} from ${sender.path.address} " +
         s"attempts to start.")
