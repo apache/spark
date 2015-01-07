@@ -81,7 +81,7 @@ class SqlLexical extends StdLexical {
   /* This is a work around to support the lazy setting */
   def initialize(keywords: Seq[String]): Unit = {
     reserved.clear()
-    reserved ++= keywords
+    reserved ++= keywords.flatMap(w => allCaseVersions(w))
   }
 
   delimiters += (
