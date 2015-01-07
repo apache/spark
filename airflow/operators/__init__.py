@@ -1,7 +1,6 @@
 from bash_operator import BashOperator
 from mysql_operator import MySqlOperator
 from hive_operator import HiveOperator
-from hive2samba_operator import Hive2SambaOperator
 from sensors import SqlSensor
 from sensors import ExternalTaskSensor
 from sensors import HivePartitionSensor
