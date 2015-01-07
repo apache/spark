@@ -36,6 +36,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
   var amQueue = sparkConf.get("spark.yarn.queue", "default")
   var amMemory: Int = 512 // MB
+  val amCores: Int = sparkConf.getInt("spark.yarn.am.cores", 1)
   var appName: String = "Spark"
   var priority = 0
 
