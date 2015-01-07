@@ -1086,8 +1086,10 @@
               <shadedPattern>org.spark-project.guava</shadedPattern>
               <excludes>
                 <exclude>com/google/common/base/Absent*</exclude>
+                <exclude>com/google/common/base/Function</exclude>
                 <exclude>com/google/common/base/Optional*</exclude>
                 <exclude>com/google/common/base/Present*</exclude>
+                <exclude>com/google/common/base/Supplier</exclude>
               </excludes>
             </relocation>
           </relocations>
