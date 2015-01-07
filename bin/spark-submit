@@ -38,11 +38,16 @@ while (($#)); do
     export SPARK_SUBMIT_CLASSPATH=$2
   elif [ "$1" = "--driver-java-options" ]; then
     export SPARK_SUBMIT_OPTS=$2
+  elif [ "$1" = "--master" ]; then
+    export MASTER=$2
   fi
   shift
 done
 
 DEFAULT_PROPERTIES_FILE="$SPARK_HOME/conf/spark-defaults.conf"
+if [ "$MASTER" == "yarn-cluster" ]; then
+  SPARK_SUBMIT_DEPLOY_MODE=cluster
+fi
 export SPARK_SUBMIT_DEPLOY_MODE=${SPARK_SUBMIT_DEPLOY_MODE:-"client"}
 export SPARK_SUBMIT_PROPERTIES_FILE=${SPARK_SUBMIT_PROPERTIES_FILE:-"$DEFAULT_PROPERTIES_FILE"}
 
