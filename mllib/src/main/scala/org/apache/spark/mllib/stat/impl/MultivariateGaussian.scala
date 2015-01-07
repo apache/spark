@@ -19,6 +19,7 @@ package org.apache.spark.mllib.stat.impl
 
 import breeze.linalg.{DenseVector => DBV, DenseMatrix => DBM, diag, max, eigSym}
 
+import org.apache.spark.mllib.linalg.{ Vectors, Vector, Matrices, Matrix }
 import org.apache.spark.mllib.util.MLUtils
 
 /**
@@ -30,22 +31,61 @@ import org.apache.spark.mllib.util.MLUtils
  * @param mu The mean vector of the distribution
  * @param sigma The covariance matrix of the distribution
  */
-private[mllib] class MultivariateGaussian(
+class MultivariateGaussian private[mllib] (
     val mu: DBV[Double], 
     val sigma: DBM[Double]) extends Serializable {
 
   /**
+   * Public constructor
+   * 
+   * @param mu The mean vector of the distribution
+   * @param sigma The covariance matrix of the distribution
+   */
+  def this(mu: Vector, sigma: Matrix) = {
+    this(mu.toBreeze.toDenseVector, sigma.toBreeze.toDenseMatrix)
+  }
+  
+  /**
    * Compute distribution dependent constants:
    *    rootSigmaInv = D^(-1/2) * U, where sigma = U * D * U.t
-   *    u = (2*pi)^(-k/2) * det(sigma)^(-1/2) 
+   *    u = log((2*pi)^(-k/2) * det(sigma)^(-1/2)) 
    */
   private val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
   
+  // Public methods use MLlib vectors/matrices
+  
+  /** Return the mean vector for this distribution */
+  def getMean(): Vector = {
+    Vectors.fromBreeze(mu)
+  }
+  
+  /** Return the covariance matrix for this distribution */
+  def getCovariance(): Matrix = {
+    Matrices.fromBreeze(sigma)
+  }
+  
   /** Returns density of this multivariate Gaussian at given point, x */
-  def pdf(x: DBV[Double]): Double = {
+  def pdf(x: Vector): Double = {
+    pdf(x.toBreeze.toDenseVector)
+  }
+  
+  /** Returns the log-density of this multivariate Gaussian at given point, x */
+  def logpdf(x: Vector): Double = {
+    logpdf(x.toBreeze.toDenseVector)
+  }
+  
+  // private methods use Breeze vectors/matrices
+  
+  /** Returns density of this multivariate Gaussian at given point, x */
+  private[mllib] def pdf(x: DBV[Double]): Double = {
+    math.exp(logpdf(x))
+  }
+  
+  /** Returns the log-density of this multivariate Gaussian at given point, x */
+  private[mllib] def logpdf(x: DBV[Double]): Double = {
     val delta = x - mu
     val v = rootSigmaInv * delta
-    u * math.exp(v.t * v * -0.5)
+    u + v.t * v * -0.5
   }
   
   /**
@@ -54,7 +94,7 @@ private[mllib] class MultivariateGaussian(
    * where k is length of the mean vector.
    * 
    * We here compute distribution-fixed parts 
-   *  (2*pi)^(-k/2) * det(sigma)^(-1/2)
+   *  log((2*pi)^(-k/2) * det(sigma)^(-1/2))
    * and
    *  D^(-1/2) * U, where sigma = U * D * U.t
    *  
@@ -91,7 +131,7 @@ private[mllib] class MultivariateGaussian(
       // by inverting the square root of all non-zero values
       val pinvS = diag(new DBV(d.map(v => if (v > tol) math.sqrt(1.0 / v) else 0.0).toArray))
     
-      (pinvS * u, math.pow(2.0 * math.Pi, -mu.length / 2.0) * math.pow(pdetSigma, -0.5))
+      (pinvS * u, math.log(math.pow(2.0 * math.Pi, -mu.length / 2.0) * math.pow(pdetSigma, -0.5)))
     } catch {
       case uex: UnsupportedOperationException =>
         throw new IllegalArgumentException("Covariance matrix has no non-zero singular values")
