@@ -21,14 +21,16 @@ import java.util.Random
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.ml.recommendation.ALS.{CholeskySolver, LocalIndexEncoder, NormalEquation}
+import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
+import scala.collection.mutable.ArrayBuffer
+
 class ALSSuite extends FunSuite with MLlibTestSparkContext {
 
-  test("local index encoder") {
+  test("LocalIndexEncoder") {
     val random = new Random
     for (numBlocks <- Seq(1, 2, 5, 10, 20, 50, 100)) {
       val encoder = new LocalIndexEncoder(numBlocks)
@@ -113,7 +115,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
     assert(Vectors.dense(ne0.atb) ~== Vectors.dense(2.5, 5.0) relTol 1e-8)
   }
 
-  test("Cholesky solver") {
+  test("CholeskySolver") {
     val k = 2
     val ne0 = new NormalEquation(k)
       .add(Array(1.0f, 2.0f), 4.0f)
@@ -138,5 +140,65 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
     // NumPy code that computes the expected solution, where lambda is scaled by n:
     // x0 = np.linalg.solve(A.transpose() * A + 0.5 * 3 * np.eye(2), A.transpose() * b)
     assert(Vectors.dense(x1) ~== Vectors.dense(-0.1155556, 3.28) relTol 1e-6)
+  }
+
+  test("RatingBlockBuilder") {
+    val emptyBuilder = new RatingBlockBuilder()
+    assert(emptyBuilder.size === 0)
+    val emptyBlock = emptyBuilder.build()
+    assert(emptyBlock.srcIds.isEmpty)
+    assert(emptyBlock.dstIds.isEmpty)
+    assert(emptyBlock.ratings.isEmpty)
+
+    val builder0 = new RatingBlockBuilder()
+      .add(Rating(0, 1, 2.0f))
+      .add(Rating(3, 4, 5.0f))
+    assert(builder0.size === 2)
+    val builder1 = new RatingBlockBuilder()
+      .add(Rating(6, 7, 8.0f))
+      .merge(builder0.build())
+    assert(builder1.size === 3)
+    val block = builder1.build()
+    val ratings = Seq.tabulate(block.size) { i =>
+      (block.srcIds(i), block.dstIds(i), block.ratings(i))
+    }.toSet
+    assert(ratings === Set((0, 1, 2.0f), (3, 4, 5.0f), (6, 7, 8.0f)))
+  }
+
+  test("UncompressedInBlock") {
+    val encoder = new LocalIndexEncoder(10)
+    val uncompressed = new UncompressedInBlockBuilder(encoder)
+      .add(0, Array(1, 0, 2), Array(0, 1, 4), Array(1.0f, 2.0f, 3.0f))
+      .add(1, Array(3, 0), Array(2, 5), Array(4.0f, 5.0f))
+      .build()
+    assert(uncompressed.size === 5)
+    val records = Seq.tabulate(uncompressed.size) { i =>
+      val dstEncodedIndex = uncompressed.dstEncodedIndices(i)
+      val dstBlockId = encoder.blockId(dstEncodedIndex)
+      val dstLocalIndex = encoder.localIndex(dstEncodedIndex)
+      (uncompressed.srcIds(i), dstBlockId, dstLocalIndex, uncompressed.ratings(i))
+    }.toSet
+    val expected =
+      Set((1, 0, 0, 1.0f), (0, 0, 1, 2.0f), (2, 0, 4, 3.0f), (3, 1, 2, 4.0f), (0, 1, 5, 5.0f))
+    assert(records === expected)
+
+    val compressed = uncompressed.compress()
+    assert(compressed.size === 5)
+    assert(compressed.srcIds.toSeq === Seq(0, 1, 2, 3))
+    assert(compressed.dstPtrs.toSeq === Seq(0, 2, 3, 4, 5))
+    var decompressed = ArrayBuffer.empty[(Int, Int, Int, Float)]
+    var i = 0
+    while (i < compressed.srcIds.size) {
+      var j = compressed.dstPtrs(i)
+      while (j < compressed.dstPtrs(i + 1)) {
+        val dstEncodedIndex = compressed.dstEncodedIndices(j)
+        val dstBlockId = encoder.blockId(dstEncodedIndex)
+        val dstLocalIndex = encoder.localIndex(dstEncodedIndex)
+        decompressed += ((compressed.srcIds(i), dstBlockId, dstLocalIndex, compressed.ratings(j)))
+        j += 1
+      }
+      i += 1
+    }
+    assert(decompressed.toSet === expected)
   }
 }

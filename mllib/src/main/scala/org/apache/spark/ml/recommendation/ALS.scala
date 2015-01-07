@@ -231,10 +231,10 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   }
 }
 
-private object ALS extends Logging {
+private[recommendation] object ALS extends Logging {
 
   /** Rating class for better code readability. */
-  private case class Rating(user: Int, item: Int, rating: Float)
+  private[recommendation] case class Rating(user: Int, item: Int, rating: Float)
 
   /** Cholesky solver for least square problems. */
   private[recommendation] class CholeskySolver {
@@ -454,26 +454,31 @@ private object ALS extends Logging {
    *
    * @see [[LocalIndexEncoder]]
    */
-  private case class InBlock(
+  private[recommendation] case class InBlock(
       srcIds: Array[Int],
       dstPtrs: Array[Int],
       dstEncodedIndices: Array[Int],
-      ratings: Array[Float])
+      ratings: Array[Float]) {
+    /** Size of the block. */
+    val size: Int = ratings.size
+    require(dstEncodedIndices.size == size)
+    require(dstPtrs.size == srcIds.size + 1)
+  }
 
   /**
    * Initializes factors randomly given the in-link blocks.
    *
-   * @param inBlocks in blocks
-   * @param k rank
+   * @param inBlocks in-link blocks
+   * @param rank rank
    * @return initialized factor blocks
    */
-  private def initialize(inBlocks: RDD[(Int, InBlock)], k: Int): RDD[(Int, FactorBlock)] = {
+  private def initialize(inBlocks: RDD[(Int, InBlock)], rank: Int): RDD[(Int, FactorBlock)] = {
     inBlocks.map { case (srcBlockId, inBlock) =>
       val random = new XORShiftRandom(srcBlockId)
       val factors = Array.fill(inBlock.srcIds.size) {
-        val factor = Array.fill(k)(random.nextGaussian().toFloat)
-        val nrm = blas.snrm2(k, factor, 1)
-        blas.sscal(k, 1.0f / nrm, factor, 1)
+        val factor = Array.fill(rank)(random.nextGaussian().toFloat)
+        val nrm = blas.snrm2(rank, factor, 1)
+        blas.sscal(rank, 1.0f / nrm, factor, 1)
         factor
       }
       (srcBlockId, factors)
@@ -483,12 +488,18 @@ private object ALS extends Logging {
   /**
    * A rating block that contains src IDs, dst IDs, and ratings, stored in primitive arrays.
    */
-  private case class RatingBlock(srcIds: Array[Int], dstIds: Array[Int], ratings: Array[Float])
+  private[recommendation]
+  case class RatingBlock(srcIds: Array[Int], dstIds: Array[Int], ratings: Array[Float]) {
+    /** Size of the block. */
+    val size: Int = srcIds.size
+    require(dstIds.size == size)
+    require(ratings.size == size)
+  }
 
   /**
    * Builder for [[RatingBlock]]. [[mutable.ArrayBuilder]] is used to avoid boxing/unboxing.
    */
-  private class RatingBlockBuilder extends Serializable {
+  private[recommendation] class RatingBlockBuilder extends Serializable {
 
     private val srcIds = mutable.ArrayBuilder.make[Int]
     private val dstIds = mutable.ArrayBuilder.make[Int]
@@ -576,7 +587,7 @@ private object ALS extends Logging {
    * Builder for uncompressed in-blocks of (srcId, dstEncodedIndex, rating) tuples.
    * @param encoder encoder for dst indices
    */
-  private class UncompressedInBlockBuilder(encoder: LocalIndexEncoder) {
+  private[recommendation] class UncompressedInBlockBuilder(encoder: LocalIndexEncoder) {
 
     private val srcIds = mutable.ArrayBuilder.make[Int]
     private val dstEncodedIndices = mutable.ArrayBuilder.make[Int]
@@ -617,7 +628,7 @@ private object ALS extends Logging {
   /**
    * A block of (srcId, dstEncodedIndex, rating) tuples stored in primitive arrays.
    */
-  private class UncompressedInBlock(
+  private[recommendation] class UncompressedInBlock(
       val srcIds: Array[Int],
       val dstEncodedIndices: Array[Int],
       val ratings: Array[Float]) {
