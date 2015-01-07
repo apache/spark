@@ -65,7 +65,7 @@ private[spark] class Client(
   private val amMemoryOverhead = args.amMemoryOverhead // MB
   private val executorMemoryOverhead = args.executorMemoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
-  private val isLaunchingDriver = args.userClass != null
+  private val isClusterMode = args.userClass != null
 
 
   def stop(): Unit = yarnClient.stop()
@@ -179,7 +179,7 @@ private[spark] class Client(
    * The file is only copied if the source and destination file systems are different. This is used
    * for preparing resources for launching the ApplicationMaster container. Exposed for testing.
    */
-  def copyFileToRemote(
+  private[yarn] def copyFileToRemote(
       destDir: Path,
       srcPath: Path,
       replication: Short,
@@ -203,22 +203,6 @@ private[spark] class Client(
     val qualifiedDestPath = destFs.makeQualified(destPath)
     val fc = FileContext.getFileContext(qualifiedDestPath.toUri(), hadoopConf)
     fc.resolvePath(qualifiedDestPath)
-  }
-
-  /**
-   * Given a local URI, resolve it and return a qualified local path that corresponds to the URI.
-   * This is used for preparing local resources to be included in the container launch context.
-   */
-  private def getQualifiedLocalPath(localURI: URI): Path = {
-    val qualifiedURI =
-      if (localURI.getScheme == null) {
-        // If not specified, assume this is in the local filesystem to keep the behavior
-        // consistent with that of Hadoop
-        new URI(FileSystem.getLocal(hadoopConf).makeQualified(new Path(localURI)).toString)
-      } else {
-        localURI
-      }
-    new Path(qualifiedURI)
   }
 
   /**
@@ -269,7 +253,7 @@ private[spark] class Client(
       if (!localPath.isEmpty()) {
         val localURI = new URI(localPath)
         if (localURI.getScheme != LOCAL_SCHEME) {
-          val src = getQualifiedLocalPath(localURI)
+          val src = getQualifiedLocalPath(localURI, hadoopConf)
           val destPath = copyFileToRemote(dst, src, replication, setPermissions)
           val destFs = FileSystem.get(destPath.toUri(), hadoopConf)
           distCacheMgr.addResource(destFs, hadoopConf, destPath,
@@ -360,7 +344,7 @@ private[spark] class Client(
     // Note that to warn the user about the deprecation in cluster mode, some code from
     // SparkConf#validateSettings() is duplicated here (to avoid triggering the condition
     // described above).
-    if (isLaunchingDriver) {
+    if (isClusterMode) {
       sys.env.get("SPARK_JAVA_OPTS").foreach { value =>
         val warning =
           s"""
@@ -440,7 +424,7 @@ private[spark] class Client(
     }
 
     // Include driver-specific java options if we are launching a driver
-    if (isLaunchingDriver) {
+    if (isClusterMode) {
       sparkConf.getOption("spark.driver.extraJavaOptions")
         .orElse(sys.env.get("SPARK_JAVA_OPTS"))
         .map(Utils.splitCommandString).getOrElse(Seq.empty)
@@ -474,7 +458,7 @@ private[spark] class Client(
     javaOpts += ("-Dspark.yarn.app.container.log.dir=" + ApplicationConstants.LOG_DIR_EXPANSION_VAR)
 
     val userClass =
-      if (isLaunchingDriver) {
+      if (isClusterMode) {
         Seq("--class", YarnSparkHadoopUtil.escapeForShell(args.userClass))
       } else {
         Nil
@@ -486,7 +470,7 @@ private[spark] class Client(
         Nil
       }
     val amClass =
-      if (isLaunchingDriver) {
+      if (isClusterMode) {
         Class.forName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
       } else {
         Class.forName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName
@@ -623,7 +607,7 @@ private[spark] class Client(
   }
 }
 
-private[spark] object Client extends Logging {
+object Client extends Logging {
   def main(argStrings: Array[String]) {
     if (!sys.props.contains("SPARK_SUBMIT")) {
       println("WARNING: This client is deprecated and will be removed in a " +
@@ -699,7 +683,8 @@ private[spark] object Client extends Logging {
    * Populate the classpath entry in the given environment map with any application
    * classpath specified through the Hadoop and Yarn configurations.
    */
-  def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]): Unit = {
+  private[yarn] def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String])
+    : Unit = {
     val classPathElementsToAdd = getYarnAppClasspath(conf) ++ getMRAppClasspath(conf)
     for (c <- classPathElementsToAdd.flatten) {
       YarnSparkHadoopUtil.addPathToEnvironment(env, Environment.CLASSPATH.name, c.trim)
@@ -923,6 +908,22 @@ private[spark] object Client extends Logging {
     }
 
     Objects.equal(srcHost, dstHost) && srcUri.getPort() == dstUri.getPort()
+  }
+
+  /**
+   * Given a local URI, resolve it and return a qualified local path that corresponds to the URI.
+   * This is used for preparing local resources to be included in the container launch context.
+   */
+  private def getQualifiedLocalPath(localURI: URI, hadoopConf: Configuration): Path = {
+    val qualifiedURI =
+      if (localURI.getScheme == null) {
+        // If not specified, assume this is in the local filesystem to keep the behavior
+        // consistent with that of Hadoop
+        new URI(FileSystem.getLocal(hadoopConf).makeQualified(new Path(localURI)).toString)
+      } else {
+        localURI
+      }
+    new Path(qualifiedURI)
   }
 
 }
