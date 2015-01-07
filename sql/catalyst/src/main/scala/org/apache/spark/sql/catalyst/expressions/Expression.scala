@@ -22,7 +22,6 @@ import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType, NativeType}
 import org.apache.spark.sql.catalyst.util.Metadata
-import java.sql.Date
 
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>
