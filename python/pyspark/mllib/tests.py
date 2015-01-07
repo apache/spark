@@ -332,6 +332,10 @@ class SciPyTests(PySparkTestCase):
 
 
 if __name__ == "__main__":
+    # Remove python/pyspark/mllib from the module search path so so that mllib.random
+    # doesn't mask imports of Python's build-in random module (see SPARK-3910)
+    import sys
+    sys.path.pop(0)
     if not _have_scipy:
         print "NOTE: Skipping SciPy tests as it does not seem to be installed"
     unittest.main()

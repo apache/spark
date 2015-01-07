@@ -561,4 +561,8 @@ def _test():
 
 
 if __name__ == "__main__":
+    # Remove python/pyspark/mllib from the module search path so so that mllib.random
+    # doesn't mask imports of Python's build-in random module (see SPARK-3910)
+    import sys
+    sys.path.pop(0)
     _test()
