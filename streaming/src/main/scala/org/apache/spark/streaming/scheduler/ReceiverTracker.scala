@@ -145,11 +145,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         " attempts to register.")
     } else if(numAttempts == 1) {
       logInfo("Receiver for stream " + streamId + " from " + sender.path.address +
-        " attempts to start for the " + numAttempts + " time.")
+        " attempts to start.")
     } else {
       logInfo("Receiver for stream " + streamId + " from " + sender.path.address +
-        " failed " + (numAttempts - 1) + " times, and attempts to start for the " +
-        numAttempts + " time.")
+        " failed " + (numAttempts - 1) + " times, and attempts to restart.")
     }
   }
 
