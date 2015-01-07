@@ -37,8 +37,11 @@ private[streaming] case class RegisterReceiver(
     streamId: Int,
     typ: String,
     host: String,
-    numAttempts: Int,
     receiverActor: ActorRef
+  ) extends ReceiverTrackerMessage
+private[streaming] case class StartingReceiver(
+    streamId: Int,
+    numStartAttempts: Int
   ) extends ReceiverTrackerMessage
 private[streaming] case class AddBlock(receivedBlockInfo: ReceivedBlockInfo)
   extends ReceiverTrackerMessage
@@ -130,7 +133,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       streamId: Int,
       typ: String,
       host: String,
-      numAttempts: Int,
       receiverActor: ActorRef,
       sender: ActorRef
     ) {
@@ -139,16 +141,23 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
     receiverInfo(streamId) = ReceiverInfo(
       streamId, s"${typ}-${streamId}", receiverActor, true, host)
+    logInfo(s"Receiver for stream ${streamId} from ${sender.path.address} " +
+      s"attempts to register.")
+  }
+
+  /** Report a starting receiver */
+  private def startingReceiver(
+    streamId: Int,
+    numStartAttempts: Int,
+    sender: ActorRef
+    ) {
     listenerBus.post(StreamingListenerReceiverStarted(receiverInfo(streamId)))
-    if(numAttempts == 0) {
-      logInfo("Receiver for stream " + streamId + " from " + sender.path.address +
-        " attempts to register.")
-    } else if(numAttempts == 1) {
-      logInfo("Receiver for stream " + streamId + " from " + sender.path.address +
-        " attempts to start.")
+    if(numStartAttempts > 1) {
+      logInfo(s"Receiver for stream ${streamId} from ${sender.path.address} " +
+        s"failed ${numAttempts -1} times, and attempts to restart.")
     } else {
-      logInfo("Receiver for stream " + streamId + " from " + sender.path.address +
-        " failed " + (numAttempts - 1) + " times, and attempts to restart.")
+      logInfo(s"Receiver for stream ${streamId} from ${sender.path.address} " +
+        s"attempts to start.")
     }
   }
 
@@ -203,8 +212,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   /** Actor to receive messages from the receivers. */
   private class ReceiverTrackerActor extends Actor {
     def receive = {
-      case RegisterReceiver(streamId, typ, host, numAttempts, receiverActor) =>
-        registerReceiver(streamId, typ, host, numAttempts, receiverActor, sender)
+      case RegisterReceiver(streamId, typ, host, receiverActor) =>
+        registerReceiver(streamId, typ, host, receiverActor, sender)
+        sender ! true
+      case StartingReceiver(streamId, numStartAttempts) =>
+        startingReceiver(streamId, numStartAttempts, sender)
         sender ! true
       case AddBlock(receivedBlockInfo) =>
         sender ! addBlock(receivedBlockInfo)
