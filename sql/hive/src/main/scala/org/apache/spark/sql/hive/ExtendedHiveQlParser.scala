@@ -20,29 +20,19 @@ package org.apache.spark.sql.hive
 import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.{AbstractSparkSQLParser, SqlLexical}
+import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.hive.execution.{AddJar, AddFile, HiveNativeCommand}
 
 /**
  * A parser that recognizes all HiveQL constructs together with Spark SQL specific extensions.
  */
 private[hive] class ExtendedHiveQlParser extends AbstractSparkSQLParser {
-  protected implicit def asParser(k: Keyword): Parser[String] =
-    lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
-
+  // Keyword is a convention with AbstractSparkSQLParser, which will scan all of the `Keyword`
+  // properties via reflection the class in runtime for constructing the SqlLexical object
   protected val ADD  = Keyword("ADD")
   protected val DFS  = Keyword("DFS")
   protected val FILE = Keyword("FILE")
   protected val JAR  = Keyword("JAR")
-
-  private val reservedWords =
-    this
-      .getClass
-      .getMethods
-      .filter(_.getReturnType == classOf[Keyword])
-      .map(_.invoke(this).asInstanceOf[Keyword].str)
-
-  override val lexical = new SqlLexical(reservedWords)
 
   protected lazy val start: Parser[LogicalPlan] = dfs | addJar | addFile | hiveQl
 
