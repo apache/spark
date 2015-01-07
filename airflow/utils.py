@@ -166,16 +166,13 @@ def send_email(to, subject, html_content):
     SMTP_USER = conf.get('smtp', 'SMTP_USER')
     SMTP_PASSWORD = conf.get('smtp', 'SMTP_PASSWORD')
 
-    if type(to) is type(list()):
-        to = ','.join(to)
-
-    if ';' in to:
-        to = to.replace(';', ',')
+    if type(to) is type(""):
+        to = re.split(r'[;,]\s*', to)
 
     msg = MIMEMultipart('alternative')
     msg['Subject'] = subject
     msg['From'] = SMTP_MAIL_FROM
-    msg['To'] = to
+    msg['To'] = ", ".join(to)
     mime_text = MIMEText(html_content, 'html')
     msg.attach(mime_text)
     s = smtplib.SMTP(SMTP_HOST, SMTP_PORT)
