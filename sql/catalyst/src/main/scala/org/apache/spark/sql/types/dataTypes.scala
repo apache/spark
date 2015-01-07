@@ -749,14 +749,14 @@ object StructType {
  * @group dataType
  */
 @DeveloperApi
-case class StructType(fields: Array[StructField]) extends DataType {
+case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
 
-  /**
-   * Returns all field names in a [[Seq]].
-   */
-  lazy val fieldNames: Seq[String] = fields.map(_.name)
+  /** Returns all field names in an array. */
+  def fieldNames: Array[String] = fields.map(_.name)
+
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
+
   /**
    * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
    * have a name matching the given name, `null` will be returned.
@@ -800,6 +800,12 @@ case class StructType(fields: Array[StructField]) extends DataType {
   override private[sql] def jsonValue =
     ("type" -> typeName) ~
       ("fields" -> fields.map(_.jsonValue).toSeq)
+
+  override def apply(fieldIndex: Int): StructField = fields(fieldIndex)
+
+  override def length: Int = fields.length
+
+  override def iterator: Iterator[StructField] = fields.iterator
 }
 
 
@@ -855,7 +861,7 @@ case class MapType(
  * a SchemaRDD which has class X in the schema.
  *
  * For SparkSQL to recognize UDTs, the UDT must be annotated with
- * [[org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType]].
+ * [[SQLUserDefinedType]].
  *
  * The conversion via `serialize` occurs when instantiating a `SchemaRDD` from another RDD.
  * The conversion via `deserialize` occurs when reading from a `SchemaRDD`.

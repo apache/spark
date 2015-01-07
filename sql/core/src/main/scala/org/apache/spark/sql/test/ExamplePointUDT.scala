@@ -20,8 +20,6 @@ package org.apache.spark.sql.test
 import java.util
 
 import scala.collection.JavaConverters._
-
-import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
 import org.apache.spark.sql.types._
 
 /**

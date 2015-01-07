@@ -19,9 +19,6 @@ package org.apache.spark.sql.types;
 
 import java.util.*;
 
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.MetadataBuilder;
-
 /**
  * To get/create specific data type, users should use singleton objects and factory methods
  * provided by this class.
@@ -137,9 +134,9 @@ public class DataTypes {
    * ({@code valueContainsNull}).
    */
   public static MapType createMapType(
-    DataType keyType,
-    DataType valueType,
-    boolean valueContainsNull) {
+      DataType keyType,
+      DataType valueType,
+      boolean valueContainsNull) {
     if (keyType == null) {
       throw new IllegalArgumentException("keyType should not be null.");
     }
@@ -154,10 +151,10 @@ public class DataTypes {
    * whether values of this field can be null values ({@code nullable}).
    */
   public static StructField createStructField(
-    String name,
-    DataType dataType,
-    boolean nullable,
-    Metadata metadata) {
+      String name,
+      DataType dataType,
+      boolean nullable,
+      Metadata metadata) {
     if (name == null) {
       throw new IllegalArgumentException("name should not be null.");
     }
