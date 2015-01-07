@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types.decimal.Decimal
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions._

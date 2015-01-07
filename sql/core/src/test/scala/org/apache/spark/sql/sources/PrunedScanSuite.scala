@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.types._
 
 class PrunedScanSource extends RelationProvider {
   override def createRelation(

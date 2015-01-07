@@ -24,7 +24,8 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.{SchemaRDD, StructType}
+import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.types.StructType
 
 /**
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].

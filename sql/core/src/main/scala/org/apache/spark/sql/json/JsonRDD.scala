@@ -17,9 +17,6 @@
 
 package org.apache.spark.sql.json
 
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
-import org.apache.spark.sql.types.util.DataTypeConversions
-
 import java.io.StringWriter
 
 import scala.collection.Map
@@ -34,8 +31,9 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.decimal.Decimal
 import org.apache.spark.Logging
 
 private[sql] object JsonRDD extends Logging {
@@ -246,7 +244,7 @@ private[sql] object JsonRDD extends Logging {
         // The value associated with the key is an array.
         // Handle inner structs of an array.
         def buildKeyPathForInnerStructs(v: Any, t: DataType): Seq[(String, DataType)] = t match {
-          case ArrayType(StructType(Nil), containsNull) => {
+          case ArrayType(e: StructType, containsNull) => {
             // The elements of this arrays are structs.
             v.asInstanceOf[Seq[Map[String, Any]]].flatMap(Option(_)).flatMap {
               element => allKeysWithValueTypes(element)

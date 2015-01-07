@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.sql.{DataType, StringType, ArrayType}
+import org.apache.spark.sql.types.{DataType, StringType, ArrayType}
 
 /**
  * :: AlphaComponent ::

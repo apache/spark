@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.columnar.compression
 
-import org.apache.spark.sql.catalyst.types.NativeType
+import org.apache.spark.sql.types.NativeType
 import org.apache.spark.sql.columnar._
 
 class TestCompressibleColumnBuilder[T <: NativeType](

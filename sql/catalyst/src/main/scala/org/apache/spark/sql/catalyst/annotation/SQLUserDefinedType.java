@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.annotation;
 import java.lang.annotation.*;
 
 import org.apache.spark.annotation.DeveloperApi;
-import org.apache.spark.sql.catalyst.types.UserDefinedType;
+import org.apache.spark.sql.types.UserDefinedType;
 
 /**
  * ::DeveloperApi::

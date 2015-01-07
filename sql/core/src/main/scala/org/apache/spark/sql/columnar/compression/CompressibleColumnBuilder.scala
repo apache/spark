@@ -21,7 +21,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.catalyst.types.NativeType
+import org.apache.spark.sql.types.NativeType
 import org.apache.spark.sql.columnar.{ColumnBuilder, NativeColumnBuilder}
 
 /**

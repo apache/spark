@@ -19,7 +19,7 @@ package org.apache.spark.sql.columnar
 
 import java.nio.{ByteOrder, ByteBuffer}
 
-import org.apache.spark.sql.catalyst.types.{BinaryType, NativeType, DataType}
+import org.apache.spark.sql.types.{BinaryType, NativeType, DataType}
 import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.columnar.compression.CompressibleColumnAccessor
 

@@ -29,7 +29,7 @@ import com.twitter.chill.{AllScalaRegistrar, ResourcePool}
 import org.apache.spark.{SparkEnv, SparkConf}
 import org.apache.spark.serializer.{SerializerInstance, KryoSerializer}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types.decimal.Decimal
 import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.util.MutablePair
 import org.apache.spark.util.Utils

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.types.decimal
+package org.apache.spark.sql.types.decimal
 
 import org.scalatest.{PrivateMethodTester, FunSuite}
 

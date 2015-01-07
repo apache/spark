@@ -38,11 +38,11 @@ import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.{io => hadoopIo}
 import org.apache.hadoop.mapred.InputFormat
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types.decimal.Decimal
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 
-import org.apache.spark.sql.catalyst.types.DecimalType
+import org.apache.spark.sql.types.DecimalType
 
 class HiveFunctionWrapper(var functionClassName: String) extends java.io.Serializable {
   // for Serialization

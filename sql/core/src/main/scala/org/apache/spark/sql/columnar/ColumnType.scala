@@ -24,7 +24,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.MutableRow
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.execution.SparkSqlSerializer
 
 /**

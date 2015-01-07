@@ -20,7 +20,7 @@ package org.apache.spark.sql.columnar
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 class ColumnStatsSuite extends FunSuite {
   testColumnStats(classOf[ByteColumnStats], BYTE, Row(Byte.MaxValue, Byte.MinValue, 0))

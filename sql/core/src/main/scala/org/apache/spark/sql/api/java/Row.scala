@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.api.java
 
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types.decimal.Decimal
 
 import scala.annotation.varargs
 import scala.collection.convert.Wrappers.{JListWrapper, JMapWrapper}

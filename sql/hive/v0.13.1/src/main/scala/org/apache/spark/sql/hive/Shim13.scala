@@ -38,8 +38,8 @@ import org.apache.hadoop.hive.serde2.{Deserializer, ColumnProjectionUtils}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.types.DecimalType
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.types.decimal.Decimal
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions

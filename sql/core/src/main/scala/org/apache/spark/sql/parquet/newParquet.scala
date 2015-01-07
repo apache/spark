@@ -33,7 +33,7 @@ import org.apache.spark.rdd.{NewHadoopPartition, RDD}
 
 import org.apache.spark.sql.{SQLConf, Row, SQLContext}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types.{StringType, IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{StringType, IntegerType, StructField, StructType}
 import org.apache.spark.sql.sources._
 
 import scala.collection.JavaConversions._

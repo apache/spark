@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType, NativeType}
-import org.apache.spark.sql.catalyst.util.Metadata
+import org.apache.spark.sql.types._
 
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>

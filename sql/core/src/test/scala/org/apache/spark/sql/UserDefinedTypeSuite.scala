@@ -21,7 +21,7 @@ import scala.beans.{BeanInfo, BeanProperty}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
-import org.apache.spark.sql.catalyst.types.UserDefinedType
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.TestSQLContext._
 
 @SQLUserDefinedType(udt = classOf[MyDenseVectorUDT])

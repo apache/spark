@@ -23,8 +23,8 @@ import java.util.{Locale, TimeZone}
 
 import org.apache.hadoop.hive.serde2.io.DoubleWritable
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.decimal.Decimal
 import org.scalatest.FunSuite
 
 import org.apache.hadoop.hive.ql.udf.UDAFPercentile
@@ -93,7 +93,6 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
   val row = data.map(_.eval(null))
   val dataTypes = data.map(_.dataType)
 
-  import scala.collection.JavaConversions._
   def toWritableInspector(dataType: DataType): ObjectInspector = dataType match {
     case ArrayType(tpe, _) =>
       ObjectInspectorFactory.getStandardListObjectInspector(toWritableInspector(tpe))
@@ -115,7 +114,8 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     case DecimalType() => PrimitiveObjectInspectorFactory.writableHiveDecimalObjectInspector
     case StructType(fields) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
-        fields.map(f => f.name), fields.map(f => toWritableInspector(f.dataType)))
+        java.util.Arrays.asList(fields.map(f => f.name) :_*),
+        java.util.Arrays.asList(fields.map(f => toWritableInspector(f.dataType)) :_*))
   }
 
   def checkDataType(dt1: Seq[DataType], dt2: Seq[DataType]): Unit = {

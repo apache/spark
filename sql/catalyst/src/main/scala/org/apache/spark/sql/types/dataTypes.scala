@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.types
+package org.apache.spark.sql.types
 
 import java.sql.{Date, Timestamp}
 
-import scala.math.Numeric.{FloatAsIfIntegral, BigDecimalAsIfIntegral, DoubleAsIfIntegral}
+import scala.math.Numeric.{FloatAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{TypeTag, runtimeMirror, typeTag}
 import scala.util.parsing.combinator.RegexParsers
@@ -31,10 +31,10 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression, Row}
-import org.apache.spark.sql.catalyst.types.decimal._
-import org.apache.spark.sql.catalyst.util.Metadata
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.types.decimal._
 import org.apache.spark.util.Utils
+
 
 object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
@@ -140,7 +140,7 @@ object DataType {
 
     protected lazy val structType: Parser[DataType] =
       "StructType\\([A-zA-z]*\\(".r ~> repsep(structField, ",") <~ "))" ^^ {
-        case fields => new StructType(fields)
+        case fields => StructType(fields)
       }
 
     protected lazy val dataType: Parser[DataType] =
@@ -181,7 +181,7 @@ object DataType {
   /**
    * Compares two types, ignoring nullability of ArrayType, MapType, StructType.
    */
-  def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
+  private[sql] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
     (left, right) match {
       case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
         equalsIgnoreNullability(leftElementType, rightElementType)
@@ -200,6 +200,15 @@ object DataType {
   }
 }
 
+
+/**
+ * :: DeveloperApi ::
+ *
+ * The base type of all Spark SQL data types.
+ *
+ * @group dataType
+ */
+@DeveloperApi
 abstract class DataType {
   /** Matches any expression that evaluates to this DataType */
   def unapply(a: Expression): Boolean = a match {
@@ -218,7 +227,17 @@ abstract class DataType {
   def prettyJson: String = pretty(render(jsonValue))
 }
 
+
+/**
+ * :: DeveloperApi ::
+ *
+ * The data type representing `NULL` values.
+ *
+ * @group dataType
+ */
+@DeveloperApi
 case object NullType extends DataType
+
 
 object NativeType {
   val all = Seq(
@@ -237,9 +256,11 @@ object NativeType {
     StringType -> 4096)
 }
 
+
 trait PrimitiveType extends DataType {
   override def isPrimitive = true
 }
+
 
 object PrimitiveType {
   private val nonDecimals = Seq(NullType, DateType, TimestampType, BinaryType) ++ NativeType.all
@@ -267,12 +288,30 @@ abstract class NativeType extends DataType {
   }
 }
 
+
+/**
+ * :: DeveloperApi ::
+ *
+ * The data type representing `String` values
+ *
+ * @group dataType
+ */
+@DeveloperApi
 case object StringType extends NativeType with PrimitiveType {
   private[sql] type JvmType = String
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
 }
 
+
+/**
+ * :: DeveloperApi ::
+ *
+ * The data type representing `Array[Byte]` values.
+ *
+ * @group dataType
+ */
+@DeveloperApi
 case object BinaryType extends NativeType with PrimitiveType {
   private[sql] type JvmType = Array[Byte]
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
@@ -287,12 +326,30 @@ case object BinaryType extends NativeType with PrimitiveType {
   }
 }
 
+
+/**
+ * :: DeveloperApi ::
+ *
+ * The data type representing `Boolean` values.
+ *
+ *@group dataType
+ */
+@DeveloperApi
 case object BooleanType extends NativeType with PrimitiveType {
   private[sql] type JvmType = Boolean
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
 }
 
+
+/**
+ * :: DeveloperApi ::
+ *
+ * The data type representing `java.sql.Timestamp` values.
+ *
+ * @group dataType
+ */
+@DeveloperApi
 case object TimestampType extends NativeType {
   private[sql] type JvmType = Timestamp
 
@@ -303,6 +360,15 @@ case object TimestampType extends NativeType {
   }
 }
 
+
+/**
+ * :: DeveloperApi ::
+ *
+ * The data type representing `java.sql.Date` values.
+ *
+ * @group dataType
+ */
+@DeveloperApi
 case object DateType extends NativeType {
   private[sql] type JvmType = Date
 
@@ -313,6 +379,7 @@ case object DateType extends NativeType {
   }
 }
 
+
 abstract class NumericType extends NativeType with PrimitiveType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
@@ -322,9 +389,11 @@ abstract class NumericType extends NativeType with PrimitiveType {
   private[sql] val numeric: Numeric[JvmType]
 }
 
+
 object NumericType {
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
 }
+
 
 /** Matcher for any expressions that evaluate to [[IntegralType]]s */
 object IntegralType {
@@ -334,10 +403,20 @@ object IntegralType {
   }
 }
 
-abstract class IntegralType extends NumericType {
+
+sealed abstract class IntegralType extends NumericType {
   private[sql] val integral: Integral[JvmType]
 }
 
+
+/**
+ * :: DeveloperApi ::
+ *
+ * The data type representing `Long` values.
+ *
+ * @group dataType
+ */
+@DeveloperApi
 case object LongType extends IntegralType {
   private[sql] type JvmType = Long
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
@@ -346,6 +425,15 @@ case object LongType extends IntegralType {
   private[sql] val ordering = implicitly[Ordering[JvmType]]
 }
 
+
+/**
+ * :: DeveloperApi ::
+ *
+ * The data type representing `Int` values.
+ *
+ * @group dataType
+ */
+@DeveloperApi
 case object IntegerType extends IntegralType {
   private[sql] type JvmType = Int
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
@@ -354,6 +442,15 @@ case object IntegerType extends IntegralType {
   private[sql] val ordering = implicitly[Ordering[JvmType]]
 }
 
+
+/**
+ * :: DeveloperApi ::
+ *
+ * The data type representing `Short` values.
+ *
+ * @group dataType
+ */
+@DeveloperApi
 case object ShortType extends IntegralType {
   private[sql] type JvmType = Short
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
@@ -362,6 +459,15 @@ case object ShortType extends IntegralType {
   private[sql] val ordering = implicitly[Ordering[JvmType]]
 }
 
+
+/**
+ * :: DeveloperApi ::
+ *
+ * The data type representing `Byte` values.
+ *
+ * @group dataType
+ */
+@DeveloperApi
 case object ByteType extends IntegralType {
   private[sql] type JvmType = Byte
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
@@ -369,6 +475,7 @@ case object ByteType extends IntegralType {
   private[sql] val integral = implicitly[Integral[Byte]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
 }
+
 
 /** Matcher for any expressions that evaluate to [[FractionalType]]s */
 object FractionalType {
@@ -378,15 +485,28 @@ object FractionalType {
   }
 }
 
-abstract class FractionalType extends NumericType {
+
+sealed abstract class FractionalType extends NumericType {
   private[sql] val fractional: Fractional[JvmType]
   private[sql] val asIntegral: Integral[JvmType]
 }
 
+
 /** Precision parameters for a Decimal */
 case class PrecisionInfo(precision: Int, scale: Int)
 
-/** A Decimal that might have fixed precision and scale, or unlimited values for these */
+
+/**
+ * :: DeveloperApi ::
+ *
+ * The data type representing `scala.math.BigDecimal` values.
+ * A Decimal that might have fixed precision and scale, or unlimited values for these.
+ *
+ * TODO(matei): explain precision and scale
+ *
+ * @group dataType
+ */
+@DeveloperApi
 case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalType {
   private[sql] type JvmType = Decimal
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
@@ -405,6 +525,7 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
     case None => "DecimalType()"
   }
 }
+
 
 /** Extra factory methods and pattern matchers for Decimals */
 object DecimalType {
@@ -437,6 +558,15 @@ object DecimalType {
   }
 }
 
+
+/**
+ * :: DeveloperApi ::
+ *
+ * The data type representing `Double` values.
+ *
+ * @group dataType
+ */
+@DeveloperApi
 case object DoubleType extends FractionalType {
   private[sql] type JvmType = Double
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
@@ -446,6 +576,15 @@ case object DoubleType extends FractionalType {
   private[sql] val asIntegral = DoubleAsIfIntegral
 }
 
+
+/**
+ * :: DeveloperApi ::
+ *
+ * The data type representing `Float` values.
+ *
+ * @group dataType
+ */
+@DeveloperApi
 case object FloatType extends FractionalType {
   private[sql] type JvmType = Float
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
@@ -455,18 +594,29 @@ case object FloatType extends FractionalType {
   private[sql] val asIntegral = FloatAsIfIntegral
 }
 
+
 object ArrayType {
   /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
   def apply(elementType: DataType): ArrayType = ArrayType(elementType, true)
 }
 
+
 /**
+ * :: DeveloperApi ::
+ *
  * The data type for collections of multiple values.
  * Internally these are represented as columns that contain a ``scala.collection.Seq``.
  *
+ * An [[ArrayType]] object comprises two fields, `elementType: [[DataType]]` and
+ * `containsNull: Boolean`. The field of `elementType` is used to specify the type of
+ * array elements. The field of `containsNull` is used to specify if the array has `null` values.
+ *
  * @param elementType The data type of values.
  * @param containsNull Indicates if values have `null` values
+ *
+ * @group dataType
  */
+@DeveloperApi
 case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(
@@ -479,6 +629,7 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
       ("elementType" -> elementType.jsonValue) ~
       ("containsNull" -> containsNull)
 }
+
 
 /**
  * A field inside a StructType.
@@ -510,12 +661,85 @@ case class StructField(
   }
 }
 
+
 object StructType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
     StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
+
+  def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
+
+  def apply(fields: java.util.List[StructField]): StructType = {
+    StructType(fields.toArray.asInstanceOf[Array[StructField]])
+  }
 }
 
-case class StructType(fields: Seq[StructField]) extends DataType {
+
+/**
+ * :: DeveloperApi ::
+ *
+ * A [[StructType]] object can be constructed by
+ * {{{
+ * StructType(fields: Seq[StructField])
+ * }}}
+ * For a [[StructType]] object, one or multiple [[StructField]]s can be extracted by names.
+ * If multiple [[StructField]]s are extracted, a [[StructType]] object will be returned.
+ * If a provided name does not have a matching field, it will be ignored. For the case
+ * of extracting a single StructField, a `null` will be returned.
+ * Example:
+ * {{{
+ * import org.apache.spark.sql._
+ *
+ * val struct =
+ *   StructType(
+ *     StructField("a", IntegerType, true) ::
+ *     StructField("b", LongType, false) ::
+ *     StructField("c", BooleanType, false) :: Nil)
+ *
+ * // Extract a single StructField.
+ * val singleField = struct("b")
+ * // singleField: StructField = StructField(b,LongType,false)
+ *
+ * // This struct does not have a field called "d". null will be returned.
+ * val nonExisting = struct("d")
+ * // nonExisting: StructField = null
+ *
+ * // Extract multiple StructFields. Field names are provided in a set.
+ * // A StructType object will be returned.
+ * val twoFields = struct(Set("b", "c"))
+ * // twoFields: StructType =
+ * //   StructType(List(StructField(b,LongType,false), StructField(c,BooleanType,false)))
+ *
+ * // Those names do not have matching fields will be ignored.
+ * // For the case shown below, "d" will be ignored and
+ * // it is treated as struct(Set("b", "c")).
+ * val ignoreNonExisting = struct(Set("b", "c", "d"))
+ * // ignoreNonExisting: StructType =
+ * //   StructType(List(StructField(b,LongType,false), StructField(c,BooleanType,false)))
+ * }}}
+ *
+ * A [[org.apache.spark.sql.catalyst.expressions.Row]] object is used as a value of the StructType.
+ * Example:
+ * {{{
+ * import org.apache.spark.sql._
+ *
+ * val innerStruct =
+ *   StructType(
+ *     StructField("f1", IntegerType, true) ::
+ *     StructField("f2", LongType, false) ::
+ *     StructField("f3", BooleanType, false) :: Nil)
+ *
+ * val struct = StructType(
+ *   StructField("a", innerStruct, true) :: Nil)
+ *
+ * // Create a Row with the schema defined by struct
+ * val row = Row(Row(1, 2, true))
+ * // row: Row = [[1,2,true]]
+ * }}}
+ *
+ * @group dataType
+ */
+@DeveloperApi
+case class StructType(fields: Array[StructField]) extends DataType {
 
   /**
    * Returns all field names in a [[Seq]].
@@ -565,8 +789,9 @@ case class StructType(fields: Seq[StructField]) extends DataType {
 
   override private[sql] def jsonValue =
     ("type" -> typeName) ~
-      ("fields" -> fields.map(_.jsonValue))
+      ("fields" -> fields.map(_.jsonValue).toSeq)
 }
+
 
 object MapType {
   /**
@@ -574,14 +799,20 @@ object MapType {
    * The `valueContainsNull` is true.
    */
   def apply(keyType: DataType, valueType: DataType): MapType =
-    MapType(keyType: DataType, valueType: DataType, true)
+    MapType(keyType: DataType, valueType: DataType, valueContainsNull = true)
 }
 
+
 /**
+ * :: DeveloperApi ::
+ *
  * The data type for Maps. Keys in a map are not allowed to have `null` values.
+ *
  * @param keyType The data type of map keys.
  * @param valueType The data type of map values.
  * @param valueContainsNull Indicates if map values have `null` values.
+ *
+ * @group dataType
  */
 case class MapType(
     keyType: DataType,
@@ -601,6 +832,7 @@ case class MapType(
       ("valueType" -> valueType.jsonValue) ~
       ("valueContainsNull" -> valueContainsNull)
 }
+
 
 /**
  * ::DeveloperApi::

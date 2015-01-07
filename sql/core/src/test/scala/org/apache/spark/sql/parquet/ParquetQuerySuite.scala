@@ -29,10 +29,10 @@ import parquet.io.api.Binary
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types.IntegerType
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class TestRDDEntry(key: Int, value: String)

@@ -25,7 +25,7 @@ import scala.reflect.runtime.universe.runtimeMirror
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{MutableRow, SpecificMutableRow}
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.columnar._
 import org.apache.spark.util.Utils
 
