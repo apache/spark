@@ -38,7 +38,6 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.sources.MetastoreTypes
 import org.apache.spark.util.Utils
 
 /* Implicit conversions */
@@ -438,7 +437,7 @@ private[hive] case class MetastoreRelation
   implicit class SchemaAttribute(f: FieldSchema) {
     def toAttribute = AttributeReference(
       f.getName,
-      HiveMetastoreTypes.toDataType(f.getType),
+      sqlContext.ddlParser.parseType(f.getType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
     )(qualifiers = Seq(alias.getOrElse(tableName)))
@@ -459,9 +458,8 @@ private[hive] case class MetastoreRelation
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
 }
 
-
-object HiveMetastoreTypes extends MetastoreTypes {
-  override def toMetastoreType(dt: DataType): String = dt match {
+object HiveMetastoreTypes {
+  def toMetastoreType(dt: DataType): String = dt match {
     case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"
     case StructType(fields) =>
       s"struct<${fields.map(f => s"${f.name}:${toMetastoreType(f.dataType)}").mkString(",")}>"
