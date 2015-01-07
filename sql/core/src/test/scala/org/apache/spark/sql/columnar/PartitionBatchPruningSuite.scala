@@ -105,7 +105,9 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
 
     test(query) {
       val schemaRdd = sql(query)
-      assertResult(expectedQueryResult.toArray, "Wrong query result") {
+      val queryExecution = schemaRdd.queryExecution
+
+      assertResult(expectedQueryResult.toArray, s"Wrong query result: $queryExecution") {
         schemaRdd.collect().map(_.head).toArray
       }
 
@@ -113,8 +115,10 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
         case in: InMemoryColumnarTableScan => (in.readPartitions.value, in.readBatches.value)
       }.head
 
-      assert(readBatches === expectedReadBatches, "Wrong number of read batches")
-      assert(readPartitions === expectedReadPartitions, "Wrong number of read partitions")
+      assert(readBatches === expectedReadBatches, s"Wrong number of read batches: $queryExecution")
+      assert(
+        readPartitions === expectedReadPartitions,
+        s"Wrong number of read partitions: $queryExecution")
     }
   }
 }

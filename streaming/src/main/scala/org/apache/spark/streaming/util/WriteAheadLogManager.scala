@@ -19,11 +19,11 @@ package org.apache.spark.streaming.util
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
 import WriteAheadLogManager._
@@ -124,8 +124,12 @@ private[streaming] class WriteAheadLogManager(
    * files, which is usually based on the local system time. So if there is coordination necessary
    * between the node calculating the threshTime (say, driver node), and the local system time
    * (say, worker node), the caller has to take account of possible time skew.
+   *
+   * If waitForCompletion is set to true, this method will return only after old logs have been
+   * deleted. This should be set to true only for testing. Else the files will be deleted
+   * asynchronously.
    */
-  def cleanupOldLogs(threshTime: Long): Unit = {
+  def cleanupOldLogs(threshTime: Long, waitForCompletion: Boolean): Unit = {
     val oldLogFiles = synchronized { pastLogs.filter { _.endTime < threshTime } }
     logInfo(s"Attempting to clear ${oldLogFiles.size} old log files in $logDirectory " +
       s"older than $threshTime: ${oldLogFiles.map { _.path }.mkString("\n")}")
@@ -146,9 +150,14 @@ private[streaming] class WriteAheadLogManager(
       logInfo(s"Cleared log files in $logDirectory older than $threshTime")
     }
     if (!executionContext.isShutdown) {
-      Future { deleteFiles() }
+      val f = Future { deleteFiles() }
+      if (waitForCompletion) {
+        import scala.concurrent.duration._
+        Await.ready(f, 1 second)
+      }
     }
   }
+
 
   /** Stop the manager, close any open log writer */
   def stop(): Unit = synchronized {

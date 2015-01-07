@@ -280,7 +280,7 @@ class JsonProtocolSuite extends FunSuite {
 
   private def testBlockManagerId(id: BlockManagerId) {
     val newId = JsonProtocol.blockManagerIdFromJson(JsonProtocol.blockManagerIdToJson(id))
-    assertEquals(id, newId)
+    assert(id === newId)
   }
 
   private def testTaskInfo(info: TaskInfo) {
@@ -335,22 +335,8 @@ class JsonProtocolSuite extends FunSuite {
         assertEquals(e1.jobResult, e2.jobResult)
       case (e1: SparkListenerEnvironmentUpdate, e2: SparkListenerEnvironmentUpdate) =>
         assertEquals(e1.environmentDetails, e2.environmentDetails)
-      case (e1: SparkListenerBlockManagerAdded, e2: SparkListenerBlockManagerAdded) =>
-        assert(e1.maxMem === e2.maxMem)
-        assert(e1.time === e2.time)
-        assertEquals(e1.blockManagerId, e2.blockManagerId)
-      case (e1: SparkListenerBlockManagerRemoved, e2: SparkListenerBlockManagerRemoved) =>
-        assert(e1.time === e2.time)
-        assertEquals(e1.blockManagerId, e2.blockManagerId)
-      case (e1: SparkListenerUnpersistRDD, e2: SparkListenerUnpersistRDD) =>
-        assert(e1.rddId == e2.rddId)
-      case (e1: SparkListenerApplicationStart, e2: SparkListenerApplicationStart) =>
-        assert(e1.appName == e2.appName)
-        assert(e1.time == e2.time)
-        assert(e1.sparkUser == e2.sparkUser)
-      case (e1: SparkListenerApplicationEnd, e2: SparkListenerApplicationEnd) =>
-        assert(e1.time == e2.time)
-      case (SparkListenerShutdown, SparkListenerShutdown) =>
+      case (e1, e2) =>
+        assert(e1 === e2)
       case _ => fail("Events don't match in types!")
     }
   }
@@ -435,16 +421,6 @@ class JsonProtocolSuite extends FunSuite {
     assert(metrics1.bytesRead === metrics2.bytesRead)
   }
 
-  private def assertEquals(bm1: BlockManagerId, bm2: BlockManagerId) {
-    if (bm1 == null || bm2 == null) {
-      assert(bm1 === bm2)
-    } else {
-      assert(bm1.executorId === bm2.executorId)
-      assert(bm1.host === bm2.host)
-      assert(bm1.port === bm2.port)
-    }
-  }
-
   private def assertEquals(result1: JobResult, result2: JobResult) {
     (result1, result2) match {
       case (JobSucceeded, JobSucceeded) =>
@@ -462,7 +438,7 @@ class JsonProtocolSuite extends FunSuite {
         assert(r1.shuffleId === r2.shuffleId)
         assert(r1.mapId === r2.mapId)
         assert(r1.reduceId === r2.reduceId)
-        assertEquals(r1.bmAddress, r2.bmAddress)
+        assert(r1.bmAddress === r2.bmAddress)
         assert(r1.message === r2.message)
       case (r1: ExceptionFailure, r2: ExceptionFailure) =>
         assert(r1.className === r2.className)

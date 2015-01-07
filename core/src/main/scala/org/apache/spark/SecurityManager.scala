@@ -151,8 +151,8 @@ private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging with 
 
   private val authOn = sparkConf.getBoolean("spark.authenticate", false)
   // keep spark.ui.acls.enable for backwards compatibility with 1.0
-  private var aclsOn = sparkConf.getOption("spark.acls.enable").getOrElse(
-    sparkConf.get("spark.ui.acls.enable", "false")).toBoolean
+  private var aclsOn =
+    sparkConf.getBoolean("spark.acls.enable", sparkConf.getBoolean("spark.ui.acls.enable", false))
 
   // admin acls should be set before view or modify acls
   private var adminAcls: Set[String] =
