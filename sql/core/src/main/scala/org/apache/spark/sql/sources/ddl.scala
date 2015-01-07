@@ -161,9 +161,12 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
     }
 
   protected lazy val structType: Parser[DataType] =
-    STRUCT ~> "<" ~> repsep(structField, ",") <~ ">" ^^ {
-      case fields => new StructType(fields)
-    }
+    (STRUCT ~> "<" ~> repsep(structField, ",") <~ ">" ^^ {
+    case fields => new StructType(fields)
+    }) |
+    (STRUCT ~> "<>" ^^ {
+      case fields => new StructType(Nil)
+    })
 
   private[sql] lazy val dataType: Parser[DataType] =
     arrayType |
