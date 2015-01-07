@@ -842,10 +842,34 @@ private[spark] class Master(
   }
 }
 
+object SparkUrl {
+
+  def unapply(sparkUrl: String): Option[(String, Int)] = {
+    try {
+      val uri = new java.net.URI(sparkUrl)
+      val host = uri.getHost
+      val port = uri.getPort
+      if (uri.getScheme != "spark" ||
+        host == null ||
+        port < 0 ||
+        (uri.getPath != null && !uri.getPath.isEmpty) || // uri.getPath returns "" instead of null
+        uri.getFragment != null ||
+        uri.getQuery != null ||
+        uri.getUserInfo != null) {
+        None
+      } else {
+        Some((host, port))
+      }
+    } catch {
+      case e: java.net.URISyntaxException => None
+    }
+  }
+
+}
+
 private[spark] object Master extends Logging {
   val systemName = "sparkMaster"
   private val actorName = "Master"
-  val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
 
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
@@ -855,14 +879,28 @@ private[spark] object Master extends Logging {
     actorSystem.awaitTermination()
   }
 
-  /** Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:ip`. */
-  def toAkkaUrl(sparkUrl: String): String = {
-    sparkUrl match {
-      case sparkUrlRegex(host, port) =>
-        "akka.tcp://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
-      case _ =>
-        throw new SparkException("Invalid master URL: " + sparkUrl)
-    }
+  /**
+   * Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:ip`.
+   *
+   * @throws SparkException if the url is invalid
+   */
+  def toAkkaUrl(sparkUrl: String): String = sparkUrl match {
+    case SparkUrl(host, port) =>
+      "akka.tcp://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
+    case _ =>
+      throw new SparkException("Invalid master URL: " + sparkUrl)
+  }
+
+  /**
+   * Returns an akka `Address` for the Master actor given a sparkUrl `spark://host:ip`.
+   *
+   * @throws SparkException if the url is invalid
+   */
+  def toAkkaAddress(sparkUrl: String): Address = sparkUrl match {
+    case SparkUrl(host, port) =>
+      Address("akka.tcp", systemName, host, port)
+    case _ =>
+      throw new SparkException("Invalid master URL: " + sparkUrl)
   }
 
   def startSystemAndActor(

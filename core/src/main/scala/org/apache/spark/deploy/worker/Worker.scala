@@ -174,12 +174,7 @@ private[spark] class Worker(
     activeMasterUrl = url
     activeMasterWebUiUrl = uiUrl
     master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
-    masterAddress = activeMasterUrl match {
-      case Master.sparkUrlRegex(_host, _port) =>
-        Address("akka.tcp", Master.systemName, _host, _port.toInt)
-      case x =>
-        throw new SparkException("Invalid spark URL: " + x)
-    }
+    masterAddress = Master.toAkkaAddress(activeMasterUrl)
     connected = true
     // Cancel any outstanding re-registration attempts because we found a new master
     registrationRetryTimer.foreach(_.cancel())
@@ -189,8 +184,12 @@ private[spark] class Worker(
   private def tryRegisterAllMasters() {
     for (masterUrl <- masterUrls) {
       logInfo("Connecting to master " + masterUrl + "...")
-      val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
-      actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+      try {
+        val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
+        actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+      } catch {
+        case e: SparkException => logError(e.getMessage, e)
+      }
     }
   }
 

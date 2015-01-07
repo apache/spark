@@ -77,8 +77,12 @@ private[spark] class AppClient(
     def tryRegisterAllMasters() {
       for (masterUrl <- masterUrls) {
         logInfo("Connecting to master " + masterUrl + "...")
-        val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
-        actor ! RegisterApplication(appDescription)
+        try {
+          val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
+          actor ! RegisterApplication(appDescription)
+        } catch {
+          case e: SparkException => logError(e.getMessage, e)
+        }
       }
     }
 
@@ -105,18 +109,17 @@ private[spark] class AppClient(
     def changeMaster(url: String) {
       activeMasterUrl = url
       master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
-      masterAddress = activeMasterUrl match {
-        case Master.sparkUrlRegex(host, port) =>
-          Address("akka.tcp", Master.systemName, host, port.toInt)
-        case x =>
-          throw new SparkException("Invalid spark URL: " + x)
-      }
+      masterAddress = Master.toAkkaAddress(activeMasterUrl)
     }
 
     private def isPossibleMaster(remoteUrl: Address) = {
-      masterUrls.map(s => Master.toAkkaUrl(s))
-        .map(u => AddressFromURIString(u).hostPort)
-        .contains(remoteUrl.hostPort)
+      masterUrls.flatMap(s => {
+        try {
+          Some(AddressFromURIString(Master.toAkkaUrl(s)).hostPort)
+        } catch {
+          case e: SparkException => None // ignore invalid urls
+        }
+      }).contains(remoteUrl.hostPort)
     }
 
     override def receiveWithLogging = {

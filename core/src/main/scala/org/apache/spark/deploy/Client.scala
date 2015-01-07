@@ -24,7 +24,7 @@ import akka.pattern.ask
 import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SparkException, Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
@@ -39,7 +39,11 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
   val timeout = AkkaUtils.askTimeout(conf)
 
   override def preStart() = {
-    masterActor = context.actorSelection(Master.toAkkaUrl(driverArgs.master))
+    try {
+      masterActor = context.actorSelection(Master.toAkkaUrl(driverArgs.master))
+    } catch {
+      case e: SparkException => logError(e.getMessage, e)
+    }
 
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
