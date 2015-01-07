@@ -1328,6 +1328,17 @@
     </profile>
 
     <profile>
+      <id>hadoop-2.5</id>
+      <properties>
+        <hadoop.version>2.5.0</hadoop.version>
+        <protobuf.version>2.5.0</protobuf.version>
+        <jets3t.version>0.9.2</jets3t.version>
+        <commons.math3.version>3.1.1</commons.math3.version>
+        <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+      </properties>
+    </profile>
+
+    <profile>
       <id>yarn</id>
       <modules>
         <module>yarn</module>
