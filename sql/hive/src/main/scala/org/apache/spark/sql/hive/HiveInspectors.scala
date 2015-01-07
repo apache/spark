@@ -43,7 +43,7 @@ import scala.collection.JavaConversions._
  *     long / scala.Long
  *     short / scala.Short
  *     byte / scala.Byte
- *     org.apache.spark.sql.catalyst.types.decimal.Decimal
+ *     org.apache.spark.sql.types.decimal.Decimal
  *     Array[Byte]
  *     java.sql.Date
  *     java.sql.Timestamp
