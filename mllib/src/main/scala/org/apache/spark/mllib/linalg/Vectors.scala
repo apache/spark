@@ -427,6 +427,10 @@ class DenseVector(val values: Array[Double]) extends Vector {
   }
 }
 
+object DenseVector {
+  def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
+}
+
 /**
  * A sparse vector represented by an index array and an value array.
  *
@@ -473,4 +477,9 @@ class SparseVector(
       i += 1
     }
   }
+}
+
+object SparseVector {
+  def unapply(sv: SparseVector): Option[(Int, Array[Int], Array[Double])] =
+    Some((sv.size, sv.indices, sv.values))
 }
