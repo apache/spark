@@ -68,8 +68,8 @@ private[spark] class YarnClientSchedulerBackend(
     // List of (target Client argument, environment variable, Spark property)
     val optionTuples =
       List(
-        ("--driver-memory", "SPARK_MASTER_MEMORY", "spark.master.memory"),
-        ("--driver-memory", "SPARK_DRIVER_MEMORY", "spark.driver.memory"),
+        ("--driver-memory", "SPARK_AM_MEMORY", "spark.yarn.am.memory"),
+        ("--driver-cores", "SPARK_AM_CORES", "spark.yarn.am.cores"),
         ("--num-executors", "SPARK_WORKER_INSTANCES", "spark.executor.instances"),
         ("--num-executors", "SPARK_EXECUTOR_INSTANCES", "spark.executor.instances"),
         ("--executor-memory", "SPARK_WORKER_MEMORY", "spark.executor.memory"),

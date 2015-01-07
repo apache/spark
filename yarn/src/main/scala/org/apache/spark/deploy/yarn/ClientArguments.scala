@@ -35,6 +35,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var executorCores = 1
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
   var amQueue = sparkConf.get("spark.yarn.queue", "default")
+  var amCores = 1
   var amMemory: Int = 512 // MB
   var appName: String = "Spark"
   var priority = 0
@@ -43,8 +44,13 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
   // Additional memory to allocate to containers
   // For now, use driver's memory overhead as our AM container's memory overhead
-  val amMemoryOverhead = sparkConf.getInt("spark.yarn.driver.memoryOverhead",
-    math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
+  val amMemoryOverhead = if (userClass != null) {
+    sparkConf.getInt("spark.yarn.driver.memoryOverhead",
+      math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
+  } else {
+    sparkConf.getInt("spark.yarn.am.memoryOverhead",
+      math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
+    }
 
   val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
@@ -119,6 +125,10 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
             println("--master-memory is deprecated. Use --driver-memory instead.")
           }
           amMemory = value
+          args = tail
+
+        case ("--driver-cores") :: IntParam(value) :: tail =>
+          amCores = value
           args = tail
 
         case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>
