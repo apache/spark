@@ -38,7 +38,8 @@ import org.apache.spark.annotation.DeveloperApi
  * @param map an immutable map that stores the data
  */
 @DeveloperApi
-sealed class Metadata private[types] (private[types] val map: Map[String, Any]) extends Serializable {
+sealed class Metadata private[types] (private[types] val map: Map[String, Any])
+  extends Serializable {
 
   /** Tests whether this Metadata contains a binding for a key. */
   def contains(key: String): Boolean = map.contains(key)
