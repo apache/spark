@@ -93,9 +93,9 @@ class NewTableScanSuite extends DataSourceTest {
   before {
     sql(
       """
-        |CREATE TEMPORARY TABLE oneToTen(stringField string, intField int, longField bigint,
-        |floatField float, doubleField double, shortField smallint, byteField tinyint,
-        |booleanField boolean, decimalField decimal(10,2), dateField date, timestampField timestamp)
+        |CREATE TEMPORARY TABLE oneToTen(stringField stRIng, intField iNt, longField Bigint,
+        |floatField flOat, doubleField doubLE, shortField smaLlint, byteField tinyint,
+        |booleanField boolean, decimalField decimal(10,2), dateField dAte, timestampField tiMestamp)
         |USING org.apache.spark.sql.sources.AllDataTypesScanSource
         |OPTIONS (
         |  From '1',

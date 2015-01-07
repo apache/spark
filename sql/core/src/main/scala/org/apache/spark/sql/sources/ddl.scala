@@ -19,10 +19,9 @@ package org.apache.spark.sql.sources
 
 import scala.language.implicitConversions
 import scala.util.parsing.combinator.syntactical.StandardTokenParsers
-import scala.util.parsing.combinator.{RegexParsers, PackratParsers}
+import scala.util.parsing.combinator.PackratParsers
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.RunnableCommand
@@ -44,17 +43,42 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
     }
   }
 
+  def parseType(input: String): DataType = {
+    phrase(dataType)(new lexical.Scanner(input)) match {
+      case Success(r, x) => r
+      case x =>
+        sys.error(s"Unsupported dataType: $x")
+    }
+  }
+
   protected case class Keyword(str: String)
 
   protected implicit def asParser(k: Keyword): Parser[String] =
     lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
 
   protected val CREATE = Keyword("CREATE")
-  protected val DECIMAL = Keyword("DECIMAL")
   protected val TEMPORARY = Keyword("TEMPORARY")
   protected val TABLE = Keyword("TABLE")
   protected val USING = Keyword("USING")
   protected val OPTIONS = Keyword("OPTIONS")
+
+  // Data types.
+  protected val STRING = Keyword("STRING")
+  protected val FLOAT = Keyword("FLOAT")
+  protected val INT = Keyword("INT")
+  protected val TINYINT = Keyword("TINYINT")
+  protected val SMALLINT = Keyword("SMALLINT")
+  protected val DOUBLE = Keyword("DOUBLE")
+  protected val BIGINT = Keyword("BIGINT")
+  protected val BINARY = Keyword("BINARY")
+  protected val BOOLEAN = Keyword("BOOLEAN")
+  protected val DECIMAL = Keyword("DECIMAL")
+  protected val DATE = Keyword("DATE")
+  protected val TIMESTAMP = Keyword("TIMESTAMP")
+  protected val VARCHAR = Keyword("VARCHAR")
+  protected val ARRAY = Keyword("ARRAY")
+  protected val MAP = Keyword("MAP")
+  protected val STRUCT = Keyword("STRUCT")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -77,19 +101,14 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    */
   protected lazy val createTable: Parser[LogicalPlan] =
-  (  CREATE ~ TEMPORARY ~ TABLE ~> ident ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
-      case tableName ~ provider ~ opts =>
-        CreateTableUsing(tableName, Seq.empty, provider, opts)
-    }
-  |
+  (
     CREATE ~ TEMPORARY ~ TABLE ~> ident
-      ~ tableCols  ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
-      case tableName ~ tableColumns ~ provider ~ opts =>
-      CreateTableUsing(tableName, tableColumns, provider, opts)
+      ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
+      case tableName ~ columns ~ provider ~ opts =>
+        val tblColumns = if(columns.isEmpty) Seq.empty else columns.get
+        CreateTableUsing(tableName, tblColumns, provider, opts)
     }
   )
-
-  protected lazy val metastoreTypes = new MetastoreTypes
 
   protected lazy val tableCols: Parser[Seq[StructField]] =  "(" ~> repsep(column, ",") <~ ")"
 
@@ -101,96 +120,62 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected lazy val pair: Parser[(String, String)] = ident ~ stringLit ^^ { case k ~ v => (k,v) }
 
   protected lazy val column: Parser[StructField] =
-  ( ident ~  ident ^^ { case name ~ typ =>
-      StructField(name, metastoreTypes.toDataType(typ))
+    ident ~ dataType ^^ { case columnName ~ typ =>
+      StructField(cleanIdentifier(columnName), typ)
     }
-  |
-    ident ~ (DECIMAL ~ "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
-      case name ~ precision ~ scale =>
-        StructField(name, DecimalType(precision.toInt, scale.toInt))
-    }
-  )
-}
 
-/**
- * :: DeveloperApi ::
- * Provides a parser for data types.
- */
-@DeveloperApi
-private[sql] class MetastoreTypes extends RegexParsers {
   protected lazy val primitiveType: Parser[DataType] =
-    "string" ^^^ StringType |
-      "float" ^^^ FloatType |
-      "int" ^^^ IntegerType |
-      "tinyint" ^^^ ByteType |
-      "smallint" ^^^ ShortType |
-      "double" ^^^ DoubleType |
-      "bigint" ^^^ LongType |
-      "binary" ^^^ BinaryType |
-      "boolean" ^^^ BooleanType |
-      fixedDecimalType |                     // decimal with precision/scale
-      "decimal" ^^^ DecimalType.Unlimited |  // decimal with no precision/scale
-      "date" ^^^ DateType |
-      "timestamp" ^^^ TimestampType |
-      "varchar\\((\\d+)\\)".r ^^^ StringType
+    STRING ^^^ StringType |
+    BINARY ^^^ BinaryType |
+    BOOLEAN ^^^ BooleanType |
+    TINYINT ^^^ ByteType |
+    SMALLINT ^^^ ShortType |
+    INT ^^^ IntegerType |
+    BIGINT ^^^ LongType |
+    FLOAT ^^^ FloatType |
+    DOUBLE ^^^ DoubleType |
+    fixedDecimalType |                   // decimal with precision/scale
+    DECIMAL ^^^ DecimalType.Unlimited |  // decimal with no precision/scale
+    DATE ^^^ DateType |
+    TIMESTAMP ^^^ TimestampType |
+    VARCHAR ~ "(" ~ numericLit ~ ")" ^^^ StringType
 
   protected lazy val fixedDecimalType: Parser[DataType] =
-    ("decimal" ~> "(" ~> "\\d+".r) ~ ("," ~> "\\d+".r <~ ")") ^^ {
-      case precision ~ scale =>
-        DecimalType(precision.toInt, scale.toInt)
+    (DECIMAL ~ "(" ~> numericLit) ~ ("," ~> numericLit <~ ")") ^^ {
+      case precision ~ scale => DecimalType(precision.toInt, scale.toInt)
     }
 
   protected lazy val arrayType: Parser[DataType] =
-    "array" ~> "<" ~> dataType <~ ">" ^^ {
+    ARRAY ~> "<" ~> dataType <~ ">" ^^ {
       case tpe => ArrayType(tpe)
     }
 
   protected lazy val mapType: Parser[DataType] =
-    "map" ~> "<" ~> dataType ~ "," ~ dataType <~ ">" ^^ {
+    MAP ~> "<" ~> dataType ~ "," ~ dataType <~ ">" ^^ {
       case t1 ~ _ ~ t2 => MapType(t1, t2)
     }
 
   protected lazy val structField: Parser[StructField] =
-    "[a-zA-Z0-9_]*".r ~ ":" ~ dataType ^^ {
-      case name ~ _ ~ tpe => StructField(name, tpe, nullable = true)
+    ident ~ ":" ~ dataType ^^ {
+      case fieldName ~ _ ~ tpe => StructField(cleanIdentifier(fieldName), tpe, nullable = true)
     }
 
   protected lazy val structType: Parser[DataType] =
-    "struct" ~> "<" ~> repsep(structField,",") <~ ">"  ^^ {
+    STRUCT ~> "<" ~> repsep(structField, ",") <~ ">" ^^ {
       case fields => new StructType(fields)
     }
 
   private[sql] lazy val dataType: Parser[DataType] =
     arrayType |
-      mapType |
-      structType |
-      primitiveType
+    mapType |
+    structType |
+    primitiveType
 
-  def toDataType(metastoreType: String): DataType = parseAll(dataType, metastoreType) match {
-    case Success(result, _) => result
-    case failure: NoSuccess => sys.error(s"Unsupported dataType: $metastoreType")
-  }
-
-  def toMetastoreType(dt: DataType): String = dt match {
-    case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"
-    case StructType(fields) =>
-      s"struct<${fields.map(f => s"${f.name}:${toMetastoreType(f.dataType)}").mkString(",")}>"
-    case MapType(keyType, valueType, _) =>
-      s"map<${toMetastoreType(keyType)},${toMetastoreType(valueType)}>"
-    case StringType => "string"
-    case FloatType => "float"
-    case IntegerType => "int"
-    case ByteType => "tinyint"
-    case ShortType => "smallint"
-    case DoubleType => "double"
-    case LongType => "bigint"
-    case BinaryType => "binary"
-    case BooleanType => "boolean"
-    case DateType => "date"
-    case d: DecimalType => "decimal"
-    case TimestampType => "timestamp"
-    case NullType => "void"
-    case udt: UserDefinedType[_] => toMetastoreType(udt.sqlType)
+  protected val escapedIdentifier = "`([^`]+)`".r
+  /** Strips backticks from ident if present */
+  protected def cleanIdentifier(ident: String): String = ident match {
+    case escapedIdentifier(i) => i
+    case plainIdent => plainIdent
   }
 }
 
