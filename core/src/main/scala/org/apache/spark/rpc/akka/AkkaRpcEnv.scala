@@ -19,25 +19,33 @@ package org.apache.spark.rpc.akka
 
 import java.util.concurrent.CountDownLatch
 
-import com.google.common.annotations.VisibleForTesting
-
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.concurrent.Future
 import scala.language.postfixOps
+import scala.reflect.ClassTag
+import scala.util.control.NonFatal
 
 import akka.actor.{ActorRef, Actor, Props, ActorSystem}
 import akka.pattern.{ask => akkaAsk}
 import akka.remote._
+import com.google.common.annotations.VisibleForTesting
 
-import org.apache.spark.{SecurityManager, Logging, SparkException, SparkConf}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.rpc._
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils}
 
-import scala.reflect.ClassTag
-import scala.util.control.NonFatal
-
-class AkkaRpcEnv private (val actorSystem: ActorSystem, conf: SparkConf, val boundPort: Int)
+/**
+ * A RpcEnv implementation based on Akka.
+ *
+ * TODO Once we remove all usages of Akka in other place, we can move this file to a new project and
+ * remove Akka from the dependencies.
+ *
+ * @param actorSystem
+ * @param conf
+ * @param boundPort
+ */
+private[spark] class AkkaRpcEnv private (val actorSystem: ActorSystem, conf: SparkConf, val boundPort: Int)
   extends RpcEnv {
 
   override def setupEndpoint(name: String, endpointCreator: => RpcEndpoint): RpcEndpointRef = {
@@ -47,20 +55,23 @@ class AkkaRpcEnv private (val actorSystem: ActorSystem, conf: SparkConf, val bou
       val actorRef = actorSystem.actorOf(Props(new Actor with ActorLogReceive with Logging {
 
         val endpoint = endpointCreator
+        // Wait until `endpointRef` is set. TODO better solution?
         latch.await()
         require(endpointRef != null)
         registerEndpoint(endpoint, endpointRef)
 
+        var isNetworkRpcEndpoint = false
+
         override def preStart(): Unit = {
-          endpoint.onStart()
           if (endpoint.isInstanceOf[NetworkRpcEndpoint]) {
-            // Listen for remote client disconnection events,
-            // since they don't go through Akka's watch()
+            isNetworkRpcEndpoint = true
+            // Listen for remote client network events only when it's `NetworkRpcEndpoint`
             context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
           }
+          endpoint.onStart()
         }
 
-        override def receiveWithLogging: Receive = {
+        override def receiveWithLogging: Receive = if (isNetworkRpcEndpoint) {
           case AssociatedEvent(_, remoteAddress, _) =>
             try {
               endpoint.asInstanceOf[NetworkRpcEndpoint].
@@ -85,11 +96,22 @@ class AkkaRpcEnv private (val actorSystem: ActorSystem, conf: SparkConf, val bou
               case NonFatal(e) => endpoint.onError(e)
             }
           case e: RemotingLifecycleEvent =>
-            // ignore?
+          // TODO ignore?
 
           case message: Any =>
+            logDebug("Received RPC message: " + message)
             try {
-              logInfo("Received RPC message: " + message)
+              val pf = endpoint.receive(new AkkaRpcEndpointRef(sender(), conf))
+              if (pf.isDefinedAt(message)) {
+                pf.apply(message)
+              }
+            } catch {
+              case NonFatal(e) => endpoint.onError(e)
+            }
+        } else {
+          case message: Any =>
+            logDebug("Received RPC message: " + message)
+            try {
               val pf = endpoint.receive(new AkkaRpcEndpointRef(sender(), conf))
               if (pf.isDefinedAt(message)) {
                 pf.apply(message)
@@ -140,17 +162,13 @@ class AkkaRpcEnv private (val actorSystem: ActorSystem, conf: SparkConf, val bou
 
 private[rpc] object AkkaRpcEnv {
 
-  def apply(
-      name: String,
-      host: String,
-      port: Int,
-      conf: SparkConf,
-      securityManager: SecurityManager): AkkaRpcEnv = {
-    val (actorSystem, boundPort) =
-      AkkaUtils.createActorSystem(name, host, port, conf, securityManager)
-    new AkkaRpcEnv(actorSystem, conf, boundPort)
+  def apply(config: RpcEnvConfig): RpcEnv = {
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
+        config.name, config.host, config.port, config.conf, config.securityManager)
+    new AkkaRpcEnv(actorSystem, config.conf, boundPort)
   }
 
+  // TODO Remove it
   @VisibleForTesting
   def apply(name: String, conf: SparkConf): AkkaRpcEnv = {
     new AkkaRpcEnv(ActorSystem(name), conf, -1)
@@ -159,9 +177,10 @@ private[rpc] object AkkaRpcEnv {
 
 private[akka] class AkkaRpcEndpointRef(val actorRef: ActorRef, @transient conf: SparkConf)
   extends RpcEndpointRef with Serializable with Logging {
+  // `conf` won't be used after initialization. So it's safe to be transient.
 
   private[this] val maxRetries = conf.getInt("spark.akka.num.retries", 3)
-  private[this] val retryWaitMs = conf.getInt("spark.akka.retry.wait", 3000)
+  private[this] val retryWaitMs = conf.getLong("spark.akka.retry.wait", 3000)
   private[this] val defaultTimeout = conf.getLong("spark.akka.lookupTimeout", 30) seconds
 
   override val address: RpcAddress = AkkaUtils.akkaAddressToRpcAddress(actorRef.path.address)
@@ -175,28 +194,8 @@ private[akka] class AkkaRpcEndpointRef(val actorRef: ActorRef, @transient conf: 
   override def askWithReply[T](message: Any): T = askWithReply(message, defaultTimeout)
 
   override def askWithReply[T](message: Any, timeout: FiniteDuration): T = {
-    var attempts = 0
-    var lastException: Exception = null
-    while (attempts < maxRetries) {
-      attempts += 1
-      try {
-        val future = actorRef.ask(message)(timeout)
-        val result = Await.result(future, timeout)
-        if (result == null) {
-          throw new SparkException("Actor returned null")
-        }
-        return result.asInstanceOf[T]
-      } catch {
-        case ie: InterruptedException => throw ie
-        case e: Exception =>
-          lastException = e
-          logWarning("Error sending message in " + attempts + " attempts", e)
-      }
-      Thread.sleep(retryWaitMs)
-    }
-
-    throw new SparkException(
-      "Error sending message [message = " + message + "]", lastException)
+    // TODO: Consider removing multiple attempts
+    AkkaUtils.askWithReply(message, actorRef, maxRetries, retryWaitMs, timeout)
   }
 
   override def send(message: Any)(implicit sender: RpcEndpointRef = RpcEndpoint.noSender): Unit = {
