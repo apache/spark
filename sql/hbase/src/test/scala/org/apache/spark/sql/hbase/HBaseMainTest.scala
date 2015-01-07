@@ -247,13 +247,8 @@ with Logging {
   }
 
   def setupData(useMultiplePartitions: Boolean, needInsertData: Boolean = false) {
-    createTable(useMultiplePartitions)
-
-    if (!checkHBaseTableExists(HbaseTableName)) {
-      throw new IllegalStateException(s"Unable to find table $HbaseTableName")
-    }
-
     if (needInsertData) {
+      createTable(useMultiplePartitions)
       insertTestData()
     }
   }
