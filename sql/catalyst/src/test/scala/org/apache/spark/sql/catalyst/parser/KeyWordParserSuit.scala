@@ -32,13 +32,13 @@ class KeyWordParserSuit extends FunSuite {
         |  sparksql_table_schema   '(row_key string, name string, age int, job string)',
         |  hbase_table_name    'people',
         |  hbase_table_schema '(:key , profile:name , profile:age , career:job )'
-		 |)
+        |)
         |sERDEPRopERTIES (
-		 |  path 'temp_path'
-		 |)
-		 |TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST(
-		 | test 'test_keyword'
-		 )""".stripMargin
+        |  path 'temp_path'
+        |)
+        |TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST(
+        | test 'test_keyword'
+        )""".stripMargin
 
     val allCaseVersionsParser =  new AllCaseVersionsParser()
     val lowerCaseKeyWordParser = new LowerCaseParser()
@@ -90,10 +90,12 @@ class AllCaseVersionsParser extends StandardTokenParsers with PackratParsers  {
     protected val USING = Keyword("USING")
     protected val OPTIONS = Keyword("OPTIONS")
     protected val SERDEPROPERTIES = Keyword("SERDEPROPERTIES")
-    protected val TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST = Keyword("TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST")
+    protected val TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST =
+        Keyword("TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST")
 
     // Use reflection to find the reserved words defined in this class.
-    protected val reservedWords = this.getClass.getMethods.filter(_.getReturnType == classOf[Keyword]).map(_.invoke(this).asInstanceOf[Keyword].str)
+    protected val reservedWords = this.getClass.getMethods.filter(_.getReturnType == classOf[Keyword])
+        .map(_.invoke(this).asInstanceOf[Keyword].str)
 
     override val lexical = new LowerCaseSqlLexical(reservedWords)
 
@@ -105,8 +107,8 @@ class AllCaseVersionsParser extends StandardTokenParsers with PackratParsers  {
      * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")
      */
     protected lazy val createTable: Parser[String] =
-        CREATE ~ TEMPORARY ~ TABLE ~> ident ~ (USING ~> className) ~ (OPTIONS ~> options) ~ (SERDEPROPERTIES~>serde) ~
-            (TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST ~> test).? ^^ {
+        CREATE ~ TEMPORARY ~ TABLE ~> ident ~ (USING ~> className) ~ (OPTIONS ~> options) ~
+         (SERDEPROPERTIES~>serde) ~ (TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST ~> test).? ^^ {
             case tableName ~ provider ~ opts ~ sd ~ tst  =>
                 "parse success"
         }
@@ -148,10 +150,13 @@ class LowerCaseParser extends StandardTokenParsers with PackratParsers  {
     protected val USING = Keyword("USING")
     protected val OPTIONS = Keyword("OPTIONS")
     protected val SERDEPROPERTIES = Keyword("SERDEPROPERTIES")
-    protected val TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST = Keyword("TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST")
+    protected val TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST =
+        Keyword("TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST")
 
     // Use reflection to find the reserved words defined in this class.
-    protected val reservedWords = this.getClass.getMethods.filter(_.getReturnType == classOf[Keyword]).map(_.invoke(this).asInstanceOf[Keyword].str)
+    protected val reservedWords =
+        this.getClass.getMethods.filter(_.getReturnType == classOf[Keyword])
+            .map(_.invoke(this).asInstanceOf[Keyword].str)
 
     override val lexical = new LowerCaseSqlLexical(reservedWords)
 
@@ -163,8 +168,8 @@ class LowerCaseParser extends StandardTokenParsers with PackratParsers  {
      * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")
      */
     protected lazy val createTable: Parser[String] =
-        CREATE ~ TEMPORARY ~ TABLE ~> ident ~ (USING ~> className) ~ (OPTIONS ~> options) ~ (SERDEPROPERTIES~>serde) ~
-            (TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST ~> test).? ^^ {
+        CREATE ~ TEMPORARY ~ TABLE ~> ident ~ (USING ~> className) ~ (OPTIONS ~> options) ~
+            (SERDEPROPERTIES~>serde) ~ (TESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTESTTEST ~> test).? ^^ {
             case tableName ~ provider ~ opts ~ sd ~ tst  =>
                 "parse success"
         }
