@@ -227,9 +227,9 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
       shuffleReadMetrics.incRemoteBytesRead(base + 1)
       shuffleReadMetrics.incRemoteBlocksFetched(base + 2)
       shuffleWriteMetrics.incShuffleBytesWritten(base + 3)
-      taskMetrics.executorRunTime = base + 4
-      taskMetrics.diskBytesSpilled = base + 5
-      taskMetrics.memoryBytesSpilled = base + 6
+      taskMetrics.incExecutorRunTime(base + 4)
+      taskMetrics.incDiskBytesSpilled(base + 5)
+      taskMetrics.incMemoryBytesSpilled(base + 6)
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       taskMetrics.inputMetrics = Some(inputMetrics)
       inputMetrics.incBytesRead(base + 7)
