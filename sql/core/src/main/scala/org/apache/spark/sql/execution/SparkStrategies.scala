@@ -17,16 +17,16 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.sources.{CreateTempTableUsing, CreateTableUsing}
 import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.columnar.{InMemoryRelation, InMemoryColumnarTableScan}
+import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.parquet._
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.sources.{CreateTempTableUsing, CreateTableUsing}
 
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {

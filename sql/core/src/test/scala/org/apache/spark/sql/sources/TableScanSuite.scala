@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources
 import java.sql.{Timestamp, Date}
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.types.DecimalType
+import org.apache.spark.sql.types._
 
 class DefaultSource extends SimpleScanSource
 
