@@ -25,7 +25,7 @@ import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
 import org.netlib.util.intW
 
-import org.apache.spark.{Logging, HashPartitioner, Partitioner}
+import org.apache.spark.{HashPartitioner, Logging, Partitioner}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.rdd.RDD
@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.types.{DoubleType, FloatType, IntegerType, StructField}
+import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
 import org.apache.spark.util.random.XORShiftRandom
 
@@ -154,11 +155,37 @@ private object ALSModel {
 }
 
 /**
- * Alternating least squares (ALS).
+ * Alternating Least Squares (ALS) matrix factorization.
+ *
+ * ALS attempts to estimate the ratings matrix `R` as the product of two lower-rank matrices,
+ * `X` and `Y`, i.e. `X * Yt = R`. Typically these approximations are called 'factor' matrices.
+ * The general approach is iterative. During each iteration, one of the factor matrices is held
+ * constant, while the other is solved for using least squares. The newly-solved factor matrix is
+ * then held constant while solving for the other factor matrix.
+ *
+ * This is a blocked implementation of the ALS factorization algorithm that groups the two sets
+ * of factors (referred to as "users" and "products") into blocks and reduces communication by only
+ * sending one copy of each user vector to each product block on each iteration, and only for the
+ * product blocks that need that user's feature vector. This is achieved by pre-computing some
+ * information about the ratings matrix to determine the "out-links" of each user (which blocks of
+ * products it will contribute to) and "in-link" information for each product (which of the feature
+ * vectors it receives from each user block it will depend on). This allows us to send only an
+ * array of feature vectors between each user block and product block, and have the product block
+ * find the users' ratings and update the products based on these messages.
+ *
+ * For implicit preference data, the algorithm used is based on
+ * "Collaborative Filtering for Implicit Feedback Datasets", available at
+ * [[http://dx.doi.org/10.1109/ICDM.2008.22]], adapted for the blocked approach used here.
+ *
+ * Essentially instead of finding the low-rank approximations to the rating matrix `R`,
+ * this finds the approximations for a preference matrix `P` where the elements of `P` are 1 if
+ * r > 0 and 0 if r = 0. The ratings then act as 'confidence' values related to strength of
+ * indicated user
+ * preferences rather than explicit ratings given to items.
  */
 class ALS extends Estimator[ALSModel] with ALSParams {
 
-  import ALS.Rating
+  import org.apache.spark.ml.recommendation.ALS.Rating
 
   def setRank(value: Int): this.type = set(rank, value)
   def setNumUserBlocks(value: Int): this.type = set(numUserBlocks, value)
@@ -329,7 +356,7 @@ private object ALS extends Logging {
     val itemPart = new HashPartitioner(numItemBlocks)
     val userLocalIndexEncoder = new LocalIndexEncoder(userPart.numPartitions)
     val itemLocalIndexEncoder = new LocalIndexEncoder(itemPart.numPartitions)
-    val blockRatings = blockifyRatings(ratings, userPart, itemPart).cache()
+    val blockRatings = partitionRatings(ratings, userPart, itemPart).cache()
     val (userInBlocks, userOutBlocks) = makeBlocks("user", blockRatings, userPart, itemPart)
     // materialize blockRatings and user blocks
     userOutBlocks.count()
@@ -345,16 +372,14 @@ private object ALS extends Logging {
     if (implicitPrefs) {
       for (iter <- 1 to maxIter) {
         userFactors.setName(s"userFactors-$iter").persist()
-        val YtY = Some(computeYtY(userFactors, rank))
         val previousItemFactors = itemFactors
         itemFactors = computeFactors(userFactors, userOutBlocks, itemInBlocks, rank, regParam,
-          userLocalIndexEncoder, implicitPrefs, alpha, YtY)
+          userLocalIndexEncoder, implicitPrefs, alpha)
         previousItemFactors.unpersist()
         itemFactors.setName(s"itemFactors-$iter").persist()
-        val XtX = Some(computeYtY(itemFactors, rank))
         val previousUserFactors = userFactors
         userFactors = computeFactors(itemFactors, itemOutBlocks, userInBlocks, rank, regParam,
-          itemLocalIndexEncoder, implicitPrefs, alpha, XtX)
+          itemLocalIndexEncoder, implicitPrefs, alpha)
         previousUserFactors.unpersist()
       }
     } else {
@@ -400,23 +425,34 @@ private object ALS extends Logging {
   private type FactorBlock = Array[Array[Float]]
 
   /**
-   * Out block that stores, for each dst block, which src factors to send.
-   * For example, outBlock(0) contains the indices of the src factors to send to dst block 0.
+   * Out-link block that stores, for each dst (item/user) block, which src (user/item) factors to
+   * send. For example, outLinkBlock(0) contains the local indices (not the original src IDs) of the
+   * src factors in this block to send to dst block 0.
    */
   private type OutBlock = Array[Array[Int]]
 
   /**
-   * In block for computing src factors.
+   * In-link block for computing src (user/item) factors. This includes the original src IDs
+   * of the elements within this block as well as encoded dst (item/user) indices and corresponding
+   * ratings. The dst indices are in the form of (blockId, localIndex), which are not the original
+   * dst IDs. To compute src factors, we expect receiving dst factors that match the dst indices.
+   * For example, if we have an in-link record
    *
-   * For each src id, it stores its associated dst block ids and local indices, and ratings.
-   * So given the dst factors, it is easy to compute src factors one by one.
-   * We use compressed sparse column (CSC) format.
+   * {srcId: 0, dstBlockId: 2, dstLocalIndex: 3, rating: 5.0},
+   *
+   * and assume that the dst factors are stored as dstFactors: Map[Int, Array[Array[Float]]], which
+   * is a blockId to dst factors map, the corresponding dst factor of the record is dstFactor(2)(3).
+   *
+   * We use a CSC-like (compressed sparse column) format to store the in-link information. So we can
+   * compute src factors one after another using only one normal equation instance.
    *
    * @param srcIds src ids (ordered)
    * @param dstPtrs dst pointers. Elements in range [dstPtrs(i), dstPtrs(i+1)) of dst indices and
    *                ratings are associated with srcIds(i).
    * @param dstEncodedIndices encoded dst indices
    * @param ratings ratings
+   *
+   * @see [[LocalIndexEncoder]]
    */
   private case class InBlock(
       srcIds: Array[Int],
@@ -425,7 +461,7 @@ private object ALS extends Logging {
       ratings: Array[Float])
 
   /**
-   * Initializes factors randomly given the in blocks.
+   * Initializes factors randomly given the in-link blocks.
    *
    * @param inBlocks in blocks
    * @param k rank
@@ -445,16 +481,12 @@ private object ALS extends Logging {
   }
 
   /**
-   * A rating block that contains src ids, dst ids, and ratings.
-   *
-   * @param srcIds src ids
-   * @param dstIds dst ids
-   * @param ratings ratings
+   * A rating block that contains src IDs, dst IDs, and ratings, stored in primitive arrays.
    */
   private case class RatingBlock(srcIds: Array[Int], dstIds: Array[Int], ratings: Array[Float])
 
   /**
-   * Builder for [[RatingBlock]].
+   * Builder for [[RatingBlock]]. [[mutable.ArrayBuilder]] is used to avoid boxing/unboxing.
    */
   private class RatingBlockBuilder extends Serializable {
 
@@ -463,6 +495,7 @@ private object ALS extends Logging {
     private val ratings = mutable.ArrayBuilder.make[Float]
     var size = 0
 
+    /** Adds a rating. */
     def add(r: Rating): this.type = {
       size += 1
       srcIds += r.user
@@ -471,6 +504,7 @@ private object ALS extends Logging {
       this
     }
 
+    /** Merges another [[RatingBlockBuilder]]. */
     def merge(other: RatingBlock): this.type = {
       size += other.srcIds.size
       srcIds ++= other.srcIds
@@ -479,93 +513,126 @@ private object ALS extends Logging {
       this
     }
 
-    def toRatingBlock: RatingBlock = {
+    /** Builds a [[RatingBlock]]. */
+    def build(): RatingBlock = {
       RatingBlock(srcIds.result(), dstIds.result(), ratings.result())
     }
   }
 
   /**
-   * Blockifies raw ratings.
+   * Partitions raw ratings into blocks.
+   *
+   * @param ratings raw ratings
+   * @param srcPart partitioner for src IDs
+   * @param dstPart partitioner for dst IDs
+   *
+   * @return an RDD of rating blocks in the form of ((srcBlockId, dstBlockId), ratingBlock)
    */
-  private def blockifyRatings(
+  private def partitionRatings(
       ratings: RDD[Rating],
       srcPart: Partitioner,
       dstPart: Partitioner): RDD[((Int, Int), RatingBlock)] = {
+
+     /* The implementation produces the same result as the following but generates less objects.
+
+     ratings.map { r =>
+       ((srcPart.getPartition(r.user), dstPart.getPartition(r.item)), r)
+     }.aggregateByKey(new RatingBlockBuilder)(
+         seqOp = (b, r) => b.add(r),
+         combOp = (b0, b1) => b0.merge(b1.build()))
+       .mapValues(_.build())
+     */
+
     val numPartitions = srcPart.numPartitions * dstPart.numPartitions
     ratings.mapPartitions { iter =>
-      val blocks = Array.fill(numPartitions)(new RatingBlockBuilder)
+      val builders = Array.fill(numPartitions)(new RatingBlockBuilder)
       iter.flatMap { r =>
         val srcBlockId = srcPart.getPartition(r.user)
         val dstBlockId = dstPart.getPartition(r.item)
         val idx = srcBlockId + srcPart.numPartitions * dstBlockId
-        val block = blocks(idx)
-        block.add(r)
-        if (block.size >= 2048) { // 2048 * (3 * 4) = 24k
-          blocks(idx) = new RatingBlockBuilder
-          Iterator.single(((srcBlockId, dstBlockId), block.toRatingBlock))
+        val builder = builders(idx)
+        builder.add(r)
+        if (builder.size >= 2048) { // 2048 * (3 * 4) = 24k
+          builders(idx) = new RatingBlockBuilder
+          Iterator.single(((srcBlockId, dstBlockId), builder.build()))
         } else {
           Iterator.empty
         }
       } ++ {
-        blocks.view.zipWithIndex.filter(_._1.size > 0).map { case (block, idx) =>
+        builders.view.zipWithIndex.filter(_._1.size > 0).map { case (block, idx) =>
           val srcBlockId = idx % srcPart.numPartitions
           val dstBlockId = idx / srcPart.numPartitions
-          ((srcBlockId, dstBlockId), block.toRatingBlock)
+          ((srcBlockId, dstBlockId), block.build())
         }
       }
-    }.groupByKey().mapValues { iter =>
-      val buffered = new RatingBlockBuilder
-      iter.foreach(buffered.merge)
-      buffered.toRatingBlock
-    }.setName("blockRatings")
+    }.groupByKey().mapValues { blocks =>
+      val builder = new RatingBlockBuilder
+      blocks.foreach(builder.merge)
+      builder.build()
+    }.setName("ratingBlocks")
   }
 
   /**
-   * Builder for blocks of (srcId, dstEncodedIndex, rating) tuples.
-   * @param encoder
+   * Builder for uncompressed in-blocks of (srcId, dstEncodedIndex, rating) tuples.
+   * @param encoder encoder for dst indices
    */
-  private class UncompressedBlockBuilder(encoder: LocalIndexEncoder) {
+  private class UncompressedInBlockBuilder(encoder: LocalIndexEncoder) {
 
-    val srcIds = mutable.ArrayBuilder.make[Int]
-    val dstEncodedIndices = mutable.ArrayBuilder.make[Int]
-    val ratings = mutable.ArrayBuilder.make[Float]
+    private val srcIds = mutable.ArrayBuilder.make[Int]
+    private val dstEncodedIndices = mutable.ArrayBuilder.make[Int]
+    private val ratings = mutable.ArrayBuilder.make[Float]
 
+    /**
+     * Adds a dst block of (srcId, dstLocalIndex, rating) tuples.
+     *
+     * @param dstBlockId dst block ID
+     * @param srcIds original src IDs
+     * @param dstLocalIndices dst local indices
+     * @param ratings ratings
+     */
     def add(
-        theDstBlockId: Int,
-        theSrcIds: Array[Int],
-        theDstLocalIndices: Array[Int],
-        theRatings: Array[Float]): this.type = {
-      val sz = theSrcIds.size
-      require(theDstLocalIndices.size == sz)
-      require(theRatings.size == sz)
-      srcIds ++= theSrcIds
-      ratings ++= theRatings
+        dstBlockId: Int,
+        srcIds: Array[Int],
+        dstLocalIndices: Array[Int],
+        ratings: Array[Float]): this.type = {
+      val sz = srcIds.size
+      require(dstLocalIndices.size == sz)
+      require(ratings.size == sz)
+      this.srcIds ++= srcIds
+      this.ratings ++= ratings
       var j = 0
       while (j < sz) {
-        dstEncodedIndices += encoder.encode(theDstBlockId, theDstLocalIndices(j))
+        this.dstEncodedIndices += encoder.encode(dstBlockId, dstLocalIndices(j))
         j += 1
       }
       this
     }
 
-    def build(): UncompressedBlock = {
-      new UncompressedBlock(srcIds.result(), dstEncodedIndices.result(), ratings.result())
+    /** Builds a [[UncompressedInBlock]]. */
+    def build(): UncompressedInBlock = {
+      new UncompressedInBlock(srcIds.result(), dstEncodedIndices.result(), ratings.result())
     }
   }
 
   /**
-   * A block of (srcId, dstEncodedIndex, rating) tuples.
+   * A block of (srcId, dstEncodedIndex, rating) tuples stored in primitive arrays.
    */
-  private class UncompressedBlock(
+  private class UncompressedInBlock(
       val srcIds: Array[Int],
       val dstEncodedIndices: Array[Int],
       val ratings: Array[Float]) {
 
+    /** Size the of block. */
     def size: Int = srcIds.size
 
+    /**
+     * Compresses the block into an [[InBlock]]. The algorithm is the same as converting a
+     * sparse matrix from coordinate list (COO) format into compressed sparse column (CSC) format.
+     * Sorting is done using Spark's built-in Timsort to avoid generating too many objects.
+     */
     def compress(): InBlock = {
       val sz = size
-      assert(sz > 0)
+      assert(sz > 0) // TODO: Check whether it is possible to have empty blocks.
       sort()
       val uniqueSrcIdsBuilder = mutable.ArrayBuilder.make[Int]
       val dstCountsBuilder = mutable.ArrayBuilder.make[Int]
@@ -603,26 +670,37 @@ private object ALS extends Logging {
 
     private def sort(): Unit = {
       val sz = size
-      logDebug(s"Sorting uncompressed block of size $sz.")
+      // Since there might be interleaved log messages, we insert a unqiue id for easy pairing.
+      val sortId = Utils.random.nextInt()
+      logDebug(s"Start sorting an uncompressed in-block of size $sz. (sortId = $sortId)")
       val start = System.nanoTime()
-      val sorter = new Sorter(new UncompressedBlockSort)
+      val sorter = new Sorter(new UncompressedInBlockSort)
       sorter.sort(this, 0, size, Ordering[IntWrapper])
-      logDebug("Sorting took " + (System.nanoTime() - start) / 1e9 + " seconds.")
+      val duration = (System.nanoTime() - start) / 1e9
+      logDebug(s"Sorting took $duration seconds. (sortId = $sortId)")
     }
   }
 
+  /**
+   * A wrapper that holds a primitive integer key.
+   *
+   * @see [[UncompressedInBlockSort]]
+   */
   private class IntWrapper(var key: Int = 0) extends Ordered[IntWrapper] {
     override def compare(that: IntWrapper): Int = {
       key.compare(that.key)
     }
   }
 
-  private class UncompressedBlockSort extends SortDataFormat[IntWrapper, UncompressedBlock] {
+  /**
+   * [[SortDataFormat]] of [[UncompressedInBlock]] used by [[Sorter]].
+   */
+  private class UncompressedInBlockSort extends SortDataFormat[IntWrapper, UncompressedInBlock] {
 
     override def newKey(): IntWrapper = new IntWrapper()
 
     override def getKey(
-        data: UncompressedBlock,
+        data: UncompressedInBlock,
         pos: Int,
         reuse: IntWrapper): IntWrapper = {
       if (reuse == null) {
@@ -634,7 +712,7 @@ private object ALS extends Logging {
     }
 
     override def getKey(
-        data: UncompressedBlock,
+        data: UncompressedInBlock,
         pos: Int): IntWrapper = {
       getKey(data, pos, null)
     }
@@ -648,16 +726,16 @@ private object ALS extends Logging {
       data(pos1) = tmp
     }
 
-    override def swap(data: UncompressedBlock, pos0: Int, pos1: Int): Unit = {
+    override def swap(data: UncompressedInBlock, pos0: Int, pos1: Int): Unit = {
       swapElements(data.srcIds, pos0, pos1)
       swapElements(data.dstEncodedIndices, pos0, pos1)
       swapElements(data.ratings, pos0, pos1)
     }
 
     override def copyRange(
-        src: UncompressedBlock,
+        src: UncompressedInBlock,
         srcPos: Int,
-        dst: UncompressedBlock,
+        dst: UncompressedInBlock,
         dstPos: Int,
         length: Int): Unit = {
       System.arraycopy(src.srcIds, srcPos, dst.srcIds, dstPos, length)
@@ -665,15 +743,15 @@ private object ALS extends Logging {
       System.arraycopy(src.ratings, srcPos, dst.ratings, dstPos, length)
     }
 
-    override def allocate(length: Int): UncompressedBlock = {
-      new UncompressedBlock(
+    override def allocate(length: Int): UncompressedInBlock = {
+      new UncompressedInBlock(
         new Array[Int](length), new Array[Int](length), new Array[Float](length))
     }
 
     override def copyElement(
-        src: UncompressedBlock,
+        src: UncompressedInBlock,
         srcPos: Int,
-        dst: UncompressedBlock,
+        dst: UncompressedInBlock,
         dstPos: Int): Unit = {
       dst.srcIds(dstPos) = src.srcIds(srcPos)
       dst.dstEncodedIndices(dstPos) = src.dstEncodedIndices(srcPos)
@@ -681,6 +759,14 @@ private object ALS extends Logging {
     }
   }
 
+  /**
+   * Creates in-blocks and out-blocks from rating blocks.
+   * @param prefix prefix for in/out-block names
+   * @param ratingBlocks rating blocks
+   * @param srcPart partitioner for src IDs
+   * @param dstPart partitioner for dst IDs
+   * @return (in-blocks, out-blocks)
+   */
   private def makeBlocks(
       prefix: String,
       ratingBlocks: RDD[((Int, Int), RatingBlock)],
@@ -688,7 +774,7 @@ private object ALS extends Logging {
       dstPart: Partitioner): (RDD[(Int, InBlock)], RDD[(Int, OutBlock)]) = {
     val inBlocks = ratingBlocks.map {
       case ((srcBlockId, dstBlockId), RatingBlock(srcIds, dstIds, ratings)) =>
-        // faster version of
+        // The implementation is a faster version of
         // val dstIdToLocalIndex = dstIds.toSet.toSeq.sorted.zipWithIndex.toMap
         val start = System.nanoTime()
         val dstIdSet = new OpenHashSet[Int](1 << 20)
@@ -715,12 +801,12 @@ private object ALS extends Logging {
         (srcBlockId, (dstBlockId, srcIds, dstLocalIndices, ratings))
     }.groupByKey(new HashPartitioner(srcPart.numPartitions))
         .mapValues { iter =>
-      val uncompressedBlockBuilder =
-        new UncompressedBlockBuilder(new LocalIndexEncoder(dstPart.numPartitions))
+      val builder =
+        new UncompressedInBlockBuilder(new LocalIndexEncoder(dstPart.numPartitions))
       iter.foreach { case (dstBlockId, srcIds, dstLocalIndices, ratings) =>
-        uncompressedBlockBuilder.add(dstBlockId, srcIds, dstLocalIndices, ratings)
+        builder.add(dstBlockId, srcIds, dstLocalIndices, ratings)
       }
-      uncompressedBlockBuilder.build().compress()
+      builder.build().compress()
     }.setName(prefix + "InBlocks").cache()
     val outBlocks = inBlocks.mapValues { case InBlock(srcIds, dstPtrs, dstEncodedIndices, _) =>
       val encoder = new LocalIndexEncoder(dstPart.numPartitions)
@@ -733,7 +819,7 @@ private object ALS extends Logging {
         while (j < dstPtrs(i + 1)) {
           val dstBlockId = encoder.blockId(dstEncodedIndices(j))
           if (!seen(dstBlockId)) {
-            activeIds(dstBlockId) += i // add the local index
+            activeIds(dstBlockId) += i // add the local index in this out-block
             seen(dstBlockId) = true
           }
           j += 1
@@ -747,16 +833,30 @@ private object ALS extends Logging {
     (inBlocks, outBlocks)
   }
 
+  /**
+   * Compute dst factors by forming and solving least square problems.
+   *
+   * @param srcFactorBlocks src factors
+   * @param srcOutBlocks src out-blocks
+   * @param dstInBlocks dst in-blocks
+   * @param rank rank
+   * @param regParam regularization constant
+   * @param srcEncoder encoder for src local indices
+   * @param implicitPrefs whether to use implicit preference
+   * @param alpha the alpha constant in the implicit preference formulation
+   *
+   * @return dst factors
+   */
   private def computeFactors(
       srcFactorBlocks: RDD[(Int, FactorBlock)],
       srcOutBlocks: RDD[(Int, OutBlock)],
       dstInBlocks: RDD[(Int, InBlock)],
-      k: Int,
-      lambda: Double,
+      rank: Int,
+      regParam: Double,
       srcEncoder: LocalIndexEncoder,
       implicitPrefs: Boolean = false,
-      alpha: Double = 1.0,
-      YtY: Option[NormalEquation] = None): RDD[(Int, FactorBlock)] = {
+      alpha: Double = 1.0): RDD[(Int, FactorBlock)] = {
+    val YtY = if (implicitPrefs) Some(computeYtY(srcFactorBlocks, rank)) else None
     val srcOut = srcOutBlocks.join(srcFactorBlocks).flatMap {
       case (srcBlockId, (srcOutBlock, srcFactors)) =>
         srcOutBlock.view.zipWithIndex.map { case (activeIndices, dstBlockId) =>
@@ -769,8 +869,8 @@ private object ALS extends Logging {
         val sortedSrcFactors = srcFactors.toSeq.sortBy(_._1).map(_._2).toArray
         val dstFactors = new Array[Array[Float]](dstIds.size)
         var j = 0
-        val ls = new NormalEquation(k)
-        val solver = new CholeskySolver
+        val ls = new NormalEquation(rank)
+        val solver = new CholeskySolver // TODO: add NNLS solver
         while (j < dstIds.size) {
           ls.reset()
           if (implicitPrefs) {
@@ -790,15 +890,19 @@ private object ALS extends Logging {
             }
             i += 1
           }
-          dstFactors(j) = solver.solve(ls, lambda)
+          dstFactors(j) = solver.solve(ls, regParam)
           j += 1
         }
         dstFactors
     }
   }
 
-  private def computeYtY(factorBlocks: RDD[(Int, FactorBlock)], k: Int): NormalEquation = {
-    factorBlocks.values.aggregate(new NormalEquation(k))(
+  /**
+   * Computes the Gramian matrix of user or item factors, which is only used in implicit preference.
+   * Caching of the input factors is handled in [[ALS#train]].
+   */
+  private def computeYtY(factorBlocks: RDD[(Int, FactorBlock)], rank: Int): NormalEquation = {
+    factorBlocks.values.aggregate(new NormalEquation(rank))(
       seqOp = (ne, factors) => {
         factors.foreach(ne.add(_, 0.0f))
         ne
@@ -823,17 +927,20 @@ private object ALS extends Logging {
       math.min(java.lang.Integer.numberOfLeadingZeros(numBlocks - 1), 31)
     private[this] final val localIndexMask = (1 << numLocalIndexBits) - 1
 
+    /** Encodes a (blockId, localIndex) into a single integer. */
     def encode(blockId: Int, localIndex: Int): Int = {
       require(blockId < numBlocks)
       require((localIndex & ~localIndexMask) == 0)
       (blockId << numLocalIndexBits) | localIndex
     }
 
+    /** Gets the block id from an encoded index. */
     @inline
     def blockId(encoded: Int): Int = {
       encoded >>> numLocalIndexBits
     }
 
+    /** Gets the local index from an encoded index. */
     @inline
     def localIndex(encoded: Int): Int = {
       encoded & localIndexMask
