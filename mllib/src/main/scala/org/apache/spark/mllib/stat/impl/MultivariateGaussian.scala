@@ -52,8 +52,6 @@ class MultivariateGaussian private[mllib] (
    */
   private val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
   
-  // Public methods use MLlib vectors/matrices
-  
   /** Return the mean vector for this distribution */
   def getMean(): Vector = {
     Vectors.fromBreeze(mu)
@@ -73,8 +71,6 @@ class MultivariateGaussian private[mllib] (
   def logpdf(x: Vector): Double = {
     logpdf(x.toBreeze.toDenseVector)
   }
-  
-  // private methods use Breeze vectors/matrices
   
   /** Returns density of this multivariate Gaussian at given point, x */
   private[mllib] def pdf(x: DBV[Double]): Double = {

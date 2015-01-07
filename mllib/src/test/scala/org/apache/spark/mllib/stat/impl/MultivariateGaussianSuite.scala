@@ -19,7 +19,7 @@ package org.apache.spark.mllib.stat.impl
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.linalg.{ Vectors, Vector, Matrices, Matrix }
+import org.apache.spark.mllib.linalg.{ Vectors, Matrices }
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 
