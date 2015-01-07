@@ -63,7 +63,6 @@ class LogisticGradient extends Gradient {
   override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
     val margin = -1.0 * dot(data, weights)
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
-
     val gradient = data.copy
     scal(gradientMultiplier, gradient)
     val loss =
