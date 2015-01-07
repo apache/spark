@@ -182,7 +182,10 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
   /**
    * Total bytes read.
    */
-  var bytesRead: Long = 0L
+  private var _bytesRead: Long = _
+  def bytesRead = _bytesRead
+  def incBytesRead(value: Long) = _bytesRead += value
+  def decBytesRead(value: Long) = _bytesRead -= value
 }
 
 /**
@@ -194,7 +197,10 @@ case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
   /**
    * Total bytes written
    */
-  var bytesWritten: Long = 0L
+  private var _bytesWritten: Long = _
+  def bytesWritten = _bytesWritten
+  def incBytesWritten(value : Long) = _bytesWritten += value
+  def decBytesWritten(value : Long) = _bytesWritten -= value
 }
 
 /**
@@ -204,31 +210,47 @@ case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
 @DeveloperApi
 class ShuffleReadMetrics extends Serializable {
   /**
-   * Number of blocks fetched in this shuffle by this task (remote or local)
-   */
-  def totalBlocksFetched: Int = remoteBlocksFetched + localBlocksFetched
-
-  /**
    * Number of remote blocks fetched in this shuffle by this task
    */
-  var remoteBlocksFetched: Int = _
-
+  private var _remoteBlocksFetched: Int = _
+  def remoteBlocksFetched = _remoteBlocksFetched
+  def incRemoteBlocksFetched(value: Int) = _remoteBlocksFetched += value
+  def defRemoteBlocksFetched(value: Int) = _remoteBlocksFetched -= value
+  
   /**
    * Number of local blocks fetched in this shuffle by this task
    */
-  var localBlocksFetched: Int = _
+  private var _localBlocksFetched: Int = _
+  def localBlocksFetched = _localBlocksFetched
+  def incLocalBlocksFetched(value: Int) = _localBlocksFetched += value
+  def defLocalBlocksFetched(value: Int) = _localBlocksFetched -= value
+
 
   /**
    * Time the task spent waiting for remote shuffle blocks. This only includes the time
    * blocking on shuffle input data. For instance if block B is being fetched while the task is
    * still not finished processing block A, it is not considered to be blocking on block B.
    */
-  var fetchWaitTime: Long = _
-
+  private var _fetchWaitTime: Long = _
+  def fetchWaitTime = _fetchWaitTime
+  def incFetchWaitTime(value: Long) = _fetchWaitTime += value
+  def decFetchWaitTime(value: Long) = _fetchWaitTime -= value
+  
   /**
    * Total number of remote bytes read from the shuffle by this task
    */
-  var remoteBytesRead: Long = _
+  private var _remoteBytesRead: Long = _
+  def remoteBytesRead = _remoteBytesRead
+  def incRemoteBytesRead(value: Long) = _remoteBytesRead += value
+  def decRemoteBytesRead(value: Long) = _remoteBytesRead -= value
+
+  /**
+   * Number of blocks fetched in this shuffle by this task (remote or local)
+   */
+  private var _totalBlocksFetched: Int = remoteBlocksFetched + localBlocksFetched
+  def totalBlocksFetched = _totalBlocksFetched
+  def incTotalBlocksFetched(value: Int) = _totalBlocksFetched += value
+  def decTotalBlocksFetched(value: Int) = _totalBlocksFetched -= value
 }
 
 /**
@@ -240,10 +262,16 @@ class ShuffleWriteMetrics extends Serializable {
   /**
    * Number of bytes written for the shuffle by this task
    */
-  @volatile var shuffleBytesWritten: Long = _
-
+  @volatile private var _shuffleBytesWritten: Long = _
+  def incShuffleBytesWritten(value: Long) = _shuffleBytesWritten += value
+  def decShuffleBytesWritten(value: Long) = _shuffleBytesWritten -= value
+  def shuffleBytesWritten = _shuffleBytesWritten
   /**
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds
    */
-  @volatile var shuffleWriteTime: Long = _
+  @volatile private var _shuffleWriteTime: Long = _
+  def incShuffleWriteTime(value: Long) = _shuffleWriteTime += value
+  def decShuffleWriteTime(value: Long) = _shuffleWriteTime -= value
+  def shuffleWriteTime= _shuffleWriteTime
+
 }
