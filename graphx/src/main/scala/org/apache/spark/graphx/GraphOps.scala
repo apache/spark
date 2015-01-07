@@ -343,9 +343,9 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * @example for `sendMsg`:
    * {{{
    *  private def sendMessage(ctx: EdgeContext[VD, ED, A): Unit = {
-   *	//	logic code defined by you...
-	 *    ctx.sendToDst(aMsg1)
-	 *    ctx.sendToSrc(aMsg2)
+   *	  //logic code defined by you...
+   *    ctx.sendToDst(aMsg1)
+   *    ctx.sendToSrc(aMsg2)
    *  }
    * }}}
    *
