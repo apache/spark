@@ -106,7 +106,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *
    * @group userf
    */
-  implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]) = {
+  implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]): SchemaRDD = {
     SparkPlan.currentContext.set(self)
     val attributeSeq = ScalaReflection.attributesFor[A]
     val schema = StructType.fromAttributes(attributeSeq)
@@ -327,9 +327,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     def numPartitions = self.numShufflePartitions
 
-    val strategies: Seq[Strategy] =
+    def strategies: Seq[Strategy] =
       extraStrategies ++ (
-      CommandStrategy(self) ::
+      CommandStrategy ::
       DataSourceStrategy ::
       TakeOrdered ::
       HashAggregation ::

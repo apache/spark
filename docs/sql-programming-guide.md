@@ -625,6 +625,10 @@ This conversion can be done using one of two methods in a SQLContext:
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
 * `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
 
+Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
+line must contain a separate, self-contained valid JSON object. As a consequence,
+a regular multi-line JSON file will most often fail.
+
 {% highlight scala %}
 // sc is an existing SparkContext.
 val sqlContext = new org.apache.spark.sql.SQLContext(sc)
@@ -663,6 +667,10 @@ This conversion can be done using one of two methods in a JavaSQLContext :
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
 * `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
 
+Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
+line must contain a separate, self-contained valid JSON object. As a consequence,
+a regular multi-line JSON file will most often fail.
+
 {% highlight java %}
 // sc is an existing JavaSparkContext.
 JavaSQLContext sqlContext = new org.apache.spark.sql.api.java.JavaSQLContext(sc);
@@ -700,6 +708,10 @@ This conversion can be done using one of two methods in a SQLContext:
 
 * `jsonFile` - loads data from a directory of JSON files where each line of the files is a JSON object.
 * `jsonRDD` - loads data from an existing RDD where each element of the RDD is a string containing a JSON object.
+
+Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
+line must contain a separate, self-contained valid JSON object. As a consequence,
+a regular multi-line JSON file will most often fail.
 
 {% highlight python %}
 # sc is an existing SparkContext.
@@ -819,12 +831,9 @@ turning on some experimental options.
 
 ## Caching Data In Memory
 
-Spark SQL can cache tables using an in-memory columnar format by calling `sqlContext.cacheTable("tableName")`.
+Spark SQL can cache tables using an in-memory columnar format by calling `sqlContext.cacheTable("tableName")` or `schemaRDD.cache()`.
 Then Spark SQL will scan only required columns and will automatically tune compression to minimize
 memory usage and GC pressure. You can call `sqlContext.uncacheTable("tableName")` to remove the table from memory.
-
-Note that if you call `schemaRDD.cache()` rather than `sqlContext.cacheTable(...)`, tables will _not_ be cached using
-the in-memory columnar format, and therefore `sqlContext.cacheTable(...)` is strongly recommended for this use case.
 
 Configuration of in-memory caching can be done using the `setConf` method on SQLContext or by running
 `SET key=value` commands using SQL.
@@ -938,6 +947,18 @@ Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
 You may also use the beeline script that comes with Hive.
 
+Thrift JDBC server also supports sending thrift RPC messages over HTTP transport. 
+Use the following setting to enable HTTP mode as system property or in `hive-site.xml` file in `conf/`: 
+
+    hive.server2.transport.mode - Set this to value: http 
+    hive.server2.thrift.http.port - HTTP port number fo listen on; default is 10001
+    hive.server2.http.endpoint - HTTP endpoint; default is cliservice
+
+To test, use beeline to connect to the JDBC/ODBC server in http mode with:
+
+    beeline> !connect jdbc:hive2://<host>:<port>/<database>?hive.server2.transport.mode=http;hive.server2.thrift.http.path=<http_endpoint>
+
+
 ## Running the Spark SQL CLI
 
 The Spark SQL CLI is a convenient tool to run the Hive metastore service in local mode and execute
@@ -986,12 +1007,11 @@ let user control table caching explicitly:
     CACHE TABLE logs_last_month;
     UNCACHE TABLE logs_last_month;
 
-**NOTE:** `CACHE TABLE tbl` is lazy, similar to `.cache` on an RDD. This command only marks `tbl` to ensure that
-partitions are cached when calculated but doesn't actually cache it until a query that touches `tbl` is executed.
-To force the table to be cached, you may simply count the table immediately after executing `CACHE TABLE`:
+**NOTE:** `CACHE TABLE tbl` is now __eager__ by default not __lazy__. Don’t need to trigger cache materialization manually anymore.
 
-    CACHE TABLE logs_last_month;
-    SELECT COUNT(1) FROM logs_last_month;
+Spark SQL newly introduced a statement to let user control table caching whether or not lazy since Spark 1.2.0:
+
+	CACHE [LAZY] TABLE [AS SELECT] ...
 
 Several caching related features are not supported yet:
 

@@ -105,11 +105,6 @@
       <classifier>${avro.mapred.classifier}</classifier>
     </dependency>
     <dependency>
-      <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>org.scalacheck</groupId>
       <artifactId>scalacheck_${scala.binary.version}</artifactId>
       <scope>test</scope>
@@ -161,6 +156,10 @@
       <plugin>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
+        <configuration>
+          <!-- Specially disable assertions since some Hive tests fail them -->
+          <argLine>-da -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
+        </configuration>
       </plugin>
       <plugin>
          <groupId>org.codehaus.mojo</groupId>

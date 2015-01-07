@@ -24,6 +24,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.test.TestSQLContext._
 
+import scala.language.postfixOps
+
 class DslQuerySuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
@@ -52,6 +54,18 @@ class DslQuerySuite extends QueryTest {
       testData2.aggregate(sum('b)),
       9
     )
+  }
+
+  test("convert $\"attribute name\" into unresolved attribute") {
+    checkAnswer(
+      testData.where($"key" === 1).select($"value"),
+      Seq(Seq("1")))
+  }
+
+  test("convert Scala Symbol 'attrname into unresolved attribute") {
+    checkAnswer(
+      testData.where('key === 1).select('value),
+      Seq(Seq("1")))
   }
 
   test("select *") {
@@ -86,7 +100,7 @@ class DslQuerySuite extends QueryTest {
       Seq(Seq(6)))
   }
 
-  test("sorting") {
+  test("global sorting") {
     checkAnswer(
       testData2.orderBy('a.asc, 'b.asc),
       Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)))
@@ -118,6 +132,33 @@ class DslQuerySuite extends QueryTest {
     checkAnswer(
       mapData.orderBy('data.getItem(1).desc),
       mapData.collect().sortBy(_.data(1)).reverse.toSeq)
+  }
+
+  test("partition wide sorting") {
+    // 2 partitions totally, and
+    // Partition #1 with values:
+    //    (1, 1)
+    //    (1, 2)
+    //    (2, 1)
+    // Partition #2 with values:
+    //    (2, 2)
+    //    (3, 1)
+    //    (3, 2)
+    checkAnswer(
+      testData2.sortBy('a.asc, 'b.asc),
+      Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)))
+
+    checkAnswer(
+      testData2.sortBy('a.asc, 'b.desc),
+      Seq((1,2), (1,1), (2,1), (2,2), (3,2), (3,1)))
+
+    checkAnswer(
+      testData2.sortBy('a.desc, 'b.desc),
+      Seq((2,1), (1,2), (1,1), (3,2), (3,1), (2,2)))
+
+    checkAnswer(
+      testData2.sortBy('a.desc, 'b.asc),
+      Seq((2,1), (1,1), (1,2), (3,1), (3,2), (2,2)))
   }
 
   test("limit") {

@@ -30,23 +30,6 @@ abstract class Command extends LeafNode {
 }
 
 /**
- * Returned for commands supported by a given parser, but not catalyst.  In general these are DDL
- * commands that are passed directly to another system.
- */
-case class NativeCommand(cmd: String) extends Command {
-  override def output =
-    Seq(AttributeReference("result", StringType, nullable = false)())
-}
-
-/**
- * Commands of the form "SET [key [= value] ]".
- */
-case class DFSCommand(kv: Option[(String, Option[String])]) extends Command {
-  override def output = Seq(
-    AttributeReference("DFS output", StringType, nullable = false)())
-}
-
-/**
  *
  * Commands of the form "SET [key [= value] ]".
  */

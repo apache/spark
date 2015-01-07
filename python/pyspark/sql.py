@@ -420,7 +420,7 @@ class StructType(DataType):
 
 class UserDefinedType(DataType):
     """
-    :: WARN: Spark Internal Use Only ::
+    .. note:: WARN: Spark Internal Use Only
     SQL User-Defined Type (UDT).
     """
 
@@ -788,8 +788,9 @@ def _create_converter(dataType):
         return lambda row: map(conv, row)
 
     elif isinstance(dataType, MapType):
-        conv = _create_converter(dataType.valueType)
-        return lambda row: dict((k, conv(v)) for k, v in row.iteritems())
+        kconv = _create_converter(dataType.keyType)
+        vconv = _create_converter(dataType.valueType)
+        return lambda row: dict((kconv(k), vconv(v)) for k, v in row.iteritems())
 
     elif isinstance(dataType, NullType):
         return lambda x: None
@@ -944,7 +945,7 @@ def _infer_schema_type(obj, dataType):
 
     elif isinstance(dataType, MapType):
         k, v = obj.iteritems().next()
-        return MapType(_infer_type(k),
+        return MapType(_infer_schema_type(k, dataType.keyType),
                        _infer_schema_type(v, dataType.valueType))
 
     elif isinstance(dataType, StructType):
@@ -1085,7 +1086,7 @@ def _has_struct_or_date(dt):
     elif isinstance(dt, ArrayType):
         return _has_struct_or_date(dt.elementType)
     elif isinstance(dt, MapType):
-        return _has_struct_or_date(dt.valueType)
+        return _has_struct_or_date(dt.keyType) or _has_struct_or_date(dt.valueType)
     elif isinstance(dt, DateType):
         return True
     elif isinstance(dt, UserDefinedType):
@@ -1148,12 +1149,13 @@ def _create_cls(dataType):
         return List
 
     elif isinstance(dataType, MapType):
-        cls = _create_cls(dataType.valueType)
+        kcls = _create_cls(dataType.keyType)
+        vcls = _create_cls(dataType.valueType)
 
         def Dict(d):
             if d is None:
                 return
-            return dict((k, _create_object(cls, v)) for k, v in d.items())
+            return dict((_create_object(kcls, k), _create_object(vcls, v)) for k, v in d.items())
 
         return Dict
 
@@ -1164,7 +1166,8 @@ def _create_cls(dataType):
         return lambda datum: dataType.deserialize(datum)
 
     elif not isinstance(dataType, StructType):
-        raise Exception("unexpected data type: %s" % dataType)
+        # no wrapper for primitive types
+        return lambda x: x
 
     class Row(tuple):
 
@@ -1668,7 +1671,7 @@ class HiveContext(SQLContext):
         except Py4JError as e:
             raise Exception("You must build Spark with Hive. "
                             "Export 'SPARK_HIVE=true' and run "
-                            "sbt/sbt assembly", e)
+                            "build/sbt assembly", e)
 
     def _get_hive_ctx(self):
         return self._jvm.HiveContext(self._jsc.sc())
@@ -2081,6 +2084,34 @@ class SchemaRDD(RDD):
             return SchemaRDD(rdd, self.sql_ctx)
         else:
             raise ValueError("Can only subtract another SchemaRDD")
+
+    def sample(self, withReplacement, fraction, seed=None):
+        """
+        Return a sampled subset of this SchemaRDD.
+
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.sample(False, 0.5, 97).count()
+        2L
+        """
+        assert fraction >= 0.0, "Negative fraction value: %s" % fraction
+        seed = seed if seed is not None else random.randint(0, sys.maxint)
+        rdd = self._jschema_rdd.sample(withReplacement, fraction, long(seed))
+        return SchemaRDD(rdd, self.sql_ctx)
+
+    def takeSample(self, withReplacement, num, seed=None):
+        """Return a fixed-size sampled subset of this SchemaRDD.
+
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.takeSample(False, 2, 97)
+        [Row(field1=3, field2=u'row3'), Row(field1=1, field2=u'row1')]
+        """
+        seed = seed if seed is not None else random.randint(0, sys.maxint)
+        with SCCallSiteSync(self.context) as css:
+            bytesInJava = self._jschema_rdd.baseSchemaRDD() \
+                .takeSampleToPython(withReplacement, num, long(seed)) \
+                .iterator()
+        cls = _create_cls(self.schema())
+        return map(cls, self._collect_iterator_through_file(bytesInJava))
 
 
 def _test():

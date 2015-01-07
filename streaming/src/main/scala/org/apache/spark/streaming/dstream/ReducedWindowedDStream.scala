@@ -17,8 +17,6 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.StreamingContext._
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.{CoGroupedRDD, MapPartitionsRDD}
 import org.apache.spark.Partitioner
