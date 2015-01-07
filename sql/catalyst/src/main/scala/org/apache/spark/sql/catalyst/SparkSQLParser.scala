@@ -70,8 +70,8 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
           val rsIdent = processIdent((first :: rest).mkString.toLowerCase)
           if(rsIdent.getClass.getCanonicalName.contains("StdTokens.Keyword")) 
             Keyword(rsIdent.chars.toLowerCase()) 
-          else 
-            rsIdent
+          else
+            processIdent((first :: rest).mkString)
       }
     | rep1(digit) ~ ('.' ~> digit.*).? ^^ {
         case i ~ None    => NumericLit(i.mkString)
