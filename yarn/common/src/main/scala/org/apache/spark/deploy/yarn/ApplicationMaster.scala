@@ -60,7 +60,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
   @volatile private var finished = false
-  @volatile private var finalStatus = FinalApplicationStatus.SUCCEEDED
+  @volatile private var finalStatus = getDefaultFinalStatus
   @volatile private var finalMsg: String = ""
   @volatile private var userClassThread: Thread = _
 
@@ -150,6 +150,20 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           "Uncaught exception: " + e.getMessage())
     }
     exitCode
+  }
+
+  /**
+   * Set the default final application status for client mode to UNDEFINED to handle
+   * if YARN HA restarts the application so that it properly retries. Set the final
+   * status to SUCCEEDED in cluster mode to handle if the user calls System.exit
+   * from the application code.
+   */
+  final def getDefaultFinalStatus() = {
+    if (isDriver) {
+      FinalApplicationStatus.SUCCEEDED
+    } else {
+      FinalApplicationStatus.UNDEFINED
+    }
   }
 
   /**
