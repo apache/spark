@@ -46,8 +46,7 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
 
   protected case class Keyword(str: String)
 
-  protected implicit def asParser(k: Keyword): Parser[String] =
-    lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
+  protected implicit def asParser(k: Keyword): Parser[String] = k.str.toLowerCase
 
   protected val CREATE = Keyword("CREATE")
   protected val TEMPORARY = Keyword("TEMPORARY")

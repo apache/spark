@@ -27,8 +27,7 @@ import org.apache.spark.sql.hive.execution.{AddJar, AddFile, HiveNativeCommand}
  * A parser that recognizes all HiveQL constructs together with Spark SQL specific extensions.
  */
 private[hive] class ExtendedHiveQlParser extends AbstractSparkSQLParser {
-  protected implicit def asParser(k: Keyword): Parser[String] =
-    lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
+  protected implicit def asParser(k: Keyword): Parser[String] = k.str.toLowerCase
 
   protected val ADD  = Keyword("ADD")
   protected val DFS  = Keyword("DFS")
