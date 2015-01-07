@@ -20,6 +20,7 @@ package org.apache.spark.mllib.optimization
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, dot, scal}
+import org.apache.spark.mllib.util.MLUtils
 
 /**
  * :: DeveloperApi ::
@@ -64,17 +65,12 @@ class LogisticGradient extends Gradient {
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
     val gradient = data.copy
     scal(gradientMultiplier, gradient)
-    val minusYP = if (label > 0) margin else -margin
-
-    // log1p is log(1+p) but more accurate for small p
-    // Following two equations are the same analytically but not numerically, e.g.,
-    // math.log1p(math.exp(1000)) == Infinity
-    // 1000 + math.log1p(math.exp(-1000)) == 1000.0
     val loss =
-      if (minusYP < 0) {
-        math.log1p(math.exp(minusYP))
+      if (label > 0) {
+        // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
+        MLUtils.log1pExp(margin)
       } else {
-        math.log1p(math.exp(-minusYP)) + minusYP
+        MLUtils.log1pExp(margin) - margin
       }
 
     (gradient, loss)
@@ -89,9 +85,10 @@ class LogisticGradient extends Gradient {
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
     axpy(gradientMultiplier, data, cumGradient)
     if (label > 0) {
-      math.log1p(math.exp(margin))
+      // The following is equivalent to log(1 + exp(margin)) but more numerically stable.
+      MLUtils.log1pExp(margin)
     } else {
-      math.log1p(math.exp(margin)) - margin
+      MLUtils.log1pExp(margin) - margin
     }
   }
 }
