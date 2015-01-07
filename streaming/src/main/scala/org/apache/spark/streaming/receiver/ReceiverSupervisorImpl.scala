@@ -73,12 +73,13 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Timeout for Akka actor messages */
   private val askTimeout = AkkaUtils.askTimeout(env.conf)
+  private var numStartAttempts = 0
 
   /** Akka actor for receiving messages from the ReceiverTracker in the driver */
   private val actor = env.actorSystem.actorOf(
     Props(new Actor {
       override def preStart() {
-        logInfo("Registered receiver " + streamId)
+        logInfo(s"Registered receiver ${streamId} ")
         val msg = RegisterReceiver(
           streamId, receiver.getClass.getSimpleName, Utils.localHostName(), self)
         val future = trackerActor.ask(msg)(askTimeout)
@@ -183,8 +184,14 @@ private[streaming] class ReceiverSupervisorImpl(
   }
 
   override protected def onReceiverStart() {
-    val msg = RegisterReceiver(
-      streamId, receiver.getClass.getSimpleName, Utils.localHostName(), actor)
+    numStartAttempts += 1
+    if(numStartAttempts > 1) {
+      logInfo(s"Receiver ${streamId} failed ${numStartAttempts -1} times, " +
+        s"and attempts to restart.")
+    } else {
+      logInfo(s"Receiver ${streamId} attempts to start.")
+    }
+    val msg = StartingReceiver(streamId, numStartAttempts)
     val future = trackerActor.ask(msg)(askTimeout)
     Await.result(future, askTimeout)
   }
