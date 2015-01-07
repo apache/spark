@@ -1012,4 +1012,8 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     rdd.registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), 2)
   }
+
+  test("support alias field as string literal") {
+    assert(sql("select key , value as 'vvv' from testData").count == 100)
+  }
 }
