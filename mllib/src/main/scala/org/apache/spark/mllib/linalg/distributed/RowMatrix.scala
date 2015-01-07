@@ -528,21 +528,21 @@ class RowMatrix(
       iter.flatMap { row =>
         val buf = new ListBuffer[((Int, Int), Double)]()
         row match {
-          case sv: SparseVector =>
-            val nnz = sv.indices.size
+          case SparseVector(size, indices, values) =>
+            val nnz = indices.size
             var k = 0
             while (k < nnz) {
-              scaled(k) = sv.values(k) / q(sv.indices(k))
+              scaled(k) = values(k) / q(indices(k))
               k += 1
             }
             k = 0
             while (k < nnz) {
-              val i = sv.indices(k)
+              val i = indices(k)
               val iVal = scaled(k)
               if (iVal != 0 && rand.nextDouble() < p(i)) {
                 var l = k + 1
                 while (l < nnz) {
-                  val j = sv.indices(l)
+                  val j = indices(l)
                   val jVal = scaled(l)
                   if (jVal != 0 && rand.nextDouble() < p(j)) {
                     buf += (((i, j), iVal * jVal))
@@ -552,11 +552,11 @@ class RowMatrix(
               }
               k += 1
             }
-          case dv: DenseVector =>
-            val n = dv.values.size
+          case DenseVector(values) =>
+            val n = values.size
             var i = 0
             while (i < n) {
-              scaled(i) = dv.values(i) / q(i)
+              scaled(i) = values(i) / q(i)
               i += 1
             }
             i = 0
@@ -620,11 +620,9 @@ object RowMatrix {
     // TODO: Find a better home (breeze?) for this method.
     val n = v.size
     v match {
-      case dv: DenseVector =>
-        blas.dspr("U", n, alpha, dv.values, 1, U)
-      case sv: SparseVector =>
-        val indices = sv.indices
-        val values = sv.values
+      case DenseVector(values) =>
+        blas.dspr("U", n, alpha, values, 1, U)
+      case SparseVector(size, indices, values) =>
         val nnz = indices.length
         var colStartIdx = 0
         var prevCol = 0
