@@ -64,7 +64,7 @@ class LogisticGradient extends Gradient {
     val gradientMultiplier = (1.0 / (1.0 + math.exp(margin))) - label
     val gradient = data.copy
     scal(gradientMultiplier, gradient)
-    val minusYP = label * margin
+    val minusYP = if (label > 0) margin else -margin
 
     // log1p is log(1+p) but more accurate for small p
     // Following two equations are the same analytically but not numerically, e.g.,
