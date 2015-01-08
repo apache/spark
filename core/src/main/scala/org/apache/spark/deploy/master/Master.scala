@@ -720,26 +720,27 @@ private[spark] class Master(
   def rebuildSparkUI(app: ApplicationInfo): Boolean = {
     val appName = app.desc.name
     val notFoundBasePath = HistoryServer.UI_PATH_PREFIX + "/not-found"
-    val eventLogFile = app.desc.eventLogDir
-      .map { dir => EventLoggingListener.getLogPath(dir, app.id) }
-      .getOrElse {
-        // Event logging is not enabled for this application
-        app.desc.appUiUrl = notFoundBasePath
-        return false
-    }
-    val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
-
-    if (fs.exists(new Path(eventLogFile + EventLoggingListener.IN_PROGRESS))) {
-      // Event logging is enabled for this application, but the application is still in progress
-      val title = s"Application history not found (${app.id})"
-      var msg = s"Application $appName is still in progress."
-      logWarning(msg)
-      msg = URLEncoder.encode(msg, "UTF-8")
-      app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
-      return false
-    }
-
     try {
+      val eventLogFile = app.desc.eventLogDir
+        .map { dir => EventLoggingListener.getLogPath(dir, app.id) }
+        .getOrElse {
+          // Event logging is not enabled for this application
+          app.desc.appUiUrl = notFoundBasePath
+          return false
+        }
+        
+      val fs = Utils.getHadoopFileSystem(eventLogFile, hadoopConf)
+
+      if (fs.exists(new Path(eventLogFile + EventLoggingListener.IN_PROGRESS))) {
+        // Event logging is enabled for this application, but the application is still in progress
+        val title = s"Application history not found (${app.id})"
+        var msg = s"Application $appName is still in progress."
+        logWarning(msg)
+        msg = URLEncoder.encode(msg, "UTF-8")
+        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
+        return false
+      }
+
       val (logInput, sparkVersion) = EventLoggingListener.openEventLog(new Path(eventLogFile), fs)
       val replayBus = new ReplayListenerBus()
       val ui = SparkUI.createHistoryUI(new SparkConf, replayBus, new SecurityManager(conf),
@@ -758,7 +759,7 @@ private[spark] class Master(
       case fnf: FileNotFoundException =>
         // Event logging is enabled for this application, but no event logs are found
         val title = s"Application history not found (${app.id})"
-        var msg = s"No event logs found for application $appName in $eventLogFile."
+        var msg = s"No event logs found for application $appName in ${app.desc.eventLogDir}."
         logWarning(msg)
         msg += " Did you specify the correct logging directory?"
         msg = URLEncoder.encode(msg, "UTF-8")
@@ -845,7 +846,6 @@ private[spark] class Master(
 private[spark] object Master extends Logging {
   val systemName = "sparkMaster"
   private val actorName = "Master"
-  val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
 
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
@@ -855,14 +855,24 @@ private[spark] object Master extends Logging {
     actorSystem.awaitTermination()
   }
 
-  /** Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:ip`. */
+  /**
+   * Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:port`.
+   *
+   * @throws SparkException if the url is invalid
+   */
   def toAkkaUrl(sparkUrl: String): String = {
-    sparkUrl match {
-      case sparkUrlRegex(host, port) =>
-        "akka.tcp://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
-      case _ =>
-        throw new SparkException("Invalid master URL: " + sparkUrl)
-    }
+    val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
+    "akka.tcp://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
+  }
+
+  /**
+   * Returns an akka `Address` for the Master actor given a sparkUrl `spark://host:port`.
+   *
+   * @throws SparkException if the url is invalid
+   */
+  def toAkkaAddress(sparkUrl: String): Address = {
+    val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
+    Address("akka.tcp", systemName, host, port)
   }
 
   def startSystemAndActor(
