@@ -14,8 +14,8 @@ login_manager = flask_login.LoginManager()
 def load_user(userid):
     session = settings.Session()
     user = session.query(User).filter(User.id == userid).first()
-    if not user:
-        raise Exception(userid)
+    #if not user:
+    #    raise Exception(userid)
     session.expunge_all()
     session.commit()
     session.close()

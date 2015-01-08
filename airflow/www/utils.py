@@ -7,6 +7,15 @@ from flask import after_this_request, request
 import wtforms
 from wtforms.compat import text_type
 
+def limit_sql(sql, limit):
+    sql = sql.strip()
+    sql = sql.rstrip(';')
+    return """\
+    SELECT * FROM (
+    {sql}
+    ) qry
+    LIMIT {limit};
+    """.format(**locals())
 
 def gzipped(f):
     '''
