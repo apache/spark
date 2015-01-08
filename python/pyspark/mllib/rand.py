@@ -128,7 +128,7 @@ class RandomRDDs(object):
         >>> abs(stats.stdev() - expStd) < 0.5
         True
         """
-        return callMLlibFunc("logNormalRDD", sc._jsc, float(mean), float(std), 
+        return callMLlibFunc("logNormalRDD", sc._jsc, float(mean), float(std),
                              size, numPartitions, seed)
 
     @staticmethod
@@ -295,7 +295,7 @@ class RandomRDDs(object):
         >>> abs(mat.std() - expStd) < 0.1
         True
         """
-        return callMLlibFunc("logNormalVectorRDD", sc._jsc, float(mean), float(std), 
+        return callMLlibFunc("logNormalVectorRDD", sc._jsc, float(mean), float(std),
                              numRows, numCols, numPartitions, seed)
 
     @staticmethod
@@ -389,8 +389,9 @@ class RandomRDDs(object):
         >>> abs(mat.std() - expStd) < 0.1
         True
         """
-        return callMLlibFunc("gammaVectorRDD", sc._jsc, float(shape), float(scale), 
+        return callMLlibFunc("gammaVectorRDD", sc._jsc, float(shape), float(scale),
                              numRows, numCols, numPartitions, seed)
+
 
 def _test():
     import doctest
