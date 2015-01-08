@@ -392,29 +392,28 @@ abstract class RDD[T: ClassTag](
         this, new BernoulliCellSampler[T](x(0), x(1)), true, seed)
     }.toArray
   }
-
+  
   /**
-   * Return a fixed-size sampled subset of this RDD in an array
-   *
-   * @param withReplacement whether sampling is done with replacement
-   * @param num size of the returned sample
-   * @param seed seed for the random number generator
-   * @return sample of specified size in an array
+   * Returns a fixed-size sampled subset of this RDD as an RDD
+   * @param withReplacement - Whether to sample with replacement (boolean)
+   * @param num - The number of elements to retrieve
+   * @param seed - A random seed for the randomization
+   * @return
    */
-  def takeSample(withReplacement: Boolean,
-      num: Int,
-      seed: Long = Utils.random.nextLong): Array[T] = {
+  def sampleByCount(withReplacement: Boolean,
+             num: Int,
+             seed: Long = Utils.random.nextLong): RDD[T] = {
     val numStDev =  10.0
 
     if (num < 0) {
       throw new IllegalArgumentException("Negative number of elements requested")
     } else if (num == 0) {
-      return new Array[T](0)
+      return new EmptyRDD[T](this.sc)
     }
 
     val initialCount = this.count()
     if (initialCount == 0) {
-      return new Array[T](0)
+      return new EmptyRDD[T](this.sc)
     }
 
     val maxSampleSize = Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt
@@ -425,26 +424,57 @@ abstract class RDD[T: ClassTag](
 
     val rand = new Random(seed)
     if (!withReplacement && num >= initialCount) {
-      return Utils.randomizeInPlace(this.collect(), rand)
+      return this
     }
 
+    // Because sampling is stochastic, compute the sample size needed to ensure a sufficient 
+    // number of samples with 99.99% succss rate
     val fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount,
       withReplacement)
-
-    var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+    
+    var samples = this.sample(withReplacement, fraction, rand.nextInt())
 
     // If the first sample didn't turn out large enough, keep trying to take samples;
     // this shouldn't happen often because we use a big multiplier for the initial size
     var numIters = 0
-    while (samples.length < num) {
+    var count = samples.count()
+    
+    // At this point we are guaranteed to have at least "num" samples but we may have more than
+    // num samples since computeFractionForSample actually yields an upper bound.
+    // If we have too many samples, drop un-needed ones
+    while (count < num) {
       logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
-      samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+      samples = this.sample(withReplacement, fraction, rand.nextInt())
       numIters += 1
+      count = samples.count()
     }
 
-    Utils.randomizeInPlace(samples, rand).take(num)
+    // After sampling is complete, we may actually have too many samples. Therefore, as the final
+    // step, pare down the generated list
+    if(count > num) {
+      samples =  samples.zipWithIndex().filter(_._2 < num).map(_._1) 
+    }
+
+    samples
   }
 
+  /**
+   * Return a fixed-size sampled subset of this RDD in an array
+   *
+   * @param withReplacement whether sampling is done with replacement
+   * @param num size of the returned sample
+   * @param seed seed for the random number generator
+   * @return sample of specified size in an array
+   */
+  def takeSample(withReplacement: Boolean,
+                 num: Int,
+                 seed: Long = Utils.random.nextLong): Array[T] = {
+
+    // To maintain functionality of the previous implementation, randomize the returned 
+    // RDD in place before returning
+    Utils.randomizeInPlace(sampleByCount(withReplacement, num, seed).collect(), new Random(seed))
+  }
+  
   /**
    * Return the union of this RDD and another one. Any identical elements will appear multiple
    * times (use `.distinct()` to eliminate them).

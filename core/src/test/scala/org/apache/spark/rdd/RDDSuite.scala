@@ -17,6 +17,8 @@
 
 package org.apache.spark.rdd
 
+import java.util.Random
+
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -85,7 +87,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(error(simpleRdd.countApproxDistinct(8, 0), size) < 0.2)
     assert(error(simpleRdd.countApproxDistinct(12, 0), size) < 0.1)
   }
-
+  
   test("SparkContext.union") {
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     assert(sc.union(nums).collect().toList === List(1, 2, 3, 4))
@@ -549,6 +551,60 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       assert(sampled.partitioner === rdd.partitioner)
     }
   }
+  
+  test("sampleByCount") {
+    val count = 10000
+    val largeSize = 1000000
+    val smallSize = 50
+    val data = sc.parallelize(1 to largeSize, 2)
+    val dataSmall = sc.parallelize(1 to smallSize, 2)
+
+    val testCount = 10
+    
+    val seed = System.currentTimeMillis()
+    val rand = new Random(seed)
+    
+    for (i <- 1 to testCount) {
+      // When sampling without replacement, ensure all elements are distinct and we get the right 
+      // number.
+
+      val sampleSize = rand.nextInt(count) 
+      val samples = data.sampleByCount(withReplacement=false, sampleSize, seed)
+      assert(samples.count() == sampleSize)
+      assert(samples.distinct().count() == sampleSize)
+
+      // *********************************************************************
+      // When sampling with replacement, ensure we get the right 
+      // number.
+      val sampleSize2 = rand.nextInt(smallSize) + smallSize
+      val samples2 = dataSmall.sampleByCount(withReplacement=true, sampleSize2, seed)
+      assert(samples2.count() == sampleSize2)
+
+      // *********************************************************************
+      // When sampling without replacement and sample more elements than there are in the array
+      // ensure that the appropriate number of elements are returned
+      // Ensure that we're requesting more elements than there are in the RDD
+      val sampleSize3 = rand.nextInt(smallSize) + smallSize
+      val samples3 = dataSmall.sampleByCount(withReplacement=false, sampleSize3, seed)
+
+      assert(samples3.count() == smallSize)
+
+      // Values should still be distinct because the original array is still 1:smallCount
+      assert(samples3.distinct().count() == smallSize)
+
+      // *********************************************************************
+      // When sampling with replacement and sample the entire array for a large count
+      // ensure that all elements are not distinct
+      val sampleSize4 = count + rand.nextInt(count)
+      val samples4 = data.sampleByCount(withReplacement=true, sampleSize4, seed)
+
+      assert(samples4.count() == sampleSize4)
+
+      // Chance of getting all distinct elements is astronomically low, confirm that this doesnt 
+      // happen
+      assert(samples4.distinct().count() < sampleSize4)
+    }
+  }
 
   test("takeSample") {
     val n = 1000000
@@ -579,13 +635,13 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
     {
       val sample = data.takeSample(withReplacement=true, num=20)
-      assert(sample.size === 20)        // Got exactly 100 elements
+      assert(sample.size === 20)        // Got exactly 20 elements
       assert(sample.toSet.size <= 20, "sampling with replacement returned all distinct elements")
       assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
     }
     {
       val sample = data.takeSample(withReplacement=true, num=n)
-      assert(sample.size === n)        // Got exactly 100 elements
+      assert(sample.size === n)        // Got exactly 1000000 elements
       // Chance of getting all distinct elements is astronomically low, so test we got < 100
       assert(sample.toSet.size < n, "sampling with replacement returned all distinct elements")
       assert(sample.forall(x => 1 <= x && x <= n), s"elements not in [1, $n]")
