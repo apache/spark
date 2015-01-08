@@ -109,6 +109,7 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
     }
     val tmpPath = Util.getTempFilePath(conf, hbaseRelation.tableName)
     bulkLoad.makeBulkLoadRDD(splitKeys.toArray, hadoopReader, job, tmpPath, hbaseRelation)
+    FileSystem.get(conf).delete(new Path(tmpPath))
   }
 
   test("write data to HFile with optimized bulk loading") {
@@ -143,6 +144,7 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
     result.foreach(println)
     for (i <- 0 to 7)
       FileSystem.get(conf).delete(new Path("./hfileoutput" + i), true)
+    FileSystem.get(conf).delete(new Path("testtablename*"), true)
   }
 
   test("hfile output format, delete me when ready") {
@@ -278,6 +280,10 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
     val executeSql3 = hbc.executeSql(loadSql)
     executeSql3.toRdd.collect().foreach(println)
     hbc.sql("select * from testblk").collect().foreach(println)
+
+    // cleanup
+    hbc.executeSql(drop)
+    FileSystem.get(hbc.sparkContext.hadoopConfiguration).delete(new Path("testblk*"), true)
   }
 
   override def afterAll() {

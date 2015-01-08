@@ -17,20 +17,17 @@
 
 package org.apache.spark.sql.hbase
 
-import org.apache.log4j.Logger
+import org.apache.spark.Logging
 
-class AggregateQueriesSuite extends QueriesSuiteBase {
-
-  private val logger = Logger.getLogger(getClass.getName)
-
+class AggregateQueriesSuite extends QueriesSuiteBase with Logging {
   var testnm = "Group by with cols in select list and with order by"
   test("Group by with cols in select list and with order by") {
     val query =
       s"""select count(1) as cnt, intcol, floatcol, strcol, max(bytecol) bytecol, max(shortcol) shortcol,
-         | max(floatcol) floatcolmax, max(doublecol) doublecol, max(longcol) from $tabName
-         |  where strcol like '%Row%' and shortcol < 12345 and doublecol > 5678912.345681
-         |  and doublecol < 5678912.345684
-         | group by intcol, floatcol, strcol order by strcol desc"""
+          max(floatcol) floatcolmax, max(doublecol) doublecol, max(longcol) from $tabName
+          where strcol like '%Row%' and shortcol < 12345 and doublecol > 5678912.345681
+          and doublecol < 5678912.345684
+          group by intcol, floatcol, strcol order by strcol desc"""
 
     testGroupBy(testnm, query)
   }
@@ -39,10 +36,10 @@ class AggregateQueriesSuite extends QueriesSuiteBase {
   test("Group by with cols in select list and with having and order by") {
     val query = s"""select count(1) as cnt, intcol, floatcol, strcol, max(bytecol) bytecolmax,
          max(shortcol) shortcolmax, max(floatcol) floatcolmax, max(doublecol) doublecolmax,
-          max(longcol) longcolmax
-          from $tabName
-          where strcol like '%Row%' and shortcol < 12345 and doublecol > 5678912.345681
-          and doublecol < 5678912.345685
+         max(longcol) longcolmax
+         from $tabName
+         where strcol like '%Row%' and shortcol < 12345 and doublecol > 5678912.345681
+         and doublecol < 5678912.345685
          group by intcol, floatcol, strcol
          having max(doublecol) < 5678912.345684
          order by strcol desc""".stripMargin
@@ -62,20 +59,20 @@ class AggregateQueriesSuite extends QueriesSuiteBase {
     }.foldLeft(true) { case (res1, newres) => res1 && newres}
     assert(res, "One or more rows did not match expected")
 
-    println(s"$query came back with ${result1.size} results")
-    println(result1.mkString)
+    logInfo(s"$query came back with ${result1.size} results")
+    logInfo(result1.mkString)
 
-    println(s"Test $testName completed successfully")
+    logInfo(s"Test $testName completed successfully")
   }
 
   testnm = "Another Group by with cols in select list and with having and order by"
   test("Another Group by with cols in select list and with having and order by") {
     val query1 =
-      s"""select count(1) as cnt, intcol, floatcol, strcol, max(bytecol) bytecol, max(shortcol) shortcol,
-         | max(floatcol) floatcolmax, max(doublecol) doublecol, max(longcol) from $tabName
-         |  where strcol like '%Row%' and shortcol < 12345 and doublecol > 5678912.345681
-         |  and doublecol < 5678912.345685
-         | group by intcol, floatcol, strcol having max(doublecol) < 5678912.345684 order by strcol desc"""
+      s"""select count(1) as cnt, intcol, floatcol, strcol, max(bytecol) bytecolmax, max(shortcol) shortcolmax,
+          max(floatcol) floatcolmax, max(doublecol) doublecolmax, max(longcol) longcolmax from $tabName
+          where strcol like '%Row%' and shortcol < 12345 and doublecol > 5678912.345681
+          and doublecol < 5678912.345685
+          group by intcol, floatcol, strcol having max(doublecol) < 5678912.345684 order by strcol desc"""
         .stripMargin
 
     val result1 = runQuery(query1)
@@ -84,16 +81,16 @@ class AggregateQueriesSuite extends QueriesSuiteBase {
       Array(1, 23456783, 45657.83F, "Row3", 'c', 12343, 45657.83F, 5678912.345683, 3456789012343L),
       Array(1, 23456782, 45657.82F, "Row2", 'b', 12342, 45657.82F, 5678912.345682, 3456789012342L))
 
-    var res = {
+    val res = {
       for (rx <- 0 until exparr.size)
       yield compareWithTol(result1(rx).toSeq, exparr(rx), s"Row$rx failed")
     }.foldLeft(true) { case (res1, newres) => res1 && newres}
     assert(res, "One or more rows did not match expected")
 
-    println(s"$query1 came back with ${result1.size} results")
-    println(result1.mkString)
+    logInfo(s"$query1 came back with ${result1.size} results")
+    logInfo(result1.mkString)
 
-    println(s"Test $testnm completed successfully")
+    logInfo(s"Test $testnm completed successfully")
   }
 }
 

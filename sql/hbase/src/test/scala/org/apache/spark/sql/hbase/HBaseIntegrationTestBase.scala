@@ -164,7 +164,6 @@ abstract class HBaseIntegrationTestBase(useMiniCluster: Boolean = true,
     msg = "HBaseSQLContext was shut down"
 
     try {
-      testUtil.cleanupTestDir
       testUtil.shutdownMiniCluster()
     } catch {
       case e: Throwable =>
