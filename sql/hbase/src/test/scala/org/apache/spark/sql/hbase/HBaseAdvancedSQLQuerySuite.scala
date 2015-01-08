@@ -21,15 +21,16 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.SQLConf
 import org.scalatest.BeforeAndAfterAll
 
-
 class HBaseAdvancedSQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
 
-  val sqlContext:SQLContext = {
+  val sqlContext: SQLContext = {
     HBaseMainTest.main(null);
     HBaseMainTest.hbc
   }
+
   import sqlContext._
+
   TestData
 
   test("aggregation with codegen") {

@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.hbase
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.Row
 
-class HBaseInsertTableSuite extends QueriesSuiteBase {
+class HBaseInsertTableSuite extends QueriesSuiteBase with Logging {
 
   var testnm = "Insert all rows to the table from other table"
   test("Insert all rows to the table from other table") {
@@ -43,10 +44,10 @@ class HBaseInsertTableSuite extends QueriesSuiteBase {
 
     compareResults(testResult, targetResult)
 
-    println(s"$testQuery came back with ${testResult.size} results")
-    println(testResult.mkString)
-    
-    println(s"Test $testnm completed successfully")
+    logInfo(s"$testQuery came back with ${testResult.size} results")
+    logInfo(testResult.mkString)
+
+    logInfo(s"Test $testnm completed successfully")
   }
 
   testnm = "Insert few rows to the table from other table after applying filter"
@@ -72,10 +73,10 @@ class HBaseInsertTableSuite extends QueriesSuiteBase {
 
     compareResults(testResult, targetResult)
 
-    println(s"$testQuery came back with ${testResult.size} results")
-    println(testResult.mkString)
+    logInfo(s"$testQuery came back with ${testResult.size} results")
+    logInfo(testResult.mkString)
 
-    println(s"Test $testnm completed successfully")
+    logInfo(s"Test $testnm completed successfully")
   }
   
   def compareResults(fetchResult: Array[Row], targetResult: Array[Row]) = {
@@ -110,10 +111,10 @@ class HBaseInsertTableSuite extends QueriesSuiteBase {
 
     compareResults(testResult, targetResult)
 
-    println(s"$testQuery came back with ${testResult.size} results")
-    println(testResult.mkString)
+    logInfo(s"$testQuery came back with ${testResult.size} results")
+    logInfo(testResult.mkString)
 
-    println(s"Test $testnm completed successfully")
+    logInfo(s"Test $testnm completed successfully")
   }
 
   testnm = "Insert into values test"
@@ -146,9 +147,9 @@ class HBaseInsertTableSuite extends QueriesSuiteBase {
     }.foldLeft(true) { case (res1, newres) => res1 && newres}
     assert(res, "One or more rows did not match expected")
 
-    println(s"$testQuery came back with ${testResult.size} results")
-    println(testResult.mkString)
+    logInfo(s"$testQuery came back with ${testResult.size} results")
+    logInfo(testResult.mkString)
 
-    println(s"Test $testnm completed successfully")
+    logInfo(s"Test $testnm completed successfully")
   }
 }

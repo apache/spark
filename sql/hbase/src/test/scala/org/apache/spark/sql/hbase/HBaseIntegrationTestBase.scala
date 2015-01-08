@@ -23,7 +23,6 @@ import java.util.{Date, Random}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.client.HBaseAdmin
 import org.apache.hadoop.hbase.{HBaseConfiguration, HBaseTestingUtility, MiniHBaseCluster}
-import org.apache.log4j.Logger
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 import org.scalatest.{BeforeAndAfterAllConfigMap, ConfigMap, FunSuite, Suite}
 
@@ -41,7 +40,6 @@ abstract class HBaseIntegrationTestBase(useMiniCluster: Boolean = true,
   @transient var hbc: HBaseSQLContext = null
   @transient var catalog: HBaseCatalog = null
   @transient var testUtil: HBaseTestingUtility = null
-  @transient private val logger = Logger.getLogger(getClass.getName)
 
   def sparkContext: SparkContext = sc
 
@@ -49,27 +47,17 @@ abstract class HBaseIntegrationTestBase(useMiniCluster: Boolean = true,
   val sparkUiPort = 0xc000 + new Random().nextInt(0x3f00)
   logInfo(s"SparkUIPort = $sparkUiPort\n")
 
-  //  def simpleSetupShutdown() {
-  //      testUtil = new HBaseTestingUtility
-  //      config = testUtil.getConfiguration
-  //      testUtil.startMiniCluster(nMasters, nRegionServers, nDataNodes)
-  //      testUtil.shutdownMiniCluster()
-  //  }
-  //
-
   val useMiniClusterInt = useMiniCluster // false
 
   val WorkDirProperty = "test.build.data.basedirectory"
   val DefaultWorkDir = "/tmp/minihbase"
 
-
-
-    val workDir = System.getProperty(WorkDirProperty, DefaultWorkDir)
+  val workDir = System.getProperty(WorkDirProperty, DefaultWorkDir)
     System.setProperty(WorkDirProperty, workDir)
 
     logInfo(s"useMiniCluster=$useMiniClusterInt workingDir ($WorkDirProperty})=$workDir\n")
     if (useMiniClusterInt) {
-      logger.debug(s"Spin up hbase minicluster w/ $nMasters mast, $nRegionServers RS, $nDataNodes dataNodes")
+      logDebug(s"Spin up hbase minicluster w/ $nMasters mast, $nRegionServers RS, $nDataNodes dataNodes")
       testUtil = new HBaseTestingUtility
       config = testUtil.getConfiguration
     } else {
@@ -116,8 +104,8 @@ abstract class HBaseIntegrationTestBase(useMiniCluster: Boolean = true,
       sconf.set("spark.ui.port", sparkUiPort.toString)
       //      sconf.set("spark.hadoop.hbase.regionserver.info.port", "-1")
       //      sconf.set("spark.hadoop.hbase.master.info.port", "-1")
-      //    // Increase the various timeout's to allow for debugging/breakpoints. If we simply
-      //    // leave default values then ZK connection timeouts tend to occur
+      // Increase the various timeout's to allow for debugging/breakpoints. If we simply
+      // leave default values then ZK connection timeouts tend to occur
       sconf.set("spark.hadoop.dfs.client.socket-timeout", "480000")
       sconf.set("spark.hadoop.dfs.datanode.socket.write.timeout", "480000")
       sconf.set("spark.hadoop.zookeeper.session.timeout", "480000")
@@ -146,28 +134,26 @@ abstract class HBaseIntegrationTestBase(useMiniCluster: Boolean = true,
     hbc = new HBaseSQLContext(sc)
     hbc.optConfiguration = Some(config)
 
-    //        hbc.catalog.hBaseAdmin = hbaseAdmin
-    logger.debug(s"In testbase: HBaseAdmin.configuration zkPort="
+    logDebug(s"In testbase: HBaseAdmin.configuration zkPort="
       + s"${hbaseAdmin.getConfiguration.get("hbase.zookeeper.property.clientPort")}")
 
   override protected def afterAll(configMap: ConfigMap): Unit = {
     var msg = s"Test ${getClass.getName} completed at ${(new java.util.Date).toString} duration=${((new java.util.Date).getTime - startTime) / 1000}"
-    logger.info(msg)
     logInfo(msg)
     try {
       hbc.sparkContext.stop()
     } catch {
       case e: Throwable =>
-        logger.error(s"Exception shutting down sparkContext: ${e.getMessage}")
+        logError(s"Exception shutting down sparkContext: ${e.getMessage}")
     }
     hbc = null
     msg = "HBaseSQLContext was shut down"
-
+    logInfo(msg)
     try {
       testUtil.shutdownMiniCluster()
     } catch {
       case e: Throwable =>
-        logger.error(s"Exception shutting down HBaseMiniCluster: ${e.getMessage}")
+        logError(s"Exception shutting down HBaseMiniCluster: ${e.getMessage}")
     }
   }
 }
