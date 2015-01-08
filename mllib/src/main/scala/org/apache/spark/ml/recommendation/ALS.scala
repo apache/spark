@@ -643,7 +643,7 @@ private[recommendation] object ALS extends Logging {
      */
     def compress(): InBlock = {
       val sz = size
-      assert(sz > 0) // TODO: Check whether it is possible to have empty blocks.
+      assert(sz > 0, "Empty in-link block should not exist.")
       sort()
       val uniqueSrcIdsBuilder = mutable.ArrayBuilder.make[Int]
       val dstCountsBuilder = mutable.ArrayBuilder.make[Int]
@@ -681,7 +681,7 @@ private[recommendation] object ALS extends Logging {
 
     private def sort(): Unit = {
       val sz = size
-      // Since there might be interleaved log messages, we insert a unqiue id for easy pairing.
+      // Since there might be interleaved log messages, we insert a unique id for easy pairing.
       val sortId = Utils.random.nextInt()
       logDebug(s"Start sorting an uncompressed in-block of size $sz. (sortId = $sortId)")
       val start = System.nanoTime()
@@ -807,7 +807,7 @@ private[recommendation] object ALS extends Logging {
           i += 1
         }
         logDebug(
-          "Converting to local indices took " + (System.nanoTime() - start) / 1e9 + "seconds.")
+          "Converting to local indices took " + (System.nanoTime() - start) / 1e9 + " seconds.")
         val dstLocalIndices = dstIds.map(dstIdToLocalIndex.apply)
         (srcBlockId, (dstBlockId, srcIds, dstLocalIndices, ratings))
     }.groupByKey(new HashPartitioner(srcPart.numPartitions))
@@ -845,7 +845,7 @@ private[recommendation] object ALS extends Logging {
   }
 
   /**
-   * Compute dst factors by forming and solving least square problems.
+   * Compute dst factors by constructing and solving least square problems.
    *
    * @param srcFactorBlocks src factors
    * @param srcOutBlocks src out-blocks
@@ -867,6 +867,7 @@ private[recommendation] object ALS extends Logging {
       srcEncoder: LocalIndexEncoder,
       implicitPrefs: Boolean = false,
       alpha: Double = 1.0): RDD[(Int, FactorBlock)] = {
+    val numSrcBlocks = srcFactorBlocks.partitions.size
     val YtY = if (implicitPrefs) Some(computeYtY(srcFactorBlocks, rank)) else None
     val srcOut = srcOutBlocks.join(srcFactorBlocks).flatMap {
       case (srcBlockId, (srcOutBlock, srcFactors)) =>
@@ -877,7 +878,10 @@ private[recommendation] object ALS extends Logging {
     val merged = srcOut.groupByKey(new HashPartitioner(dstInBlocks.partitions.size))
     dstInBlocks.join(merged).mapValues {
       case (InBlock(dstIds, srcPtrs, srcEncodedIndices, ratings), srcFactors) =>
-        val sortedSrcFactors = srcFactors.toSeq.sortBy(_._1).map(_._2).toArray
+        val sortedSrcFactors = new Array[FactorBlock](numSrcBlocks)
+        srcFactors.foreach { case (srcBlockId, factors) =>
+          sortedSrcFactors(srcBlockId) = factors
+        }
         val dstFactors = new Array[Array[Float]](dstIds.size)
         var j = 0
         val ls = new NormalEquation(rank)
