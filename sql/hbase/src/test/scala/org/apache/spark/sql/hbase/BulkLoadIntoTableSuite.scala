@@ -35,7 +35,7 @@ import scala.collection.mutable.ArrayBuffer
 class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Logging {
 
   val (hbc: HBaseSQLContext, sc: SparkContext) = {
-    HBaseMainTest.setupData(true)
+    HBaseMainTest.setupData(useMultiplePartitions = true)
     (HBaseMainTest.hbc, HBaseMainTest.sc)
   }
 
@@ -44,7 +44,6 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
 
     val parser = new HBaseSQLParser()
     val sql = raw"LOAD DATA LOCAL INPATH './usr/file.txt' INTO TABLE tb"
-    //val sql = "select"
 
     val plan: LogicalPlan = parser(sql)
     assert(plan != null)
@@ -109,7 +108,7 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
     }
     val tmpPath = Util.getTempFilePath(conf, hbaseRelation.tableName)
     bulkLoad.makeBulkLoadRDD(splitKeys.toArray, hadoopReader, job, tmpPath, hbaseRelation)
-    FileSystem.get(conf).delete(new Path(tmpPath))
+    FileSystem.get(conf).delete(new Path(tmpPath), true)
   }
 
   test("write data to HFile with optimized bulk loading") {
@@ -141,7 +140,6 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
       wrappedConf,
       "./hfileoutput")(hbaseRelation)
 
-    result.foreach(println)
     for (i <- 0 to 7)
       FileSystem.get(conf).delete(new Path("./hfileoutput" + i), true)
     FileSystem.get(conf).delete(new Path("testtablename*"), true)
@@ -162,11 +160,8 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
       iter.map { line =>
         val splits = line.split(splitRegex)
         keyBytes(0) = (bytesUtils.toBytes(splits(0).toInt), IntegerType)
-        //println("test1 " + BytesUtils.toInt(bytesUtils.toBytes(splits(0).toInt), 0)) // here revert 1 is 1
         valueBytes(0) = (family, qualyfier, bytesUtils.toBytes(splits(1).toInt))
-        //val rowKeyData = HBaseKVHelper.encodingRawKeyColumns(keyBytes) // here revert 1 is 6
         val rowKeyData = bytesUtils.toBytes(splits(0).toInt)
-        //println("test2 " + BytesUtils.toInt(rowKeyData, 0))
 
         val rowKey = new ImmutableBytesWritableWrapper(rowKeyData)
         val put = new PutWrapper(rowKeyData)

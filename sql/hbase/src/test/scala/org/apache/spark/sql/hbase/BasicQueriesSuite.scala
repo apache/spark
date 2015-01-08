@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.hbase
 
-class BasicQueriesSuite extends QueriesSuiteBase {
+import org.apache.spark.Logging
+
+class BasicQueriesSuite extends QueriesSuiteBase with Logging {
 
   var testnm = "StarOperator * with limit"
   test("StarOperator * with limit") {
@@ -37,24 +39,24 @@ class BasicQueriesSuite extends QueriesSuiteBase {
     }.foldLeft(true) { case (res1, newres) => res1 && newres}
     assert(res, "One or more rows did not match expected")
 
-    println(s"$query1 came back with ${result1.size} results")
-    println(result1.mkString)
+    logInfo(s"$query1 came back with ${result1.size} results")
+    logInfo(result1.mkString)
 
     val sql2 =
       s"""select * from $tabName limit 2"""
         .stripMargin
 
     val results = runQuery(sql2)
-    println(s"$sql2 came back with ${results.size} results")
+    logInfo(s"$sql2 came back with ${results.size} results")
     assert(results.size == 2, s"$testnm failed assertion on size")
     res = {
       for (rx <- 0 until 2)
       yield compareWithTol(result1(rx).toSeq, exparr(rx), s"Row$rx failed")
     }.foldLeft(true) { case (res1, newres) => res1 && newres}
-    println(results.mkString)
+    logInfo(results.mkString)
     assert(res, "One or more rows did not match expected")
 
-    println(s"Test $testnm completed successfully")
+    logInfo(s"Test $testnm completed successfully")
   }
 
   testnm = "Select all cols with filter"
@@ -64,7 +66,7 @@ class BasicQueriesSuite extends QueriesSuiteBase {
         .stripMargin
 
     val result1 = runQuery(query1)
-    println(s"$query1 came back with ${result1.size} results")
+    logInfo(s"$query1 came back with ${result1.size} results")
     assert(result1.size == 2, s"$testnm failed on size")
     val exparr = Array(
       Array("Row2", 'b', 12342, 23456782, 3456789012342L, 45657.82F, 5678912.345682),
@@ -74,24 +76,23 @@ class BasicQueriesSuite extends QueriesSuiteBase {
       for (rx <- 0 until 2)
       yield compareWithTol(result1(rx).toSeq, exparr(rx), s"Row$rx failed")
     }.foldLeft(true) { case (res1, newres) => res1 && newres}
-    println(result1.mkString)
+    logInfo(result1.mkString)
     assert(res, "One or more rows did not match expected")
 
-    println(s"Test $testnm completed successfully")
+    logInfo(s"Test $testnm completed successfully")
   }
 
   testnm = "Select all cols with order by"
   test("Select all cols with order by") {
     val query1 =
       s"""select * from $tabName where shortcol < 12344 order by strcol desc limit 2"""
-//      s"""select * from $tabName order by strcol desc"""
         .stripMargin
 
     val result1 = runQuery(query1)
     assert(result1.size == 2, s"$testnm failed on size")
     val exparr = Array(
       Array("Row3", 'c', 12343, 23456783, 3456789012343L, 45657.83F, 5678912.345683),
-       Array("Row2", 'b', 12342, 23456782, 3456789012342L, 45657.82F, 5678912.345682))
+      Array("Row2", 'b', 12342, 23456782, 3456789012342L, 45657.82F, 5678912.345682))
 
     val res = {
       for (rx <- 0 until 2)
@@ -99,7 +100,7 @@ class BasicQueriesSuite extends QueriesSuiteBase {
     }.foldLeft(true) { case (res1, newres) => res1 && newres}
     assert(res, "One or more rows did not match expected")
 
-    println(s"Test $testnm completed successfully")
+    logInfo(s"Test $testnm completed successfully")
   }
 
   testnm = "Select same column twice"
@@ -111,7 +112,7 @@ class BasicQueriesSuite extends QueriesSuiteBase {
         .stripMargin
 
     val result1 = runQuery(query1)
-    println(s"$query1 came back with ${result1.size} results")
+    logInfo(s"$query1 came back with ${result1.size} results")
     assert(result1.size == 1, s"$testnm failed on size")
     val exparr = Array(
       Array(5678912.345682, 5678912.345682))
@@ -121,10 +122,10 @@ class BasicQueriesSuite extends QueriesSuiteBase {
       for (rx <- 0 until 1)
       yield compareWithTol(result1(rx).toSeq, exparr(rx), s"Row$rx failed")
     }.foldLeft(true) { case (res1, newres) => res1 && newres}
-    println(result1.mkString)
+    logInfo(result1.mkString)
     assert(res, "One or more rows did not match expected")
 
-    println(s"Test $testnm completed successfully")
+    logInfo(s"Test $testnm completed successfully")
   }
 
   testnm = "Select specific cols with filter"
@@ -138,7 +139,7 @@ class BasicQueriesSuite extends QueriesSuiteBase {
         .stripMargin
 
     val result1 = runQuery(query1)
-    println(s"$query1 came back with ${result1.size} results")
+    logInfo(s"$query1 came back with ${result1.size} results")
     assert(result1.size == 1, s"$testnm failed on size")
     val exparr = Array(
       Array(5678912.345682, -5678912.345682, "ow2", 5678912.345682,
@@ -149,15 +150,15 @@ class BasicQueriesSuite extends QueriesSuiteBase {
       for (rx <- 0 until 1)
       yield compareWithTol(result1(rx).toSeq, exparr(rx), s"Row$rx failed")
     }.foldLeft(true) { case (res1, newres) => res1 && newres}
-    println(result1.mkString)
+    logInfo(result1.mkString)
     assert(res, "One or more rows did not match expected")
 
-    println(s"Test $testnm completed successfully")
+    logInfo(s"Test $testnm completed successfully")
   }
 
-    testnm = "Mixed And/or predicates"
+  testnm = "Mixed And/or predicates"
   test("Mixed And/or predicates") {
-    val query1 =  s"""select doublecol as double1, -1 * doublecol as minusdouble,
+    val query1 = s"""select doublecol as double1, -1 * doublecol as minusdouble,
      substr(strcol, 2) as substrcol, doublecol, strcol,
      bytecol, shortcol, intcol, longcol, floatcol from $tabName
      where strcol like '%Row%'
@@ -171,24 +172,22 @@ class BasicQueriesSuite extends QueriesSuiteBase {
        AND (intcol < 0 OR intcol is not null)""".stripMargin
 
     val result1 = runQuery(query1)
-    println(s"$query1 came back with ${result1.size} results")
+    logInfo(s"$query1 came back with ${result1.size} results")
     assert(result1.size == 2, s"$testnm failed on size")
     val exparr = Array(
       Array(5678912.345682, -5678912.345682, "ow2", 5678912.345682,
         "Row2", 'b', 12342, 23456782, 3456789012342L, 45657.82F),
-     Array(5678912.345683,-5678912.345683,"ow3",5678912.345683,
-       "Row3",-29,12343,23456783,3456789012343L,45657.83))
+      Array(5678912.345683, -5678912.345683, "ow3", 5678912.345683,
+        "Row3", -29, 12343, 23456783, 3456789012343L, 45657.83))
 
     val res = {
       for (rx <- 0 until 1)
       yield compareWithTol(result1(rx).toSeq, exparr(rx), s"Row$rx failed")
     }.foldLeft(true) { case (res1, newres) => res1 && newres}
-    println(result1.mkString)
+    logInfo(result1.mkString)
     assert(res, "One or more rows did not match expected")
 
-    println(s"Test $testnm completed successfully")
+    logInfo(s"Test $testnm completed successfully")
   }
-
-
 }
 
