@@ -57,18 +57,19 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   val caseSensitive: Boolean = false
 
-  def tableExists(db: Option[String], tableName: String): Boolean = {
-    val (databaseName, tblName) = processDatabaseAndTableName(
-      db.getOrElse(hive.sessionState.getCurrentDatabase), tableName)
-    client.getTable(databaseName, tblName, false) != null
+  def tableExists(tableIdentifier: Seq[String]): Boolean = {
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    val (databaseName, tblName) =
+      (tableIdent.lift(1).getOrElse(hive.sessionState.getCurrentDatabase), tableIdent.head)
+    client.getTable(databaseName, tblName) != null
   }
 
   def lookupRelation(
-      db: Option[String],
-      tableName: String,
+      tableIdentifier: Seq[String],
       alias: Option[String]): LogicalPlan = synchronized {
+    val tableIdent = processTableIdentifier(tableIdentifier)
     val (databaseName, tblName) =
-      processDatabaseAndTableName(db.getOrElse(hive.sessionState.getCurrentDatabase), tableName)
+      (tableIdent.lift(1).getOrElse(hive.sessionState.getCurrentDatabase), tableIdent.head)
     val table = client.getTable(databaseName, tblName)
     if (table.isView) {
       // if the unresolved relation is from hive view
@@ -251,6 +252,26 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     }
   }
 
+  protected def processDatabaseAndTableName(
+      databaseName: Option[String],
+      tableName: String): (Option[String], String) = {
+    if (!caseSensitive) {
+      (databaseName.map(_.toLowerCase), tableName.toLowerCase)
+    } else {
+      (databaseName, tableName)
+    }
+  }
+
+  protected def processDatabaseAndTableName(
+      databaseName: String,
+      tableName: String): (String, String) = {
+    if (!caseSensitive) {
+      (databaseName.toLowerCase, tableName.toLowerCase)
+    } else {
+      (databaseName, tableName)
+    }
+  }
+
   /**
    * Creates any tables required for query execution.
    * For example, because of a CREATE TABLE X AS statement.
@@ -270,7 +291,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
         // Get the CreateTableDesc from Hive SemanticAnalyzer
-        val desc: Option[CreateTableDesc] = if (tableExists(Some(databaseName), tblName)) {
+        val desc: Option[CreateTableDesc] = if (tableExists(IndexedSeq(tblName, databaseName))) {
           None
         } else {
           val sa = new SemanticAnalyzer(hive.hiveconf) {
@@ -352,15 +373,13 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
    * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
    */
-  override def registerTable(
-      databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit = ???
+  override def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit = ???
 
   /**
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
    * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
    */
-  override def unregisterTable(
-      databaseName: Option[String], tableName: String): Unit = ???
+  override def unregisterTable(tableIdentifier: Seq[String]): Unit = ???
 
   override def unregisterAllTables() = {}
 }
