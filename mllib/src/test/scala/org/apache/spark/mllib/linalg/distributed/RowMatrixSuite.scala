@@ -171,6 +171,18 @@ class RowMatrixSuite extends FunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("validate k in svd") {
+    for (mat <- Seq(denseMat, sparseMat)) {
+      for (mode <- Seq("auto", "local-svd", "local-eigs", "dist-eigs")) {
+        try {
+          mat.computeSVD(-1, computeU = true, 1e-6, 300, 1e-10, mode)
+          } catch {
+            case ie: IllegalArgumentException =>
+          }
+      }
+    }
+  }
+
   def closeToZero(G: BDM[Double]): Boolean = {
     G.valuesIterator.map(math.abs).sum < 1e-6
   }
