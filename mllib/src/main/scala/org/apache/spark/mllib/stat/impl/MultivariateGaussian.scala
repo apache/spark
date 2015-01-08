@@ -59,7 +59,7 @@ class MultivariateGaussian private[mllib] (
    *    u = log((2*pi)^(-k/2)^ * det(sigma)^(-1/2)^) 
    */
   private val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
-  
+    
   /** Return the mean vector (mu) for this distribution */
   def getMu: Vector = Vectors.fromBreeze(mu)
   
@@ -124,14 +124,14 @@ class MultivariateGaussian private[mllib] (
     val tol = MLUtils.EPSILON * max(d) * d.length
     
     try {
-      // pseudo-determinant is product of all non-zero singular values
+      // log(pseudo-determinant) is sum of the logs of all non-zero singular values
       val logPseudoDetSigma = d.activeValuesIterator.filter(_ > tol).map(math.log(_)).reduce(_ + _)
       
       // calculate the root-pseudo-inverse of the diagonal matrix of singular values 
       // by inverting the square root of all non-zero values
       val pinvS = diag(new DBV(d.map(v => if (v > tol) math.sqrt(1.0 / v) else 0.0).toArray))
     
-      (pinvS * u, (-mu.length / 2.0) * math.log(2.0 * math.Pi) + -0.5 * logPseudoDetSigma)
+      (pinvS * u, -0.5 * (mu.length * math.log(2.0 * math.Pi) + logPseudoDetSigma))
     } catch {
       case uex: UnsupportedOperationException =>
         throw new IllegalArgumentException("Covariance matrix has no non-zero singular values")
