@@ -176,8 +176,11 @@ object Vectors {
    * @param indices index array, must be strictly increasing.
    * @param values value array, must have the same length as indices.
    */
-  def sparse(size: Int, indices: Array[Int], values: Array[Double]): Vector =
+  def sparse(size: Int, indices: Array[Int], values: Array[Double]): Vector = {
+    require((1 until indices.length).forall(i => indices(i-1) <= indices(i)), 
+      "indices is not strictly increasing.")
     new SparseVector(size, indices, values)
+  }
 
   /**
    * Creates a sparse vector using unordered (index, value) pairs.
