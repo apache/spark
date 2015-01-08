@@ -1318,12 +1318,32 @@ of that each task's update may be applied more than once if tasks or job stages 
 
 In addition, accumulators do not maintain lineage for the operations that use them. Consequently, accumulators updates are not guaranteed to be executed when made within a lazy transformation like `map()`. Unless something has triggered the evaluation of the lazy transformation that updates the value of the accumlator, subsequent operations will not themselves trigger that evaluation and the value of the accumulator will remain unchanged. The below code fragment demonstrates this issue:
 
+<div class="codetabs">
+
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
 	val acc = sc.accumulator(0)
     data.map(x => acc += x; f(x))
     // Here, acc is still 0 because no actions have cause the `map` to be computed.
 {% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+	Accumulator<Integer> accum = sc.accumulator(0);
+    data.map(x -> accum.add(x); f(x););
+    // Here, acc is still 0 because no actions have cause the `map` to be computed.
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+	accum = sc.accumulator(0)
+	data.map(lambda x => acc.add(x); f(x))
+    # Here, acc is still 0 because no actions have cause the `map` to be computed.
+{% endhighlight %}
+</div>
+
 </div>
 
 # Deploying to a Cluster
