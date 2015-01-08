@@ -991,13 +991,6 @@ private[spark] object Utils extends Logging {
       environment.put(key, value)
     }
 
-    // When testing, expose the parent class path to the child. This is processed by
-    // compute-classpath.{cmd,sh} and makes all needed jars available to child processes
-    // when the assembly is built with the "*-provided" profiles enabled.
-    if (sys.props.contains("spark.testing")) {
-      environment.put("SPARK_DIST_CLASSPATH", sys.props("java.class.path"))
-    }
-
     val process = builder.start()
     new Thread("read stderr for " + command(0)) {
       override def run() {

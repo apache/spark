@@ -1144,13 +1144,15 @@
             <filereports>SparkTestSuite.txt</filereports>
             <argLine>-ea -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=${CodeCacheSize}</argLine>
             <stderr/>
+            <environmentVariables>
+              <SPARK_DIST_CLASSPATH>${test_classpath}</SPARK_DIST_CLASSPATH>
+            </environmentVariables>
             <systemProperties>
               <java.awt.headless>true</java.awt.headless>
               <spark.test.home>${spark.test.home}</spark.test.home>
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
-              <spark.executor.extraClassPath>${test_classpath}</spark.executor.extraClassPath>
               <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
             </systemProperties>
           </configuration>
