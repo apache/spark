@@ -173,12 +173,8 @@ class RowMatrixSuite extends FunSuite with MLlibTestSparkContext {
 
   test("validate k in svd") {
     for (mat <- Seq(denseMat, sparseMat)) {
-      for (mode <- Seq("auto", "local-svd", "local-eigs", "dist-eigs")) {
-        try {
-          mat.computeSVD(-1, computeU = true, 1e-6, 300, 1e-10, mode)
-          } catch {
-            case ie: IllegalArgumentException =>
-          }
+      intercept[IllegalArgumentException] {
+        mat.computeSVD(-1)
       }
     }
   }

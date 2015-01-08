@@ -103,7 +103,8 @@ class IndexedRowMatrix(
       computeU: Boolean = false,
       rCond: Double = 1e-9): SingularValueDecomposition[IndexedRowMatrix, Matrix] = {
 
-    require(k >= 1, "k should be at least one.")
+    val n = numCols().toInt
+    require(k > 0 && k <= n, s"Requested k singular values but got k=$k and numCols=$n.")
     val indices = rows.map(_.index)
     val svd = toRowMatrix().computeSVD(k, computeU, rCond)
     val U = if (computeU) {

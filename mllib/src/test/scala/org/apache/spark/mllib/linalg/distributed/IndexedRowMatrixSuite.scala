@@ -115,13 +115,10 @@ class IndexedRowMatrixSuite extends FunSuite with MLlibTestSparkContext {
 
   test("validate k in svd") {
     val A = new IndexedRowMatrix(indexedRows)
-    try {
-        A.computeSVD(-1)
-      } catch {
-        case ie: IllegalArgumentException =>
-      }
+    intercept[IllegalArgumentException] {
+      A.computeSVD(-1)
+    }
   }
-
 
   def closeToZero(G: BDM[Double]): Boolean = {
     G.valuesIterator.map(math.abs).sum < 1e-6
