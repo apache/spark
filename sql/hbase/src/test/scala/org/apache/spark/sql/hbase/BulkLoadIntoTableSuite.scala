@@ -278,6 +278,9 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
     val executeSql3 = hbc.executeSql(loadSql)
     executeSql3.toRdd.collect().foreach(println)
     hbc.sql("select * from testblk").collect().foreach(println)
+
+    // cleanup
+    hbc.executeSql(drop)
   }
 
   override def afterAll() {

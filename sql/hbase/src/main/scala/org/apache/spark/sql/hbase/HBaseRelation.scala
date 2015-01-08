@@ -78,6 +78,14 @@ class HBaseSource extends RelationProvider {
   }
 }
 
+/**
+ *
+ * @param tableName SQL table name
+ * @param hbaseNamespace physical HBase table namespace
+ * @param hbaseTableName physical HBase table name
+ * @param allColumns schema
+ * @param context HBaseSQLContext
+ */
 @SerialVersionUID(1529873946227428789L)
 private[hbase] case class HBaseRelation(
                                          tableName: String,
@@ -227,86 +235,6 @@ private[hbase] case class HBaseRelation(
     new PartitionRange(start, startInclusive, end, endInclusive, partition.index, dt, pred)
   }
 
-  private def prePruneRanges(ranges: Seq[PartitionRange[_]], keyIndex: Int)
-  : (Seq[PartitionRange[_]], Seq[PartitionRange[_]]) = {
-    require(keyIndex < keyColumns.size, "key index out of range")
-    if (ranges.isEmpty) {
-      (ranges, Nil)
-    } else if (keyIndex == 0) {
-      (Nil, ranges)
-    } else {
-      // the first portion is of those ranges of equal start and end values of the
-      // previous dimensions so they can be subject to further checks on the next dimension
-      val (p1, p2) = ranges.partition(p => p.start == p.end)
-      (p2, p1.map(p => generateRange(partitions(p.id), p.pred, keyIndex)))
-    }
-  }
-
-  def getPrunedPartitions(partitionPred: Option[Expression] = None)
-  : Option[Seq[HBasePartition]] = {
-    def getPrunedRanges(pred: Expression): Seq[PartitionRange[_]] = {
-      val predRefs = pred.references.toSeq
-      val boundPruningPred = BindReferences.bindReference(pred, predRefs)
-      val keyIndexToPredIndex = (for {
-        (keyColumn, keyIndex) <- keyColumns.zipWithIndex
-        (predRef, predIndex) <- predRefs.zipWithIndex
-        if keyColumn.sqlName == predRef.name
-      } yield (keyIndex, predIndex)).toMap
-
-      val row = new GenericMutableRow(predRefs.size)
-      var notPrunedRanges = partitions.map(generateRange(_, boundPruningPred, 0))
-      var prunedRanges: Seq[PartitionRange[_]] = Nil
-
-      for (keyIndex <- 0 until keyColumns.size; if notPrunedRanges.nonEmpty) {
-        val (passedRanges, toBePrunedRanges) = prePruneRanges(notPrunedRanges, keyIndex)
-        prunedRanges = prunedRanges ++ passedRanges
-        notPrunedRanges =
-          if (keyIndexToPredIndex.contains(keyIndex)) {
-            toBePrunedRanges.filter(
-              range => {
-                val predIndex = keyIndexToPredIndex(keyIndex)
-                row.update(predIndex, range)
-                val partialEvalResult = range.pred.partialReduce(row, predRefs)
-                range.pred = if (partialEvalResult._1 == null) {
-                  // progressively fine tune the constraining predicate
-                  partialEvalResult._2
-                } else {
-                  null
-                }
-                // MAYBE is represented by a to-be-qualified-with expression
-                partialEvalResult._1 == null ||
-                  partialEvalResult._1.asInstanceOf[Boolean]
-              }
-            )
-          } else toBePrunedRanges
-      }
-      prunedRanges ++ notPrunedRanges
-    }
-
-    partitionPred match {
-      case None => Some(partitions)
-      case Some(pred) => if (pred.references.intersect(AttributeSet(partitionKeys)).isEmpty) {
-        // the predicate does not apply to the partitions at all; just push down the filtering
-        Some(partitions.map(p => new HBasePartition(p.idx, p.mappedIndex,
-          p.start, p.end, p.server, Some(pred))))
-      } else {
-        val prunedRanges: Seq[PartitionRange[_]] = getPrunedRanges(pred)
-        var idx: Int = -1
-        val result = Some(prunedRanges.map(p => {
-          val par = partitions(p.id)
-          idx = idx + 1
-          // pruned partitions have the same "physical" partition index, but different
-          // "canonical" index
-          if (p.pred == null) {
-            new HBasePartition(idx, par.mappedIndex, par.start, par.end, par.server, None)
-          } else {
-            new HBasePartition(idx, par.mappedIndex, par.start, par.end, par.server, Some(p.pred))
-          }
-        }))
-        result
-      }
-    }
-  }
 
   /**
    * Return the start keys of all of the regions in this table,

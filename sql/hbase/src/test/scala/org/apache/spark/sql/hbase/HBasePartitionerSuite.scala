@@ -52,53 +52,6 @@ class HBasePartitionerSuite extends FunSuite with HBaseTestSparkContext {
     }
   }
 
-  test("test HBaseRelation getPrunedPartions") {
-    val namespace = "testNamespace"
-    val tableName = "testTable"
-    val hbaseTableName = "hbaseTable"
-    val family1 = "family1"
-    val family2 = "family2"
-
-    val rowkey1 = HBaseKVHelper.encodingRawKeyColumns(
-      Seq((BytesUtils.create(IntegerType).toBytes(1), IntegerType)
-        , (BytesUtils.create(IntegerType).toBytes(2), IntegerType))
-    )
-
-    val rowkey2 = HBaseKVHelper.encodingRawKeyColumns(
-      Seq((BytesUtils.create(IntegerType).toBytes(9), IntegerType)
-        , (BytesUtils.create(IntegerType).toBytes(2), IntegerType))
-    )
-
-    val rowkey3 = HBaseKVHelper.encodingRawKeyColumns(
-      Seq((BytesUtils.create(IntegerType).toBytes(3), IntegerType)
-        , (BytesUtils.create(IntegerType).toBytes(4), IntegerType))
-    )
-
-    val rowkey4 = HBaseKVHelper.encodingRawKeyColumns(
-      Seq((BytesUtils.create(IntegerType).toBytes(3), IntegerType)
-        , (BytesUtils.create(IntegerType).toBytes(6), IntegerType))
-    )
-
-    //    val partition1 = new HBasePartition(0, 0, Some(rowkey1), Some(rowkey2))
-    //    val partition2 = new HBasePartition(1, 1, Some(rowkey3), Some(rowkey4))
-
-    var allColumns = List[AbstractColumn]()
-    allColumns = allColumns :+ KeyColumn("column2", IntegerType, 1)
-    allColumns = allColumns :+ KeyColumn("column1", IntegerType, 0)
-    allColumns = allColumns :+ NonKeyColumn("column4", FloatType, family2, "qualifier2")
-    allColumns = allColumns :+ NonKeyColumn("column3", ShortType, family1, "qualifier1")
-
-    val hbr = HBaseRelation(tableName, namespace, hbaseTableName
-      , allColumns)(new HBaseSQLContext(sc))
-    //    val partitions = List[HBasePartition](partition1, partition2)
-    //    hbr.partitions = partitions
-
-    val attribute1 = hbr.partitionKeys(0)
-    //    val attribute2 = hbr.partitionKeys(1)
-    val predicate5 = new GreaterThan(Literal(5, IntegerType), attribute1)
-
-    hbr.getPrunedPartitions(Option(predicate5))
-  }
 
   test("row key encode / decode") {
     val rowkey = HBaseKVHelper.encodingRawKeyColumns(
