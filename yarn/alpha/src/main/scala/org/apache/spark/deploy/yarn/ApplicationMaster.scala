@@ -227,7 +227,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         assert(sparkContext != null || count >= numTries)
 
         if (null != sparkContext) {
-          uiAddress = sparkContext.ui.appUIAddress
+          uiAddress = sparkContext.ui.map(_.appUIAddress).getOrElse("")
           this.yarnAllocator = YarnAllocationHandler.newAllocator(
             yarnConf,
             resourceManager,
