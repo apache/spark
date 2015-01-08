@@ -22,11 +22,12 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.serializers import PairDeserializer, NoOpSerializer
 from pyspark.streaming import DStream
 
-__all__ = ['KafkaUtils']
+__all__ = ['KafkaUtils', 'utf8_decoder']
 
 
 def utf8_decoder(s):
-    return s.decode('utf-8')
+    """ Decode the unicode as UTF-8 """
+    return s and s.decode('utf-8')
 
 
 class KafkaUtils(object):
@@ -70,7 +71,8 @@ class KafkaUtils(object):
             jstream = ssc._jvm.KafkaUtils.createStream(ssc._jssc, array, array, decoder, decoder,
                                                        jparam, jtopics, jlevel)
         except Py4JError, e:
-            if 'call a package' in e.message:
+            # TODO: use --jar once it also work on driver
+            if not e.message or 'call a package' in e.message:
                 print "No kafka package, please build it and add it into classpath:"
                 print " $ sbt/sbt streaming-kafka/package"
                 print " $ bin/submit --driver-class-path lib_managed/jars/kafka_2.10-0.8.0.jar:" \
