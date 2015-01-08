@@ -27,7 +27,17 @@ private[sql] case class LogicalRelation(relation: BaseRelation)
   extends LeafNode
   with MultiInstanceRelation {
 
-  override val output: Seq[AttributeReference] = relation.schema.toAttributes
+  override val output: Seq[AttributeReference] = {
+    // If the external data source was written against Spark 1.2.0, the schema method returns
+    // the old data type system. Convert it into the new type system and then return the attributes.
+    val schemaMethod = relation.getClass.getDeclaredMethod("schema")
+    schemaMethod.invoke(relation) match {
+      case oldSchemaType: org.apache.spark.sql.catalyst.types.StructType =>
+        oldSchemaType.toNewType.toAttributes
+      case newSchemaType: org.apache.spark.sql.types.StructType =>
+        newSchemaType.toAttributes
+    }
+  }
 
   // Logical Relations are distinct if they have different output for the sake of transformations.
   override def equals(other: Any) = other match {
