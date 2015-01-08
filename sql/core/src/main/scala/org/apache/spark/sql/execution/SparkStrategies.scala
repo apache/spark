@@ -314,11 +314,11 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case r: RunnableCommand => ExecutedCommand(r) :: Nil
 
-      case CreateTableUsing(tableName, provider, true, options) =>
+      case CreateTableUsing(tableName, userSpecifiedSchema, provider, true, options) =>
         ExecutedCommand(
-          CreateTempTableUsing(tableName, provider, options)) :: Nil
+          CreateTempTableUsing(tableName, userSpecifiedSchema, provider, options)) :: Nil
 
-      case CreateTableUsing(tableName, provider, false, options) =>
+      case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, options) =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
 
       case logical.SetCommand(kv) =>

@@ -220,9 +220,9 @@ private[hive] trait HiveStrategies {
             ExecutedCommand(DescribeCommand(planLater(o), describe.output)) :: Nil
         }
 
-      case CreateTableUsing(tableName, provider, false, options) =>
+      case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, options) =>
         ExecutedCommand(
-          CreateMetastoreDataSource(tableName, provider, options)) :: Nil
+          CreateMetastoreDataSource(tableName, userSpecifiedSchema, provider, options)) :: Nil
 
       case _ => Nil
     }

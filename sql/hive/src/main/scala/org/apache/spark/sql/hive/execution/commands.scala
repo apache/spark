@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.SQLContext
@@ -92,12 +93,13 @@ case class AddFile(path: String) extends RunnableCommand {
 
 case class CreateMetastoreDataSource(
     tableName: String,
+    userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    hiveContext.catalog.createDataSourceTable(tableName, provider, options)
+    hiveContext.catalog.createDataSourceTable(tableName, userSpecifiedSchema, provider, options)
 
     Seq.empty[Row]
   }
