@@ -86,20 +86,20 @@ private object IDF {
         df = BDV.zeros(doc.size)
       }
       doc match {
-        case sv: SparseVector =>
-          val nnz = sv.indices.size
+        case SparseVector(size, indices, values) =>
+          val nnz = indices.size
           var k = 0
           while (k < nnz) {
-            if (sv.values(k) > 0) {
-              df(sv.indices(k)) += 1L
+            if (values(k) > 0) {
+              df(indices(k)) += 1L
             }
             k += 1
           }
-        case dv: DenseVector =>
-          val n = dv.size
+        case DenseVector(values) =>
+          val n = values.size
           var j = 0
           while (j < n) {
-            if (dv.values(j) > 0.0) {
+            if (values(j) > 0.0) {
               df(j) += 1L
             }
             j += 1
@@ -207,20 +207,20 @@ private object IDFModel {
   def transform(idf: Vector, v: Vector): Vector = {
     val n = v.size
     v match {
-      case sv: SparseVector =>
-        val nnz = sv.indices.size
+      case SparseVector(size, indices, values) =>
+        val nnz = indices.size
         val newValues = new Array[Double](nnz)
         var k = 0
         while (k < nnz) {
-          newValues(k) = sv.values(k) * idf(sv.indices(k))
+          newValues(k) = values(k) * idf(indices(k))
           k += 1
         }
-        Vectors.sparse(n, sv.indices, newValues)
-      case dv: DenseVector =>
+        Vectors.sparse(n, indices, newValues)
+      case DenseVector(values) =>
         val newValues = new Array[Double](n)
         var j = 0
         while (j < n) {
-          newValues(j) = dv.values(j) * idf(j)
+          newValues(j) = values(j) * idf(j)
           j += 1
         }
         Vectors.dense(newValues)
