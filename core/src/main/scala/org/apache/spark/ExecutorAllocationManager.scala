@@ -65,7 +65,8 @@ private[spark] class ExecutorAllocationManager(
     listenerBus: LiveListenerBus,
     conf: SparkConf)
   extends Logging {
-allocationManager =>
+
+  allocationManager =>
 
   import ExecutorAllocationManager._
 
@@ -211,8 +212,8 @@ allocationManager =>
       addTime += sustainedSchedulerBacklogTimeout * 1000
     }
 
-    removeTimes.retain {
-      case (executorId, expireTime) => !(now >= expireTime && removeExecutor(executorId))
+    removeTimes.retain { case (executorId, expireTime) =>
+      now < expireTime || !removeExecutor(executorId)
     }
   }
 
@@ -378,6 +379,8 @@ allocationManager =>
           s"scheduled to run on the executor (to expire in $executorIdleTimeout seconds)")
         removeTimes(executorId) = clock.getTimeMillis + executorIdleTimeout * 1000
       }
+    } else {
+      logWarning(s"Attempted to mark unknown executor $executorId idle")
     }
   }
 
@@ -484,7 +487,7 @@ allocationManager =>
      * An estimate of the total number of pending tasks remaining for currently running stages. Does
      * not account for tasks which may have failed and been resubmitted.
      *
-     * Note: The current thread must own the allocationManager's monitor.
+     * Note: The caller must own the `allocationManager` lock before calling `totalPendingTasks`
      */
     def totalPendingTasks(): Int = {
       stageIdToNumTasks.map { case (stageId, numTasks) =>
