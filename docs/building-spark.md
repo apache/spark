@@ -153,7 +153,8 @@ Thus, the full flow for running continuous-compilation of the `core` submodule m
 
 # Using With IntelliJ IDEA
 
-This setup works fine in IntelliJ IDEA 11.1.4. After opening the project via the pom.xml file in the project root folder, you only need to activate either the hadoop1 or hadoop2 profile in the "Maven Properties" popout. We have not tried Eclipse/Scala IDE with this.
+For additional help in setting up IntelliJ IDEA for Spark development, refer to the
+[wiki page for IntelliJ](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-BuildingSparkinIntelliJIDEA)
 
 # Building Spark Debian Packages
 
