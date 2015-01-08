@@ -207,8 +207,7 @@ private[spark] object JsonProtocol {
 
   def executorRemovedToJson(executorRemoved: SparkListenerExecutorRemoved): JValue = {
     ("Event" -> Utils.getFormattedClassName(executorRemoved)) ~
-    ("Executor ID" -> executorRemoved.executorId) ~
-    ("Executor Info" -> executorInfoToJson(executorRemoved.executorInfo))
+    ("Executor ID" -> executorRemoved.executorId)
   }
 
   /** ------------------------------------------------------------------- *
@@ -555,8 +554,7 @@ private[spark] object JsonProtocol {
 
   def executorRemovedFromJson(json: JValue): SparkListenerExecutorRemoved = {
     val executorId = (json \ "Executor ID").extract[String]
-    val executorInfo = executorInfoFromJson(json \ "Executor Info")
-    SparkListenerExecutorRemoved(executorId, executorInfo)
+    SparkListenerExecutorRemoved(executorId)
   }
 
   /** --------------------------------------------------------------------- *

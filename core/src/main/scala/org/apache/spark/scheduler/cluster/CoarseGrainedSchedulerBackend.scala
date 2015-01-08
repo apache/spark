@@ -216,7 +216,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
           scheduler.executorLost(executorId, SlaveLost(reason))
-          listenerBus.post(SparkListenerExecutorRemoved(executorId, executorInfo))
+          listenerBus.post(SparkListenerExecutorRemoved(executorId))
         case None => logError(s"Asked to remove non-existent executor $executorId")
       }
     }

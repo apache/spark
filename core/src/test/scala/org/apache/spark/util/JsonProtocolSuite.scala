@@ -72,8 +72,7 @@ class JsonProtocolSuite extends FunSuite {
     val applicationEnd = SparkListenerApplicationEnd(42L)
     val executorAdded = SparkListenerExecutorAdded("exec1",
       new ExecutorInfo("Hostee.awesome.com", 11))
-    val executorRemoved = SparkListenerExecutorRemoved("exec2",
-      new ExecutorInfo("Hoster.awesome.com", 42))
+    val executorRemoved = SparkListenerExecutorRemoved("exec2")
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -352,7 +351,6 @@ class JsonProtocolSuite extends FunSuite {
         assertEquals(e1.executorInfo, e2.executorInfo)
       case (e1: SparkListenerExecutorRemoved, e2: SparkListenerExecutorRemoved) =>
         assert(e1.executorId == e1.executorId)
-        assertEquals(e1.executorInfo, e2.executorInfo)
       case (e1, e2) =>
         assert(e1 === e2)
       case _ => fail("Events don't match in types!")
@@ -1447,11 +1445,7 @@ class JsonProtocolSuite extends FunSuite {
     """
       |{
       |  "Event": "SparkListenerExecutorRemoved",
-      |  "Executor ID": "exec2",
-      |  "Executor Info": {
-      |    "Host": "Hoster.awesome.com",
-      |    "Total Cores": 42
-      |  }
+      |  "Executor ID": "exec2"
       |}
     """
 }

@@ -90,7 +90,7 @@ case class SparkListenerExecutorAdded(executorId: String, executorInfo: Executor
   extends SparkListenerEvent
 
 @DeveloperApi
-case class SparkListenerExecutorRemoved(executorId: String, executorInfo: ExecutorInfo)
+case class SparkListenerExecutorRemoved(executorId: String)
   extends SparkListenerEvent
 
 /**
