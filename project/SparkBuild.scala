@@ -183,6 +183,7 @@ object SparkBuild extends Build {
     fork := true,
     javaOptions in Test += "-Dspark.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
+    javaOptions in Test += "-Dspark.ui.enabled=false",
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark").map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g".split(" ").toSeq,
