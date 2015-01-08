@@ -30,6 +30,8 @@ while (($#)); do
     SPARK_SUBMIT_DEPLOY_MODE=$2
   elif [ "$1" = "--properties-file" ]; then
     SPARK_SUBMIT_PROPERTIES_FILE=$2
+  elif [ "$1" = "--environment-file" ]; then
+    SPARK_SUBMIT_ENVIRONMENT_FILE=$2
   elif [ "$1" = "--driver-memory" ]; then
     export SPARK_SUBMIT_DRIVER_MEMORY=$2
   elif [ "$1" = "--driver-library-path" ]; then
@@ -42,9 +44,19 @@ while (($#)); do
   shift
 done
 
-DEFAULT_PROPERTIES_FILE="$SPARK_HOME/conf/spark-defaults.conf"
-export SPARK_SUBMIT_DEPLOY_MODE=${SPARK_SUBMIT_DEPLOY_MODE:-"client"}
+# SPARK-4616 - Add environment file to source in possible configuration options
+DEFAULT_ENVIRONMENT_FILE="$SPARK_HOME/conf/spark-env.sh"
+export SPARK_SUBMIT_ENVIRONMENT_FILE=${SPARK_SUBMIT_ENVIRONMENT_FILE:-"$DEFAULT_ENVIRONMENT_FILE"}
+
+# Source in the environment specifically to ensure whether SPARK_CONF_DIR has been set or not
+. "$SPARK_HOME"/bin/load-spark-env.sh
+
+# If the SPARK_CONF_DIR wasn't set from spark-env.sh then provide healthy defaults
+SPARK_CONF_DIR=${SPARK_CONF_DIR:-"$SPARK_HOME/conf"}
+DEFAULT_PROPERTIES_FILE="$SPARK_CONF_DIR/spark-defaults.conf"
 export SPARK_SUBMIT_PROPERTIES_FILE=${SPARK_SUBMIT_PROPERTIES_FILE:-"$DEFAULT_PROPERTIES_FILE"}
+
+export SPARK_SUBMIT_DEPLOY_MODE=${SPARK_SUBMIT_DEPLOY_MODE:-"client"}
 
 # For client mode, the driver will be launched in the same JVM that launches
 # SparkSubmit, so we may need to read the properties file for any extra class

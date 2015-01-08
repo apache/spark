@@ -30,7 +30,7 @@ FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 # Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
 
-. "$FWDIR"/bin/load-spark-env.sh
+. "$SPARK_HOME"/bin/load-spark-env.sh
 
 if [ -z "$1" ]; then
   echo "Usage: spark-class <class> [<args>]" 1>&2

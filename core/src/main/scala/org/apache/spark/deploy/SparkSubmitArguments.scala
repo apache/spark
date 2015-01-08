@@ -35,6 +35,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var executorCores: String = null
   var totalExecutorCores: String = null
   var propertiesFile: String = null
+  var environmentFile: String = null
   var driverMemory: String = null
   var driverExtraClassPath: String = null
   var driverExtraLibraryPath: String = null
@@ -200,6 +201,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |  executorCores           $executorCores
     |  totalExecutorCores      $totalExecutorCores
     |  propertiesFile          $propertiesFile
+    |  environmentFile         $environmentFile
     |  driverMemory            $driverMemory
     |  driverCores             $driverCores
     |  driverExtraClassPath    $driverExtraClassPath
@@ -298,6 +300,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         propertiesFile = value
         parse(tail)
 
+      case ("--environment-file") :: value :: tail =>
+        environmentFile = value
+        parse(tail)
+
       case ("--supervise") :: tail =>
         supervise = true
         parse(tail)
@@ -380,6 +386,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |  --conf PROP=VALUE           Arbitrary Spark configuration property.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
         |                              specified, this will look for conf/spark-defaults.conf.
+        |  --environment-file FILE     Path to a file from which to load various Spark environment
+        |                              options (e.g. SPARK_CONF_DIR, etc.). If not specified, this
+        |                              will look for conf/spark-env.sh.
         |
         |  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: 512M).
         |  --driver-java-options       Extra Java options to pass to the driver.
