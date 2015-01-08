@@ -54,16 +54,22 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
   test ("persistent JSON table with a user specified schema") {
     sql(
       """
-        |CREATE TABLE jsonTable (a string, b String)
+        |CREATE TABLE jsonTable (
+        |a string,
+        |b String,
+        |`c_!@(3)` int,
+        |`<d>` Struct<`d!`:array<int>, `=`:array<struct<Dd2: boolean>>>)
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
         |  path 'src/test/resources/data/files/sample.json'
         |)
       """.stripMargin)
 
+    jsonFile("src/test/resources/data/files/sample.json").registerTempTable("expectedJsonTable")
+
     checkAnswer(
-      sql("SELECT * FROM jsonTable"),
-      jsonFile("src/test/resources/data/files/sample.json").collect().toSeq)
+      sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM jsonTable"),
+      sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM expectedJsonTable").collect().toSeq)
 
   }
 
@@ -72,21 +78,26 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     // field values based on field names.
     sql(
       """
-        |CREATE TABLE jsonTable (b String)
+        |CREATE TABLE jsonTable (`<d>` Struct<`=`:array<struct<Dd2: boolean>>>, b String)
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
         |  path 'src/test/resources/data/files/sample.json'
         |)
       """.stripMargin)
 
-    val expectedSchema = StructType(StructField("b", StringType, true) :: Nil)
+    val innerStruct = StructType(
+      StructField("=", ArrayType(StructType(StructField("Dd2", BooleanType, true) :: Nil))) :: Nil)
+    val expectedSchema = StructType(
+      StructField("<d>", innerStruct, true) ::
+      StructField("b", StringType, true) :: Nil)
 
     assert(expectedSchema == table("jsonTable").schema)
 
+    jsonFile("src/test/resources/data/files/sample.json").registerTempTable("expectedJsonTable")
+
     checkAnswer(
-      sql("SELECT * FROM jsonTable"),
-      jsonFile("src/test/resources/data/files/sample.json").collect().map(
-        r => Seq(r.getString(1))).toSeq)
+      sql("SELECT b, `<d>`.`=` FROM jsonTable"),
+      sql("SELECT b, `<d>`.`=` FROM expectedJsonTable").collect().toSeq)
 
   }
 
@@ -199,5 +210,32 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT * FROM jsonTable"),
       ("a", "b", "c") :: Nil)
     FileUtils.deleteDirectory(tempDir)
+  }
+
+  test("invalidate cache and reload") {
+    sql(
+      """
+        |CREATE TABLE jsonTable (`c_!@(3)` int)
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path 'src/test/resources/data/files/sample.json'
+        |)
+      """.stripMargin)
+
+    jsonFile("src/test/resources/data/files/sample.json").registerTempTable("expectedJsonTable")
+
+    checkAnswer(
+      sql("SELECT * FROM jsonTable"),
+      sql("SELECT `c_!@(3)` FROM expectedJsonTable").collect().toSeq)
+
+    invalidateTable("jsonTable")
+    checkAnswer(
+      sql("SELECT * FROM jsonTable"),
+      sql("SELECT `c_!@(3)` FROM expectedJsonTable").collect().toSeq)
+
+    invalidateTable("jsonTable")
+    val expectedSchema = StructType(StructField("c_!@(3)", IntegerType, true) :: Nil)
+
+    assert(expectedSchema == table("jsonTable").schema)
   }
 }
