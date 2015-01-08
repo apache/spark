@@ -138,6 +138,7 @@ class DAGScheduler(
   }
 
   initializeEventProcessActor()
+  taskScheduler.setDAGScheduler(this)
 
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
@@ -1374,12 +1375,6 @@ private[scheduler] class DAGSchedulerActorSupervisor(dagScheduler: DAGScheduler)
 
 private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGScheduler)
   extends Actor with Logging {
-
-  override def preStart() {
-    // set DAGScheduler for taskScheduler to ensure eventProcessActor is always
-    // valid when the messages arrive
-    dagScheduler.taskScheduler.setDAGScheduler(dagScheduler)
-  }
 
   /**
    * The main event loop of the DAG scheduler.

@@ -49,6 +49,15 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
     assert(analyzer(plan).schema.fields(0).dataType === expectedType)
   }
 
+  private def checkComparison(expression: Expression, expectedType: DataType): Unit = {
+    val plan = Project(Alias(expression, "c")() :: Nil, relation)
+    val comparison = analyzer(plan).collect {
+      case Project(Alias(e: BinaryComparison, _) :: Nil, _) => e
+    }.head
+    assert(comparison.left.dataType === expectedType)
+    assert(comparison.right.dataType === expectedType)
+  }
+
   test("basic operations") {
     checkType(Add(d1, d2), DecimalType(6, 2))
     checkType(Subtract(d1, d2), DecimalType(6, 2))
@@ -63,6 +72,14 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
     checkType(Add(Add(d1, d2), d1), DecimalType(7, 2))
     checkType(Add(Add(Add(d1, d2), d1), d2), DecimalType(8, 2))
     checkType(Add(Add(d1, d2), Add(d1, d2)), DecimalType(7, 2))
+  }
+
+  test("Comparison operations") {
+    checkComparison(LessThan(i, d1), DecimalType.Unlimited)
+    checkComparison(LessThanOrEqual(d1, d2), DecimalType.Unlimited)
+    checkComparison(GreaterThan(d2, u), DecimalType.Unlimited)
+    checkComparison(GreaterThanOrEqual(d1, f), DoubleType)
+    checkComparison(GreaterThan(d2, d2), DecimalType(5, 2))
   }
 
   test("bringing in primitive types") {

@@ -123,6 +123,7 @@ private[spark] class Master(
 
   override def preStart() {
     logInfo("Starting Spark master at " + masterUrl)
+    logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     webUi.bind()
@@ -844,7 +845,6 @@ private[spark] class Master(
 private[spark] object Master extends Logging {
   val systemName = "sparkMaster"
   private val actorName = "Master"
-  val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
 
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
@@ -854,14 +854,24 @@ private[spark] object Master extends Logging {
     actorSystem.awaitTermination()
   }
 
-  /** Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:ip`. */
+  /**
+   * Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:port`.
+   *
+   * @throws SparkException if the url is invalid
+   */
   def toAkkaUrl(sparkUrl: String): String = {
-    sparkUrl match {
-      case sparkUrlRegex(host, port) =>
-        "akka.tcp://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
-      case _ =>
-        throw new SparkException("Invalid master URL: " + sparkUrl)
-    }
+    val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
+    "akka.tcp://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
+  }
+
+  /**
+   * Returns an akka `Address` for the Master actor given a sparkUrl `spark://host:port`.
+   *
+   * @throws SparkException if the url is invalid
+   */
+  def toAkkaAddress(sparkUrl: String): Address = {
+    val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
+    Address("akka.tcp", systemName, host, port)
   }
 
   def startSystemAndActor(

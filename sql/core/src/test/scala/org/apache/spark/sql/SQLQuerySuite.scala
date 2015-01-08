@@ -987,6 +987,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     )
   }
 
+  test("oder by asc by default when not specify ascending and descending") {
+    checkAnswer(
+      sql("SELECT a, b FROM testData2 ORDER BY a desc, b"),
+      Seq((3, 1), (3, 2), (2, 1), (2,2), (1, 1), (1, 2))
+    )
+  }
+
   test("Supporting relational operator '<=>' in Spark SQL") {
     val nullCheckData1 = TestData(1,"1") :: TestData(2,null) :: Nil
     val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
