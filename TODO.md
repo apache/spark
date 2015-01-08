@@ -9,9 +9,6 @@ TODO
 * For each existing operator
 
 #### Command line
-* `airflow test dag_id task_id YYYY-MM-DD` (outputs log to stdout, doesnt care about dependencies, states)
-* `airflow list_dags`
-* `airflow list_tasks dag_idj`
 * `airflow task_state dag_id task_id YYYY-MM-DD`
 
 #### More Operators!
@@ -28,14 +25,14 @@ TODO
 
 #### Backend
 * CeleryExecutor
-* Master to derive BaseJob
 * Clear should kill running jobs
-* Mysql port should carry through
+* Mysql port should carry through (using default now)
 
 #### Misc
 * Write an hypervisor, looks for dead jobs without a heartbeat and kills
 * Authentication with Flask-Login and Flask-Principal
 * email_on_retry
+* Naming for the DatabaseConnection model was shortsighted, the same model can be used for any external connections (FTP, samba, ...), rename the model to Connection.
 
 #### Wishlist
 * Support for cron like synthax (0 * * * ) using croniter library

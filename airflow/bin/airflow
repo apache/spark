@@ -86,6 +86,37 @@ def run(args):
         force=args.force,
         ignore_dependencies=args.ignore_dependencies)
 
+def list_dags(args):
+    dagbag = DagBag()
+    print("\n".join(sorted(dagbag.dags)))
+
+def list_tasks(args):
+    dagbag = DagBag()
+    if args.dag_id not in dagbag.dags:
+        raise Exception('dag_id could not be found')
+    dag = dagbag.dags[args.dag_id]
+    if args.tree:
+        dag.tree_view()
+    else:
+        tasks = sorted([t.task_id for t in dag.tasks])
+        print("\n".join(sorted(tasks)))
+
+def test(args):
+    log = logging.getLogger()
+    log.setLevel(logging.DEBUG)
+    logformat = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setFormatter(logformat)
+    log.addHandler(ch)
+    args.execution_date = dateutil.parser.parse(args.execution_date)
+    dagbag = DagBag(args.subdir)
+    if args.dag_id not in dagbag.dags:
+        raise Exception('dag_id could not be found')
+    dag = dagbag.dags[args.dag_id]
+    task = dag.get_task(task_id=args.task_id)
+    ti = TaskInstance(task, args.execution_date)
+    ti.run(force=True, ignore_dependencies=True)
 
 def clear(args):
     logging.basicConfig(level=logging.INFO, format=settings.SIMPLE_LOG_FORMAT)
@@ -281,6 +312,17 @@ if __name__ == '__main__':
         help="Serialized pickle object of the entire dag (used internally)")
     parser_run.set_defaults(func=run)
 
+    ht = "Test a task instance"
+    parser_test = subparsers.add_parser('test', help=ht)
+    parser_test.add_argument("dag_id", help="The id of the dag to run")
+    parser_test.add_argument("task_id", help="The task_id to run")
+    parser_test.add_argument(
+        "execution_date", help="The execution date to run")
+    parser_test.add_argument(
+        "-sd", "--subdir", help=subdir_help,
+        default=conf.get('core', 'DAGS_FOLDER'))
+    parser_test.set_defaults(func=test)
+
     ht = "Start a Airflow webserver instance"
     parser_webserver = subparsers.add_parser('webserver', help=ht)
     parser_webserver.add_argument(
@@ -309,6 +351,18 @@ if __name__ == '__main__':
     ht = "Initialize and reset the metadata database"
     parser_initdb = subparsers.add_parser('initdb', help=ht)
     parser_initdb.set_defaults(func=initdb)
+
+    ht = "List the DAGs"
+    parser_list_dags = subparsers.add_parser('list_dags', help=ht)
+    parser_list_dags.set_defaults(func=list_dags)
+
+    ht = "List the tasks whithin a DAG"
+    parser_list_tasks = subparsers.add_parser('list_tasks', help=ht)
+    parser_list_tasks.add_argument(
+        "-t", "--tree", help="Tree view", action="store_true")
+    parser_list_tasks.add_argument(
+        "dag_id", help="The id of the dag")
+    parser_list_tasks.set_defaults(func=list_tasks)
 
     ht = "Start a Celery worker node"
     parser_worker = subparsers.add_parser('worker', help=ht)
