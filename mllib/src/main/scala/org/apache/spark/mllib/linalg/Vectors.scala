@@ -108,16 +108,16 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
   override def serialize(obj: Any): Row = {
     val row = new GenericMutableRow(4)
     obj match {
-      case sv: SparseVector =>
+      case SparseVector(size, indices, values) =>
         row.setByte(0, 0)
-        row.setInt(1, sv.size)
-        row.update(2, sv.indices.toSeq)
-        row.update(3, sv.values.toSeq)
-      case dv: DenseVector =>
+        row.setInt(1, size)
+        row.update(2, indices.toSeq)
+        row.update(3, values.toSeq)
+      case DenseVector(values) =>
         row.setByte(0, 1)
         row.setNullAt(1)
         row.setNullAt(2)
-        row.update(3, dv.values.toSeq)
+        row.update(3, values.toSeq)
     }
     row
   }
@@ -271,8 +271,8 @@ object Vectors {
   def norm(vector: Vector, p: Double): Double = {
     require(p >= 1.0)
     val values = vector match {
-      case dv: DenseVector => dv.values
-      case sv: SparseVector => sv.values
+      case DenseVector(vs) => vs
+      case SparseVector(n, ids, vs) => vs
       case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
     }
     val size = values.size
@@ -373,8 +373,9 @@ object Vectors {
     var kv2 = 0
     val indices = v1.indices
     var squaredDistance = 0.0
-    var iv1 = indices(kv1)
+    val nnzv1 = indices.size
     val nnzv2 = v2.size
+    var iv1 = if (nnzv1 > 0) indices(kv1) else -1
    
     while (kv2 < nnzv2) {
       var score = 0.0
@@ -382,7 +383,7 @@ object Vectors {
         score = v2(kv2)
       } else {
         score = v1.values(kv1) - v2(kv2)
-        if (kv1 < indices.length - 1) {
+        if (kv1 < nnzv1 - 1) {
           kv1 += 1
           iv1 = indices(kv1)
         }
@@ -424,6 +425,10 @@ class DenseVector(val values: Array[Double]) extends Vector {
       i += 1
     }
   }
+}
+
+object DenseVector {
+  def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
 }
 
 /**
@@ -472,4 +477,9 @@ class SparseVector(
       i += 1
     }
   }
+}
+
+object SparseVector {
+  def unapply(sv: SparseVector): Option[(Int, Array[Int], Array[Double])] =
+    Some((sv.size, sv.indices, sv.values))
 }
