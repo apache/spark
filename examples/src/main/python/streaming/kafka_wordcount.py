@@ -45,8 +45,9 @@ if __name__ == "__main__":
     ssc = StreamingContext(sc, 1)
 
     zkQuorum, topic = sys.argv[1:]
-    lines = KafkaUtils.createStream(ssc, zkQuorum, "spark-streaming-consumer", {topic: 1})
-    counts = lines.map(lambda x: x[1]).flatMap(lambda line: line.split(" ")) \
+    kvs = KafkaUtils.createStream(ssc, zkQuorum, "spark-streaming-consumer", {topic: 1})
+    lines = kvs.map(lambda x: x[1])
+    counts = lines.flatMap(lambda line: line.split(" ")) \
         .map(lambda word: (word, 1)) \
         .reduceByKey(lambda a, b: a+b)
     counts.pprint()
