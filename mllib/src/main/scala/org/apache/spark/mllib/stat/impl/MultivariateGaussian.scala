@@ -35,13 +35,8 @@ class MultivariateGaussian private[mllib] (
     val mu: DBV[Double], 
     val sigma: DBM[Double]) extends Serializable {
 
-  if (sigma.cols != sigma.rows) {
-    throw new IllegalArgumentException("Covariance matrix must be square");
-  }
-  
-  if (mu.length != sigma.cols) {
-    throw new IllegalArgumentException("Mean vector length must match covariance matrix size")
-  }
+  require(sigma.cols == sigma.rows, "Covariance matrix must be square")
+  require(mu.length == sigma.cols, "Mean vector length must match covariance matrix size")
   
   /**
    * Public constructor
@@ -125,7 +120,7 @@ class MultivariateGaussian private[mllib] (
     
     try {
       // log(pseudo-determinant) is sum of the logs of all non-zero singular values
-      val logPseudoDetSigma = d.activeValuesIterator.filter(_ > tol).map(math.log(_)).reduce(_ + _)
+      val logPseudoDetSigma = d.activeValuesIterator.filter(_ > tol).map(math.log).sum
       
       // calculate the root-pseudo-inverse of the diagonal matrix of singular values 
       // by inverting the square root of all non-zero values
