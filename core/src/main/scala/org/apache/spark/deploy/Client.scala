@@ -24,7 +24,7 @@ import akka.pattern.ask
 import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.{SparkException, Logging, SecurityManager, SparkConf}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
@@ -39,11 +39,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
   val timeout = AkkaUtils.askTimeout(conf)
 
   override def preStart() = {
-    try {
-      masterActor = context.actorSelection(Master.toAkkaUrl(driverArgs.master))
-    } catch {
-      case e: SparkException => logError(e.getMessage, e)
-    }
+    masterActor = context.actorSelection(Master.toAkkaUrl(driverArgs.master))
 
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
@@ -164,6 +160,8 @@ object Client {
     val (actorSystem, _) = AkkaUtils.createActorSystem(
       "driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
+    // Verify driverArgs.master is a valid url so that we can use it in ClientActor safely
+    Master.toAkkaUrl(driverArgs.master)
     actorSystem.actorOf(Props(classOf[ClientActor], driverArgs, conf))
 
     actorSystem.awaitTermination()

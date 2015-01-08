@@ -26,7 +26,7 @@ import akka.actor._
 import akka.pattern.ask
 import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
@@ -46,6 +46,8 @@ private[spark] class AppClient(
     listener: AppClientListener,
     conf: SparkConf)
   extends Logging {
+
+  val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl)
 
   val REGISTRATION_TIMEOUT = 20.seconds
   val REGISTRATION_RETRIES = 3
@@ -75,14 +77,10 @@ private[spark] class AppClient(
     }
 
     def tryRegisterAllMasters() {
-      for (masterUrl <- masterUrls) {
-        logInfo("Connecting to master " + masterUrl + "...")
-        try {
-          val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
-          actor ! RegisterApplication(appDescription)
-        } catch {
-          case e: SparkException => logError(e.getMessage, e)
-        }
+      for (masterAkkaUrl <- masterAkkaUrls) {
+        logInfo("Connecting to master " + masterAkkaUrl + "...")
+        val actor = context.actorSelection(masterAkkaUrl)
+        actor ! RegisterApplication(appDescription)
       }
     }
 
@@ -107,19 +105,14 @@ private[spark] class AppClient(
     }
 
     def changeMaster(url: String) {
+      // activeMasterUrl is a valid Spark url since we receive it from master.
       activeMasterUrl = url
       master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
       masterAddress = Master.toAkkaAddress(activeMasterUrl)
     }
 
     private def isPossibleMaster(remoteUrl: Address) = {
-      masterUrls.flatMap(s => {
-        try {
-          Some(AddressFromURIString(Master.toAkkaUrl(s)).hostPort)
-        } catch {
-          case e: SparkException => None // ignore invalid urls
-        }
-      }).contains(remoteUrl.hostPort)
+      masterAkkaUrls.map(AddressFromURIString(_).hostPort).contains(remoteUrl.hostPort)
     }
 
     override def receiveWithLogging = {
