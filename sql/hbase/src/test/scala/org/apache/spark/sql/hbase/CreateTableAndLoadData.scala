@@ -3,6 +3,7 @@ package org.apache.spark.sql.hbase
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{TableExistsException, HColumnDescriptor, HTableDescriptor, TableName}
 import org.apache.log4j.Logger
+import org.apache.spark.Logging
 
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -25,9 +26,7 @@ import org.apache.log4j.Logger
  * CreateTableAndLoadData
  *
  */
-trait CreateTableAndLoadData {
-
-  private val logger = Logger.getLogger(getClass.getName)
+trait CreateTableAndLoadData extends Logging {
   val DefaultStagingTableName = "StageTable"
   val DefaultTableName = "TestTable"
   val DefaultHbaseStagingTableName = s"Hb$DefaultStagingTableName"
@@ -45,10 +44,10 @@ trait CreateTableAndLoadData {
 
   private val tpath = for (csvPath <- CsvPaths
                            if new java.io.File(csvPath).exists()
-                      ) yield {
-                        println(s"Following path exists $csvPath")
-                        csvPath
-                      }
+  ) yield {
+    logInfo(s"Following path exists $csvPath")
+    csvPath
+  }
   private[hbase] val CsvPath = tpath(0)
 
   def createTableAndLoadData(hbc: HBaseSQLContext) = {
@@ -70,7 +69,7 @@ trait CreateTableAndLoadData {
       hbaseAdmin.createTable(hdesc)
     } catch {
       case e: TableExistsException =>
-        logger.error(s"Table already exists $tableName", e)
+        logError(s"Table already exists $tableName", e)
     }
   }
 
@@ -109,41 +108,36 @@ trait CreateTableAndLoadData {
           .stripMargin
         )
     try {
-      logger.info(s"invoking $stagingSql ..")
+      logInfo(s"invoking $stagingSql ..")
       runSql(hbc, stagingSql)
     } catch {
       case e: TableExistsException =>
-        logger.info("IF NOT EXISTS still not implemented so we get the following exception", e)
+        logInfo("IF NOT EXISTS still not implemented so we get the following exception", e)
     }
 
-    logger.debug(s"Created table $tableName: " +
+    logDebug(s"Created table $tableName: " +
       s"isTableAvailable= ${hbaseAdmin.isTableAvailable(s2b(hbaseStagingTable))}" +
       s" tableDescriptor= ${hbaseAdmin.getTableDescriptor(s2b(hbaseStagingTable))}")
 
     try {
-      logger.info(s"invoking $tabSql ..")
+      logInfo(s"invoking $tabSql ..")
       runSql(hbc, tabSql)
     } catch {
       case e: TableExistsException =>
-        logger.info("IF NOT EXISTS still not implemented so we get the following exception", e)
+        logInfo("IF NOT EXISTS still not implemented so we get the following exception", e)
     }
   }
 
   def runSql(hbc: HBaseSQLContext, sql: String) = {
-    println(sql)
-    hbc.sql(sql).collect().foreach(println)
+    logInfo(sql)
+    hbc.sql(sql).collect()
   }
 
   def loadData(hbc: HBaseSQLContext, stagingTableName: String, tableName: String,
                loadFile: String) = {
     // then load data into table
-    val hbaseAdmin = hbc.catalog.hBaseAdmin
     val loadSql = s"LOAD DATA LOCAL INPATH '$loadFile' INTO TABLE $tableName"
-    val result3 = runSql(hbc, loadSql)
-    val insertSql = s"""insert into $tableName select cast(strcol as string),
-    cast(bytecol as tinyint), cast(shortcol as smallint), cast(intcol as int),
-    cast (longcol as bigint), cast(floatcol as float), cast(doublecol as double)
-    from $stagingTableName"""
+    runSql(hbc, loadSql)
   }
 
   def s2b(s: String) = Bytes.toBytes(s)
