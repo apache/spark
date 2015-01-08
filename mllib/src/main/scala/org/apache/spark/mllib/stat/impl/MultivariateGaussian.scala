@@ -35,6 +35,14 @@ class MultivariateGaussian private[mllib] (
     val mu: DBV[Double], 
     val sigma: DBM[Double]) extends Serializable {
 
+  if (sigma.cols != sigma.rows) {
+    throw new IllegalArgumentException("Covariance matrix must be square");
+  }
+  
+  if (mu.length != sigma.cols) {
+    throw new IllegalArgumentException("Mean vector length must match covariance matrix size")
+  }
+  
   /**
    * Public constructor
    * 
@@ -47,20 +55,16 @@ class MultivariateGaussian private[mllib] (
   
   /**
    * Compute distribution dependent constants:
-   *    rootSigmaInv = D^(-1/2) * U, where sigma = U * D * U.t
-   *    u = log((2*pi)^(-k/2) * det(sigma)^(-1/2)) 
+   *    rootSigmaInv = D^(-1/2)^ * U, where sigma = U * D * U.t
+   *    u = log((2*pi)^(-k/2)^ * det(sigma)^(-1/2)^) 
    */
   private val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
   
-  /** Return the mean vector for this distribution */
-  def getMean(): Vector = {
-    Vectors.fromBreeze(mu)
-  }
+  /** Return the mean vector (mu) for this distribution */
+  def getMu: Vector = Vectors.fromBreeze(mu)
   
-  /** Return the covariance matrix for this distribution */
-  def getCovariance(): Matrix = {
-    Matrices.fromBreeze(sigma)
-  }
+  /** Return the covariance matrix (sigma) for this distribution */
+  def getSigma: Matrix = Matrices.fromBreeze(sigma)
   
   /** Returns density of this multivariate Gaussian at given point, x */
   def pdf(x: Vector): Double = {
@@ -86,13 +90,13 @@ class MultivariateGaussian private[mllib] (
   
   /**
    * Calculate distribution dependent components used for the density function:
-   *    pdf(x) = (2*pi)^(-k/2) * det(sigma)^(-1/2) * exp( (-1/2) * (x-mu).t * inv(sigma) * (x-mu) )
+   *    pdf(x) = (2*pi)^(-k/2)^ * det(sigma)^(-1/2)^ * exp((-1/2) * (x-mu).t * inv(sigma) * (x-mu))
    * where k is length of the mean vector.
    * 
    * We here compute distribution-fixed parts 
-   *  log((2*pi)^(-k/2) * det(sigma)^(-1/2))
+   *  log((2*pi)^(-k/2)^ * det(sigma)^(-1/2)^)
    * and
-   *  D^(-1/2) * U, where sigma = U * D * U.t
+   *  D^(-1/2)^ * U, where sigma = U * D * U.t
    *  
    * Both the determinant and the inverse can be computed from the singular value decomposition
    * of sigma.  Noting that covariance matrices are always symmetric and positive semi-definite,
@@ -101,11 +105,11 @@ class MultivariateGaussian private[mllib] (
    * 
    *    sigma = U * D * U.t
    *    inv(Sigma) = U * inv(D) * U.t 
-   *               = (D^{-1/2} * U).t * (D^{-1/2} * U)
+   *               = (D^{-1/2}^ * U).t * (D^{-1/2}^ * U)
    * 
    * and thus
    * 
-   *    -0.5 * (x-mu).t * inv(Sigma) * (x-mu) = -0.5 * norm(D^{-1/2} * U  * (x-mu))^2
+   *    -0.5 * (x-mu).t * inv(Sigma) * (x-mu) = -0.5 * norm(D^{-1/2}^ * U  * (x-mu))^2^
    *  
    * To guard against singular covariance matrices, this method computes both the 
    * pseudo-determinant and the pseudo-inverse (Moore-Penrose).  Singular values are considered
@@ -121,13 +125,13 @@ class MultivariateGaussian private[mllib] (
     
     try {
       // pseudo-determinant is product of all non-zero singular values
-      val pdetSigma = d.activeValuesIterator.filter(_ > tol).reduce(_ * _)
+      val logPseudoDetSigma = d.activeValuesIterator.filter(_ > tol).map(math.log(_)).reduce(_ + _)
       
       // calculate the root-pseudo-inverse of the diagonal matrix of singular values 
       // by inverting the square root of all non-zero values
       val pinvS = diag(new DBV(d.map(v => if (v > tol) math.sqrt(1.0 / v) else 0.0).toArray))
     
-      (pinvS * u, math.log(math.pow(2.0 * math.Pi, -mu.length / 2.0) * math.pow(pdetSigma, -0.5)))
+      (pinvS * u, (-mu.length / 2.0) * math.log(2.0 * math.Pi) + -0.5 * logPseudoDetSigma)
     } catch {
       case uex: UnsupportedOperationException =>
         throw new IllegalArgumentException("Covariance matrix has no non-zero singular values")
