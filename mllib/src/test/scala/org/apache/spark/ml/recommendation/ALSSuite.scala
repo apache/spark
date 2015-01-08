@@ -19,16 +19,33 @@ package org.apache.spark.ml.recommendation
 
 import java.util.Random
 
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
+import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.scalatest.FunSuite
 
+import org.apache.spark.Logging
 import org.apache.spark.ml.recommendation.ALS._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.sql.{Row, SQLContext}
 
-import scala.collection.mutable.ArrayBuffer
+case class ALSTestData(
+    training: Seq[Rating],
+    test: Seq[Rating],
+    userFactors: Map[Int, Array[Float]],
+    itemFactors: Map[Int, Array[Float]])
 
-class ALSSuite extends FunSuite with MLlibTestSparkContext {
+class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
+
+  private var sqlContext: SQLContext = _
+
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    sqlContext = new SQLContext(sc)
+  }
 
   test("LocalIndexEncoder") {
     val random = new Random
@@ -200,5 +217,118 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
       i += 1
     }
     assert(decompressed.toSet === expected)
+  }
+
+  def genALSTestData(
+      numUsers: Int,
+      numItems: Int,
+      rank: Int,
+      trainingFraction: Double,
+      testFraction: Double,
+      noiseLevel: Double = 0.0,
+      seed: Long = 11L): ALSTestData = {
+    val random = new Random(seed)
+    val userFactors = genFactors(numUsers, rank, random)
+    val itemFactors = genFactors(numItems, rank, random)
+    val totalFraction = trainingFraction + testFraction
+    val training = ArrayBuffer.empty[Rating]
+    val test = ArrayBuffer.empty[Rating]
+    for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
+      val x = random.nextDouble()
+      if (x < totalFraction) {
+        val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
+        if (x < trainingFraction) {
+          training += Rating(userId, itemId, rating + noiseLevel.toFloat * random.nextFloat())
+        } else {
+          test += Rating(userId, itemId, rating)
+        }
+      }
+    }
+    logInfo(s"Generated ${training.size} ratings for training and ${test.size} for test.")
+    ALSTestData(training.toSeq, test.toSeq, userFactors, itemFactors)
+  }
+
+  def genFactors(size: Int, rank: Int, random: Random): Map[Int, Array[Float]] = {
+    require(size > 0 && size < Int.MaxValue / 3)
+    val ids = mutable.Set.empty[Int]
+    while (ids.size < size) {
+      ids += random.nextInt()
+    }
+    ids.map(id => (id, Array.fill(rank)(random.nextFloat()))).toMap
+  }
+
+  def testALS(
+      alsTestData: ALSTestData,
+      rank: Int,
+      maxIter: Int,
+      regParam: Double,
+      targetRMSE: Double,
+      numUserBlocks: Int = 2,
+      numItemBlocks: Int = 3): Unit = {
+    val sqlContext = this.sqlContext
+    import sqlContext.{createSchemaRDD, symbolToUnresolvedAttribute}
+    val training = sc.parallelize(alsTestData.training, 2)
+    val test = sc.parallelize(alsTestData.test, 2)
+    val als = new ALS()
+      .setRank(rank)
+      .setRegParam(regParam)
+      .setNumUserBlocks(numUserBlocks)
+      .setNumItemBlocks(numItemBlocks)
+    val model = als.fit(training)
+    val prediction = model.transform(test)
+    val mse = prediction.select('rating, 'prediction)
+      .map { case Row(rating: Float, prediction: Float) =>
+        val err = rating.toDouble - prediction
+        err * err
+      }.mean()
+    val rmse = math.sqrt(mse)
+    logInfo(s"Test RMSE is $rmse.")
+    assert(rmse < targetRMSE)
+  }
+
+  test("exact rank-1 matrix") {
+    val testData = genALSTestData(
+      numUsers = 20,
+      numItems = 40,
+      rank = 1,
+      trainingFraction = 0.6,
+      testFraction =  0.3)
+    testALS(testData, maxIter = 1, rank = 1, regParam = 1e-4, targetRMSE = 0.002)
+    testALS(testData, maxIter = 1, rank = 2, regParam = 1e-4, targetRMSE = 0.002)
+  }
+
+  test("approximate rank-1 matrix") {
+    val testData = genALSTestData(
+      numUsers = 20,
+      numItems = 40,
+      rank = 1,
+      trainingFraction = 0.6,
+      testFraction = 0.3,
+      noiseLevel = 0.01)
+    testALS(testData, maxIter = 2, rank = 1, regParam = 0.01, targetRMSE = 0.02)
+    testALS(testData, maxIter = 2, rank = 2, regParam = 0.01, targetRMSE = 0.02)
+  }
+
+  test("exact rank-2 matrix") {
+    val testData = genALSTestData(
+      numUsers = 20,
+      numItems = 40,
+      rank = 2,
+      trainingFraction = 0.6,
+      testFraction =  0.3)
+    testALS(testData, maxIter = 4, rank = 2, regParam = 1e-4, targetRMSE = 0.002)
+    testALS(testData, maxIter = 6, rank = 3, regParam = 0.01, targetRMSE = 0.04)
+  }
+
+  test("approximate rank-2 matrix") {
+    val testData = genALSTestData(
+      numUsers = 20,
+      numItems = 40,
+      rank = 2,
+      trainingFraction = 0.6,
+      testFraction = 0.3,
+      noiseLevel = 0.01)
+    testALS(testData, maxIter = 4, rank = 2, regParam = 0.01, targetRMSE = 0.03)
+    testALS(testData, maxIter = 4, rank = 3, regParam = 0.01, targetRMSE = 0.03)
   }
 }
