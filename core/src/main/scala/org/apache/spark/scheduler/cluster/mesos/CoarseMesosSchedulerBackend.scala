@@ -37,7 +37,7 @@ import org.apache.mesos.protobuf.ByteString
 import java.util.concurrent.locks.ReentrantLock
 
 case class SlaveStatus(var executorRunning: Boolean, var taskRunning: Boolean) {
-  def notRunning = !taskRunning && !executorRunning
+  def finished = !taskRunning && !executorRunning
 }
 
 /**
@@ -284,11 +284,9 @@ private[spark] class CoarseMesosSchedulerBackend(
         var minCpuRequired = 1
         var minMemRequired = MemoryUtils.calculateTotalMemory(sc)
 
-        slaveStatuses.get(slaveId).map { s =>
-          if (s.executorRunning) {
-            minCpuRequired += shuffleServiceCpu
-            minMemRequired += shuffleServiceMem
-          }
+        if (!slaveStatuses.contains(slaveId) || !slaveStatuses(slaveId).executorRunning) {
+          minCpuRequired += shuffleServiceCpu
+          minMemRequired += shuffleServiceMem
         }
 
         if (taskIdToSlaveId.size < executorLimit.getOrElse(Int.MaxValue) &&
@@ -435,7 +433,7 @@ private[spark] class CoarseMesosSchedulerBackend(
         pendingRemovedSlaveIds -= slaveId
         val status = slaveStatuses(slaveId)
         status.taskRunning = false
-        if (status.notRunning) {
+        if (status.finished) {
           slaveStatuses -= slaveId
         }
       }
