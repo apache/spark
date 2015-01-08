@@ -214,7 +214,7 @@ class SchemaRDD(
    * @group Query
    */
   def orderBy(sortExprs: SortOrder*): SchemaRDD =
-    new SchemaRDD(sqlContext, Sort(sortExprs, logicalPlan))
+    new SchemaRDD(sqlContext, Sort(sortExprs, true, logicalPlan))
 
   /**
    * Sorts the results by the given expressions within partition.
@@ -227,7 +227,7 @@ class SchemaRDD(
    * @group Query
    */
   def sortBy(sortExprs: SortOrder*): SchemaRDD =
-    new SchemaRDD(sqlContext, SortPartitions(sortExprs, logicalPlan))
+    new SchemaRDD(sqlContext, Sort(sortExprs, false, logicalPlan))
 
   @deprecated("use limit with integer argument", "1.1.0")
   def limit(limitExpr: Expression): SchemaRDD =
@@ -238,7 +238,6 @@ class SchemaRDD(
    * {{{
    *   schemaRDD.limit(10)
    * }}}
-   * 
    * @group Query
    */
   def limit(limitNum: Int): SchemaRDD =

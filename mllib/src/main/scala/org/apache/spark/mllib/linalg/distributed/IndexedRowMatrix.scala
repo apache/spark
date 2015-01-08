@@ -142,7 +142,7 @@ class IndexedRowMatrix(
     val mat = BDM.zeros[Double](m, n)
     rows.collect().foreach { case IndexedRow(rowIndex, vector) =>
       val i = rowIndex.toInt
-      vector.toBreeze.activeIterator.foreach { case (j, v) =>
+      vector.foreachActive { case (j, v) =>
         mat(i, j) = v
       }
     }
