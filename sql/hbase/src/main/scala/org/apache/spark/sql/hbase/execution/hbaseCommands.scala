@@ -111,10 +111,10 @@ case class DescribeTableCommand(tableName: String) extends RunnableCommand {
     if (relation.isDefined) {
       relation.get.allColumns.foreach {
         case keyColumn: KeyColumn =>
-          buffer.append(Row(keyColumn.sqlName, keyColumn.dataType,
-            "KEY COLUMN", keyColumn.order))
+          buffer.append(Row(keyColumn.sqlName, keyColumn.dataType.toString,
+            "KEY COLUMN", keyColumn.order.toString, ""))
         case nonKeyColumn: NonKeyColumn =>
-          buffer.append(Row(nonKeyColumn.sqlName, nonKeyColumn.dataType,
+          buffer.append(Row(nonKeyColumn.sqlName, nonKeyColumn.dataType.toString,
             "NON KEY COLUMN", nonKeyColumn.family, nonKeyColumn.qualifier))
       }
       buffer.toSeq
@@ -123,7 +123,8 @@ case class DescribeTableCommand(tableName: String) extends RunnableCommand {
     }
   }
 
-  override def output: Seq[Attribute] = Seq.empty
+  override def output: Seq[Attribute] =
+    StructType(Seq.fill(5)(StructField("", StringType))).toAttributes
 }
 
 @DeveloperApi
