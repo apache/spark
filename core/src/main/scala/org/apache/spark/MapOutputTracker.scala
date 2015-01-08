@@ -42,7 +42,8 @@ private[spark] class MapOutputTrackerMasterActor(override val rpcEnv: RpcEnv,
 
   override def receive(sender: RpcEndpointRef) = {
     case GetMapOutputStatuses(shuffleId: Int) =>
-      logInfo("Asked to send map output locations for shuffle " + shuffleId + " to " + sender)
+      logInfo(
+        "Asked to send map output locations for shuffle " + shuffleId + " to " + sender.address)
       val mapOutputStatuses = tracker.getSerializedMapOutputStatuses(shuffleId)
       val serializedSize = mapOutputStatuses.size
       if (serializedSize > maxAkkaFrameSize) {
@@ -101,7 +102,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
    * Send a message to the trackerActor and get its result within a default timeout, or
    * throw a SparkException if this fails.
    */
-  protected def askTracker(message: Any): Any = {
+  protected def askTracker[T](message: Any): T = {
     try {
       trackerActor.askWithReply(message)
     } catch {
@@ -113,7 +114,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   /** Send a one-way message to the trackerActor, to which we expect it to reply with true. */
   protected def sendTracker(message: Any) {
-    val response = askTracker(message)
+    val response = askTracker[Boolean](message)
     if (response != true) {
       throw new SparkException(
         "Error reply received from MapOutputTracker. Expecting true, got " + response.toString)
@@ -153,8 +154,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
         logInfo("Doing the fetch; tracker actor = " + trackerActor)
         // This try-finally prevents hangs due to timeouts:
         try {
-          val fetchedBytes =
-            askTracker(GetMapOutputStatuses(shuffleId)).asInstanceOf[Array[Byte]]
+          val fetchedBytes = askTracker[Array[Byte]](GetMapOutputStatuses(shuffleId))
           fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes)
           logInfo("Got the output locations")
           mapStatuses.put(shuffleId, fetchedStatuses)
