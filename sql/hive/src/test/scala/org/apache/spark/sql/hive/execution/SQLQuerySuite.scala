@@ -69,6 +69,17 @@ class SQLQuerySuite extends QueryTest {
       """CREATE TABLE IF NOT EXISTS ctas4 AS
         | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
 
+    sql(
+      """CREATE TABLE ctas5
+        | ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
+        | STORED AS
+        | INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
+        | OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
+        | AS
+        |   SELECT key, value
+        |   FROM src
+        |   ORDER BY key, value""".stripMargin).collect
+
     checkAnswer(
       sql("SELECT k, value FROM ctas1 ORDER BY k, value"),
       sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
@@ -94,6 +105,13 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
       sql("SELECT key, value FROM ctas4 LIMIT 1").collect().toSeq)
+
+    // use the Hive SerDe for parquet tables
+    sql("set spark.sql.hive.convertMetastoreParquet = false")
+    checkAnswer(
+      sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
+      sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+    sql("set spark.sql.hive.convertMetastoreParquet = true")
 
     checkExistence(sql("DESC EXTENDED ctas2"), true,
       "name:key", "type:string", "name:value", "ctas2",
@@ -141,7 +159,7 @@ class SQLQuerySuite extends QueryTest {
   test("test CTAS") {
     checkAnswer(sql("CREATE TABLE test_ctas_123 AS SELECT key, value FROM src"), Seq.empty[Row])
     checkAnswer(
-      sql("SELECT key, value FROM test_ctas_123 ORDER BY key"), 
+      sql("SELECT key, value FROM test_ctas_123 ORDER BY key"),
       sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
   }
 
