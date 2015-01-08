@@ -84,7 +84,7 @@ class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll {
   }
 
 
-  test("Query Hive native command execution result") {
+  test("Query HBase native command execution result") {
     val tableName = "test_native_commands"
 
 //    assertResult(0) {
@@ -111,6 +111,7 @@ class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll {
 //      javaHbaseCtx.sql(s"DROP TABLE $tableName").count()
 //    }
 
+      javaHbaseCtx.sql("describe ta").collect.foreach(println)
 //    assertResult(Array(Array("key", "int"), Array("value", "string"))) {
 //      javaHbaseCtx
 //        .sql(s"describe $tableName")

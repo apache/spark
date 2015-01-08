@@ -112,7 +112,7 @@ case class DescribeTableCommand(tableName: String) extends RunnableCommand {
       relation.get.allColumns.foreach {
         case keyColumn: KeyColumn =>
           buffer.append(Row(keyColumn.sqlName, keyColumn.dataType.toString,
-            "KEY COLUMN", keyColumn.order.toString, ""))
+            "KEY COLUMN", keyColumn.order.toString))
         case nonKeyColumn: NonKeyColumn =>
           buffer.append(Row(nonKeyColumn.sqlName, nonKeyColumn.dataType.toString,
             "NON KEY COLUMN", nonKeyColumn.family, nonKeyColumn.qualifier))
