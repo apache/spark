@@ -19,15 +19,9 @@ package org.apache.spark.sql.hbase.api.java
 
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql._
-import org.apache.spark.sql.hbase.{HBaseMainTest, QueryTest}
-
-import scala.util.Try
-
+import org.apache.spark.sql.hbase.{HBaseSQLContext, HBaseMainTest, QueryTest}
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-import org.apache.spark.sql.api.java.{JavaSQLContext, JavaSchemaRDD}
-import org.apache.spark.sql.execution.ExplainCommand
-import org.apache.spark.sql.hbase.HBaseMainTest._
 
 // Implicits
 import scala.collection.JavaConversions._
@@ -46,6 +40,7 @@ class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll {
 
   // There is a little trickery here to avoid instantiating two HiveContexts in the same JVM
   lazy val javaHbaseCtx = new JavaHbaseContext(javaCtx)
+  javaHbaseCtx.sqlContext.asInstanceOf[HBaseSQLContext].optConfiguration = hbc.optConfiguration
 
   test("aggregation with codegen") {
     val originalValue = javaHbaseCtx.sqlContext.getConf(SQLConf.CODEGEN_ENABLED, "false")  //codegenEnabled
@@ -98,17 +93,13 @@ class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll {
 //          MAPPED BY (testNamespace.ht0, COLS=[column3=family1.qualifier1,
 //          column4=family2.qualifier2])""").count()
 //    }
-
     val a = javaHbaseCtx
       .sql("SHOW TABLES")
       .schemaRDD
     val b = sql("SHOW TABLES")
 
-    println("\n###################")
     a.collect().foreach(println)
-    println("###################")
     b.collect().foreach(println)
-    println("###################")
 //    assert(
 //      javaHbaseCtx
 //        .sql("SHOW TABLES")

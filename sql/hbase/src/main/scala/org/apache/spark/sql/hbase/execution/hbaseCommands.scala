@@ -39,6 +39,7 @@ import org.apache.spark.sql.hbase.util.{HBaseKVHelper, Util}
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.{SerializableWritable, SparkEnv, TaskContext}
 import org.apache.spark.sql.hbase.util.InsertWappers._
+import org.apache.spark.sql.catalyst.types.StringType
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
@@ -97,7 +98,7 @@ case object ShowTablesCommand extends RunnableCommand {
     buffer.toSeq
   }
 
-  override def output: Seq[Attribute] = Seq.empty
+  override def output: Seq[Attribute] = StructType(Seq(StructField("", StringType))).toAttributes
 }
 
 @DeveloperApi
