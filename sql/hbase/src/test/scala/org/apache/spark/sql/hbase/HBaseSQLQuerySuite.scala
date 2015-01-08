@@ -29,7 +29,7 @@ import org.scalatest.BeforeAndAfterAll
 class HBaseSQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
   val sqlContext:SQLContext = {
-    HBaseMainTest.main(null);
+    HBaseMainTest.main(null)
     HBaseMainTest.hbc
   }
   import sqlContext._

@@ -47,17 +47,17 @@ class HBaseMiniClusterBase extends FunSuite with BeforeAndAfterAll with Logging 
 
   test("test whether minicluster work") {
     val hbaseAdmin = new HBaseAdmin(config)
-    println(s"1: ${hbaseAdmin.tableExists("wf")}")
+    logInfo(s"1: ${hbaseAdmin.tableExists("wf")}")
 
     val desc = new HTableDescriptor(TableName.valueOf("wf"))
-    val farmily = Bytes.toBytes("fam")
-    val hcd = new HColumnDescriptor(farmily)
+    val family = Bytes.toBytes("fam")
+    val hcd = new HColumnDescriptor(family)
       .setMaxVersions(10)
       .setTimeToLive(1)
     desc.addFamily(hcd)
 
     hbaseAdmin.createTable(desc)
-    println(s"2: ${hbaseAdmin.tableExists("wf")}")
+    logInfo(s"2: ${hbaseAdmin.tableExists("wf")}")
   }
 
   override def afterAll() = {

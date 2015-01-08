@@ -22,7 +22,6 @@ import java.io.{ByteArrayOutputStream, DataOutputStream}
 import org.apache.hadoop.hbase._
 import org.apache.hadoop.hbase.client._
 import org.apache.hadoop.hbase.util.Bytes
-import org.apache.log4j.Logger
 import org.apache.spark.Logging
 import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Row}
@@ -35,8 +34,6 @@ import org.apache.spark.sql.hbase.util.{DataTypeUtils, HBaseKVHelper, BytesUtils
  */
 object HBaseMainTest extends HBaseIntegrationTestBase(true) with CreateTableAndLoadData
 with Logging {
-  @transient val logger = Logger.getLogger(getClass.getName)
-
   val TableName_a: String = "ta"
   val TableName_b: String = "tb"
   val HbaseTableName: String = "ht"
@@ -196,12 +193,12 @@ with Logging {
     results match {
       case rdd: TestingSchemaRDD =>
         val data = rdd.collectPartitions()
-        println(s"For test [$msg]: Received data length=${data(0).length}: ${
+        logInfo(s"For test [$msg]: Received data length=${data(0).length}: ${
           data(0).mkString("RDD results: {", "],[", "}")
         }")
       case _ =>
         val data = results.collect()
-        println(s"For test [$msg]: Received data length=${data.length}: ${
+        logInfo(s"For test [$msg]: Received data length=${data.length}: ${
           data.mkString("RDD results: {", "],[", "}")
         }")
     }
@@ -242,7 +239,7 @@ with Logging {
     var res: Result = null
     do {
       res = scanner.next
-      if (res != null) println(s"Row ${res.getRow} has map=${res.getNoVersionMap.toString}")
+      if (res != null) logInfo(s"Row ${res.getRow} has map=${res.getNoVersionMap.toString}")
     } while (res != null)
   }
 
@@ -254,6 +251,6 @@ with Logging {
   }
 
   def main(args: Array[String]) = {
-    setupData(useMultiplePartitions = true, true)
+    setupData(useMultiplePartitions = true, needInsertData = true)
   }
 }
