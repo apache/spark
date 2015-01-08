@@ -123,6 +123,10 @@
       $('#chart_section').hide(1000);
       $('#datatable_section').hide(1000);
     }
+    function warn(msg){
+      $('#error_msg').html(msg);
+      $('#error').show();
+    }
     $( document ).ready(function() {
       Highcharts.setOptions({
         colors: [
@@ -154,6 +158,8 @@
         else {
           error(payload.error);
         }
+        if ('warning' in payload)
+            warn(payload.warning);
       }).fail(function() {
         error( "Ooops. Unhandled error." );
       });

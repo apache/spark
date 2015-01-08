@@ -43,8 +43,11 @@ class PrestoHook(BaseHook):
         client = self.client
         if client.runquery(hql, schema):
             data = client.getdata()
-            df = pandas.DataFrame(data)
-            df.columns = [c['name'] for c in client.getcolumns()]
+            if data:
+                df = pandas.DataFrame(data)
+                df.columns = [c['name'] for c in client.getcolumns()]
+            else:
+                df = pandas.DataFrame()
             return df
         else:
             raise PrestoException(self.client.getlasterrormessage())

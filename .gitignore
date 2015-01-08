@@ -12,3 +12,4 @@ logs
 MANIFEST
 secrets.py
 *.egg-info
+*.bkp
