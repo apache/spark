@@ -92,11 +92,11 @@ private[spark] class YarnClientSchedulerBackend(
         extraArgs += (optionName, sc.getConf.get(sparkProp))
         if (deprecatedProps.contains(sparkProp)) {
           logWarning(s"NOTE: $sparkProp is deprecated. Use ${deprecatedProps(sparkProp)} instead.")
-        } else if (System.getenv(envVar) != null) {
-          extraArgs += (optionName, System.getenv(envVar))
-          if (deprecatedEnvVars.contains(envVar)) {
-            logWarning(s"NOTE: $envVar is deprecated. Use ${deprecatedEnvVars(envVar)} instead.")
-          }
+        }
+      } else if (System.getenv(envVar) != null) {
+        extraArgs += (optionName, System.getenv(envVar))
+        if (deprecatedEnvVars.contains(envVar)) {
+          logWarning(s"NOTE: $envVar is deprecated. Use ${deprecatedEnvVars(envVar)} instead.")
         }
       }
     }
