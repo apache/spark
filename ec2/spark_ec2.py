@@ -262,13 +262,13 @@ def get_validate_spark_version(version, repo):
     else:
         github_commit_url = "{repo}/commit/{commit_hash}".format(repo=repo, commit_hash=version)
         request = urllib2.Request(github_commit_url)
-        request.get_method = lambda : 'HEAD'
+        request.get_method = lambda: 'HEAD'
         try:
             response = urllib2.urlopen(request)
         except urllib2.HTTPError, e:
             print >> stderr, "Couldn't validate Spark commit: {url}".format(url=github_commit_url)
             print >> stderr, "Received HTTP response code of {code}.".format(code=e.code)
-            sys.exit(1)        
+            sys.exit(1)
         return version
 
 
