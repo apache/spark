@@ -37,10 +37,10 @@ install_app() {
   local curl_opts=""
   local wget_opts=""
   if [ -n "$AMPLAB_JENKINS" ]; then
-    curl_opts="-s"
+    curl_opts="-s -L"
     wget_opts="--quiet"
   else
-    curl_opts="--progress-bar"
+    curl_opts="--progress-bar -L"
     wget_opts="--progress=bar:force"
   fi
 
@@ -68,7 +68,7 @@ install_app() {
 # Install maven under the build/ folder
 install_mvn() {
   install_app \
-    "http://apache.claz.org/maven/maven-3/3.2.3/binaries" \
+    "http://www.eu.apache.org/dist/maven/maven-3/3.2.5/binaries" \
     "apache-maven-3.2.3-bin.tar.gz" \
     "apache-maven-3.2.3/bin/mvn"
   MVN_BIN="${_DIR}/apache-maven-3.2.3/bin/mvn"
