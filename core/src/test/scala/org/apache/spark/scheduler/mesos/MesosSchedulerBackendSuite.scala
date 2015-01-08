@@ -18,17 +18,20 @@
 package org.apache.spark.scheduler.mesos
 
 import org.scalatest.FunSuite
-import org.apache.spark.{scheduler, SparkConf, SparkContext, LocalSparkContext}
-import org.apache.spark.scheduler.{TaskDescription, WorkerOffer, TaskSchedulerImpl}
+import org.apache.spark.{SparkConf, SparkContext, LocalSparkContext}
+import org.apache.spark.scheduler.{SparkListenerExecutorAdded, LiveListenerBus,
+  TaskDescription, WorkerOffer, TaskSchedulerImpl}
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.scheduler.cluster.mesos.{MemoryUtils, MesosSchedulerBackend}
 import org.apache.mesos.SchedulerDriver
-import org.apache.mesos.Protos._
-import org.scalatest.mock.EasyMockSugar
+import org.apache.mesos.Protos.{ExecutorInfo => MesosExecutorInfo, _}
 import org.apache.mesos.Protos.Value.Scalar
 import org.easymock.{Capture, EasyMock}
 import java.nio.ByteBuffer
 import java.util.Collections
 import java.util
+import org.scalatest.mock.EasyMockSugar
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
@@ -52,11 +55,16 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Ea
     val driver = EasyMock.createMock(classOf[SchedulerDriver])
     val taskScheduler = EasyMock.createMock(classOf[TaskSchedulerImpl])
 
+    val listenerBus = EasyMock.createMock(classOf[LiveListenerBus])
+    listenerBus.post(SparkListenerExecutorAdded("s1", new ExecutorInfo("host1", 2)))
+    EasyMock.replay(listenerBus)
+
     val sc = EasyMock.createMock(classOf[SparkContext])
     EasyMock.expect(sc.executorMemory).andReturn(100).anyTimes()
     EasyMock.expect(sc.getSparkHome()).andReturn(Option("/path")).anyTimes()
     EasyMock.expect(sc.executorEnvs).andReturn(new mutable.HashMap).anyTimes()
     EasyMock.expect(sc.conf).andReturn(new SparkConf).anyTimes()
+    EasyMock.expect(sc.listenerBus).andReturn(listenerBus)
     EasyMock.replay(sc)
 
     val minMem = MemoryUtils.calculateTotalMemory(sc).toInt
