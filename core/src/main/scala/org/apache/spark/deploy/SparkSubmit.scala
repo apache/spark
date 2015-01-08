@@ -134,12 +134,6 @@ object SparkSubmit {
       }
     }
 
-    sysProps.put("spark.deploy.mode",
-      deployMode match {
-        case CLIENT => "client"
-        case _ => "cluster"
-      })
-
     // The following modes are not supported or applicable
     (clusterManager, deployMode) match {
       case (MESOS, CLUSTER) =>
