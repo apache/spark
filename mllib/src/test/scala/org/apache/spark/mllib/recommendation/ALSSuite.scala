@@ -17,15 +17,17 @@
 
 package org.apache.spark.mllib.recommendation
 
-import org.apache.spark.mllib.recommendation.ALS.BlockStats
-import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.storage.StorageLevel
-import org.jblas.DoubleMatrix
-import org.scalatest.FunSuite
-
 import scala.collection.JavaConversions._
 import scala.math.abs
 import scala.util.Random
+
+import org.scalatest.FunSuite
+import org.jblas.DoubleMatrix
+
+import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.recommendation.ALS.BlockStats
+import org.apache.spark.storage.StorageLevel
 
 object ALSSuite {
 
