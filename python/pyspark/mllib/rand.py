@@ -128,8 +128,8 @@ class RandomRDDs(object):
         >>> abs(stats.stdev() - expStd) < 0.5
         True
         """
-        return callMLlibFunc("logNormalRDD", sc._jsc, float(mean), float(std), size, numPartitions, seed)
-
+        return callMLlibFunc("logNormalRDD", sc._jsc, float(mean), float(std), 
+                             size, numPartitions, seed)
 
     @staticmethod
     def poissonRDD(sc, mean, size, numPartitions=None, seed=None):
@@ -211,7 +211,8 @@ class RandomRDDs(object):
         >>> abs(stats.stdev() - expStd) < 0.5
         True
         """
-        return callMLlibFunc("gammaRDD", sc._jsc, float(shape), float(scale), size, numPartitions, seed)
+        return callMLlibFunc("gammaRDD", sc._jsc, float(shape),
+                             float(scale), size, numPartitions, seed)
 
     @staticmethod
     @toArray
@@ -285,7 +286,8 @@ class RandomRDDs(object):
         >>> std = 1.0
         >>> expMean = exp(mean + 0.5 * std * std)
         >>> expStd = sqrt((exp(std * std) - 1.0) * exp(2.0 * mean + std * std))
-        >>> mat = np.matrix(RandomRDDs.logNormalVectorRDD(sc, mean, std, 100, 100, seed=1L).collect())
+        >>> mat = np.matrix(RandomRDDs.logNormalVectorRDD(sc, mean, std, \
+                               100, 100, seed=1L).collect())
         >>> mat.shape
         (100, 100)
         >>> abs(mat.mean() - expMean) < 0.1
@@ -293,8 +295,8 @@ class RandomRDDs(object):
         >>> abs(mat.std() - expStd) < 0.1
         True
         """
-        return callMLlibFunc("logNormalVectorRDD", sc._jsc, float(mean), float(std), numRows, numCols, numPartitions, seed)
-
+        return callMLlibFunc("logNormalVectorRDD", sc._jsc, float(mean), float(std), 
+                             numRows, numCols, numPartitions, seed)
 
     @staticmethod
     @toArray
@@ -356,7 +358,6 @@ class RandomRDDs(object):
         return callMLlibFunc("exponentialVectorRDD", sc._jsc, float(mean), numRows, numCols,
                              numPartitions, seed)
 
-
     @staticmethod
     @toArray
     def gammaVectorRDD(sc, shape, scale, numRows, numCols, numPartitions=None, seed=None):
@@ -379,7 +380,8 @@ class RandomRDDs(object):
         >>> scale = 2.0
         >>> expMean = shape * scale
         >>> expStd = sqrt(shape * scale * scale)
-        >>> mat = np.matrix(RandomRDDs.gammaVectorRDD(sc, shape, scale, 100, 100, seed=1L).collect())
+        >>> mat = np.matrix(RandomRDDs.gammaVectorRDD(sc, shape, scale, \
+                       100, 100, seed=1L).collect())
         >>> mat.shape
         (100, 100)
         >>> abs(mat.mean() - expMean) < 0.1
@@ -387,8 +389,8 @@ class RandomRDDs(object):
         >>> abs(mat.std() - expStd) < 0.1
         True
         """
-        return callMLlibFunc("gammaVectorRDD", sc._jsc, float(shape), float(scale), numRows, numCols, numPartitions, seed)
-
+        return callMLlibFunc("gammaVectorRDD", sc._jsc, float(shape), float(scale), 
+                             numRows, numCols, numPartitions, seed)
 
 def _test():
     import doctest
