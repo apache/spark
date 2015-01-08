@@ -19,8 +19,8 @@ package org.apache.spark.sql.hive
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.test.ExamplePointUDT
+import org.apache.spark.sql.types.StructType
 
 class HiveMetastoreCatalogSuite extends FunSuite {
 

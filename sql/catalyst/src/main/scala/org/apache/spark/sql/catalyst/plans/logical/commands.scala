@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.types.StringType
+import org.apache.spark.sql.types.StringType
 
 /**
  * A logical node that represents a non-query command to be executed by the system.  For example,

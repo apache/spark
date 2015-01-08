@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.util.{List => JList, Map => JMap}
 
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
-
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
 
@@ -33,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 import org.apache.spark.{Accumulator, Logging => SparkLogging}
 
 /**

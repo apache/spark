@@ -18,11 +18,12 @@ package org.apache.spark.sql.parquet
 
 import java.util.{List => JList}
 
+import scala.collection.JavaConversions._
+
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce.{JobContext, InputSplit, Job}
-import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 
 import parquet.hadoop.ParquetInputFormat
 import parquet.hadoop.util.ContextUtil
@@ -30,13 +31,11 @@ import parquet.hadoop.util.ContextUtil
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.{Partition => SparkPartition, Logging}
 import org.apache.spark.rdd.{NewHadoopPartition, RDD}
-
 import org.apache.spark.sql.{SQLConf, Row, SQLContext}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types.{StringType, IntegerType, StructField, StructType}
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-import scala.collection.JavaConversions._
 
 /**
  * Allows creation of parquet based tables using the syntax

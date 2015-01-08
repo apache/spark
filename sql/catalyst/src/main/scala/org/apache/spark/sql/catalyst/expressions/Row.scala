@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.types.NativeType
+import org.apache.spark.sql.types.NativeType
 
 object Row {
   /**

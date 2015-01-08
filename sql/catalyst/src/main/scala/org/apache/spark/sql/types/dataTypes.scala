@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.types
+package org.apache.spark.sql.types
 
 import java.sql.{Date, Timestamp}
 
@@ -29,20 +29,13 @@ import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.types.Metadata
-import org.apache.spark.sql.types.decimal.Decimal
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Expression}
+import org.apache.spark.sql.types.decimal._
 import org.apache.spark.util.Utils
 
-/**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
- *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
- */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+
 object DataType {
   def fromJson(json: String): DataType = parseDataType(parse(json))
 
@@ -75,6 +68,13 @@ object DataType {
         ("fields", JArray(fields)),
         ("type", JString("struct"))) =>
       StructType(fields.map(parseStructField))
+
+    case JSortedObject(
+        ("class", JString(udtClass)),
+        ("pyClass", _),
+        ("sqlType", _),
+        ("type", JString("udt"))) =>
+      Class.forName(udtClass).newInstance().asInstanceOf[UserDefinedType[_]]
   }
 
   private def parseStructField(json: JValue): StructField = json match {
@@ -140,7 +140,7 @@ object DataType {
 
     protected lazy val structType: Parser[DataType] =
       "StructType\\([A-zA-z]*\\(".r ~> repsep(structField, ",") <~ "))" ^^ {
-        case fields => new StructType(fields)
+        case fields => StructType(fields)
       }
 
     protected lazy val dataType: Parser[DataType] =
@@ -181,7 +181,7 @@ object DataType {
   /**
    * Compares two types, ignoring nullability of ArrayType, MapType, StructType.
    */
-  def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
+  private[sql] def equalsIgnoreNullability(left: DataType, right: DataType): Boolean = {
     (left, right) match {
       case (ArrayType(leftElementType, _), ArrayType(rightElementType, _)) =>
         equalsIgnoreNullability(leftElementType, rightElementType)
@@ -202,13 +202,13 @@ object DataType {
 
 
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The base type of all Spark SQL data types.
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
 abstract class DataType {
   /** Matches any expression that evaluates to this DataType */
   def unapply(a: Expression): Boolean = a match {
@@ -225,30 +225,20 @@ abstract class DataType {
   def json: String = compact(render(jsonValue))
 
   def prettyJson: String = pretty(render(jsonValue))
-
-  def toNewType: org.apache.spark.sql.types.DataType
 }
 
-/**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
- *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
- */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
-case object NullType extends DataType {
-  override def toNewType = org.apache.spark.sql.types.NullType
-}
 
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type representing `NULL` values. Please use the singleton [[DataTypes.NullType]].
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
+case object NullType extends DataType
+
+
 object NativeType {
   val all = Seq(
     IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
@@ -266,26 +256,12 @@ object NativeType {
     StringType -> 4096)
 }
 
-/**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
- *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
- */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+
 trait PrimitiveType extends DataType {
   override def isPrimitive = true
 }
 
-/**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
- *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
- */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+
 object PrimitiveType {
   private val nonDecimals = Seq(NullType, DateType, TimestampType, BinaryType) ++ NativeType.all
   private val nonDecimalNameToType = nonDecimals.map(t => t.typeName -> t).toMap
@@ -301,14 +277,6 @@ object PrimitiveType {
   }
 }
 
-/**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
- *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
- */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
 abstract class NativeType extends DataType {
   private[sql] type JvmType
   @transient private[sql] val tag: TypeTag[JvmType]
@@ -320,29 +288,31 @@ abstract class NativeType extends DataType {
   }
 }
 
+
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type representing `String` values. Please use the singleton [[DataTypes.StringType]].
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
 case object StringType extends NativeType with PrimitiveType {
   private[sql] type JvmType = String
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
-  override def toNewType = org.apache.spark.sql.types.StringType
 }
 
+
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type representing `Array[Byte]` values.
+ * Please use the singleton [[DataTypes.BinaryType]].
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
 case object BinaryType extends NativeType with PrimitiveType {
   private[sql] type JvmType = Array[Byte]
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
@@ -355,32 +325,33 @@ case object BinaryType extends NativeType with PrimitiveType {
       x.length - y.length
     }
   }
-  override def toNewType = org.apache.spark.sql.types.BinaryType
 }
 
+
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type representing `Boolean` values. Please use the singleton [[DataTypes.BooleanType]].
+ *
+ *@group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
 case object BooleanType extends NativeType with PrimitiveType {
   private[sql] type JvmType = Boolean
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
-  override def toNewType = org.apache.spark.sql.types.BooleanType
 }
 
+
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type representing `java.sql.Timestamp` values.
+ * Please use the singleton [[DataTypes.TimestampType]].
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
 case object TimestampType extends NativeType {
   private[sql] type JvmType = Timestamp
 
@@ -389,18 +360,18 @@ case object TimestampType extends NativeType {
   private[sql] val ordering = new Ordering[JvmType] {
     def compare(x: Timestamp, y: Timestamp) = x.compareTo(y)
   }
-
-  override def toNewType = org.apache.spark.sql.types.TimestampType
 }
 
+
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type representing `java.sql.Date` values.
+ * Please use the singleton [[DataTypes.DateType]].
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
 case object DateType extends NativeType {
   private[sql] type JvmType = Date
 
@@ -409,18 +380,9 @@ case object DateType extends NativeType {
   private[sql] val ordering = new Ordering[JvmType] {
     def compare(x: Date, y: Date) = x.compareTo(y)
   }
-
-  override def toNewType = org.apache.spark.sql.types.DateType
 }
 
-/**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
- *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
- */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+
 abstract class NumericType extends NativeType with PrimitiveType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
@@ -430,119 +392,124 @@ abstract class NumericType extends NativeType with PrimitiveType {
   private[sql] val numeric: Numeric[JvmType]
 }
 
-/**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
- *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
- */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
-abstract class IntegralType extends NumericType {
+
+object NumericType {
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
+}
+
+
+/** Matcher for any expressions that evaluate to [[IntegralType]]s */
+object IntegralType {
+  def unapply(a: Expression): Boolean = a match {
+    case e: Expression if e.dataType.isInstanceOf[IntegralType] => true
+    case _ => false
+  }
+}
+
+
+sealed abstract class IntegralType extends NumericType {
   private[sql] val integral: Integral[JvmType]
 }
 
+
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type representing `Long` values. Please use the singleton [[DataTypes.LongType]].
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
 case object LongType extends IntegralType {
   private[sql] type JvmType = Long
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Long]]
   private[sql] val integral = implicitly[Integral[Long]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
-  override def toNewType = org.apache.spark.sql.types.LongType
 }
 
+
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type representing `Int` values. Please use the singleton [[DataTypes.IntegerType]].
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
 case object IntegerType extends IntegralType {
   private[sql] type JvmType = Int
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Int]]
   private[sql] val integral = implicitly[Integral[Int]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
-  override def toNewType = org.apache.spark.sql.types.IntegerType
 }
 
+
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type representing `Short` values. Please use the singleton [[DataTypes.ShortType]].
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
 case object ShortType extends IntegralType {
   private[sql] type JvmType = Short
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Short]]
   private[sql] val integral = implicitly[Integral[Short]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
-  override def toNewType = org.apache.spark.sql.types.ShortType
 }
 
+
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type representing `Byte` values. Please use the singleton [[DataTypes.ByteType]].
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
 case object ByteType extends IntegralType {
   private[sql] type JvmType = Byte
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val numeric = implicitly[Numeric[Byte]]
   private[sql] val integral = implicitly[Integral[Byte]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
-  override def toNewType = org.apache.spark.sql.types.ByteType
 }
 
-/**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
- *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
- */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
-abstract class FractionalType extends NumericType {
+
+/** Matcher for any expressions that evaluate to [[FractionalType]]s */
+object FractionalType {
+  def unapply(a: Expression): Boolean = a match {
+    case e: Expression if e.dataType.isInstanceOf[FractionalType] => true
+    case _ => false
+  }
+}
+
+
+sealed abstract class FractionalType extends NumericType {
   private[sql] val fractional: Fractional[JvmType]
   private[sql] val asIntegral: Integral[JvmType]
 }
 
-/**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
- *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
- */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
-case class PrecisionInfo(precision: Int, scale: Int) {
-  def toNewType = org.apache.spark.sql.types.PrecisionInfo(precision, scale)
-}
+
+/** Precision parameters for a Decimal */
+case class PrecisionInfo(precision: Int, scale: Int)
+
 
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type representing `scala.math.BigDecimal` values.
+ * A Decimal that might have fixed precision and scale, or unlimited values for these.
+ *
+ * Please use [[DataTypes.createDecimalType()]] to create a specific instance.
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
 case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalType {
   private[sql] type JvmType = Decimal
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
@@ -550,6 +517,10 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
   private[sql] val fractional = Decimal.DecimalIsFractional
   private[sql] val ordering = Decimal.DecimalIsFractional
   private[sql] val asIntegral = Decimal.DecimalAsIfIntegral
+
+  def precision: Int = precisionInfo.map(_.precision).getOrElse(-1)
+
+  def scale: Int = precisionInfo.map(_.scale).getOrElse(-1)
 
   override def typeName: String = precisionInfo match {
     case Some(PrecisionInfo(precision, scale)) => s"decimal($precision,$scale)"
@@ -560,18 +531,10 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
     case Some(PrecisionInfo(precision, scale)) => s"DecimalType($precision,$scale)"
     case None => "DecimalType()"
   }
-
-  override def toNewType = org.apache.spark.sql.types.DecimalType(precisionInfo.map(_.toNewType))
 }
 
-/**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
- *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
- */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+
+/** Extra factory methods and pattern matchers for Decimals */
 object DecimalType {
   val Unlimited: DecimalType = DecimalType(None)
 
@@ -580,10 +543,21 @@ object DecimalType {
       t.precisionInfo.map(p => (p.precision, p.scale))
   }
 
+  object Expression {
+    def unapply(e: Expression): Option[(Int, Int)] = e.dataType match {
+      case t: DecimalType => t.precisionInfo.map(p => (p.precision, p.scale))
+      case _ => None
+    }
+  }
+
   def apply(): DecimalType = Unlimited
 
   def apply(precision: Int, scale: Int): DecimalType =
     DecimalType(Some(PrecisionInfo(precision, scale)))
+
+  def unapply(t: DataType): Boolean = t.isInstanceOf[DecimalType]
+
+  def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[DecimalType]
 
   def isFixed(dataType: DataType): Boolean = dataType match {
     case DecimalType.Fixed(_, _) => true
@@ -591,14 +565,15 @@ object DecimalType {
   }
 }
 
+
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type representing `Double` values. Please use the singleton [[DataTypes.DoubleType]].
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
 case object DoubleType extends FractionalType {
   private[sql] type JvmType = Double
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
@@ -606,17 +581,17 @@ case object DoubleType extends FractionalType {
   private[sql] val fractional = implicitly[Fractional[Double]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
   private[sql] val asIntegral = DoubleAsIfIntegral
-  override def toNewType = org.apache.spark.sql.types.DoubleType
 }
 
+
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type representing `Float` values. Please use the singleton [[DataTypes.FloatType]].
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
 case object FloatType extends FractionalType {
   private[sql] type JvmType = Float
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
@@ -624,30 +599,33 @@ case object FloatType extends FractionalType {
   private[sql] val fractional = implicitly[Fractional[Float]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
   private[sql] val asIntegral = FloatAsIfIntegral
-  override def toNewType = org.apache.spark.sql.types.FloatType
 }
 
-/**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
- *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
- */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+
 object ArrayType {
   /** Construct a [[ArrayType]] object with the given element type. The `containsNull` is true. */
   def apply(elementType: DataType): ArrayType = ArrayType(elementType, true)
 }
 
+
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type for collections of multiple values.
+ * Internally these are represented as columns that contain a ``scala.collection.Seq``.
+ *
+ * Please use [[DataTypes.createArrayType()]] to create a specific instance.
+ *
+ * An [[ArrayType]] object comprises two fields, `elementType: [[DataType]]` and
+ * `containsNull: Boolean`. The field of `elementType` is used to specify the type of
+ * array elements. The field of `containsNull` is used to specify if the array has `null` values.
+ *
+ * @param elementType The data type of values.
+ * @param containsNull Indicates if values have `null` values
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+@DeveloperApi
 case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataType {
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
     builder.append(
@@ -659,18 +637,18 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
     ("type" -> typeName) ~
       ("elementType" -> elementType.jsonValue) ~
       ("containsNull" -> containsNull)
-
-  override def toNewType = org.apache.spark.sql.types.ArrayType(elementType.toNewType, containsNull)
 }
 
+
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * A field inside a StructType.
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * @param name The name of this field.
+ * @param dataType The data type of this field.
+ * @param nullable Indicates if values of this field can be `null` values.
+ * @param metadata The metadata of this field. The metadata should be preserved during
+ *                 transformation if the content of the column is not modified, e.g, in selection.
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
 case class StructField(
     name: String,
     dataType: DataType,
@@ -691,27 +669,94 @@ case class StructField(
       ("nullable" -> nullable) ~
       ("metadata" -> metadata.jsonValue)
   }
-
-  def toNewType = org.apache.spark.sql.types.StructField(
-    name, dataType.toNewType, nullable, metadata)
 }
 
-/**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
- *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
- */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
-case class StructType(fields: Seq[StructField]) extends DataType {
 
-  /**
-   * Returns all field names in a [[Seq]].
-   */
-  lazy val fieldNames: Seq[String] = fields.map(_.name)
+object StructType {
+  protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
+    StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
+
+  def apply(fields: Seq[StructField]): StructType = StructType(fields.toArray)
+
+  def apply(fields: java.util.List[StructField]): StructType = {
+    StructType(fields.toArray.asInstanceOf[Array[StructField]])
+  }
+}
+
+
+/**
+ * :: DeveloperApi ::
+ *
+ * A [[StructType]] object can be constructed by
+ * {{{
+ * StructType(fields: Seq[StructField])
+ * }}}
+ * For a [[StructType]] object, one or multiple [[StructField]]s can be extracted by names.
+ * If multiple [[StructField]]s are extracted, a [[StructType]] object will be returned.
+ * If a provided name does not have a matching field, it will be ignored. For the case
+ * of extracting a single StructField, a `null` will be returned.
+ * Example:
+ * {{{
+ * import org.apache.spark.sql._
+ *
+ * val struct =
+ *   StructType(
+ *     StructField("a", IntegerType, true) ::
+ *     StructField("b", LongType, false) ::
+ *     StructField("c", BooleanType, false) :: Nil)
+ *
+ * // Extract a single StructField.
+ * val singleField = struct("b")
+ * // singleField: StructField = StructField(b,LongType,false)
+ *
+ * // This struct does not have a field called "d". null will be returned.
+ * val nonExisting = struct("d")
+ * // nonExisting: StructField = null
+ *
+ * // Extract multiple StructFields. Field names are provided in a set.
+ * // A StructType object will be returned.
+ * val twoFields = struct(Set("b", "c"))
+ * // twoFields: StructType =
+ * //   StructType(List(StructField(b,LongType,false), StructField(c,BooleanType,false)))
+ *
+ * // Any names without matching fields will be ignored.
+ * // For the case shown below, "d" will be ignored and
+ * // it is treated as struct(Set("b", "c")).
+ * val ignoreNonExisting = struct(Set("b", "c", "d"))
+ * // ignoreNonExisting: StructType =
+ * //   StructType(List(StructField(b,LongType,false), StructField(c,BooleanType,false)))
+ * }}}
+ *
+ * A [[org.apache.spark.sql.catalyst.expressions.Row]] object is used as a value of the StructType.
+ * Example:
+ * {{{
+ * import org.apache.spark.sql._
+ *
+ * val innerStruct =
+ *   StructType(
+ *     StructField("f1", IntegerType, true) ::
+ *     StructField("f2", LongType, false) ::
+ *     StructField("f3", BooleanType, false) :: Nil)
+ *
+ * val struct = StructType(
+ *   StructField("a", innerStruct, true) :: Nil)
+ *
+ * // Create a Row with the schema defined by struct
+ * val row = Row(Row(1, 2, true))
+ * // row: Row = [[1,2,true]]
+ * }}}
+ *
+ * @group dataType
+ */
+@DeveloperApi
+case class StructType(fields: Array[StructField]) extends DataType with Seq[StructField] {
+
+  /** Returns all field names in an array. */
+  def fieldNames: Array[String] = fields.map(_.name)
+
   private lazy val fieldNamesSet: Set[String] = fieldNames.toSet
   private lazy val nameToField: Map[String, StructField] = fields.map(f => f.name -> f).toMap
+
   /**
    * Extracts a [[StructField]] of the given name. If the [[StructType]] object does not
    * have a name matching the given name, `null` will be returned.
@@ -721,8 +766,8 @@ case class StructType(fields: Seq[StructField]) extends DataType {
   }
 
   /**
-   * Returns a [[StructType]] containing [[StructField]]s of the given names.
-   * Those names which do not have matching fields will be ignored.
+   * Returns a [[StructType]] containing [[StructField]]s of the given names, preserving the
+   * original order of fields. Those names which do not have matching fields will be ignored.
    */
   def apply(names: Set[String]): StructType = {
     val nonExistFields = names -- fieldNamesSet
@@ -733,6 +778,9 @@ case class StructType(fields: Seq[StructField]) extends DataType {
     // Preserve the original order of fields.
     StructType(fields.filter(f => names.contains(f.name)))
   }
+
+  protected[sql] def toAttributes: Seq[AttributeReference] =
+    map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
 
   def treeString: String = {
     val builder = new StringBuilder
@@ -751,36 +799,39 @@ case class StructType(fields: Seq[StructField]) extends DataType {
 
   override private[sql] def jsonValue =
     ("type" -> typeName) ~
-      ("fields" -> fields.map(_.jsonValue))
+      ("fields" -> map(_.jsonValue))
 
-  override def toNewType = org.apache.spark.sql.types.StructType(fields.map(_.toNewType))
+  override def apply(fieldIndex: Int): StructField = fields(fieldIndex)
+
+  override def length: Int = fields.length
+
+  override def iterator: Iterator[StructField] = fields.iterator
 }
 
-/**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
- *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
- */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
+
 object MapType {
   /**
    * Construct a [[MapType]] object with the given key type and value type.
    * The `valueContainsNull` is true.
    */
   def apply(keyType: DataType, valueType: DataType): MapType =
-    MapType(keyType: DataType, valueType: DataType, true)
+    MapType(keyType: DataType, valueType: DataType, valueContainsNull = true)
 }
 
+
 /**
- * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
- * backward compatibility for external data sources written against Spark 1.2.0.
+ * :: DeveloperApi ::
  *
- * The entire package will be removed in future versions of Spark (likely 1.4.0).
- * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
+ * The data type for Maps. Keys in a map are not allowed to have `null` values.
+ *
+ * Please use [[DataTypes.createMapType()]] to create a specific instance.
+ *
+ * @param keyType The data type of map keys.
+ * @param valueType The data type of map values.
+ * @param valueContainsNull Indicates if map values have `null` values.
+ *
+ * @group dataType
  */
-@deprecated("1.3.0", "Use org.apache.spark.sql.types package instead.")
 case class MapType(
     keyType: DataType,
     valueType: DataType,
@@ -798,7 +849,52 @@ case class MapType(
       ("keyType" -> keyType.jsonValue) ~
       ("valueType" -> valueType.jsonValue) ~
       ("valueContainsNull" -> valueContainsNull)
+}
 
-  override def toNewType = org.apache.spark.sql.types.MapType(
-    keyType.toNewType, valueType.toNewType, valueContainsNull)
+
+/**
+ * ::DeveloperApi::
+ * The data type for User Defined Types (UDTs).
+ *
+ * This interface allows a user to make their own classes more interoperable with SparkSQL;
+ * e.g., by creating a [[UserDefinedType]] for a class X, it becomes possible to create
+ * a SchemaRDD which has class X in the schema.
+ *
+ * For SparkSQL to recognize UDTs, the UDT must be annotated with
+ * [[SQLUserDefinedType]].
+ *
+ * The conversion via `serialize` occurs when instantiating a `SchemaRDD` from another RDD.
+ * The conversion via `deserialize` occurs when reading from a `SchemaRDD`.
+ */
+@DeveloperApi
+abstract class UserDefinedType[UserType] extends DataType with Serializable {
+
+  /** Underlying storage type for this UDT */
+  def sqlType: DataType
+
+  /** Paired Python UDT class, if exists. */
+  def pyUDT: String = null
+
+  /**
+   * Convert the user type to a SQL datum
+   *
+   * TODO: Can we make this take obj: UserType?  The issue is in ScalaReflection.convertToCatalyst,
+   *       where we need to convert Any to UserType.
+   */
+  def serialize(obj: Any): Any
+
+  /** Convert a SQL datum to the user type */
+  def deserialize(datum: Any): UserType
+
+  override private[sql] def jsonValue: JValue = {
+    ("type" -> "udt") ~
+      ("class" -> this.getClass.getName) ~
+      ("pyClass" -> pyUDT) ~
+      ("sqlType" -> sqlType.jsonValue)
+  }
+
+  /**
+   * Class object for the UserType
+   */
+  def userClass: java.lang.Class[UserType]
 }

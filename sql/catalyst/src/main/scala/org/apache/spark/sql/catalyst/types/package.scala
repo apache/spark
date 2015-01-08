@@ -16,8 +16,12 @@
  */
 
 package org.apache.spark.sql.catalyst
+
 /**
- * Contains a type system for attributes produced by relations, including complex types like
- * structs, arrays and maps.
+ * This package is deprecated in Spark 1.3.0 and is only kept here for maintaining
+ * backward compatibility for external data sources written against Spark 1.2.0.
+ *
+ * The entire package will be removed in future versions of Spark (likely 1.4.0).
+ * Please see https://issues.apache.org/jira/browse/SPARK-5123 for more information.
  */
 package object types
