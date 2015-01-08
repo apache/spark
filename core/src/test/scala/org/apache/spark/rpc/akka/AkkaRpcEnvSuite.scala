@@ -17,14 +17,34 @@
 
 package org.apache.spark.rpc.akka
 
-import org.apache.spark.rpc.{RpcEnv, RpcEnvSuite}
-import org.apache.spark.SparkConf
+import org.apache.spark.rpc._
+import org.apache.spark.{SecurityManager, SparkConf}
 
 class AkkaRpcEnvSuite extends RpcEnvSuite {
 
   override def createRpcEnv: RpcEnv = {
     val conf = new SparkConf()
-    AkkaRpcEnv("test", conf)
+    AkkaRpcEnv(RpcEnvConfig(conf, "test", "localhost", 12345, new SecurityManager(conf)))
+  }
+
+  test("setupEndpointRef: systemName, address, endpointName") {
+    val ref = env.setupEndpoint("test_endpoint", new RpcEndpoint {
+      override val rpcEnv = env
+
+      override def receive(sender: RpcEndpointRef) = {
+        case _ =>
+      }
+    })
+    val conf = new SparkConf()
+    val newRpcEnv =
+      AkkaRpcEnv(RpcEnvConfig(conf, "test", "localhost", 12346, new SecurityManager(conf)))
+    try {
+      val newRef = newRpcEnv.setupEndpointRef("test", ref.address, "test_endpoint")
+      assert("akka.tcp://test@localhost:12345/user/test_endpoint" ===
+        newRef.asInstanceOf[AkkaRpcEndpointRef].actorRef.path.toString)
+    } finally {
+      newRpcEnv.stopAll()
+    }
   }
 
 }

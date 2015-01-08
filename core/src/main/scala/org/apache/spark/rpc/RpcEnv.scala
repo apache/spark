@@ -86,6 +86,12 @@ trait RpcEnv {
   def setupEndpointRefByUrl(url: String): RpcEndpointRef
 
   /**
+   * Retrieve the [[RpcEndpointRef]] represented by `systemName`, `address` and `endpointName`
+   */
+  def setupEndpointRef(
+       systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef
+
+  /**
    * Stop [[RpcEndpoint]] specified by `endpoint`.
    */
   def stop(endpoint: RpcEndpointRef): Unit
@@ -357,4 +363,8 @@ object RpcAddress {
     RpcAddress(u.getHost, u.getPort)
   }
 
+  def fromSparkURL(sparkUrl: String): RpcAddress = {
+    val (host, port) = Utils.extractHostPortFromSparkUrl(sparkUrl)
+    RpcAddress(host, port)
+  }
 }

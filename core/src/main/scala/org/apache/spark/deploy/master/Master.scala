@@ -849,7 +849,6 @@ private[spark] class Master(
 private[spark] object Master extends Logging {
   val systemName = "sparkMaster"
   private val actorName = "Master"
-  val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
 
   def main(argStrings: Array[String]) {
     SignalLogger.register(log)
@@ -859,14 +858,22 @@ private[spark] object Master extends Logging {
     rpcEnv.awaitTermination()
   }
 
-  /** Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:ip`. */
-  def toAkkaUrl(sparkUrl: String): String = {
-    sparkUrl match {
-      case sparkUrlRegex(host, port) =>
-        "akka.tcp://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
-      case _ =>
-        throw new SparkException("Invalid master URL: " + sparkUrl)
-    }
+  /**
+   * Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:port`.
+   *
+   * @throws SparkException if the url is invalid
+   */
+  def toEndpointRef(rpcEnv: RpcEnv, sparkUrl: String): RpcEndpointRef = {
+    val address = RpcAddress.fromSparkURL(sparkUrl)
+    toEndpointRef(rpcEnv, address)
+  }
+
+  /**
+   * Returns an `akka.tcp://...` URL for the Master actor given a RpcAddress.
+   *
+   */
+  def toEndpointRef(rpcEnv: RpcEnv, address: RpcAddress): RpcEndpointRef = {
+    rpcEnv.setupEndpointRef(systemName, address, actorName)
   }
 
   def startSystemAndActor(

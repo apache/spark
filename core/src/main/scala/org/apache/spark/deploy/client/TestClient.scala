@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.client
 
-import org.apache.spark.rpc.RpcEnv
+import org.apache.spark.rpc.{RpcAddress, RpcEnv}
 import org.apache.spark.{SecurityManager, SparkConf, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.util.Utils
@@ -52,7 +52,8 @@ private[spark] object TestClient {
     val desc = new ApplicationDescription("TestClient", Some(1), 512,
       Command("spark.deploy.client.TestExecutor", Seq(), Map(), Seq(), Seq(), Seq()), "ignored")
     val listener = new TestListener
-    val client = new AppClient(rpcEnv, Array(url), desc, listener, new SparkConf)
+    val client =
+      new AppClient(rpcEnv, Set(RpcAddress.fromSparkURL(url)), desc, listener, new SparkConf)
     client.start()
     rpcEnv.awaitTermination()
   }

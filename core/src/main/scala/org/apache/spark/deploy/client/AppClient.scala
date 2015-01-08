@@ -21,7 +21,7 @@ import java.util.concurrent.{ScheduledFuture, TimeUnit, Executors, TimeoutExcept
 
 import scala.concurrent.duration._
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
@@ -32,25 +32,23 @@ import org.apache.spark.util.Utils
  * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
  * an app description, and a listener for cluster events, and calls back the listener when various
  * events occur.
- *
- * @param masterUrls Each url should look like spark://host:port.
  */
 private[spark] class AppClient(
     rpcEnv: RpcEnv,
-    masterUrls: Array[String],
+    masterAddresses: Set[RpcAddress],
     appDescription: ApplicationDescription,
     listener: AppClientListener,
     conf: SparkConf)
   extends Logging {
 
   val REGISTRATION_TIMEOUT = 20.seconds.toMillis
+
   val REGISTRATION_RETRIES = 3
 
   var masterAddress: RpcAddress = null
   var actor: RpcEndpointRef = null
   var appId: String = null
   var registered = false
-  var activeMasterUrl: String = null
 
   class ClientActor(override val rpcEnv: RpcEnv) extends NetworkRpcEndpoint with Logging {
     var master: RpcEndpointRef = null
@@ -73,9 +71,9 @@ private[spark] class AppClient(
     }
 
     def tryRegisterAllMasters() {
-      for (masterUrl <- masterUrls) {
-        logInfo("Connecting to master " + masterUrl + "...")
-        val actor = rpcEnv.setupEndpointRefByUrl(Master.toAkkaUrl(masterUrl))
+      for (masterAddress <- masterAddresses) {
+        logInfo("Connecting to master " + masterAddress + "...")
+        val actor = Master.toEndpointRef(rpcEnv, masterAddress)
         actor.send(RegisterApplication(appDescription))
       }
     }
@@ -102,19 +100,13 @@ private[spark] class AppClient(
     }
 
     def changeMaster(url: String) {
-      activeMasterUrl = url
-      master = rpcEnv.setupEndpointRefByUrl(Master.toAkkaUrl(activeMasterUrl))
-      masterAddress = activeMasterUrl match {
-        case Master.sparkUrlRegex(host, port) =>
-          RpcAddress(host, port.toInt)
-        case x =>
-          throw new SparkException("Invalid spark URL: " + x)
-      }
+      // url is a valid Spark url since we receive it from master.
+      master = Master.toEndpointRef(rpcEnv, url)
+      masterAddress = master.address
     }
 
     private def isPossibleMaster(remoteUrl: RpcAddress) = {
-      masterUrls.map(RpcAddress.fromURIString(_).hostPort)
-        .contains(remoteUrl.hostPort)
+      masterAddresses.contains(remoteUrl)
     }
 
     override def receive(sender: RpcEndpointRef) = {

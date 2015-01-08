@@ -20,7 +20,7 @@ package org.apache.spark
 import org.mockito.Mockito._
 import org.scalatest.FunSuite
 
-import org.apache.spark.rpc.{RpcEnv, RpcEndpoint, RpcEndpointRef}
+import org.apache.spark.rpc.{RpcAddress, RpcEnv, RpcEndpoint, RpcEndpointRef}
 import org.apache.spark.scheduler.{CompressedMapStatus, MapStatus}
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.BlockManagerId

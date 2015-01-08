@@ -43,7 +43,7 @@ private[spark] class MapOutputTrackerMasterActor(override val rpcEnv: RpcEnv,
   override def receive(sender: RpcEndpointRef) = {
     case GetMapOutputStatuses(shuffleId: Int) =>
       logInfo(
-        "Asked to send map output locations for shuffle " + shuffleId + " to " + sender.address)
+        "Asked to send map output locations for shuffle " + shuffleId + " to " + sender)
       val mapOutputStatuses = tracker.getSerializedMapOutputStatuses(shuffleId)
       val serializedSize = mapOutputStatuses.size
       if (serializedSize > maxAkkaFrameSize) {

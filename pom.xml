@@ -256,7 +256,7 @@
       <version>1.0.0</version>
     </dependency>
     <!--
-         This depndency has been added to provided scope as it is needed for executing build
+         This dependency has been added to provided scope as it is needed for executing build
          specific groovy scripts using gmaven+ and not required for downstream project building
          with spark.
     -->
@@ -265,6 +265,15 @@
       <artifactId>groovy-all</artifactId>
       <version>2.3.7</version>
       <scope>provided</scope>
+    </dependency>
+    <!--
+         This is needed by the scalatest plugin, and so is declared here to be available in
+         all child modules, just as scalatest is run in all children
+    -->
+    <dependency>
+      <groupId>org.scalatest</groupId>
+      <artifactId>scalatest_${scala.binary.version}</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
   <dependencyManagement>
@@ -935,19 +944,38 @@
             <fork>true</fork>
           </configuration>
         </plugin>
+        <!-- Surefire runs all Java tests -->
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-surefire-plugin</artifactId>
-          <version>2.17</version>
+          <version>2.18</version>
+          <!-- Note config is repeated in scalatest config -->
           <configuration>
-            <!-- Uses scalatest instead -->
-            <skipTests>true</skipTests>
+            <includes>
+              <include>**/Test*.java</include>
+              <include>**/*Test.java</include>
+              <include>**/*TestCase.java</include>
+              <include>**/*Suite.java</include>
+            </includes>
+            <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
+            <argLine>-Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
+            <systemProperties>
+              <java.awt.headless>true</java.awt.headless>
+              <spark.test.home>${session.executionRootDirectory}</spark.test.home>
+              <spark.testing>1</spark.testing>
+              <spark.ui.enabled>false</spark.ui.enabled>
+              <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
+              <spark.executor.extraClassPath>${test_classpath}</spark.executor.extraClassPath>
+              <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
+            </systemProperties>
           </configuration>
         </plugin>
+        <!-- Scalatest runs all Scala tests -->
         <plugin>
           <groupId>org.scalatest</groupId>
           <artifactId>scalatest-maven-plugin</artifactId>
           <version>1.0</version>
+          <!-- Note config is repeated in surefire config -->
           <configuration>
             <reportsDirectory>${project.build.directory}/surefire-reports</reportsDirectory>
             <junitxml>.</junitxml>
@@ -1158,6 +1186,15 @@
             </goals>
           </execution>
         </executions>
+      </plugin>
+      <!-- Enable surefire and scalatest in all children, in one place: -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+      </plugin>
+      <plugin>
+        <groupId>org.scalatest</groupId>
+        <artifactId>scalatest-maven-plugin</artifactId>
       </plugin>
     </plugins>
   </build>

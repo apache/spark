@@ -34,7 +34,7 @@ private class ClientActor(override val rpcEnv: RpcEnv, driverArgs: ClientArgumen
   var masterActor: RpcEndpointRef = _
 
   override def onStart() = {
-    masterActor = rpcEnv.setupEndpointRefByUrl(Master.toAkkaUrl(driverArgs.master))
+    masterActor = Master.toEndpointRef(rpcEnv, driverArgs.master)
 
     println(s"Sending ${driverArgs.cmd} command to ${driverArgs.master}")
 
@@ -154,6 +154,8 @@ object Client {
     val rpcEnv = RpcEnv.create(
       "driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
+    // Verify driverArgs.master is a valid url so that we can use it in ClientActor safely
+    Utils.extractHostPortFromSparkUrl(driverArgs.master)
     rpcEnv.setupEndpoint("client-actor", new ClientActor(rpcEnv, driverArgs, conf))
 
     rpcEnv.awaitTermination()

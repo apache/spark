@@ -30,7 +30,7 @@ import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
@@ -39,9 +39,6 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc.{RpcAddress, RpcEnv, RpcEndpointRef, NetworkRpcEndpoint}
 import org.apache.spark.util.{SignalLogger, Utils}
 
-/**
-  * @param masterUrls Each url should look like spark://host:port.
-  */
 private[spark] class Worker(
     override val rpcEnv: RpcEnv,
     host: String,
@@ -49,7 +46,7 @@ private[spark] class Worker(
     webUiPort: Int,
     cores: Int,
     memory: Int,
-    masterUrls: Array[String],
+    masterAddresses: Set[RpcAddress],
     actorSystemName: String,
     actorName: String,
     workDirPath: String = null,
@@ -176,15 +173,11 @@ private[spark] class Worker(
   }
 
   def changeMaster(url: String, uiUrl: String) {
+    // activeMasterUrl it's a valid Spark url since we receive it from master.
     activeMasterUrl = url
     activeMasterWebUiUrl = uiUrl
-    master = rpcEnv.setupEndpointRefByUrl(Master.toAkkaUrl(activeMasterUrl))
-    masterAddress = activeMasterUrl match {
-      case Master.sparkUrlRegex(_host, _port) =>
-       RpcAddress(_host, _port.toInt)
-      case x =>
-        throw new SparkException("Invalid spark URL: " + x)
-    }
+    master = Master.toEndpointRef(rpcEnv, activeMasterUrl)
+    masterAddress = master.address
     connected = true
     // Cancel any outstanding re-registration attempts because we found a new master
     registrationRetryTimer.foreach(_.cancel(true))
@@ -192,9 +185,9 @@ private[spark] class Worker(
   }
 
   private def tryRegisterAllMasters() {
-    for (masterUrl <- masterUrls) {
-      logInfo("Connecting to master " + masterUrl + "...")
-      val actor = rpcEnv.setupEndpointRefByUrl(Master.toAkkaUrl(masterUrl))
+    for (masterAddress <- masterAddresses) {
+      logInfo("Connecting to master " + masterAddress + "...")
+      val actor = Master.toEndpointRef(rpcEnv, masterAddress)
       actor.send(
         RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress))
     }
@@ -541,9 +534,11 @@ private[spark] object Worker extends Logging {
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
     val actorName = "Worker"
     val securityMgr = new SecurityManager(conf)
+
+    val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL).toSet
     val rpcEnv = RpcEnv.create(systemName, host, port, conf = conf, securityManager = securityMgr)
     rpcEnv.setupEndpoint(actorName, new Worker(rpcEnv, host, rpcEnv.boundPort, webUiPort, cores,
-      memory, masterUrls, systemName, actorName,  workDir, conf, securityMgr))
+      memory, masterAddresses, systemName, actorName,  workDir, conf, securityMgr))
     rpcEnv
   }
 

@@ -26,7 +26,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
-import akka.actor.{ActorRef, Actor, Props, ActorSystem}
+import _root_.akka.actor._
 import akka.pattern.{ask => akkaAsk}
 import akka.remote._
 import com.google.common.annotations.VisibleForTesting
@@ -45,8 +45,13 @@ import org.apache.spark.util.{ActorLogReceive, AkkaUtils}
  * @param conf
  * @param boundPort
  */
-private[spark] class AkkaRpcEnv private (val actorSystem: ActorSystem, conf: SparkConf, val boundPort: Int)
-  extends RpcEnv {
+private[spark] class AkkaRpcEnv private (
+    val actorSystem: ActorSystem, conf: SparkConf, val boundPort: Int) extends RpcEnv {
+
+  private val defaultAddress: RpcAddress = {
+    val address = actorSystem.asInstanceOf[ExtendedActorSystem].provider.getDefaultAddress
+    AkkaUtils.akkaAddressToRpcAddress(address)
+  }
 
   override def setupEndpoint(name: String, endpointCreator: => RpcEndpoint): RpcEndpointRef = {
     val latch = new CountDownLatch(1)
@@ -75,7 +80,7 @@ private[spark] class AkkaRpcEnv private (val actorSystem: ActorSystem, conf: Spa
           case AssociatedEvent(_, remoteAddress, _) =>
             try {
               endpoint.asInstanceOf[NetworkRpcEndpoint].
-                onConnected(AkkaUtils.akkaAddressToRpcAddress(remoteAddress))
+                onConnected(akkaAddressToRpcAddress(remoteAddress))
             } catch {
               case NonFatal(e) => endpoint.onError(e)
             }
@@ -83,7 +88,7 @@ private[spark] class AkkaRpcEnv private (val actorSystem: ActorSystem, conf: Spa
           case DisassociatedEvent(_, remoteAddress, _) =>
             try {
               endpoint.asInstanceOf[NetworkRpcEndpoint].
-                onDisconnected(AkkaUtils.akkaAddressToRpcAddress(remoteAddress))
+                onDisconnected(akkaAddressToRpcAddress(remoteAddress))
             } catch {
               case NonFatal(e) => endpoint.onError(e)
             }
@@ -91,7 +96,7 @@ private[spark] class AkkaRpcEnv private (val actorSystem: ActorSystem, conf: Spa
           case AssociationErrorEvent(cause, localAddress, remoteAddress, inbound, _) =>
             try {
               endpoint.asInstanceOf[NetworkRpcEndpoint].
-                onNetworkError(cause, AkkaUtils.akkaAddressToRpcAddress(remoteAddress))
+                onNetworkError(cause, akkaAddressToRpcAddress(remoteAddress))
             } catch {
               case NonFatal(e) => endpoint.onError(e)
             }
@@ -101,7 +106,7 @@ private[spark] class AkkaRpcEnv private (val actorSystem: ActorSystem, conf: Spa
           case message: Any =>
             logDebug("Received RPC message: " + message)
             try {
-              val pf = endpoint.receive(new AkkaRpcEndpointRef(sender(), conf))
+              val pf = endpoint.receive(new AkkaRpcEndpointRef(defaultAddress, sender(), conf))
               if (pf.isDefinedAt(message)) {
                 pf.apply(message)
               }
@@ -112,7 +117,7 @@ private[spark] class AkkaRpcEnv private (val actorSystem: ActorSystem, conf: Spa
           case message: Any =>
             logDebug("Received RPC message: " + message)
             try {
-              val pf = endpoint.receive(new AkkaRpcEndpointRef(sender(), conf))
+              val pf = endpoint.receive(new AkkaRpcEndpointRef(defaultAddress, sender(), conf))
               if (pf.isDefinedAt(message)) {
                 pf.apply(message)
               }
@@ -126,21 +131,32 @@ private[spark] class AkkaRpcEnv private (val actorSystem: ActorSystem, conf: Spa
         }
 
         }), name = name)
-      endpointRef = new AkkaRpcEndpointRef(actorRef, conf)
+      endpointRef = new AkkaRpcEndpointRef(defaultAddress, actorRef, conf)
       endpointRef
     } finally {
       latch.countDown()
     }
   }
 
+  private def akkaAddressToRpcAddress(address: Address): RpcAddress = {
+    RpcAddress(address.host.getOrElse(defaultAddress.host),
+      address.port.getOrElse(defaultAddress.port))
+  }
+
   override def setupDriverEndpointRef(name: String): RpcEndpointRef = {
-    new AkkaRpcEndpointRef(AkkaUtils.makeDriverRef(name, conf, actorSystem), conf)
+    new AkkaRpcEndpointRef(defaultAddress, AkkaUtils.makeDriverRef(name, conf, actorSystem), conf)
   }
 
   override def setupEndpointRefByUrl(url: String): RpcEndpointRef = {
     val timeout = Duration.create(conf.getLong("spark.akka.lookupTimeout", 30), "seconds")
     val ref = Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
-    new AkkaRpcEndpointRef(ref, conf)
+    new AkkaRpcEndpointRef(defaultAddress, ref, conf)
+  }
+
+  override def setupEndpointRef(
+      systemName: String, address: RpcAddress, endpointName: String): RpcEndpointRef = {
+    setupEndpointRefByUrl(
+      "akka.tcp://%s@%s:%s/user/%s".format(systemName, address.host, address.port, endpointName))
   }
 
   override def stopAll(): Unit = {
@@ -175,15 +191,21 @@ private[rpc] object AkkaRpcEnv {
   }
 }
 
-private[akka] class AkkaRpcEndpointRef(val actorRef: ActorRef, @transient conf: SparkConf)
-  extends RpcEndpointRef with Serializable with Logging {
-  // `conf` won't be used after initialization. So it's safe to be transient.
+private[akka] class AkkaRpcEndpointRef(
+    @transient defaultAddress: RpcAddress,
+    val actorRef: ActorRef,
+    @transient conf: SparkConf) extends RpcEndpointRef with Serializable with Logging {
+  // `defaultAddress` and `conf` won't be used after initialization. So it's safe to be transient.
 
   private[this] val maxRetries = conf.getInt("spark.akka.num.retries", 3)
   private[this] val retryWaitMs = conf.getLong("spark.akka.retry.wait", 3000)
   private[this] val defaultTimeout = conf.getLong("spark.akka.lookupTimeout", 30) seconds
 
-  override val address: RpcAddress = AkkaUtils.akkaAddressToRpcAddress(actorRef.path.address)
+  override val address: RpcAddress = {
+    val akkaAddress = actorRef.path.address
+    RpcAddress(akkaAddress.host.getOrElse(defaultAddress.host),
+      akkaAddress.port.getOrElse(defaultAddress.port))
+  }
 
   override def ask[T: ClassTag](message: Any): Future[T] = ask(message, defaultTimeout)
 
