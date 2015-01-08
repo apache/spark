@@ -8,6 +8,12 @@ TODO
 #### Write unittests
 * For each existing operator
 
+#### Command line
+* `airflow test dag_id task_id YYYY-MM-DD` (outputs log to stdout, doesnt care about dependencies, states)
+* `airflow list_dags`
+* `airflow list_tasks dag_idj`
+* `airflow task_state dag_id task_id YYYY-MM-DD`
+
 #### More Operators!
 * HIVE
 * BaseDataTransferOperator
