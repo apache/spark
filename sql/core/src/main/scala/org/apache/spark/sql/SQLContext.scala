@@ -24,6 +24,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
@@ -262,7 +263,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   def createParquetFile[A <: Product : TypeTag](
       path: String,
       allowExisting: Boolean = true,
-      conf: Configuration = new Configuration()): SchemaRDD = {
+      conf: Configuration = sparkContext.hadoopConfiguration): SchemaRDD = {
     new SchemaRDD(
       this,
       ParquetRelation.createEmpty(

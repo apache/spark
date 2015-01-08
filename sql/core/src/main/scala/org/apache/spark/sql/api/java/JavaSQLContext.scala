@@ -23,6 +23,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.{SQLContext, StructType => SStructType}
 import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
@@ -84,7 +85,7 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
       beanClass: Class[_],
       path: String,
       allowExisting: Boolean = true,
-      conf: Configuration = new Configuration()): JavaSchemaRDD = {
+      conf: Configuration = sqlContext.sparkContext.hadoopConfiguration): JavaSchemaRDD = {
     new JavaSchemaRDD(
       sqlContext,
       ParquetRelation.createEmpty(path, getSchema(beanClass), allowExisting, conf, sqlContext))
