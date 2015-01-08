@@ -28,50 +28,38 @@ import scala.util.parsing.combinator.syntactical.StandardTokenParsers
 import scala.util.parsing.combinator.PackratParsers
 
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.SqlLexical
+import org.apache.spark.sql.catalyst.{AbstractSparkSQLParser, SqlLexical}
 
 /**
  * A parser for foreign DDL commands.
  */
-private[sql] class DDLParser extends StandardTokenParsers with PackratParsers with Logging {
+private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
 
-  def apply(input: String): Option[LogicalPlan] = {
-    phrase(ddl)(new lexical.Scanner(input)) match {
-      case Success(r, x) => Some(r)
-      case x =>
-        logDebug(s"Not recognized as DDL: $x")
-        None
+  def apply(input: String, exceptionOnError: Boolean): Option[LogicalPlan] = {
+    try {
+      Some(apply(input))
+    } catch {
+      case _ if !exceptionOnError => None
+      case x: Throwable => throw x
     }
   }
 
-  protected case class Keyword(str: String)
-
-  protected implicit def asParser(k: Keyword): Parser[String] =
-    lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
-
+  // Keyword is a convention with AbstractSparkSQLParser, which will scan all of the `Keyword`
+  // properties via reflection the class in runtime for constructing the SqlLexical object
   protected val CREATE = Keyword("CREATE")
   protected val TEMPORARY = Keyword("TEMPORARY")
   protected val TABLE = Keyword("TABLE")
   protected val USING = Keyword("USING")
   protected val OPTIONS = Keyword("OPTIONS")
 
-  // Use reflection to find the reserved words defined in this class.
-  protected val reservedWords =
-    this.getClass
-      .getMethods
-      .filter(_.getReturnType == classOf[Keyword])
-      .map(_.invoke(this).asInstanceOf[Keyword].str)
-
-  override val lexical = new SqlLexical(reservedWords)
-
-  protected lazy val ddl: Parser[LogicalPlan] = createTable
+  protected def start: Parser[LogicalPlan] = ddl
 
   /**
    * CREATE TEMPORARY TABLE avroTable
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")
    */
-  protected lazy val createTable: Parser[LogicalPlan] =
+  protected lazy val ddl: Parser[LogicalPlan] =
     CREATE ~ TEMPORARY ~ TABLE ~> ident ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
       case tableName ~ provider ~ opts =>
         CreateTableUsing(tableName, provider, opts)

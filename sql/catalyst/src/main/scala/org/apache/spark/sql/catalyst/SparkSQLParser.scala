@@ -28,12 +28,33 @@ import org.apache.spark.sql.catalyst.plans.logical._
 private[sql] abstract class AbstractSparkSQLParser
   extends StandardTokenParsers with PackratParsers {
 
-  def apply(input: String): LogicalPlan = phrase(start)(new lexical.Scanner(input)) match {
-    case Success(plan, _) => plan
-    case failureOrError => sys.error(failureOrError.toString)
+  def apply(input: String): LogicalPlan = {
+    // Initialize the Keywords.
+    lexical.initialize(reservedWords)
+    phrase(start)(new lexical.Scanner(input)) match {
+      case Success(plan, _) => plan
+      case failureOrError => sys.error(failureOrError.toString)
+    }
   }
 
   protected case class Keyword(str: String)
+
+  protected implicit def asParser(k: Keyword): Parser[String] =
+    lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
+
+  // By default, use Reflection to find the reserved words defined in the sub class.
+  // NOTICE, Since the Keyword properties defined by sub class, we couldn't call this
+  // method during the parent class instantiation, because the sub class instance
+  // isn't created yet.
+  protected lazy val reservedWords: Seq[String] =
+    this
+      .getClass
+      .getMethods
+      .filter(_.getReturnType == classOf[Keyword])
+      .map(_.invoke(this).asInstanceOf[Keyword].str)
+
+  // Set the keywords as empty by default, will change that later.
+  override val lexical = new SqlLexical
 
   protected def start: Parser[LogicalPlan]
 
@@ -52,12 +73,16 @@ private[sql] abstract class AbstractSparkSQLParser
   }
 }
 
-class SqlLexical(val keywords: Seq[String]) extends StdLexical {
+class SqlLexical extends StdLexical {
   case class FloatLit(chars: String) extends Token {
     override def toString = chars
   }
 
-  reserved ++= keywords.flatMap(w => allCaseVersions(w))
+  /* This is a work around to support the lazy setting */
+  def initialize(keywords: Seq[String]): Unit = {
+    reserved.clear()
+    reserved ++= keywords.flatMap(w => allCaseVersions(w))
+  }
 
   delimiters += (
     "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
@@ -132,24 +157,14 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
     }
   }
 
+  // Keyword is a convention with AbstractSparkSQLParser, which will scan all of the `Keyword`
+  // properties via reflection the class in runtime for constructing the SqlLexical object
   protected val AS      = Keyword("AS")
   protected val CACHE   = Keyword("CACHE")
   protected val LAZY    = Keyword("LAZY")
   protected val SET     = Keyword("SET")
   protected val TABLE   = Keyword("TABLE")
   protected val UNCACHE = Keyword("UNCACHE")
-
-  protected implicit def asParser(k: Keyword): Parser[String] =
-    lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
-
-  private val reservedWords: Seq[String] =
-    this
-      .getClass
-      .getMethods
-      .filter(_.getReturnType == classOf[Keyword])
-      .map(_.invoke(this).asInstanceOf[Keyword].str)
-
-  override val lexical = new SqlLexical(reservedWords)
 
   override protected lazy val start: Parser[LogicalPlan] = cache | uncache | set | others
 
