@@ -1,5 +1,3 @@
-package org.apache.spark.sql.hbase
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -17,14 +15,17 @@ package org.apache.spark.sql.hbase
  * limitations under the License.
  */
 
+package org.apache.spark.sql.hbase
+
+import org.apache.spark.Logging
+
 /**
  * HBaseStartupShutdownSuite
  *
  */
-class HBaseStartupShutdownSuite extends HBaseIntegrationTestBase {
+class HBaseStartupShutdownSuite extends HBaseIntegrationTestBase with Logging {
 
   test("Do nothing .. should cause mini cluster to start up and shut down") {
-    println("Doing nothing!")
+    logInfo("Doing nothing!")
   }
-
 }

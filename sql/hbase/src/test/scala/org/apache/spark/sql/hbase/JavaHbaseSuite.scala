@@ -17,23 +17,22 @@
 
 package org.apache.spark.sql.hbase.api.java
 
+import org.apache.spark.Logging
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.hbase.{HBaseSQLContext, HBaseMainTest, QueryTest}
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
-
+import org.scalatest.BeforeAndAfterAll
 
 // Implicits
+
 import scala.collection.JavaConversions._
 
-class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll {
-  // Make sure the tables are loaded.
-//  TestData
-
+class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll with Logging {
   val hbc = {
     HBaseMainTest.main(null)
     HBaseMainTest.hbc
   }
+
   import hbc._
 
   lazy val javaCtx = new JavaSparkContext(HBaseMainTest.sc)
@@ -43,7 +42,7 @@ class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll {
   javaHbaseCtx.sqlContext.asInstanceOf[HBaseSQLContext].optConfiguration = hbc.optConfiguration
 
   test("aggregation with codegen") {
-    val originalValue = javaHbaseCtx.sqlContext.getConf(SQLConf.CODEGEN_ENABLED, "false")  //codegenEnabled
+    val originalValue = javaHbaseCtx.sqlContext.getConf(SQLConf.CODEGEN_ENABLED, "false") //codegenEnabled
     javaHbaseCtx.sqlContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
     val d = javaHbaseCtx.sql("SELECT col1 FROM ta GROUP BY col1").collect()
     d.foreach(println)
@@ -52,7 +51,6 @@ class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll {
 
   test("dsl simple select") {
     val tableA = javaHbaseCtx.sql("SELECT * FROM ta").schemaRDD
-//    tableA.foreach(println)
     checkAnswer(
       tableA.where('col7 === 1).orderBy('col2.asc).select('col4),
       Seq(Seq(1))
@@ -79,61 +77,17 @@ class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll {
     validateMetadata(personWithMeta.select('col7, 'col1))
     validateMetadata(sql("SELECT * FROM personWithMeta"))
     validateMetadata(sql("SELECT col7, col1 FROM personWithMeta"))
-    validateMetadata(sql("SELECT * FROM personWithMeta JOIN salary ON col7 = personId"))
-    validateMetadata(sql("SELECT col1, salary FROM personWithMeta JOIN salary ON col7 = personId"))
   }
 
-
   test("Query HBase native command execution result") {
-    val tableName = "test_native_commands"
-
-//    assertResult(0) {
-//      javaHbaseCtx.sql(s"""CREATE TABLE $tableName (column2 INTEGER, column1 INTEGER, column4 FLOAT,
-//          column3 SHORT, PRIMARY KEY(column1, column2))
-//          MAPPED BY (testNamespace.ht0, COLS=[column3=family1.qualifier1,
-//          column4=family2.qualifier2])""").count()
-//    }
     val a = javaHbaseCtx
       .sql("SHOW TABLES")
       .schemaRDD
     val b = sql("SHOW TABLES")
 
-    a.collect().foreach(println)
-    b.collect().foreach(println)
-//    assert(
-//      javaHbaseCtx
-//        .sql("SHOW TABLES")
-//        .collect()
-//        .map(_.getString(0))
-//        .contains(tableName))
+    a.collect().foreach{case a: Row => logInfo(a.toString())}
+    b.collect().foreach{case a: Row => logInfo(a.toString())}
 
-//    assertResult(0) {
-//      javaHbaseCtx.sql(s"DROP TABLE $tableName").count()
-//    }
-
-      javaHbaseCtx.sql("describe ta").collect.foreach(println)
-//    assertResult(Array(Array("key", "int"), Array("value", "string"))) {
-//      javaHbaseCtx
-//        .sql(s"describe $tableName")
-//        .collect()
-//        .map(row => Array(row.get(0).asInstanceOf[String], row.get(1).asInstanceOf[String]))
-//        .toArray
-//    }
-
-//    assert(isExplanation(javaHbaseCtx.sql(
-//      s"EXPLAIN SELECT key, COUNT(*) FROM $tableName GROUP BY key")))
-
-//    TestHbase.reset()
+    javaHbaseCtx.sql("describe ta").collect().foreach{case a: org.apache.spark.sql.api.java.Row => logInfo(a.toString())}
   }
-
-//  test("Exactly once semantics for DDL and command statements") {
-//    val tableName = "test_exactly_once"
-//    val q0 = javaHbaseCtx.sql(s"CREATE TABLE $tableName(key INT, value STRING)")
-//
-//    // If the table was not created, the following assertion would fail
-//    assert(Try(TestHbase.table(tableName)).isSuccess)
-//
-//    // If the CREATE TABLE command got executed again, the following assertion would fail
-//    assert(Try(q0.count()).isSuccess)
-//  }
 }
