@@ -76,7 +76,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val sqlParser = {
     val fallback = new catalyst.SqlParser
-    new catalyst.SparkSQLParser(fallback(_))
+    new SparkSQLParser(fallback(_))
   }
 
   protected[sql] def parseSql(sql: String): LogicalPlan = {
@@ -329,7 +329,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     def strategies: Seq[Strategy] =
       extraStrategies ++ (
-      CommandStrategy ::
       DataSourceStrategy ::
       TakeOrdered ::
       HashAggregation ::
