@@ -56,6 +56,17 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     assert(results.collect().toSet === Set((1, 10), (2, 10)))
   }
 
+  test("Using Broadcast locally with multiple SparkContext") {
+    val firstSc = new SparkContext("local", "test", httpConf)
+    firstSc.stop()
+    val secondSc = new SparkContext("local", "test", httpConf)
+    val list = List[Int](1, 2, 3, 4)
+    val thrown = intercept[Exception]{
+      val broadcast = firstSc.broadcast(list)
+    }
+    assert(thrown.getMessage.toLowerCase().contains("already shut down"))
+  }
+
   test("Accessing HttpBroadcast variables from multiple threads") {
     sc = new SparkContext("local[10]", "test", httpConf)
     val list = List[Int](1, 2, 3, 4)
