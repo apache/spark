@@ -83,6 +83,11 @@ public abstract class DataType {
   public static final ShortType ShortType = new ShortType();
 
   /**
+   * Gets the NullType object.
+   */
+  public static final NullType NullType = new NullType();
+
+  /**
    * Creates an ArrayType by specifying the data type of elements ({@code elementType}).
    * The field of {@code containsNull} is set to {@code true}.
    */

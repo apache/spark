@@ -51,7 +51,7 @@ case class BoostingStrategy(
   private[tree] def assertValid(): Unit = {
     treeStrategy.algo match {
       case Classification =>
-        require(treeStrategy.numClassesForClassification == 2,
+        require(treeStrategy.numClasses == 2,
           "Only binary classification is supported for boosting.")
       case Regression =>
         // nothing
@@ -80,12 +80,12 @@ object BoostingStrategy {
     treeStrategy.maxDepth = 3
     algo match {
       case "Classification" =>
-        treeStrategy.numClassesForClassification = 2
+        treeStrategy.numClasses = 2
         new BoostingStrategy(treeStrategy, LogLoss)
       case "Regression" =>
         new BoostingStrategy(treeStrategy, SquaredError)
       case _ =>
-        throw new IllegalArgumentException(s"$algo is not supported by the boosting.")
+        throw new IllegalArgumentException(s"$algo is not supported by boosting.")
     }
   }
 }

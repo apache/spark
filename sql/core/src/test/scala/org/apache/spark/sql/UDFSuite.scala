@@ -31,6 +31,11 @@ class UDFSuite extends QueryTest {
     assert(sql("SELECT strLenScala('test')").first().getInt(0) === 4)
   }
 
+  test("ZeroArgument UDF") {
+    registerFunction("random0", () => { Math.random()})
+    assert(sql("SELECT random0()").first().getDouble(0) >= 0.0)
+  }
+
   test("TwoArgument UDF") {
     registerFunction("strLenScala", (_: String).length + (_:Int))
     assert(sql("SELECT strLenScala('test', 1)").first().getInt(0) === 5)

@@ -64,7 +64,7 @@ import org.apache.spark.util._
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
  */
-class SparkContext(config: SparkConf) extends Logging {
+class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationClient {
 
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -172,6 +172,9 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def this(master: String, appName: String, sparkHome: String, jars: Seq[String]) =
     this(master, appName, sparkHome, jars, Map(), Map())
 
+  // log out Spark Version in Spark driver log
+  logInfo(s"Running Spark version $SPARK_VERSION")
+  
   private[spark] val conf = config.clone()
   conf.validateSettings()
 
@@ -326,8 +329,13 @@ class SparkContext(config: SparkConf) extends Logging {
   try {
     dagScheduler = new DAGScheduler(this)
   } catch {
-    case e: Exception => throw
-      new SparkException("DAGScheduler cannot be initialized due to %s".format(e.getMessage))
+    case e: Exception => {
+      try {
+        stop()
+      } finally {
+        throw new SparkException("Error while constructing DAGScheduler", e)
+      }
+    }
   }
 
   // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
@@ -344,6 +352,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // The metrics system for Driver need to be set spark.app.id to app ID.
   // So it should start after we get app ID from the task scheduler and set spark.app.id.
   metricsSystem.start()
+  // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
+  metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
   // Optionally log Spark events
   private[spark] val eventLogger: Option[EventLoggingListener] = {
@@ -357,9 +367,13 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   // Optionally scale number of executors dynamically based on workload. Exposed for testing.
+  private val dynamicAllocationEnabled = conf.getBoolean("spark.dynamicAllocation.enabled", false)
+  private val dynamicAllocationTesting = conf.getBoolean("spark.dynamicAllocation.testing", false)
   private[spark] val executorAllocationManager: Option[ExecutorAllocationManager] =
-    if (conf.getBoolean("spark.dynamicAllocation.enabled", false)) {
-      Some(new ExecutorAllocationManager(this))
+    if (dynamicAllocationEnabled) {
+      assert(master.contains("yarn") || dynamicAllocationTesting,
+        "Dynamic allocation of executors is currently only supported in YARN mode")
+      Some(new ExecutorAllocationManager(this, listenerBus, conf))
     } else {
       None
     }
@@ -988,7 +1002,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def requestExecutors(numAdditionalExecutors: Int): Boolean = {
+  override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
+    assert(master.contains("yarn") || dynamicAllocationTesting,
+      "Requesting executors is currently only supported in YARN mode")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.requestExecutors(numAdditionalExecutors)
@@ -1004,7 +1020,9 @@ class SparkContext(config: SparkConf) extends Logging {
    * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def killExecutors(executorIds: Seq[String]): Boolean = {
+  override def killExecutors(executorIds: Seq[String]): Boolean = {
+    assert(master.contains("yarn") || dynamicAllocationTesting,
+      "Killing executors is currently only supported in YARN mode")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.killExecutors(executorIds)
@@ -1020,7 +1038,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def killExecutor(executorId: String): Boolean = killExecutors(Seq(executorId))
+  override def killExecutor(executorId: String): Boolean = super.killExecutor(executorId)
 
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
@@ -1630,28 +1648,28 @@ object SparkContext extends Logging {
   // following ones.
 
   @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
     def zero(initialValue: Double) = 0.0
   }
 
   @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   object IntAccumulatorParam extends AccumulatorParam[Int] {
     def addInPlace(t1: Int, t2: Int): Int = t1 + t2
     def zero(initialValue: Int) = 0
   }
 
   @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   object LongAccumulatorParam extends AccumulatorParam[Long] {
     def addInPlace(t1: Long, t2: Long) = t1 + t2
     def zero(initialValue: Long) = 0L
   }
 
   @deprecated("Replaced by implicit objects in AccumulatorParam. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   object FloatAccumulatorParam extends AccumulatorParam[Float] {
     def addInPlace(t1: Float, t2: Float) = t1 + t2
     def zero(initialValue: Float) = 0f
@@ -1662,52 +1680,52 @@ object SparkContext extends Logging {
   // and just call the corresponding functions in `object RDD`.
 
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.2.0")
+    "kept here only for backward compatibility.", "1.3.0")
   def rddToPairRDDFunctions[K, V](rdd: RDD[(K, V)])
       (implicit kt: ClassTag[K], vt: ClassTag[V], ord: Ordering[K] = null) = {
     RDD.rddToPairRDDFunctions(rdd)
   }
 
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.2.0")
+    "kept here only for backward compatibility.", "1.3.0")
   def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = RDD.rddToAsyncRDDActions(rdd)
 
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.2.0")
+    "kept here only for backward compatibility.", "1.3.0")
   def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
       rdd: RDD[(K, V)]) =
     RDD.rddToSequenceFileRDDFunctions(rdd)
 
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.2.0")
+    "kept here only for backward compatibility.", "1.3.0")
   def rddToOrderedRDDFunctions[K : Ordering : ClassTag, V: ClassTag](
       rdd: RDD[(K, V)]) =
     RDD.rddToOrderedRDDFunctions(rdd)
 
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.2.0")
+    "kept here only for backward compatibility.", "1.3.0")
   def doubleRDDToDoubleRDDFunctions(rdd: RDD[Double]) = RDD.doubleRDDToDoubleRDDFunctions(rdd)
 
   @deprecated("Replaced by implicit functions in the RDD companion object. This is " +
-    "kept here only for backward compatibility.", "1.2.0")
+    "kept here only for backward compatibility.", "1.3.0")
   def numericRDDToDoubleRDDFunctions[T](rdd: RDD[T])(implicit num: Numeric[T]) =
     RDD.numericRDDToDoubleRDDFunctions(rdd)
 
   // Implicit conversions to common Writable types, for saveAsSequenceFile
 
-  implicit def intToIntWritable(i: Int) = new IntWritable(i)
+  implicit def intToIntWritable(i: Int): IntWritable = new IntWritable(i)
 
-  implicit def longToLongWritable(l: Long) = new LongWritable(l)
+  implicit def longToLongWritable(l: Long): LongWritable = new LongWritable(l)
 
-  implicit def floatToFloatWritable(f: Float) = new FloatWritable(f)
+  implicit def floatToFloatWritable(f: Float): FloatWritable = new FloatWritable(f)
 
-  implicit def doubleToDoubleWritable(d: Double) = new DoubleWritable(d)
+  implicit def doubleToDoubleWritable(d: Double): DoubleWritable = new DoubleWritable(d)
 
-  implicit def boolToBoolWritable (b: Boolean) = new BooleanWritable(b)
+  implicit def boolToBoolWritable (b: Boolean): BooleanWritable = new BooleanWritable(b)
 
-  implicit def bytesToBytesWritable (aob: Array[Byte]) = new BytesWritable(aob)
+  implicit def bytesToBytesWritable (aob: Array[Byte]): BytesWritable = new BytesWritable(aob)
 
-  implicit def stringToText(s: String) = new Text(s)
+  implicit def stringToText(s: String): Text = new Text(s)
 
   private implicit def arrayToArrayWritable[T <% Writable: ClassTag](arr: Traversable[T])
     : ArrayWritable = {
@@ -1722,43 +1740,43 @@ object SparkContext extends Logging {
   // and just call the corresponding functions in `object WritableConverter`.
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def intWritableConverter(): WritableConverter[Int] =
     WritableConverter.intWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def longWritableConverter(): WritableConverter[Long] =
     WritableConverter.longWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def doubleWritableConverter(): WritableConverter[Double] =
     WritableConverter.doubleWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def floatWritableConverter(): WritableConverter[Float] =
     WritableConverter.floatWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def booleanWritableConverter(): WritableConverter[Boolean] =
     WritableConverter.booleanWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def bytesWritableConverter(): WritableConverter[Array[Byte]] =
     WritableConverter.bytesWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
+    "backward compatibility.", "1.3.0")
   def stringWritableConverter(): WritableConverter[String] =
     WritableConverter.stringWritableConverter()
 
   @deprecated("Replaced by implicit functions in WritableConverter. This is kept here only for " +
-    "backward compatibility.", "1.2.0")
-  def writableWritableConverter[T <: Writable]() =
+    "backward compatibility.", "1.3.0")
+  def writableWritableConverter[T <: Writable](): WritableConverter[T] =
     WritableConverter.writableWritableConverter()
 
   /**
@@ -2017,15 +2035,15 @@ object WritableConverter {
     simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
   implicit def bytesWritableConverter(): WritableConverter[Array[Byte]] = {
-    simpleWritableConverter[Array[Byte], BytesWritable](bw =>
+    simpleWritableConverter[Array[Byte], BytesWritable] { bw =>
       // getBytes method returns array which is longer then data to be returned
       Arrays.copyOfRange(bw.getBytes, 0, bw.getLength)
-    )
+    }
   }
 
   implicit def stringWritableConverter(): WritableConverter[String] =
     simpleWritableConverter[String, Text](_.toString)
 
-  implicit def writableWritableConverter[T <: Writable]() =
+  implicit def writableWritableConverter[T <: Writable](): WritableConverter[T] =
     new WritableConverter[T](_.runtimeClass.asInstanceOf[Class[T]], _.asInstanceOf[T])
 }

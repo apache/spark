@@ -68,6 +68,22 @@ class JavaSQLSuite extends FunSuite {
     javaSqlCtx.sql("SELECT * FROM people").collect()
   }
 
+  test("schema with null from JavaBeans") {
+    val person = new PersonBean
+    person.setName("Michael")
+    person.setAge(29)
+
+    val rdd = javaCtx.parallelize(person :: Nil)
+    val schemaRDD = javaSqlCtx.applySchema(rdd, classOf[PersonBean])
+
+    schemaRDD.registerTempTable("people")
+    val nullRDD = javaSqlCtx.sql("SELECT null FROM people")
+    val structFields = nullRDD.schema.getFields()
+    assert(structFields.size == 1)
+    assert(structFields(0).getDataType().isInstanceOf[NullType])
+    assert(nullRDD.collect.head.row === Seq(null))
+  }
+
   test("all types in JavaBeans") {
     val bean = new AllTypesBean
     bean.setStringField("")

@@ -39,8 +39,8 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DecimalType
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
-import org.apache.spark.sql.execution.{ExtractPythonUdfs, QueryExecutionException, Command => PhysicalCommand}
-import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
+import org.apache.spark.sql.execution.{SparkPlan, ExecutedCommand, ExtractPythonUdfs, QueryExecutionException}
+import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTableCommand}
 import org.apache.spark.sql.sources.DataSourceStrategy
 
 /**
@@ -284,7 +284,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * Execute the command using Hive and return the results as a sequence. Each element
    * in the sequence is one row.
    */
-  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = {
+  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = synchronized {
     try {
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
@@ -338,9 +338,9 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   val hivePlanner = new SparkPlanner with HiveStrategies {
     val hiveContext = self
 
-    override val strategies: Seq[Strategy] = extraStrategies ++ Seq(
+    override def strategies: Seq[Strategy] = extraStrategies ++ Seq(
       DataSourceStrategy,
-      CommandStrategy(self),
+      CommandStrategy,
       HiveCommandStrategy(self),
       TakeOrdered,
       ParquetOperations,
@@ -369,15 +369,21 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
      * execution is simply passed back to Hive.
      */
     def stringResult(): Seq[String] = executedPlan match {
-      case describeHiveTableCommand: DescribeHiveTableCommand =>
+      case ExecutedCommand(desc: DescribeHiveTableCommand) =>
         // If it is a describe command for a Hive table, we want to have the output format
         // be similar with Hive.
-        describeHiveTableCommand.hiveString
-      case command: PhysicalCommand =>
+        desc.run(self).map {
+          case Row(name: String, dataType: String, comment) =>
+            Seq(name, dataType,
+              Option(comment.asInstanceOf[String]).getOrElse(""))
+              .map(s => String.format(s"%-20s", s))
+              .mkString("\t")
+        }
+      case command: ExecutedCommand =>
         command.executeCollect().map(_.head.toString)
 
       case other =>
-        val result: Seq[Seq[Any]] = toRdd.map(_.copy()).collect().toSeq
+        val result: Seq[Seq[Any]] = other.executeCollect().toSeq
         // We need the types so we can output struct field names
         val types = analyzed.output.map(_.dataType)
         // Reformat to match hive tab delimited output.
@@ -386,7 +392,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     override def simpleString: String =
       logical match {
-        case _: NativeCommand => "<Native command: executed by Hive>"
+        case _: HiveNativeCommand => "<Native command: executed by Hive>"
         case _: SetCommand => "<SET command: executed by Hive, and noted by SQLContext>"
         case _ => super.simpleString
       }
@@ -414,8 +420,8 @@ object HiveContext {
     case (d: Date, DateType) => new DateWritable(d).toString
     case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
     case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
-    case (decimal: Decimal, DecimalType()) =>  // Hive strips trailing zeros so use its toString
-      HiveShim.createDecimal(decimal.toBigDecimal.underlying()).toString
+    case (decimal: BigDecimal, DecimalType()) => // Hive strips trailing zeros so use its toString
+      HiveShim.createDecimal(decimal.underlying()).toString
     case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
 

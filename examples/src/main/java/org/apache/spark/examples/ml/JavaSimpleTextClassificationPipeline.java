@@ -80,14 +80,14 @@ public class JavaSimpleTextClassificationPipeline {
       new Document(5L, "l m n"),
       new Document(6L, "mapreduce spark"),
       new Document(7L, "apache hadoop"));
-    JavaSchemaRDD test =
-      jsql.applySchema(jsc.parallelize(localTest), Document.class);
+    JavaSchemaRDD test = jsql.applySchema(jsc.parallelize(localTest), Document.class);
 
     // Make predictions on test documents.
     model.transform(test).registerAsTable("prediction");
     JavaSchemaRDD predictions = jsql.sql("SELECT id, text, score, prediction FROM prediction");
     for (Row r: predictions.collect()) {
-      System.out.println(r);
+      System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> score=" + r.get(2)
+          + ", prediction=" + r.get(3));
     }
   }
 }

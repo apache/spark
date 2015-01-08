@@ -20,10 +20,11 @@ package org.apache.spark.examples.ml
 import scala.beans.BeanInfo
 
 import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkContext._
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{Row, SQLContext}
 
 @BeanInfo
 case class LabeledDocument(id: Long, text: String, label: Double)
@@ -81,6 +82,8 @@ object SimpleTextClassificationPipeline {
     model.transform(test)
       .select('id, 'text, 'score, 'prediction)
       .collect()
-      .foreach(println)
+      .foreach { case Row(id: Long, text: String, score: Double, prediction: Double) =>
+        println("(" + id + ", " + text + ") --> score=" + score + ", prediction=" + prediction)
+      }
   }
 }

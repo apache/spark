@@ -85,6 +85,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val ON = Keyword("ON")
   protected val OR = Keyword("OR")
   protected val ORDER = Keyword("ORDER")
+  protected val SORT = Keyword("SORT")
   protected val OUTER = Keyword("OUTER")
   protected val OVERWRITE = Keyword("OVERWRITE")
   protected val REGEXP = Keyword("REGEXP")
@@ -140,7 +141,7 @@ class SqlParser extends AbstractSparkSQLParser {
       (WHERE  ~> expression).? ~
       (GROUP  ~  BY ~> rep1sep(expression, ",")).? ~
       (HAVING ~> expression).? ~
-      (ORDER  ~  BY ~> ordering).? ~
+      sortType.? ~
       (LIMIT  ~> expression).? ^^ {
         case d ~ p ~ r ~ f ~ g ~ h ~ o ~ l  =>
           val base = r.getOrElse(NoRelation)
@@ -150,7 +151,7 @@ class SqlParser extends AbstractSparkSQLParser {
             .getOrElse(Project(assignAliases(p), withFilter))
           val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
           val withHaving = h.map(Filter(_, withDistinct)).getOrElse(withDistinct)
-          val withOrder = o.map(Sort(_, withHaving)).getOrElse(withHaving)
+          val withOrder = o.map(_(withHaving)).getOrElse(withHaving)
           val withLimit = l.map(Limit(_, withOrder)).getOrElse(withOrder)
           withLimit
       }
@@ -202,15 +203,16 @@ class SqlParser extends AbstractSparkSQLParser {
     | FULL  ~ OUTER.? ^^^ FullOuter
     )
 
-  protected lazy val ordering: Parser[Seq[SortOrder]] =
-    ( rep1sep(singleOrder, ",")
-    | rep1sep(expression, ",") ~ direction.? ^^ {
-        case exps ~ d => exps.map(SortOrder(_, d.getOrElse(Ascending)))
-      }
+  protected lazy val sortType: Parser[LogicalPlan => LogicalPlan] =
+    ( ORDER ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, true, l) }
+    | SORT ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, false, l) }
     )
 
-  protected lazy val singleOrder: Parser[SortOrder] =
-    expression ~ direction ^^ { case e ~ o => SortOrder(e, o) }
+  protected lazy val ordering: Parser[Seq[SortOrder]] =
+    ( rep1sep(expression ~ direction.? , ",") ^^ {
+        case exps  => exps.map(pair => SortOrder(pair._1, pair._2.getOrElse(Ascending)))
+      }
+    )
 
   protected lazy val direction: Parser[SortDirection] =
     ( ASC  ^^^ Ascending

@@ -22,7 +22,6 @@ import java.util.TimeZone
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /* Implicits */
@@ -41,6 +40,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   override protected def afterAll() {
     TimeZone.setDefault(origZone)
+  }
+
+  test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
+    checkAnswer(
+      sql("SELECT a FROM testData2 SORT BY a"),
+      Seq(1, 1, 2 ,2 ,3 ,3).map(Seq(_))
+    )
   }
 
   test("grouping on nested fields") {
@@ -978,6 +984,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT a + b FROM testData2 ORDER BY a"),
       Seq(2, 3, 3 ,4 ,4 ,5).map(Seq(_))
+    )
+  }
+
+  test("oder by asc by default when not specify ascending and descending") {
+    checkAnswer(
+      sql("SELECT a, b FROM testData2 ORDER BY a desc, b"),
+      Seq((3, 1), (3, 2), (2, 1), (2,2), (1, 1), (1, 2))
     )
   }
 

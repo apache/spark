@@ -181,7 +181,9 @@ private[spark] object UIUtils extends Logging {
       </li>
     }
     val helpButton: Seq[Node] = helpText.map { helpText =>
-      <a data-toggle="tooltip" data-placement="bottom" title={helpText}>(?)</a>
+      <sup>
+        (<a data-toggle="tooltip" data-placement="bottom" title={helpText}>?</a>)
+      </sup>
     }.getOrElse(Seq.empty)
 
     <html>
@@ -192,9 +194,12 @@ private[spark] object UIUtils extends Logging {
       <body>
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
-            <a href={prependBaseUri("/")} class="brand">
-              <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
-            </a>
+            <div class="brand">
+              <a href={prependBaseUri("/")} class="brand">
+                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
+                <span class="version">{org.apache.spark.SPARK_VERSION}</span>
+              </a>
+            </div>
             <ul class="nav">{header}</ul>
             <p class="navbar-text pull-right">
               <strong title={appName}>{shortAppName}</strong> application UI
@@ -211,11 +216,6 @@ private[spark] object UIUtils extends Logging {
             </div>
           </div>
           {content}
-        </div>
-        <div id="footer">
-          <div class="container-fluid">
-            <p class="muted credit">Spark {org.apache.spark.SPARK_VERSION}</p>
-          </div>
         </div>
       </body>
     </html>
@@ -234,19 +234,15 @@ private[spark] object UIUtils extends Logging {
             <div class="span12">
               <h3 style="vertical-align: middle; display: inline-block;">
                 <a style="text-decoration: none" href={prependBaseUri("/")}>
-                  <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")}
-                       style="margin-right: 15px;" />
+                  <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
+                  <span class="version" 
+                        style="margin-right: 15px;">{org.apache.spark.SPARK_VERSION}</span>
                 </a>
                 {title}
               </h3>
             </div>
           </div>
           {content}
-        </div>
-        <div id="footer">
-          <div class="container-fluid">
-            <p class="muted credit">Spark {org.apache.spark.SPARK_VERSION}</p>
-          </div>
         </div>
       </body>
     </html>

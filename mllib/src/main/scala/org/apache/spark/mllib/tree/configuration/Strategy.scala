@@ -37,7 +37,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
  * @param maxDepth Maximum depth of the tree.
  *                 E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.
- * @param numClassesForClassification Number of classes for classification.
+ * @param numClasses Number of classes for classification.
  *                                    (Ignored for regression.)
  *                                    Default value is 2 (binary classification).
  * @param maxBins Maximum number of bins used for discretizing continuous features and
@@ -73,7 +73,7 @@ class Strategy (
     @BeanProperty var algo: Algo,
     @BeanProperty var impurity: Impurity,
     @BeanProperty var maxDepth: Int,
-    @BeanProperty var numClassesForClassification: Int = 2,
+    @BeanProperty var numClasses: Int = 2,
     @BeanProperty var maxBins: Int = 32,
     @BeanProperty var quantileCalculationStrategy: QuantileStrategy = Sort,
     @BeanProperty var categoricalFeaturesInfo: Map[Int, Int] = Map[Int, Int](),
@@ -86,7 +86,7 @@ class Strategy (
     @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
 
   def isMulticlassClassification =
-    algo == Classification && numClassesForClassification > 2
+    algo == Classification && numClasses > 2
   def isMulticlassWithCategoricalFeatures
     = isMulticlassClassification && (categoricalFeaturesInfo.size > 0)
 
@@ -97,10 +97,10 @@ class Strategy (
       algo: Algo,
       impurity: Impurity,
       maxDepth: Int,
-      numClassesForClassification: Int,
+      numClasses: Int,
       maxBins: Int,
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]) {
-    this(algo, impurity, maxDepth, numClassesForClassification, maxBins, Sort,
+    this(algo, impurity, maxDepth, numClasses, maxBins, Sort,
       categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
   }
 
@@ -117,8 +117,8 @@ class Strategy (
    */
   def setCategoricalFeaturesInfo(
       categoricalFeaturesInfo: java.util.Map[java.lang.Integer, java.lang.Integer]): Unit = {
-    setCategoricalFeaturesInfo(
-      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap)
+    this.categoricalFeaturesInfo =
+      categoricalFeaturesInfo.asInstanceOf[java.util.Map[Int, Int]].asScala.toMap
   }
 
   /**
@@ -128,9 +128,9 @@ class Strategy (
   private[tree] def assertValid(): Unit = {
     algo match {
       case Classification =>
-        require(numClassesForClassification >= 2,
-          s"DecisionTree Strategy for Classification must have numClassesForClassification >= 2," +
-          s" but numClassesForClassification = $numClassesForClassification.")
+        require(numClasses >= 2,
+          s"DecisionTree Strategy for Classification must have numClasses >= 2," +
+          s" but numClasses = $numClasses.")
         require(Set(Gini, Entropy).contains(impurity),
           s"DecisionTree Strategy given invalid impurity for Classification: $impurity." +
           s"  Valid settings: Gini, Entropy")
@@ -160,7 +160,7 @@ class Strategy (
 
   /** Returns a shallow copy of this instance. */
   def copy: Strategy = {
-    new Strategy(algo, impurity, maxDepth, numClassesForClassification, maxBins,
+    new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode, minInfoGain,
       maxMemoryInMB, subsamplingRate, useNodeIdCache, checkpointDir, checkpointInterval)
   }
@@ -176,9 +176,9 @@ object Strategy {
   def defaultStrategy(algo: String): Strategy = algo match {
     case "Classification" =>
       new Strategy(algo = Classification, impurity = Gini, maxDepth = 10,
-        numClassesForClassification = 2)
+        numClasses = 2)
     case "Regression" =>
       new Strategy(algo = Regression, impurity = Variance, maxDepth = 10,
-        numClassesForClassification = 0)
+        numClasses = 0)
   }
 }

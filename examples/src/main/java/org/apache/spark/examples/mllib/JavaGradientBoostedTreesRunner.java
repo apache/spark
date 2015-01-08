@@ -73,7 +73,7 @@ public final class JavaGradientBoostedTreesRunner {
           return p.label();
         }
       }).countByValue().size();
-      boostingStrategy.treeStrategy().setNumClassesForClassification(numClasses);
+      boostingStrategy.treeStrategy().setNumClasses(numClasses);
 
       // Train a GradientBoosting model for classification.
       final GradientBoostedTreesModel model = GradientBoostedTrees.train(data, boostingStrategy);

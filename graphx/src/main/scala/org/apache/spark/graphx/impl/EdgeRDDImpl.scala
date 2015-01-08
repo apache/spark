@@ -26,7 +26,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.graphx._
 
 class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
-    override val partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])],
+    @transient override val partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])],
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
   extends EdgeRDD[ED](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
 
@@ -70,6 +70,10 @@ class EdgeRDDImpl[ED: ClassTag, VD: ClassTag] private[graphx] (
     this
   }
 
+  override def checkpoint() = {
+    partitionsRDD.checkpoint()
+  }
+    
   /** The number of edges in the RDD. */
   override def count(): Long = {
     partitionsRDD.map(_._2.size.toLong).reduce(_ + _)

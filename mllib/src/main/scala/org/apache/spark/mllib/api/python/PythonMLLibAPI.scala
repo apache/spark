@@ -477,7 +477,7 @@ class PythonMLLibAPI extends Serializable {
       algo = algo,
       impurity = impurity,
       maxDepth = maxDepth,
-      numClassesForClassification = numClasses,
+      numClasses = numClasses,
       maxBins = maxBins,
       categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap,
       minInstancesPerNode = minInstancesPerNode,
@@ -513,7 +513,7 @@ class PythonMLLibAPI extends Serializable {
       algo = algo,
       impurity = impurity,
       maxDepth = maxDepth,
-      numClassesForClassification = numClasses,
+      numClasses = numClasses,
       maxBins = maxBins,
       categoricalFeaturesInfo = categoricalFeaturesInfo.asScala.toMap)
     val cached = data.rdd.persist(StorageLevel.MEMORY_AND_DISK)

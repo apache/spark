@@ -118,7 +118,19 @@ trait ScalaReflection {
       case t if t <:< typeOf[Product] =>
         val formalTypeArgs = t.typeSymbol.asClass.typeParams
         val TypeRef(_, _, actualTypeArgs) = t
-        val params = t.member(nme.CONSTRUCTOR).asMethod.paramss
+        val constructorSymbol = t.member(nme.CONSTRUCTOR)
+        val params = if (constructorSymbol.isMethod) {
+          constructorSymbol.asMethod.paramss
+        } else {
+          // Find the primary constructor, and use its parameter ordering.
+          val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
+            s => s.isMethod && s.asMethod.isPrimaryConstructor)
+          if (primaryConstructorSymbol.isEmpty) {
+            sys.error("Internal SQL error: Product object did not have a primary constructor.")
+          } else {
+            primaryConstructorSymbol.get.asMethod.paramss
+          }
+        }
         Schema(StructType(
           params.head.map { p =>
             val Schema(dataType, nullable) =

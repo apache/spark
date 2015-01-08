@@ -45,6 +45,13 @@ source "$FWDIR"/bin/utils.sh
 SUBMIT_USAGE_FUNCTION=usage
 gatherSparkSubmitOpts "$@"
 
+# SPARK-4161: scala does not assume use of the java classpath,
+# so we need to add the "-Dscala.usejavacp=true" flag mnually. We
+# do this specifically for the Spark shell because the scala REPL
+# has its own class loader, and any additional classpath specified
+# through spark.driver.extraClassPath is not automatically propagated.
+SPARK_SUBMIT_OPTS="$SPARK_SUBMIT_OPTS -Dscala.usejavacp=true"
+
 function main() {
   if $cygwin; then
     # Workaround for issue involving JLine and Cygwin
