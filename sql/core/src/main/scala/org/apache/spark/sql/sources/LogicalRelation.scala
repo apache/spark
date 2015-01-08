@@ -27,7 +27,7 @@ private[sql] case class LogicalRelation(relation: BaseRelation)
   extends LeafNode
   with MultiInstanceRelation {
 
-  override val output: Seq[AttributeReference] = relation.schema.toAttributes.toSeq
+  override val output: Seq[AttributeReference] = relation.schema.toAttributes
 
   // Logical Relations are distinct if they have different output for the sake of transformations.
   override def equals(other: Any) = other match {

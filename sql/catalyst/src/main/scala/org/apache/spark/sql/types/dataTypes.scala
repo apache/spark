@@ -719,7 +719,7 @@ object StructType {
  * // twoFields: StructType =
  * //   StructType(List(StructField(b,LongType,false), StructField(c,BooleanType,false)))
  *
- * // Those names do not have matching fields will be ignored.
+ * // Any names without matching fields will be ignored.
  * // For the case shown below, "d" will be ignored and
  * // it is treated as struct(Set("b", "c")).
  * val ignoreNonExisting = struct(Set("b", "c", "d"))
@@ -766,8 +766,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   /**
-   * Returns a [[StructType]] containing [[StructField]]s of the given names.
-   * Those names which do not have matching fields will be ignored.
+   * Returns a [[StructType]] containing [[StructField]]s of the given names, preserving the
+   * original order of fields. Those names which do not have matching fields will be ignored.
    */
   def apply(names: Set[String]): StructType = {
     val nonExistFields = names -- fieldNamesSet
@@ -779,8 +779,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     StructType(fields.filter(f => names.contains(f.name)))
   }
 
-  protected[sql] def toAttributes =
-    fields.map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
+  protected[sql] def toAttributes: Seq[AttributeReference] =
+    map(f => AttributeReference(f.name, f.dataType, f.nullable, f.metadata)())
 
   def treeString: String = {
     val builder = new StringBuilder
@@ -799,7 +799,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override private[sql] def jsonValue =
     ("type" -> typeName) ~
-      ("fields" -> fields.map(_.jsonValue).toSeq)
+      ("fields" -> map(_.jsonValue))
 
   override def apply(fieldIndex: Int): StructField = fields(fieldIndex)
 

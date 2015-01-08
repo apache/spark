@@ -17,22 +17,21 @@
 
 package org.apache.spark.sql.hive
 
-import java.sql.Date
 import java.util
+import java.sql.Date
 import java.util.{Locale, TimeZone}
 
+import org.apache.hadoop.hive.ql.udf.UDAFPercentile
 import org.apache.hadoop.hive.serde2.io.DoubleWritable
+import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectInspectorFactory, StructObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.decimal.Decimal
+import org.apache.hadoop.io.LongWritable
 import org.scalatest.FunSuite
 
-import org.apache.hadoop.hive.ql.udf.UDAFPercentile
-import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, StructObjectInspector, ObjectInspectorFactory}
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFactory.ObjectInspectorOptions
-import org.apache.hadoop.io.LongWritable
-
 import org.apache.spark.sql.catalyst.expressions.{Literal, Row}
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.decimal.Decimal
 
 class HiveInspectorSuite extends FunSuite with HiveInspectors {
   test("Test wrap SettableStructObjectInspector") {

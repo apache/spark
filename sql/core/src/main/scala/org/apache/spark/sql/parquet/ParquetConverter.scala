@@ -17,16 +17,15 @@
 
 package org.apache.spark.sql.parquet
 
-import org.apache.spark.sql.types.decimal.Decimal
-
 import scala.collection.mutable.{Buffer, ArrayBuffer, HashMap}
 
 import parquet.io.api.{PrimitiveConverter, GroupConverter, Binary, Converter}
 import parquet.schema.MessageType
 
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.decimal.Decimal
 
 /**
  * Collection of converters of Parquet types (group and primitive types) that

@@ -34,9 +34,9 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.plans.logical.SetCommand
-import org.apache.spark.sql.types._
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
+import org.apache.spark.sql.types._
 import org.apache.spark.sql.{SQLConf, SchemaRDD, Row => SparkRow}
 
 /**
