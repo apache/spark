@@ -36,6 +36,10 @@ import com.google.common.collect.{BiMap, HashBiMap}
 import org.apache.mesos.protobuf.ByteString
 import java.util.concurrent.locks.ReentrantLock
 
+case class SlaveStatus(var executorRunning: Boolean, var taskRunning: Boolean) {
+  def notRunning = !taskRunning && !executorRunning
+}
+
 /**
  * A SchedulerBackend that runs tasks on Mesos, but uses "coarse-grained" tasks, where it holds
  * onto each Mesos node for the duration of the Spark job instead of relinquishing cores whenever
@@ -70,7 +74,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   val coresByTaskId = new HashMap[Int, Int]
   var totalCoresAcquired = 0
 
-  val slaveIdsWithTasks = new HashSet[String]
+  val slaveStatuses = new HashMap[String, SlaveStatus]
 
   val taskIdToSlaveId = HashBiMap.create[Int, String]()
 
@@ -262,11 +266,6 @@ private[spark] class CoarseMesosSchedulerBackend(
     0
   }
 
-  def minMemRequired = MemoryUtils.calculateTotalMemory(sc) + shuffleServiceMem.toDouble
-
-
-  def minCpuRequired = 1 + shuffleServiceCpu
-
   /**
    * Method called by Mesos to offer resources on slaves. We respond by launching an executor,
    * unless we've already launched more than we wanted to.
@@ -281,18 +280,29 @@ private[spark] class CoarseMesosSchedulerBackend(
         val cpus = getResource(offer.getResourcesList, "cpus").toInt
         logTrace("Received offer id: " + offer.getId.getValue + ", cpu: " + cpus.toString +
           ", mem: " + mem.toString)
+
+        var minCpuRequired = 1
+        var minMemRequired = MemoryUtils.calculateTotalMemory(sc)
+
+        slaveStatuses.get(slaveId).map { s =>
+          if (s.executorRunning) {
+            minCpuRequired += shuffleServiceCpu
+            minMemRequired += shuffleServiceMem
+          }
+        }
+
         if (taskIdToSlaveId.size < executorLimit.getOrElse(Int.MaxValue) &&
           totalCoresAcquired < maxCores &&
-          mem >= minMemRequired &&
-          cpus >= minCpuRequired &&
           failuresBySlaveId.getOrElse(slaveId, 0) < MAX_SLAVE_FAILURES &&
-          !slaveIdsWithTasks.contains(slaveId)) {
+          (!slaveStatuses.contains(slaveId) || !slaveStatuses(slaveId).taskRunning) &&
+          mem >= minMemRequired &&
+          cpus >= minCpuRequired) {
+
           // Launch an executor on the slave
           val cpusToUse = math.min(cpus, maxCores - totalCoresAcquired)
           totalCoresAcquired += cpusToUse
           val taskId = newMesosTaskId()
           taskIdToSlaveId(taskId) = slaveId
-          slaveIdsWithTasks += slaveId
           coresByTaskId(taskId) = cpusToUse
           val taskIdString: String = taskId.toString
           val builder = MesosTaskInfo.newBuilder()
@@ -301,12 +311,14 @@ private[spark] class CoarseMesosSchedulerBackend(
             .setName("Task " + taskId)
 
           if (!shuffleServiceEnabled) {
+            slaveStatuses(slaveId) = SlaveStatus(false, true)
             builder
               .setCommand(createTaskCommand(offer, cpusToUse + extraCoresPerSlave, taskIdString))
               .addResources(createResource("cpus", cpusToUse))
               .addResources(createResource("mem",
               MemoryUtils.calculateTotalMemory(sc)))
           } else {
+            slaveStatuses(slaveId) = SlaveStatus(true, true)
             val taskCpus = cpusToUse - shuffleServiceCpu
             val taskMem = mem - shuffleServiceMem
             builder.setExecutor(
@@ -326,6 +338,10 @@ private[spark] class CoarseMesosSchedulerBackend(
 
           logTrace("Launching task with offer id: " + offer.getId.getValue +
             ", task: " + builder.build())
+
+          val status = slaveStatuses(slaveId)
+          status.taskRunning = true
+          status.executorRunning = true
 
           d.launchTasks(
             Collections.singleton(offer.getId), Collections.singletonList(builder.build()), filters)
@@ -365,7 +381,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     val taskId = status.getTaskId.getValue.toInt
     val state = status.getState
     stateLock.synchronized {
-      if(!taskIdToSlaveId.containsKey(taskId)) {
+      if (!taskIdToSlaveId.containsKey(taskId)) {
         return
       }
 
@@ -409,8 +425,7 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   def executorTerminated(d: SchedulerDriver, slaveId: String, reason: String) {
     stateLock.synchronized {
-      if (slaveIdsWithTasks.contains(slaveId)) {
-        slaveIdsWithTasks -= slaveId
+      if (slaveStatuses.contains(slaveId)) {
         val slaveIdToTaskId: BiMap[String, Int] = taskIdToSlaveId.inverse()
         if (slaveIdToTaskId.contains(slaveId)) {
           val taskId: Int = slaveIdToTaskId.get(slaveId)
@@ -418,6 +433,11 @@ private[spark] class CoarseMesosSchedulerBackend(
           removeExecutor(sparkExecutorId(slaveId, taskId.toString), reason)
         }
         pendingRemovedSlaveIds -= slaveId
+        val status = slaveStatuses(slaveId)
+        status.taskRunning = false
+        if (status.notRunning) {
+          slaveStatuses -= slaveId
+        }
       }
     }
   }
@@ -425,6 +445,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   override def slaveLost(d: SchedulerDriver, slaveId: SlaveID) {
     logInfo("Mesos slave lost: " + slaveId.getValue)
     executorTerminated(d, slaveId.getValue, "Mesos slave lost: " + slaveId.getValue)
+    slaveStatuses -= slaveId.getValue
   }
 
   override def executorLost(d: SchedulerDriver, e: ExecutorID, s: SlaveID, status: Int) {

@@ -103,7 +103,8 @@ class CoarseMesosSchedulerBackendSuite extends FunSuite with LocalSparkContext w
     mesosOffers2.add(createOffer(2, minMem, minCpu))
     backend.resourceOffers(driver, mesosOffers2)
     // Verify we didn't launch any new executor
-    assert(backend.slaveIdsWithTasks.size.equals(1))
+    assert(backend.slaveStatuses.size.equals(1))
+    assert(backend.slaveStatuses.values.iterator.next().taskRunning.equals(true))
     assert(backend.pendingRemovedSlaveIds.size.equals(1))
 
     EasyMock.verify(driver)
@@ -122,9 +123,9 @@ class CoarseMesosSchedulerBackendSuite extends FunSuite with LocalSparkContext w
 
     backend.doRequestTotalExecutors(2)
     backend.resourceOffers(driver, mesosOffers2)
-    assert(backend.slaveIdsWithTasks.size.equals(2))
+    assert(backend.slaveStatuses.size.equals(2))
     backend.slaveLost(driver, SlaveID.newBuilder().setValue("s1").build())
-    assert(backend.slaveIdsWithTasks.size.equals(1))
+    assert(backend.slaveStatuses.size.equals(1))
     assert(backend.pendingRemovedSlaveIds.size.equals(0))
 
     EasyMock.verify(driver)
