@@ -283,10 +283,12 @@ private[spark] class CoarseMesosSchedulerBackend(
 
         var minCpuRequired = 1
         var minMemRequired = MemoryUtils.calculateTotalMemory(sc)
+        var shuffleResourcesUsed = false
 
         if (!slaveStatuses.contains(slaveId) || !slaveStatuses(slaveId).executorRunning) {
           minCpuRequired += shuffleServiceCpu
           minMemRequired += shuffleServiceMem
+          shuffleResourcesUsed = true
         }
 
         if (taskIdToSlaveId.size < executorLimit.getOrElse(Int.MaxValue) &&
@@ -317,8 +319,14 @@ private[spark] class CoarseMesosSchedulerBackend(
               MemoryUtils.calculateTotalMemory(sc)))
           } else {
             slaveStatuses(slaveId) = SlaveStatus(true, true)
-            val taskCpus = cpusToUse - shuffleServiceCpu
-            val taskMem = mem - shuffleServiceMem
+
+            // Deduct the executor resources that the remains is for the task.
+            val (taskCpus, taskMem) = if (shuffleResourcesUsed) {
+              (cpusToUse - shuffleServiceCpu, mem - shuffleServiceMem)
+            } else {
+              (cpusToUse, mem)
+            }
+
             builder.setExecutor(
               ExecutorInfo.newBuilder()
                 .setExecutorId(ExecutorID.newBuilder().setValue(slaveId).build)
