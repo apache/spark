@@ -177,7 +177,6 @@ case class DescribeCommand(
     override val output: Seq[Attribute]) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    Row("# Registered as a temporary table", null, null) +:
-      child.output.map(field => Row(field.name, field.dataType.toString, null))
+    child.output.map(field => Row(field.name, field.dataType.toString, null))
   }
 }

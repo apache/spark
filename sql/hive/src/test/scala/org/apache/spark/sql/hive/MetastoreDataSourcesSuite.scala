@@ -51,6 +51,45 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
   }
 
+  test ("persistent JSON table with a user specified schema") {
+    sql(
+      """
+        |CREATE TABLE jsonTable (a string, b String)
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path 'src/test/resources/data/files/sample.json'
+        |)
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT * FROM jsonTable"),
+      jsonFile("src/test/resources/data/files/sample.json").collect().toSeq)
+
+  }
+
+  test ("persistent JSON table with a user specified schema with a subset of fields") {
+    // This works because JSON objects are self-describing and JSONRelation can get needed
+    // field values based on field names.
+    sql(
+      """
+        |CREATE TABLE jsonTable (b String)
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path 'src/test/resources/data/files/sample.json'
+        |)
+      """.stripMargin)
+
+    val expectedSchema = StructType(StructField("b", StringType, true) :: Nil)
+
+    assert(expectedSchema == table("jsonTable").schema)
+
+    checkAnswer(
+      sql("SELECT * FROM jsonTable"),
+      jsonFile("src/test/resources/data/files/sample.json").collect().map(
+        r => Seq(r.getString(1))).toSeq)
+
+  }
+
   test("resolve shortened provider names") {
     sql(
       """
@@ -106,19 +145,20 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       ("a", "b") :: Nil)
 
     FileUtils.deleteDirectory(tempDir)
-    sparkContext.parallelize(("a", "b", "c") :: Nil).toJSON.saveAsTextFile(tempDir.getCanonicalPath)
+    sparkContext.parallelize(("a1", "b1", "c1") :: Nil).toJSON.saveAsTextFile(tempDir.getCanonicalPath)
 
-    // Schema is cached so answer does not change.
+    // Schema is cached so the new column does not show. The updated values in existing columns
+    // will show.
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
-      ("a", "b") :: Nil)
+      ("a1", "b1") :: Nil)
 
     refreshTable("jsonTable")
 
     // Check that the refresh worked
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
-      ("a", "b", "c") :: Nil)
+      ("a1", "b1", "c1") :: Nil)
     FileUtils.deleteDirectory(tempDir)
   }
 
