@@ -67,7 +67,7 @@ import org.apache.spark.network.util.NettyUtils;
 public class TransportClient implements Closeable {
   private final Logger logger = LoggerFactory.getLogger(TransportClient.class);
 
-  public final Channel channel;
+  private final Channel channel;
   private final TransportResponseHandler handler;
 
   public TransportClient(Channel channel, TransportResponseHandler handler) {
