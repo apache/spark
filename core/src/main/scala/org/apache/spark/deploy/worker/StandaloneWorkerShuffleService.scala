@@ -53,8 +53,6 @@ class StandaloneWorkerShuffleService(sparkConf: SparkConf, securityManager: Secu
       require(server == null, "Shuffle server already started")
       logInfo(s"Starting shuffle service on port $port with useSasl = $useSasl")
       server = transportContext.createServer(port)
-    } else {
-      logInfo(s"Skip launching shuffle service as it's not enabled.")
     }
   }
 

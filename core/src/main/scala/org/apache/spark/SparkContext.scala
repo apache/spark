@@ -1003,7 +1003,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   @DeveloperApi
   override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
     assert(master.contains("mesos") || master.contains("yarn") || dynamicAllocationTesting,
-      "Requesting executors is currently only supported in YARN or Mesos mode")
+      "Requesting executors is currently only supported in YARN or Mesos coarse-grained mode")
     schedulerBackend match {
       case b: CoarseGrainedSchedulerBackend =>
         b.requestExecutors(numAdditionalExecutors)
