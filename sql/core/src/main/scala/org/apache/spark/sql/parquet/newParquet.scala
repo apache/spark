@@ -48,7 +48,7 @@ class DefaultSource extends SchemaRelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String],
-      schema: Option[StructType] = None): BaseRelation = {
+      schema: Option[StructType]): BaseRelation = {
     val path =
       parameters.getOrElse("path", sys.error("'path' must be specified for parquet tables."))
 

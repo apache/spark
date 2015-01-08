@@ -26,7 +26,7 @@ private[sql] class DefaultSource extends SchemaRelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String],
-      schema: Option[StructType] = None): BaseRelation = {
+      schema: Option[StructType]): BaseRelation = {
     val fileName = parameters.getOrElse("path", sys.error("Option 'path' not specified"))
     val samplingRatio = parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
 

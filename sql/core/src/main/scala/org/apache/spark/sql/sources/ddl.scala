@@ -64,14 +64,14 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
 
   // Data types.
   protected val STRING = Keyword("STRING")
-  protected val FLOAT = Keyword("FLOAT")
-  protected val INT = Keyword("INT")
-  protected val TINYINT = Keyword("TINYINT")
-  protected val SMALLINT = Keyword("SMALLINT")
-  protected val DOUBLE = Keyword("DOUBLE")
-  protected val BIGINT = Keyword("BIGINT")
   protected val BINARY = Keyword("BINARY")
   protected val BOOLEAN = Keyword("BOOLEAN")
+  protected val TINYINT = Keyword("TINYINT")
+  protected val SMALLINT = Keyword("SMALLINT")
+  protected val INT = Keyword("INT")
+  protected val BIGINT = Keyword("BIGINT")
+  protected val FLOAT = Keyword("FLOAT")
+  protected val DOUBLE = Keyword("DOUBLE")
   protected val DECIMAL = Keyword("DECIMAL")
   protected val DATE = Keyword("DATE")
   protected val TIMESTAMP = Keyword("TIMESTAMP")
@@ -105,8 +105,8 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
     CREATE ~ TEMPORARY ~ TABLE ~> ident
       ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
       case tableName ~ columns ~ provider ~ opts =>
-        val tblColumns = if(columns.isEmpty) Seq.empty else columns.get
-        CreateTableUsing(tableName, tblColumns, provider, opts)
+        val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
+        CreateTableUsing(tableName, userSpecifiedSchema, provider, opts)
     }
   )
 
@@ -184,7 +184,7 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
 
 private[sql] case class CreateTableUsing(
     tableName: String,
-    tableCols: Seq[StructField],
+    userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
@@ -203,16 +203,9 @@ private[sql] case class CreateTableUsing(
           .asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
           .createRelation(sqlContext, new CaseInsensitiveMap(options))
       case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
-        if(tableCols.isEmpty) {
-          dataSource
-            .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
-            .createRelation(sqlContext, new CaseInsensitiveMap(options))
-        } else {
-          dataSource
-            .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
-            .createRelation(
-              sqlContext, new CaseInsensitiveMap(options), Some(StructType(tableCols)))
-        }
+        dataSource
+          .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
+          .createRelation(sqlContext, new CaseInsensitiveMap(options), userSpecifiedSchema)
     }
 
     sqlContext.baseRelationToSchemaRDD(relation).registerTempTable(tableName)
