@@ -173,20 +173,9 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
       val logInfos = statusList
         .filter { entry =>
           try {
-            val isFinishedApplication =
-              if (isLegacyLogDirectory(entry)) {
-                fs.exists(new Path(entry.getPath(), APPLICATION_COMPLETE))
-              } else {
-                !entry.getPath().getName().endsWith(EventLoggingListener.IN_PROGRESS)
-              }
-
-            if (isFinishedApplication) {
-              val modTime = getModificationTime(entry)
-              newLastModifiedTime = math.max(newLastModifiedTime, modTime)
-              modTime >= lastModifiedTime
-            } else {
-              false
-            }
+            val modTime = getModificationTime(entry)
+            newLastModifiedTime = math.max(newLastModifiedTime, modTime)
+            modTime >= lastModifiedTime
           } catch {
             case e: AccessControlException =>
               // Do not use "logInfo" since these messages can get pretty noisy if printed on
@@ -204,7 +193,7 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
               None
           }
         }
-        .sortBy { info => -info.endTime }
+        .sortBy { info => (-info.endTime, -info.startTime) }
 
       lastModifiedTime = newLastModifiedTime
 
@@ -261,7 +250,8 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
         appListener.startTime.getOrElse(-1L),
         appListener.endTime.getOrElse(-1L),
         getModificationTime(eventLog),
-        appListener.sparkUser.getOrElse(NOT_STARTED))
+        appListener.sparkUser.getOrElse(NOT_STARTED),
+        isApplicationCompleted(eventLog))
     } finally {
       logInput.close()
     }
@@ -329,6 +319,17 @@ private[history] class FsHistoryProvider(conf: SparkConf) extends ApplicationHis
   /** Returns the system's mononotically increasing time. */
   private def getMonotonicTimeMs(): Long = System.nanoTime() / (1000 * 1000)
 
+  /**
+   * Return true when the application has completed.
+   */
+  private def isApplicationCompleted(entry: FileStatus): Boolean = {
+    if (isLegacyLogDirectory(entry)) {
+      fs.exists(new Path(entry.getPath(), APPLICATION_COMPLETE))
+    } else {
+      !entry.getPath().getName().endsWith(EventLoggingListener.IN_PROGRESS)
+    }
+  }
+
 }
 
 private object FsHistoryProvider {
@@ -342,5 +343,6 @@ private class FsApplicationHistoryInfo(
     startTime: Long,
     endTime: Long,
     lastUpdated: Long,
-    sparkUser: String)
-  extends ApplicationHistoryInfo(id, name, startTime, endTime, lastUpdated, sparkUser)
+    sparkUser: String,
+    completed: Boolean = true)
+  extends ApplicationHistoryInfo(id, name, startTime, endTime, lastUpdated, sparkUser, completed)

@@ -61,7 +61,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
   @volatile private var finished = false
-  @volatile private var finalStatus = FinalApplicationStatus.SUCCEEDED
+  @volatile private var finalStatus = getDefaultFinalStatus
   @volatile private var finalMsg: String = ""
   @volatile private var userClassThread: Thread = _
 
@@ -103,7 +103,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
             logInfo("Invoking sc stop from shutdown hook")
             sc.stop()
           }
-          val maxAppAttempts = client.getMaxRegAttempts(yarnConf)
+          val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
           val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
 
           if (!finished) {
@@ -151,6 +151,20 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           "Uncaught exception: " + e.getMessage())
     }
     exitCode
+  }
+
+  /**
+   * Set the default final application status for client mode to UNDEFINED to handle
+   * if YARN HA restarts the application so that it properly retries. Set the final
+   * status to SUCCEEDED in cluster mode to handle if the user calls System.exit
+   * from the application code.
+   */
+  final def getDefaultFinalStatus() = {
+    if (isDriver) {
+      FinalApplicationStatus.SUCCEEDED
+    } else {
+      FinalApplicationStatus.UNDEFINED
+    }
   }
 
   /**
@@ -418,12 +432,12 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     logInfo("Starting the user JAR in a separate Thread")
     System.setProperty("spark.executor.instances", args.numExecutors.toString)
 
-    val classpath = ClientBase.getUserClasspath(null, sparkConf)
+    val classpath = Client.getUserClasspath(null, sparkConf)
     val urls = classpath.map { entry =>
       new URL("file:" + new File(entry.getPath()).getAbsolutePath())
     }
     val userClassLoader =
-      if (ClientBase.isUserClassPathFirst(sparkConf, true)) {
+      if (Client.isUserClassPathFirst(sparkConf, true)) {
         new ChildExecutorURLClassLoader(urls, Utils.getContextOrSparkClassLoader)
       } else {
         new ExecutorURLClassLoader(urls, Utils.getContextOrSparkClassLoader)

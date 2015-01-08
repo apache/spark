@@ -26,11 +26,13 @@ import com.google.common.io.ByteStreams
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkSubmit._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ResetSystemProperties, Utils}
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
 
-class SparkSubmitSuite extends FunSuite with Matchers {
+// Note: this suite mixes in ResetSystemProperties because SparkSubmit.main() sets a bunch
+// of properties that neeed to be cleared after tests.
+class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties {
   def beforeAll() {
     System.setProperty("spark.testing", "true")
   }
@@ -291,6 +293,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
       "--master", "local",
+      "--conf", "spark.ui.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -305,6 +308,7 @@ class SparkSubmitSuite extends FunSuite with Matchers {
       "--name", "testApp",
       "--master", "local-cluster[2,1,512]",
       "--jars", jarsString,
+      "--conf", "spark.ui.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }

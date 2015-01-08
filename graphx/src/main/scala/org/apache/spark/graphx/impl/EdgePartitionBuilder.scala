@@ -129,44 +129,45 @@ private[impl] case class EdgeWithLocalIds[@specialized ED](
     srcId: VertexId, dstId: VertexId, localSrcId: Int, localDstId: Int, attr: ED)
 
 private[impl] object EdgeWithLocalIds {
-  implicit def lexicographicOrdering[ED] = new Ordering[EdgeWithLocalIds[ED]] {
-    override def compare(a: EdgeWithLocalIds[ED], b: EdgeWithLocalIds[ED]): Int = {
-      if (a.srcId == b.srcId) {
-        if (a.dstId == b.dstId) 0
-        else if (a.dstId < b.dstId) -1
+  implicit def lexicographicOrdering[ED]: Ordering[EdgeWithLocalIds[ED]] =
+    new Ordering[EdgeWithLocalIds[ED]] {
+      override def compare(a: EdgeWithLocalIds[ED], b: EdgeWithLocalIds[ED]): Int = {
+        if (a.srcId == b.srcId) {
+          if (a.dstId == b.dstId) 0
+          else if (a.dstId < b.dstId) -1
+          else 1
+        } else if (a.srcId < b.srcId) -1
         else 1
-      } else if (a.srcId < b.srcId) -1
-      else 1
-    }
-  }
-
-  private[graphx] def edgeArraySortDataFormat[ED]
-      = new SortDataFormat[EdgeWithLocalIds[ED], Array[EdgeWithLocalIds[ED]]] {
-    override def getKey(
-        data: Array[EdgeWithLocalIds[ED]], pos: Int): EdgeWithLocalIds[ED] = {
-      data(pos)
+      }
     }
 
-    override def swap(data: Array[EdgeWithLocalIds[ED]], pos0: Int, pos1: Int): Unit = {
-      val tmp = data(pos0)
-      data(pos0) = data(pos1)
-      data(pos1) = tmp
-    }
+  private[graphx] def edgeArraySortDataFormat[ED] = {
+    new SortDataFormat[EdgeWithLocalIds[ED], Array[EdgeWithLocalIds[ED]]] {
+      override def getKey(data: Array[EdgeWithLocalIds[ED]], pos: Int): EdgeWithLocalIds[ED] = {
+        data(pos)
+      }
 
-    override def copyElement(
-        src: Array[EdgeWithLocalIds[ED]], srcPos: Int,
-        dst: Array[EdgeWithLocalIds[ED]], dstPos: Int) {
-      dst(dstPos) = src(srcPos)
-    }
+      override def swap(data: Array[EdgeWithLocalIds[ED]], pos0: Int, pos1: Int): Unit = {
+        val tmp = data(pos0)
+        data(pos0) = data(pos1)
+        data(pos1) = tmp
+      }
 
-    override def copyRange(
-        src: Array[EdgeWithLocalIds[ED]], srcPos: Int,
-        dst: Array[EdgeWithLocalIds[ED]], dstPos: Int, length: Int) {
-      System.arraycopy(src, srcPos, dst, dstPos, length)
-    }
+      override def copyElement(
+          src: Array[EdgeWithLocalIds[ED]], srcPos: Int,
+          dst: Array[EdgeWithLocalIds[ED]], dstPos: Int) {
+        dst(dstPos) = src(srcPos)
+      }
 
-    override def allocate(length: Int): Array[EdgeWithLocalIds[ED]] = {
-      new Array[EdgeWithLocalIds[ED]](length)
+      override def copyRange(
+          src: Array[EdgeWithLocalIds[ED]], srcPos: Int,
+          dst: Array[EdgeWithLocalIds[ED]], dstPos: Int, length: Int) {
+        System.arraycopy(src, srcPos, dst, dstPos, length)
+      }
+
+      override def allocate(length: Int): Array[EdgeWithLocalIds[ED]] = {
+        new Array[EdgeWithLocalIds[ED]](length)
+      }
     }
   }
 }
