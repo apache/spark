@@ -22,7 +22,10 @@ import scala.util.parsing.combinator.syntactical.StandardTokenParsers
 import scala.util.parsing.combinator.PackratParsers
 
 import org.apache.spark.Logging
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.SqlLexical
 
@@ -61,14 +64,14 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
 
   // Data types.
   protected val STRING = Keyword("STRING")
-  protected val FLOAT = Keyword("FLOAT")
-  protected val INT = Keyword("INT")
-  protected val TINYINT = Keyword("TINYINT")
-  protected val SMALLINT = Keyword("SMALLINT")
-  protected val DOUBLE = Keyword("DOUBLE")
-  protected val BIGINT = Keyword("BIGINT")
   protected val BINARY = Keyword("BINARY")
   protected val BOOLEAN = Keyword("BOOLEAN")
+  protected val TINYINT = Keyword("TINYINT")
+  protected val SMALLINT = Keyword("SMALLINT")
+  protected val INT = Keyword("INT")
+  protected val BIGINT = Keyword("BIGINT")
+  protected val FLOAT = Keyword("FLOAT")
+  protected val DOUBLE = Keyword("DOUBLE")
   protected val DECIMAL = Keyword("DECIMAL")
   protected val DATE = Keyword("DATE")
   protected val TIMESTAMP = Keyword("TIMESTAMP")
@@ -102,8 +105,8 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
     CREATE ~ TEMPORARY ~ TABLE ~> ident
       ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
       case tableName ~ columns ~ provider ~ opts =>
-        val tblColumns = if(columns.isEmpty) Seq.empty else columns.get
-        CreateTableUsing(tableName, tblColumns, provider, opts)
+        val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
+        CreateTableUsing(tableName, userSpecifiedSchema, provider, opts)
     }
   )
 
@@ -176,6 +179,37 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected def cleanIdentifier(ident: String): String = ident match {
     case escapedIdentifier(i) => i
     case plainIdent => plainIdent
+  }
+}
+
+private[sql] case class CreateTableUsing(
+    tableName: String,
+    userSpecifiedSchema: Option[StructType],
+    provider: String,
+    options: Map[String, String]) extends RunnableCommand {
+
+  def run(sqlContext: SQLContext) = {
+    val loader = Utils.getContextOrSparkClassLoader
+    val clazz: Class[_] = try loader.loadClass(provider) catch {
+      case cnf: java.lang.ClassNotFoundException =>
+        try loader.loadClass(provider + ".DefaultSource") catch {
+          case cnf: java.lang.ClassNotFoundException =>
+            sys.error(s"Failed to load class for data source: $provider")
+        }
+    }
+    val relation = clazz.newInstance match {
+      case dataSource: org.apache.spark.sql.sources.RelationProvider  =>
+        dataSource
+          .asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
+          .createRelation(sqlContext, new CaseInsensitiveMap(options))
+      case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
+        dataSource
+          .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
+          .createRelation(sqlContext, new CaseInsensitiveMap(options), userSpecifiedSchema)
+    }
+
+    sqlContext.baseRelationToSchemaRDD(relation).registerTempTable(tableName)
+    Seq.empty
   }
 }
 
