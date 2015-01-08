@@ -45,10 +45,16 @@ if [%1] == [] goto continue
     set SPARK_SUBMIT_CLASSPATH=%2
   ) else if [%1] == [--driver-java-options] (
     set SPARK_SUBMIT_OPTS=%2
+  ) else if [%1] == [--master] (
+    set MASTER=%2
   )
   shift
 goto loop
 :continue
+
+if [%MASTER%] == [yarn-cluster] (
+  set SPARK_SUBMIT_DEPLOY_MODE=cluster
+)
 
 rem For client mode, the driver will be launched in the same JVM that launches
 rem SparkSubmit, so we may need to read the properties file for any extra class
