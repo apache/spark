@@ -46,16 +46,28 @@ class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll with Logging {
     javaHbaseCtx.sqlContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
     val d = javaHbaseCtx.sql("SELECT col1 FROM ta GROUP BY col1").collect()
     d.foreach(println)
+    assert(d.size == 14, s"aggregation with codegen test failed on size")
     javaHbaseCtx.sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
 
+
   test("dsl simple select") {
     val tableA = javaHbaseCtx.sql("SELECT * FROM ta").schemaRDD
+    assert(tableA.count() == 14, s"dsl simple select test failed on size")
+    checkAnswer(
+      tableA.where('col2 === 6).orderBy('col2.asc).select('col7),
+      Seq(Seq(-31))
+    )
     checkAnswer(
       tableA.where('col7 === 1).orderBy('col2.asc).select('col4),
       Seq(Seq(1))
     )
+    checkAnswer(
+      tableA.where('col4 === 512).orderBy('col2.asc).select('col2),
+      Seq(Seq(13))
+    )
   }
+
 
   test("metadata is propagated correctly") {
     val tableA = sql("SELECT col7, col1, col3 FROM ta")
@@ -85,9 +97,22 @@ class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll with Logging {
       .schemaRDD
     val b = sql("SHOW TABLES")
 
-    a.collect().foreach{case a: Row => logInfo(a.toString())}
-    b.collect().foreach{case a: Row => logInfo(a.toString())}
+    val collectionA = a.collect();
+    collectionA.foreach { case a: Row => logInfo(a.toString())}
+    assert(collectionA.size == 2, s"Query HBase native command execution result test failed on size")
+    assert(collectionA(0).getString(0) == "ta", s"Query HBase native command execution result test failed on table listing")
 
-    javaHbaseCtx.sql("describe ta").collect().foreach{case a: org.apache.spark.sql.api.java.Row => logInfo(a.toString())}
+    val collectionB = b.collect();
+    collectionB.foreach { case a: Row => logInfo(a.toString())}
+    assert(collectionB.size == 2, s"Query HBase native command execution result test failed on size")
+    assert(collectionB(1).getString(0) == "tb", s"Query HBase native command execution result test failed on table listing")
+
+    val tblDesc = javaHbaseCtx.sql("describe ta").collect()
+    tblDesc.foreach { case a: org.apache.spark.sql.api.java.Row => logInfo(a.toString())}
+    assert(tblDesc(0).getString(0) == "col1", s"HBase native command execution result test failed on table description")
+    assert(tblDesc(2).getString(1) == "ShortType", s"HBase native command execution result test failed on table description")
+    assert(tblDesc(4).getString(2) == "NON KEY COLUMN", s"HBase native command execution result test failed on table description")
+    assert(tblDesc(5).getString(3) == "cf2", s"HBase native command execution result test failed on table description")
+    assert(tblDesc(6).getString(2) == "KEY COLUMN", s"HBase native command execution result test failed on table description")
   }
 }
