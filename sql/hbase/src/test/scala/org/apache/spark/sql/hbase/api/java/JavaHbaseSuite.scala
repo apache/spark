@@ -20,7 +20,7 @@ package org.apache.spark.sql.hbase.api.java
 import org.apache.spark.Logging
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql._
-import org.apache.spark.sql.hbase.{HBaseSQLContext, HBaseMainTest, QueryTest}
+import org.apache.spark.sql.hbase.{HBaseMainTest, HBaseSQLContext, QueryTest}
 import org.scalatest.BeforeAndAfterAll
 
 // Implicits
