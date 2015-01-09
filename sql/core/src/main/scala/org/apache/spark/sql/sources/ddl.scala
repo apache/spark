@@ -121,7 +121,7 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
 
   protected lazy val column: Parser[StructField] =
     ident ~ dataType ^^ { case columnName ~ typ =>
-      StructField(cleanIdentifier(columnName), typ)
+      StructField(columnName, typ)
     }
 
   protected lazy val primitiveType: Parser[DataType] =
@@ -157,7 +157,7 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
 
   protected lazy val structField: Parser[StructField] =
     ident ~ ":" ~ dataType ^^ {
-      case fieldName ~ _ ~ tpe => StructField(cleanIdentifier(fieldName), tpe, nullable = true)
+      case fieldName ~ _ ~ tpe => StructField(fieldName, tpe, nullable = true)
     }
 
   protected lazy val structType: Parser[DataType] =
@@ -173,13 +173,6 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
     mapType |
     structType |
     primitiveType
-
-  protected val escapedIdentifier = "`([^`]+)`".r
-  /** Strips backticks from ident if present */
-  protected def cleanIdentifier(ident: String): String = ident match {
-    case escapedIdentifier(i) => i
-    case plainIdent => plainIdent
-  }
 }
 
 private[sql] case class CreateTableUsing(
