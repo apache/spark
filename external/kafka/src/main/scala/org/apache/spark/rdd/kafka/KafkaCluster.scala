@@ -32,7 +32,7 @@ import kafka.consumer.{ConsumerConfig, SimpleConsumer}
   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form
   */
 class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
-  import KafkaCluster.Err
+  import KafkaCluster.{Err, LeaderOffset}
 
   val seedBrokers: Array[(String, Int)] =
     kafkaParams.get("metadata.broker.list")
@@ -131,18 +131,18 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
 
   def getLatestLeaderOffsets(
     topicAndPartitions: Set[TopicAndPartition]
-  ): Either[Err, Map[TopicAndPartition, Long]] =
+  ): Either[Err, Map[TopicAndPartition, LeaderOffset]] =
     getLeaderOffsets(topicAndPartitions, OffsetRequest.LatestTime)
 
   def getEarliestLeaderOffsets(
     topicAndPartitions: Set[TopicAndPartition]
-  ): Either[Err, Map[TopicAndPartition, Long]] =
+  ): Either[Err, Map[TopicAndPartition, LeaderOffset]] =
     getLeaderOffsets(topicAndPartitions, OffsetRequest.EarliestTime)
 
   def getLeaderOffsets(
     topicAndPartitions: Set[TopicAndPartition],
     before: Long
-  ): Either[Err, Map[TopicAndPartition, Long]] =
+  ): Either[Err, Map[TopicAndPartition, LeaderOffset]] =
     getLeaderOffsets(topicAndPartitions, before, 1).right.map { r =>
       r.map { kv =>
         // mapValues isnt serializable, see SI-7005
@@ -159,11 +159,11 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     topicAndPartitions: Set[TopicAndPartition],
     before: Long,
     maxNumOffsets: Int
-  ): Either[Err, Map[TopicAndPartition, Seq[Long]]] = {
+  ): Either[Err, Map[TopicAndPartition, Seq[LeaderOffset]]] = {
     findLeaders(topicAndPartitions).right.flatMap { tpToLeader =>
       val leaderToTp: Map[(String, Int), Seq[TopicAndPartition]] = flip(tpToLeader)
       val leaders = leaderToTp.keys
-      var result = Map[TopicAndPartition, Seq[Long]]()
+      var result = Map[TopicAndPartition, Seq[LeaderOffset]]()
       val errs = new Err
       withBrokers(leaders, errs) { consumer =>
         val needed: Seq[TopicAndPartition] = leaderToTp((consumer.host, consumer.port))
@@ -178,7 +178,9 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
           respMap.get(tp).foreach { errAndOffsets =>
             if (errAndOffsets.error == ErrorMapping.NoError) {
               if (errAndOffsets.offsets.nonEmpty) {
-                result += tp -> errAndOffsets.offsets
+                result += tp -> errAndOffsets.offsets.map { off =>
+                  LeaderOffset(consumer.host, consumer.port, off)
+                }
               } else {
                 errs.append(new Exception(
                   s"Empty offsets for ${tp}, is ${before} before log beginning?"))
@@ -296,6 +298,8 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
 
 object KafkaCluster {
   type Err = ArrayBuffer[Throwable]
+
+  case class LeaderOffset(host: String, port: Int, offset: Long)
 
   /** Make a consumer config without requiring group.id or zookeeper.connect,
     * since communicating with brokers also needs common settings such as timeout

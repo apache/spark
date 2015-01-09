@@ -31,16 +31,24 @@ import kafka.message.{MessageAndMetadata, MessageAndOffset}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
 
+
 case class KafkaRDDPartition(
   override val index: Int,
+  /** kafka topic name */
   topic: String,
+  /** kafka partition id */
   partition: Int,
+  /** inclusive starting offset */
   fromOffset: Long,
-  untilOffset: Long
+  /** exclusive ending offset */
+  untilOffset: Long,
+  /** preferred kafka host, i.e. the leader at the time the rdd was created */
+  host: String,
+  /** preferred kafka host's port */
+  port: Int
 ) extends Partition
 
 /** A batch-oriented interface for consuming from Kafka.
-  * Each given Kafka topic/partition corresponds to an RDD partition.
   * Starting and ending offsets are specified in advance,
   * so that you can control exactly-once semantics.
   * For an easy interface to Kafka-managed offsets,
@@ -49,10 +57,8 @@ case class KafkaRDDPartition(
   * configuration parameters</a>.
   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-  * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
-  *  starting point of the batch
-  * @param untilOffsets per-topic/partition Kafka offsets defining the (exclusive)
-  *  ending point of the batch
+  * @param rddPartitions Each RDD partition corresponds to a
+  *   range of offsets for a given Kafka topic/partition
   * @param messageHandler function for translating each message into the desired type
   */
 class KafkaRDD[
@@ -63,20 +69,31 @@ class KafkaRDD[
   R: ClassTag](
     sc: SparkContext,
     val kafkaParams: Map[String, String],
-    val fromOffsets: Map[TopicAndPartition, Long],
-    val untilOffsets: Map[TopicAndPartition, Long],
+    val rddPartitions: Traversable[KafkaRDDPartition],
     messageHandler: MessageAndMetadata[K, V] => R
   ) extends RDD[R](sc, Nil) with Logging {
 
-  assert(fromOffsets.keys == untilOffsets.keys,
-    "Must provide both from and until offsets for each topic/partition")
+  /** per-topic/partition Kafka offsets defining the (inclusive) starting point of the batch */
+  def fromOffsets: Map[TopicAndPartition, Long] =
+    rddPartitions.map { kr =>
+      TopicAndPartition(kr.topic, kr.partition) -> kr.fromOffset
+    }.toMap
 
-  override def getPartitions: Array[Partition] = fromOffsets.zipWithIndex.map { kvi =>
-    val ((tp, from), index) = kvi
-    new KafkaRDDPartition(index, tp.topic, tp.partition, from, untilOffsets(tp))
-  }.toArray
+  /** per-topic/partition Kafka offsets defining the (exclusive) ending point of the batch */
+  def untilOffsets: Map[TopicAndPartition, Long] =
+    rddPartitions.map { kr =>
+      TopicAndPartition(kr.topic, kr.partition) -> kr.untilOffset
+    }.toMap
 
-  override def compute(thePart: Partition, context: TaskContext) = {
+  override def getPartitions: Array[Partition] = rddPartitions.toArray
+
+  override def getPreferredLocations(thePart: Partition): Seq[String] = {
+    val part = thePart.asInstanceOf[KafkaRDDPartition]
+    // TODO is additional hostname resolution necessary here
+    Seq(part.host)
+  }
+
+  override def compute(thePart: Partition, context: TaskContext): Iterator[R] = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
     if (part.fromOffset >= part.untilOffset) {
       log.warn("Beginning offset is same or after ending offset " +
@@ -86,25 +103,37 @@ class KafkaRDD[
       new NextIterator[R] {
         context.addTaskCompletionListener{ context => closeIfNeeded() }
 
-        val kc = new KafkaCluster(kafkaParams)
         log.info(s"Computing topic ${part.topic}, partition ${part.partition} " +
           s"offsets ${part.fromOffset} -> ${part.untilOffset}")
+
+        val kc = new KafkaCluster(kafkaParams)
         val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
           .newInstance(kc.config.props)
           .asInstanceOf[Decoder[K]]
         val valueDecoder = classTag[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
           .newInstance(kc.config.props)
           .asInstanceOf[Decoder[V]]
-        val consumer: SimpleConsumer = kc.connectLeader(part.topic, part.partition).fold(
-          errs => throw new Exception(
-            s"Couldn't connect to leader for topic ${part.topic} ${part.partition}: " +
-              errs.mkString("\n")),
-          consumer => consumer
-        )
+        val consumer = connectLeader
         var requestOffset = part.fromOffset
         var iter: Iterator[MessageAndOffset] = null
 
-        def handleErr(resp: FetchResponse) {
+        // TODO broken until SPARK-4014 is resolved and attemptId / attemptNumber is meaningful.
+        // The idea is to use the provided preferred host, except on task retry atttempts,
+        // to minimize number of kafka metadata requests
+        private def connectLeader: SimpleConsumer = {
+          if (context.attemptId > 0) {
+            kc.connectLeader(part.topic, part.partition).fold(
+              errs => throw new Exception(
+                s"Couldn't connect to leader for topic ${part.topic} ${part.partition}: " +
+                  errs.mkString("\n")),
+              consumer => consumer
+            )
+          } else {
+            kc.connect(part.host, part.port)
+          }
+        }
+
+        private def handleErr(resp: FetchResponse) {
           if (resp.hasError) {
             val err = resp.errorCode(part.topic, part.partition)
             if (err == ErrorMapping.LeaderNotAvailableCode ||
@@ -159,4 +188,42 @@ class KafkaRDD[
     }
   }
 
+}
+
+object KafkaRDD {
+  import KafkaCluster.LeaderOffset
+
+  /**
+    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
+    * configuration parameters</a>.
+    *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
+    *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+    * @param fromOffsets per-topic/partition Kafka offsets defining the (inclusive)
+    *  starting point of the batch
+    * @param untilOffsets per-topic/partition Kafka offsets defining the (exclusive)
+    *  ending point of the batch
+    * @param messageHandler function for translating each message into the desired type
+    */
+  def apply[
+    K: ClassTag,
+    V: ClassTag,
+    U <: Decoder[_]: ClassTag,
+    T <: Decoder[_]: ClassTag,
+    R: ClassTag](
+      sc: SparkContext,
+      kafkaParams: Map[String, String],
+      fromOffsets: Map[TopicAndPartition, Long],
+      untilOffsets: Map[TopicAndPartition, LeaderOffset],
+      messageHandler: MessageAndMetadata[K, V] => R
+  ): KafkaRDD[K, V, U, T, R] = {
+    assert(fromOffsets.keys == untilOffsets.keys,
+      "Must provide both from and until offsets for each topic/partition")
+
+    val partitions  = fromOffsets.zipWithIndex.map { case ((tp, from), index) =>
+      val lo = untilOffsets(tp)
+      new KafkaRDDPartition(index, tp.topic, tp.partition, from, lo.offset, lo.host, lo.port)
+    }
+
+    new KafkaRDD[K, V, U, T, R](sc, kafkaParams, partitions, messageHandler)
+  }
 }

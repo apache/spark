@@ -27,6 +27,7 @@ import kafka.serializer.Decoder
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.kafka.{KafkaCluster, KafkaRDD}
+import org.apache.spark.rdd.kafka.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
 
@@ -76,7 +77,7 @@ class DeterministicKafkaInputDStream[
   private var currentOffsets = fromOffsets
 
   @tailrec
-  private def latestLeaderOffsets(retries: Int): Map[TopicAndPartition, Long] = {
+  private def latestLeaderOffsets(retries: Int): Map[TopicAndPartition, LeaderOffset] = {
     val o = kc.getLatestLeaderOffsets(currentOffsets.keySet)
     // Either.fold would confuse @tailrec, do it manually
     if (o.isLeft) {
@@ -93,20 +94,21 @@ class DeterministicKafkaInputDStream[
     }
   }
 
-  private def clamp(leaderOffsets: Map[TopicAndPartition, Long]): Map[TopicAndPartition, Long] = {
+  private def clamp(
+    leaderOffsets: Map[TopicAndPartition, LeaderOffset]): Map[TopicAndPartition, LeaderOffset] = {
     maxMessagesPerPartition.map { mmp =>
-      leaderOffsets.map { kv =>
-        kv._1 -> Math.min(currentOffsets(kv._1) + mmp, kv._2)
+      leaderOffsets.map { case (tp, lo) =>
+        tp -> lo.copy(offset = Math.min(currentOffsets(tp) + mmp, lo.offset))
       }
     }.getOrElse(leaderOffsets)
   }
 
   override def compute(validTime: Time): Option[KafkaRDD[K, V, U, T, R]] = {
     val untilOffsets = clamp(latestLeaderOffsets(maxRetries))
-    val rdd = new KafkaRDD[K, V, U, T, R](
+    val rdd = KafkaRDD[K, V, U, T, R](
       context.sparkContext, kafkaParams, currentOffsets, untilOffsets, messageHandler)
 
-    currentOffsets = untilOffsets
+    currentOffsets = untilOffsets.map(kv => kv._1 -> kv._2.offset)
     Some(rdd)
   }
 

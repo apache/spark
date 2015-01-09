@@ -77,10 +77,13 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
     for {
       topicPartitions <- kc.getPartitions(topics).right.toOption
       from <- kc.getConsumerOffsets(groupId, topicPartitions).right.toOption.orElse(
-        kc.getEarliestLeaderOffsets(topicPartitions).right.toOption)
+        kc.getEarliestLeaderOffsets(topicPartitions).right.toOption.map { offs =>
+          offs.map(kv => kv._1 -> kv._2.offset)
+        }
+      )
       until <- kc.getLatestLeaderOffsets(topicPartitions).right.toOption
     } yield {
-      new KafkaRDD[String, String, StringDecoder, StringDecoder, String](
+      KafkaRDD[String, String, StringDecoder, StringDecoder, String](
         sc, kc.kafkaParams, from, until, mmd => s"${mmd.offset} ${mmd.message}")
     }
   }
