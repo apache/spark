@@ -141,7 +141,8 @@ object SparkSubmit {
       case (MESOS, CLUSTER) =>
         printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
       case (STANDALONE, CLUSTER) if args.isPython =>
-        printErrorAndExit("Standalone-Cluster deploy mode is currently not supported for python applications.")
+        printErrorAndExit("Standalone-Cluster deploy mode is currently not supported" +
+          "for python applications.")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
       case (_, CLUSTER) if isSqlShell(args.mainClass) =>
@@ -167,7 +168,7 @@ object SparkSubmit {
       }
     }
 
-    //In yarn-cluster mode for a python app, add primary Resource and pyFiles to files
+    // In yarn-cluster mode for a python app, add primary Resource and pyFiles to files
     // that can be distributed with the job
     if (args.isPython && deployMode == CLUSTER) {
       args.files = mergeFileLists(args.files, args.primaryResource)
@@ -276,7 +277,7 @@ object SparkSubmit {
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
     if (isYarnCluster) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
-      if (args.isPython) {//yarn-cluster mode for python application
+      if (args.isPython) {// yarn-cluster mode for python application
       val primaryResourceLocalPath = new Path(args.primaryResource)
         childArgs += ("--primaryResource", primaryResourceLocalPath.getName)
         val pyFilesLocalNames:String = if (args.pyFiles != null) {
