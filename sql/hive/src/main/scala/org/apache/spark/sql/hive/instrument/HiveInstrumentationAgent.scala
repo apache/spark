@@ -28,9 +28,6 @@ import java.util.HashMap
 import org.apache.hadoop.hive.shims.ShimLoader
 import sun.misc.Unsafe
 
-/**
- *
- */
 object HiveInstrumentationAgent {
   var latch = new AtomicBoolean(false)
   val unsafe = {
@@ -40,14 +37,9 @@ object HiveInstrumentationAgent {
   }
 
   private val pool = ClassPool.getDefault();
-
   private val newClass = pool.get("org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge23")
   private val oldClass = pool.get("org.apache.hadoop.hive.thrift.HadoopThriftAuthBridge20S")
 
-  println("replaced")
-  /**
-   *
-   */
   def instrument = {
     if (ShimLoader.getHadoopShims.isSecurityEnabled && ShimLoader.getMajorVersion == "0.23")  {
       if (!latch.getAndSet(true)) {
@@ -57,7 +49,6 @@ object HiveInstrumentationAgent {
             this.swapMethodBody(targetMethod)
           }
         }
-        println("getting byte code");
         val scBytes = this.oldClass.toBytecode()
         unsafe.defineClass(null, scBytes, 0, scBytes.length,
           this.getClass.getClassLoader(), this.getClass.getProtectionDomain())
@@ -65,9 +56,6 @@ object HiveInstrumentationAgent {
     }
   }
 
-  /**
-   *
-   */
   private def swapMethodBody(targetMethod: CtMethod) {
     val desc = targetMethod.getMethodInfo().getDescriptor()
     try {

@@ -44,14 +44,12 @@ class HadoopThriftAuthBridge23 extends HadoopThriftAuthBridge20S {
   override def getHadoopSaslProperties(conf: Configuration): Map[String, String] =
   {
     if (!HadoopThriftAuthBridge23.latch.getAndSet(true)) {
-      println("initializing HadoopThriftAuthBridge23")
       try {
         HadoopThriftAuthBridge23.SASL_PROPERTIES_RESOLVER_CLASS =
           Class.forName(HadoopThriftAuthBridge23.SASL_PROP_RES_CLASSNAME);
       } catch {
         case e =>
-        case e => e.printStackTrace();
-          throw e
+          throw new IllegalStateException("Error finding SaslPropertiesResolver", e);
       }
 
       if (HadoopThriftAuthBridge23.SASL_PROPERTIES_RESOLVER_CLASS != null) {
@@ -64,9 +62,8 @@ class HadoopThriftAuthBridge23 extends HadoopThriftAuthBridge20S {
           HadoopThriftAuthBridge23.GET_DEFAULT_PROP_METHOD = HadoopThriftAuthBridge23
             .SASL_PROPERTIES_RESOLVER_CLASS.getMethod("getDefaultProperties")
         } catch {
-          case e => e.printStackTrace();
-            throw e
-          // this must be hadoop 2.4 , where getDefaultProperties was protected
+          case e =>
+            throw new IllegalStateException("Error finding method getDefaultProperties", e);
         }
       }
 
@@ -84,7 +81,6 @@ class HadoopThriftAuthBridge23 extends HadoopThriftAuthBridge20S {
         }
       }
     }
-    println("Instrumented method")
     if (HadoopThriftAuthBridge23.SASL_PROPS_FIELD != null) {
       // hadoop 2.4 and earlier way of finding the sasl property settings
       // Initialize the SaslRpcServer to ensure QOP parameters are read from
