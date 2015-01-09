@@ -30,6 +30,7 @@ import org.apache.hadoop.hive.metastore.TableType
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table, HiveException}
+import org.apache.hadoop.hive.ql.metadata.InvalidTableException
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
@@ -61,7 +62,11 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     val tableIdent = processTableIdentifier(tableIdentifier)
     val (databaseName, tblName) =
       (tableIdent.lift(1).getOrElse(hive.sessionState.getCurrentDatabase), tableIdent.head)
-    client.getTable(databaseName, tblName) != null
+    try {
+      client.getTable(databaseName, tblName) != null
+    } catch {
+      case ie: InvalidTableException => false
+    }
   }
 
   def lookupRelation(
