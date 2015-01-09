@@ -104,6 +104,9 @@ class HBaseBasicOperationSuite extends QueryTest with BeforeAndAfterAll with Log
 
   test("Select test 4 (join)") {
     assert(sql( """SELECT ta.col2 FROM ta join tb on ta.col4=tb.col7""").count == 2)
+    assert(sql( """SELECT * FROM ta FULL OUTER JOIN tb WHERE tb.col7 = 1""").count == 14)
+    assert(sql( """SELECT * FROM ta LEFT JOIN tb WHERE tb.col7 = 1""").count == 14)
+    assert(sql( """SELECT * FROM ta RIGHT JOIN tb WHERE tb.col7 = 1""").count == 14)
   }
 
   test("Alter Add column and Alter Drop column") {
