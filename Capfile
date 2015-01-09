@@ -9,15 +9,13 @@ set :shared_conf_path, "/u/apps/spark/shared/conf"
 set :gateway, nil
 set :keep_releases, 5
 
-MAINTENANCE = (11..15).map {|i| "dn%02d.chi.shopify.com" % i } # Node is up but should not be part of the production cluster
-LOAD_TESTING = (42..44).map {|i| "dn%02d.chi.shopify.com" % i }
-DECOMISSIONED = ["dn37.chi.shopify.com", "dn40.chi.shopify.com", "dn09.chi.shopify.com", "dn46.chi.shopify.com", "dn17.chi.shopify.com"] # Node is down don't try to send code
-BROKEN = MAINTENANCE + DECOMISSIONED
+DATANODES = (2..47).map {|i| "dn%02d.chi.shopify.com" % i }
+OTHERNODES = ["hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reports-reportify-etl3.chi.shopify.com", "reports-reportify-skydb4.chi.shopify.com", "platfora2.chi.shopify.com"]
+BROKEN = ["dn16.chi.shopify.com"] # Node is down don't try to send code
 
 task :production do
-  role :app, *((2..47).map {|i| "dn%02d.chi.shopify.com" % i } - (BROKEN + LOAD_TESTING))
+  role :app, *(DATANODES + OTHERNODES - BROKEN)
   role :history, "hadoop-rm.chi.shopify.com"
-  role :code, "hadoop-etl1.chi.shopify.com", "spark-etl1.chi.shopify.com", "reports-reportify-etl3.chi.shopify.com", "reports-reportify-skydb4.chi.shopify.com", "platfora2.chi.shopify.com"
   role :uploader, "spark-etl1.chi.shopify.com"
 end
 
