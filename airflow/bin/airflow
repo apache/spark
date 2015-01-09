@@ -19,6 +19,7 @@ import argparse
 mark_success_help = "Mark jobs as succeeded without running them"
 subdir_help = "File location or directory from which to look for the dag"
 
+
 def backfill(args):
     logging.basicConfig(level=logging.INFO, format=settings.SIMPLE_LOG_FORMAT)
     dagbag = DagBag(args.subdir)
@@ -86,9 +87,11 @@ def run(args):
         force=args.force,
         ignore_dependencies=args.ignore_dependencies)
 
+
 def list_dags(args):
     dagbag = DagBag()
     print("\n".join(sorted(dagbag.dags)))
+
 
 def list_tasks(args):
     dagbag = DagBag()
@@ -100,6 +103,7 @@ def list_tasks(args):
     else:
         tasks = sorted([t.task_id for t in dag.tasks])
         print("\n".join(sorted(tasks)))
+
 
 def test(args):
     log = logging.getLogger()
@@ -117,6 +121,7 @@ def test(args):
     task = dag.get_task(task_id=args.task_id)
     ti = TaskInstance(task, args.execution_date)
     ti.run(force=True, ignore_dependencies=True)
+
 
 def clear(args):
     logging.basicConfig(level=logging.INFO, format=settings.SIMPLE_LOG_FORMAT)
@@ -198,6 +203,26 @@ def serve_logs(args):
     print(conf.get('core', 'BASE_LOG_FOLDER'))
     flask_app.run(host='0.0.0.0', port=8990, debug=True)
 
+def serve_logs(args):
+    print("Starting flask")
+    import flask
+    flask_app = flask.Flask(__name__)
+    @flask_app.route('/log/<path:filename>')
+    def serve_logs(filename):
+        conf.get('core', 'BASE_LOG_FOLDER')
+        print filename
+        return flask.send_from_directory(
+            conf.get('core', 'BASE_LOG_FOLDER'), 
+            filename,
+            mimetype="application/json",
+            as_attachment=False)
+    print(conf.get('core', 'BASE_LOG_FOLDER'))
+    WORKER_LOG_SERVER_PORT = \
+        int(conf.get('celery', 'WORKER_LOG_SERVER_PORT'))
+    flask_app.run(
+        host='0.0.0.0', port=WORKER_LOG_SERVER_PORT, debug=True)
+
+
 def worker(args):
     import subprocess
     sp = subprocess.Popen("airflow serve_logs", shell=True)
@@ -205,6 +230,7 @@ def worker(args):
     from airflow.executors.celery_executor import app as celery_app
     celery_app.start()
     sp.kill()
+
 
 def initdb(args):
 
