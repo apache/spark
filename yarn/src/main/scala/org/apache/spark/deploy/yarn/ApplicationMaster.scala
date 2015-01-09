@@ -245,12 +245,14 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         ApplicationMaster.EXIT_SC_NOT_INITED,
         "Timed out waiting for SparkContext.")
     } else {
+      actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
+        conf = sparkConf, securityManager = securityMgr)._1
       val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
         SparkEnv.driverActorSystemName,
         sc.getConf.get("spark.driver.host"),
         sc.getConf.get("spark.driver.port"),
         YarnSchedulerBackend.ACTOR_NAME)
-      actor = sc.env.actorSystem.actorOf(Props(new AMActor(driverUrl, true)), name = "YarnAM")
+      actor = actorSystem.actorOf(Props(new AMActor(driverUrl, true)), name = "YarnAM")
       registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       userClassThread.join()
     }
