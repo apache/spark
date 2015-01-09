@@ -98,143 +98,145 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-server</artifactId>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-testing-util</artifactId>
+      <version>${hbase.version}</version>
+      <scope>${hbase.deps.scope}</scope>
+      <exclusions>
+        <exclusion>
+          <!-- SPARK-4455 -->
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-annotations</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.jruby</groupId>
+          <artifactId>jruby-complete</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-testing-util</artifactId>
-        <version>${hbase.version}</version>
-        <exclusions>
-          <exclusion>
-            <!-- SPARK-4455 -->
-            <groupId>org.apache.hbase</groupId>
-            <artifactId>hbase-annotations</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.jruby</groupId>
-            <artifactId>jruby-complete</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-protocol</artifactId>
-        <version>${hbase.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-common</artifactId>
-        <version>${hbase.version}</version>
-        <exclusions>
-          <exclusion>
-            <!-- SPARK-4455 -->
-            <groupId>org.apache.hbase</groupId>
-            <artifactId>hbase-annotations</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-client</artifactId>
-        <version>${hbase.version}</version>
-        <exclusions>
-          <exclusion>
-            <!-- SPARK-4455 -->
-            <groupId>org.apache.hbase</groupId>
-            <artifactId>hbase-annotations</artifactId>
-          </exclusion>
-         <exclusion>
-          <groupId>io.netty</groupId>
-          <artifactId>netty</artifactId>
-         </exclusion>
-       </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-server</artifactId>
-        <version>${hbase.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-core</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-client</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-mapreduce-client-core</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-auth</artifactId>
-          </exclusion>
-          <exclusion>
-            <!-- SPARK-4455 -->
-            <groupId>org.apache.hbase</groupId>
-            <artifactId>hbase-annotations</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-annotations</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.hadoop</groupId>
-            <artifactId>hadoop-hdfs</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.hbase</groupId>
-            <artifactId>hbase-hadoop1-compat</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-math</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey</groupId>
-            <artifactId>jersey-core</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey</groupId>
-            <artifactId>jersey-server</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey</groupId>
-            <artifactId>jersey-core</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>com.sun.jersey</groupId>
-            <artifactId>jersey-json</artifactId>
-          </exclusion>
-          <exclusion>
-            <!-- hbase uses v2.4, which is better, but ...-->
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-hadoop-compat</artifactId>
-        <version>${hbase.version}</version>
-      </dependency>
-      <dependency>
-        <groupId>org.apache.hbase</groupId>
-        <artifactId>hbase-hadoop-compat</artifactId>
-        <version>${hbase.version}</version>
-        <type>test-jar</type>
-        <scope>test</scope>
-      </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-protocol</artifactId>
+      <version>${hbase.version}</version>
+      <scope>${hbase.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-common</artifactId>
+      <version>${hbase.version}</version>
+      <scope>${hbase.deps.scope}</scope>
+      <exclusions>
+        <exclusion>
+          <!-- SPARK-4455 -->
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-annotations</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-client</artifactId>
+      <version>${hbase.version}</version>
+      <scope>${hbase.deps.scope}</scope>
+      <exclusions>
+        <exclusion>
+          <!-- SPARK-4455 -->
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-annotations</artifactId>
+        </exclusion>
+       <exclusion>
+        <groupId>io.netty</groupId>
+        <artifactId>netty</artifactId>
+       </exclusion>
+     </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-server</artifactId>
+      <version>${hbase.version}</version>
+      <scope>${hbase.deps.scope}</scope>
+      <exclusions>
+        <exclusion>
+          <!-- SPARK-4455 -->
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-annotations</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-client</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-mapreduce-client-jobclient</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-mapreduce-client-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-auth</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-annotations</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-hdfs</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.hbase</groupId>
+          <artifactId>hbase-hadoop1-compat</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.apache.commons</groupId>
+          <artifactId>commons-math</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.sun.jersey</groupId>
+          <artifactId>jersey-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.slf4j</groupId>
+          <artifactId>slf4j-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.sun.jersey</groupId>
+          <artifactId>jersey-server</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.sun.jersey</groupId>
+          <artifactId>jersey-core</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.sun.jersey</groupId>
+          <artifactId>jersey-json</artifactId>
+        </exclusion>
+        <exclusion>
+          <!-- hbase uses v2.4, which is better, but ...-->
+          <groupId>commons-io</groupId>
+          <artifactId>commons-io</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-hadoop-compat</artifactId>
+      <version>${hbase.version}</version>
+      <scope>${hbase.deps.scope}</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-hadoop-compat</artifactId>
+      <version>${hbase.version}</version>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-math3</artifactId>
@@ -308,31 +310,6 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
-        <configuration>
-          <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${project.build.directory}/scala-${scala.binary.version}/spark-examples-${project.version}-hadoop${hadoop.version}.jar</outputFile>
-          <artifactSet>
-            <includes>
-              <include>*:*</include>
-            </includes>
-          </artifactSet>
-          <filters>
-            <filter>
-              <artifact>com.google.guava:guava</artifact>
-              <excludes>
-                <exclude>com/google/common/base/Optional*</exclude>
-              </excludes>
-            </filter>
-            <filter>
-              <artifact>*:*</artifact>
-              <excludes>
-                <exclude>META-INF/*.SF</exclude>
-                <exclude>META-INF/*.DSA</exclude>
-                <exclude>META-INF/*.RSA</exclude>
-              </excludes>
-            </filter>
-          </filters>
-        </configuration>
         <executions>
           <execution>
             <phase>package</phase>
@@ -340,6 +317,34 @@
               <goal>shade</goal>
             </goals>
             <configuration>
+            <shadedArtifactAttached>false</shadedArtifactAttached>
+            <outputFile>${project.build.directory}/scala-${scala.binary.version}/spark-examples-${project.version}-hadoop${hadoop.version}.jar</outputFile>
+            <artifactSet>
+              <includes>
+                <include>*:*</include>
+              </includes>
+            </artifactSet>
+            <filters>
+              <filter>
+                <artifact>com.google.guava:guava</artifact>
+                <excludes>
+                  <!--
+                    Exclude all Guava classes so they're picked up from the main assembly. The
+                    dependency still needs to be compile-scoped so that the relocation below
+                    works.
+                  -->
+                  <exclude>**</exclude>
+                </excludes>
+              </filter>
+              <filter>
+                <artifact>*:*</artifact>
+                <excludes>
+                  <exclude>META-INF/*.SF</exclude>
+                  <exclude>META-INF/*.DSA</exclude>
+                  <exclude>META-INF/*.RSA</exclude>
+                </excludes>
+              </filter>
+            </filters>
               <relocations>
                 <relocation>
                   <pattern>com.google</pattern>
@@ -411,7 +416,7 @@
       </properties>
     </profile>
     <profile>
-      <!-- We add a source directory specific to Scala 2.10 since Kafka 
+      <!-- We add a source directory specific to Scala 2.10 since Kafka
            only works with it -->
       <id>scala-2.10</id>
       <activation>
@@ -448,6 +453,38 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+
+    <!-- Profiles that disable inclusion of certain dependencies. -->
+    <profile>
+      <id>flume-provided</id>
+      <properties>
+        <flume.deps.scope>provided</flume.deps.scope>
+      </properties>
+    </profile>
+    <profile>
+      <id>hadoop-provided</id>
+      <properties>
+        <hadoop.deps.scope>provided</hadoop.deps.scope>
+      </properties>
+    </profile>
+    <profile>
+      <id>hbase-provided</id>
+      <properties>
+        <hbase.deps.scope>provided</hbase.deps.scope>
+      </properties>
+    </profile>
+    <profile>
+      <id>hive-provided</id>
+      <properties>
+        <hive.deps.scope>provided</hive.deps.scope>
+      </properties>
+    </profile>
+    <profile>
+      <id>parquet-provided</id>
+      <properties>
+        <parquet.deps.scope>provided</parquet.deps.scope>
+      </properties>
     </profile>
   </profiles>
 </project>

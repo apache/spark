@@ -29,7 +29,7 @@
   <artifactId>spark-mllib_2.10</artifactId>
   <properties>
     <sbt.project.name>mllib</sbt.project.name>
-  </properties>  
+  </properties>
   <packaging>jar</packaging>
   <name>Spark Project ML Library</name>
   <url>http://spark.apache.org/</url>
@@ -49,10 +49,6 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-server</artifactId>
     </dependency>
     <dependency>
       <groupId>org.jblas</groupId>
