@@ -77,7 +77,8 @@ class HBaseSQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("aggregation with codegen") {
     val originalValue = codegenEnabled
     setConf(SQLConf.CODEGEN_ENABLED, "true")
-    sql("SELECT k FROM testData GROUP BY k").collect()
+    val result = sql("SELECT k FROM testData GROUP BY k").collect()
+    assert(result.size == testData.collect().size, s"aggregation with codegen test failed on size")
     setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
 
@@ -927,7 +928,7 @@ class HBaseSQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("SPARK-3483 Special chars in column names") {
     val dt = sparkContext.parallelize(Seq("""{"k?number1": "value1", "k.number2": "value2"}"""))
     jsonRDD(dt).registerTempTable("records")
-    sql("SELECT `k?number1` FROM records")
+    checkAnswer(sql("SELECT `k?number1` FROM records"), "value1")
   }
 
   test("SPARK-3814 Support Bitwise & operator") {
