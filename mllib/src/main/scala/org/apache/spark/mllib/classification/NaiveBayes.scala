@@ -93,10 +93,10 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
   def run(data: RDD[LabeledPoint]) = {
     val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
       val values = v match {
-        case sv: SparseVector =>
-          sv.values
-        case dv: DenseVector =>
-          dv.values
+        case SparseVector(size, indices, values) =>
+          values
+        case DenseVector(values) =>
+          values
       }
       if (!values.forall(_ >= 0.0)) {
         throw new SparkException(s"Naive Bayes requires nonnegative feature values but found $v.")

@@ -680,16 +680,16 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         val withSort =
           (orderByClause, sortByClause, distributeByClause, clusterByClause) match {
             case (Some(totalOrdering), None, None, None) =>
-              Sort(totalOrdering.getChildren.map(nodeToSortOrder), withHaving)
+              Sort(totalOrdering.getChildren.map(nodeToSortOrder), true, withHaving)
             case (None, Some(perPartitionOrdering), None, None) =>
-              SortPartitions(perPartitionOrdering.getChildren.map(nodeToSortOrder), withHaving)
+              Sort(perPartitionOrdering.getChildren.map(nodeToSortOrder), false, withHaving)
             case (None, None, Some(partitionExprs), None) =>
               Repartition(partitionExprs.getChildren.map(nodeToExpr), withHaving)
             case (None, Some(perPartitionOrdering), Some(partitionExprs), None) =>
-              SortPartitions(perPartitionOrdering.getChildren.map(nodeToSortOrder),
+              Sort(perPartitionOrdering.getChildren.map(nodeToSortOrder), false,
                 Repartition(partitionExprs.getChildren.map(nodeToExpr), withHaving))
             case (None, None, None, Some(clusterExprs)) =>
-              SortPartitions(clusterExprs.getChildren.map(nodeToExpr).map(SortOrder(_, Ascending)),
+              Sort(clusterExprs.getChildren.map(nodeToExpr).map(SortOrder(_, Ascending)), false,
                 Repartition(clusterExprs.getChildren.map(nodeToExpr), withHaving))
             case (None, None, None, None) => withHaving
             case _ => sys.error("Unsupported set of ordering / distribution clauses.")

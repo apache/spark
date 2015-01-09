@@ -204,19 +204,15 @@ class SqlParser extends AbstractSparkSQLParser {
     )
 
   protected lazy val sortType: Parser[LogicalPlan => LogicalPlan] =
-    ( ORDER ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, l) }
-    | SORT ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => SortPartitions(o, l) }
+    ( ORDER ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, true, l) }
+    | SORT ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, false, l) }
     )
 
   protected lazy val ordering: Parser[Seq[SortOrder]] =
-    ( rep1sep(singleOrder, ",")
-    | rep1sep(expression, ",") ~ direction.? ^^ {
-        case exps ~ d => exps.map(SortOrder(_, d.getOrElse(Ascending)))
+    ( rep1sep(expression ~ direction.? , ",") ^^ {
+        case exps  => exps.map(pair => SortOrder(pair._1, pair._2.getOrElse(Ascending)))
       }
     )
-
-  protected lazy val singleOrder: Parser[SortOrder] =
-    expression ~ direction ^^ { case e ~ o => SortOrder(e, o) }
 
   protected lazy val direction: Parser[SortDirection] =
     ( ASC  ^^^ Ascending
