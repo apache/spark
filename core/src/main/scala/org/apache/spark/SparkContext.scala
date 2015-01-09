@@ -64,7 +64,7 @@ import org.apache.spark.util._
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
  */
-class SparkContext(config: SparkConf) extends Logging {
+class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationClient {
 
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -172,6 +172,9 @@ class SparkContext(config: SparkConf) extends Logging {
   private[spark] def this(master: String, appName: String, sparkHome: String, jars: Seq[String]) =
     this(master, appName, sparkHome, jars, Map(), Map())
 
+  // log out Spark Version in Spark driver log
+  logInfo(s"Running Spark version $SPARK_VERSION")
+  
   private[spark] val conf = config.clone()
   conf.validateSettings()
 
@@ -226,7 +229,7 @@ class SparkContext(config: SparkConf) extends Logging {
   // An asynchronous listener bus for Spark events
   private[spark] val listenerBus = new LiveListenerBus
 
-  conf.set("spark.executor.id", "driver")
+  conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.createDriverEnv(conf, isLocal, listenerBus)
@@ -326,8 +329,13 @@ class SparkContext(config: SparkConf) extends Logging {
   try {
     dagScheduler = new DAGScheduler(this)
   } catch {
-    case e: Exception => throw
-      new SparkException("DAGScheduler cannot be initialized due to %s".format(e.getMessage))
+    case e: Exception => {
+      try {
+        stop()
+      } finally {
+        throw new SparkException("Error while constructing DAGScheduler", e)
+      }
+    }
   }
 
   // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
@@ -344,6 +352,8 @@ class SparkContext(config: SparkConf) extends Logging {
   // The metrics system for Driver need to be set spark.app.id to app ID.
   // So it should start after we get app ID from the task scheduler and set spark.app.id.
   metricsSystem.start()
+  // Attach the driver metrics servlet handler to the web ui after the metrics system is started.
+  metricsSystem.getServletHandlers.foreach(handler => ui.foreach(_.attachHandler(handler)))
 
   // Optionally log Spark events
   private[spark] val eventLogger: Option[EventLoggingListener] = {
@@ -363,7 +373,7 @@ class SparkContext(config: SparkConf) extends Logging {
     if (dynamicAllocationEnabled) {
       assert(master.contains("yarn") || dynamicAllocationTesting,
         "Dynamic allocation of executors is currently only supported in YARN mode")
-      Some(new ExecutorAllocationManager(this))
+      Some(new ExecutorAllocationManager(this, listenerBus, conf))
     } else {
       None
     }
@@ -992,7 +1002,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def requestExecutors(numAdditionalExecutors: Int): Boolean = {
+  override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
     assert(master.contains("yarn") || dynamicAllocationTesting,
       "Requesting executors is currently only supported in YARN mode")
     schedulerBackend match {
@@ -1010,7 +1020,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def killExecutors(executorIds: Seq[String]): Boolean = {
+  override def killExecutors(executorIds: Seq[String]): Boolean = {
     assert(master.contains("yarn") || dynamicAllocationTesting,
       "Killing executors is currently only supported in YARN mode")
     schedulerBackend match {
@@ -1028,7 +1038,7 @@ class SparkContext(config: SparkConf) extends Logging {
    * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  def killExecutor(executorId: String): Boolean = killExecutors(Seq(executorId))
+  override def killExecutor(executorId: String): Boolean = super.killExecutor(executorId)
 
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
@@ -1703,19 +1713,19 @@ object SparkContext extends Logging {
 
   // Implicit conversions to common Writable types, for saveAsSequenceFile
 
-  implicit def intToIntWritable(i: Int) = new IntWritable(i)
+  implicit def intToIntWritable(i: Int): IntWritable = new IntWritable(i)
 
-  implicit def longToLongWritable(l: Long) = new LongWritable(l)
+  implicit def longToLongWritable(l: Long): LongWritable = new LongWritable(l)
 
-  implicit def floatToFloatWritable(f: Float) = new FloatWritable(f)
+  implicit def floatToFloatWritable(f: Float): FloatWritable = new FloatWritable(f)
 
-  implicit def doubleToDoubleWritable(d: Double) = new DoubleWritable(d)
+  implicit def doubleToDoubleWritable(d: Double): DoubleWritable = new DoubleWritable(d)
 
-  implicit def boolToBoolWritable (b: Boolean) = new BooleanWritable(b)
+  implicit def boolToBoolWritable (b: Boolean): BooleanWritable = new BooleanWritable(b)
 
-  implicit def bytesToBytesWritable (aob: Array[Byte]) = new BytesWritable(aob)
+  implicit def bytesToBytesWritable (aob: Array[Byte]): BytesWritable = new BytesWritable(aob)
 
-  implicit def stringToText(s: String) = new Text(s)
+  implicit def stringToText(s: String): Text = new Text(s)
 
   private implicit def arrayToArrayWritable[T <% Writable: ClassTag](arr: Traversable[T])
     : ArrayWritable = {

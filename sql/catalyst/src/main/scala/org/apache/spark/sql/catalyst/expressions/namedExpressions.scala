@@ -187,3 +187,8 @@ case class AttributeReference(
 
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
 }
+
+object VirtualColumn {
+  val groupingIdName = "grouping__id"
+  def newGroupingId = AttributeReference(groupingIdName, IntegerType, false)()
+}

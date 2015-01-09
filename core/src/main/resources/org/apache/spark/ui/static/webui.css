@@ -169,6 +169,16 @@ span.additional-metric-title {
   display: inline-block;
 }
 
+.version {
+  line-height: 30px;
+  vertical-align: bottom;
+  font-size: 12px;
+  padding: 0;
+  margin: 0;
+  font-weight: bold;
+  color: #777;
+}
+
 /* Hide all additional metrics by default. This is done here rather than using JavaScript to
  * avoid slow page loads for stage pages with large numbers (e.g., thousands) of tasks. */
 .scheduler_delay, .deserialization_time, .serialization_time, .getting_result_time {

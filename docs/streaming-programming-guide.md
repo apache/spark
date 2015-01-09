@@ -75,7 +75,7 @@ main entry point for all streaming functionality. We create a local StreamingCon
 {% highlight scala %}
 import org.apache.spark._
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.StreamingContext._ // not necessary in Spark 1.3+
 
 // Create a local StreamingContext with two working thread and batch interval of 1 second.
 // The master requires 2 cores to prevent from a starvation scenario.
@@ -107,7 +107,7 @@ each line will be split into multiple words and the stream of words is represent
 `words` DStream.  Next, we want to count these words.
 
 {% highlight scala %}
-import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.StreamingContext._ // not necessary in Spark 1.3+
 // Count each word in each batch
 val pairs = words.map(word => (word, 1))
 val wordCounts = pairs.reduceByKey(_ + _)
