@@ -41,10 +41,7 @@ private[spark] abstract class YarnSchedulerBackend(
 
   protected var totalExpectedExecutors = 0
 
-  private val yarnSchedulerActor: ActorRef =
-    actorSystem.actorOf(
-      Props(new YarnSchedulerActor),
-      name = YarnSchedulerBackend.ACTOR_NAME)
+  protected val yarnSchedulerActor: ActorRef = _
 
   private implicit val askTimeout = AkkaUtils.askTimeout(sc.conf)
 
@@ -94,12 +91,14 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * An actor that communicates with the ApplicationMaster.
    */
-  private class YarnSchedulerActor extends Actor {
+  protected class YarnSchedulerActor(isDriver: Boolean)  extends Actor {
     private var amActor: Option[ActorRef] = None
 
     override def preStart(): Unit = {
       // Listen for disassociation events
-      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+      if (!isDriver) {
+        context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+      }
     }
 
     override def receive = {

@@ -19,6 +19,8 @@ package org.apache.spark.scheduler.cluster
 
 import scala.collection.mutable.ArrayBuffer
 
+import akka.actor.Props
+
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
 
 import org.apache.spark.{SparkException, Logging, SparkContext}
@@ -41,6 +43,8 @@ private[spark] class YarnClientSchedulerBackend(
    */
   override def start() {
     super.start()
+    yarnSchedulerActor = sc.env.actorSystem.actorOf(Props(new YarnSchedulerActor(false)),
+      name = YarnSchedulerBackend.ACTOR_NAME)
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort

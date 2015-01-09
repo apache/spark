@@ -245,6 +245,12 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         ApplicationMaster.EXIT_SC_NOT_INITED,
         "Timed out waiting for SparkContext.")
     } else {
+      val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
+        SparkEnv.driverActorSystemName,
+        sc.getConf.get("spark.driver.host"),
+        sc.getConf.get("spark.driver.port"),
+        YarnSchedulerBackend.ACTOR_NAME)
+      actor = sc.env.actorSystem.actorOf(Props(new AMActor(driverUrl, true)), name = "YarnAM")
       registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       userClassThread.join()
     }
@@ -404,7 +410,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       driverHost,
       driverPort.toString,
       YarnSchedulerBackend.ACTOR_NAME)
-    actorSystem.actorOf(Props(new AMActor(driverUrl)), name = "YarnAM")
+    actorSystem.actorOf(Props(new AMActor(driverUrl, false)), name = "YarnAM")
   }
 
   /** Add the Yarn IP filter that is required for properly securing the UI. */
@@ -464,7 +470,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   /**
    * Actor that communicates with the driver in client deploy mode.
    */
-  private class AMActor(driverUrl: String) extends Actor {
+  private class AMActor(driverUrl: String, isDriver: Boolean) extends Actor {
     var driver: ActorSelection = _
 
     override def preStart() = {
@@ -474,7 +480,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       // we can monitor Lifecycle Events.
       driver ! "Hello"
       driver ! RegisterClusterManager
-      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+      if (isDriver) {
+        context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
+      }
     }
 
     override def receive = {
