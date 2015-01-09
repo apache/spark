@@ -636,6 +636,10 @@
             <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
             <argLine>-Xms64m -Xmx3g</argLine>
             <stderr />
+            <systemProperties>
+              <spark.testing>true</spark.testing>
+              <spark.ui.enabled>false</spark.ui.enabled>
+            </systemProperties>
           </configuration>
           <executions>
             <execution>
