@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
+import org.apache.spark.sql.sources.CreateTableUsing
 import org.apache.spark.sql.{SQLContext, SchemaRDD, Strategy}
 
 import scala.collection.JavaConversions._
@@ -218,6 +219,10 @@ private[hive] trait HiveStrategies {
           case o: LogicalPlan =>
             ExecutedCommand(DescribeCommand(planLater(o), describe.output)) :: Nil
         }
+
+      case CreateTableUsing(tableName, provider, false, options) =>
+        ExecutedCommand(
+          CreateMetastoreDataSource(tableName, provider, options)) :: Nil
 
       case _ => Nil
     }
