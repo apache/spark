@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors, DenseVector, DenseMatrix, BLAS}
 import org.apache.spark.mllib.stat.impl.MultivariateGaussian
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.util.Utils
 
 /**
  * This class performs expectation maximization for multivariate Gaussian
@@ -45,10 +46,11 @@ import org.apache.spark.mllib.util.MLUtils
 class GaussianMixtureEM private (
     private var k: Int, 
     private var convergenceTol: Double, 
-    private var maxIterations: Int) extends Serializable {
+    private var maxIterations: Int,
+    private var seed: Long) extends Serializable {
   
   /** A default instance, 2 Gaussians, 100 iterations, 0.01 log-likelihood threshold */
-  def this() = this(2, 0.01, 100)
+  def this() = this(2, 0.01, 100, Utils.random.nextLong())
   
   // number of samples per cluster to use when initializing Gaussians
   private val nSamples = 5
@@ -100,11 +102,21 @@ class GaussianMixtureEM private (
     this
   }
   
-  /** Return the largest change in log-likelihood at which convergence is
-   *  considered to have occurred.
+  /**
+   * Return the largest change in log-likelihood at which convergence is
+   * considered to have occurred.
    */
   def getConvergenceTol: Double = convergenceTol
-  
+
+  /** Set the random seed */
+  def setSeed(seed: Long): this.type = {
+    this.seed = seed
+    this
+  }
+
+  /** Return the random seed */
+  def getSeed: Long = seed
+
   /** Perform expectation maximization */
   def run(data: RDD[Vector]): GaussianMixtureModel = {
     val sc = data.sparkContext
@@ -113,7 +125,7 @@ class GaussianMixtureEM private (
     val breezeData = data.map(u => u.toBreeze.toDenseVector).cache()
     
     // Get length of the input vectors
-    val d = breezeData.first.length 
+    val d = breezeData.first().length
     
     // Determine initial weights and corresponding Gaussians.
     // If the user supplied an initial GMM, we use those values, otherwise
@@ -126,7 +138,7 @@ class GaussianMixtureEM private (
       })
       
       case None => {
-        val samples = breezeData.takeSample(true, k * nSamples, scala.util.Random.nextInt)
+        val samples = breezeData.takeSample(withReplacement = true, k * nSamples, seed)
         (Array.fill(k)(1.0 / k), Array.tabulate(k) { i => 
           val slice = samples.view(i * nSamples, (i + 1) * nSamples)
           new MultivariateGaussian(vectorMean(slice), initCovariance(slice)) 

@@ -35,12 +35,14 @@ class GMMExpectationMaximizationSuite extends FunSuite with MLlibTestSparkContex
     val Ew = 1.0
     val Emu = Vectors.dense(5.0, 10.0)
     val Esigma = Matrices.dense(2, 2, Array(2.0 / 3.0, -2.0 / 3.0, -2.0 / 3.0, 2.0 / 3.0))
-    
-    val gmm = new GaussianMixtureEM().setK(1).run(data)
-                
-    assert(gmm.weight(0) ~== Ew absTol 1E-5)
-    assert(gmm.mu(0) ~== Emu absTol 1E-5)
-    assert(gmm.sigma(0) ~== Esigma absTol 1E-5)
+
+    val seeds = Array(314589, 29032897, 50181, 494821, 4660)
+    seeds.foreach { seed =>
+      val gmm = new GaussianMixtureEM().setK(1).setSeed(seed).run(data)
+      assert(gmm.weight(0) ~== Ew absTol 1E-5)
+      assert(gmm.mu(0) ~== Emu absTol 1E-5)
+      assert(gmm.sigma(0) ~== Esigma absTol 1E-5)
+    }
   }
   
   test("two clusters") {
