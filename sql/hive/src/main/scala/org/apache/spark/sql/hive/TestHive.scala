@@ -102,7 +102,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     new this.QueryExecution { val logical = plan }
 
   /** Fewer partitions to speed up testing. */
-  setConf(SQLConf.SHUFFLE_PARTITIONS, "5")
+  private[sql] override val conf: SQLConf = new SQLConf {
+    override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+  }
 
   /**
    * Returns the value of specified environmental variable as a [[java.io.File]] after checking

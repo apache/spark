@@ -29,5 +29,7 @@ object TestSQLContext
       new SparkConf().set("spark.sql.testkey", "true"))) {
 
   /** Fewer partitions to speed up testing. */
-  setConf(SQLConf.SHUFFLE_PARTITIONS, "5")
+  private[sql] override val conf: SQLConf = new SQLConf {
+    override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+  }
 }
