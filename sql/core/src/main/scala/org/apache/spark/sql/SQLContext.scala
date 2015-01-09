@@ -59,7 +59,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   self =>
 
-  private[sql] val conf: SQLConf = new SQLConf
+  // Note that this is a lazy val so we can override the default value in subclasses.
+  private[sql] lazy val conf: SQLConf = new SQLConf
 
   /** Set Spark SQL configuration properties. */
   def setConf(props: Properties): Unit = conf.setConf(props)

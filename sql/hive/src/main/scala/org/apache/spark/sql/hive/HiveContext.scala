@@ -71,11 +71,9 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
-  private[sql] override val conf: SQLConf = new SQLConf {
+  private[sql] override lazy val conf: SQLConf = new SQLConf {
     override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
   }
-
-  setConf(SQLConf.DIALECT, "hiveql")
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe

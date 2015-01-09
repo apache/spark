@@ -102,7 +102,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     new this.QueryExecution { val logical = plan }
 
   /** Fewer partitions to speed up testing. */
-  private[sql] override val conf: SQLConf = new SQLConf {
+  private[sql] override lazy val conf: SQLConf = new SQLConf {
     override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
   }
 
