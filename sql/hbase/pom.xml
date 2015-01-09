@@ -396,7 +396,7 @@
     </profile>
 
 
-   <profile>
+    <profile>
       <id>hadoop-2.2</id>
       <properties>
         <hadoop.version>2.2.0</hadoop.version>
@@ -1024,13 +1024,34 @@
           </execution>
         </executions>
       </plugin>
- 
+
       <plugin>
         <groupId>org.scalatest</groupId>
         <artifactId>scalatest-maven-plugin</artifactId>
+        <configuration>
+          <!-- Specially disable assertions since some Hive tests fail them -->
+          <argLine>-da -Xmx3g -XX:MaxPermSize=${MaxPermGen} -XX:ReservedCodeCacheSize=512m</argLine>
+        </configuration>
       </plugin>
-
       <!-- Deploy datanucleus jars to the spark/lib_managed/jars directory -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <executions>
+          <execution>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>test-jar-on-test-compile</id>
+            <phase>test-compile</phase>
+            <goals>
+              <goal>test-jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>
