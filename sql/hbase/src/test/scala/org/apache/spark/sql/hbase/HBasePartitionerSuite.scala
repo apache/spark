@@ -27,29 +27,30 @@ import org.apache.spark.sql.hbase.util.InsertWappers._
 import scala.collection.mutable.ArrayBuffer
 
 class HBasePartitionerSuite extends HBaseIntegrationTestBase {
-//  test("test hbase partitioner") {
-//    val data = (1 to 40).map { r =>
-//      val rowKey = Bytes.toBytes(r)
-//      val rowKeyWritable = new ImmutableBytesWritableWrapper(rowKey)
-//      (rowKeyWritable, r)
-//    }
-//    val rdd = sc.parallelize(data, 4)
-//    val splitKeys = (1 to 40).filter(_ % 5 == 0).filter(_ != 40).map { r =>
-//      new ImmutableBytesWritableWrapper(Bytes.toBytes(r))
-//    }
-//    val partitioner = new HBasePartitioner(splitKeys.toArray)
-//    val shuffled =
-//      new ShuffledRDD[ImmutableBytesWritableWrapper, Int, Int](rdd, partitioner)
-//
-//    val groups = shuffled.mapPartitionsWithIndex { (idx, iter) =>
-//      iter.map(x => (x._2, idx))
-//    }.collect()
-//    assert(groups.size == 40)
-//    assert(groups.map(_._2).toSet.size == 8)
-//    groups.foreach { r =>
-//      assert(r._1 > 5 * r._2 && r._1 <= 5 * (1 + r._2))
-//    }
-//  }
+  test("test hbase partitioner") {
+    val data = (1 to 40).map { r =>
+      val rowKey = Bytes.toBytes(r)
+      val rowKeyWritable = new ImmutableBytesWritableWrapper(rowKey)
+      (rowKeyWritable, r)
+    }
+    val rdd = sc.parallelize(data, 4)
+    val splitKeys = (1 to 40).filter(_ % 5 == 0).filter(_ != 40).map { r =>
+      new ImmutableBytesWritableWrapper(Bytes.toBytes(r))
+    }
+    val partitioner = new HBasePartitioner(splitKeys.toArray)
+    val shuffled =
+      new ShuffledRDD[ImmutableBytesWritableWrapper, Int, Int](rdd, partitioner)
+
+    val groups = shuffled.mapPartitionsWithIndex { (idx, iter) =>
+      iter.map(x => (x._2, idx))
+    }.collect()
+    assert(groups.size == 40)
+    assert(groups.map(_._2).toSet.size == 8)
+    groups.foreach { r =>
+      assert(r._1 > 5 * r._2 && r._1 <= 5 * (1 + r._2))
+    }
+  }
+
 
   test("row key encode / decode") {
     val rowkey = HBaseKVHelper.encodingRawKeyColumns(
