@@ -75,7 +75,8 @@ object MLUtils {
       .filter(line => !(line.isEmpty || line.startsWith("#")))
       .map { line =>
         val items = line.split(' ')
-        val label = items.head.toDouble
+        val label =
+          if(items.head.toDouble < 0.0) 0.0 else items.head.toDouble // labels should be nonnegative
         val (indices, values) = items.tail.filter(_.nonEmpty).map { item =>
           val indexAndValue = item.split(':')
           val index = indexAndValue(0).toInt - 1 // Convert 1-based indices to 0-based.
