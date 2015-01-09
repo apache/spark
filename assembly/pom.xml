@@ -354,5 +354,25 @@
         </dependency>
       </dependencies>
     </profile>
+
+    <!-- Profiles that disable inclusion of certain dependencies. -->
+    <profile>
+      <id>hadoop-provided</id>
+      <properties>
+        <hadoop.deps.scope>provided</hadoop.deps.scope>
+      </properties>
+    </profile>
+    <profile>
+      <id>hive-provided</id>
+      <properties>
+        <hive.deps.scope>provided</hive.deps.scope>
+      </properties>
+    </profile>
+    <profile>
+      <id>parquet-provided</id>
+      <properties>
+        <parquet.deps.scope>provided</parquet.deps.scope>
+      </properties>
+    </profile>
   </profiles>
 </project>

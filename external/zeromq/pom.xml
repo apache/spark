@@ -44,7 +44,6 @@
     <dependency>
       <groupId>${akka.group}</groupId>
       <artifactId>akka-zeromq_${scala.binary.version}</artifactId>
-      <version>${akka.version}</version>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
