@@ -200,7 +200,7 @@ with Logging {
   }
 
   def addRowVals(put: Put, rowValue: Any, rowType: DataType,
-                 colFamily: String, colQulifier: String) = {
+                 colFamily: String, colQualifier: String) = {
     val bos = new ByteArrayOutputStream()
     val dos = new DataOutputStream(bos)
     val bu = BytesUtils.create(rowType)
@@ -215,7 +215,7 @@ with Logging {
       case ShortType => dos.write(bu.toBytes(rowValue.asInstanceOf[Short]))
       case _ => throw new Exception("Unsupported HBase SQL Data Type")
     }
-    put.add(Bytes.toBytes(colFamily), Bytes.toBytes(colQulifier), bos.toByteArray)
+    put.add(Bytes.toBytes(colFamily), Bytes.toBytes(colQualifier), bos.toByteArray)
   }
 
   def testHBaseScanner() = {
