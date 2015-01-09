@@ -26,7 +26,16 @@ import shutil
 import sys
 from tempfile import NamedTemporaryFile
 import time
-import unittest
+
+if sys.version_info[:2] <= (2, 6):
+    try:
+        import unittest2 as unittest
+    except ImportError:
+        sys.stderr.write('Please install unittest2 to test with Python 2.6 or earlier')
+        sys.exit(1)
+else:
+    import unittest
+
 
 from pyspark.context import SparkContext
 from pyspark.files import SparkFiles
