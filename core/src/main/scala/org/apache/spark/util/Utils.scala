@@ -1706,11 +1706,11 @@ private[spark] object Utils extends Logging {
 
   /**
    * Attempt to start a service on the given port, or fail after a number of attempts.
-   * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
+   * Each subsequent attempt uses random + the port used in the previous attempt 
+   * (unless the port is 0).
    *
    * @param startPort The initial port to start the service on.
    * @param maxRetries Maximum number of retries to attempt.
-   *                   A value of 3 means attempting ports n, n+1, n+2, and n+3, for example.
    * @param startService Function to start service on a given port.
    *                     This is expected to throw java.net.BindException on port collision.
    */
@@ -1720,13 +1720,13 @@ private[spark] object Utils extends Logging {
       serviceName: String = "",
       maxRetries: Int = portMaxRetries): (T, Int) = {
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
-    for (offset <- 0 to maxRetries) {
+    for (retry <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
       val tryPort = if (startPort == 0) {
         startPort
       } else {
         // If the new port wraps around, do not try a privilege port
-        ((startPort + offset - 1024) % (65536 - 1024)) + 1024
+        ((startPort + random.nextInt(65536) - 1024) % (65536 - 1024)) + 1024
       }
       try {
         val (service, port) = startService(tryPort)
@@ -1734,7 +1734,7 @@ private[spark] object Utils extends Logging {
         return (service, port)
       } catch {
         case e: Exception if isBindCollision(e) =>
-          if (offset >= maxRetries) {
+          if (retry >= maxRetries) {
             val exceptionMessage =
               s"${e.getMessage}: Service$serviceString failed after $maxRetries retries!"
             val exception = new BindException(exceptionMessage)
