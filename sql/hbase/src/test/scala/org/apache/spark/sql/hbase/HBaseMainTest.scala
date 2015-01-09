@@ -189,20 +189,6 @@ with Logging {
     htable.close()
   }
 
-  def printResults(msg: String, results: SchemaRDD) =
-    results match {
-      case rdd: TestingSchemaRDD =>
-        val data = rdd.collectPartitions()
-        logInfo(s"For test [$msg]: Received data length=${data(0).length}: ${
-          data(0).mkString("RDD results: {", "],[", "}")
-        }")
-      case _ =>
-        val data = results.collect()
-        logInfo(s"For test [$msg]: Received data length=${data.length}: ${
-          data.mkString("RDD results: {", "],[", "}")
-        }")
-    }
-
   def makeRowKey(row: Row, dataTypeOfKeys: Seq[DataType]) = {
     val rawKeyCol = dataTypeOfKeys.zipWithIndex.map {
       case (dataType, index) =>

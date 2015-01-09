@@ -17,18 +17,17 @@
 
 package org.apache.spark.sql.hbase
 
-import org.apache.log4j.Logger
+import org.apache.spark.Logging
 import org.apache.spark.sql.SQLContext
 import org.scalatest.ConfigMap
 
 class QueriesSuiteBase() extends HBaseIntegrationTestBase(
   System.getProperty("spark.testing.use-external-hbase", "false") == "false")
-    with CreateTableAndLoadData {
+    with CreateTableAndLoadData with Logging {
   self: HBaseIntegrationTestBase =>
 
   val tabName = DefaultTableName
   var AvoidByteDataTypeBug = true
-  private val logger = Logger.getLogger(getClass.getName)
 
   override protected def beforeAll(configMap: ConfigMap): Unit = {
     super.beforeAll(configMap)
@@ -36,7 +35,7 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase(
   }
 
   def runQuery(sql: String) = {
-    logger.info(sql)
+    logInfo(sql)
     val execQuery1 = hbc.sql(sql)
     execQuery1.collect()
   }
@@ -58,11 +57,11 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase(
       yield compareWithTol(result1(rx).toSeq, exparr(rx), s"Row$rx failed")
     }.foldLeft(true) { case (res1, newres) => res1 && newres}
 
-    println(s"$sql came back with ${result1.size} results")
-    println(result1.mkString)
+    logInfo(s"$sql came back with ${result1.size} results")
+    logInfo(result1.mkString)
     assert(res, "One or more rows did not match expected")
 
-    println(s"Test $testName completed successfully")
+    logInfo(s"Test $testName completed successfully")
   }
 
   val CompareTol = 1e-6
@@ -75,15 +74,15 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase(
         case (a: Float, e: Float) =>
           Math.abs(a - e) <= CompareTol
         case (a: Byte, e) if AvoidByteDataTypeBug =>
-          logger.error("We are sidestepping the byte datatype bug..")
+         logError("We are sidestepping the byte datatype bug..")
           true
         case (a, e) =>
-          logger.debug(s"atype=${a.getClass.getName} etype=${e.getClass.getName}")
+          logDebug(s"atype=${a.getClass.getName} etype=${e.getClass.getName}")
           a == e
         case _ => throw new IllegalArgumentException("Expected tuple")
       }
       if (!eq) {
-        logger.error(s"$emsg: Mismatch- act=$aa exp=$ee")
+        logError(s"$emsg: Mismatch- act=$aa exp=$ee")
       }
       eq
     }

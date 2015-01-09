@@ -24,7 +24,8 @@ import org.scalatest.{BeforeAndAfterAll, Suite}
  * HBaseTestSparkContext used for test.
  *
  */
-trait HBaseTestSparkContext extends BeforeAndAfterAll { self: Suite =>
+trait HBaseTestSparkContext extends BeforeAndAfterAll {
+  self: Suite =>
 
   @transient var sc: SparkContext = _
 

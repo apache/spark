@@ -21,9 +21,6 @@ import java.sql.Timestamp
 
 import org.apache.spark.sql.catalyst.plans.logical
 
-/* Implicits */
-//import org.apache.spark.sql.hbase.hbc._
-
 case class TestData(k: Int, v: String)
 
 object TestData {
@@ -74,11 +71,11 @@ object TestData {
   case class BinaryData(a: Array[Byte], b: Int)
   val binaryData =
     hbc.sparkContext.parallelize(
-      BinaryData("12".getBytes(), 1) ::
-      BinaryData("22".getBytes(), 5) ::
-      BinaryData("122".getBytes(), 3) ::
-      BinaryData("121".getBytes(), 2) ::
-      BinaryData("123".getBytes(), 4) :: Nil).toSchemaRDD
+      BinaryData("12".getBytes, 1) ::
+      BinaryData("22".getBytes, 5) ::
+      BinaryData("122".getBytes, 3) ::
+      BinaryData("121".getBytes, 2) ::
+      BinaryData("123".getBytes, 4) :: Nil).toSchemaRDD
   binaryData.registerTempTable("binaryData")
 
   case class TestData3(a: Int, b: Option[Int])
@@ -199,8 +196,8 @@ object TestData {
   case class ComplexData(m: Map[Int, String], s: TestData, a: Seq[Int], b: Boolean)
   val complexData =
     hbc.sparkContext.parallelize(
-      ComplexData(Map(1 -> "1"), TestData(1, "1"), Seq(1), true)
-        :: ComplexData(Map(2 -> "2"), TestData(2, "2"), Seq(2), false)
+      ComplexData(Map(1 -> "1"), TestData(1, "1"), Seq(1), b = true)
+        :: ComplexData(Map(2 -> "2"), TestData(2, "2"), Seq(2), b = false)
         :: Nil).toSchemaRDD
   complexData.registerTempTable("complexData")
 }
