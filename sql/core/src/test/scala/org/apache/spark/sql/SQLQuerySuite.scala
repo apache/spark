@@ -66,6 +66,52 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       Row(1, 1) :: Nil)
   }
 
+  test("rollup") {
+    checkAnswer(
+      sql("SELECT y, sum(s) FROM groupData GROUP BY ROLLUP(y) ORDER BY y"),
+      Row(null, 135) :: Row(2014, 30) :: Row(2015, 55) :: Row(2016, 50) :: Nil
+    )
+
+    checkAnswer(
+      sql("SELECT y, p, sum(s) FROM groupData GROUP BY ROLLUP(y, p) ORDER BY y, p"),
+      Row(null, null, 135)
+        :: Row(2014, null, 30)
+        :: Row(2014, "a", 10)
+        :: Row(2014, "b", 20)
+        :: Row(2015, null, 55)
+        :: Row(2015, "a", 30)
+        :: Row(2015, "b", 25)
+        :: Row(2016, null, 50)
+        :: Row(2016, "a", 15)
+        :: Row(2016, "b", 35)
+        :: Nil
+    )
+  }
+
+  test("cube") {
+    checkAnswer(
+      sql("SELECT y, sum(s) FROM groupData GROUP BY CUBE(y) ORDER BY y"),
+      Row(null, 135) :: Row(2014, 30) :: Row(2015, 55) :: Row(2016, 50) :: Nil
+    )
+
+    checkAnswer(
+      sql("SELECT y, p, sum(s) FROM groupData GROUP BY CUBE(y, p) ORDER BY y, p"),
+      Row(null, null, 135)
+        :: Row(null, "a", 55)
+        :: Row(null, "b", 80)
+        :: Row(2014, null, 30)
+        :: Row(2014, "a", 10)
+        :: Row(2014, "b", 20)
+        :: Row(2015, null, 55)
+        :: Row(2015, "a", 30)
+        :: Row(2015, "b", 25)
+        :: Row(2016, null, 50)
+        :: Row(2016, "a", 15)
+        :: Row(2016, "b", 35)
+        :: Nil
+    )
+  }
+
   test("SPARK-3176 Added Parser of SQL ABS()") {
     checkAnswer(
       sql("SELECT ABS(-1.3)"),

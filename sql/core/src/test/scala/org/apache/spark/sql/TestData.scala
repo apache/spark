@@ -201,4 +201,17 @@ object TestData {
         :: ComplexData(Map(2 -> "2"), TestData(2, "2"), Seq(2), false)
         :: Nil).toSchemaRDD
   complexData.registerTempTable("complexData")
+
+  case class GroupData(y: Int, p: String, s: Int)
+  val groupData =
+    TestSQLContext.sparkContext.parallelize(
+      GroupData(2014, "a", 10)
+        :: GroupData(2014, "b", 20)
+        :: GroupData(2015, "a", 30)
+        :: GroupData(2015, "b", 25)
+        :: GroupData(2016, "a", 15)
+        :: GroupData(2016, "b", 35)
+        :: Nil)
+  groupData.registerTempTable("groupData")
+
 }
