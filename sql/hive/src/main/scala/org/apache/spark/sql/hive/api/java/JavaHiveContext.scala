@@ -31,12 +31,12 @@ class JavaHiveContext(sqlContext: SQLContext) extends JavaSQLContext(sqlContext)
 
   override def sql(sqlText: String): JavaSchemaRDD = {
     // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
-    if (sqlContext.dialect == "sql") {
+    if (sqlContext.conf.dialect == "sql") {
       super.sql(sqlText)
-    } else if (sqlContext.dialect == "hiveql") {
+    } else if (sqlContext.conf.dialect == "hiveql") {
       new JavaSchemaRDD(sqlContext, HiveQl.parseSql(sqlText))
     }  else {
-      sys.error(s"Unsupported SQL dialect: ${sqlContext.dialect}.  Try 'sql' or 'hiveql'")
+      sys.error(s"Unsupported SQL dialect: ${sqlContext.conf.dialect}.  Try 'sql' or 'hiveql'")
     }
   }
 

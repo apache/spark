@@ -88,7 +88,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   TestData // Load test data tables.
 
   private var testRDD: SchemaRDD = null
-  private val originalParquetFilterPushdownEnabled = TestSQLContext.parquetFilterPushDown
+  private val originalParquetFilterPushdownEnabled = TestSQLContext.conf.parquetFilterPushDown
 
   override def beforeAll() {
     ParquetTestData.writeFile()
@@ -144,7 +144,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   ignore("Treat binary as string") {
-    val oldIsParquetBinaryAsString = TestSQLContext.isParquetBinaryAsString
+    val oldIsParquetBinaryAsString = TestSQLContext.conf.isParquetBinaryAsString
 
     // Create the test file.
     val file = getTempFilePath("parquet")
@@ -174,7 +174,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Compression options for writing to a Parquetfile") {
-    val defaultParquetCompressionCodec = TestSQLContext.parquetCompressionCodec
+    val defaultParquetCompressionCodec = TestSQLContext.conf.parquetCompressionCodec
     import scala.collection.JavaConversions._
 
     val file = getTempFilePath("parquet")
@@ -186,7 +186,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     rdd.saveAsParquetFile(path)
     var actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
       .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
-    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+    assert(actualCodec === TestSQLContext.conf.parquetCompressionCodec.toUpperCase :: Nil)
 
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
@@ -202,7 +202,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     rdd.saveAsParquetFile(path)
     actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
       .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
-    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+    assert(actualCodec === TestSQLContext.conf.parquetCompressionCodec.toUpperCase :: Nil)
 
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
@@ -234,7 +234,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     rdd.saveAsParquetFile(path)
     actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
       .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
-    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+    assert(actualCodec === TestSQLContext.conf.parquetCompressionCodec.toUpperCase :: Nil)
 
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
@@ -250,7 +250,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     rdd.saveAsParquetFile(path)
     actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
       .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
-    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+    assert(actualCodec === TestSQLContext.conf.parquetCompressionCodec.toUpperCase :: Nil)
 
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
