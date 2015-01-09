@@ -1,6 +1,6 @@
 # Creation of a CentOS with Data Controller
 
-FROM centos-infra-dev3.ord2012.labs.aspect.com:5000/centos7base-jdk7u67-python342
+FROM centos-infra-dev3.ord.labs.aspect.com:5000/centos7-jdk7u67x64
 MAINTAINER OMNI-CHANNEL-TEAM
 RUN echo "Creating the 'Spark Master and Worker' Docker container image file..."
 
