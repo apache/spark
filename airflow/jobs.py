@@ -158,7 +158,7 @@ class MasterJob(BaseJob):
             sys.exit(1)
         signal.signal(signal.SIGINT, signal_handler)
 
-        settings.pessimistic_connection_handling()
+        utils.pessimistic_connection_handling()
 
         # Sleep time (seconds) between master runs
 

@@ -518,14 +518,16 @@ class Airflow(BaseView):
         task_id = request.args.get('task_id')
         execution_date = request.args.get('execution_date')
         dag = dagbag.dags[dag_id]
-        loc = BASE_LOG_FOLDER + "/{dag_id}/{task_id}/{execution_date}"
+        log_relative = "/{dag_id}/{task_id}/{execution_date}".format(**locals())
+        loc = BASE_LOG_FOLDER + log_relative
         loc = loc.format(**locals())
+        log = ""
         try:
             f = open(loc)
-            log = "".join(f.readlines())
+            log += "".join(f.readlines())
             f.close()
         except:
-            log = "The log file '{loc}' is missing.".format(**locals())
+            log = "The log file '{0}' doesn't exist locally\n".format(loc)
             TI = models.TaskInstance
             session = Session()
             ti = session.query(TI).filter(
@@ -533,7 +535,21 @@ class Airflow(BaseView):
                 TI.execution_date == execution_date).first()
             if ti:
                 host = ti.hostname
-                log += "\n\nIt should be on host [{host}]".format(**locals())
+                WORKER_LOG_SERVER_PORT = \
+                    conf.get('celery', 'WORKER_LOG_SERVER_PORT')
+                url = (
+                    "http://{host}:{WORKER_LOG_SERVER_PORT}/log"
+                    "{log_relative}").format(**locals())
+
+                log += "It should be on host [{host}]\n".format(**locals())
+                log += "Fetching here: {url}\n".format(**locals())
+                try:
+                    import urllib2
+                    w = urllib2.urlopen(url)
+                    log += w.read()
+                    w.close()
+                except:
+                    log += "Failed to fetch.".format(**locals())
             session.commit()
             session.close()
 
