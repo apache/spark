@@ -275,6 +275,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
 
     addToClassPath(cp, getenv("HADOOP_CONF_DIR"));
     addToClassPath(cp, getenv("YARN_CONF_DIR"));
+    addToClassPath(cp, getenv("SPARK_DIST_CLASSPATH"));
     return cp;
   }
 
@@ -511,7 +512,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
   }
 
   private String getenv(String key) {
-    return (env != null) ? env.get(key) : System.getenv(key);
+    return first(env != null ? env.get(key) : null, System.getenv(key));
   }
 
   /**
