@@ -20,6 +20,7 @@ package org.apache.spark
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{HashMap, LinkedHashSet}
 import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.util.Utils
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -52,6 +53,17 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     // Load any spark.* system properties
     for ((k, v) <- System.getProperties.asScala if k.startsWith("spark.")) {
       settings(k) = v
+    }
+  }
+
+  val propertiesUrl = 
+    Utils.getContextOrSparkClassLoader.getResource("spark-defaults.conf")
+
+  Option(propertiesUrl).foreach { fileUrl =>
+    Utils.getPropertiesFromFile(fileUrl.getPath()).foreach { case (k, v) =>
+      if (k.startsWith("spark.")) {
+        settings(k) = v
+      }
     }
   }
 
