@@ -3,6 +3,7 @@ import dateutil.parser
 import json
 import logging
 import re
+import socket
 import sys
 import urllib2
 
@@ -522,26 +523,27 @@ class Airflow(BaseView):
         loc = BASE_LOG_FOLDER + log_relative
         loc = loc.format(**locals())
         log = ""
-        try:
-            f = open(loc)
-            log += "".join(f.readlines())
-            f.close()
-        except:
-            log = "The log file '{0}' doesn't exist locally\n".format(loc)
-            TI = models.TaskInstance
-            session = Session()
-            ti = session.query(TI).filter(
-                TI.dag_id == dag_id, TI.task_id == task_id,
-                TI.execution_date == execution_date).first()
-            if ti:
-                host = ti.hostname
+        TI = models.TaskInstance
+        session = Session()
+        ti = session.query(TI).filter(
+            TI.dag_id == dag_id, TI.task_id == task_id,
+            TI.execution_date == execution_date).first()
+        if ti:
+            host = ti.hostname
+            if socket.gethostname() == host:
+                try:
+                    f = open(loc)
+                    log += "".join(f.readlines())
+                    f.close()
+                except:
+                    log = "Log file isn't where expected.\n".format(loc)
+            else:
                 WORKER_LOG_SERVER_PORT = \
                     conf.get('celery', 'WORKER_LOG_SERVER_PORT')
                 url = (
                     "http://{host}:{WORKER_LOG_SERVER_PORT}/log"
                     "{log_relative}").format(**locals())
-
-                log += "It should be on host [{host}]\n".format(**locals())
+                log += "Log file isn't local."
                 log += "Fetching here: {url}\n".format(**locals())
                 try:
                     import urllib2
@@ -549,11 +551,11 @@ class Airflow(BaseView):
                     log += w.read()
                     w.close()
                 except:
-                    log += "Failed to fetch.".format(**locals())
+                    log += "Failed to fetch log file.".format(**locals())
             session.commit()
             session.close()
 
-        log = "<pre><code>" + log + "</code></pre>"
+        log = "<pre><code>{0}</code></pre>".format(log)
         title = "Logs for {task_id} on {execution_date}".format(**locals())
         html_code = log
 
