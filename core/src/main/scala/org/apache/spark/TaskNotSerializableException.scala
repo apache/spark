@@ -20,8 +20,6 @@ package org.apache.spark
 import org.apache.spark.annotation.DeveloperApi
 
 /**
- * :: DeveloperApi ::
- * Exception thrown when a task cannot be serialized
+ * Exception thrown when a task cannot be serialized.
  */
-@DeveloperApi
-class TaskNotSerializableException(error: Throwable) extends Exception(error)
+private[spark] class TaskNotSerializableException(error: Throwable) extends Exception(error)

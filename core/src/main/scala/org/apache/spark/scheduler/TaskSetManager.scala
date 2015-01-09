@@ -460,15 +460,14 @@ private[spark] class TaskSetManager(
           // Serialize and return the task
           val startTime = clock.getTime()
           val serializedTask: ByteBuffer = try {
-            Task.serializeWithDependencies(task, sched.sc.addedFiles,
-                sched.sc.addedJars, ser)
+            Task.serializeWithDependencies(task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           } catch {
             // If the task cannot be serialized, then there's no point to re-attempt the task,
             // as it will always fail. So just abort the whole task-set.
             case NonFatal(e) =>
-              logError(s"Failed to serialize task $taskId, not attempting to retry it.", e)
-              abort(s"Failed to serialize task $taskId, not attempt to retry it. Exception " +
-                s"during serialization is: $e")
+              val msg = s"Failed to serialize task $taskId, not attempting to retry it."
+              logError(msg, e)
+              abort(s"$msg Exception during serialization: $e")
               throw new TaskNotSerializableException(e)
           }
           if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
