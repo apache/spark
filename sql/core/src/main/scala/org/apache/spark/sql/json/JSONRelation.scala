@@ -44,11 +44,11 @@ private[sql] case class JSONRelation(
   private def baseRDD = sqlContext.sparkContext.textFile(fileName)
 
   override val schema = userSpecifiedSchema.getOrElse(
-    JsonRDD.inferSchema(
-      baseRDD,
-      samplingRatio,
-      sqlContext.columnNameOfCorruptRecord)
-    )
+    JsonRDD.nullTypeToStringType(
+      JsonRDD.inferSchema(
+        baseRDD,
+        samplingRatio,
+        sqlContext.columnNameOfCorruptRecord)))
 
   override def buildScan() =
     JsonRDD.jsonStringToRow(baseRDD, schema, sqlContext.columnNameOfCorruptRecord)
