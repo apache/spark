@@ -32,7 +32,10 @@ trait HBaseTestSparkContext extends BeforeAndAfterAll {
   def sparkContext: SparkContext = sc
 
   override def beforeAll() = {
-    sc = new SparkContext("local", "test")
+    sc = {
+      HBaseMainTest.setupData(true)
+      HBaseMainTest.sc
+    }
   }
 
   override def afterAll() = {
