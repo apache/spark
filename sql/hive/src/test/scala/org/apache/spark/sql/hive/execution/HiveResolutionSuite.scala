@@ -17,11 +17,18 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
+import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 
 case class Nested(a: Int, B: Int)
 case class Data(a: Int, B: Int, n: Nested, nestedArray: Seq[Nested])
+
+case class A1(x: Int)
+case class A2(a: A3, k:Int)
+case class A3(x: String)
+case class A4(x: String)
 
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
@@ -88,6 +95,23 @@ class HiveResolutionSuite extends HiveComparisonTest {
     TestHive.sparkContext.parallelize(Data(1, 2, Nested(1,2), Seq(Nested(1,2))) :: Nil)
       .registerTempTable("nestedRepeatedTest")
     assert(sql("SELECT nestedArray[0].a FROM nestedRepeatedTest").collect().head(0) === 1)
+  }
+
+  createQueryTest("test ambiguousReferences resolved as hive",
+    """
+      |CREATE TABLE t1 (x int);
+      |CREATE TABLE t2 (a STRUCT<x:string>, x int);
+      |INSERT OVERWRITE TABLE t1 SELECT 1 FROM src LIMIT 1;
+      |INSERT OVERWRITE TABLE t2 SELECT named_struct("x","str"),1 FROM src LIMIT 1;
+      |SELECT a.x FROM t1 a JOIN t2 b ON a.x = b.x;
+    """.stripMargin)
+
+  test("test ambiguousReferences exception thrown") {
+    sparkContext.parallelize(A3("a") :: Nil).registerTempTable("t3")
+    sparkContext.parallelize(A4("b") :: Nil).registerTempTable("t4")
+    intercept[TreeNodeException[Project]] {
+        sql("SELECT x FROM t3 a JOIN t4 b").collect()
+    }
   }
 
   /**

@@ -131,39 +131,56 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
       input: Seq[Attribute],
       resolver: Resolver): Option[NamedExpression] = {
 
-    val parts = name.split("\\.")
+    val parts = name.split("\\.").toList
 
-    // Collect all attributes that are output by this nodes children where either the first part
-    // matches the name or where the first part matches the scope and the second part matches the
-    // name.  Return these matches along with any remaining parts, which represent dotted access to
-    // struct fields.
-    val options = input.flatMap { option =>
+    // Reference to hive SemanticAnalyzer
+    // we should filter some input Attribute if 'name' contains table alias.
+    // For example:
+    // CREATE TABLE t1(x INT);
+    // CREATE TABLE t2(a STRUCT<x: INT>, k INT);
+    // SELECT a.x FROM t1 a JOIN t2 b;
+    val inputMatchTableAlias = input.filter(_.qualifiers.exists(resolver(_, parts.head)))
+
+    val (finalParts, finalInput) =
+      if(parts.size == 1 || inputMatchTableAlias.isEmpty) {
+        // should be column reference
+        (parts, input)
+      } else {
+        // 'name' contains table alias
+        (parts.drop(1), inputMatchTableAlias)
+      }
+
+    val options = finalInput.flatMap { option =>
       // If the first part of the desired name matches a qualifier for this possible match, drop it.
-      val remainingParts =
-        if (option.qualifiers.find(resolver(_, parts.head)).nonEmpty && parts.size > 1) {
-          parts.drop(1)
-        } else {
-          parts
+      if (resolver(option.name, finalParts.head)) {
+        val optionalNestedReferences = finalParts.tail
+        (option.dataType, optionalNestedReferences) match {
+          // No nesting
+          case (_, Nil) => (option.withName(finalParts.head), Nil) :: Nil
+          // Points to nested field(s) of a structure
+          case (_: StructType, nestedReferences) =>
+            resolveNesting(nestedReferences, option, resolver) match {
+              case Some(expression) => (expression, nestedReferences.last) :: Nil
+              case invalidReference => Nil
+            }
+          // Invalid
+          case _ => Nil
         }
-
-      if (resolver(option.name, remainingParts.head)) {
-        // Preserve the case of the user's attribute reference.
-        (option.withName(remainingParts.head), remainingParts.tail.toList) :: Nil
       } else {
         Nil
       }
     }
 
+    // for sql like : select a from (select a, a from b)
+    // we should filter the duplicated attributes.
     options.distinct match {
       // One match, no nested fields, use it.
-      case Seq((a, Nil)) => Some(a)
+      case Seq((a: Attribute, Nil)) => Some(a)
 
       // One match, but we also need to extract the requested nested field.
-      case Seq((a, nestedFields)) =>
+      case Seq((nestedExpression: Expression, last:String)) =>
         val aliased =
-          Alias(
-            resolveNesting(nestedFields, a, resolver),
-            nestedFields.last)() // Preserve the case of the user's field access.
+          Alias(nestedExpression, last)() // Preserve the case of the user's field access.
         Some(aliased)
 
       // No matches.
@@ -185,22 +202,26 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
   private def resolveNesting(
       nestedFields: List[String],
       expression: Expression,
-      resolver: Resolver): Expression = {
+      resolver: Resolver): Option[Expression] = {
 
     (nestedFields, expression.dataType) match {
-      case (Nil, _) => expression
+      case (Nil, _) => Some(expression)
       case (requestedField :: rest, StructType(fields)) =>
         val actualField = fields.filter(f => resolver(f.name, requestedField))
         actualField match {
           case Seq() =>
-            sys.error(
+            logTrace(
               s"No such struct field $requestedField in ${fields.map(_.name).mkString(", ")}")
+            None
           case Seq(singleMatch) =>
             resolveNesting(rest, GetField(expression, singleMatch.name), resolver)
           case multipleMatches =>
-            sys.error(s"Ambiguous reference to fields ${multipleMatches.mkString(", ")}")
+            logTrace(s"Ambiguous reference to fields ${multipleMatches.mkString(", ")}")
+            None
         }
-      case (_, dt) => sys.error(s"Can't access nested field in type $dt")
+      case (_, dt) =>
+        logTrace(s"Can't access nested field in type $dt")
+        None
     }
   }
 }

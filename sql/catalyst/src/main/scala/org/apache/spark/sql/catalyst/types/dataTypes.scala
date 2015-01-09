@@ -566,6 +566,8 @@ case class StructType(fields: Seq[StructField]) extends DataType {
   override private[sql] def jsonValue =
     ("type" -> typeName) ~
       ("fields" -> fields.map(_.jsonValue))
+
+  def simpleString: String = "struct"
 }
 
 object MapType {
