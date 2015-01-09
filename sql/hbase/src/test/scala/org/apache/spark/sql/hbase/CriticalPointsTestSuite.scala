@@ -16,43 +16,31 @@
  */
 package org.apache.spark.sql.hbase
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.HBaseConfiguration
 import org.apache.spark._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.hbase.util.{HBaseKVHelper, BytesUtils}
+import org.apache.spark.sql.hbase.util.{BytesUtils, HBaseKVHelper}
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import scala.collection.mutable.ArrayBuffer
 
 //@Ignore
 class CriticalPointsTestSuite extends FunSuite with BeforeAndAfterAll with Logging {
-  var sparkConf: SparkConf = _
-  var sparkContext: SparkContext = _
-  var hbaseContext: HBaseSQLContext = _
-  var configuration: Configuration = _
-  var catalog: HBaseCatalog = _
-
   val namespace = "testNamespace"
   val tableName = "testTable"
   val hbaseTableName = "ht"
   val family1 = "family1"
   val family2 = "family2"
+  val hbaseContext: HBaseSQLContext = {
+    HBaseMainTest.setupData(true)
+    HBaseMainTest.hbc
+  }
 
   def partitionEquals(p1:HBasePartition, p2:HBasePartition):Boolean = {
     ((p1.start equals p2.start)
     && (p1.startInclusive equals p2.startInclusive)
     && (p1.end equals p2.end)
     && (p1.endInclusive equals p2.endInclusive))
-  }
-
-  override def beforeAll() = {
-    sparkConf = new SparkConf().setAppName("Catalog Test").setMaster("local[4]")
-    sparkContext = new SparkContext(sparkConf)
-    hbaseContext = new HBaseSQLContext(sparkContext)
-    catalog = new HBaseCatalog(hbaseContext)
-    configuration = HBaseConfiguration.create()
   }
 
   test("Generate CP Ranges 0") {
