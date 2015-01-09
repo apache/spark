@@ -151,10 +151,10 @@ Thus, the full flow for running continuous-compilation of the `core` submodule m
  $ mvn scala:cc
 ```
 
-# Using With IntelliJ IDEA
+# Building Spark with IntelliJ IDEA or Eclipse
 
-For additional help in setting up IntelliJ IDEA for Spark development, refer to the
-[wiki page for IntelliJ](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-BuildingSparkinIntelliJIDEA)
+For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troubleshooting, refer to the
+[wiki page for IDE setup](https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark#ContributingtoSpark-IDESetup).
 
 # Building Spark Debian Packages
 
