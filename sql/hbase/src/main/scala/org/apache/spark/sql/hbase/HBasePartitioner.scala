@@ -28,7 +28,7 @@ class HBasePartitioner (var splitKeys: Array[ImmutableBytesWritableWrapper]) ext
 
   type t = ImmutableBytesWritableWrapper
 
-  def numPartitions = splitKeys.length
+  def numPartitions = splitKeys.length + 1
 
   @transient private val binarySearch: ((Array[t], t) => Int) = CollectionsUtils.makeBinarySearch[t]
 
