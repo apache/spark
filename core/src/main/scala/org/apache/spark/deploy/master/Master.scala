@@ -679,23 +679,23 @@ private[spark] class Master(
       app.desc.appUiUrl = notFoundBasePath
       return false
     }
-    val fileSystem = Utils.getHadoopFileSystem(eventLogDir)
-    val eventLogInfo = EventLoggingListener.parseLoggingInfo(eventLogDir, fileSystem)
-    val eventLogPaths = eventLogInfo.logPaths
-    val compressionCodec = eventLogInfo.compressionCodec
-
-    if (eventLogPaths.isEmpty) {
-      // Event logging is enabled for this application, but no event logs are found
-      val title = s"Application history not found (${app.id})"
-      var msg = s"No event logs found for application $appName in $eventLogDir."
-      logWarning(msg)
-      msg += " Did you specify the correct logging directory?"
-      msg = URLEncoder.encode(msg, "UTF-8")
-      app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
-      return false
-    }
-
     try {
+      val fileSystem = Utils.getHadoopFileSystem(eventLogDir)
+      val eventLogInfo = EventLoggingListener.parseLoggingInfo(eventLogDir, fileSystem)
+      val eventLogPaths = eventLogInfo.logPaths
+      val compressionCodec = eventLogInfo.compressionCodec
+
+      if (eventLogPaths.isEmpty) {
+        // Event logging is enabled for this application, but no event logs are found
+        val title = s"Application history not found (${app.id})"
+        var msg = s"No event logs found for application $appName in $eventLogDir."
+        logWarning(msg)
+        msg += " Did you specify the correct logging directory?"
+        msg = URLEncoder.encode(msg, "UTF-8")
+        app.desc.appUiUrl = notFoundBasePath + s"?msg=$msg&title=$title"
+        return false
+      }
+
       val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
       val ui = new SparkUI(new SparkConf, replayBus, appName + " (completed)",
         HistoryServer.UI_PATH_PREFIX + s"/${app.id}")
