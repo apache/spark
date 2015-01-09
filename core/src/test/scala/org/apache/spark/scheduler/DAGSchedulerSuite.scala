@@ -746,7 +746,12 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
     completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
-    assert(Accumulators.originals(accum.id).value === 1)
+
+    val acc = Accumulators.originals(accum.id).get match {
+      case Some(accOpt) => assert(accOpt.value === 1)
+      case None => assert(condition=false, "Accumulator reference did not exist.")
+    }
+    
     assertDataStructuresEmpty
   }
 
