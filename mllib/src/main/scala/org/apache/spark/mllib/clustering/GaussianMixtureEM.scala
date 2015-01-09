@@ -21,7 +21,7 @@ import scala.collection.mutable.IndexedSeq
 
 import breeze.linalg.{DenseVector => BreezeVector, DenseMatrix => BreezeMatrix, diag, Transpose}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors, DenseVector, DenseMatrix, BLAS}
 import org.apache.spark.mllib.stat.impl.MultivariateGaussian
 import org.apache.spark.mllib.util.MLUtils
 
@@ -151,9 +151,10 @@ class GaussianMixtureEM private (
       var i = 0
       while (i < k) {
         val mu = sums.means(i) / sums.weights(i)
-        val sigma = sums.sigmas(i) / sums.weights(i) - mu * new Transpose(mu) // TODO: Use BLAS.dsyr
+        BLAS.syr(-sums.weights(i), Vectors.fromBreeze(mu).asInstanceOf[DenseVector],
+          Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
         weights(i) = sums.weights(i) / sumWeights
-        gaussians(i) = new MultivariateGaussian(mu, sigma)
+        gaussians(i) = new MultivariateGaussian(mu, sums.sigmas(i) / sums.weights(i))
         i = i + 1
       }
    
@@ -211,7 +212,8 @@ private object ExpectationSum {
       p(i) /= pSum
       sums.weights(i) += p(i)
       sums.means(i) += x * p(i)
-      sums.sigmas(i) += xxt * p(i) // TODO: use BLAS.dsyr
+      BLAS.syr(p(i), Vectors.fromBreeze(x).asInstanceOf[DenseVector],
+        Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
       i = i + 1
     }
     sums
