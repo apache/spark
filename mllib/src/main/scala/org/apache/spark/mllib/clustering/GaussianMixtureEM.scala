@@ -151,7 +151,7 @@ class GaussianMixtureEM private (
       var i = 0
       while (i < k) {
         val mu = sums.means(i) / sums.weights(i)
-        BLAS.dsyr(-sums.weights(i), Vectors.fromBreeze(mu).asInstanceOf[DenseVector],
+        BLAS.syr(-sums.weights(i), Vectors.fromBreeze(mu).asInstanceOf[DenseVector],
           Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
         weights(i) = sums.weights(i) / sumWeights
         gaussians(i) = new MultivariateGaussian(mu, sums.sigmas(i) / sums.weights(i))
@@ -212,7 +212,7 @@ private object ExpectationSum {
       p(i) /= pSum
       sums.weights(i) += p(i)
       sums.means(i) += x * p(i)
-      BLAS.dsyr(p(i), Vectors.fromBreeze(x).asInstanceOf[DenseVector],
+      BLAS.syr(p(i), Vectors.fromBreeze(x).asInstanceOf[DenseVector],
         Matrices.fromBreeze(sums.sigmas(i)).asInstanceOf[DenseMatrix])
       i = i + 1
     }

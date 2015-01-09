@@ -230,9 +230,12 @@ private[spark] object BLAS extends Serializable with Logging {
   }
  
   /**
-   * A := alpha * x * x^T + A
+   * A := alpha * x * x^T^ + A
+   * @param alpha a real scalar that will be multiplied to x * x^T^.
+   * @param x the vector x that contains the n elements.
+   * @param A the symmetric matrix A. Size of n x n.
    */
-  def dsyr(alpha: Double, x: DenseVector, A: DenseMatrix) {
+  def syr(alpha: Double, x: DenseVector, A: DenseMatrix) {
     val mA = A.numRows
     val nA = A.numCols
     require(mA == nA, s"A is not a symmetric matrix. A: $mA x $nA")
@@ -244,7 +247,7 @@ private[spark] object BLAS extends Serializable with Logging {
     var i = 0
     while (i < mA) {
       var j = i + 1
-      while(j < nA) {
+      while (j < nA) {
         A(j, i) = A(i, j)
         j += 1
       }
