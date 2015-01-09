@@ -61,6 +61,8 @@ class CatalogTestSuite extends FunSuite with BeforeAndAfterAll with Logging {
       ).map(HBaseKVHelper.makeRowKey(_, Seq(DoubleType, StringType, ShortType)))
 
     catalog.createTable(tableName, namespace, hbaseTableName, allColumns, splitKeys)
+
+    assert(catalog.checkLogicalTableExist(tableName) === true)
   }
 
   test("Get Table") {
@@ -117,6 +119,8 @@ class CatalogTestSuite extends FunSuite with BeforeAndAfterAll with Logging {
     val tableName = "testTable"
 
     catalog.deleteTable(tableName)
+
+    assert(catalog.checkLogicalTableExist(tableName) === false)
   }
 
   test("Check Logical Table Exist") {
