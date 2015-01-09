@@ -535,7 +535,12 @@ class Airflow(BaseView):
                 TI.execution_date == execution_date).first()
             if ti:
                 host = ti.hostname
-                url = "http://{host}:8990/log{log_relative}".format(**locals())
+                WORKER_LOG_SERVER_PORT = \
+                    conf.get('celery', 'WORKER_LOG_SERVER_PORT')
+                url = (
+                    "http://{host}:{WORKER_LOG_SERVER_PORT}/log"
+                    "{log_relative}").format(**locals())
+
                 log += "It should be on host [{host}]\n".format(**locals())
                 log += "Fetching here: {url}\n".format(**locals())
                 try:

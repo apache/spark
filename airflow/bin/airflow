@@ -182,11 +182,29 @@ def master(args):
     job = jobs.MasterJob(args.dag_id, args.subdir)
     job.run()
 
+def serve_logs(args):
+    print("Starting flask")
+    import flask
+    flask_app = flask.Flask(__name__)
+    @flask_app.route('/log/<path:filename>')
+    def serve_logs(filename):
+        conf.get('core', 'BASE_LOG_FOLDER')
+        print filename
+        return flask.send_from_directory(
+            conf.get('core', 'BASE_LOG_FOLDER'), 
+            filename,
+            mimetype="application/json",
+            as_attachment=False)
+    print(conf.get('core', 'BASE_LOG_FOLDER'))
+    flask_app.run(host='0.0.0.0', port=8990, debug=True)
 
 def worker(args):
-    from airflow.executors.celery_executor import app
-    app.start()
-
+    import subprocess
+    sp = subprocess.Popen("airflow serve_logs", shell=True)
+    # Worker to serve static log files through this simple flask app
+    from airflow.executors.celery_executor import app as celery_app
+    celery_app.start()
+    sp.kill()
 
 def initdb(args):
 
@@ -367,6 +385,10 @@ if __name__ == '__main__':
     ht = "Start a Celery worker node"
     parser_worker = subparsers.add_parser('worker', help=ht)
     parser_worker.set_defaults(func=worker)
+
+    ht = "Serve logs generate by worker"
+    parser_logs = subparsers.add_parser('serve_logs', help=ht)
+    parser_logs.set_defaults(func=serve_logs)
 
     args = parser.parse_args()
     args.func(args)
