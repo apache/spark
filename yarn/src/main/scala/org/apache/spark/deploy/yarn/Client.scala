@@ -367,6 +367,10 @@ private[spark] class Client(
       }
     }
 
+    sys.env.get(ENV_DIST_CLASSPATH).foreach { dcp =>
+      env(ENV_DIST_CLASSPATH) = dcp
+    }
+
     env
   }
 
@@ -651,6 +655,9 @@ object Client extends Logging {
   // App files are world-wide readable and owner writable -> rw-r--r--
   val APP_FILE_PERMISSION: FsPermission =
     FsPermission.createImmutable(Integer.parseInt("644", 8).toShort)
+
+  // Distribution-defined classpath to add to processes
+  val ENV_DIST_CLASSPATH = "SPARK_DIST_CLASSPATH"
 
   /**
    * Find the user-defined Spark jar if configured, or return the jar containing this
