@@ -490,7 +490,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     override def receive = {
       case x: DisassociatedEvent =>
         logInfo(s"Driver terminated or disconnected! Shutting down. $x")
-        finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+        if (!isDriver) {
+          finish(FinalApplicationStatus.SUCCEEDED, ApplicationMaster.EXIT_SUCCESS)
+        }
 
       case x: AddWebUIFilter =>
         logInfo(s"Add WebUI Filter. $x")
