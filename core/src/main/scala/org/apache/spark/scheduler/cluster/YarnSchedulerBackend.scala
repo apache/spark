@@ -41,7 +41,7 @@ private[spark] abstract class YarnSchedulerBackend(
 
   protected var totalExpectedExecutors = 0
 
-  protected val yarnSchedulerActor: ActorRef = _
+  protected var yarnSchedulerActor: ActorRef = _
 
   private implicit val askTimeout = AkkaUtils.askTimeout(sc.conf)
 
