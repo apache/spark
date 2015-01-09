@@ -16,29 +16,20 @@
  */
 package org.apache.spark.sql.hbase
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase._
 import org.apache.hadoop.hbase.client.HBaseAdmin
 import org.apache.spark._
 import org.apache.spark.sql.catalyst.expressions.GenericRow
+import org.apache.spark.sql.catalyst.plans.logical.Subquery
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.hbase.util.HBaseKVHelper
+import org.apache.spark.sql.sources.LogicalRelation
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-//@Ignore
 class CatalogTestSuite extends FunSuite with BeforeAndAfterAll with Logging {
-  var sparkConf: SparkConf = _
-  var sparkContext: SparkContext = _
-  var hbaseContext: HBaseSQLContext = _
-  var configuration: Configuration = _
-  var catalog: HBaseCatalog = _
-
-  override def beforeAll() = {
-    sparkConf = new SparkConf().setAppName("Catalog Test").setMaster("local[4]")
-    sparkContext = new SparkContext(sparkConf)
-    hbaseContext = new HBaseSQLContext(sparkContext)
-    catalog = new HBaseCatalog(hbaseContext)
-    configuration = HBaseConfiguration.create()
+  val (hbaseContext, catalog, configuration) = {
+    HBaseMainTest.setupData(useMultiplePartitions = true)
+    (HBaseMainTest.hbc, new HBaseCatalog(HBaseMainTest.hbc), HBaseMainTest.config)
   }
 
   test("Create Table") {
@@ -95,7 +86,8 @@ class CatalogTestSuite extends FunSuite with BeforeAndAfterAll with Logging {
     assert(result.nonKeyColumns(1).dataType === BooleanType)
 
     val relation = catalog.lookupRelation(None, tableName)
-    val hbRelation = relation.asInstanceOf[HBaseRelation]
+    val subquery = relation.asInstanceOf[Subquery]
+    val hbRelation = subquery.child.asInstanceOf[LogicalRelation].relation.asInstanceOf[HBaseRelation]
     assert(hbRelation.nonKeyColumns.map(_.family) == List("family2", "family1"))
     val keyColumns = Seq(KeyColumn("column1", StringType, 0), KeyColumn("column2", IntegerType, 1))
     assert(hbRelation.keyColumns.equals(keyColumns))
