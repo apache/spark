@@ -40,23 +40,26 @@ else
   JAR_PATH="${EXAMPLES_DIR}/target/scala-${SPARK_SCALA_VERSION}"
 fi
 
-JAR_COUNT="`ls ${JAR_PATH}/spark-examples-*hadoop*.jar 2>>/dev/null | wc -l`"
+JAR_COUNT=0
 
-if [ "$JAR_COUNT" -eq "0" ]; then
-  echo "Failed to find Spark examples assembly in $FWDIR/lib or $FWDIR/examples/target" 1>&2
-  echo "You need to build Spark before running this program" 1>&2
-  exit 1
-fi
+for f in ${JAR_PATH}/spark-examples-*hadoop*.jar; do
+  if [[ ! -e "$f" ]]; then
+    echo "Failed to find Spark examples assembly in $FWDIR/lib or $FWDIR/examples/target" 1>&2
+    echo "You need to build Spark before running this program" 1>&2
+    exit 1
+  fi 
+  SPARK_EXAMPLES_JAR="$f"
+  JAR_COUNT=$((JAR_COUNT+1))   
+done
 
 if [ "$JAR_COUNT" -gt "1" ]; then
-  JARS_LIST="`ls -t ${JAR_PATH}/spark-examples-*hadoop*.jar`"
   echo "Found multiple Spark examples assembly jars in ${JAR_PATH}" 1>&2
-  echo "$JARS_LIST" 1>&2
+  ls ${JAR_PATH}/spark-examples-*hadoop*.jar 1>&2
   echo "Please remove all but one jar." 1>&2
   exit 1
 fi
 
-export SPARK_EXAMPLES_JAR="`ls ${JAR_PATH}/spark-examples-*hadoop*.jar 2>>/dev/null`"
+export SPARK_EXAMPLES_JAR
 
 EXAMPLE_MASTER=${MASTER:-"local[*]"}
 
