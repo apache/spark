@@ -24,7 +24,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import akka.actor.{ActorSystem, Props}
 import com.google.common.io.Files
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
@@ -33,6 +32,7 @@ import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
 import org.apache.spark.network.nio.NioBlockTransferService
+import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.shuffle.hash.HashShuffleManager
@@ -56,7 +56,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
   val manualClock = new ManualClock
   val blockManagerSize = 10000000
 
-  var actorSystem: ActorSystem = null
+  var rpcEnv: RpcEnv = null
   var blockManagerMaster: BlockManagerMaster = null
   var blockManager: BlockManager = null
   var tempDirectory: File = null
@@ -64,14 +64,14 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
   before {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
       "test", "localhost", 0, conf = conf, securityManager = securityMgr)
-    this.actorSystem = actorSystem
-    conf.set("spark.driver.port", boundPort.toString)
+    rpcEnv = RpcEnv.create("test", "localhost", 0, conf = conf, securityManager = securityMgr)
+    conf.set("spark.driver.port", rpcEnv.boundPort.toString)
 
-    blockManagerMaster = new BlockManagerMaster(
-      actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf, new LiveListenerBus))),
+    blockManagerMaster = new BlockManagerMaster(rpcEnv.setupEndpoint("block-manager-master-actor",
+      new BlockManagerMasterActor(rpcEnv, true, conf, new LiveListenerBus)),
       conf, true)
 
-    blockManager = new BlockManager("bm", actorSystem, blockManagerMaster, serializer,
+    blockManager = new BlockManager("bm", rpcEnv, blockManagerMaster, serializer,
       blockManagerSize, conf, mapOutputTracker, shuffleManager,
       new NioBlockTransferService(conf, securityMgr), securityMgr, 0)
     blockManager.initialize("app-id")
@@ -89,9 +89,9 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       blockManagerMaster.stop()
       blockManagerMaster = null
     }
-    actorSystem.shutdown()
-    actorSystem.awaitTermination()
-    actorSystem = null
+    rpcEnv.stopAll()
+    rpcEnv.awaitTermination()
+    rpcEnv = null
 
     if (tempDirectory != null && tempDirectory.exists()) {
       FileUtils.deleteDirectory(tempDirectory)
