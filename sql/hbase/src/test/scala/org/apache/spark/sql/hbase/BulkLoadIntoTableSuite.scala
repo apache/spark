@@ -38,6 +38,7 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
     HBaseMainTest.setupData(useMultiplePartitions = true)
     (HBaseMainTest.hbc, HBaseMainTest.sc)
   }
+  val sparkHome = hbc.sparkContext.getSparkHome.get
 
   // Test if we can parse 'LOAD DATA LOCAL INPATH './usr/file.txt' INTO TABLE tb'
   test("bulkload parser test, local file") {
@@ -149,8 +150,8 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
     import org.apache.spark.sql.catalyst.types._
     val splitRegex = ","
     val conf = hbc.sparkContext.hadoopConfiguration
-
-    val rdd = sc.textFile("./sql/hbase/src/test/resources/test.txt", 1).mapPartitions { iter =>
+    val inputFile = sparkHome + "/sql/hbase/src/test/resources/test.txt"
+    val rdd = sc.textFile(inputFile, 1).mapPartitions { iter =>
       val keyBytes = new Array[(Array[Byte], DataType)](1)
       val valueBytes = new Array[(Array[Byte], Array[Byte], Array[Byte])](1)
       val bytesUtils = BytesUtils.create(IntegerType)
@@ -269,8 +270,10 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
     val executeSql2 = hbc.executeSql(sql2)
     executeSql2.toRdd.collect().foreach(println)
 
+    val inputFile = sparkHome + "/sql/hbase/src/test/resources/loadData.txt"
+
     // then load data into table
-    val loadSql = "LOAD DATA LOCAL INPATH './sql/hbase/src/test/resources/loadData.txt' INTO TABLE testblk"
+    val loadSql = "LOAD DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
 
     val executeSql3 = hbc.executeSql(loadSql)
     executeSql3.toRdd.collect().foreach(println)
