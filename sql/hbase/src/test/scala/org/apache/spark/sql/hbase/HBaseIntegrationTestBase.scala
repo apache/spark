@@ -66,6 +66,7 @@ abstract class HBaseIntegrationTestBase(useMiniCluster: Boolean = true,
 
     val sconf = new SparkConf()
     if (useMiniClusterInt) {
+      config.set("dfs.replication", "1")
       config.set("dfs.client.socket-timeout", "480000")
       config.set("dfs.datanode.socket.write.timeout", "480000")
       config.set("zookeeper.session.timeout", "480000")
