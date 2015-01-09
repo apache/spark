@@ -190,15 +190,28 @@ private[sql] case class CreateTableUsing(
             sys.error(s"Failed to load class for data source: $provider")
         }
     }
-    val relation = clazz.newInstance match {
-      case dataSource: org.apache.spark.sql.sources.RelationProvider  =>
-        dataSource
-          .asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
-          .createRelation(sqlContext, new CaseInsensitiveMap(options))
-      case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
-        dataSource
-          .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
-          .createRelation(sqlContext, new CaseInsensitiveMap(options), userSpecifiedSchema)
+
+    val relation = userSpecifiedSchema match {
+      case Some(schema: StructType) => {
+        clazz.newInstance match {
+          case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
+            dataSource
+              .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
+              .createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
+          case _ =>
+            sys.error(s"${clazz.getCanonicalName} should extend SchemaRelationProvider.")
+        }
+      }
+      case None => {
+        clazz.newInstance match {
+          case dataSource: org.apache.spark.sql.sources.RelationProvider  =>
+            dataSource
+              .asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
+              .createRelation(sqlContext, new CaseInsensitiveMap(options))
+          case _ =>
+            sys.error(s"${clazz.getCanonicalName} should extend RelationProvider.")
+        }
+      }
     }
 
     sqlContext.baseRelationToSchemaRDD(relation).registerTempTable(tableName)
