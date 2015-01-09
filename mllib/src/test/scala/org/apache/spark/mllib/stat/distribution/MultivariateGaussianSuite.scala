@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.stat.impl
+package org.apache.spark.mllib.stat.distribution
 
 import org.scalatest.FunSuite
 

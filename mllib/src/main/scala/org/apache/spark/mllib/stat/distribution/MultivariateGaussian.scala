@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.stat.impl
+package org.apache.spark.mllib.stat.distribution
 
 import breeze.linalg.{DenseVector => DBV, DenseMatrix => DBM, diag, max, eigSym}
 
-import org.apache.spark.mllib.linalg.{ Vectors, Vector, Matrices, Matrix }
+import org.apache.spark.mllib.linalg.{Vectors, Vector, Matrices, Matrix}
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.annotation.DeveloperApi;
 
 /**
  * This class provides basic functionality for a Multivariate Gaussian (Normal) Distribution. In
@@ -31,9 +32,10 @@ import org.apache.spark.mllib.util.MLUtils
  * @param mu The mean vector of the distribution
  * @param sigma The covariance matrix of the distribution
  */
+@DeveloperApi
 class MultivariateGaussian private[mllib] (
-    val mu: DBV[Double], 
-    val sigma: DBM[Double]) extends Serializable {
+    private[mllib] val mu: DBV[Double], 
+    private[mllib] val sigma: DBM[Double]) extends Serializable {
 
   require(sigma.cols == sigma.rows, "Covariance matrix must be square")
   require(mu.length == sigma.cols, "Mean vector length must match covariance matrix size")
