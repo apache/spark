@@ -41,7 +41,6 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   def isClusterMode: Boolean = userClass != null
 
   private var driverMemory: Int = 512 // MB
-  private val driverMemKey = "spark.driver.memory"
   private val driverMemOverheadKey = "spark.yarn.driver.memoryOverhead"
   private val amMemKey = "spark.yarn.am.memory"
   private val amMemOverheadKey = "spark.yarn.am.memoryOverhead"
@@ -100,10 +99,8 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       }
       amMemory = driverMemory
     } else {
-      for (key <- Seq(driverMemKey, driverMemOverheadKey)) {
-        if (sparkConf.contains(key)) {
-          println(s"$key is set but does not apply in client mode.")
-        }
+      if (sparkConf.contains(driverMemOverheadKey)) {
+        println(s"$driverMemOverheadKey is set but does not apply in client mode.")
       }
       sparkConf.getOption(amMemKey)
           .map(Utils.memoryStringToMb)
