@@ -44,9 +44,8 @@ class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll with Logging {
   test("aggregation with codegen") {
     val originalValue = javaHbaseCtx.sqlContext.getConf(SQLConf.CODEGEN_ENABLED, "false") //codegenEnabled
     javaHbaseCtx.sqlContext.setConf(SQLConf.CODEGEN_ENABLED, "true")
-    val d = javaHbaseCtx.sql("SELECT col1 FROM ta GROUP BY col1").collect()
-    d.foreach(println)
-    assert(d.size == 14, s"aggregation with codegen test failed on size")
+    val results = javaHbaseCtx.sql("SELECT col1 FROM ta GROUP BY col1").collect()
+    assert(results.size == 14, s"aggregation with codegen test failed on size")
     javaHbaseCtx.sqlContext.setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
 

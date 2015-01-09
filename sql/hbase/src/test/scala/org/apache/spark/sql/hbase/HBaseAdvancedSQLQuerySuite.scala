@@ -36,7 +36,8 @@ class HBaseAdvancedSQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("aggregation with codegen") {
     val originalValue = codegenEnabled
     setConf(SQLConf.CODEGEN_ENABLED, "true")
-    sql("SELECT col1 FROM ta GROUP BY col1").collect()
+    val result = sql("SELECT col1 FROM ta GROUP BY col1").collect()
+    assert(result.size == 14, s"aggregation with codegen test failed on size")
     setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
 
@@ -45,6 +46,9 @@ class HBaseAdvancedSQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       tableA.where('col7 === 1).orderBy('col2.asc).select('col4),
       Seq(Seq(1)))
+    checkAnswer(
+      tableA.where('col2 === 6).orderBy('col2.asc).select('col7),
+      Seq(Seq(-31)))
   }
 
   test("metadata is propagated correctly") {
