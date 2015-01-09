@@ -205,7 +205,7 @@ class SQLQuerySuite extends QueryTest {
     sql("SELECT * FROM src WHERE key % 2 = 0")
       .sample(withReplacement = false, fraction = 0.3)
       .registerTempTable("sampled")
-    (1 to 10).foreach{ i =>
+    (1 to 10).foreach { i =>
       checkAnswer(
         sql("SELECT * FROM sampled WHERE key % 2 = 1"),
         Seq.empty[Row])
