@@ -22,12 +22,11 @@ import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.hbase.util.{HBaseKVHelper, BytesUtils}
-import org.scalatest.FunSuite
 import org.apache.spark.sql.hbase.util.InsertWappers._
 
 import scala.collection.mutable.ArrayBuffer
 
-class HBasePartitionerSuite extends FunSuite with HBaseTestSparkContext {
+class HBasePartitionerSuite extends HBaseIntegrationTestBase {
   test("test hbase partitioner") {
     val data = (1 to 40).map { r =>
       val rowKey = Bytes.toBytes(r)
