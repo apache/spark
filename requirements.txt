@@ -5,6 +5,7 @@ flask
 flask-admin
 flask-bootstrap
 flask-cache
+flask-login
 hive-thrift-py
 ipython[all]
 jinja2
