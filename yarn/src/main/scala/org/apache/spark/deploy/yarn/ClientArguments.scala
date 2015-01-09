@@ -94,18 +94,20 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
     }
     if (isClusterMode) {
       for (key <- Seq(amMemKey, amMemOverheadKey)) {
-        if (sparkConf.getOption(key).isDefined) {
+        if (sparkConf.contains(key)) {
           println(s"$key is set but does not apply in cluster mode.")
         }
       }
       amMemory = driverMemory
     } else {
       for (key <- Seq(driverMemKey, driverMemOverheadKey)) {
-        if (sparkConf.getOption(key).isDefined) {
+        if (sparkConf.contains(key)) {
           println(s"$key is set but does not apply in client mode.")
         }
       }
-      amMemory = Utils.memoryStringToMb(sparkConf.get(amMemKey, "512m"))
+      sparkConf.getOption(amMemKey)
+          .map(Utils.memoryStringToMb)
+          .foreach(mem => amMemory = mem)
     }
   }
 
