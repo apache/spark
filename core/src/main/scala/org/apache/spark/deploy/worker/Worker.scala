@@ -40,7 +40,7 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 
 /**
-  * @param masterUrls Each url should look like spark://host:port.
+  * @param masterAkkaUrls Each url should be a valid akka url.
   */
 private[spark] class Worker(
     host: String,
@@ -48,7 +48,7 @@ private[spark] class Worker(
     webUiPort: Int,
     cores: Int,
     memory: Int,
-    masterUrls: Array[String],
+    masterAkkaUrls: Array[String],
     actorSystemName: String,
     actorName: String,
     workDirPath: String = null,
@@ -171,15 +171,11 @@ private[spark] class Worker(
   }
 
   def changeMaster(url: String, uiUrl: String) {
+    // activeMasterUrl it's a valid Spark url since we receive it from master.
     activeMasterUrl = url
     activeMasterWebUiUrl = uiUrl
     master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
-    masterAddress = activeMasterUrl match {
-      case Master.sparkUrlRegex(_host, _port) =>
-        Address("akka.tcp", Master.systemName, _host, _port.toInt)
-      case x =>
-        throw new SparkException("Invalid spark URL: " + x)
-    }
+    masterAddress = Master.toAkkaAddress(activeMasterUrl)
     connected = true
     // Cancel any outstanding re-registration attempts because we found a new master
     registrationRetryTimer.foreach(_.cancel())
@@ -187,9 +183,9 @@ private[spark] class Worker(
   }
 
   private def tryRegisterAllMasters() {
-    for (masterUrl <- masterUrls) {
-      logInfo("Connecting to master " + masterUrl + "...")
-      val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
+    for (masterAkkaUrl <- masterAkkaUrls) {
+      logInfo("Connecting to master " + masterAkkaUrl + "...")
+      val actor = context.actorSelection(masterAkkaUrl)
       actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
     }
   }
@@ -527,8 +523,9 @@ private[spark] object Worker extends Logging {
     val securityMgr = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port,
       conf = conf, securityManager = securityMgr)
+    val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl)
     actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
-      masterUrls, systemName, actorName,  workDir, conf, securityMgr), name = actorName)
+      masterAkkaUrls, systemName, actorName,  workDir, conf, securityMgr), name = actorName)
     (actorSystem, boundPort)
   }
 

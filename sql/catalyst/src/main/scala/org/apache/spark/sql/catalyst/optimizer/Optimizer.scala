@@ -142,16 +142,16 @@ object ColumnPruning extends Rule[LogicalPlan] {
     case Project(projectList1, Project(projectList2, child)) =>
       // Create a map of Aliases to their values from the child projection.
       // e.g., 'SELECT ... FROM (SELECT a + b AS c, d ...)' produces Map(c -> Alias(a + b, c)).
-      val aliasMap = projectList2.collect {
-        case a @ Alias(e, _) => (a.toAttribute: Expression, a)
-      }.toMap
+      val aliasMap = AttributeMap(projectList2.collect {
+        case a @ Alias(e, _) => (a.toAttribute, a)
+      })
 
       // Substitute any attributes that are produced by the child projection, so that we safely
       // eliminate it.
       // e.g., 'SELECT c + 1 FROM (SELECT a + b AS C ...' produces 'SELECT a + b + 1 ...'
       // TODO: Fix TransformBase to avoid the cast below.
       val substitutedProjection = projectList1.map(_.transform {
-        case a if aliasMap.contains(a) => aliasMap(a)
+        case a: Attribute if aliasMap.contains(a) => aliasMap(a)
       }).asInstanceOf[Seq[NamedExpression]]
 
       Project(substitutedProjection, child)
@@ -294,11 +294,16 @@ object OptimizeIn extends Rule[LogicalPlan] {
 }
 
 /**
- * Simplifies boolean expressions where the answer can be determined without evaluating both sides.
+ * Simplifies boolean expressions:
+ *
+ * 1. Simplifies expressions whose answer can be determined without evaluating both sides.
+ * 2. Eliminates / extracts common factors.
+ * 3. Removes `Not` operator.
+ *
  * Note that this rule can eliminate expressions that might otherwise have been evaluated and thus
  * is only safe when evaluations of expressions does not result in side effects.
  */
-object BooleanSimplification extends Rule[LogicalPlan] {
+object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case and @ And(left, right) =>
@@ -307,7 +312,9 @@ object BooleanSimplification extends Rule[LogicalPlan] {
           case (l, Literal(true, BooleanType)) => l
           case (Literal(false, BooleanType), _) => Literal(false)
           case (_, Literal(false, BooleanType)) => Literal(false)
-          case (_, _) => and
+          // a && a && a ... => a
+          case _ if splitConjunctivePredicates(and).distinct.size == 1 => left
+          case _ => and
         }
 
       case or @ Or(left, right) =>
@@ -316,7 +323,19 @@ object BooleanSimplification extends Rule[LogicalPlan] {
           case (_, Literal(true, BooleanType)) => Literal(true)
           case (Literal(false, BooleanType), r) => r
           case (l, Literal(false, BooleanType)) => l
-          case (_, _) => or
+          // a || a || a ... => a
+          case _ if splitDisjunctivePredicates(or).distinct.size == 1 => left
+          // (a && b && c && ...) || (a && b && d && ...) => a && b && (c || d || ...)
+          case _ =>
+            val lhsSet = splitConjunctivePredicates(left).toSet
+            val rhsSet = splitConjunctivePredicates(right).toSet
+            val common = lhsSet.intersect(rhsSet)
+
+            (lhsSet.diff(common).reduceOption(And) ++ rhsSet.diff(common).reduceOption(And))
+              .reduceOption(Or)
+              .map(_ :: common.toList)
+              .getOrElse(common.toList)
+              .reduce(And)
         }
 
       case not @ Not(exp) =>
