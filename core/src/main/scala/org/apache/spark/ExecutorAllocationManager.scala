@@ -436,7 +436,12 @@ private[spark] class ExecutorAllocationManager(
       val executorId = taskStart.taskInfo.executorId
 
       allocationManager.synchronized {
-        allocationManager.onExecutorAdded(executorId)
+        // This guards against the race condition in which the `SparkListenerTaskStart`
+        // event is posted before the `SparkListenerBlockManagerAdded` event, which is
+        // possible because these events are posted in different threads.
+        if (!allocationManager.executorIds.contains(executorId)) {
+          allocationManager.onExecutorAdded(executorId)
+        }
 
         // If this is the last pending task, mark the scheduler queue as empty
         stageIdToTaskIndices.getOrElseUpdate(stageId, new mutable.HashSet[Int]) += taskIndex
@@ -474,7 +479,12 @@ private[spark] class ExecutorAllocationManager(
     override def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded): Unit = {
       val executorId = blockManagerAdded.blockManagerId.executorId
       if (executorId != SparkContext.DRIVER_IDENTIFIER) {
-        allocationManager.onExecutorAdded(executorId)
+        // This guards against the race condition in which the `SparkListenerTaskStart`
+        // event is posted before the `SparkListenerBlockManagerAdded` event, which is
+        // possible because these events are posted in different threads.
+        if (!allocationManager.executorIds.contains(executorId)) {
+          allocationManager.onExecutorAdded(executorId)
+        }
       }
     }
 
@@ -487,7 +497,7 @@ private[spark] class ExecutorAllocationManager(
      * An estimate of the total number of pending tasks remaining for currently running stages. Does
      * not account for tasks which may have failed and been resubmitted.
      *
-     * Note: The caller must own the `allocationManager` lock before calling `totalPendingTasks`
+     * Note: This is not thread-safe without the caller owning the `allocationManager` lock.
      */
     def totalPendingTasks(): Int = {
       stageIdToNumTasks.map { case (stageId, numTasks) =>
