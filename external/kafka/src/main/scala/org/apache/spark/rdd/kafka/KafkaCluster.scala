@@ -99,7 +99,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
       if (result.keys.size == topicAndPartitions.size) {
         Right(result)
       } else {
-        val missing = topicAndPartitions.diff(result.keys.toSet)
+        val missing = topicAndPartitions.diff(result.keySet)
         val err = new Err
         err.append(new Exception(s"Couldn't find leaders for ${missing}"))
         Left(err)
@@ -192,7 +192,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
           return Right(result)
         }
       }
-      val missing = topicAndPartitions.diff(result.keys.toSet)
+      val missing = topicAndPartitions.diff(result.keySet)
       errs.append(new Exception(s"Couldn't find leader offsets for ${missing}"))
       Left(errs)
     }
@@ -219,7 +219,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     withBrokers(seedBrokers, errs) { consumer =>
       val resp = consumer.fetchOffsets(req)
       val respMap = resp.requestInfo
-      val needed = topicAndPartitions.diff(result.keys.toSet)
+      val needed = topicAndPartitions.diff(result.keySet)
       needed.foreach { tp =>
         respMap.get(tp).foreach { offsetMeta =>
           if (offsetMeta.error == ErrorMapping.NoError) {
@@ -233,7 +233,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
         return Right(result)
       }
     }
-    val missing = topicAndPartitions.diff(result.keys.toSet)
+    val missing = topicAndPartitions.diff(result.keySet)
     errs.append(new Exception(s"Couldn't find consumer offsets for ${missing}"))
     Left(errs)
   }
@@ -254,11 +254,11 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     var result = Map[TopicAndPartition, Short]()
     val req = OffsetCommitRequest(groupId, metadata)
     val errs = new Err
-    val topicAndPartitions = metadata.keys.toSet
+    val topicAndPartitions = metadata.keySet
     withBrokers(seedBrokers, errs) { consumer =>
       val resp = consumer.commitOffsets(req)
       val respMap = resp.requestInfo
-      val needed = topicAndPartitions.diff(result.keys.toSet)
+      val needed = topicAndPartitions.diff(result.keySet)
       needed.foreach { tp =>
         respMap.get(tp).foreach { err =>
           if (err == ErrorMapping.NoError) {
@@ -272,7 +272,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
         return Right(result)
       }
     }
-    val missing = topicAndPartitions.diff(result.keys.toSet)
+    val missing = topicAndPartitions.diff(result.keySet)
     errs.append(new Exception(s"Couldn't set offsets for ${missing}"))
     Left(errs)
   }

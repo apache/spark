@@ -24,7 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.NextIterator
 
 import java.util.Properties
-import kafka.api.FetchRequestBuilder
+import kafka.api.{FetchRequestBuilder, FetchResponse}
 import kafka.common.{ErrorMapping, TopicAndPartition}
 import kafka.consumer.{ConsumerConfig, SimpleConsumer}
 import kafka.message.{MessageAndMetadata, MessageAndOffset}
@@ -104,6 +104,20 @@ class KafkaRDD[
         var requestOffset = part.fromOffset
         var iter: Iterator[MessageAndOffset] = null
 
+        def handleErr(resp: FetchResponse) {
+          if (resp.hasError) {
+            val err = resp.errorCode(part.topic, part.partition)
+            if (err == ErrorMapping.LeaderNotAvailableCode ||
+              err == ErrorMapping.NotLeaderForPartitionCode) {
+              log.error(s"Lost leader for topic ${part.topic} partition ${part.partition}, " +
+                s" sleeping for ${kc.config.refreshLeaderBackoffMs}ms")
+              Thread.sleep(kc.config.refreshLeaderBackoffMs)
+            }
+            // Let normal rdd retry sort out reconnect attempts
+            throw ErrorMapping.exceptionFor(err)
+          }
+        }
+
         override def close() = consumer.close()
 
         override def getNext: R = {
@@ -112,17 +126,8 @@ class KafkaRDD[
               addFetch(part.topic, part.partition, requestOffset, kc.config.fetchMessageMaxBytes).
               build()
             val resp = consumer.fetch(req)
-            if (resp.hasError) {
-              val err = resp.errorCode(part.topic, part.partition)
-              if (err == ErrorMapping.LeaderNotAvailableCode ||
-                err == ErrorMapping.NotLeaderForPartitionCode) {
-                log.error(s"Lost leader for topic ${part.topic} partition ${part.partition}, " +
-                  s" sleeping for ${kc.config.refreshLeaderBackoffMs}ms")
-                Thread.sleep(kc.config.refreshLeaderBackoffMs)
-              }
-              // Let normal rdd retry sort out reconnect attempts
-              throw ErrorMapping.exceptionFor(err)
-            }
+            handleErr(resp)
+            // kafka may return a batch that starts before the requested offset
             iter = resp.messageSet(part.topic, part.partition)
               .iterator
               .dropWhile(_.offset < requestOffset)

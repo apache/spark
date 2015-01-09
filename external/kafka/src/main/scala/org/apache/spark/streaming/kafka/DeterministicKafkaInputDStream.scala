@@ -77,7 +77,7 @@ class DeterministicKafkaInputDStream[
 
   @tailrec
   private def latestLeaderOffsets(retries: Int): Map[TopicAndPartition, Long] = {
-    val o = kc.getLatestLeaderOffsets(currentOffsets.keys.toSet)
+    val o = kc.getLatestLeaderOffsets(currentOffsets.keySet)
     // Either.fold would confuse @tailrec, do it manually
     if (o.isLeft) {
       val err = o.left.get.toString
@@ -96,8 +96,7 @@ class DeterministicKafkaInputDStream[
   private def clamp(leaderOffsets: Map[TopicAndPartition, Long]): Map[TopicAndPartition, Long] = {
     maxMessagesPerPartition.map { mmp =>
       leaderOffsets.map { kv =>
-        val (k, v) = kv
-        k -> Math.min(currentOffsets(k) + mmp, v)
+        kv._1 -> Math.min(currentOffsets(kv._1) + mmp, kv._2)
       }
     }.getOrElse(leaderOffsets)
   }
