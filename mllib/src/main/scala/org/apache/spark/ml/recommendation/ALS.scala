@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.recommendation
 
-import java.{util => javaUtil}
+import java.{util => ju}
 
 import scala.collection.mutable
 
@@ -179,7 +179,7 @@ private object ALSModel {
  *
  * Essentially instead of finding the low-rank approximations to the rating matrix `R`,
  * this finds the approximations for a preference matrix `P` where the elements of `P` are 1 if
- * r > 0 and 0 if r = 0. The ratings then act as 'confidence' values related to strength of
+ * r > 0 and 0 if r <= 0. The ratings then act as 'confidence' values related to strength of
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
@@ -314,9 +314,12 @@ private[recommendation] object ALS extends Logging {
      */
     def addImplicit(a: Array[Float], b: Float, alpha: Double): this.type = {
       require(a.size == k)
+      // Extension to the original paper to handle b < 0. confidence is a function of |b| instead
+      // so that it is never negative.
       val confidence = 1.0 + alpha * math.abs(b)
       copyToDouble(a)
       blas.dspr(upper, k, confidence - 1.0, da, 1, ata)
+      // For b <= 0, the corresponding preference is 0. So the term below is only added for b > 0.
       if (b > 0) {
         blas.daxpy(k, confidence, da, 1, atb, 1)
       }
@@ -334,8 +337,8 @@ private[recommendation] object ALS extends Logging {
 
     /** Resets everything to zero, which should be called after each solve. */
     def reset(): Unit = {
-      javaUtil.Arrays.fill(ata, 0.0)
-      javaUtil.Arrays.fill(atb, 0.0)
+      ju.Arrays.fill(ata, 0.0)
+      ju.Arrays.fill(atb, 0.0)
       n = 0
     }
   }
@@ -461,6 +464,7 @@ private[recommendation] object ALS extends Logging {
       ratings: Array[Float]) {
     /** Size of the block. */
     val size: Int = ratings.size
+
     require(dstEncodedIndices.size == size)
     require(dstPtrs.size == srcIds.size + 1)
   }
@@ -473,6 +477,11 @@ private[recommendation] object ALS extends Logging {
    * @return initialized factor blocks
    */
   private def initialize(inBlocks: RDD[(Int, InBlock)], rank: Int): RDD[(Int, FactorBlock)] = {
+    // Choose a unit vector uniformly at random from the unit sphere, but from the
+    // "first quadrant" where all elements are nonnegative. This can be done by choosing
+    // elements distributed as Normal(0,1) and taking the absolute value, and then normalizing.
+    // This appears to create factorizations that have a slightly better reconstruction
+    // (<1%) compared picking elements uniformly at random in [0,1].
     inBlocks.map { case (srcBlockId, inBlock) =>
       val random = new XORShiftRandom(srcBlockId)
       val factors = Array.fill(inBlock.srcIds.size) {
@@ -799,7 +808,7 @@ private[recommendation] object ALS extends Logging {
           i += 1
         }
         assert(i == dstIdSet.size)
-        javaUtil.Arrays.sort(sortedDstIds)
+        ju.Arrays.sort(sortedDstIds)
         val dstIdToLocalIndex = new OpenHashMap[Int, Int](sortedDstIds.size)
         i = 0
         while (i < sortedDstIds.size) {
@@ -826,7 +835,7 @@ private[recommendation] object ALS extends Logging {
       val seen = new Array[Boolean](dstPart.numPartitions)
       while (i < srcIds.size) {
         var j = dstPtrs(i)
-        javaUtil.Arrays.fill(seen, false)
+        ju.Arrays.fill(seen, false)
         while (j < dstPtrs(i + 1)) {
           val dstBlockId = encoder.blockId(dstEncodedIndices(j))
           if (!seen(dstBlockId)) {

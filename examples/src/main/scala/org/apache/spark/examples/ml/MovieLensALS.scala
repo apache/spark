@@ -142,14 +142,15 @@ object MovieLensALS {
     val predictions = model.transform(test).cache()
 
     // Evaluate the model.
+    // TODO: Create an evaluator to compute RMSE.
     val mse = predictions.select('rating, 'prediction)
       .flatMap { case Row(rating: Float, prediction: Float) =>
         val err = rating.toDouble - prediction
         val err2 = err * err
         if (err2.isNaN) {
-          Iterator.empty
+          None
         } else {
-          Iterator.single(err2)
+          Some(err2)
         }
       }.mean()
     val rmse = math.sqrt(mse)
