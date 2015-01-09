@@ -92,7 +92,7 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
   test("write data to HFile") {
     val colums = Seq(new KeyColumn("k1", IntegerType, 0), new NonKeyColumn("v1", IntegerType, "cf1", "c1"))
     val hbaseRelation = HBaseRelation("testtablename", "hbasenamespace", "hbasetablename", colums)(hbc)
-    val bulkLoad = BulkLoadIntoTableCommand("./sql/hbase/src/test/resources/test.txt", "hbasetablename",
+    val bulkLoad = BulkLoadIntoTableCommand(sparkHome + "/sql/hbase/src/test/resources/test.txt", "hbasetablename",
       isLocal = true, Option(","))
     val splitKeys = (1 to 40).filter(_ % 5 == 0).map { r =>
       val bytesUtils = BytesUtils.create(IntegerType)
