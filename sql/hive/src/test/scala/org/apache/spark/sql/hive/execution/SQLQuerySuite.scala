@@ -22,6 +22,8 @@ import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
+import org.apache.spark.sql.hive.HiveShim
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -69,17 +71,6 @@ class SQLQuerySuite extends QueryTest {
       """CREATE TABLE IF NOT EXISTS ctas4 AS
         | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
 
-    sql(
-      """CREATE TABLE ctas5
-        | ROW FORMAT SERDE 'org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe'
-        | STORED AS
-        | INPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat'
-        | OUTPUTFORMAT 'org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat'
-        | AS
-        |   SELECT key, value
-        |   FROM src
-        |   ORDER BY key, value""".stripMargin).collect
-
     checkAnswer(
       sql("SELECT k, value FROM ctas1 ORDER BY k, value"),
       sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
@@ -106,12 +97,21 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
       sql("SELECT key, value FROM ctas4 LIMIT 1").collect().toSeq)
 
-    // use the Hive SerDe for parquet tables
-    sql("set spark.sql.hive.convertMetastoreParquet = false")
-    checkAnswer(
-      sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
-      sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
-    sql("set spark.sql.hive.convertMetastoreParquet = true")
+    if (HiveShim.version =="0.13.1") {
+      sql(
+        """CREATE TABLE ctas5
+          | STORED AS parquet AS
+          |   SELECT key, value
+          |   FROM src
+          |   ORDER BY key, value""".stripMargin).collect
+
+      // use the Hive SerDe for parquet tables
+      sql("set spark.sql.hive.convertMetastoreParquet = false")
+      checkAnswer(
+        sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
+        sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
+      sql("set spark.sql.hive.convertMetastoreParquet = true")
+    }
 
     checkExistence(sql("DESC EXTENDED ctas2"), true,
       "name:key", "type:string", "name:value", "ctas2",
