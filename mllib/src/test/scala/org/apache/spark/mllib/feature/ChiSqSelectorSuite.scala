@@ -19,10 +19,10 @@ package org.apache.spark.mllib.feature
 
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.scalatest.FunSuite
 
-class ChiSqSelectorSuite extends FunSuite with LocalSparkContext {
+class ChiSqSelectorSuite extends FunSuite with MLlibTestSparkContext {
 
   lazy val labeledDiscreteData = sc.parallelize(
     Seq( new LabeledPoint(0.0, Vectors.dense(Array(8.0, 7.0, 0.0))),
