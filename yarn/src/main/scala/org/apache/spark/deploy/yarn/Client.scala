@@ -21,7 +21,7 @@ import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{HashMap, ListBuffer, Map}
+import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Map}
 import scala.util.{Try, Success, Failure}
 
 import com.google.common.base.Objects
@@ -473,17 +473,32 @@ private[spark] class Client(
       } else {
         Nil
       }
+    val primaryResource =
+      if (args.primaryResource != null) {
+        Seq("--primaryResource", args.primaryResource)
+      } else {
+        Nil
+      }
+    val pyFiles =
+      if (args.pyFiles != null) {
+        Seq("--py-files", args.pyFiles)
+      } else {
+        Nil
+      }
     val amClass =
       if (isClusterMode) {
         Class.forName("org.apache.spark.deploy.yarn.ApplicationMaster").getName
       } else {
         Class.forName("org.apache.spark.deploy.yarn.ExecutorLauncher").getName
       }
+    if (args.primaryResource != null && args.primaryResource.endsWith(".py")) {
+      args.userArgs = ArrayBuffer(args.primaryResource, args.pyFiles) ++ args.userArgs
+    }
     val userArgs = args.userArgs.flatMap { arg =>
       Seq("--arg", YarnSparkHadoopUtil.escapeForShell(arg))
     }
     val amArgs =
-      Seq(amClass) ++ userClass ++ userJar ++ userArgs ++
+      Seq(amClass) ++ userClass ++ userJar ++ primaryResource ++ pyFiles ++ userArgs ++
         Seq(
           "--executor-memory", args.executorMemory.toString + "m",
           "--executor-cores", args.executorCores.toString,

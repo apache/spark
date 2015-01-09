@@ -23,6 +23,8 @@ import java.net.URL
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.executor.ExecutorURLClassLoader
 import org.apache.spark.util.Utils
 
@@ -138,8 +140,8 @@ object SparkSubmit {
     (clusterManager, deployMode) match {
       case (MESOS, CLUSTER) =>
         printErrorAndExit("Cluster deploy mode is currently not supported for Mesos clusters.")
-      case (_, CLUSTER) if args.isPython =>
-        printErrorAndExit("Cluster deploy mode is currently not supported for python applications.")
+      case (STANDALONE, CLUSTER) if args.isPython =>
+        printErrorAndExit("Standalone-Cluster deploy mode is currently not supported for python applications.")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
       case (_, CLUSTER) if isSqlShell(args.mainClass) =>
@@ -148,7 +150,7 @@ object SparkSubmit {
     }
 
     // If we're running a python app, set the main class to our specific python runner
-    if (args.isPython) {
+    if (args.isPython && deployMode != CLUSTER) {
       if (args.primaryResource == PYSPARK_SHELL) {
         args.mainClass = "py4j.GatewayServer"
         args.childArgs = ArrayBuffer("--die-on-broken-pipe", "0")
@@ -163,6 +165,13 @@ object SparkSubmit {
       if (args.pyFiles != null) {
         sysProps("spark.submit.pyFiles") = args.pyFiles
       }
+    }
+
+    //In yarn-cluster mode for a python app, add primary Resource and pyFiles to files
+    // that can be distributed with the job
+    if (args.isPython && deployMode == CLUSTER) {
+      args.files = mergeFileLists(args.files, args.primaryResource)
+      args.files = mergeFileLists(args.files, args.pyFiles)
     }
 
     // Special flag to avoid deprecation warnings at the client
@@ -267,10 +276,22 @@ object SparkSubmit {
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
     if (isYarnCluster) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
-      if (args.primaryResource != SPARK_INTERNAL) {
-        childArgs += ("--jar", args.primaryResource)
+      if (args.isPython) {//yarn-cluster mode for python application
+      val primaryResourceLocalPath = new Path(args.primaryResource)
+        childArgs += ("--primaryResource", primaryResourceLocalPath.getName)
+        val pyFilesLocalNames:String = if (args.pyFiles != null) {
+          args.pyFiles.split(",").map { p => (new Path(p)).getName }.mkString(",")
+        } else {
+          "null"
+        }
+        childArgs += ("--py-files", pyFilesLocalNames.toString)
+        childArgs += ("--class", "org.apache.spark.deploy.PythonRunner")
+      } else {
+        if (args.primaryResource != SPARK_INTERNAL) {
+          childArgs += ("--jar", args.primaryResource)
+        }
+        childArgs += ("--class", args.mainClass)
       }
-      childArgs += ("--class", args.mainClass)
       if (args.childArgs != null) {
         args.childArgs.foreach { arg => childArgs += ("--arg", arg) }
       }

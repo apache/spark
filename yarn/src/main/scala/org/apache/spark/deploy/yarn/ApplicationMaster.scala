@@ -34,7 +34,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.SparkException
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.deploy.{PythonRunner, SparkHadoopUtil}
 import org.apache.spark.deploy.history.HistoryServer
 import org.apache.spark.scheduler.cluster.YarnSchedulerBackend
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
@@ -430,6 +430,10 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private def startUserClass(): Thread = {
     logInfo("Starting the user JAR in a separate Thread")
     System.setProperty("spark.executor.instances", args.numExecutors.toString)
+    if (args.primaryResource != null && args.primaryResource.endsWith(".py")) {
+      System.setProperty("spark.submit.pyFiles",
+        PythonRunner.formatPaths(args.pyFiles).mkString(","))
+    }
     val mainMethod = Class.forName(args.userClass, false,
       Thread.currentThread.getContextClassLoader).getMethod("main", classOf[Array[String]])
 
