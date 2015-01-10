@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hbase
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{LocatedFileStatus, FileSystem, Path}
 import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat2
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.mapreduce.Job
@@ -33,7 +33,6 @@ import org.scalatest.{BeforeAndAfterAll, FunSuite}
 import scala.collection.mutable.ArrayBuffer
 
 class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Logging {
-
   val (hbc: HBaseSQLContext, sc: SparkContext) = {
     HBaseMainTest.setupData(useMultiplePartitions = true)
     (HBaseMainTest.hbc, HBaseMainTest.sc)
@@ -285,7 +284,16 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
 
     // cleanup
     hbc.executeSql(drop)
-    FileSystem.get(hbc.sparkContext.hadoopConfiguration).delete(new Path("testblk*"), true)
+
+    // delete the temp files
+    val fileSystem = FileSystem.get(hbc.sparkContext.hadoopConfiguration)
+    val files = fileSystem.listStatus(new Path(sparkHome))
+    for (file <- files) {
+      println(file.getPath.getName)
+      if (file.getPath.getName.indexOf("testblk") != -1) {
+        fileSystem.delete(file.getPath, true)
+      }
+    }
   }
 
   override def afterAll() {
