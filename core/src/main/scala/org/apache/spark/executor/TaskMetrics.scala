@@ -164,10 +164,10 @@ class TaskMetrics extends Serializable {
   private[spark] def updateShuffleReadMetrics() = synchronized {
     val merged = new ShuffleReadMetrics()
     for (depMetrics <- depsShuffleReadMetrics) {
-      merged.fetchWaitTime += depMetrics.fetchWaitTime
-      merged.localBlocksFetched += depMetrics.localBlocksFetched
-      merged.remoteBlocksFetched += depMetrics.remoteBlocksFetched
-      merged.remoteBytesRead += depMetrics.remoteBytesRead
+      merged.incFetchWaitTime(depMetrics.fetchWaitTime)
+      merged.incLocalBlocksFetched(depMetrics.localBlocksFetched)
+      merged.incRemoteBlocksFetched(depMetrics.remoteBlocksFetched)
+      merged.incRemoteBytesRead(depMetrics.remoteBytesRead)
     }
     _shuffleReadMetrics = Some(merged)
   }
@@ -272,10 +272,7 @@ class ShuffleReadMetrics extends Serializable {
   /**
    * Number of blocks fetched in this shuffle by this task (remote or local)
    */
-  private var _totalBlocksFetched: Int = remoteBlocksFetched + localBlocksFetched
-  def totalBlocksFetched = _totalBlocksFetched
-  def incTotalBlocksFetched(value: Int) = _totalBlocksFetched += value
-  def decTotalBlocksFetched(value: Int) = _totalBlocksFetched -= value
+  def totalBlocksFetched = _remoteBlocksFetched + _localBlocksFetched
 }
 
 /**

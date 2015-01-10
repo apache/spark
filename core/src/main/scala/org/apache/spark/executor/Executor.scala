@@ -370,7 +370,7 @@ private[spark] class Executor(
             if (!taskRunner.attemptedTask.isEmpty) {
               Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
                 metrics.updateShuffleReadMetrics
-                metrics.jvmGCTime = curGCTime - taskRunner.startGCTime
+                metrics.incJvmGCTime(curGCTime - taskRunner.startGCTime)
                 if (isLocal) {
                   // JobProgressListener will hold an reference of it during
                   // onExecutorMetricsUpdate(), then JobProgressListener can not see
