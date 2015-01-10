@@ -49,7 +49,7 @@ class MLP(
   require(dropout.last == 0D)
   require(innerLayers.length == dropout.length)
 
-  protected[neuralNetwork] lazy val rand: Random = new Random()
+  @transient protected lazy val rand: Random = new Random()
 
   def topology: Array[Int] = {
     val topology = new Array[Int](numLayer + 1)
@@ -78,12 +78,11 @@ class MLP(
     output
   }
 
-  protected[neuralNetwork] def learn(x: SM, label: SM): (Array[(SM, SV)], Double, Double) = {
+  protected[mllib] def computeDelta(x: SM, label: SM): (Array[SM], Array[SM]) = {
     val batchSize = x.numCols
     val in = new Array[SM](numLayer)
     val out = new Array[SM](numLayer)
     val delta = new Array[SM](numLayer)
-    val grads = new Array[(SM, SV)](numLayer)
     val dropOutMasks: Array[SM] = dropOutMask(batchSize)
 
     for (layer <- 0 until numLayer) {
@@ -102,29 +101,41 @@ class MLP(
       out(layer) = output
     }
 
-    for (layer <- (0 until numLayer).reverse) {
-      val input = in(layer)
-      val output = out(layer)
-      delta(layer) = if (layer == numLayer - 1) {
-        innerLayers(layer).computeDeltaTop(output, label)
+    for (i <- (0 until numLayer).reverse) {
+      val output = out(i)
+      val currentLayer = innerLayers(i)
+      delta(i) = if (i == numLayer - 1) {
+        currentLayer.outputError(output, label)
       } else {
-        innerLayers(layer).computeDeltaMiddle(output, innerLayers(layer + 1), delta(layer + 1))
+        val nextLayer = innerLayers(i + 1)
+        val nextDelta = delta(i + 1)
+        nextLayer.previousError(output, currentLayer, nextDelta)
       }
-      if (dropOutMasks(layer) != null) {
-        delta(layer).toBreeze :*= dropOutMasks(layer).toBreeze
+      if (dropOutMasks(i) != null) {
+        delta(i).toBreeze :*= dropOutMasks(i).toBreeze
       }
-      grads(layer) = innerLayers(layer).backward(input, delta(layer))
     }
-
-    val cost = if (innerLayers.last.layerType == "softMax") {
-      Layer.crossEntropy(out.last, label)
-    } else {
-      Layer.meanSquaredError(out.last, label)
-    }
-    (grads, cost, batchSize.toDouble)
+    (out, delta)
   }
 
-  protected[neuralNetwork] def dropOutMask(cols: Int): Array[SM] = {
+  protected[mllib] def computeGradient(
+    x: SM, label: SM): (Array[(SM, SV)], Double, Double) = {
+    val grads = new Array[(SM, SV)](numLayer)
+    val (out, delta) = computeDelta(x, label)
+    for (i <- 0 until numLayer) {
+      val input = if (i == 0) x else out(i - 1)
+      grads(i) = innerLayers(i).backward(input, delta(i))
+    }
+
+    val cost = if (innerLayers.last.layerType == "SoftMax") {
+      NNUtil.crossEntropy(out.last, label)
+    } else {
+      NNUtil.meanSquaredError(out.last, label)
+    }
+    (grads, cost, x.numCols.toDouble)
+  }
+
+  protected[mllib] def dropOutMask(cols: Int): Array[SM] = {
     val masks = new Array[SM](numLayer)
     for (layer <- 0 until numLayer) {
       val dropoutRate = dropout(layer)
@@ -484,7 +495,7 @@ private[mllib] class MLPGradient(
     val batchedData = data.toArray
     val input = new SDM(numIn, 1, batchedData.slice(0, numIn))
     val label = new SDM(numLabel, 1, batchedData.slice(numIn, numIn + numLabel))
-    val (grads, error, _) = mlp.learn(input, label)
+    val (grads, error, _) = mlp.computeGradient(input, label)
     (MLP.structureToVector(grads), error)
   }
 
@@ -519,7 +530,8 @@ private[mllib] class MLPGradient(
         input(::, index) := brzVector(0 until numIn)
         label(::, index) := brzVector(numIn until numIn + numLabel)
       }
-      val (grads, error, _) = mlp.learn(Matrices.fromBreeze(input), Matrices.fromBreeze(label))
+      val (grads, error, _) = mlp.computeGradient(Matrices.fromBreeze(input),
+        Matrices.fromBreeze(label))
       BLAS.axpy(1, MLP.structureToVector(grads), cumGradient)
       loss += error
       count += numCol

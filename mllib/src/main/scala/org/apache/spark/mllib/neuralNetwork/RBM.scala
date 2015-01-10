@@ -42,20 +42,20 @@ class RBM(
     numIn: Int,
     numOut: Int,
     dropout: Double = 0.5D) {
-    this(Layer.initUniformDistWeight(numIn, numOut, 0D, 0.001),
-      Layer.initializeBias(numIn),
-      Layer.initializeBias(numOut),
+    this(NNUtil.initUniformDistWeight(numIn, numOut, 0D, 0.01),
+      NNUtil.initializeBias(numIn),
+      NNUtil.initializeBias(numOut),
       dropout)
   }
 
   require(dropoutRate >= 0 && dropoutRate < 1)
-  protected lazy val rand: Random = new JDKRandomGenerator()
-  protected[neuralNetwork] lazy val visibleLayer: Layer = {
+  @transient protected lazy val rand: Random = new JDKRandomGenerator()
+  @transient protected[mllib] lazy val visibleLayer: Layer = {
     val brzWeight = weight.toBreeze.toDenseMatrix
     new ReLuLayer(new SDM(weight.numCols, weight.numRows, brzWeight.t.toArray), visibleBias)
   }
 
-  protected[neuralNetwork] lazy val hiddenLayer: Layer = {
+  @transient protected[mllib] lazy val hiddenLayer: Layer = {
     new ReLuLayer(weight, hiddenBias)
   }
 
@@ -151,7 +151,7 @@ class RBM(
     val diffHidden: BM[Double] = hKMean.toBreeze - h1Mean.toBreeze
     val gradHiddenBias = Vectors.fromBreeze(brzSum(diffHidden.toDenseMatrix, BrzAxis._1))
 
-    val mse = Layer.meanSquaredError(input, vKMean)
+    val mse = NNUtil.meanSquaredError(input, vKMean)
     (gradWeight, gradVisibleBias, gradHiddenBias, mse, batchSize.toDouble)
   }
 

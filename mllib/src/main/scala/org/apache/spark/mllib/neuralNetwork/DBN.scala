@@ -26,7 +26,7 @@ class DBN(val stackedRBM: StackedRBM)
   lazy val mlp: MLP = {
     val nn = stackedRBM.toMLP()
     val lastLayer = nn.innerLayers(nn.numLayer - 1)
-    Layer.initUniformDistWeight(lastLayer.weight, 0.01)
+    NNUtil.initUniformDistWeight(lastLayer.weight, 0.01)
     nn.innerLayers(nn.numLayer - 1) = new SoftMaxLayer(lastLayer.weight, lastLayer.bias)
     nn
   }
