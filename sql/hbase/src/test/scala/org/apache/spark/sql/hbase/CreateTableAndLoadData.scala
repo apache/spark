@@ -1,5 +1,6 @@
 package org.apache.spark.sql.hbase
 
+import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{TableExistsException, HColumnDescriptor, HTableDescriptor, TableName}
 import org.apache.log4j.Logger
@@ -138,6 +139,20 @@ trait CreateTableAndLoadData extends Logging {
     // then load data into table
     val loadSql = s"LOAD DATA LOCAL INPATH '$loadFile' INTO TABLE $tableName"
     runSql(hbc, loadSql)
+  }
+
+  def cleanUp(hbc: HBaseSQLContext) = {
+    // delete the temp files
+    val sparkHome = hbc.sparkContext.getSparkHome().getOrElse(".")
+
+    val fileSystem = FileSystem.get(hbc.sparkContext.hadoopConfiguration)
+    val files = fileSystem.listStatus(new Path(sparkHome))
+    for (file <- files) {
+      println(file.getPath.getName)
+      if (file.getPath.getName.indexOf("TestTable") != -1) {
+        fileSystem.delete(file.getPath, true)
+      }
+    }
   }
 
   def s2b(s: String) = Bytes.toBytes(s)

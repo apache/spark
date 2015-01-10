@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hbase
 
+import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.spark.Logging
 import org.apache.spark.sql.SQLContext
 import org.scalatest.ConfigMap
@@ -32,6 +33,10 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase(
   override protected def beforeAll(configMap: ConfigMap): Unit = {
     super.beforeAll(configMap)
     createTableAndLoadData(hbc)
+  }
+
+  override protected def afterAll(configMap: ConfigMap): Unit = {
+    cleanUp(hbc)
   }
 
   def runQuery(sql: String) = {
@@ -85,6 +90,5 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase(
       eq
     }
   }
-
 }
 
