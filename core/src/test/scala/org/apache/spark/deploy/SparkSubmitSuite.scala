@@ -215,11 +215,12 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     childArgsStr should include regex ("launch spark://h:p .*thejar.jar org.SomeClass arg1 arg2")
     mainClass should be ("org.apache.spark.deploy.Client")
     classpath should have size (0)
-    sysProps should have size (5)
+    sysProps should have size (6)
     sysProps.keys should contain ("SPARK_SUBMIT")
     sysProps.keys should contain ("spark.master")
     sysProps.keys should contain ("spark.app.name")
     sysProps.keys should contain ("spark.jars")
+    sysProps.keys should contain ("spark.ui.showConsoleProgress")
     sysProps.keys should contain ("spark.shuffle.spill")
     sysProps("spark.shuffle.spill") should be ("false")
   }

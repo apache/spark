@@ -50,6 +50,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var name: String = null
   var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
   var jars: String = null
+  var showConsoleProgress: String = "true"
   var verbose: Boolean = false
   var isPython: Boolean = false
   var pyFiles: String = null
@@ -216,6 +217,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |  name                    $name
     |  childArgs               [${childArgs.mkString(" ")}]
     |  jars                    $jars
+    |  showConsoleProgress     $showConsoleProgress
     |  verbose                 $verbose
     |
     |Spark properties used, including those specified through
@@ -329,6 +331,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         }
         parse(tail)
 
+      case ("--no-progress-bar") :: tail =>
+        showConsoleProgress = "false"
+        parse(tail)
+
       case ("--help" | "-h") :: tail =>
         printUsageAndExit(0)
 
@@ -389,6 +395,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |                              classpath.
         |
         |  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).
+        |
+        |  --no-progress-bar           Turn off a console progress bar
         |
         |  --help, -h                  Show this help message and exit
         |  --verbose, -v               Print additional debug output
