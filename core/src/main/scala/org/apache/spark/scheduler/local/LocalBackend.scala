@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import akka.actor.{Actor, ActorRef, Props}
 
-import org.apache.spark.{Logging, SparkContext, SparkEnv, TaskState}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
@@ -43,6 +43,7 @@ private case class StopExecutor()
 private[spark] class LocalActor(
     scheduler: TaskSchedulerImpl,
     executorBackend: LocalBackend,
+    conf: SparkConf,
     private val totalCores: Int)
   extends Actor with ActorLogReceive with Logging {
 
@@ -52,7 +53,7 @@ private[spark] class LocalActor(
   private val localExecutorHostname = "localhost"
 
   private val executor = new Executor(
-    localExecutorId, localExecutorHostname, SparkEnv.get, isLocal = true)
+    localExecutorId, localExecutorHostname, SparkEnv.get, conf, isLocal = true)
 
   override def receiveWithLogging = {
     case ReviveOffers =>
@@ -90,11 +91,12 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
   extends SchedulerBackend with ExecutorBackend {
 
   private val appId = "local-" + System.currentTimeMillis
+  private val conf = SparkEnv.get.conf.clone()
   var localActor: ActorRef = null
 
   override def start() {
     localActor = SparkEnv.get.actorSystem.actorOf(
-      Props(new LocalActor(scheduler, this, totalCores)),
+      Props(new LocalActor(scheduler, this, conf, totalCores)),
       "LocalBackendActor")
   }
 
