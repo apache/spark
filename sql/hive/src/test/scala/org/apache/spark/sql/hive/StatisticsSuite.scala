@@ -72,7 +72,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
   test("analyze MetastoreRelations") {
     def queryTotalSize(tableName: String): BigInt =
-      catalog.lookupRelation(IndexedSeq(tableName)).statistics.sizeInBytes
+      catalog.lookupRelation(Seq(tableName)).statistics.sizeInBytes
 
     // Non-partitioned table
     sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
@@ -123,7 +123,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
     intercept[NotImplementedError] {
       analyze("tempTable")
     }
-    catalog.unregisterTable(IndexedSeq("tempTable"))
+    catalog.unregisterTable(Seq("tempTable"))
   }
 
   test("estimates the size of a test MetastoreRelation") {

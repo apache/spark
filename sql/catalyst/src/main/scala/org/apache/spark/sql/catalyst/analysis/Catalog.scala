@@ -31,8 +31,8 @@ trait Catalog {
   def tableExists(tableIdentifier: Seq[String]): Boolean
 
   def lookupRelation(
-                      tableIdentifier: Seq[String],
-                      alias: Option[String] = None): LogicalPlan
+      tableIdentifier: Seq[String],
+      alias: Option[String] = None): LogicalPlan
 
   def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit
 
@@ -40,8 +40,7 @@ trait Catalog {
 
   def unregisterAllTables(): Unit
 
-  protected def processTableIdentifier(tableIdentifier: Seq[String]):
-      Seq[String] = {
+  protected def processTableIdentifier(tableIdentifier: Seq[String]): Seq[String] = {
     if (!caseSensitive) {
       tableIdentifier.map(_.toLowerCase)
     } else {
@@ -49,6 +48,18 @@ trait Catalog {
     }
   }
 
+  protected def getDbTableName(tableIdent: Seq[String]): String = {
+    val size = tableIdent.size
+    if (size <= 2) {
+      tableIdent.mkString(".")
+    } else {
+      tableIdent.slice(size - 2, size).mkString(".")
+    }
+  }
+
+  protected def getDBTable(tableIdent: Seq[String]) : (Option[String], String) = {
+    (tableIdent.lift(tableIdent.size - 2), tableIdent.last)
+  }
 }
 
 class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
@@ -58,12 +69,12 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
       tableIdentifier: Seq[String],
       plan: LogicalPlan): Unit = {
     val tableIdent = processTableIdentifier(tableIdentifier)
-    tables += ((tableIdent.mkString("."), plan))
+    tables += ((getDbTableName(tableIdent), plan))
   }
 
   override def unregisterTable(tableIdentifier: Seq[String]) = {
     val tableIdent = processTableIdentifier(tableIdentifier)
-    tables -= tableIdent.mkString(".")
+    tables -= getDbTableName(tableIdent)
   }
 
   override def unregisterAllTables() = {
@@ -72,7 +83,7 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
 
   override def tableExists(tableIdentifier: Seq[String]): Boolean = {
     val tableIdent = processTableIdentifier(tableIdentifier)
-    tables.get(tableIdent.mkString(".")) match {
+    tables.get(getDbTableName(tableIdent)) match {
       case Some(_) => true
       case None => false
     }
@@ -82,9 +93,9 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
       tableIdentifier: Seq[String],
       alias: Option[String] = None): LogicalPlan = {
     val tableIdent = processTableIdentifier(tableIdentifier)
-    val tableFullName = tableIdent.mkString(".")
+    val tableFullName = getDbTableName(tableIdent)
     val table = tables.getOrElse(tableFullName, sys.error(s"Table Not Found: $tableFullName"))
-    val tableWithQualifiers = Subquery(tableIdent.head, table)
+    val tableWithQualifiers = Subquery(tableIdent.last, table)
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
     // properly qualified with this alias.
@@ -101,11 +112,11 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
 trait OverrideCatalog extends Catalog {
 
   // TODO: This doesn't work when the database changes...
-  val overrides = new mutable.HashMap[String, LogicalPlan]()
+  val overrides = new mutable.HashMap[(Option[String],String), LogicalPlan]()
 
   abstract override def tableExists(tableIdentifier: Seq[String]): Boolean = {
-    val tableIdent = processTableIdentifier(tableIdentifier).mkString(".")
-    overrides.get(tableIdent) match {
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    overrides.get(getDBTable(tableIdent)) match {
       case Some(_) => true
       case None => super.tableExists(tableIdentifier)
     }
@@ -115,8 +126,8 @@ trait OverrideCatalog extends Catalog {
     tableIdentifier: Seq[String],
     alias: Option[String] = None): LogicalPlan = {
     val tableIdent = processTableIdentifier(tableIdentifier)
-    val overriddenTable = overrides.get(tableIdent.mkString("."))
-    val tableWithQualifers = overriddenTable.map(r => Subquery(tableIdent.head, r))
+    val overriddenTable = overrides.get(getDBTable(tableIdent))
+    val tableWithQualifers = overriddenTable.map(r => Subquery(tableIdent.last, r))
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
     // properly qualified with this alias.
@@ -129,13 +140,13 @@ trait OverrideCatalog extends Catalog {
   override def registerTable(
       tableIdentifier: Seq[String],
       plan: LogicalPlan): Unit = {
-    val tableIdent = processTableIdentifier(tableIdentifier).mkString(".")
-    overrides.put(tableIdent, plan)
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    overrides.put(getDBTable(tableIdent), plan)
   }
 
   override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
-    val tableIdent = processTableIdentifier(tableIdentifier).mkString(".")
-    overrides.remove(tableIdent)
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    overrides.remove(getDBTable(tableIdent))
   }
 
   override def unregisterAllTables(): Unit = {

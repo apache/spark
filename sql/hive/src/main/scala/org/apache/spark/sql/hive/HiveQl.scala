@@ -386,10 +386,12 @@ private[hive] object HiveQl {
     (db, tableName)
   }
 
-  protected def extractTableIdent(tableNameParts: Node): IndexedSeq[String] = {
+  protected def extractTableIdent(tableNameParts: Node): Seq[String] = {
     tableNameParts.getChildren.map { case Token(part, Nil) => cleanIdentifier(part) } match {
-      case Seq(tableOnly) => IndexedSeq(tableOnly)
-      case Seq(databaseName, table) => IndexedSeq(table, databaseName)
+      case Seq(tableOnly) => Seq(tableOnly)
+      case Seq(databaseName, table) => Seq(databaseName, table)
+      case other => sys.error("Hive only supports tables names like 'tableName' " +
+        s"or 'databaseName.tableName', found '$other'")
     }
   }
 
@@ -491,7 +493,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               case tableName =>
                 // It is describing a table with the format like "describe table".
                 DescribeCommand(
-                  UnresolvedRelation(IndexedSeq(tableName.getText), None),
+                  UnresolvedRelation(Seq(tableName.getText), None),
                   extended.isDefined)
             }
           }
@@ -766,8 +768,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
       val tableIdent =
         tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
-          case Seq(tableOnly) => IndexedSeq(tableOnly)
-          case Seq(databaseName, table) => IndexedSeq(table, databaseName)
+          case Seq(tableOnly) => Seq(tableOnly)
+          case Seq(databaseName, table) => Seq(databaseName, table)
+          case other => sys.error("Hive only supports tables names like 'tableName' " +
+            s"or 'databaseName.tableName', found '$other'")
       }
       val alias = aliasClause.map { case Token(a, Nil) => cleanIdentifier(a) }
       val relation = UnresolvedRelation(tableIdent, alias)

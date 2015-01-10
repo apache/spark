@@ -60,8 +60,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   def tableExists(tableIdentifier: Seq[String]): Boolean = {
     val tableIdent = processTableIdentifier(tableIdentifier)
-    val (databaseName, tblName) =
-      (tableIdent.lift(1).getOrElse(hive.sessionState.getCurrentDatabase), tableIdent.head)
+    val databaseName = tableIdent.lift(tableIdent.size - 2).getOrElse(
+      hive.sessionState.getCurrentDatabase)
+    val tblName = tableIdent.last
     try {
       client.getTable(databaseName, tblName) != null
     } catch {
@@ -73,8 +74,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       tableIdentifier: Seq[String],
       alias: Option[String]): LogicalPlan = synchronized {
     val tableIdent = processTableIdentifier(tableIdentifier)
-    val (databaseName, tblName) =
-      (tableIdent.lift(1).getOrElse(hive.sessionState.getCurrentDatabase), tableIdent.head)
+    val databaseName = tableIdent.lift(tableIdent.size - 2).getOrElse(
+      hive.sessionState.getCurrentDatabase)
+    val tblName = tableIdent.last
     val table = client.getTable(databaseName, tblName)
     if (table.isView) {
       // if the unresolved relation is from hive view
@@ -296,7 +298,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
         // Get the CreateTableDesc from Hive SemanticAnalyzer
-        val desc: Option[CreateTableDesc] = if (tableExists(IndexedSeq(tblName, databaseName))) {
+        val desc: Option[CreateTableDesc] = if (tableExists(Seq(databaseName, tblName))) {
           None
         } else {
           val sa = new SemanticAnalyzer(hive.hiveconf) {
