@@ -20,7 +20,7 @@ package org.apache.spark.streaming.scheduler
 import akka.actor.{ActorRef, ActorSystem, Props, Actor}
 import org.apache.spark.{SparkException, SparkEnv, Logging}
 import org.apache.spark.streaming.{Checkpoint, Time, CheckpointWriter}
-import org.apache.spark.streaming.util.{TimeoutUtils, ManualClock, RecurringTimer, Clock}
+import org.apache.spark.streaming.util.{ManualClock, RecurringTimer, Clock}
 import scala.util.{Failure, Success, Try}
 
 /** Event classes for JobGenerator */
@@ -93,18 +93,13 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
     if (processReceivedData) {
       logInfo("Stopping JobGenerator gracefully")
-      val stopTimeout = conf.getLong(
-        "spark.streaming.gracefulStopTimeout",
-        10 * ssc.graph.batchDuration.milliseconds
-      )
 
 
       // Wait until all the received blocks in the network input tracker has
       // been consumed by network input DStreams, and jobs have been generated with them
       logInfo("Waiting for all received blocks to be consumed for job generation")
-      if (!TimeoutUtils.waitUntilDone(stopTimeout,
-          () => !jobScheduler.receiverTracker.hasUnallocatedBlocks)) {
-        logError("Timeout waiting for unallocated blocks in receiverTracker")
+      while (jobScheduler.receiverTracker.hasUnallocatedBlocks) {
+        Thread.sleep(100)
       }
       logInfo("Waited for all received blocks to be consumed for job generation")
 
@@ -117,10 +112,13 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       def haveAllBatchesBeenProcessed = {
         lastProcessedBatch != null && lastProcessedBatch.milliseconds == stopTime
       }
+
       logInfo("Waiting for jobs to be processed and checkpoints to be written")
-      if (!TimeoutUtils.waitUntilDone(stopTimeout, () => haveAllBatchesBeenProcessed)) {
-        logError("Timeout waiting for all batches to be processed")
+
+      while (!haveAllBatchesBeenProcessed) {
+        Thread.sleep(100)
       }
+
       logInfo("Waited for jobs to be processed and checkpoints to be written")
     } else {
       logInfo("Stopping JobGenerator immediately")

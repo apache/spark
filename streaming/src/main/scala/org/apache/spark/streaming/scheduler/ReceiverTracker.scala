@@ -18,8 +18,6 @@
 package org.apache.spark.streaming.scheduler
 
 
-import org.apache.spark.streaming.util.TimeoutUtils
-
 import scala.collection.mutable.{HashMap, SynchronizedMap}
 import scala.language.existentials
 
@@ -211,7 +209,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
   class ReceiverLauncher {
     @transient val env = ssc.env
     private var terminated = true
-    private val conf = ssc.conf
     @transient val thread  = new Thread() {
       override def run() {
         try {
@@ -233,10 +230,6 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
 
       // Wait for the Spark job that runs the receivers to be over
       // That is, for the receivers to quit gracefully.
-      val stopTimeout = conf.getLong(
-        "spark.streaming.gracefulStopTimeout",
-        10 * ssc.graph.batchDuration.milliseconds)
-
 
       thread.join(10000)
 
@@ -244,18 +237,15 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       def done = { receiverInfo.isEmpty && terminated }
 
       if (graceful) {
-        TimeoutUtils.waitUntilDone(stopTimeout,() => done ) match {
-          case true =>
-            logInfo("All of the receivers have deregistered successfully and job terminated")
-          case false =>
-            logError("Timeout waiting for receivers to deregister")
+        while (!done) {
+          Thread.sleep(100)
         }
+      }
+
+      if (!receiverInfo.isEmpty) {
+        logWarning(s"All of the receivers have not deregistered, ${receiverInfo}")
       } else {
-        if (!receiverInfo.isEmpty) {
-          logWarning("All of the receivers have not deregistered, " + receiverInfo)
-        } else {
-          logInfo("All of the receivers have deregistered successfully")
-        }
+        logInfo("All of the receivers have deregistered successfully")
       }
     }
 
@@ -318,7 +308,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       // Signal the receivers to stop
       val receivers = receiverInfo.values.flatMap { info => Option(info.actor) }
       receivers.foreach { _ ! StopReceiver }
-      logInfo("Sent stop signal to all " + receivers.size + " receivers")
+      logInfo(s"Sent stop signal to all ${receivers.size} receivers")
     }
   }
 }
