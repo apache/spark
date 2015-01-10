@@ -224,14 +224,24 @@ cp -r "$SPARK_HOME/ec2" "$DISTDIR"
 if [ "$SPARK_TACHYON" == "true" ]; then
   TACHYON_VERSION="0.5.0"
   TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/tachyon-${TACHYON_VERSION}-bin.tar.gz"
+  TACHYON_TGZ="tachyon-${TACHYON_VERSION}-bin.tar.gz"
 
   TMPD=`mktemp -d 2>/dev/null || mktemp -d -t 'disttmp'`
 
   pushd $TMPD > /dev/null
   echo "Fetching tachyon tgz"
-  wget "$TACHYON_URL"
 
-  tar xf "tachyon-${TACHYON_VERSION}-bin.tar.gz"
+  TACHYON_DL="${TACHYON_TGZ}.part"
+  if type curl &>/dev/null; then
+    curl --silent -k -L "${TACHYON_URL}" > "${TACHYON_DL}" && mv "${TACHYON_DL}" "${TACHYON_TGZ}"
+  elif type wget &>/dev/null; then
+    wget --quiet "${TACHYON_URL}" -O "${TACHYON_DL}" && mv "${TACHYON_DL}" "${TACHYON_TGZ}"
+  else
+    printf "You do not have curl or wget installed. please install Tachyon manually.\n"
+    exit -1
+  fi
+
+  tar xzf "${TACHYON_TGZ}"
   cp "tachyon-${TACHYON_VERSION}/core/target/tachyon-${TACHYON_VERSION}-jar-with-dependencies.jar" "$DISTDIR/lib"
   mkdir -p "$DISTDIR/tachyon/src/main/java/tachyon/web"
   cp -r "tachyon-${TACHYON_VERSION}"/{bin,conf,libexec} "$DISTDIR/tachyon"
