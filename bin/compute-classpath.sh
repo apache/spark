@@ -100,20 +100,24 @@ fi
 
 CLASSPATH="$CLASSPATH:$ASSEMBLY_JAR"
 
-# When Hive support is needed, Datanucleus jars must be included on the classpath.
-# Datanucleus jars do not work if only included in the uber jar as plugin.xml metadata is lost.
-# Both sbt and maven will populate "lib_managed/jars/" with the datanucleus jars when Spark is
-# built with Hive, so first check if the datanucleus jars exist, and then ensure the current Spark
-# assembly is built for Hive, before actually populating the CLASSPATH with the jars.
-# Note that this check order is faster (by up to half a second) in the case where Hive is not used.
 if [ -f "$FWDIR/RELEASE" ]; then
   datanucleus_dir="$FWDIR"/lib
 else
   datanucleus_dir="$FWDIR"/lib_managed/jars
 fi
 
+# When Hive support is needed, Datanucleus jars must be included on the classpath.
+# Datanucleus jars do not work if only included in the uber jar as plugin.xml metadata is lost.
+# Both sbt and maven will populate "lib_managed/jars/" with the datanucleus jars when Spark is
+# built with Hive, so first check if the datanucleus jars exist, and then ensure the current Spark
+# assembly is built for Hive, before actually populating the CLASSPATH with the jars.
+# Note that this check order is faster (by up to half a second) in the case where Hive is not used.
 datanucleus_jars="$(find "$datanucleus_dir" 2>/dev/null | grep "datanucleus-.*\\.jar$")"
 datanucleus_jars="$(echo "$datanucleus_jars" | tr "\n" : | sed s/:$//g)"
+
+# SPARK-4261: make right version info for beeline, copy hive-beeline*.jar to "lib_managed/jars/".
+# Here add beeline jar to classpath.
+hivebeeline_jar="$(find "$datanucleus_dir" 2>/dev/null | grep "hive-beeline-.*\\.jar")"
 
 if [ -n "$datanucleus_jars" ]; then
   hive_files=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" org/apache/hadoop/hive/ql/exec 2>/dev/null)
@@ -121,6 +125,10 @@ if [ -n "$datanucleus_jars" ]; then
     echo "Spark assembly has been built with Hive, including Datanucleus jars on classpath" 1>&2
     CLASSPATH="$CLASSPATH:$datanucleus_jars"
   fi
+fi
+
+if [ -n "$hivebeeline_jar" ]; then
+    CLASSPATH="$CLASSPATH:$hivebeeline_jar"
 fi
 
 # Add test classes if we're running from SBT or Maven with SPARK_TESTING set to 1

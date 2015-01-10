@@ -56,20 +56,29 @@ if exist "%FWDIR%RELEASE" (
 
 set CLASSPATH=%CLASSPATH%;%ASSEMBLY_JAR%
 
-rem When Hive support is needed, Datanucleus jars must be included on the classpath.
-rem Datanucleus jars do not work if only included in the uber jar as plugin.xml metadata is lost.
-rem Both sbt and maven will populate "lib_managed/jars/" with the datanucleus jars when Spark is
-rem built with Hive, so look for them there.
 if exist "%FWDIR%RELEASE" (
   set datanucleus_dir=%FWDIR%lib
 ) else (
   set datanucleus_dir=%FWDIR%lib_managed\jars
 )
+
+rem When Hive support is needed, Datanucleus jars must be included on the classpath.
+rem Datanucleus jars do not work if only included in the uber jar as plugin.xml metadata is lost.
+rem Both sbt and maven will populate "lib_managed/jars/" with the datanucleus jars when Spark is
+rem built with Hive, so look for them there.
 set "datanucleus_jars="
 for %%d in ("%datanucleus_dir%\datanucleus-*.jar") do (
   set datanucleus_jars=!datanucleus_jars!;%%d
 )
 set CLASSPATH=%CLASSPATH%;%datanucleus_jars%
+
+rem SPARK-4261: make right version info for beeline, copy hive-beeline*.jar to "lib_managed/jars/".
+rem Here add beeline jar to classpath.
+for %%d in ("%datanucleus_dir%\hive-beeline*.jar") do (
+  set hivebeeline_jar=!hivebeeline_jar!;%%d
+)
+set CLASSPATH=%CLASSPATH%;%hivebeeline_jar%
+
 
 set SPARK_CLASSES=%FWDIR%core\target\scala-%SCALA_VERSION%\classes
 set SPARK_CLASSES=%SPARK_CLASSES%;%FWDIR%repl\target\scala-%SCALA_VERSION%\classes

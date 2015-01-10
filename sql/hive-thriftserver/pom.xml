@@ -83,6 +83,29 @@
           <skip>true</skip>
         </configuration>
       </plugin>
+      <!-- Deploy hive-beeline jar to the spark/lib_managed/jars directory -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>copy-dependencies</id>
+            <phase>package</phase>
+            <goals>
+              <goal>copy-dependencies</goal>
+            </goals>
+            <configuration>
+              <!-- basedir is spark/sql/hive-thriftserver/ -->
+              <outputDirectory>${basedir}/../../lib_managed/jars</outputDirectory>
+              <overWriteReleases>false</overWriteReleases>
+              <overWriteSnapshots>false</overWriteSnapshots>
+              <overWriteIfNewer>true</overWriteIfNewer>
+              <includeGroupIds>org.spark-project.hive</includeGroupIds>
+              <includeArtifactIds>hive-beeline</includeArtifactIds>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 </project>
