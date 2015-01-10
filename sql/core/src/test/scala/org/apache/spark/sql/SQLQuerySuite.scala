@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql
 
+import java.sql.Timestamp
 import java.util.TimeZone
 
 import org.scalatest.BeforeAndAfterAll
@@ -978,6 +979,48 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     jsonRDD(sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
     checkAnswer(sql("SELECT a.b + 1 FROM data GROUP BY a.b + 1"), 2)
     dropTempTable("data")
+  }
+
+  test("Concatenation") {
+    checkAnswer(
+      sql("SELECT key || key FROM testData ORDER BY key"),
+      (1 to 100).map(s => Seq(s.toString * 2)))
+
+    checkAnswer(
+      sql("SELECT key || key || key FROM testData ORDER BY key"),
+      (1 to 100).map(s => Seq(s.toString * 3)))
+
+    checkAnswer(
+      sql("SELECT key || value FROM testData ORDER BY key"),
+      (1 to 100).map(s => Seq(s.toString * 2)))
+
+    checkAnswer(
+      sql("SELECT value || key FROM testData ORDER BY key"),
+      (1 to 100).map(s => Seq(s.toString * 2)))
+
+    checkAnswer(
+      sql("SELECT value || value FROM testData ORDER BY key"),
+      (1 to 100).map(s => Seq(s.toString * 2)))
+
+    checkAnswer(
+      sql("SELECT time || 'example' FROM timestamps"),
+      (1 to 3).map(s => Seq(new Timestamp(s).toString + "example")))
+
+    checkAnswer(
+      sql("SELECT key || 'spark' FROM testData ORDER BY key"),
+      (1 to 100).map(s => Seq(s.toString + "spark")))
+
+    checkAnswer(
+      sql("SELECT key || true FROM testData ORDER BY key"),
+      (1 to 100).map(s => Seq(s.toString + true)))
+
+    checkAnswer(
+      sql("SELECT key || 100 FROM testData ORDER BY key"),
+      (1 to 100).map(s => Seq(s.toString + 100)))
+
+    checkAnswer(
+      sql("SELECT key || null FROM testData ORDER BY key"),
+      (1 to 100).map(_ => Seq(null)))
   }
 
   test("SPARK-4432 Fix attribute reference resolution error when using ORDER BY") {

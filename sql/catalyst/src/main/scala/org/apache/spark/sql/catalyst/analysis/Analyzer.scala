@@ -315,7 +315,6 @@ class Analyzer(catalog: Catalog,
         val unresolved = ordering.flatMap(_.collect { case UnresolvedAttribute(name) => name })
         val resolved = unresolved.flatMap(child.resolve(_, resolver))
         val requiredAttributes = AttributeSet(resolved.collect { case a: Attribute => a })
-
         val missingInProject = requiredAttributes -- p.output
         if (missingInProject.nonEmpty) {
           // Add missing attributes and then project them away after the sort.

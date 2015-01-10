@@ -1026,6 +1026,101 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(s.substring(0), "example", row)
   }
 
+  test("Concatenation") {
+    val row = new GenericRow(Array[Any](
+      "hello ", "spark", true, 10.asInstanceOf[Byte],
+      20.asInstanceOf[Short], 100, 300L, Decimal("1000000000000000000000"),
+      Date.valueOf("2001-03-03"), Timestamp.valueOf("2001-03-03 05:00:00"),
+      false
+    ))
+    val strc1 = 'a.string.at(0)
+    val strc2 = 'a.string.at(1)
+    val boolc1 = 'a.boolean.at(2)
+    val bytec1 = 'a.byte.at(3)
+    val shortc1 = 'a.short.at(4)
+    val intc1 = 'a.int.at(5)
+    val longc1 = 'a.long.at(6)
+    val decimalc1 = 'a.decimal.at(7)
+    val datec1 = 'a.date.at(8)
+    val timestampc1 = 'a.timestamp.at(9)
+    val boolc2 = 'a.timestamp.at(10)
+
+    // The type of left operand is string
+    checkEvaluation(strc1 concat strc2, "hello spark", row)
+    checkEvaluation(strc1 concat boolc1, "hello true", row)
+    checkEvaluation(strc1 concat bytec1, "hello 10", row)
+    checkEvaluation(strc1 concat shortc1, "hello 20", row)
+    checkEvaluation(strc1 concat intc1, "hello 100", row)
+    checkEvaluation(strc1 concat longc1, "hello 300", row)
+    checkEvaluation(strc1 concat decimalc1, "hello 1000000000000000000000", row)
+    checkEvaluation(strc1 concat datec1, "hello 2001-03-03", row)
+    checkEvaluation(strc1 concat timestampc1, "hello 2001-03-03 05:00:00.0", row)
+
+    // The type of right operand is string
+    checkEvaluation(boolc1 concat strc2, "truespark", row)
+    checkEvaluation(bytec1 concat strc2, "10spark", row)
+    checkEvaluation(shortc1 concat strc2, "20spark", row)
+    checkEvaluation(intc1 concat strc2, "100spark", row)
+    checkEvaluation(longc1 concat strc2, "300spark", row)
+    checkEvaluation(decimalc1 concat strc2, "1000000000000000000000spark", row)
+    checkEvaluation(datec1 concat strc2, "2001-03-03spark", row)
+    checkEvaluation(timestampc1 concat strc2, "2001-03-03 05:00:00.0spark", row)
+
+    // The type of both operands is not string
+    checkEvaluation(boolc1 concat boolc2, "truefalse", row)
+    checkEvaluation(boolc1 concat bytec1, "true10", row)
+    checkEvaluation(boolc1 concat shortc1, "true20", row)
+    checkEvaluation(boolc1 concat intc1, "true100", row)
+    checkEvaluation(boolc1 concat longc1, "true300", row)
+    checkEvaluation(boolc1 concat decimalc1, "true1000000000000000000000", row)
+    checkEvaluation(boolc1 concat datec1, "true2001-03-03", row)
+    checkEvaluation(boolc1 concat timestampc1, "true2001-03-03 05:00:00.0", row)
+    checkEvaluation(bytec1 concat shortc1, "1020", row)
+    checkEvaluation(bytec1 concat intc1, "10100", row)
+    checkEvaluation(bytec1 concat longc1, "10300", row)
+    checkEvaluation(bytec1 concat decimalc1, "101000000000000000000000", row)
+    checkEvaluation(bytec1 concat datec1, "102001-03-03", row)
+    checkEvaluation(bytec1 concat timestampc1, "102001-03-03 05:00:00.0", row)
+    checkEvaluation(shortc1 concat intc1, "20100", row)
+    checkEvaluation(shortc1 concat longc1, "20300", row)
+    checkEvaluation(shortc1 concat decimalc1, "201000000000000000000000", row)
+    checkEvaluation(shortc1 concat datec1, "202001-03-03", row)
+    checkEvaluation(shortc1 concat timestampc1, "202001-03-03 05:00:00.0", row)
+    checkEvaluation(intc1 concat longc1, "100300", row)
+    checkEvaluation(intc1 concat decimalc1, "1001000000000000000000000", row)
+    checkEvaluation(intc1 concat datec1, "1002001-03-03", row)
+    checkEvaluation(intc1 concat timestampc1, "1002001-03-03 05:00:00.0", row)
+    checkEvaluation(longc1 concat decimalc1, "3001000000000000000000000", row)
+    checkEvaluation(longc1 concat datec1, "3002001-03-03", row)
+    checkEvaluation(longc1 concat timestampc1, "3002001-03-03 05:00:00.0", row)
+    checkEvaluation(decimalc1 concat datec1, "10000000000000000000002001-03-03", row)
+    checkEvaluation(decimalc1 concat timestampc1,
+      "10000000000000000000002001-03-03 05:00:00.0", row)
+    checkEvaluation(datec1 concat timestampc1, "2001-03-032001-03-03 05:00:00.0", row)
+
+    // The type of left operand is null
+    checkEvaluation(Literal(null, NullType) concat strc1, null, row)
+    checkEvaluation(Literal(null, NullType) concat boolc1, null, row)
+    checkEvaluation(Literal(null, NullType) concat bytec1, null, row)
+    checkEvaluation(Literal(null, NullType) concat shortc1, null, row)
+    checkEvaluation(Literal(null, NullType) concat intc1, null, row)
+    checkEvaluation(Literal(null, NullType) concat longc1, null, row)
+    checkEvaluation(Literal(null, NullType) concat decimalc1, null, row)
+    checkEvaluation(Literal(null, NullType) concat datec1, null, row)
+    checkEvaluation(Literal(null, NullType) concat timestampc1, null, row)
+
+    // The type of right operand is null
+    checkEvaluation(strc1 concat Literal(null, NullType), null, row)
+    checkEvaluation(boolc1 concat Literal(null, NullType), null, row)
+    checkEvaluation(bytec1 concat Literal(null, NullType), null, row)
+    checkEvaluation(shortc1 concat Literal(null, NullType), null, row)
+    checkEvaluation(intc1 concat Literal(null, NullType), null, row)
+    checkEvaluation(longc1 concat Literal(null, NullType), null, row)
+    checkEvaluation(decimalc1 concat Literal(null, NullType), null, row)
+    checkEvaluation(datec1 concat Literal(null, NullType), null, row)
+    checkEvaluation(timestampc1 concat Literal(null, NullType), null, row)
+  }
+
   test("SQRT") {
     val inputSequence = (1 to (1<<24) by 511).map(_ * (1L<<24))
     val expectedResults = inputSequence.map(l => math.sqrt(l.toDouble))

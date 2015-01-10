@@ -272,3 +272,29 @@ case class Substring(str: Expression, pos: Expression, len: Expression) extends 
     case _ => s"SUBSTR($str, $pos, $len)"
   }
 }
+
+/**
+ * A function that concatenates two strings.
+ */
+case class Concat(left: Expression, right: Expression) extends BinaryExpression {
+
+  type EvaluatedType = Any
+
+  def nullable: Boolean = left.nullable || right.nullable
+  override def dataType: DataType = StringType
+
+  override def eval(input: Row): Any = {
+    val leftEvaled = left.eval(input)
+    val rightEvaled = right.eval(input)
+
+    if (leftEvaled == null || rightEvaled == null) {
+      null
+    } else {
+      val leftStr = leftEvaled.toString
+      val rightStr = rightEvaled.toString
+      leftStr + rightStr
+    }
+  }
+
+  def symbol: String = "||"
+}
