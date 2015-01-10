@@ -44,10 +44,8 @@ class HBaseInsertTableSuite extends QueriesSuiteBase with Logging {
 
     compareResults(testResult, targetResult)
 
-    logInfo(s"$testQuery came back with ${testResult.size} results")
-    logInfo(testResult.mkString)
-
-    logInfo(s"Test $testnm completed successfully")
+    //logInfo(s"$testQuery came back with ${testResult.size} results")
+    //logInfo(testResult.mkString)
   }
 
   testnm = "Insert few rows to the table from other table after applying filter"
@@ -73,10 +71,8 @@ class HBaseInsertTableSuite extends QueriesSuiteBase with Logging {
 
     compareResults(testResult, targetResult)
 
-    logInfo(s"$testQuery came back with ${testResult.size} results")
-    logInfo(testResult.mkString)
-
-    logInfo(s"Test $testnm completed successfully")
+    //logInfo(s"$testQuery came back with ${testResult.size} results")
+    //logInfo(testResult.mkString)
   }
   
   def compareResults(fetchResult: Array[Row], targetResult: Array[Row]) = {
@@ -111,10 +107,8 @@ class HBaseInsertTableSuite extends QueriesSuiteBase with Logging {
 
     compareResults(testResult, targetResult)
 
-    logInfo(s"$testQuery came back with ${testResult.size} results")
-    logInfo(testResult.mkString)
-
-    logInfo(s"Test $testnm completed successfully")
+    //logInfo(s"$testQuery came back with ${testResult.size} results")
+    //logInfo(testResult.mkString)
   }
 
   testnm = "Insert into values test"
@@ -147,9 +141,7 @@ class HBaseInsertTableSuite extends QueriesSuiteBase with Logging {
     }.foldLeft(true) { case (res1, newres) => res1 && newres}
     assert(res, "One or more rows did not match expected")
 
-    logInfo(s"$testQuery came back with ${testResult.size} results")
-    logInfo(testResult.mkString)
-
-    logInfo(s"Test $testnm completed successfully")
+    //logInfo(s"$testQuery came back with ${testResult.size} results")
+    //logInfo(testResult.mkString)
   }
 }
