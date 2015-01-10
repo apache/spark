@@ -26,9 +26,9 @@ object IsotonicDataGenerator {
    * @param labels list of labels for the data points
    * @return Java List of input.
    */
-  def generateIsotonicInputAsList(labels: Array[Double]): java.util.List[(java.lang.Double, java.lang.Double, java.lang.Double)] = {
-    seqAsJavaList(generateIsotonicInput(wrapDoubleArray(labels):_*)
-      .map(d => new Tuple3(new java.lang.Double(d._1), new java.lang.Double(d._2), new java.lang.Double(d._3))))
+  def generateIsotonicInputAsList(labels: Array[Double]): java.util.List[(Double, Double, Double)] = {
+    seqAsJavaList(generateIsotonicInput(wrapDoubleArray(labels):_*))
+      //.map(d => new Tuple3(new java.lang.Double(d._1), new java.lang.Double(d._2), new java.lang.Double(d._3))))
   }
 
   def bam(d: Option[Double]): Double = d.get

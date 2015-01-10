@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 
 /**
@@ -26,19 +25,17 @@ import org.apache.spark.rdd.RDD
  * @param predictions Weights computed for every feature.
  * @param isotonic isotonic (increasing) or antitonic (decreasing) sequence
  */
-class IsotonicRegressionModel(
+class IsotonicRegressionModel (
     val predictions: Seq[(Double, Double, Double)],
     val isotonic: Boolean)
-  extends RegressionModel {
+  extends Serializable {
 
-  override def predict(testData: RDD[Vector]): RDD[Double] =
+  def predict(testData: RDD[Double]): RDD[Double] =
     testData.map(predict)
 
-  override def predict(testData: Vector): Double = {
+  def predict(testData: Double): Double =
     // Take the highest of data points smaller than our feature or data point with lowest feature
-    (predictions.head +:
-      predictions.filter(y => y._2 <= testData.toArray.head)).last._1
-  }
+    (predictions.head +: predictions.filter(y => y._2 <= testData)).last._1
 }
 
 /**
@@ -118,19 +115,22 @@ class PoolAdjacentViolators private [mllib]
       }
     }
 
-    var i = 0
+    def monotonicityConstraint(isotonic: Boolean): (Double, Double) => Boolean =
+      (x, y) => if(isotonic) {
+        x <= y
+      } else {
+        x >= y
+      }
 
-    val monotonicityConstrainter: (Double, Double) => Boolean = (x, y) => if(isotonic) {
-      x <= y
-    } else {
-      x >= y
-    }
+    val monotonicityConstraintHolds = monotonicityConstraint(isotonic)
+
+    var i = 0
 
     while(i < in.length) {
       var j = i
 
       // Find monotonicity violating sequence, if any
-      while(j < in.length - 1 && !monotonicityConstrainter(in(j)._1, in(j + 1)._1)) {
+      while(j < in.length - 1 && !monotonicityConstraintHolds(in(j)._1, in(j + 1)._1)) {
         j = j + 1
       }
 
@@ -140,7 +140,7 @@ class PoolAdjacentViolators private [mllib]
       } else {
         // Otherwise pool the violating sequence
         // And check if pooling caused monotonicity violation in previously processed points
-        while (i >= 0 && !monotonicityConstrainter(in(i)._1, in(i + 1)._1)) {
+        while (i >= 0 && !monotonicityConstraintHolds(in(i)._1, in(i + 1)._1)) {
           pool(in, i, j)
           i = i - 1
         }
