@@ -45,7 +45,7 @@ class AllDataTypesScanSource extends SchemaRelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String],
-      schema: Option[StructType]): BaseRelation = {
+      schema: StructType): BaseRelation = {
     AllDataTypesScan(parameters("from").toInt, parameters("TO").toInt, schema)(sqlContext)
   }
 }
@@ -53,10 +53,10 @@ class AllDataTypesScanSource extends SchemaRelationProvider {
 case class AllDataTypesScan(
   from: Int,
   to: Int,
-  userSpecifiedSchema: Option[StructType])(@transient val sqlContext: SQLContext)
+  userSpecifiedSchema: StructType)(@transient val sqlContext: SQLContext)
   extends TableScan {
 
-  override def schema = userSpecifiedSchema.get
+  override def schema = userSpecifiedSchema
 
   override def buildScan() = {
     sqlContext.sparkContext.parallelize(from to to).map { i =>
