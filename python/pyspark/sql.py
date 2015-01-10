@@ -814,7 +814,7 @@ def _create_converter(dataType):
             elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):
                 d = dict(obj)
             else:
-                raise ValueError("unexpected tuple: %s" % obj)
+                raise ValueError("unexpected tuple: %s" % str(obj))
 
         elif isinstance(obj, dict):
             d = obj
