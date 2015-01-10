@@ -65,7 +65,7 @@ private[spark] class Client(
   private val amMemoryOverhead = args.amMemoryOverhead // MB
   private val executorMemoryOverhead = args.executorMemoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
-  private val isClusterMode = args.userClass != null
+  private val isClusterMode = args.isClusterMode
 
 
   def stop(): Unit = yarnClient.stop()

@@ -15,28 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.scheduler
 
-import org.scalatest.BeforeAndAfterAll
-import org.scalatest.Suite
+import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
 
-/** Shares a local `SparkContext` between all tests in a suite and closes it at the end */
-trait SharedSparkContext extends BeforeAndAfterAll { self: Suite =>
+import org.apache.spark.TaskContext
 
-  @transient private var _sc: SparkContext = _
+/**
+ * A Task implementation that fails to serialize.
+ */
+private[spark] class NotSerializableFakeTask(myId: Int, stageId: Int) extends Task[Array[Byte]](stageId, 0) {
+  override def runTask(context: TaskContext): Array[Byte] = Array.empty[Byte]
+  override def preferredLocations: Seq[TaskLocation] = Seq[TaskLocation]()
 
-  def sc: SparkContext = _sc
-
-  var conf = new SparkConf(false)
-
-  override def beforeAll() {
-    _sc = new SparkContext("local[4]", "test", conf)
-    super.beforeAll()
+  @throws(classOf[IOException])
+  private def writeObject(out: ObjectOutputStream): Unit = {
+    if (stageId == 0) {
+      throw new IllegalStateException("Cannot serialize")
+    }
   }
 
-  override def afterAll() {
-    LocalSparkContext.stop(_sc)
-    _sc = null
-    super.afterAll()
-  }
+  @throws(classOf[IOException])
+  private def readObject(in: ObjectInputStream): Unit = {}
 }
