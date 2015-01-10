@@ -18,6 +18,7 @@
 package org.apache.spark.rdd.kafka
 
 import scala.util.control.NonFatal
+import scala.util.Random
 import scala.collection.mutable.ArrayBuffer
 import java.util.Properties
 import kafka.api._
@@ -67,7 +68,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     val req = TopicMetadataRequest(TopicMetadataRequest.CurrentVersion,
       0, config.clientId, Seq(topic))
     val errs = new Err
-    withBrokers(seedBrokers, errs) { consumer =>
+    withBrokers(Random.shuffle(seedBrokers), errs) { consumer =>
       val resp: TopicMetadataResponse = consumer.send(req)
       resp.topicsMetadata.find(_.topic == topic).flatMap { t =>
         t.partitionsMetadata.find(_.partitionId == partition)
@@ -120,7 +121,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     val req = TopicMetadataRequest(TopicMetadataRequest.CurrentVersion,
       0, config.clientId, topics.toSeq)
     val errs = new Err
-    withBrokers(seedBrokers, errs) { consumer =>
+    withBrokers(Random.shuffle(seedBrokers), errs) { consumer =>
       val resp: TopicMetadataResponse = consumer.send(req)
       // error codes here indicate missing / just created topic,
       // repeating on a different broker wont be useful
@@ -218,7 +219,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     var result = Map[TopicAndPartition, OffsetMetadataAndError]()
     val req = OffsetFetchRequest(groupId, topicAndPartitions.toSeq)
     val errs = new Err
-    withBrokers(seedBrokers, errs) { consumer =>
+    withBrokers(Random.shuffle(seedBrokers), errs) { consumer =>
       val resp = consumer.fetchOffsets(req)
       val respMap = resp.requestInfo
       val needed = topicAndPartitions.diff(result.keySet)
@@ -257,7 +258,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
     val req = OffsetCommitRequest(groupId, metadata)
     val errs = new Err
     val topicAndPartitions = metadata.keySet
-    withBrokers(seedBrokers, errs) { consumer =>
+    withBrokers(Random.shuffle(seedBrokers), errs) { consumer =>
       val resp = consumer.commitOffsets(req)
       val respMap = resp.requestInfo
       val needed = topicAndPartitions.diff(result.keySet)
