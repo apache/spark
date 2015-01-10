@@ -468,7 +468,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(executorsPendingToRemove(manager).isEmpty)
     clock.tick(executorIdleTimeout * 1000)
     schedule(manager)
-    assert(removeTimes(manager).size === 1) // idle threshold exceeded (1 executor remaining)
+    assert(removeTimes(manager).isEmpty) // idle threshold exceeded
     assert(executorsPendingToRemove(manager).size === 2) // limit reached (1 executor remaining)
 
     // Mark a subset as busy - only idle executors should be removed
@@ -482,13 +482,11 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     onExecutorBusy(manager, "executor-5")
     onExecutorBusy(manager, "executor-6") // 3 busy and 2 idle (of the 5 active ones)
     schedule(manager)
-    // remove one idle executor (one of "executor-1", "executor-2", "executor-3") because
-    // its idle threshold is exceeded
-    assert(removeTimes(manager).size === 1)
+    assert(removeTimes(manager).size === 2) // remove only idle executors
     assert(!removeTimes(manager).contains("executor-4"))
     assert(!removeTimes(manager).contains("executor-5"))
     assert(!removeTimes(manager).contains("executor-6"))
-    assert(executorsPendingToRemove(manager).size === 3)
+    assert(executorsPendingToRemove(manager).size === 2)
     clock.tick(executorIdleTimeout * 1000)
     schedule(manager)
     assert(removeTimes(manager).isEmpty) // idle executors are removed
@@ -509,7 +507,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(executorsPendingToRemove(manager).size === 4)
     clock.tick(executorIdleTimeout * 1000)
     schedule(manager)
-    assert(removeTimes(manager).size === 1) // idle threshold exceeded (1 executor remaining)
+    assert(removeTimes(manager).isEmpty)
     assert(executorsPendingToRemove(manager).size === 6) // limit reached (1 executor remaining)
   }
 

@@ -213,7 +213,11 @@ private[spark] class ExecutorAllocationManager(
     }
 
     removeTimes.retain { case (executorId, expireTime) =>
-      now < expireTime || !removeExecutor(executorId)
+      val expired = now >= expireTime
+      if (expired) {
+        removeExecutor(executorId)
+      }
+      !expired
     }
   }
 
@@ -315,7 +319,7 @@ private[spark] class ExecutorAllocationManager(
   private def onExecutorAdded(executorId: String): Unit = synchronized {
     if (!executorIds.contains(executorId)) {
       executorIds.add(executorId)
-      onExecutorIdle(executorId)
+      executorIds.filter(listener.isExecutorIdle).foreach(onExecutorIdle)
       logInfo(s"New executor $executorId has registered (new total is ${executorIds.size})")
       if (numExecutorsPending > 0) {
         numExecutorsPending -= 1
@@ -503,6 +507,13 @@ private[spark] class ExecutorAllocationManager(
       stageIdToNumTasks.map { case (stageId, numTasks) =>
         numTasks - stageIdToTaskIndices.get(stageId).map(_.size).getOrElse(0)
       }.sum
+    }
+
+    /**
+     * Note: This is not thread-safe without the caller owning the `allocationManager` lock.
+     */
+    def isExecutorIdle(executorId: String): Boolean = {
+      !executorIdToTaskIds.contains(executorId)
     }
   }
 
