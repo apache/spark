@@ -20,12 +20,7 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.util.{List => JList}
 
-import org.apache.spark.sql.execution.SparkPlan
-
-import scala.util.parsing.combinator.RegexParsers
-
 import org.apache.hadoop.util.ReflectionUtils
-
 import org.apache.hadoop.hive.metastore.TableType
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
@@ -37,7 +32,6 @@ import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{Catalog, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -412,88 +406,6 @@ private[hive] case class InsertIntoHiveTable(
   }
 }
 
-/**
- * :: DeveloperApi ::
- * Provides conversions between Spark SQL data types and Hive Metastore types.
- */
-@DeveloperApi
-object HiveMetastoreTypes extends RegexParsers {
-  protected lazy val primitiveType: Parser[DataType] =
-    "string" ^^^ StringType |
-    "float" ^^^ FloatType |
-    "int" ^^^ IntegerType |
-    "tinyint" ^^^ ByteType |
-    "smallint" ^^^ ShortType |
-    "double" ^^^ DoubleType |
-    "bigint" ^^^ LongType |
-    "binary" ^^^ BinaryType |
-    "boolean" ^^^ BooleanType |
-    fixedDecimalType |                     // Hive 0.13+ decimal with precision/scale
-    "decimal" ^^^ DecimalType.Unlimited |  // Hive 0.12 decimal with no precision/scale
-    "date" ^^^ DateType |
-    "timestamp" ^^^ TimestampType |
-    "varchar\\((\\d+)\\)".r ^^^ StringType
-
-  protected lazy val fixedDecimalType: Parser[DataType] =
-    ("decimal" ~> "(" ~> "\\d+".r) ~ ("," ~> "\\d+".r <~ ")") ^^ {
-      case precision ~ scale =>
-        DecimalType(precision.toInt, scale.toInt)
-    }
-
-  protected lazy val arrayType: Parser[DataType] =
-    "array" ~> "<" ~> dataType <~ ">" ^^ {
-      case tpe => ArrayType(tpe)
-    }
-
-  protected lazy val mapType: Parser[DataType] =
-    "map" ~> "<" ~> dataType ~ "," ~ dataType <~ ">" ^^ {
-      case t1 ~ _ ~ t2 => MapType(t1, t2)
-    }
-
-  protected lazy val structField: Parser[StructField] =
-    "[a-zA-Z0-9_]*".r ~ ":" ~ dataType ^^ {
-      case name ~ _ ~ tpe => StructField(name, tpe, nullable = true)
-    }
-
-  protected lazy val structType: Parser[DataType] =
-    "struct" ~> "<" ~> repsep(structField,",") <~ ">"  ^^ {
-      case fields => new StructType(fields)
-    }
-
-  protected lazy val dataType: Parser[DataType] =
-    arrayType |
-    mapType |
-    structType |
-    primitiveType
-
-  def toDataType(metastoreType: String): DataType = parseAll(dataType, metastoreType) match {
-    case Success(result, _) => result
-    case failure: NoSuccess => sys.error(s"Unsupported dataType: $metastoreType")
-  }
-
-  def toMetastoreType(dt: DataType): String = dt match {
-    case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"
-    case StructType(fields) =>
-      s"struct<${fields.map(f => s"${f.name}:${toMetastoreType(f.dataType)}").mkString(",")}>"
-    case MapType(keyType, valueType, _) =>
-      s"map<${toMetastoreType(keyType)},${toMetastoreType(valueType)}>"
-    case StringType => "string"
-    case FloatType => "float"
-    case IntegerType => "int"
-    case ByteType => "tinyint"
-    case ShortType => "smallint"
-    case DoubleType => "double"
-    case LongType => "bigint"
-    case BinaryType => "binary"
-    case BooleanType => "boolean"
-    case DateType => "date"
-    case d: DecimalType => HiveShim.decimalMetastoreString(d)
-    case TimestampType => "timestamp"
-    case NullType => "void"
-    case udt: UserDefinedType[_] => toMetastoreType(udt.sqlType)
-  }
-}
-
 private[hive] case class MetastoreRelation
     (databaseName: String, tableName: String, alias: Option[String])
     (val table: TTable, val partitions: Seq[TPartition])
@@ -551,7 +463,7 @@ private[hive] case class MetastoreRelation
   implicit class SchemaAttribute(f: FieldSchema) {
     def toAttribute = AttributeReference(
       f.getName,
-      HiveMetastoreTypes.toDataType(f.getType),
+      sqlContext.ddlParser.parseType(f.getType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
     )(qualifiers = Seq(alias.getOrElse(tableName)))
@@ -570,4 +482,28 @@ private[hive] case class MetastoreRelation
 
   /** An attribute map for determining the ordinal for non-partition columns. */
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
+}
+
+object HiveMetastoreTypes {
+  def toMetastoreType(dt: DataType): String = dt match {
+    case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"
+    case StructType(fields) =>
+      s"struct<${fields.map(f => s"${f.name}:${toMetastoreType(f.dataType)}").mkString(",")}>"
+    case MapType(keyType, valueType, _) =>
+      s"map<${toMetastoreType(keyType)},${toMetastoreType(valueType)}>"
+    case StringType => "string"
+    case FloatType => "float"
+    case IntegerType => "int"
+    case ByteType => "tinyint"
+    case ShortType => "smallint"
+    case DoubleType => "double"
+    case LongType => "bigint"
+    case BinaryType => "binary"
+    case BooleanType => "boolean"
+    case DateType => "date"
+    case d: DecimalType => HiveShim.decimalMetastoreString(d)
+    case TimestampType => "timestamp"
+    case NullType => "void"
+    case udt: UserDefinedType[_] => toMetastoreType(udt.sqlType)
+  }
 }
