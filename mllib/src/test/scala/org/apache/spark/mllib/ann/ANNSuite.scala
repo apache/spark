@@ -39,7 +39,7 @@ class ANNSuite extends FunSuite with MLlibTestSparkContext {
     val rddData = sc.parallelize(data, 2)
     val hiddenLayersTopology = Array[Int](5)
     val initialWeights = ArtificialNeuralNetwork.randomWeights(rddData, hiddenLayersTopology, 0x01234567)
-    val model = ArtificialNeuralNetwork.train(rddData, hiddenLayersTopology, initialWeights, 200)
+    val model = ArtificialNeuralNetwork.train(rddData, 4, hiddenLayersTopology, initialWeights, 200)
     val predictionAndLabels = rddData.map { case(input, label) =>
       (model.predict(input)(0), label(0)) }.collect()
     assert(predictionAndLabels.forall { case(p, l) => (math.round(p) - l) == 0 })
