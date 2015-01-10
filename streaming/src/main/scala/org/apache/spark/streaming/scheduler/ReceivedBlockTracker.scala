@@ -203,9 +203,11 @@ private[streaming] class ReceivedBlockTracker(
 
   /** Write an update to the tracker to the write ahead log */
   private def writeToLog(record: ReceivedBlockTrackerLogEvent) {
-    logDebug(s"Writing to log $record")
-    logManagerOption.foreach { logManager =>
+    if (isLogManagerEnabled) {
+      logDebug(s"Writing to log $record")
+      logManagerOption.foreach { logManager =>
         logManager.writeToLog(ByteBuffer.wrap(Utils.serialize(record)))
+      }
     }
   }
 
