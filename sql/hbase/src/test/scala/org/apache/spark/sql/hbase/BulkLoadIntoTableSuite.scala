@@ -158,12 +158,12 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
       val valueBytes = new Array[(Array[Byte], Array[Byte], Array[Byte])](1)
       val bytesUtils = BytesUtils.create(IntegerType)
       val family = Bytes.toBytes("cf")
-      val qualyfier = Bytes.toBytes("c1")
+      val qualifier = Bytes.toBytes("c1")
 
       iter.map { line =>
         val splits = line.split(splitRegex)
         keyBytes(0) = (bytesUtils.toBytes(splits(0).toInt), IntegerType)
-        valueBytes(0) = (family, qualyfier, bytesUtils.toBytes(splits(1).toInt))
+        valueBytes(0) = (family, qualifier, bytesUtils.toBytes(splits(1).toInt))
         val rowKeyData = bytesUtils.toBytes(splits(0).toInt)
 
         val rowKey = new ImmutableBytesWritableWrapper(rowKeyData)
