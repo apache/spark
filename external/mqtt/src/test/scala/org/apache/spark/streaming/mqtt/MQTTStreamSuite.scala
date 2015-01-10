@@ -20,6 +20,7 @@ package org.apache.spark.streaming.mqtt
 import java.net.{URI, ServerSocket}
 
 import scala.concurrent.duration._
+import scala.language.postfixOps
 
 import org.apache.activemq.broker.{TransportConnector, BrokerService}
 import org.eclipse.paho.client.mqttv3._
