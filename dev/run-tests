@@ -59,17 +59,17 @@ export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pkinesis-asl"
 {
   if test -x "$JAVA_HOME/bin/java"; then
       declare java_cmd="$JAVA_HOME/bin/java"
-  else 
+  else
       declare java_cmd=java
   fi
-  
+
   # We can't use sed -r -e due to OS X / BSD compatibility; hence, all the parentheses.
   JAVA_VERSION=$(
     $java_cmd -version 2>&1 \
     | grep -e "^java version" --max-count=1 \
     | sed "s/java version \"\(.*\)\.\(.*\)\.\(.*\)\"/\1\2/"
   )
-  
+
   if [ "$JAVA_VERSION" -lt 18 ]; then
     echo "[warn] Java 8 tests will not run because JDK version is < 1.8."
   fi
@@ -79,7 +79,7 @@ export SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Pkinesis-asl"
 # Partial solution for SPARK-1455.
 if [ -n "$AMPLAB_JENKINS" ]; then
   git fetch origin master:master
-  
+
   sql_diffs=$(
     git diff --name-only master \
     | grep -e "^sql/" -e "^bin/spark-sql" -e "^sbin/start-thriftserver.sh"
@@ -93,7 +93,7 @@ if [ -n "$AMPLAB_JENKINS" ]; then
   if [ -n "$sql_diffs" ]; then
     echo "[info] Detected changes in SQL. Will run Hive test suite."
     _RUN_SQL_TESTS=true
-    
+
     if [ -z "$non_sql_diffs" ]; then
       echo "[info] Detected no changes except in SQL. Will only run SQL tests."
       _SQL_TESTS_ONLY=true
@@ -151,7 +151,7 @@ CURRENT_BLOCK=$BLOCK_BUILD
   HIVE_12_BUILD_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver -Phive-0.12.0"
   echo "[info] Compile with Hive 0.12.0"
   echo -e "q\n" \
-    | sbt/sbt $HIVE_12_BUILD_ARGS clean hive/compile hive-thriftserver/compile \
+    | build/sbt $HIVE_12_BUILD_ARGS clean hive/compile hive-thriftserver/compile \
     | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 
   # Then build with default Hive version (0.13.1) because tests are based on this version
@@ -160,7 +160,7 @@ CURRENT_BLOCK=$BLOCK_BUILD
   echo "[info] Building Spark with these arguments: $SBT_MAVEN_PROFILES_ARGS"\
     " -Phive -Phive-thriftserver"
   echo -e "q\n" \
-    | sbt/sbt $SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver package assembly/assembly  \
+    | build/sbt $SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver package assembly/assembly  \
     | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 }
 
@@ -177,7 +177,7 @@ CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
   if [ -n "$_RUN_SQL_TESTS" ]; then
     SBT_MAVEN_PROFILES_ARGS="$SBT_MAVEN_PROFILES_ARGS -Phive -Phive-thriftserver"
   fi
-  
+
   if [ -n "$_SQL_TESTS_ONLY" ]; then
     # This must be an array of individual arguments. Otherwise, having one long string
     # will be interpreted as a single test, which doesn't work.
@@ -185,19 +185,19 @@ CURRENT_BLOCK=$BLOCK_SPARK_UNIT_TESTS
   else
     SBT_MAVEN_TEST_ARGS=("test")
   fi
-  
+
   echo "[info] Running Spark tests with these arguments: $SBT_MAVEN_PROFILES_ARGS ${SBT_MAVEN_TEST_ARGS[@]}"
-  
+
   # NOTE: echo "q" is needed because sbt on encountering a build file with failure
   # (either resolution or compilation) prompts the user for input either q, r, etc
   # to quit or retry. This echo is there to make it not block.
-  # NOTE: Do not quote $SBT_MAVEN_PROFILES_ARGS or else it will be interpreted as a 
+  # NOTE: Do not quote $SBT_MAVEN_PROFILES_ARGS or else it will be interpreted as a
   # single argument!
   # "${SBT_MAVEN_TEST_ARGS[@]}" is cool because it's an array.
   # QUESTION: Why doesn't 'yes "q"' work?
   # QUESTION: Why doesn't 'grep -v -e "^\[info\] Resolving"' work?
   echo -e "q\n" \
-    | sbt/sbt $SBT_MAVEN_PROFILES_ARGS "${SBT_MAVEN_TEST_ARGS[@]}" \
+    | build/sbt $SBT_MAVEN_PROFILES_ARGS "${SBT_MAVEN_TEST_ARGS[@]}" \
     | grep -v -e "info.*Resolving" -e "warn.*Merging" -e "info.*Including"
 }
 

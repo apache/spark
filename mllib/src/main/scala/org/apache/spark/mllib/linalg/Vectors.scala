@@ -108,16 +108,16 @@ private[spark] class VectorUDT extends UserDefinedType[Vector] {
   override def serialize(obj: Any): Row = {
     val row = new GenericMutableRow(4)
     obj match {
-      case sv: SparseVector =>
+      case SparseVector(size, indices, values) =>
         row.setByte(0, 0)
-        row.setInt(1, sv.size)
-        row.update(2, sv.indices.toSeq)
-        row.update(3, sv.values.toSeq)
-      case dv: DenseVector =>
+        row.setInt(1, size)
+        row.update(2, indices.toSeq)
+        row.update(3, values.toSeq)
+      case DenseVector(values) =>
         row.setByte(0, 1)
         row.setNullAt(1)
         row.setNullAt(2)
-        row.update(3, dv.values.toSeq)
+        row.update(3, values.toSeq)
     }
     row
   }
@@ -268,11 +268,11 @@ object Vectors {
    * @param p norm.
    * @return norm in L^p^ space.
    */
-  private[spark] def norm(vector: Vector, p: Double): Double = {
+  def norm(vector: Vector, p: Double): Double = {
     require(p >= 1.0)
     val values = vector match {
-      case dv: DenseVector => dv.values
-      case sv: SparseVector => sv.values
+      case DenseVector(vs) => vs
+      case SparseVector(n, ids, vs) => vs
       case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
     }
     val size = values.size
@@ -312,6 +312,87 @@ object Vectors {
       math.pow(sum, 1.0 / p)
     }
   }
+ 
+  /**
+   * Returns the squared distance between two Vectors.
+   * @param v1 first Vector.
+   * @param v2 second Vector.
+   * @return squared distance between two Vectors.
+   */
+  def sqdist(v1: Vector, v2: Vector): Double = {
+    var squaredDistance = 0.0
+    (v1, v2) match { 
+      case (v1: SparseVector, v2: SparseVector) =>
+        val v1Values = v1.values
+        val v1Indices = v1.indices
+        val v2Values = v2.values
+        val v2Indices = v2.indices
+        val nnzv1 = v1Indices.size
+        val nnzv2 = v2Indices.size
+        
+        var kv1 = 0
+        var kv2 = 0
+        while (kv1 < nnzv1 || kv2 < nnzv2) {
+          var score = 0.0
+ 
+          if (kv2 >= nnzv2 || (kv1 < nnzv1 && v1Indices(kv1) < v2Indices(kv2))) {
+            score = v1Values(kv1)
+            kv1 += 1
+          } else if (kv1 >= nnzv1 || (kv2 < nnzv2 && v2Indices(kv2) < v1Indices(kv1))) {
+            score = v2Values(kv2)
+            kv2 += 1
+          } else {
+            score = v1Values(kv1) - v2Values(kv2)
+            kv1 += 1
+            kv2 += 1
+          }
+          squaredDistance += score * score
+        }
+
+      case (v1: SparseVector, v2: DenseVector) if v1.indices.length / v1.size < 0.5 =>
+        squaredDistance = sqdist(v1, v2)
+
+      case (v1: DenseVector, v2: SparseVector) if v2.indices.length / v2.size < 0.5 =>
+        squaredDistance = sqdist(v2, v1)
+
+      // When a SparseVector is approximately dense, we treat it as a DenseVector
+      case (v1, v2) =>
+        squaredDistance = v1.toArray.zip(v2.toArray).foldLeft(0.0){ (distance, elems) =>
+          val score = elems._1 - elems._2
+          distance + score * score
+        }
+    }
+    squaredDistance
+  }
+
+  /**
+   * Returns the squared distance between DenseVector and SparseVector.
+   */
+  private[mllib] def sqdist(v1: SparseVector, v2: DenseVector): Double = {
+    var kv1 = 0
+    var kv2 = 0
+    val indices = v1.indices
+    var squaredDistance = 0.0
+    val nnzv1 = indices.size
+    val nnzv2 = v2.size
+    var iv1 = if (nnzv1 > 0) indices(kv1) else -1
+   
+    while (kv2 < nnzv2) {
+      var score = 0.0
+      if (kv2 != iv1) {
+        score = v2(kv2)
+      } else {
+        score = v1.values(kv1) - v2(kv2)
+        if (kv1 < nnzv1 - 1) {
+          kv1 += 1
+          iv1 = indices(kv1)
+        }
+      }
+      squaredDistance += score * score
+      kv2 += 1
+    }
+    squaredDistance
+  }
 }
 
 /**
@@ -344,6 +425,10 @@ class DenseVector(val values: Array[Double]) extends Vector {
       i += 1
     }
   }
+}
+
+object DenseVector {
+  def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
 }
 
 /**
@@ -392,4 +477,9 @@ class SparseVector(
       i += 1
     }
   }
+}
+
+object SparseVector {
+  def unapply(sv: SparseVector): Option[(Int, Array[Int], Array[Double])] =
+    Some((sv.size, sv.indices, sv.values))
 }

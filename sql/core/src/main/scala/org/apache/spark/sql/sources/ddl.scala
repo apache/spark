@@ -110,7 +110,8 @@ private[sql] case class CreateTableUsing(
 /**
  * Builds a map in which keys are case insensitive
  */
-protected class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String] {
+protected class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String] 
+  with Serializable {
 
   val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))
 

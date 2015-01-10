@@ -33,7 +33,7 @@ import akka.util.Timeout
 
 import org.mockito.Mockito.{mock, when}
 
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers, PrivateMethodTester}
+import org.scalatest._
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
 
@@ -44,18 +44,17 @@ import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
-import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
+import org.apache.spark.util._
 
 
-class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
-  with PrivateMethodTester {
+class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
+  with PrivateMethodTester with ResetSystemProperties {
 
   private val conf = new SparkConf(false)
   var store: BlockManager = null
   var store2: BlockManager = null
   var actorSystem: ActorSystem = null
   var master: BlockManagerMaster = null
-  var oldArch: String = null
   conf.set("spark.authenticate", "false")
   val securityMgr = new SecurityManager(conf)
   val mapOutputTracker = new MapOutputTrackerMaster(conf)
@@ -79,13 +78,13 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     manager
   }
 
-  before {
+  override def beforeEach(): Unit = {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
       "test", "localhost", 0, conf = conf, securityManager = securityMgr)
     this.actorSystem = actorSystem
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
-    oldArch = System.setProperty("os.arch", "amd64")
+    System.setProperty("os.arch", "amd64")
     conf.set("os.arch", "amd64")
     conf.set("spark.test.useCompressedOops", "true")
     conf.set("spark.driver.port", boundPort.toString)
@@ -100,7 +99,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     SizeEstimator invokePrivate initialize()
   }
 
-  after {
+  override def afterEach(): Unit = {
     if (store != null) {
       store.stop()
       store = null
@@ -113,14 +112,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     actorSystem.awaitTermination()
     actorSystem = null
     master = null
-
-    if (oldArch != null) {
-      conf.set("os.arch", oldArch)
-    } else {
-      System.clearProperty("os.arch")
-    }
-
-    System.clearProperty("spark.test.useCompressedOops")
   }
 
   test("StorageLevel object caching") {
