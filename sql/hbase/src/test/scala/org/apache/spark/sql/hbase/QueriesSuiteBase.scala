@@ -60,8 +60,6 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase(
     logInfo(s"$sql came back with ${result1.size} results")
     logInfo(result1.mkString)
     assert(res, "One or more rows did not match expected")
-
-    logInfo(s"Test $testName completed successfully")
   }
 
   val CompareTol = 1e-6
