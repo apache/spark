@@ -215,7 +215,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
   }
 
   /**
-   * Generates ratings for testing ALS.
+   * Generates an explicit feedback dataset for testing ALS.
    *
    * @param numUsers number of users
    * @param numItems number of items
@@ -226,7 +226,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
    * @param seed random seed
    * @return (training, test)
    */
-  def genALSTestData(
+  def genExplicitTestData(
       numUsers: Int,
       numItems: Int,
       rank: Int,
@@ -242,9 +242,9 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     val training = ArrayBuffer.empty[Rating]
     val test = ArrayBuffer.empty[Rating]
     for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
+      val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
       val x = random.nextDouble()
       if (x < totalFraction) {
-        val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
         if (x < trainingFraction) {
           val noise = noiseLevel * random.nextGaussian()
           training += Rating(userId, itemId, rating + noise.toFloat)
@@ -257,13 +257,75 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     (sc.parallelize(training, 2), sc.parallelize(test, 2))
   }
 
-  private def genFactors(size: Int, rank: Int, random: Random): Seq[(Int, Array[Float])] = {
+  /**
+   * Generates an implicit feedback dataset for testing ALS.
+   * @param numUsers number of users
+   * @param numItems number of items
+   * @param rank rank
+   * @param noiseLevel standard deviation of Gaussian noise on training data
+   * @param seed random seed
+   * @return (training, test)
+   */
+  def genImplicitTestData(
+      numUsers: Int,
+      numItems: Int,
+      rank: Int,
+      noiseLevel: Double = 0.0,
+      seed: Long = 11L): (RDD[Rating], RDD[Rating]) = {
+    // The assumption of the implicit feedback model is that unobserved ratings are more likely to
+    // be negatives.
+    val positiveFraction = 0.8
+    val negativeFraction = 1.0 - positiveFraction
+    val trainingFraction = 0.6
+    val testFraction = 0.3
+    val totalFraction = trainingFraction + testFraction
+    val random = new Random(seed)
+    val userFactors = genFactors(numUsers, rank, random)
+    val itemFactors = genFactors(numItems, rank, random)
+    val training = ArrayBuffer.empty[Rating]
+    val test = ArrayBuffer.empty[Rating]
+    for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
+      val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
+      val threshold = if (rating > 0) positiveFraction else negativeFraction
+      val observed = random.nextDouble() < threshold
+      if (observed) {
+        val x = random.nextDouble()
+        if (x < trainingFraction) {
+          val noise = noiseLevel * random.nextGaussian()
+          training += Rating(userId, itemId, rating + noise.toFloat)
+        } else if (x < totalFraction) {
+          test += Rating(userId, itemId, rating)
+        }
+      }
+    }
+    logInfo(s"Generated an implicit feedback dataset with ${training.size} ratings for training " +
+      s"and ${test.size} for test.")
+    (sc.parallelize(training, 2), sc.parallelize(test, 2))
+  }
+
+  /**
+   * Generates random user/item factors, with i.i.d. values drawn from U(a, b).
+   * @param size number of users/items
+   * @param rank number of features
+   * @param random random number generator
+   * @param a min value of the support (default: -1)
+   * @param b max value of the support (default: 1)
+   * @return a sequence of (ID, factors) pairs
+   */
+  private def genFactors(
+      size: Int,
+      rank: Int,
+      random: Random,
+      a: Float = -1.0f,
+      b: Float = 1.0f): Seq[(Int, Array[Float])] = {
     require(size > 0 && size < Int.MaxValue / 3)
+    require(b > a)
     val ids = mutable.Set.empty[Int]
     while (ids.size < size) {
       ids += random.nextInt()
     }
-    ids.toSeq.sorted.map(id => (id, Array.fill(rank)(random.nextFloat())))
+    val width = b - a
+    ids.toSeq.sorted.map(id => (id, Array.fill(rank)(a + random.nextFloat() * width)))
   }
 
   def testALS(
@@ -272,6 +334,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       rank: Int,
       maxIter: Int,
       regParam: Double,
+      implicitPrefs: Boolean = false,
+      alpha: Double = 1.0,
       targetRMSE: Double,
       numUserBlocks: Int = 2,
       numItemBlocks: Int = 3): Unit = {
@@ -280,43 +344,62 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     val als = new ALS()
       .setRank(rank)
       .setRegParam(regParam)
+      .setImplicitPrefs(implicitPrefs)
+      .setAlpha(alpha)
       .setNumUserBlocks(numUserBlocks)
       .setNumItemBlocks(numItemBlocks)
     val model = als.fit(training)
-    val prediction = model.transform(test)
-    val mse = prediction.select('rating, 'prediction)
+    val predictions = model.transform(test)
+      .select('rating, 'prediction)
       .map { case Row(rating: Float, prediction: Float) =>
-        val err = rating.toDouble - prediction
-        err * err
-      }.mean()
-    val rmse = math.sqrt(mse)
+        (rating.toDouble, prediction.toDouble)
+      }
+    val rmse =
+      if (implicitPrefs) {
+        val (totalWeight, weightedSumSq) = predictions.map { case (rating, prediction) =>
+          val confidence = 1.0 + alpha * math.abs(rating)
+          val rating01 = math.max(math.min(rating, 1.0), 0.0)
+          val prediction01 = math.max(math.min(prediction, 1.0), 0.0)
+          val err = prediction01 - rating01
+          (confidence, confidence * err * err)
+        }.reduce { case ((c0, e0), (c1, e1)) =>
+          (c0 + c1, e0 + e1)
+        }
+        math.sqrt(weightedSumSq / totalWeight)
+      } else {
+        val mse = predictions.map { case (rating, prediction) =>
+          val err = rating - prediction
+          err * err
+        }.mean()
+        math.sqrt(mse)
+      }
     logInfo(s"Test RMSE is $rmse.")
     assert(rmse < targetRMSE)
   }
 
   test("exact rank-1 matrix") {
-    val (training, test) = genALSTestData(numUsers = 20, numItems = 40, rank = 1,
+    val (training, test) = genExplicitTestData(numUsers = 20, numItems = 40, rank = 1,
       trainingFraction = 0.6, testFraction = 0.3)
     testALS(training, test, maxIter = 1, rank = 1, regParam = 1e-5, targetRMSE = 0.001)
     testALS(training, test, maxIter = 1, rank = 2, regParam = 1e-5, targetRMSE = 0.001)
   }
 
   test("approximate rank-1 matrix") {
-    val (training, test) = genALSTestData(numUsers = 20, numItems = 40, rank = 1,
+    val (training, test) = genExplicitTestData(numUsers = 20, numItems = 40, rank = 1,
       trainingFraction = 0.6, testFraction = 0.3, noiseLevel = 0.01)
     testALS(training, test, maxIter = 2, rank = 1, regParam = 0.01, targetRMSE = 0.02)
     testALS(training, test, maxIter = 2, rank = 2, regParam = 0.01, targetRMSE = 0.02)
   }
 
   test("approximate rank-2 matrix") {
-    val (training, test) = genALSTestData(numUsers = 20, numItems = 40, rank = 2,
+    val (training, test) = genExplicitTestData(numUsers = 20, numItems = 40, rank = 2,
       trainingFraction = 0.6, testFraction = 0.3, noiseLevel = 0.01)
     testALS(training, test, maxIter = 4, rank = 2, regParam = 0.01, targetRMSE = 0.03)
     testALS(training, test, maxIter = 4, rank = 3, regParam = 0.01, targetRMSE = 0.03)
   }
 
   test("different block settings") {
-    val (training, test) = genALSTestData(numUsers = 20, numItems = 40, rank = 2,
+    val (training, test) = genExplicitTestData(numUsers = 20, numItems = 40, rank = 2,
       trainingFraction = 0.6, testFraction = 0.3, noiseLevel = 0.01)
     for ((numUserBlocks, numItemBlocks) <- Seq((1, 1), (1, 2), (2, 1), (2, 2))) {
       testALS(training, test, maxIter = 4, rank = 2, regParam = 0.01, targetRMSE = 0.03,
@@ -325,9 +408,16 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
   }
 
   test("more blocks than ratings") {
-    val (training, test) = genALSTestData(numUsers = 4, numItems = 4, rank = 1,
+    val (training, test) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1,
       trainingFraction = 0.7, testFraction = 0.3)
     testALS(training, test, maxIter = 2, rank = 1, regParam = 1e-4, targetRMSE = 0.002,
      numItemBlocks = 5, numUserBlocks = 5)
+  }
+
+  test("implicit feedback") {
+    val (training, test) = genImplicitTestData(numUsers = 20, numItems = 40, rank = 2,
+      noiseLevel = 0.01)
+    testALS(training, test, maxIter = 4, rank = 2, regParam = 0.01, implicitPrefs = true,
+      targetRMSE = 0.3)
   }
 }
