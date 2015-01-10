@@ -107,7 +107,7 @@ class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll with Logging {
     assert(collectionB(1).getString(0) == "tb", s"Query HBase native command execution result test failed on table listing")
 
     val tblDesc = javaHbaseCtx.sql("describe ta").collect()
-    tblDesc.foreach { case a: org.apache.spark.sql.api.java.Row => logInfo(a.toString())}
+    //tblDesc.foreach { case a: org.apache.spark.sql.api.java.Row => logInfo(a.toString())}
     assert(tblDesc(0).getString(0) == "col1", s"HBase native command execution result test failed on table description")
     assert(tblDesc(2).getString(1) == "ShortType", s"HBase native command execution result test failed on table description")
     assert(tblDesc(4).getString(2) == "NON KEY COLUMN", s"HBase native command execution result test failed on table description")
