@@ -302,8 +302,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
     upperCaseData.where('N <= 4).registerTempTable("left")
     upperCaseData.where('N >= 3).registerTempTable("right")
 
-    val left = UnresolvedRelation(None, "left", None)
-    val right = UnresolvedRelation(None, "right", None)
+    val left = UnresolvedRelation(Seq("left"), None)
+    val right = UnresolvedRelation(Seq("right"), None)
 
     checkAnswer(
       left.join(right, FullOuter, Some("left.N".attr === "right.N".attr)),
