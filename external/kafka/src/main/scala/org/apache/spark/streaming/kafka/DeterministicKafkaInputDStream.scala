@@ -17,7 +17,9 @@
 
 package org.apache.spark.streaming.kafka
 
+
 import scala.annotation.tailrec
+import scala.collection.mutable
 import scala.reflect.{classTag, ClassTag}
 
 import kafka.common.TopicAndPartition
@@ -26,7 +28,7 @@ import kafka.serializer.Decoder
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.kafka.{KafkaCluster, KafkaRDD}
+import org.apache.spark.rdd.kafka.{KafkaCluster, KafkaRDD, KafkaRDDPartition}
 import org.apache.spark.rdd.kafka.KafkaCluster.LeaderOffset
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.dstream._
@@ -61,6 +63,8 @@ class DeterministicKafkaInputDStream[
     messageHandler: MessageAndMetadata[K, V] => R,
     maxRetries: Int = 1
 ) extends InputDStream[R](ssc_) with Logging {
+
+  protected[streaming] override val checkpointData = new DeterministicKafkaInputDStreamCheckpointData
 
   private val kc = new KafkaCluster(kafkaParams)
 
@@ -117,4 +121,29 @@ class DeterministicKafkaInputDStream[
 
   def stop(): Unit = {
   }
+
+  private[streaming]
+  class DeterministicKafkaInputDStreamCheckpointData extends DStreamCheckpointData(this) {
+    def batchForTime = data.asInstanceOf[mutable.HashMap[
+      Time, Array[(Int, String, Int, Long, Long, String, Int)]]]
+
+    override def update(time: Time) {
+      batchForTime.clear()
+      generatedRDDs.foreach { kv =>
+        val a = kv._2.asInstanceOf[KafkaRDD[K, V, U, T, R]].batch.map(_.toTuple).toArray
+        batchForTime += kv._1 -> a
+      }
+    }
+
+    override def cleanup(time: Time) { }
+
+    override def restore() {
+      batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
+          logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
+          generatedRDDs += t -> new KafkaRDD[K, V, U, T, R](
+            context.sparkContext, kafkaParams, b.map(KafkaRDDPartition(_)), messageHandler)
+      }
+    }
+  }
+
 }

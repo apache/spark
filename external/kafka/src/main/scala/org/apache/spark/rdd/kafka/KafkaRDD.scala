@@ -31,23 +31,6 @@ import kafka.message.{MessageAndMetadata, MessageAndOffset}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
 
-
-case class KafkaRDDPartition(
-  override val index: Int,
-  /** kafka topic name */
-  topic: String,
-  /** kafka partition id */
-  partition: Int,
-  /** inclusive starting offset */
-  fromOffset: Long,
-  /** exclusive ending offset */
-  untilOffset: Long,
-  /** preferred kafka host, i.e. the leader at the time the rdd was created */
-  host: String,
-  /** preferred kafka host's port */
-  port: Int
-) extends Partition
-
 /** A batch-oriented interface for consuming from Kafka.
   * Starting and ending offsets are specified in advance,
   * so that you can control exactly-once semantics.
@@ -57,7 +40,7 @@ case class KafkaRDDPartition(
   * configuration parameters</a>.
   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
-  * @param rddPartitions Each RDD partition corresponds to a
+  * @param batch Each KafkaRDDPartition in the batch corresponds to a
   *   range of offsets for a given Kafka topic/partition
   * @param messageHandler function for translating each message into the desired type
   */
@@ -69,23 +52,11 @@ class KafkaRDD[
   R: ClassTag](
     sc: SparkContext,
     val kafkaParams: Map[String, String],
-    val rddPartitions: Traversable[KafkaRDDPartition],
+    val batch: Array[KafkaRDDPartition],
     messageHandler: MessageAndMetadata[K, V] => R
   ) extends RDD[R](sc, Nil) with Logging {
 
-  /** per-topic/partition Kafka offsets defining the (inclusive) starting point of the batch */
-  def fromOffsets: Map[TopicAndPartition, Long] =
-    rddPartitions.map { kr =>
-      TopicAndPartition(kr.topic, kr.partition) -> kr.fromOffset
-    }.toMap
-
-  /** per-topic/partition Kafka offsets defining the (exclusive) ending point of the batch */
-  def untilOffsets: Map[TopicAndPartition, Long] =
-    rddPartitions.map { kr =>
-      TopicAndPartition(kr.topic, kr.partition) -> kr.untilOffset
-    }.toMap
-
-  override def getPartitions: Array[Partition] = rddPartitions.toArray
+  override def getPartitions: Array[Partition] = batch.asInstanceOf[Array[Partition]]
 
   override def getPreferredLocations(thePart: Partition): Seq[String] = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
@@ -222,7 +193,7 @@ object KafkaRDD {
     val partitions  = fromOffsets.zipWithIndex.map { case ((tp, from), index) =>
       val lo = untilOffsets(tp)
       new KafkaRDDPartition(index, tp.topic, tp.partition, from, lo.offset, lo.host, lo.port)
-    }
+    }.toArray
 
     new KafkaRDD[K, V, U, T, R](sc, kafkaParams, partitions, messageHandler)
   }

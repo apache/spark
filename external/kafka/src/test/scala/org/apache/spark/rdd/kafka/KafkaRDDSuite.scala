@@ -20,6 +20,7 @@ package org.apache.spark.rdd.kafka
 import scala.util.Random
 
 import kafka.serializer.StringDecoder
+import kafka.common.TopicAndPartition
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
@@ -57,7 +58,9 @@ class KafkaRDDSuite extends KafkaStreamSuiteBase with BeforeAndAfter {
     assert(rdd.isDefined)
     assert(rdd.get.count === sent.values.sum)
 
-    kc.setConsumerOffsets(kafkaParams("group.id"), rdd.get.untilOffsets)
+    kc.setConsumerOffsets(
+      kafkaParams("group.id"),
+      rdd.get.batch.map(kp => TopicAndPartition(kp.topic, kp.partition) -> kp.untilOffset).toMap)
 
     val rdd2 = getRdd(kc, Set(topic))
     val sent2 = Map("d" -> 1)
