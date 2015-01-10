@@ -19,11 +19,12 @@ package org.apache.spark.mllib.stat.distribution
 
 import breeze.linalg.{DenseVector => DBV, DenseMatrix => DBM, diag, max, eigSym}
 
+import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.mllib.linalg.{Vectors, Vector, Matrices, Matrix}
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.annotation.DeveloperApi;
 
 /**
+ * :: DeveloperApi ::
  * This class provides basic functionality for a Multivariate Gaussian (Normal) Distribution. In
  * the event that the covariance matrix is singular, the density will be computed in a
  * reduced dimensional subspace under which the distribution is supported.
@@ -33,21 +34,23 @@ import org.apache.spark.annotation.DeveloperApi;
  * @param sigma The covariance matrix of the distribution
  */
 @DeveloperApi
-class MultivariateGaussian private[mllib] (
-    private[mllib] val mu: DBV[Double], 
-    private[mllib] val sigma: DBM[Double]) extends Serializable {
+class MultivariateGaussian (
+    val mu: Vector, 
+    val sigma: Matrix) extends Serializable {
 
-  require(sigma.cols == sigma.rows, "Covariance matrix must be square")
-  require(mu.length == sigma.cols, "Mean vector length must match covariance matrix size")
+  require(sigma.numCols == sigma.numRows, "Covariance matrix must be square")
+  require(mu.size == sigma.numCols, "Mean vector length must match covariance matrix size")
+  
+  private val breezeMu = mu.toBreeze.toDenseVector
   
   /**
-   * Public constructor
+   * private[mllib] constructor
    * 
    * @param mu The mean vector of the distribution
    * @param sigma The covariance matrix of the distribution
    */
-  def this(mu: Vector, sigma: Matrix) = {
-    this(mu.toBreeze.toDenseVector, sigma.toBreeze.toDenseMatrix)
+  private[mllib] def this(mu: DBV[Double], sigma: DBM[Double]) = {
+    this(Vectors.fromBreeze(mu), Matrices.fromBreeze(sigma))
   }
   
   /**
@@ -56,12 +59,6 @@ class MultivariateGaussian private[mllib] (
    *    u = log((2*pi)^(-k/2)^ * det(sigma)^(-1/2)^) 
    */
   private val (rootSigmaInv: DBM[Double], u: Double) = calculateCovarianceConstants
-    
-  /** Return the mean vector (mu) for this distribution */
-  def getMu: Vector = Vectors.fromBreeze(mu)
-  
-  /** Return the covariance matrix (sigma) for this distribution */
-  def getSigma: Matrix = Matrices.fromBreeze(sigma)
   
   /** Returns density of this multivariate Gaussian at given point, x */
   def pdf(x: Vector): Double = {
@@ -80,7 +77,7 @@ class MultivariateGaussian private[mllib] (
   
   /** Returns the log-density of this multivariate Gaussian at given point, x */
   private[mllib] def logpdf(x: DBV[Double]): Double = {
-    val delta = x - mu
+    val delta = x - breezeMu
     val v = rootSigmaInv * delta
     u + v.t * v * -0.5
   }
@@ -114,7 +111,7 @@ class MultivariateGaussian private[mllib] (
    * relation to the maximum singular value (same tolerance used by, e.g., Octave).
    */
   private def calculateCovarianceConstants: (DBM[Double], Double) = {
-    val eigSym.EigSym(d, u) = eigSym(sigma) // sigma = u * diag(d) * u.t
+    val eigSym.EigSym(d, u) = eigSym(sigma.toBreeze.toDenseMatrix) // sigma = u * diag(d) * u.t
     
     // For numerical stability, values are considered to be non-zero only if they exceed tol.
     // This prevents any inverted value from exceeding (eps * n * max(d))^-1
@@ -128,7 +125,7 @@ class MultivariateGaussian private[mllib] (
       // by inverting the square root of all non-zero values
       val pinvS = diag(new DBV(d.map(v => if (v > tol) math.sqrt(1.0 / v) else 0.0).toArray))
     
-      (pinvS * u, -0.5 * (mu.length * math.log(2.0 * math.Pi) + logPseudoDetSigma))
+      (pinvS * u, -0.5 * (mu.size * math.log(2.0 * math.Pi) + logPseudoDetSigma))
     } catch {
       case uex: UnsupportedOperationException =>
         throw new IllegalArgumentException("Covariance matrix has no non-zero singular values")

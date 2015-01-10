@@ -47,9 +47,8 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.spark-project.hive</groupId>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-metastore</artifactId>
-      <version>${hive.version}</version>
     </dependency>
     <dependency>
       <groupId>commons-httpclient</groupId>
@@ -57,51 +56,27 @@
       <version>3.1</version>
     </dependency>
     <dependency>
-      <groupId>org.spark-project.hive</groupId>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-exec</artifactId>
-      <version>${hive.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>com.esotericsoftware.kryo</groupId>
-          <artifactId>kryo</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.codehaus.jackson</groupId>
       <artifactId>jackson-mapper-asl</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.spark-project.hive</groupId>
+      <groupId>${hive.group}</groupId>
       <artifactId>hive-serde</artifactId>
-      <version>${hive.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>commons-logging</groupId>
-          <artifactId>commons-logging-api</artifactId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <!-- hive-serde already depends on avro, but this brings in customized config of avro deps from parent -->
     <dependency>
       <groupId>org.apache.avro</groupId>
       <artifactId>avro</artifactId>
-      <version>${avro.version}</version>
     </dependency>
     <!-- use the build matching the hadoop api of avro-mapred (i.e. no classifier for hadoop 1 API,
     hadoop2 classifier for hadoop 2 API. avro-mapred is a dependency of org.spark-project.hive:hive-serde -->
     <dependency>
       <groupId>org.apache.avro</groupId>
       <artifactId>avro-mapred</artifactId>
-      <version>${avro.version}</version>
       <classifier>${avro.mapred.classifier}</classifier>
     </dependency>
     <dependency>
