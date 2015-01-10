@@ -15,7 +15,6 @@ from flask.ext.admin.contrib.sqla import ModelView
 from flask.ext.cache import Cache
 from flask import request
 from wtforms import Form, DateTimeField, SelectField, TextAreaField
-import wtforms
 
 from pygments import highlight
 from pygments.lexers import PythonLexer, SqlLexer, BashLexer
@@ -46,7 +45,6 @@ if AUTHENTICATE is False:
     login_required = lambda x: x
 
 dagbag = models.DagBag(conf.get('core', 'DAGS_FOLDER'))
-session = Session()
 utils.pessimistic_connection_handling()
 
 app = Flask(__name__)
@@ -519,7 +517,8 @@ class Airflow(BaseView):
         task_id = request.args.get('task_id')
         execution_date = request.args.get('execution_date')
         dag = dagbag.dags[dag_id]
-        log_relative = "/{dag_id}/{task_id}/{execution_date}".format(**locals())
+        log_relative = "/{dag_id}/{task_id}/{execution_date}".format(
+            **locals())
         loc = BASE_LOG_FOLDER + log_relative
         loc = loc.format(**locals())
         log = ""
@@ -613,6 +612,7 @@ class Airflow(BaseView):
 
     @expose('/action')
     def action(self):
+        session = settings.Session()
         action = request.args.get('action')
         dag_id = request.args.get('dag_id')
         origin = request.args.get('origin')
@@ -1006,19 +1006,19 @@ class TaskInstanceModelView(ModelView):
         'start_date', 'end_date', 'duration', 'state', 'log')
     can_delete = True
 mv = TaskInstanceModelView(
-    models.TaskInstance, Session(), name="Task Instances", category="Admin")
+    models.TaskInstance, Session, name="Task Instances", category="Admin")
 admin.add_view(mv)
 
 
 class JobModelView(ModelViewOnly):
     column_default_sort = ('start_date', True)
-mv = JobModelView(jobs.BaseJob, Session(), name="Jobs", category="Admin")
+mv = JobModelView(jobs.BaseJob, Session, name="Jobs", category="Admin")
 admin.add_view(mv)
 
 
 class UserModelView(LoginMixin, ModelView):
     pass
-mv = UserModelView(models.User, Session(), name="Users", category="Admin")
+mv = UserModelView(models.User, Session, name="Users", category="Admin")
 admin.add_view(mv)
 
 
@@ -1035,7 +1035,7 @@ class DatabaseConnectionModelView(LoginMixin, ModelView):
         ]
     }
 mv = DatabaseConnectionModelView(
-    models.DatabaseConnection, Session(),
+    models.DatabaseConnection, Session,
     name="Database Connections", category="Admin")
 admin.add_view(mv)
 
@@ -1045,7 +1045,7 @@ class LogModelView(ModelViewOnly):
     column_filters = ('dag_id', 'task_id', 'execution_date')
 
 mv = LogModelView(
-    models.Log, Session(), name="Logs", category="Admin")
+    models.Log, Session, name="Logs", category="Admin")
 admin.add_view(mv)
 
 
@@ -1155,7 +1155,7 @@ class ChartModelView(LoginMixin, ModelView):
             model.user_id = flask_login.current_user.id
 
 mv = ChartModelView(
-    models.Chart, Session(),
+    models.Chart, Session,
     name="Charts", category="Tools")
 admin.add_view(mv)
 
