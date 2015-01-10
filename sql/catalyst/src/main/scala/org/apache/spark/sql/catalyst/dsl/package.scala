@@ -290,7 +290,7 @@ package object dsl {
 
     def insertInto(tableName: String, overwrite: Boolean = false) =
       InsertIntoTable(
-        analysis.UnresolvedRelation(None, tableName), Map.empty, logicalPlan, overwrite)
+        analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite)
 
     def analyze = analysis.SimpleAnalyzer(logicalPlan)
   }
