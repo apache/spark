@@ -24,8 +24,8 @@ import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
+import org.apache.spark.sql.SparkSQLParser
 
-import org.apache.spark.sql.catalyst.SparkSQLParser
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable}
 
 /* Implicit conversions */
@@ -44,6 +45,22 @@ import scala.collection.JavaConversions._
  * cmd string.
  */
 private[hive] case object NativePlaceholder extends Command
+
+/**
+ * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
+ * @param table The table to be described.
+ * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
+ *                   It is effective only when the table is a Hive table.
+ */
+case class DescribeCommand(
+    table: LogicalPlan,
+    isExtended: Boolean) extends Command {
+  override def output = Seq(
+    // Column names are based on Hive.
+    AttributeReference("col_name", StringType, nullable = false)(),
+    AttributeReference("data_type", StringType, nullable = false)(),
+    AttributeReference("comment", StringType, nullable = false)())
+}
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
@@ -457,17 +474,23 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     // Just fake explain for any of the native commands.
     case Token("TOK_EXPLAIN", explainArgs)
       if noExplainCommands.contains(explainArgs.head.getText) =>
-      ExplainCommand(NoRelation)
+      ExplainCommand(NoRelation, Seq(AttributeReference("plan", StringType, nullable = false)()))
     case Token("TOK_EXPLAIN", explainArgs)
       if "TOK_CREATETABLE" == explainArgs.head.getText =>
       val Some(crtTbl) :: _ :: extended :: Nil =
         getClauses(Seq("TOK_CREATETABLE", "FORMATTED", "EXTENDED"), explainArgs)
-      ExplainCommand(nodeToPlan(crtTbl), extended != None)
+      ExplainCommand(
+        nodeToPlan(crtTbl),
+        Seq(AttributeReference("plan", StringType,nullable = false)()),
+        extended != None)
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
       val Some(query) :: _ :: extended :: Nil =
         getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
-      ExplainCommand(nodeToPlan(query), extended != None)
+      ExplainCommand(
+        nodeToPlan(query),
+        Seq(AttributeReference("plan", StringType, nullable = false)()),
+        extended != None)
 
     case Token("TOK_DESCTABLE", describeArgs) =>
       // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
