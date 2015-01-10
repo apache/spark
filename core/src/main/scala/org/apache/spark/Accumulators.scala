@@ -281,7 +281,6 @@ object AccumulatorParam {
 // TODO: The multi-thread support in accumulators is kind of lame; check
 // if there's a more intuitive way of doing it right
 private[spark] object Accumulators {
-  // TODO: Use soft references? => need to make readObject work properly then
   // Store a WeakReference instead of a StrongReference because this way accumulators can be
   // appropriately garbage collected during long-running jobs and release memory
   type WeakAcc = WeakReference[Accumulable[_, _]]
