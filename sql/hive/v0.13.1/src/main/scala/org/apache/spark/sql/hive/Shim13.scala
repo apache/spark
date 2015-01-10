@@ -53,7 +53,7 @@ import scala.language.implicitConversions
  *
  * @param functionClassName UDF class name
  */
-class HiveFunctionWrapper(var functionClassName: String) extends java.io.Externalizable {
+case class HiveFunctionWrapper(var functionClassName: String) extends java.io.Externalizable {
   // for Serialization
   def this() = this(null)
 
