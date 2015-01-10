@@ -414,7 +414,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
   }
 
-  test("SPARK_CONF_DIR overrides spark-defaults.conf") {
+  ignore("SPARK_CONF_DIR overrides spark-defaults.conf") {
     forConfDir(Map("spark.executor.memory" -> "2.3g")) { path =>
       val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
       val args = Seq(
