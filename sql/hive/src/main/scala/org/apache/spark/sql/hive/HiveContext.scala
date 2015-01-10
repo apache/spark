@@ -124,7 +124,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * in the Hive metastore.
    */
   def analyze(tableName: String) {
-    val relation = EliminateAnalysisOperators(catalog.lookupRelation(None, tableName))
+    val relation = EliminateAnalysisOperators(catalog.lookupRelation(Seq(tableName)))
 
     relation match {
       case relation: MetastoreRelation =>
