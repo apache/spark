@@ -17,15 +17,16 @@
 
 package org.apache.spark.mllib.regression;
 
+import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
-import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.util.IsotonicDataGenerator;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import scala.Tuple2;
 
 import java.io.Serializable;
 import java.util.List;
@@ -44,42 +45,26 @@ public class JavaIsotonicRegressionSuite implements Serializable {
     sc = null;
   }
 
-  double difference(List<WeightedLabeledPoint> expected, IsotonicRegressionModel model) {
+  double difference(List<Tuple2<Double, Double>> expected, IsotonicRegressionModel model) {
     double diff = 0;
 
     for(int i = 0; i < model.predictions().length(); i++) {
-      WeightedLabeledPoint exp = expected.get(i);
-      diff += Math.abs(model.predict(exp.features()) - exp.label());
+      Tuple2<Double, Double> exp = expected.get(i);
+      diff += Math.abs(model.predict(exp._2()) - exp._1());
     }
 
     return diff;
   }
 
   @Test
-  public void runIsotonicRegressionUsingConstructor() {
-    JavaRDD<WeightedLabeledPoint> testRDD = sc.parallelize(IsotonicDataGenerator
-      .generateIsotonicInputAsList(
-        new double[] {1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12})).cache();
-
-    IsotonicRegressionAlgorithm isotonicRegressionAlgorithm = new PoolAdjacentViolators();
-    IsotonicRegressionModel model = isotonicRegressionAlgorithm.run(testRDD.rdd(), MonotonicityConstraint.Isotonic());
-
-    List<WeightedLabeledPoint> expected = IsotonicDataGenerator
-      .generateIsotonicInputAsList(
-        new double[] {1, 2, 7d/3, 7d/3, 7d/3, 6, 7, 8, 10, 10, 10, 12});
-
-    Assert.assertTrue(difference(expected, model) == 0);
-  }
-
-  @Test
   public void runIsotonicRegressionUsingStaticMethod() {
-    JavaRDD<WeightedLabeledPoint> testRDD = sc.parallelize(IsotonicDataGenerator
-      .generateIsotonicInputAsList(
-        new double[] {1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12})).cache();
+    JavaPairRDD<Double, Double> trainRDD = sc.parallelizePairs(
+      IsotonicDataGenerator.generateIsotonicInputAsList(
+        new double[]{1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12})).cache();
 
-    IsotonicRegressionModel model = IsotonicRegression.train(testRDD.rdd(), MonotonicityConstraint.Isotonic());
+    IsotonicRegressionModel model = IsotonicRegression.train(trainRDD, true);
 
-    List<WeightedLabeledPoint> expected = IsotonicDataGenerator
+    List<Tuple2<Double, Double>> expected = IsotonicDataGenerator
       .generateIsotonicInputAsList(
         new double[] {1, 2, 7d/3, 7d/3, 7d/3, 6, 7, 8, 10, 10, 10, 12});
 
@@ -88,22 +73,23 @@ public class JavaIsotonicRegressionSuite implements Serializable {
 
   @Test
   public void testPredictJavaRDD() {
-    JavaRDD<WeightedLabeledPoint> testRDD = sc.parallelize(IsotonicDataGenerator
-      .generateIsotonicInputAsList(
-        new double[] {1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12})).cache();
+    JavaPairRDD<Double, Double> trainRDD = sc.parallelizePairs(
+      IsotonicDataGenerator.generateIsotonicInputAsList(
+        new double[]{1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12})).cache();
 
-    IsotonicRegressionModel model = IsotonicRegression.train(testRDD.rdd(), MonotonicityConstraint.Isotonic());
+    IsotonicRegressionModel model = IsotonicRegression.train(trainRDD, true);
 
-    JavaRDD<Vector> vectors = testRDD.map(new Function<WeightedLabeledPoint, Vector>() {
+    JavaRDD<Double> testRDD = trainRDD.map(new Function<Tuple2<Double, Double>, Double>() {
       @Override
-      public Vector call(WeightedLabeledPoint v) throws Exception {
-        return v.features();
+      public Double call(Tuple2<Double, Double> v) throws Exception {
+        return v._2();
       }
     });
 
-    List<Double> predictions = model.predict(vectors).collect();
+    Double[] predictions = model.predict(testRDD).collect();
 
-    Assert.assertTrue(predictions.get(0) == 1d);
-    Assert.assertTrue(predictions.get(11) == 12d);
+    Assert.assertTrue(predictions[0] == 1d);
+    Assert.assertTrue(predictions[11] == 12d);
   }
 }
+

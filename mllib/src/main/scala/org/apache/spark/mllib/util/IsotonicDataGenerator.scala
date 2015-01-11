@@ -17,11 +17,8 @@
 
 package org.apache.spark.mllib.util
 
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.regression.WeightedLabeledPointConversions._
-import org.apache.spark.mllib.regression.{LabeledPoint, WeightedLabeledPoint}
-
 import scala.collection.JavaConversions._
+import java.lang.{Double => JDouble}
 
 object IsotonicDataGenerator {
 
@@ -30,8 +27,9 @@ object IsotonicDataGenerator {
    * @param labels list of labels for the data points
    * @return Java List of input.
    */
-  def generateIsotonicInputAsList(labels: Array[Double]): java.util.List[WeightedLabeledPoint] = {
-    seqAsJavaList(generateIsotonicInput(wrapDoubleArray(labels):_*))
+  def generateIsotonicInputAsList(labels: Array[Double]): java.util.List[(JDouble, JDouble)] = {
+    seqAsJavaList(generateIsotonicInput(wrapDoubleArray(labels):_*).map(x => (new JDouble(x._1), new JDouble(x._2))))
+      //.map(d => new Tuple3(new java.lang.Double(d._1), new java.lang.Double(d._2), new java.lang.Double(d._3))))
   }
 
   /**
@@ -39,10 +37,9 @@ object IsotonicDataGenerator {
    * @param labels list of labels for the data points
    * @return sequence of data points
    */
-  def generateIsotonicInput(labels: Double*): Seq[WeightedLabeledPoint] = {
+  def generateIsotonicInput(labels: Double*): Seq[(Double, Double, Double)] = {
     labels.zip(1 to labels.size)
-      .map(point => labeledPointToWeightedLabeledPoint(
-        LabeledPoint(point._1, Vectors.dense(point._2))))
+      .map(point => (point._1, point._2.toDouble, 1d))
   }
 
   /**
@@ -53,8 +50,8 @@ object IsotonicDataGenerator {
    */
   def generateWeightedIsotonicInput(
       labels: Seq[Double],
-      weights: Seq[Double]): Seq[WeightedLabeledPoint] = {
+      weights: Seq[Double]): Seq[(Double, Double, Double)] = {
     labels.zip(1 to labels.size).zip(weights)
-      .map(point => WeightedLabeledPoint(point._1._1, Vectors.dense(point._1._2), point._2))
+      .map(point => (point._1._1, point._1._2.toDouble, point._2))
   }
 }
