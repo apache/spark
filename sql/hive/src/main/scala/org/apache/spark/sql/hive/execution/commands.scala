@@ -58,7 +58,7 @@ case class DropTable(
     }
     hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.catalog.unregisterTable(None, tableName)
+    hiveContext.catalog.unregisterTable(Seq(tableName))
     Seq.empty[Row]
   }
 }

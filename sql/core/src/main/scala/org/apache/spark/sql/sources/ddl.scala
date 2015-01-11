@@ -92,11 +92,11 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected lazy val ddl: Parser[LogicalPlan] = createTable
 
   /**
-   * `CREATE TEMPORARY TABLE avroTable
+   * `CREATE [TEMPORARY] TABLE avroTable
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    * or
-   * `CREATE TEMPORARY TABLE avroTable(intField int, stringField string...)
+   * `CREATE [TEMPORARY] TABLE avroTable(intField int, stringField string...)
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    */
@@ -121,7 +121,7 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
 
   protected lazy val column: Parser[StructField] =
     ident ~ dataType ^^ { case columnName ~ typ =>
-      StructField(cleanIdentifier(columnName), typ)
+      StructField(columnName, typ)
     }
 
   protected lazy val primitiveType: Parser[DataType] =
@@ -157,7 +157,7 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
 
   protected lazy val structField: Parser[StructField] =
     ident ~ ":" ~ dataType ^^ {
-      case fieldName ~ _ ~ tpe => StructField(cleanIdentifier(fieldName), tpe, nullable = true)
+      case fieldName ~ _ ~ tpe => StructField(fieldName, tpe, nullable = true)
     }
 
   protected lazy val structType: Parser[DataType] =
@@ -173,13 +173,6 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
     mapType |
     structType |
     primitiveType
-
-  protected val escapedIdentifier = "`([^`]+)`".r
-  /** Strips backticks from ident if present */
-  protected def cleanIdentifier(ident: String): String = ident match {
-    case escapedIdentifier(i) => i
-    case plainIdent => plainIdent
-  }
 }
 
 object ResolvedDataSource {
@@ -196,15 +189,28 @@ object ResolvedDataSource {
             sys.error(s"Failed to load class for data source: $provider")
         }
     }
-    val relation = clazz.newInstance match {
-      case dataSource: org.apache.spark.sql.sources.RelationProvider  =>
-        dataSource
-          .asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
-          .createRelation(sqlContext, new CaseInsensitiveMap(options))
-      case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
-        dataSource
-          .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
-          .createRelation(sqlContext, new CaseInsensitiveMap(options), userSpecifiedSchema)
+
+    val relation = userSpecifiedSchema match {
+      case Some(schema: StructType) => {
+        clazz.newInstance match {
+          case dataSource: org.apache.spark.sql.sources.SchemaRelationProvider =>
+            dataSource
+              .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
+              .createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
+          case _ =>
+            sys.error(s"${clazz.getCanonicalName} should extend SchemaRelationProvider.")
+        }
+      }
+      case None => {
+        clazz.newInstance match {
+          case dataSource: org.apache.spark.sql.sources.RelationProvider =>
+            dataSource
+              .asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
+              .createRelation(sqlContext, new CaseInsensitiveMap(options))
+          case _ =>
+            sys.error(s"${clazz.getCanonicalName} should extend RelationProvider.")
+        }
+      }
     }
 
     new ResolvedDataSource(clazz, relation)
@@ -237,7 +243,8 @@ private [sql] case class CreateTempTableUsing(
 /**
  * Builds a map in which keys are case insensitive
  */
-protected class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String] {
+protected class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String] 
+  with Serializable {
 
   val baseMap = map.map(kv => kv.copy(_1 = kv._1.toLowerCase))
 

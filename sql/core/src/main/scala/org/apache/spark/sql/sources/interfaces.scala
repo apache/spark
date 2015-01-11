@@ -68,7 +68,7 @@ trait SchemaRelationProvider {
   def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String],
-      schema: Option[StructType]): BaseRelation
+      schema: StructType): BaseRelation
 }
 
 /**

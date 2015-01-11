@@ -45,7 +45,7 @@ class AllDataTypesScanSource extends SchemaRelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String],
-      schema: Option[StructType]): BaseRelation = {
+      schema: StructType): BaseRelation = {
     AllDataTypesScan(parameters("from").toInt, parameters("TO").toInt, schema)(sqlContext)
   }
 }
@@ -53,10 +53,10 @@ class AllDataTypesScanSource extends SchemaRelationProvider {
 case class AllDataTypesScan(
   from: Int,
   to: Int,
-  userSpecifiedSchema: Option[StructType])(@transient val sqlContext: SQLContext)
+  userSpecifiedSchema: StructType)(@transient val sqlContext: SQLContext)
   extends TableScan {
 
-  override def schema = userSpecifiedSchema.get
+  override def schema = userSpecifiedSchema
 
   override def buildScan() = {
     sqlContext.sparkContext.parallelize(from to to).map { i =>
@@ -72,7 +72,7 @@ case class AllDataTypesScan(
         i.toDouble,
         BigDecimal(i),
         BigDecimal(i),
-        new Date(10000 + i),
+        new Date((i + 1) * 8640000),
         new Timestamp(20000 + i),
         s"varchar_$i",
         Seq(i, i + 1),
@@ -80,7 +80,7 @@ case class AllDataTypesScan(
         Map(i -> i.toString),
         Map(Map(s"str_$i" -> i.toFloat) -> Row(i.toLong)),
         Row(i, i.toString),
-        Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(new Date(30000 + i)))))
+        Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(new Date((i + 2) * 8640000)))))
     }
   }
 }
@@ -101,7 +101,7 @@ class TableScanSuite extends DataSourceTest {
       i.toDouble,
       BigDecimal(i),
       BigDecimal(i),
-      new Date(10000 + i),
+      new Date((i + 1) * 8640000),
       new Timestamp(20000 + i),
       s"varchar_$i",
       Seq(i, i + 1),
@@ -109,7 +109,7 @@ class TableScanSuite extends DataSourceTest {
       Map(i -> i.toString),
       Map(Map(s"str_$i" -> i.toFloat) -> Row(i.toLong)),
       Row(i, i.toString),
-      Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(new Date(30000 + i)))))
+      Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(new Date((i + 2) * 8640000)))))
   }.toSeq
 
   before {
@@ -126,13 +126,13 @@ class TableScanSuite extends DataSourceTest {
     sql(
       """
         |CREATE TEMPORARY TABLE tableWithSchema (
-        |stringField stRIng,
+        |`string$%Field` stRIng,
         |binaryField binary,
-        |booleanField boolean,
-        |byteField tinyint,
+        |`booleanField` boolean,
+        |ByteField tinyint,
         |shortField smaLlint,
-        |intField iNt,
-        |longField Bigint,
+        |int_Field iNt,
+        |`longField_:,<>=+/~^` Bigint,
         |floatField flOat,
         |doubleField doubLE,
         |decimalField1 decimal,
@@ -145,7 +145,7 @@ class TableScanSuite extends DataSourceTest {
         |mapFieldSimple MAP<iNt, StRing>,
         |mapFieldComplex Map<Map<stRING, fLOAT>, Struct<key:bigInt>>,
         |structFieldSimple StRuct<key:INt, Value:STrINg>,
-        |structFieldComplex StRuct<key:Array<String>, Value:struct<value:Array<date>>>
+        |structFieldComplex StRuct<key:Array<String>, Value:struct<`value_(2)`:Array<date>>>
         |)
         |USING org.apache.spark.sql.sources.AllDataTypesScanSource
         |OPTIONS (
@@ -177,13 +177,13 @@ class TableScanSuite extends DataSourceTest {
 
   test("Schema and all fields") {
     val expectedSchema = StructType(
-      StructField("stringField", StringType, true) ::
+      StructField("string$%Field", StringType, true) ::
       StructField("binaryField", BinaryType, true) ::
       StructField("booleanField", BooleanType, true) ::
-      StructField("byteField", ByteType, true) ::
+      StructField("ByteField", ByteType, true) ::
       StructField("shortField", ShortType, true) ::
-      StructField("intField", IntegerType, true) ::
-      StructField("longField", LongType, true) ::
+      StructField("int_Field", IntegerType, true) ::
+      StructField("longField_:,<>=+/~^", LongType, true) ::
       StructField("floatField", FloatType, true) ::
       StructField("doubleField", DoubleType, true) ::
       StructField("decimalField1", DecimalType.Unlimited, true) ::
@@ -209,7 +209,8 @@ class TableScanSuite extends DataSourceTest {
           StructField("key", ArrayType(StringType), true) ::
           StructField("Value",
             StructType(
-              StructField("value", ArrayType(DateType), true) :: Nil), true) ::  Nil), true) :: Nil
+              StructField("value_(2)", ArrayType(DateType), true) :: Nil), true) ::  Nil), true) ::
+      Nil
     )
 
     assert(expectedSchema == table("tableWithSchema").schema)
@@ -217,13 +218,13 @@ class TableScanSuite extends DataSourceTest {
     checkAnswer(
       sql(
         """SELECT
-          | stringField,
+          | `string$%Field`,
           | cast(binaryField as string),
           | booleanField,
           | byteField,
           | shortField,
-          | intField,
-          | longField,
+          | int_Field,
+          | `longField_:,<>=+/~^`,
           | floatField,
           | doubleField,
           | decimalField1,
@@ -246,20 +247,24 @@ class TableScanSuite extends DataSourceTest {
     10)
 
   sqlTest(
-    "SELECT stringField FROM tableWithSchema",
+    "SELECT `string$%Field` FROM tableWithSchema",
     (1 to 10).map(i => Row(s"str_$i")).toSeq)
 
   sqlTest(
-    "SELECT intField FROM tableWithSchema WHERE intField < 5",
+    "SELECT int_Field FROM tableWithSchema WHERE int_Field < 5",
     (1 to 4).map(Row(_)).toSeq)
 
   sqlTest(
-    "SELECT longField * 2 FROM tableWithSchema",
+    "SELECT `longField_:,<>=+/~^` * 2 FROM tableWithSchema",
     (1 to 10).map(i => Row(i * 2.toLong)).toSeq)
 
   sqlTest(
-    "SELECT structFieldSimple.key, arrayFieldSimple[1] FROM tableWithSchema a where intField=1",
+    "SELECT structFieldSimple.key, arrayFieldSimple[1] FROM tableWithSchema a where int_Field=1",
     Seq(Seq(1, 2)))
+
+  sqlTest(
+    "SELECT structFieldComplex.Value.`value_(2)` FROM tableWithSchema",
+    (1 to 10).map(i => Row(Seq(new Date((i + 2) * 8640000)))).toSeq)
 
   test("Caching")  {
     // Cached Query Execution

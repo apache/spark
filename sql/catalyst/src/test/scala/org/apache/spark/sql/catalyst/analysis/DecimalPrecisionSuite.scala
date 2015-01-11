@@ -41,7 +41,7 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
   val f: Expression = UnresolvedAttribute("f")
 
   before {
-    catalog.registerTable(None, "table", relation)
+    catalog.registerTable(Seq("table"), relation)
   }
 
   private def checkType(expression: Expression, expectedType: DataType): Unit = {

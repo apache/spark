@@ -113,7 +113,7 @@ case class SetCommand(
 @DeveloperApi
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
-    override val output: Seq[Attribute], extended: Boolean) extends RunnableCommand {
+    override val output: Seq[Attribute], extended: Boolean = false) extends RunnableCommand {
 
   // Run through the optimizer to generate the physical plan.
   override def run(sqlContext: SQLContext) = try {

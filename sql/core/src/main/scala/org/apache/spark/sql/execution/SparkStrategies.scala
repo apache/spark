@@ -260,6 +260,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def numPartitions = self.numPartitions
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case r: RunnableCommand => ExecutedCommand(r) :: Nil
+
       case logical.Distinct(child) =>
         execution.Distinct(partial = false,
           execution.Distinct(partial = true, planLater(child))) :: Nil
@@ -310,29 +312,14 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  case object CommandStrategy extends Strategy {
+  case object DDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case r: RunnableCommand => ExecutedCommand(r) :: Nil
-
       case CreateTableUsing(tableName, userSpecifiedSchema, provider, true, options) =>
         ExecutedCommand(
           CreateTempTableUsing(tableName, userSpecifiedSchema, provider, options)) :: Nil
 
       case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, options) =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
-
-      case logical.SetCommand(kv) =>
-        Seq(ExecutedCommand(execution.SetCommand(kv, plan.output)))
-      case logical.ExplainCommand(logicalPlan, extended) =>
-        Seq(ExecutedCommand(
-          execution.ExplainCommand(logicalPlan, plan.output, extended)))
-      case logical.CacheTableCommand(tableName, optPlan, isLazy) =>
-        Seq(ExecutedCommand(
-          execution.CacheTableCommand(tableName, optPlan, isLazy)))
-      case logical.UncacheTableCommand(tableName) =>
-        Seq(ExecutedCommand(
-          execution.UncacheTableCommand(tableName)))
-      case _ => Nil
     }
   }
 }
