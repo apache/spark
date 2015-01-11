@@ -1,8 +1,6 @@
-import subprocess
-
 from airflow import settings
 from airflow.configuration import conf
-from airflow.models import DatabaseConnection
+from airflow.models import Connection
 from airflow.hooks.base_hook import BaseHook
 from airflow.hooks.presto.presto_client import PrestoClient
 
@@ -13,13 +11,14 @@ class PrestoHook(BaseHook):
     """
     Interact with Presto!
     """
-    def __init__(self, presto_dbid=conf.get('hooks', 'PRESTO_DEFAULT_DBID')):
+    def __init__(
+            self, presto_conn_id=conf.get('hooks', 'PRESTO_DEFAULT_CONN_ID')):
         session = settings.Session()
         db = session.query(
-            DatabaseConnection).filter(
-                DatabaseConnection.db_id == presto_dbid)
+            Connection).filter(
+                Connection.conn_id == presto_conn_id)
         if db.count() == 0:
-            raise Exception("The presto_dbid you provided isn't defined")
+            raise Exception("The presto_conn_id you provided isn't defined")
         else:
             db = db.all()[0]
         self.host = db.host

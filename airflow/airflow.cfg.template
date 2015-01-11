@@ -28,8 +28,8 @@ WORKER_LOG_SERVER_PORT = 8793
 
 [hooks]
 HIVE_HOME_PY: '/usr/lib/hive/lib/py'
-PRESTO_DEFAULT_DBID: presto_default
-HIVE_DEFAULT_DBID: hive_default
+PRESTO_DEFAULT_CONN_ID: presto_default
+HIVE_DEFAULT_CONN_ID: hive_default
 
 [misc]
 RUN_AS_MASTER: True

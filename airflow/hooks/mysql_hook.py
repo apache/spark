@@ -1,13 +1,14 @@
 import MySQLdb
 from airflow import settings
-from airflow.models import DatabaseConnection
+from airflow.models import Connection
 
 
 class MySqlHook(object):
 
     def __init__(
-            self, host=None, login=None, psw=None, db=None, mysql_dbid=None):
-        if not mysql_dbid:
+            self, host=None, login=None,
+            psw=None, db=None, mysql_conn_id=None):
+        if not mysql_conn_id:
             self.host = host
             self.login = login
             self.psw = psw
@@ -15,8 +16,8 @@ class MySqlHook(object):
         else:
             session = settings.Session()
             db = session.query(
-                DatabaseConnection).filter(
-                    DatabaseConnection.db_id == mysql_dbid)
+                Connection).filter(
+                    Connection.conn_id == mysql_conn_id)
             if db.count() == 0:
                 raise Exception("The mysql_dbid you provided isn't defined")
             else:

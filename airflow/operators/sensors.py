@@ -6,7 +6,7 @@ from airflow import settings
 from airflow.configuration import conf
 from airflow.hooks import HiveHook
 from airflow.models import BaseOperator
-from airflow.models import DatabaseConnection as DB
+from airflow.models import Connection as DB
 from airflow.models import State
 from airflow.models import TaskInstance
 from airflow.utils import apply_defaults
@@ -56,17 +56,17 @@ class SqlSensor(BaseSensorOperator):
     }
 
     @apply_defaults
-    def __init__(self, db_id, sql, *args, **kwargs):
+    def __init__(self, conn_id, sql, *args, **kwargs):
 
         super(SqlSensor, self).__init__(*args, **kwargs)
 
         self.sql = sql
-        self.db_id = db_id
+        self.conn_id = conn_id
 
         session = settings.Session()
-        db = session.query(DB).filter(DB.db_id==db_id).all()
+        db = session.query(DB).filter(DB.conn_id==conn_id).all()
         if not db:
-            raise Exception("db_id doesn't exist in the repository")
+            raise Exception("conn_id doesn't exist in the repository")
         self.hook = db[0].get_hook()
         session.commit()
         session.close()
@@ -132,14 +132,14 @@ class HivePartitionSensor(BaseSensorOperator):
     def __init__(
             self,
             table, partition="ds='{{ ds }}'",
-            hive_dbid=conf.get('hooks', 'HIVE_DEFAULT_DBID'),
+            hive_conn_id=conf.get('hooks', 'HIVE_DEFAULT_CONN_ID'),
             schema='default',
             *args, **kwargs):
         super(HivePartitionSensor, self).__init__(*args, **kwargs)
         if '.' in table:
             schema, table = table.split('.')
-        self.hive_dbid = hive_dbid
-        self.hook = HiveHook(hive_dbid=hive_dbid)
+        self.hive_conn_id = hive_conn_id
+        self.hook = HiveHook(hive_conn_id=hive_conn_id)
         self.table = table
         self.partition = partition
         self.schema = schema

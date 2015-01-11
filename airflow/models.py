@@ -130,18 +130,18 @@ class User(Base):
         return False
 
 
-class DatabaseConnection(Base):
+class Connection(Base):
     """
     Placeholder to store information about different database instances
     connection information. The idea here is that scripts use references to
-    database instances (db_id) instead of hard coding hostname, logins and
+    database instances (conn_id) instead of hard coding hostname, logins and
     passwords when using operators or hooks.
     """
-    __tablename__ = "db_connection"
+    __tablename__ = "connection"
 
     id = Column(Integer(), primary_key=True)
-    db_id = Column(String(ID_LEN), unique=True)
-    db_type = Column(String(500))
+    conn_id = Column(String(ID_LEN), unique=True)
+    conn_type = Column(String(500))
     host = Column(String(500))
     schema = Column(String(500))
     login = Column(String(500))
@@ -150,11 +150,11 @@ class DatabaseConnection(Base):
     extra = Column(String(5000))
 
     def __init__(
-            self, db_id=None, db_type=None,
+            self, conn_id=None, conn_type=None,
             host=None, login=None, password=None,
             schema=None, port=None):
-        self.db_id = db_id
-        self.db_type = db_type
+        self.conn_id = conn_id
+        self.conn_type = conn_type
         self.host = host
         self.login = login
         self.password = password
@@ -163,15 +163,15 @@ class DatabaseConnection(Base):
 
     def get_hook(self):
         from airflow import hooks
-        if self.db_type == 'mysql':
-            return hooks.MySqlHook(mysql_dbid=self.db_id)
-        elif self.db_type == 'hive':
-            return hooks.HiveHook(hive_dbid=self.db_id)
-        elif self.db_type == 'presto':
-            return hooks.PrestoHook(presto_dbid=self.db_id)
+        if self.conn_type == 'mysql':
+            return hooks.MySqlHook(mysql_conn_id=self.conn_id)
+        elif self.conn_type == 'hive':
+            return hooks.HiveHook(hive_conn_id=self.conn_id)
+        elif self.conn_type == 'presto':
+            return hooks.PrestoHook(presto_conn_id=self.conn_id)
 
     def __repr__(self):
-        return self.db_id
+        return self.conn_id
 
 
 class DagPickle(Base):
@@ -1150,7 +1150,7 @@ class Chart(Base):
 
     id = Column(Integer, primary_key=True)
     label = Column(String(200))
-    db_id = Column(String(ID_LEN), ForeignKey('db_connection.db_id'))
+    conn_id = Column(String(ID_LEN), ForeignKey('connection.conn_id'))
     user_id = Column(Integer(), ForeignKey('user.id'),)
     chart_type = Column(String(100), default="line")
     sql_layout = Column(String(50), default="series")
@@ -1162,5 +1162,5 @@ class Chart(Base):
     default_params = Column(String(5000), default="{}")
     owner = relationship("User", cascade=False, cascade_backrefs=False)
     x_is_date = Column(Boolean, default=True)
-    db = relationship("DatabaseConnection")
+    db = relationship("Connection")
     iteration_no = Column(Integer, default=0)
