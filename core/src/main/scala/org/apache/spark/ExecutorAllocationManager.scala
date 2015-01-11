@@ -319,6 +319,10 @@ private[spark] class ExecutorAllocationManager(
   private def onExecutorAdded(executorId: String): Unit = synchronized {
     if (!executorIds.contains(executorId)) {
       executorIds.add(executorId)
+      // If an executor (call this executor X) is not removed because the lower bound
+      // has been reached, it will no longer be marked as idle. When new executors join,
+      // however, we are no longer at the lower bound, and so we must mark executor X
+      // as idle again so as not to forget that it is a candidate for removal. (see SPARK-4951)
       executorIds.filter(listener.isExecutorIdle).foreach(onExecutorIdle)
       logInfo(s"New executor $executorId has registered (new total is ${executorIds.size})")
       if (numExecutorsPending > 0) {
@@ -442,7 +446,7 @@ private[spark] class ExecutorAllocationManager(
       allocationManager.synchronized {
         // This guards against the race condition in which the `SparkListenerTaskStart`
         // event is posted before the `SparkListenerBlockManagerAdded` event, which is
-        // possible because these events are posted in different threads.
+        // possible because these events are posted in different threads. (see SPARK-4951)
         if (!allocationManager.executorIds.contains(executorId)) {
           allocationManager.onExecutorAdded(executorId)
         }
@@ -485,7 +489,7 @@ private[spark] class ExecutorAllocationManager(
       if (executorId != SparkContext.DRIVER_IDENTIFIER) {
         // This guards against the race condition in which the `SparkListenerTaskStart`
         // event is posted before the `SparkListenerBlockManagerAdded` event, which is
-        // possible because these events are posted in different threads.
+        // possible because these events are posted in different threads. (see SPARK-4951)
         if (!allocationManager.executorIds.contains(executorId)) {
           allocationManager.onExecutorAdded(executorId)
         }
@@ -510,6 +514,8 @@ private[spark] class ExecutorAllocationManager(
     }
 
     /**
+     * Return true if an executor is not currently running a task, and false otherwise.
+     *
      * Note: This is not thread-safe without the caller owning the `allocationManager` lock.
      */
     def isExecutorIdle(executorId: String): Boolean = {

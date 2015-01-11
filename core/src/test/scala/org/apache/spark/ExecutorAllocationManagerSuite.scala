@@ -607,7 +607,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(removeTimes(manager).size === 1)
   }
 
-  test("call onTaskStart before onBlockManagerAdded") {
+  test("SPARK-4951: call onTaskStart before onBlockManagerAdded") {
     sc = createSparkContext(2, 10)
     val manager = sc.executorAllocationManager.get
     assert(executorIds(manager).isEmpty)
@@ -621,7 +621,7 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
     assert(removeTimes(manager).size === 0)
   }
 
-  test("onExecutorAdded should not add a busy executor to removeTimes") {
+  test("SPARK-4951: onExecutorAdded should not add a busy executor to removeTimes") {
     sc = createSparkContext(2, 10)
     val manager = sc.executorAllocationManager.get
     assert(executorIds(manager).isEmpty)
