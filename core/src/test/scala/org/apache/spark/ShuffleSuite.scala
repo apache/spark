@@ -35,19 +35,15 @@ abstract class ShuffleSuite extends FunSuite with Matchers with LocalSparkContex
   conf.set("spark.test.noStageRetry", "true")
 
   test("groupByKey without compression") {
-    try {
-      System.setProperty("spark.shuffle.compress", "false")
-      sc = new SparkContext("local", "test", conf)
-      val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 4)
-      val groups = pairs.groupByKey(4).collect()
-      assert(groups.size === 2)
-      val valuesFor1 = groups.find(_._1 == 1).get._2
-      assert(valuesFor1.toList.sorted === List(1, 2, 3))
-      val valuesFor2 = groups.find(_._1 == 2).get._2
-      assert(valuesFor2.toList.sorted === List(1))
-    } finally {
-      System.setProperty("spark.shuffle.compress", "true")
-    }
+    val myConf = conf.clone().set("spark.shuffle.compress", "false")
+    sc = new SparkContext("local", "test", myConf)
+    val pairs = sc.parallelize(Array((1, 1), (1, 2), (1, 3), (2, 1)), 4)
+    val groups = pairs.groupByKey(4).collect()
+    assert(groups.size === 2)
+    val valuesFor1 = groups.find(_._1 == 1).get._2
+    assert(valuesFor1.toList.sorted === List(1, 2, 3))
+    val valuesFor2 = groups.find(_._1 == 2).get._2
+    assert(valuesFor2.toList.sorted === List(1))
   }
 
   test("shuffle non-zero block size") {

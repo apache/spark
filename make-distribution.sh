@@ -28,18 +28,20 @@ set -o pipefail
 set -e
 
 # Figure out where the Spark framework is installed
-FWDIR="$(cd "`dirname "$0"`"; pwd)"
-DISTDIR="$FWDIR/dist"
+SPARK_HOME="$(cd "`dirname "$0"`"; pwd)"
+DISTDIR="$SPARK_HOME/dist"
 
 SPARK_TACHYON=false
 MAKE_TGZ=false
 NAME=none
+MVN="$SPARK_HOME/build/mvn"
 
 function exit_with_usage {
   echo "make-distribution.sh - tool for making binary distributions of Spark"
   echo ""
   echo "usage:"
-  echo "./make-distribution.sh [--name] [--tgz] [--with-tachyon] <maven build options>"
+  cl_options="[--name] [--tgz] [--mvn <mvn-command>] [--with-tachyon]"
+  echo "./make-distribution.sh $cl_options <maven build options>"
   echo "See Spark's \"Building Spark\" doc for correct Maven options."
   echo ""
   exit 1
@@ -70,6 +72,10 @@ while (( "$#" )); do
       ;;
     --tgz)
       MAKE_TGZ=true
+      ;;
+    --mvn)
+      MVN="$2"
+      shift
       ;;
     --name)
       NAME="$2"
@@ -109,9 +115,9 @@ if which git &>/dev/null; then
     unset GITREV
 fi
 
-if ! which mvn &>/dev/null; then
-    echo -e "You need Maven installed to build Spark."
-    echo -e "Download Maven from https://maven.apache.org/"
+if ! which $MVN &>/dev/null; then
+    echo -e "Could not locate Maven command: '$MVN'."
+    echo -e "Specify the Maven command with the --mvn flag"
     exit -1;
 fi
 
@@ -119,7 +125,7 @@ VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "
 SPARK_HADOOP_VERSION=$(mvn help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
     | grep -v "INFO"\
     | tail -n 1)
-SPARK_HIVE=$(mvn help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ 2>/dev/null\
+SPARK_HIVE=$($MVN help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ 2>/dev/null\
     | grep -v "INFO"\
     | fgrep --count "<id>hive</id>";\
     # Reset exit status to 0, otherwise the script stops here if the last grep finds nothing\
@@ -161,11 +167,11 @@ else
 fi
 
 # Build uber fat JAR
-cd "$FWDIR"
+cd "$SPARK_HOME"
 
 export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 
-BUILD_COMMAND="mvn clean package -DskipTests $@"
+BUILD_COMMAND="$MVN clean package -DskipTests $@"
 
 # Actually build the jar
 echo -e "\nBuilding with..."
@@ -177,41 +183,42 @@ ${BUILD_COMMAND}
 rm -rf "$DISTDIR"
 mkdir -p "$DISTDIR/lib"
 echo "Spark $VERSION$GITREVSTRING built for Hadoop $SPARK_HADOOP_VERSION" > "$DISTDIR/RELEASE"
+echo "Build flags: $@" >> "$DISTDIR/RELEASE"
 
 # Copy jars
-cp "$FWDIR"/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
-cp "$FWDIR"/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
+cp "$SPARK_HOME"/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/lib/"
+cp "$SPARK_HOME"/examples/target/scala*/spark-examples*.jar "$DISTDIR/lib/"
 # This will fail if the -Pyarn profile is not provided
 # In this case, silence the error and ignore the return code of this command
-cp "$FWDIR"/network/yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/lib/" &> /dev/null || :
+cp "$SPARK_HOME"/network/yarn/target/scala*/spark-*-yarn-shuffle.jar "$DISTDIR/lib/" &> /dev/null || :
 
 # Copy example sources (needed for python and SQL)
 mkdir -p "$DISTDIR/examples/src/main"
-cp -r "$FWDIR"/examples/src/main "$DISTDIR/examples/src/"
+cp -r "$SPARK_HOME"/examples/src/main "$DISTDIR/examples/src/"
 
 if [ "$SPARK_HIVE" == "1" ]; then
-  cp "$FWDIR"/lib_managed/jars/datanucleus*.jar "$DISTDIR/lib/"
+  cp "$SPARK_HOME"/lib_managed/jars/datanucleus*.jar "$DISTDIR/lib/"
 fi
 
 # Copy license and ASF files
-cp "$FWDIR/LICENSE" "$DISTDIR"
-cp "$FWDIR/NOTICE" "$DISTDIR"
+cp "$SPARK_HOME/LICENSE" "$DISTDIR"
+cp "$SPARK_HOME/NOTICE" "$DISTDIR"
 
-if [ -e "$FWDIR"/CHANGES.txt ]; then
-  cp "$FWDIR/CHANGES.txt" "$DISTDIR"
+if [ -e "$SPARK_HOME"/CHANGES.txt ]; then
+  cp "$SPARK_HOME/CHANGES.txt" "$DISTDIR"
 fi
 
 # Copy data files
-cp -r "$FWDIR/data" "$DISTDIR"
+cp -r "$SPARK_HOME/data" "$DISTDIR"
 
 # Copy other things
 mkdir "$DISTDIR"/conf
-cp "$FWDIR"/conf/*.template "$DISTDIR"/conf
-cp "$FWDIR/README.md" "$DISTDIR"
-cp -r "$FWDIR/bin" "$DISTDIR"
-cp -r "$FWDIR/python" "$DISTDIR"
-cp -r "$FWDIR/sbin" "$DISTDIR"
-cp -r "$FWDIR/ec2" "$DISTDIR"
+cp "$SPARK_HOME"/conf/*.template "$DISTDIR"/conf
+cp "$SPARK_HOME/README.md" "$DISTDIR"
+cp -r "$SPARK_HOME/bin" "$DISTDIR"
+cp -r "$SPARK_HOME/python" "$DISTDIR"
+cp -r "$SPARK_HOME/sbin" "$DISTDIR"
+cp -r "$SPARK_HOME/ec2" "$DISTDIR"
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then
@@ -243,9 +250,9 @@ fi
 
 if [ "$MAKE_TGZ" == "true" ]; then
   TARDIR_NAME=spark-$VERSION-bin-$NAME
-  TARDIR="$FWDIR/$TARDIR_NAME"
+  TARDIR="$SPARK_HOME/$TARDIR_NAME"
   rm -rf "$TARDIR"
   cp -r "$DISTDIR" "$TARDIR"
-  tar czf "spark-$VERSION-bin-$NAME.tgz" -C "$FWDIR" "$TARDIR_NAME"
+  tar czf "spark-$VERSION-bin-$NAME.tgz" -C "$SPARK_HOME" "$TARDIR_NAME"
   rm -rf "$TARDIR"
 fi

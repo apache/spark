@@ -4,7 +4,7 @@ title: Spark Streaming + Kafka Integration Guide
 ---
 [Apache Kafka](http://kafka.apache.org/) is publish-subscribe messaging rethought as a distributed, partitioned, replicated commit log service.  Here we explain how to configure Spark Streaming to receive data from Kafka.
 
-1. **Linking:** In your SBT/Maven projrect definition, link your streaming application against the following artifact (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide for further information).
+1. **Linking:** In your SBT/Maven project definition, link your streaming application against the following artifact (see [Linking section](streaming-programming-guide.html#linking) in the main programming guide for further information).
 
 		groupId = org.apache.spark
 		artifactId = spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}
@@ -20,7 +20,7 @@ title: Spark Streaming + Kafka Integration Guide
         	streamingContext, [zookeeperQuorum], [group id of the consumer], [per-topic number of Kafka partitions to consume])
 
 	See the [API docs](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$)
-	and the [example]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples/streaming/KafkaWordCount.scala).
+	and the [example]({{site.SPARK_GITHUB_URL}}/blob/master/examples/scala-2.10/src/main/scala/org/apache/spark/examples/streaming/KafkaWordCount.scala).
 	</div>
 	<div data-lang="java" markdown="1">
 		import org.apache.spark.streaming.kafka.*;

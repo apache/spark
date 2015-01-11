@@ -38,8 +38,7 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperators, OverrideCatalog, OverrideFunctionRegistry}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types.DecimalType
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
-import org.apache.spark.sql.execution.{SparkPlan, ExecutedCommand, ExtractPythonUdfs, QueryExecutionException}
+import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand, QueryExecutionException}
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTableCommand}
 import org.apache.spark.sql.sources.DataSourceStrategy
 
@@ -124,7 +123,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * in the Hive metastore.
    */
   def analyze(tableName: String) {
-    val relation = EliminateAnalysisOperators(catalog.lookupRelation(None, tableName))
+    val relation = EliminateAnalysisOperators(catalog.lookupRelation(Seq(tableName)))
 
     relation match {
       case relation: MetastoreRelation =>
@@ -284,7 +283,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * Execute the command using Hive and return the results as a sequence. Each element
    * in the sequence is one row.
    */
-  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = {
+  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = synchronized {
     try {
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
@@ -340,7 +339,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     override def strategies: Seq[Strategy] = extraStrategies ++ Seq(
       DataSourceStrategy,
-      CommandStrategy,
       HiveCommandStrategy(self),
       TakeOrdered,
       ParquetOperations,
