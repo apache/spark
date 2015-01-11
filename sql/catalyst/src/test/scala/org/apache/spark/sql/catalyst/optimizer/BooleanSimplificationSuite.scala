@@ -31,11 +31,11 @@ class BooleanSimplificationSuite extends PlanTest {
     val batches =
       Batch("AnalysisNodes", Once,
         EliminateAnalysisOperators) ::
-        Batch("Constant Folding", FixedPoint(50),
-          NullPropagation,
-          ConstantFolding,
-          BooleanSimplification,
-          SimplifyFilters) :: Nil
+      Batch("Constant Folding", FixedPoint(50),
+        NullPropagation,
+        ConstantFolding,
+        BooleanSimplification,
+        SimplifyFilters) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
