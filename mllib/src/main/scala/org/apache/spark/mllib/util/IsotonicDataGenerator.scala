@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.util
 
 import scala.collection.JavaConversions._
+import java.lang.{Double => JDouble}
 
 object IsotonicDataGenerator {
 
@@ -26,12 +27,10 @@ object IsotonicDataGenerator {
    * @param labels list of labels for the data points
    * @return Java List of input.
    */
-  def generateIsotonicInputAsList(labels: Array[Double]): java.util.List[(Double, Double, Double)] = {
-    seqAsJavaList(generateIsotonicInput(wrapDoubleArray(labels):_*))
+  def generateIsotonicInputAsList(labels: Array[Double]): java.util.List[(JDouble, JDouble)] = {
+    seqAsJavaList(generateIsotonicInput(wrapDoubleArray(labels):_*).map(x => (new JDouble(x._1), new JDouble(x._2))))
       //.map(d => new Tuple3(new java.lang.Double(d._1), new java.lang.Double(d._2), new java.lang.Double(d._3))))
   }
-
-  def bam(d: Option[Double]): Double = d.get
 
   /**
    * Return an ordered sequence of labeled data points with default weights

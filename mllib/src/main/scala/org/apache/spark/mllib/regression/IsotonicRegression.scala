@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.regression
 
+import org.apache.spark.api.java.{JavaRDD, JavaPairRDD}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -30,9 +31,30 @@ class IsotonicRegressionModel (
     val isotonic: Boolean)
   extends Serializable {
 
+  /**
+   * Predict labels for provided features
+   *
+   * @param testData features to be labeled
+   * @return predicted labels
+   */
   def predict(testData: RDD[Double]): RDD[Double] =
     testData.map(predict)
 
+  /**
+   * Predict labels for provided features
+   *
+   * @param testData features to be labeled
+   * @return predicted labels
+   */
+  def predict(testData: JavaRDD[java.lang.Double]): RDD[java.lang.Double] =
+    testData.rdd.map(x => x.doubleValue()).map(predict)
+
+  /**
+   * Predict a single label
+   *
+   * @param testData feature to be labeled
+   * @return predicted label
+   */
   def predict(testData: Double): Double =
     // Take the highest of data points smaller than our feature or data point with lowest feature
     (predictions.head +: predictions.filter(y => y._2 <= testData)).last._1
@@ -59,7 +81,7 @@ trait IsotonicRegressionAlgorithm
   /**
    * Run algorithm to obtain isotonic regression model
    *
-   * @param input data
+   * @param input (label, feature, weight)
    * @param isotonic isotonic (increasing) or antitonic (decreasing) sequence
    * @return isotonic regression model
    */
@@ -115,12 +137,11 @@ class PoolAdjacentViolators private [mllib]
       }
     }
 
-    def monotonicityConstraint(isotonic: Boolean): (Double, Double) => Boolean =
-      (x, y) => if(isotonic) {
-        x <= y
-      } else {
-        x >= y
-      }
+    val isotonicConstraint: (Double, Double) => Boolean = (x, y) => x <= y
+    val antitonicConstraint: (Double, Double) => Boolean = (x, y) => x >= y
+
+    def monotonicityConstraint(isotonic: Boolean) =
+      if(isotonic) isotonicConstraint else antitonicConstraint
 
     val monotonicityConstraintHolds = monotonicityConstraint(isotonic)
 
@@ -179,12 +200,11 @@ class PoolAdjacentViolators private [mllib]
 object IsotonicRegression {
 
   /**
-   * Train a monotone regression model given an RDD of (label, features, weight).
-   * Currently only one dimensional algorithm is supported (features.length is one)
+   * Train a monotone regression model given an RDD of (label, feature, weight).
    * Label is the dependent y value
    * Weight of the data point is the number of measurements. Default is 1
    *
-   * @param input RDD of (label, array of features, weight).
+   * @param input RDD of (label, feature, weight).
    *              Each point describes a row of the data
    *              matrix A as well as the corresponding right hand side label y
    *              and weight as number of measurements
@@ -194,5 +214,21 @@ object IsotonicRegression {
       input: RDD[(Double, Double, Double)],
       isotonic: Boolean = true): IsotonicRegressionModel = {
     new PoolAdjacentViolators().run(input, isotonic)
+  }
+
+  /**
+   * Train a monotone regression model given an RDD of (label, feature).
+   * Label is the dependent y value
+   * Weight defaults to 1
+   *
+   * @param input RDD of (label, feature).
+   * @param isotonic isotonic (increasing) or antitonic (decreasing) sequence
+   * @return
+   */
+  def train(
+      input: JavaPairRDD[java.lang.Double, java.lang.Double],
+      isotonic: Boolean): IsotonicRegressionModel = {
+    new PoolAdjacentViolators()
+      .run(input.rdd.map(x => (x._1.doubleValue(), x._2.doubleValue(), 1d)), isotonic)
   }
 }
