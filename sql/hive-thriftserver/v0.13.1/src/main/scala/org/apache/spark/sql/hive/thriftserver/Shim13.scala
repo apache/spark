@@ -22,7 +22,6 @@ import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
-import scala.math._
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.security.UserGroupInformation
@@ -166,9 +165,7 @@ private[hive] class SparkExecuteStatementOperation(
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
       }
-
-      val groupId = round(random * 1000000).toString
-      hiveContext.sparkContext.setJobGroup(groupId, statement)
+      hiveContext.sparkContext.setJobDescription(statement)
       sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
         hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }
