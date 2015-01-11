@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.clustering
 
+import scala.collection.mutable.IndexedSeq
+
 import breeze.linalg.{DenseVector => BreezeVector, DenseMatrix => BreezeMatrix, diag, Transpose}
 
 import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors, DenseVector, DenseMatrix, BLAS}
@@ -24,8 +26,6 @@ import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
-
-import scala.collection.mutable.IndexedSeq
 
 /**
  * This class performs expectation maximization for multivariate Gaussian
