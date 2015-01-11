@@ -43,7 +43,7 @@ abstract class Generator extends Expression {
   override type EvaluatedType = TraversableOnce[Row]
 
   override lazy val dataType =
-    ArrayType(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata))))
+    ArrayType(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable, a.comment, a.metadata))))
 
   override def nullable = false
 
@@ -92,11 +92,11 @@ case class Explode(attributeNames: Seq[String], child: Expression)
   protected def makeOutput() =
     if (attributeNames.size == elementTypes.size) {
       attributeNames.zip(elementTypes).map {
-        case (n, (t, nullable)) => AttributeReference(n, t, nullable)()
+        case (n, (t, nullable)) => AttributeReference(n, t, nullable, "")()
       }
     } else {
       elementTypes.zipWithIndex.map {
-        case ((t, nullable), i) => AttributeReference(s"c_$i", t, nullable)()
+        case ((t, nullable), i) => AttributeReference(s"c_$i", t, nullable, "")()
       }
     }
 
@@ -110,6 +110,8 @@ case class Explode(attributeNames: Seq[String], child: Expression)
         if (inputMap == null) Nil else inputMap.map { case (k,v) => new GenericRow(Array(k,v)) }
     }
   }
+
+  override def comment = ""
 
   override def toString() = s"explode($child)"
 }

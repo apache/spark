@@ -42,6 +42,7 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def foldable: Boolean = false
   def nullable: Boolean
+  def comment: String = ""
   def references: AttributeSet = AttributeSet(children.flatMap(_.references.iterator))
 
   /** Returns the result of evaluating this expression on a given input Row */
@@ -295,6 +296,7 @@ case class GroupExpression(children: Seq[Expression]) extends Expression {
   type EvaluatedType = Seq[Any]
   override def eval(input: Row): EvaluatedType = ???
   override def nullable = false
+  override def comment = ""
   override def foldable = false
   override def dataType = ???
 }

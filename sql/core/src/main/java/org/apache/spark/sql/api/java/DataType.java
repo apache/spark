@@ -153,6 +153,7 @@ public abstract class DataType {
       String name,
       DataType dataType,
       boolean nullable,
+      String comment,
       Metadata metadata) {
     if (name == null) {
       throw new IllegalArgumentException("name should not be null.");
@@ -164,7 +165,7 @@ public abstract class DataType {
       throw new IllegalArgumentException("metadata should not be null.");
     }
 
-    return new StructField(name, dataType, nullable, metadata);
+    return new StructField(name, dataType, nullable, comment, metadata);
   }
 
   /**
@@ -172,8 +173,8 @@ public abstract class DataType {
    *
    * @see #createStructField(String, DataType, boolean, Metadata)
    */
-  public static StructField createStructField(String name, DataType dataType, boolean nullable) {
-    return createStructField(name, dataType, nullable, (new MetadataBuilder()).build());
+  public static StructField createStructField(String name, DataType dataType, boolean nullable, String comment) {
+    return createStructField(name, dataType, nullable, comment, (new MetadataBuilder()).build());
   }
 
   /**

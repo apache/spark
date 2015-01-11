@@ -47,11 +47,13 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   override def exprId = throw new UnresolvedException(this, "exprId")
   override def dataType = throw new UnresolvedException(this, "dataType")
   override def nullable = throw new UnresolvedException(this, "nullable")
+  override def comment = throw new UnresolvedException(this, "comment")
   override def qualifiers = throw new UnresolvedException(this, "qualifiers")
   override lazy val resolved = false
 
   override def newInstance = this
   override def withNullability(newNullability: Boolean) = this
+  override def withComment(newComment: String) = this
   override def withQualifiers(newQualifiers: Seq[String]) = this
   override def withName(newName: String) = UnresolvedAttribute(name)
 
@@ -66,6 +68,7 @@ case class UnresolvedFunction(name: String, children: Seq[Expression]) extends E
   override def dataType = throw new UnresolvedException(this, "dataType")
   override def foldable = throw new UnresolvedException(this, "foldable")
   override def nullable = throw new UnresolvedException(this, "nullable")
+  override def comment = throw new UnresolvedException(this, "comment")
   override lazy val resolved = false
 
   // Unresolved functions are transient at compile time and don't get evaluated during execution.
@@ -91,11 +94,13 @@ case class Star(
   override def exprId = throw new UnresolvedException(this, "exprId")
   override def dataType = throw new UnresolvedException(this, "dataType")
   override def nullable = throw new UnresolvedException(this, "nullable")
+  override def comment = throw new UnresolvedException(this, "comment")
   override def qualifiers = throw new UnresolvedException(this, "qualifiers")
   override lazy val resolved = false
 
   override def newInstance = this
   override def withNullability(newNullability: Boolean) = this
+  override def withComment(newComment: String) = this
   override def withQualifiers(newQualifiers: Seq[String]) = this
   override def withName(newName: String) = this
 

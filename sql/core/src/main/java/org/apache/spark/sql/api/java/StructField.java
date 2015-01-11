@@ -36,21 +36,28 @@ public class StructField {
   private String name;
   private DataType dataType;
   private boolean nullable;
+  private String comment;
   private Metadata metadata;
 
   protected StructField(
       String name,
       DataType dataType,
       boolean nullable,
+      String comment,
       Metadata metadata) {
     this.name = name;
     this.dataType = dataType;
     this.nullable = nullable;
+    this.comment = comment;
     this.metadata = metadata;
   }
 
   public String getName() {
     return name;
+  }
+
+  public String getComment() {
+    return comment;
   }
 
   public DataType getDataType() {
@@ -73,6 +80,7 @@ public class StructField {
     StructField that = (StructField) o;
 
     if (nullable != that.nullable) return false;
+    if (!comment.equals(that.comment)) return false;
     if (!dataType.equals(that.dataType)) return false;
     if (!name.equals(that.name)) return false;
     if (!metadata.equals(that.metadata)) return false;
@@ -85,6 +93,7 @@ public class StructField {
     int result = name.hashCode();
     result = 31 * result + dataType.hashCode();
     result = 31 * result + (nullable ? 1 : 0);
+    result = 31 * result + comment.hashCode();
     result = 31 * result + metadata.hashCode();
     return result;
   }
