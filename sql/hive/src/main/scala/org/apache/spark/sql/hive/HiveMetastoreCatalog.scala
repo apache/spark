@@ -428,11 +428,11 @@ private[hive] case class MetastoreRelation
     }
   )
   override def sameResult(plan: LogicalPlan): Boolean = {
-    val new_plan = plan.asInstanceOf[MetastoreRelation];
-    plan.getClass == this.getClass &&
-    plan.children.size == children.size &&
-    databaseName == new_plan.databaseName &&
-    tableName == new_plan.tableName
+      plan match {
+           case mr: MetastoreRelation =>
+                    mr.databaseName == databaseName && mr.tableName == tableName
+           case _ => false
+      }
   }
 
   val tableDesc = HiveShim.getTableDesc(
