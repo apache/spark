@@ -4,7 +4,7 @@ import subprocess
 import sys
 from tempfile import NamedTemporaryFile
 
-from airflow.models import DatabaseConnection
+from airflow.models import Connection
 from airflow.configuration import conf
 from airflow import settings
 
@@ -21,13 +21,13 @@ from airflow.hooks.base_hook import BaseHook
 
 class HiveHook(BaseHook):
     def __init__(self,
-            hive_dbid=conf.get('hooks', 'HIVE_DEFAULT_DBID')):
+            hive_conn_id=conf.get('hooks', 'HIVE_DEFAULT_CONN_ID')):
         session = settings.Session()
         db = session.query(
-            DatabaseConnection).filter(
-                DatabaseConnection.db_id == hive_dbid)
+            Connection).filter(
+                Connection.conn_id == hive_conn_id)
         if db.count() == 0:
-            raise Exception("The dbid you provided isn't defined")
+            raise Exception("The conn_id you provided isn't defined")
         else:
             db = db.all()[0]
         self.host = db.host

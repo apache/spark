@@ -134,24 +134,24 @@ class Airflow(BaseView):
     @wwwutils.gzipped
     def query(self):
         session = settings.Session()
-        dbs = session.query(models.DatabaseConnection).order_by(
-            models.DatabaseConnection.db_id)
-        db_choices = [(db.db_id, db.db_id) for db in dbs]
-        db_id_str = request.args.get('db_id')
+        dbs = session.query(models.Connection).order_by(
+            models.Connection.conn_id)
+        db_choices = [(db.conn_id, db.conn_id) for db in dbs]
+        conn_id_str = request.args.get('conn_id')
         sql = request.args.get('sql')
 
         class QueryForm(Form):
-            db_id = SelectField("Layout", choices=db_choices)
+            conn_id = SelectField("Layout", choices=db_choices)
             sql = TextAreaField("SQL", widget=wwwutils.AceEditorWidget())
         data = {
-            'db_id': db_id_str,
+            'conn_id': conn_id_str,
             'sql': sql,
         }
         results = None
         has_data = False
         error = False
-        if db_id_str:
-            db = [db for db in dbs if db.db_id == db_id_str][0]
+        if conn_id_str:
+            db = [db for db in dbs if db.conn_id == conn_id_str][0]
             hook = db.get_hook()
             try:
                 # df = hook.get_pandas_df(wwwutils.limit_sql(sql, QUERY_LIMIT))
@@ -193,7 +193,7 @@ class Airflow(BaseView):
         chart_id = request.args.get('chart_id')
         chart = session.query(models.Chart).filter_by(id=chart_id).all()[0]
         db = session.query(
-            models.DatabaseConnection).filter_by(db_id=chart.db_id).all()[0]
+            models.Connection).filter_by(conn_id=chart.conn_id).all()[0]
         session.expunge_all()
 
         payload = {}
@@ -1022,8 +1022,8 @@ mv = UserModelView(models.User, Session, name="Users", category="Admin")
 admin.add_view(mv)
 
 
-class DatabaseConnectionModelView(LoginMixin, ModelView):
-    column_list = ('db_id', 'db_type', 'host', 'port')
+class ConnectionModelView(LoginMixin, ModelView):
+    column_list = ('conn_id', 'db_type', 'host', 'port')
     form_choices = {
         'db_type': [
             ('hive', 'Hive',),
@@ -1034,9 +1034,9 @@ class DatabaseConnectionModelView(LoginMixin, ModelView):
             ('ftp', 'FTP',),
         ]
     }
-mv = DatabaseConnectionModelView(
-    models.DatabaseConnection, Session,
-    name="Database Connections", category="Admin")
+mv = ConnectionModelView(
+    models.Connection, Session,
+    name="Connections", category="Admin")
 admin.add_view(mv)
 
 
@@ -1085,12 +1085,12 @@ class ChartModelView(LoginMixin, ModelView):
         'sql',
         'default_params',)
     column_list = (
-        'label', 'db_id', 'chart_type', 'owner',
+        'label', 'conn_id', 'chart_type', 'owner',
         'show_datatable', 'show_sql',)
     column_formatters = dict(label=label_link)
     create_template = 'airflow/chart/create.html'
     edit_template = 'airflow/chart/edit.html'
-    column_filters = ('owner.username', 'db_id',)
+    column_filters = ('owner.username', 'conn_id',)
     column_searchable_list = ('owner.username', 'label', 'sql')
     column_descriptions = {
         'label': "Can include {{ templated_fields }} and {{ macros }}",

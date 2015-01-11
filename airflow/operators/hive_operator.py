@@ -12,8 +12,8 @@ class HiveOperator(BaseOperator):
 
     :param hql: the hql to be executed
     :type hql: string
-    :param hive_dbid: reference to the Hive database
-    :type hive_dbid: string
+    :param hive_conn_id: reference to the Hive database
+    :type hive_conn_id: string
     """
 
     __mapper_args__ = {
@@ -25,12 +25,12 @@ class HiveOperator(BaseOperator):
     @apply_defaults
     def __init__(
             self, hql,
-            hive_dbid=conf.get('hooks', 'HIVE_DEFAULT_DBID'),
+            hive_conn_id=conf.get('hooks', 'HIVE_DEFAULT_CONN_ID'),
             *args, **kwargs):
         super(HiveOperator, self).__init__(*args, **kwargs)
 
-        self.hive_dbid = hive_dbid
-        self.hook = HiveHook(hive_dbid=hive_dbid)
+        self.hive_conn_id = hive_conn_id
+        self.hook = HiveHook(hive_conn_id=hive_conn_id)
         self.hql = hql
 
     def execute(self, execution_date):
