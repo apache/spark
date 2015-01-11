@@ -146,8 +146,9 @@ public abstract class DataType {
   }
 
   /**
-   * Creates a StructField by specifying the name ({@code name}), data type ({@code dataType}) and
-   * whether values of this field can be null values ({@code nullable}).
+   * Creates a StructField by specifying the name ({@code name}), data type ({@code dataType}),
+   * whether values of this field can be null values ({@code nullable})
+   * and comment of this StructField({@code comment}).
    */
   public static StructField createStructField(
       String name,
@@ -171,10 +172,10 @@ public abstract class DataType {
   /**
    * Creates a StructField with empty metadata.
    *
-   * @see #createStructField(String, DataType, boolean, Metadata)
+   * @see #createStructField(String, DataType, boolean, String, Metadata)
    */
-  public static StructField createStructField(String name, DataType dataType, boolean nullable, String comment) {
-    return createStructField(name, dataType, nullable, comment, (new MetadataBuilder()).build());
+  public static StructField createStructField(String name, DataType dataType, boolean nullable) {
+    return createStructField(name, dataType, nullable, "", (new MetadataBuilder()).build());
   }
 
   /**

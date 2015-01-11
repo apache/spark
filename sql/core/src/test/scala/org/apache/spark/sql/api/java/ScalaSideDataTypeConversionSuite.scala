@@ -73,7 +73,7 @@ class ScalaSideDataTypeConversionSuite extends FunSuite {
       SStructField("simpleMap", simpleScalaMapType, true) ::
       SStructField("simpleStruct", simpleScalaStructType, true) ::
       SStructField("boolean", org.apache.spark.sql.BooleanType, false) ::
-      SStructField("withMeta", org.apache.spark.sql.DoubleType, false, metadata) :: Nil)
+      SStructField("withMeta", org.apache.spark.sql.DoubleType, false, "", metadata) :: Nil)
     checkDataType(complexScalaStructType)
 
     // Complex ArrayType.

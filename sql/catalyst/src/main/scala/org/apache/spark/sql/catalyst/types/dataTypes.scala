@@ -498,12 +498,12 @@ case class StructField(
     metadata: Metadata = Metadata.empty) {
 
   private[sql] def buildFormattedString(prefix: String, builder: StringBuilder): Unit = {
-    builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)\n")
+    builder.append(s"$prefix-- $name: ${dataType.typeName} (nullable = $nullable)(comment: $comment)\n")
     DataType.buildFormattedString(dataType, s"$prefix    |", builder)
   }
 
   // override the default toString to be compatible with legacy parquet files.
-  override def toString: String = s"StructField($name,$dataType,$nullable)"
+  override def toString: String = s"StructField($name,$dataType,$nullable,$comment)"
 
   private[sql] def jsonValue: JValue = {
     ("name" -> name) ~
@@ -516,7 +516,7 @@ case class StructField(
 
 object StructType {
   protected[sql] def fromAttributes(attributes: Seq[Attribute]): StructType =
-    StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, "", a.metadata)))
+    StructType(attributes.map(a => StructField(a.name, a.dataType, a.nullable, a.comment, a.metadata)))
 }
 
 case class StructType(fields: Seq[StructField]) extends DataType {
