@@ -44,12 +44,6 @@
     <dependency>
       <groupId>${akka.group}</groupId>
       <artifactId>akka-zeromq_${scala.binary.version}</artifactId>
-      <version>${akka.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
@@ -70,11 +64,5 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-    <plugins>
-      <plugin>
-        <groupId>org.scalatest</groupId>
-        <artifactId>scalatest-maven-plugin</artifactId>
-      </plugin>
-    </plugins>
   </build>
 </project>
