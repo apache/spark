@@ -329,7 +329,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
 
     accountingLock.synchronized {
-      releasePendingUnrollMemoryForThisThread()
       val freeSpaceResult = ensureFreeSpace(blockId, size)
       val enoughFreeSpace = freeSpaceResult.success
       droppedBlocks ++= freeSpaceResult.droppedBlocks
@@ -355,6 +354,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         val droppedBlockStatus = blockManager.dropFromMemory(blockId, data)
         droppedBlockStatus.foreach { status => droppedBlocks += ((blockId, status)) }
       }
+      releasePendingUnrollMemoryForThisThread()
     }
     ResultWithDroppedBlocks(putSuccess, droppedBlocks)
   }
