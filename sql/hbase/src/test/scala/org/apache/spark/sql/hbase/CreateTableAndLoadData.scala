@@ -155,7 +155,7 @@ trait CreateTableAndLoadData extends Logging {
     val files = fileSystem.listStatus(new Path(sparkHome))
     for (file <- files) {
       println(file.getPath.getName)
-      if (file.getPath.getName.indexOf("TestTable") != -1) {
+      if (file.getPath.getName.indexOf(DefaultTableName) != -1) {
         fileSystem.delete(file.getPath, true)
       }
     }
