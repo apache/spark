@@ -280,7 +280,8 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
 
     val executeSql3 = hbc.executeSql(loadSql)
     executeSql3.toRdd.collect().foreach(println)
-    hbc.sql("select * from testblk").collect().foreach(println)
+    val rows = hbc.sql("select * from testblk").collect()
+    assert(rows.length == 3, s"load data into hbase test failed to bulkload data into htable")
 
     // cleanup
     hbc.sql(drop)
