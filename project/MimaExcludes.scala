@@ -36,7 +36,6 @@ object MimaExcludes {
         case v if v.startsWith("1.3") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
-            MimaBuild.excludeSparkPackage("graphx"),
             // These are needed if checking against the sbt build, since they are part of
             // the maven-generated artifacts in the 1.2 build.
             MimaBuild.excludeSparkPackage("unused"),
@@ -53,6 +52,14 @@ object MimaExcludes {
               "org.apache.spark.mllib.linalg.Matrices.randn"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrices.rand")
+          ) ++ Seq(
+            // SPARK-3325
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.api.java.JavaDStreamLike.print"),
+            // SPARK-2757
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.streaming.flume.sink.SparkAvroCallbackHandler." +
+                "removeAndGetProcessor")
           )
 
         case v if v.startsWith("1.2") =>

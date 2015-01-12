@@ -638,7 +638,7 @@ class BasicOperationsSuite extends TestSuiteBase {
       if (rememberDuration != null) ssc.remember(rememberDuration)
       val output = runStreams[(Int, Int)](ssc, cleanupTestInput.size, numExpectedOutput)
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
-      assert(clock.time === Seconds(10).milliseconds)
+      assert(clock.currentTime() === Seconds(10).milliseconds)
       assert(output.size === numExpectedOutput)
       operatedStream
     }

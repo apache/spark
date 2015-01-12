@@ -53,7 +53,7 @@ case class DropTable(
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.catalog.unregisterTable(None, tableName)
+    hiveContext.catalog.unregisterTable(Seq(tableName))
     Seq.empty[Row]
   }
 }

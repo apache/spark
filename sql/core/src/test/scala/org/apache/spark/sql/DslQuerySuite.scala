@@ -56,6 +56,18 @@ class DslQuerySuite extends QueryTest {
     )
   }
 
+  test("convert $\"attribute name\" into unresolved attribute") {
+    checkAnswer(
+      testData.where($"key" === 1).select($"value"),
+      Seq(Seq("1")))
+  }
+
+  test("convert Scala Symbol 'attrname into unresolved attribute") {
+    checkAnswer(
+      testData.where('key === 1).select('value),
+      Seq(Seq("1")))
+  }
+
   test("select *") {
     checkAnswer(
       testData.select(Star(None)),

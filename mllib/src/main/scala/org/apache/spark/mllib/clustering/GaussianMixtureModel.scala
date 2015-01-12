@@ -21,7 +21,7 @@ import breeze.linalg.{DenseVector => BreezeVector}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
-import org.apache.spark.mllib.stat.impl.MultivariateGaussian
+import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLUtils
 
 /**
@@ -45,7 +45,7 @@ class GaussianMixtureModel(
 
   /** Maps given points to their cluster indices. */
   def predict(points: RDD[Vector]): RDD[Int] = {
-    val responsibilityMatrix = predictMembership(points, mu, sigma, weight, k)
+    val responsibilityMatrix = predictSoft(points)
     responsibilityMatrix.map(r => r.indexOf(r.max))
   }
   
@@ -53,12 +53,7 @@ class GaussianMixtureModel(
    * Given the input vectors, return the membership value of each vector
    * to all mixture components. 
    */
-  def predictMembership(
-      points: RDD[Vector], 
-      mu: Array[Vector], 
-      sigma: Array[Matrix],
-      weight: Array[Double], 
-      k: Int): RDD[Array[Double]] = {
+  def predictSoft(points: RDD[Vector]): RDD[Array[Double]] = {
     val sc = points.sparkContext
     val dists = sc.broadcast {
       (0 until k).map { i => 

@@ -142,6 +142,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
              |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=http
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT}=$port
+             |  --driver-class-path ${sys.props("java.class.path")}
            """.stripMargin.split("\\s+").toSeq
       } else {
           s"""$startScript
@@ -151,6 +152,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
              |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_PORT}=$port
+             |  --driver-class-path ${sys.props("java.class.path")}
            """.stripMargin.split("\\s+").toSeq
       }
 
@@ -179,8 +181,9 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
       }
     }
 
-    // Resets SPARK_TESTING to avoid loading Log4J configurations in testing class paths
-    val env = Seq("SPARK_TESTING" -> "0")
+    val env = Seq(
+      // Resets SPARK_TESTING to avoid loading Log4J configurations in testing class paths
+      "SPARK_TESTING" -> "0")
 
     Process(command, None, env: _*).run(ProcessLogger(
       captureThriftServerOutput("stdout"),
@@ -214,7 +217,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     } finally {
       warehousePath.delete()
       metastorePath.delete()
-      Process(stopScript).run().exitValue()
+      Process(stopScript, None, env: _*).run().exitValue()
       // The `spark-daemon.sh' script uses kill, which is not synchronous, have to wait for a while.
       Thread.sleep(3.seconds.toMillis)
       Option(logTailingProcess).map(_.destroy())
