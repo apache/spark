@@ -333,7 +333,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       new SparkException("DAGScheduler cannot be initialized due to %s".format(e.getMessage))
   }
 
-  if (conf.getBoolean("spark.scheduler.app.slowstart", false) && master == "yarn-client") {
+  private val appSlowStart = conf.getBoolean("spark.scheduler.app.slowstart", false)
+  if (appSlowStart) {
+    assert(master.contains("yarn")，
+            "Slow start of application is currently only supported in YARN mode")
     logInfo("TaskScheduler will start later.")
   } else {
     // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's

@@ -537,10 +537,19 @@ private[spark] trait ClientBase extends Logging {
    |  Methods that cannot be implemented here due to API differences across hadoop versions  |
    * --------------------------------------------------------------------------------------- */
 
-  /** Create an application running our ApplicationMaster to the ResourceManager. */
+  /**
+   * Create an application running our ApplicationMaster to the ResourceManager.
+   * This gets ApplicationId from the ResourceManager. However it doesn't submit the application
+   * submission context containing resources requests to the ResourceManager.
+   */
   def createApplication(): ApplicationId
   
-  /** Submit an application running our ApplicationMaster to the ResourceManager. */
+  /**
+   * Submit the application submission context containing resources requests
+   * to the ResourceManager. When the ResourceManager gets this submission message,
+   * it will schedule and grant resources for this application.
+   * This will actually trigger resources scheduling in the cluster.
+   */
   def submitApplication(): Unit
 
   /** Set up security tokens for launching our ApplicationMaster container. */
