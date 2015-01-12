@@ -135,6 +135,15 @@ package object dsl {
     implicit def symbolToUnresolvedAttribute(s: Symbol): analysis.UnresolvedAttribute =
       analysis.UnresolvedAttribute(s.name)
 
+    /** Converts $"col name" into an [[analysis.UnresolvedAttribute]]. */
+    implicit class StringToAttributeConversionHelper(val sc: StringContext) {
+      // Note that if we make ExpressionConversions an object rather than a trait, we can
+      // then make this a value class to avoid the small penalty of runtime instantiation.
+      def $(args: Any*): analysis.UnresolvedAttribute = {
+        analysis.UnresolvedAttribute(sc.s(args :_*))
+      }
+    }
+
     def sum(e: Expression) = Sum(e)
     def sumDistinct(e: Expression) = SumDistinct(e)
     def count(e: Expression) = Count(e)
@@ -281,7 +290,7 @@ package object dsl {
 
     def insertInto(tableName: String, overwrite: Boolean = false) =
       InsertIntoTable(
-        analysis.UnresolvedRelation(None, tableName), Map.empty, logicalPlan, overwrite)
+        analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite)
 
     def analyze = analysis.SimpleAnalyzer(logicalPlan)
   }

@@ -237,7 +237,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // An asynchronous listener bus for Spark events
   private[spark] val listenerBus = new LiveListenerBus
 
-  conf.set("spark.executor.id", "driver")
+  conf.set("spark.executor.id", SparkContext.DRIVER_IDENTIFIER)
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.createDriverEnv(conf, isLocal, listenerBus)
@@ -337,8 +337,13 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   try {
     dagScheduler = new DAGScheduler(this)
   } catch {
-    case e: Exception => throw
-      new SparkException("DAGScheduler cannot be initialized due to %s".format(e.getMessage))
+    case e: Exception => {
+      try {
+        stop()
+      } finally {
+        throw new SparkException("Error while constructing DAGScheduler", e)
+      }
+    }
   }
 
   // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
@@ -461,7 +466,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     Option(localProperties.get).map(_.getProperty(key)).getOrElse(null)
 
   /** Set a human readable description of the current job. */
-  @deprecated("use setJobGroup", "0.8.1")
   def setJobDescription(value: String) {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
   }
