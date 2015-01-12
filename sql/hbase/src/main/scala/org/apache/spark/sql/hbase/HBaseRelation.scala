@@ -243,15 +243,21 @@ private[hbase] case class HBaseRelation(
   def getRegionStartKeys = {
     val byteKeys: Array[Array[Byte]] = htable.getStartKeys
     val ret = ArrayBuffer[ImmutableBytesWritableWrapper]()
-    for (byteKey <- byteKeys) {
-      ret += new ImmutableBytesWritableWrapper(byteKey)
+
+    //Since the byteKeys'size will be 1 if there is only one partition in the table,
+    // we need to omit the that null element.
+    if (!(byteKeys.length == 1 && byteKeys(0).length == 0)) {
+      for (byteKey <- byteKeys) {
+        ret += new ImmutableBytesWritableWrapper(byteKey)
+      }
     }
+
     ret
   }
 
   def buildFilter(
-                    projList: Seq[NamedExpression],
-                    pred: Option[Expression]): (Option[FilterList], Option[Expression]) = {
+                   projList: Seq[NamedExpression],
+                   pred: Option[Expression]): (Option[FilterList], Option[Expression]) = {
     var distinctProjList = projList.distinct
     if (pred.isDefined) {
       distinctProjList = distinctProjList.filterNot(_.references.subsetOf(pred.get.references))
