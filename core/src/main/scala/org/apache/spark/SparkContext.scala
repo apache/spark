@@ -89,7 +89,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private def assertNotStopped(): Unit = {
     if (stopped) {
-      throw new SparkException("Cannot call methods on a stopped SparkContext")
+      throw new IllegalStateException("Cannot call methods on a stopped SparkContext")
     }
   }
 
@@ -1351,7 +1351,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
     if (stopped) {
-      throw new SparkException("SparkContext has been shutdown")
+      throw new IllegalStateException("SparkContext has been shutdown")
     }
     val callSite = getCallSite
     val cleanedFunc = clean(func)

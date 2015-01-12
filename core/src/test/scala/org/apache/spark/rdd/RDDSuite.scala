@@ -941,7 +941,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("cannot run actions after SparkContext has been stopped (SPARK-5063)") {
     val existingRDD = sc.parallelize(1 to 100)
     sc.stop()
-    val thrown = intercept[SparkException] {
+    val thrown = intercept[IllegalStateException] {
       existingRDD.count()
     }
     assert(thrown.getMessage.contains("shutdown"))
@@ -950,7 +950,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
   test("cannot call methods on a stopped SparkContext (SPARK-5063)") {
     sc.stop()
     def assertFails(block: => Any): Unit = {
-      val thrown = intercept[SparkException] {
+      val thrown = intercept[IllegalStateException] {
         block
       }
       assert(thrown.getMessage.contains("stopped"))
