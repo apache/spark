@@ -168,8 +168,8 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
 
         val rowKey = new ImmutableBytesWritableWrapper(rowKeyData)
         val put = new PutWrapper(rowKeyData)
-        valueBytes.foreach { case (fam, qualifier, value) =>
-          put.add(fam, qualifier, value)
+        valueBytes.foreach { case (fam, qual, value) =>
+          put.add(fam, qual, value)
         }
         (rowKey, put)
       }

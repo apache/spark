@@ -96,12 +96,12 @@ class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll with Logging {
       .schemaRDD
     val b = sql("SHOW TABLES")
 
-    val collectionA = a.collect();
+    val collectionA = a.collect()
     //collectionA.foreach { case a: Row => logInfo(a.toString())}
     assert(collectionA.size == 2, s"Query HBase native command execution result test failed on size")
     assert(collectionA(0).getString(0) == "ta", s"Query HBase native command execution result test failed on table listing")
 
-    val collectionB = b.collect();
+    val collectionB = b.collect()
     //collectionB.foreach { case a: Row => logInfo(a.toString())}
     assert(collectionB.size == 2, s"Query HBase native command execution result test failed on size")
     assert(collectionB(1).getString(0) == "tb", s"Query HBase native command execution result test failed on table listing")

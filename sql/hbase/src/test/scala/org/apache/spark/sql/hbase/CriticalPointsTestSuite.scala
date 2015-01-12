@@ -32,7 +32,7 @@ class CriticalPointsTestSuite extends FunSuite with BeforeAndAfterAll with Loggi
   val family1 = "family1"
   val family2 = "family2"
   val hbaseContext: HBaseSQLContext = {
-    HBaseMainTest.setupData(true)
+    HBaseMainTest.setupData(useMultiplePartitions = true)
     HBaseMainTest.hbc
   }
 

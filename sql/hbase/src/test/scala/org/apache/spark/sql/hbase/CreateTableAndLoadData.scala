@@ -32,7 +32,7 @@ trait CreateTableAndLoadData extends Logging {
   val DefaultTableName = "TestTable"
   val DefaultHbaseStagingTableName = s"Hb$DefaultStagingTableName"
   val DefaultHbaseTabName = s"Hb$DefaultTableName"
-  val DefaultHbaseColFamiles = Seq("cf1", "cf2")
+  val DefaultHbaseColFamilies = Seq("cf1", "cf2")
 
   val CsvPaths = Array("src/test/resources", "sql/hbase/src/test/resources")
   val DefaultLoadFile = "testTable.txt"
@@ -79,10 +79,10 @@ trait CreateTableAndLoadData extends Logging {
 
     val hbaseAdmin = hbc.catalog.admin
     if (!hbaseAdmin.tableExists(TableName.valueOf(hbaseStagingTable))) {
-      createNativeHbaseTable(hbc, hbaseStagingTable, DefaultHbaseColFamiles)
+      createNativeHbaseTable(hbc, hbaseStagingTable, DefaultHbaseColFamilies)
     }
     if (!hbaseAdmin.tableExists(TableName.valueOf(hbaseTable))) {
-      createNativeHbaseTable(hbc, hbaseTable, DefaultHbaseColFamiles)
+      createNativeHbaseTable(hbc, hbaseTable, DefaultHbaseColFamilies)
     }
 
     if (hbc.catalog.checkLogicalTableExist(stagingTableName)) {
