@@ -501,4 +501,21 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     new SchemaRDD(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
   }
+
+  /**
+   * In DSL expressions date and time can be used as aliases for RichDate
+   * and RichTimestamp:
+   * {{{
+   * val res = sqlrdd.where('date > date("2014-01-01")).select('date, 'high, 'close)
+   * }}}
+   */
+  import org.apache.spark.sql.catalyst.expressions.{RichDate, RichTimestamp}
+  val date = RichDate
+  val timestamp = RichTimestamp
+
+  /**
+   * Row Fields can be extracted asInstanceOf[RichDate] or asInstanceOf[RichTimestamp]
+   */
+  type RichDate = org.apache.spark.sql.catalyst.expressions.RichDate
+  type RichTimestamp = org.apache.spark.sql.catalyst.expressions.RichTimestamp
 }

@@ -470,4 +470,37 @@ package object sql {
    */
   @DeveloperApi
   type MetadataBuilder = catalyst.util.MetadataBuilder
+
+  /**
+   * :: DeveloperApi ::
+   *
+   * A Date class which support the standard comparison operators, for
+   * use in DSL expressions.  Implicit conversions to java.sql.Date
+   * are provided.  The class intializer accepts a String, e.g.
+   *
+   * {{{
+   * val d = RichDate("2014-01-01")
+   * }}}
+   * 
+   * @group dataType
+   */
+  @DeveloperApi
+  val RichDate = catalyst.expressions.RichDate
+
+  /**
+   * :: DeveloperApi ::
+   *
+   * A Timestamp class which support the standard comparison
+   * operators, for use in DSL expressions.  Implicit conversions to
+   * java.sql.timestamp are provided.  The class intializer accepts a
+   * String, e.g.
+   *
+   * {{{
+   * val ts = RichTimestamp("2014-01-01 12:34:56.78")
+   * }}}
+   * 
+   * @group timeClasses
+   */
+  @DeveloperApi
+  val RichTimestamp = catalyst.expressions.RichTimestamp
 }

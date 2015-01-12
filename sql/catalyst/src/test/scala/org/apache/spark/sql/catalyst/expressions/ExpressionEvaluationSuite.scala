@@ -1072,4 +1072,32 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(c1 ^ c2, 3, row)
     checkEvaluation(~c1, -2, row)
   }
+
+  test("comparison operators for RichDate and RichTimestamp") {
+    import org.scalatest.Assertions.{convertToEqualizer => EQ}
+    assert(EQ(RichDate("2014-11-05") < RichDate("2014-11-06")).===(true))
+    assert(EQ(RichDate("2014-11-05") <= RichDate("2013-11-06")).===(false))
+    assert(EQ(RichTimestamp("2014-11-05 12:34:56.5432") > RichTimestamp("2014-11-05 00:00:00"))
+	   .===(true))
+    assert(EQ(RichTimestamp("2014-11-05 12:34:56") >= RichTimestamp("2014-11-06 00:00:00"))
+	   .===(false))
+  }
+
+  test("format methods for RichDate and RichTimestamp") {
+    val s1:String = RichDate("2014-11-22").format("MMMM d yyyy")
+    val s2:String = RichTimestamp("2014-11-22 12:34:56").format("MMMM d HH:mm") 
+    assert(s1 == "November 22 2014")
+    assert(s2 == "November 22 12:34")
+  }
+
+  test("implicit conversions for RichDate and RichTimestamp") {
+    import org.apache.spark.sql.catalyst.expressions.TimeConversions._
+    val d1 = RichDate("2014-01-01")
+    val d2 = javaDateToRichDate(richDateToJavaDate(d1))
+    assert(d1 === d2 )
+    val t1 = RichTimestamp("2014-01-01 12:34:56.789")
+    val t2 = javaTimestampToRichTimestamp(richTimestampToJavaTimestamp(t1))
+    assert(t1 === t2)
+  }
+
 }
