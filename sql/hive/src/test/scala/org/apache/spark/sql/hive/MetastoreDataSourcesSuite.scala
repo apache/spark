@@ -19,10 +19,11 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.apache.commons.io.FileUtils
-import org.apache.spark.sql._
-import org.apache.spark.sql.hive.test.TestHive
 import org.scalatest.BeforeAndAfterEach
+
+import org.apache.commons.io.FileUtils
+
+import org.apache.spark.sql._
 
 /* Implicits */
 import org.apache.spark.sql.hive.test.TestHive._
@@ -228,7 +229,9 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
       sql("SELECT * FROM jsonTable"),
       sql("SELECT `c_!@(3)` FROM expectedJsonTable").collect().toSeq)
 
+    // Discard the cached relation.
     invalidateTable("jsonTable")
+
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
       sql("SELECT `c_!@(3)` FROM expectedJsonTable").collect().toSeq)
