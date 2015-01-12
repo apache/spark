@@ -51,6 +51,11 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
     }
   }
 
+  // column name case should be consistent with hive. Currently is lower case column name.
+  def normalizeColumnName(columnName: String, lowerCase: Boolean = true): String = {
+    if (lowerCase) columnName.toLowerCase() else columnName
+  }
+
   protected case class Keyword(str: String)
 
   protected implicit def asParser(k: Keyword): Parser[String] =
@@ -121,7 +126,7 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
 
   protected lazy val column: Parser[StructField] =
     ident ~ dataType ^^ { case columnName ~ typ =>
-      StructField(columnName, typ)
+      StructField(normalizeColumnName(columnName), typ)
     }
 
   protected lazy val primitiveType: Parser[DataType] =
