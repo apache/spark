@@ -701,7 +701,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  private var customHostname: Option[String] = None
+  private var customHostname: Option[String] = sys.env.get("SPARK_LOCAL_HOSTNAME")
 
   /**
    * Allow setting a custom host name because when we run on Mesos we need to use the same
@@ -990,11 +990,12 @@ private[spark] object Utils extends Logging {
     for ((key, value) <- extraEnvironment) {
       environment.put(key, value)
     }
+
     val process = builder.start()
     new Thread("read stderr for " + command(0)) {
       override def run() {
         for (line <- Source.fromInputStream(process.getErrorStream).getLines()) {
-          System.err.println(line)
+          logInfo(line)
         }
       }
     }.start()
@@ -1089,7 +1090,7 @@ private[spark] object Utils extends Logging {
     var firstUserLine = 0
     var insideSpark = true
     var callStack = new ArrayBuffer[String]() :+ "<unknown>"
- 
+
     Thread.currentThread.getStackTrace().foreach { ste: StackTraceElement =>
       // When running under some profilers, the current stack trace might contain some bogus
       // frames. This is intended to ensure that we don't crash in these situations by
@@ -1840,6 +1841,35 @@ private[spark] object Utils extends Logging {
       SparkHadoopUtil.get.newConfiguration(conf).get(key, sparkValue)
     } else {
       sparkValue
+    }
+  }
+
+  /**
+   * Return a pair of host and port extracted from the `sparkUrl`.
+   *
+   * A spark url (`spark://host:port`) is a special URI that its scheme is `spark` and only contains
+   * host and port.
+   *
+   * @throws SparkException if `sparkUrl` is invalid.
+   */
+  def extractHostPortFromSparkUrl(sparkUrl: String): (String, Int) = {
+    try {
+      val uri = new java.net.URI(sparkUrl)
+      val host = uri.getHost
+      val port = uri.getPort
+      if (uri.getScheme != "spark" ||
+        host == null ||
+        port < 0 ||
+        (uri.getPath != null && !uri.getPath.isEmpty) || // uri.getPath returns "" instead of null
+        uri.getFragment != null ||
+        uri.getQuery != null ||
+        uri.getUserInfo != null) {
+        throw new SparkException("Invalid master URL: " + sparkUrl)
+      }
+      (host, port)
+    } catch {
+      case e: java.net.URISyntaxException =>
+        throw new SparkException("Invalid master URL: " + sparkUrl, e)
     }
   }
 }

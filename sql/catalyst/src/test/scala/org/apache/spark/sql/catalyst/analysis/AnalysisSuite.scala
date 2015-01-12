@@ -44,8 +44,8 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     AttributeReference("e", ShortType)())
 
   before {
-    caseSensitiveCatalog.registerTable(None, "TaBlE", testRelation)
-    caseInsensitiveCatalog.registerTable(None, "TaBlE", testRelation)
+    caseSensitiveCatalog.registerTable(Seq("TaBlE"), testRelation)
+    caseInsensitiveCatalog.registerTable(Seq("TaBlE"), testRelation)
   }
 
   test("union project *") {
@@ -64,45 +64,45 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     assert(
       caseSensitiveAnalyze(
         Project(Seq(UnresolvedAttribute("TbL.a")),
-          UnresolvedRelation(None, "TaBlE", Some("TbL")))) ===
+          UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
         Project(testRelation.output, testRelation))
 
     val e = intercept[TreeNodeException[_]] {
       caseSensitiveAnalyze(
         Project(Seq(UnresolvedAttribute("tBl.a")),
-          UnresolvedRelation(None, "TaBlE", Some("TbL"))))
+          UnresolvedRelation(Seq("TaBlE"), Some("TbL"))))
     }
     assert(e.getMessage().toLowerCase.contains("unresolved"))
 
     assert(
       caseInsensitiveAnalyze(
         Project(Seq(UnresolvedAttribute("TbL.a")),
-          UnresolvedRelation(None, "TaBlE", Some("TbL")))) ===
+          UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
         Project(testRelation.output, testRelation))
 
     assert(
       caseInsensitiveAnalyze(
         Project(Seq(UnresolvedAttribute("tBl.a")),
-          UnresolvedRelation(None, "TaBlE", Some("TbL")))) ===
+          UnresolvedRelation(Seq("TaBlE"), Some("TbL")))) ===
         Project(testRelation.output, testRelation))
   }
 
   test("resolve relations") {
     val e = intercept[RuntimeException] {
-      caseSensitiveAnalyze(UnresolvedRelation(None, "tAbLe", None))
+      caseSensitiveAnalyze(UnresolvedRelation(Seq("tAbLe"), None))
     }
     assert(e.getMessage == "Table Not Found: tAbLe")
 
     assert(
-      caseSensitiveAnalyze(UnresolvedRelation(None, "TaBlE", None)) ===
+      caseSensitiveAnalyze(UnresolvedRelation(Seq("TaBlE"), None)) ===
         testRelation)
 
     assert(
-      caseInsensitiveAnalyze(UnresolvedRelation(None, "tAbLe", None)) ===
+      caseInsensitiveAnalyze(UnresolvedRelation(Seq("tAbLe"), None)) ===
         testRelation)
 
     assert(
-      caseInsensitiveAnalyze(UnresolvedRelation(None, "TaBlE", None)) ===
+      caseInsensitiveAnalyze(UnresolvedRelation(Seq("TaBlE"), None)) ===
         testRelation)
   }
 
