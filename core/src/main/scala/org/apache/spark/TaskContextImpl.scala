@@ -39,6 +39,7 @@ private[spark] class TaskContextImpl(val stageId: Int,
   // Whether the task has completed.
   @volatile private var completed: Boolean = false
 
+  // Do nothing acquiescently
   private var stopCallback = (message: String) => {}
 
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
@@ -88,7 +89,8 @@ private[spark] class TaskContextImpl(val stageId: Int,
     interrupted = true
   }
 
-  def stop(message: String) {
+  /** Stop the task by custom style. */
+  private[spark] def stop(message: String) {
     stopCallback(message)
   }
 

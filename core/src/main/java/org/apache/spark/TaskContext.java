@@ -94,6 +94,12 @@ public abstract class TaskContext implements Serializable {
   @Deprecated
   public abstract void addOnCompleteCallback(final Function0<Unit> f);
 
+  /**
+   * Add a callback function to be executed on task stop.
+   * This will be called when task is being killed.
+   *
+   * @param f Callback function.
+   */
   public abstract void addOnStopCallback(final Function1<String, Unit> f);
 
   public abstract int stageId();
