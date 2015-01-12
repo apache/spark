@@ -143,8 +143,6 @@ object PartialAggregation {
         // referenced in the second aggregation.
         val namedGroupingExpressions: Map[Expression, NamedExpression] = groupingExpressions.map {
           case n: NamedExpression => (n, n)
-          // TODO: When a UDF is used in the group by clause, for example, GROUP BY YEAR(...),
-          // PartialGroup will not be a proper name.
           case other => (other, Alias(other, "PartialGroup")())
         }.toMap
 

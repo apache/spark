@@ -209,10 +209,10 @@ class Analyzer(catalog: Catalog,
 
           aggregateExprs.find { e =>
             !isValidAggregateExpression(e.transform {
-              // Should trim aliases. These aliases can be introduced while resolving unnamed
-              // expressions like `GetField` and UDF calls, and when a user explicitly assigns
-              // an alias to a grouping expression in the SELECT clause.
-              case a: Alias => a.child
+              // Should trim aliases around `GetField`s. These aliases are introduced while
+              // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
+              // (Should we just turn `GetField` into a `NamedExpression`?)
+              case Alias(g: GetField, _) => g
             })
           }.foreach { e =>
             throw new TreeNodeException(plan, s"Expression not in GROUP BY: $e")
