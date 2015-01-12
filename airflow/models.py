@@ -461,10 +461,13 @@ class TaskInstance(Base):
         return template or jinja2.Template(source)
 
     def run(
-            self, verbose=True,
-            ignore_dependencies=False,
-            force=False,
-            mark_success=False,):
+            self,
+            verbose=True,
+            ignore_dependencies=False,  # Doesn't check for deps, just runs
+            force=False,  # Disregards previous successes
+            mark_success=False,  # Don't run the task, act as if it succeeded
+            test_mode=False,  # Doesn't record success or failure in the DB
+            ):
         """
         Runs the task instnace.
         """
@@ -504,11 +507,13 @@ class TaskInstance(Base):
                 self.try_number += 1
             else:
                 self.try_number = 1
-            session.add(Log(State.RUNNING, self))
+            if not test_mode:
+                session.add(Log(State.RUNNING, self))
             self.state = State.RUNNING
             self.start_date = datetime.now()
             self.end_date = None
-            session.merge(self)
+            if not test_mode:
+                session.merge(self)
             session.commit()
             if verbose:
                 if mark_success:
@@ -547,7 +552,8 @@ class TaskInstance(Base):
                 session = settings.Session()
                 self.end_date = datetime.now()
                 self.set_duration()
-                session.add(Log(State.FAILED, self))
+                if not test_mode:
+                    session.add(Log(State.FAILED, self))
 
                 # Let's go deeper
                 try:
@@ -564,7 +570,8 @@ class TaskInstance(Base):
                         'Failed to send email to: ' + str(task.email))
                     logging.error(str(e2))
 
-                session.merge(self)
+                if not test_mode:
+                    session.merge(self)
                 session.commit()
                 logging.error(str(e))
                 raise e
@@ -573,8 +580,9 @@ class TaskInstance(Base):
             self.end_date = datetime.now()
             self.set_duration()
             self.state = State.SUCCESS
-            session.add(Log(State.SUCCESS, self))
-            session.merge(self)
+            if not test_mode:
+                session.add(Log(State.SUCCESS, self))
+                session.merge(self)
 
         session.commit()
 

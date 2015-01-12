@@ -120,7 +120,7 @@ def test(args):
     dag = dagbag.dags[args.dag_id]
     task = dag.get_task(task_id=args.task_id)
     ti = TaskInstance(task, args.execution_date)
-    ti.run(force=True, ignore_dependencies=True)
+    ti.run(force=True, ignore_dependencies=True, test_mode=True)
 
 
 def clear(args):
@@ -356,7 +356,10 @@ if __name__ == '__main__':
         help="Serialized pickle object of the entire dag (used internally)")
     parser_run.set_defaults(func=run)
 
-    ht = "Test a task instance"
+    ht = (
+        "Test a task instance. This will run a task without checking for "
+        "dependencies or recording it's state in the database."
+    )
     parser_test = subparsers.add_parser('test', help=ht)
     parser_test.add_argument("dag_id", help="The id of the dag to run")
     parser_test.add_argument("task_id", help="The task_id to run")
