@@ -40,7 +40,7 @@ case class ScriptTransformation(
     input: Seq[Expression],
     script: String,
     output: Seq[Attribute],
-    child: SparkPlan)(@transient sc: HiveContext)
+    child: SparkPlan)(@transient sc: HiveContext, schemaLess: Boolean)
   extends UnaryNode {
 
   override def otherCopyArgs = sc :: Nil
@@ -61,7 +61,11 @@ case class ScriptTransformation(
           var curLine = reader.readLine()
           while (curLine != null) {
             // TODO: Use SerDe
-            outputLines += new GenericRow(curLine.split("\t").asInstanceOf[Array[Any]])
+            if (!schemaLess) {
+              outputLines += new GenericRow(curLine.split("\t").asInstanceOf[Array[Any]])
+            } else {
+              outputLines += new GenericRow(curLine.split("\t", 2).asInstanceOf[Array[Any]])
+            }
             curLine = reader.readLine()
           }
         }

@@ -633,14 +633,16 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                    Token(script, Nil) ::
                    Token("TOK_SERDE", serdeClause) ::
                    Token("TOK_RECORDREADER", readerClause) ::
-                   outputClause :: Nil) :: Nil) =>
+                   outputClause) :: Nil) =>
 
             val output = outputClause match {
-              case Token("TOK_ALIASLIST", aliases) =>
+              case Token("TOK_ALIASLIST", aliases) :: Nil =>
                 aliases.map { case Token(name, Nil) => AttributeReference(name, StringType)() }
-              case Token("TOK_TABCOLLIST", attributes) =>
+              case Token("TOK_TABCOLLIST", attributes) :: Nil =>
                 attributes.map { case Token("TOK_TABCOL", Token(name, Nil) :: dataType :: Nil) =>
                   AttributeReference(name, nodeToDataType(dataType))() }
+              case Nil =>
+                Nil
             }
             val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
 
