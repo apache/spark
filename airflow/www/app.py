@@ -239,8 +239,16 @@ class Airflow(BaseView):
 
         if not payload['error'] and len(df) == 0:
             payload['error'] += "Empty result set. "
-        elif not payload['error'] and len(df.columns) < 3:
+        elif (
+                not payload['error'] and
+                chart.sql_layout == 'series'  and
+                len(df.columns) < 3):
             payload['error'] += "SQL needs to return at least 3 columns. "
+        elif (
+                not payload['error'] and
+                chart.sql_layout == 'columns'  and
+                len(df.columns) < 2):
+            payload['error'] += "SQL needs to return at least 2 columns. "
         elif not payload['error']:
             import numpy as np
 
@@ -353,7 +361,7 @@ class Airflow(BaseView):
                     xaxis_label = df.columns[0]
                     yaxis_label = 'y'
                     df.index = df[df.columns[0]]
-                    df = df.sort('ds')
+                    df = df.sort(df.columns[0])
                     del df[df.columns[0]]
                     for col in df.columns:
                         df[col] = df[col].astype(np.float)
@@ -1150,7 +1158,7 @@ class ChartModelView(LoginMixin, ModelView):
     }
 
     def on_model_change(self, form, model, is_created=True):
-        if not model.iteration_no:
+        if model.iteration_no is None:
             model.iteration_no = 0
         else:
             model.iteration_no += 1
