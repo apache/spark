@@ -128,9 +128,12 @@ private object ParallelCollectionRDD {
     }
     seq match {
       case r: Range => {
-        val sign = r.isInclusive && (r.end == Int.MaxValue || r.end == Int.MinValue)
+        // 1 to Int.MaxValue and (-2 to Int.MinValue by -1) can trigger exclusive range int overflow
+        val needsInclusiveRange = r.isInclusive && (r.end == Int.MaxValue || r.end == Int.MinValue)
         positions(r.length, numSlices).zipWithIndex.map({
-          case ((start, end), index) if sign && index == numSlices - 1 =>
+          // we need an inclusive range to avoid int overflow and setting the last range to be
+          // inclusive is suffice 
+          case ((start, end), index) if needsInclusiveRange && index == numSlices - 1 =>
             new Range.Inclusive(r.start + start * r.step, r.end, r.step)
           case ((start, end), _) =>
             new Range(r.start + start * r.step, r.start + end * r.step, r.step)
