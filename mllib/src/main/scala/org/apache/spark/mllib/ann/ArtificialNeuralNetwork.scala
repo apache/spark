@@ -209,9 +209,10 @@ object ArtificialNeuralNetwork {
 
 
   def train(trainingRDD: RDD[(Vector, Vector)], batchSize: Int, hiddenLayersTopology: Array[Int],
-            initialWeights: Vector, maxNumIterations: Int) : ArtificialNeuralNetworkModel = {
+            initialWeights: Vector, maxNumIterations: Int,
+            convergenceTol: Double) : ArtificialNeuralNetworkModel = {
     val topology = convertTopology(trainingRDD, hiddenLayersTopology)
-    new ArtificialNeuralNetwork(topology, maxNumIterations, defaultTolerance, batchSize).
+    new ArtificialNeuralNetwork(topology, maxNumIterations, convergenceTol, batchSize).
       run(trainingRDD, initialWeights)
   }
 

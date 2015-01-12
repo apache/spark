@@ -75,10 +75,10 @@ class ANNClassifier private(val labelToIndex: Map[Double, Int],
                              private val convergeTol: Double)
   extends ANNClassifierHelper with Serializable {
 
-  def run(data: RDD[LabeledPoint]): ANNClassifierModel = {
+  def run(data: RDD[LabeledPoint], batchSize: Int = 1): ANNClassifierModel = {
     val annData = data.map(lp => labeledPointToVectorPair(lp))
     /* train the model */
-    val model = ArtificialNeuralNetwork.train(annData, hiddenLayersTopology,
+    val model = ArtificialNeuralNetwork.train(annData, batchSize, hiddenLayersTopology,
       initialWeights, maxIterations, convergeTol)
     new ANNClassifierModel(model, labelToIndex)
   }
@@ -88,6 +88,15 @@ class ANNClassifier private(val labelToIndex: Map[Double, Int],
  * Top level methods for training the classifier based on artificial neural network (ANN)
  */
 object ANNClassifier {
+
+
+  def train(data: RDD[LabeledPoint], batchSize: Int, hiddenLayersTopology: Array[Int],
+            maxIterations: Int, convergenceTol: Double): ANNClassifierModel = {
+    val initialWeights = randomWeights(data, hiddenLayersTopology)
+    val labelToIndex = data.map( lp => lp.label).distinct().collect().sorted.zipWithIndex.toMap
+    new ANNClassifier(labelToIndex, hiddenLayersTopology,
+      initialWeights, maxIterations, 1.0, convergenceTol).run(data, batchSize)
+  }
 
   /**
    * Trains an ANN classifier.
