@@ -115,8 +115,9 @@ private[streaming] abstract class ReceiverSupervisor(
   }
 
   val stop: String => Unit = (message: String) => {
-    if(receiverState != Stopped)
+    if (receiverState != Stopped) {
       stop(message, None)
+    }
   }
 
   /** Start receiver */
