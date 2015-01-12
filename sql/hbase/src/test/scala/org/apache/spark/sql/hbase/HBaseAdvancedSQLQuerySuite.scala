@@ -20,12 +20,12 @@ package org.apache.spark.sql.hbase
 import org.apache.spark.sql.{SQLConf, _}
 import org.scalatest.BeforeAndAfterAll
 
-class HBaseAdvancedSQLQuerySuite extends QueryTest with BeforeAndAfterAll {
+class HBaseAdvancedSQLQuerySuite extends HBaseIntegrationTestBase {
   // Make sure the tables are loaded.
 
   val sqlContext: SQLContext = {
     HBaseMainTest.main(null)
-    HBaseMainTest.hbc
+    TestHbase
   }
 
   import sqlContext._

@@ -27,10 +27,10 @@ import org.scalatest.BeforeAndAfterAll
 
 import scala.collection.mutable.ArrayBuffer
 
-class HBasePartitionerSuite extends QueryTest with BeforeAndAfterAll {
+class HBasePartitionerSuite extends HBaseIntegrationTestBase {
   val sc = {
-    HBaseMainTest.setupData(true)
-    HBaseMainTest.sc
+    HBaseMainTest.setupData(useMultiplePartitions = true)
+    TestHbase.sparkContext
   }
 
   test("test hbase partitioner") {
@@ -39,7 +39,7 @@ class HBasePartitionerSuite extends QueryTest with BeforeAndAfterAll {
       val rowKeyWritable = new ImmutableBytesWritableWrapper(rowKey)
       (rowKeyWritable, r)
     }
-    val rdd = sc.parallelize(data, 4)
+    val rdd = TestHbase.sparkContext.parallelize(data, 4)
     val splitKeys = (1 to 40).filter(_ % 5 == 0).filter(_ != 40).map { r =>
       new ImmutableBytesWritableWrapper(Bytes.toBytes(r))
     }

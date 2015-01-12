@@ -26,11 +26,11 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.hbase.TestData._
 import org.scalatest.BeforeAndAfterAll
 
-class HBaseSQLQuerySuite extends QueryTest with BeforeAndAfterAll {
+class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   // Make sure the tables are loaded.
   val sqlContext:SQLContext = {
     HBaseMainTest.main(null)
-    HBaseMainTest.hbc
+    TestHbase
   }
   import sqlContext._
   TestData

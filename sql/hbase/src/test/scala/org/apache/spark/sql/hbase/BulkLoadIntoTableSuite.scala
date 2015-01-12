@@ -32,10 +32,10 @@ import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import scala.collection.mutable.ArrayBuffer
 
-class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Logging {
+class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
   val (hbc: HBaseSQLContext, sc: SparkContext) = {
     HBaseMainTest.setupData(useMultiplePartitions = true)
-    (HBaseMainTest.hbc, HBaseMainTest.sc)
+    (TestHbase, TestHbase.sparkContext)
   }
   val sparkHome = hbc.sparkContext.getSparkHome().getOrElse(".")
 

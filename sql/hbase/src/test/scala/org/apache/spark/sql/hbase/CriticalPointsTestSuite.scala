@@ -33,7 +33,7 @@ class CriticalPointsTestSuite extends FunSuite with BeforeAndAfterAll with Loggi
   val family2 = "family2"
   val hbaseContext: HBaseSQLContext = {
     HBaseMainTest.setupData(useMultiplePartitions = true)
-    HBaseMainTest.hbc
+    TestHbase
   }
 
   def partitionEquals(p1: HBasePartition, p2: HBasePartition): Boolean = {

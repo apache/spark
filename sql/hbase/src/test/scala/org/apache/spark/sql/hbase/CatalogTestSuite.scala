@@ -26,10 +26,10 @@ import org.apache.spark.sql.hbase.util.HBaseKVHelper
 import org.apache.spark.sql.sources.LogicalRelation
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-class CatalogTestSuite extends FunSuite with BeforeAndAfterAll with Logging {
+class CatalogTestSuite extends HBaseIntegrationTestBase {
   val (hbaseContext, catalog, configuration) = {
     HBaseMainTest.setupData(useMultiplePartitions = true)
-    (HBaseMainTest.hbc, new HBaseCatalog(HBaseMainTest.hbc), HBaseMainTest.config)
+    (TestHbase, TestHbase.catalog, TestHbase.config)
   }
 
   test("Create Table") {

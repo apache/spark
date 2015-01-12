@@ -70,8 +70,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
   extends Catalog with Logging with Serializable {
 
   lazy val logger = Logger.getLogger(getClass.getName)
-  lazy val configuration = hbaseContext.optConfiguration
-    .getOrElse(HBaseConfiguration.create())
+  lazy val configuration = HBaseConfiguration.create(hbaseContext.sparkContext.hadoopConfiguration)
 
   lazy val relationMapCache = new mutable.HashMap[String, HBaseRelation]
     with mutable.SynchronizedMap[String, HBaseRelation]
@@ -190,9 +189,9 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
   }
 
   def getTable(tableName: String): Option[HBaseRelation] = {
+    val table = getMetadataTable
     var result = relationMapCache.get(processTableName(tableName))
     if (result.isEmpty) {
-      val table = getMetadataTable
       val get = new Get(Bytes.toBytes(tableName))
       val values = table.get(get)
       table.close()

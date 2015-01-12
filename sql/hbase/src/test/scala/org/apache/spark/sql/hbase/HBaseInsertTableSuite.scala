@@ -20,7 +20,7 @@ package org.apache.spark.sql.hbase
 import org.apache.spark.Logging
 import org.apache.spark.sql.Row
 
-class HBaseInsertTableSuite extends QueriesSuiteBase with Logging {
+class HBaseInsertTableSuite extends QueriesSuiteBase {
 
   var testnm = "Insert all rows to the table from other table"
   test("Insert all rows to the table from other table") {

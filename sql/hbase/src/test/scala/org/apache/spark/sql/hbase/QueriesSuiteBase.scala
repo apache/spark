@@ -19,20 +19,21 @@ package org.apache.spark.sql.hbase
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.SQLContext
-import org.scalatest.{BeforeAndAfterAllConfigMap, ConfigMap, FunSuite}
+import org.scalatest.ConfigMap
 
-class QueriesSuiteBase() extends FunSuite
-with CreateTableAndLoadData with BeforeAndAfterAllConfigMap with Logging {
+class QueriesSuiteBase() extends HBaseIntegrationTestBase
+    with CreateTableAndLoadData with Logging {
+  self: HBaseIntegrationTestBase =>
   val tabName = DefaultTableName
   var AvoidByteDataTypeBug = true
   val hbc: HBaseSQLContext = {
     HBaseMainTest.main(null)
-    HBaseMainTest.hbc
+    TestHbase
   }
 
   override protected def beforeAll(configMap: ConfigMap): Unit = {
     super.beforeAll(configMap)
-    createTableAndLoadData(hbc)
+    createTableAndLoadData(TestHbase)
   }
 
   override protected def afterAll(configMap: ConfigMap): Unit = {
@@ -43,7 +44,7 @@ with CreateTableAndLoadData with BeforeAndAfterAllConfigMap with Logging {
 
   def runQuery(sql: String) = {
     logInfo(sql)
-    val execQuery1 = hbc.sql(sql)
+    val execQuery1 = TestHbase.sql(sql)
     execQuery1.collect()
   }
 

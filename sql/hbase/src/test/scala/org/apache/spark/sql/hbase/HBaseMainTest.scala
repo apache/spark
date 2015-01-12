@@ -31,8 +31,8 @@ import org.apache.spark.sql.hbase.util.{DataTypeUtils, HBaseKVHelper, BytesUtils
  * HBaseMainTest
  * create HbTestTable and metadata table, and insert some data
  */
-object HBaseMainTest extends HBaseIntegrationTestBase(true) with CreateTableAndLoadData
-with Logging {
+object HBaseMainTest extends HBaseIntegrationTestBase with CreateTableAndLoadData
+{
   val TableName_a: String = "ta"
   val TableName_b: String = "tb"
   val HbaseTableName: String = "ht"
@@ -42,14 +42,14 @@ with Logging {
   def createTable(useMultiplePartitions: Boolean) = {
     try {
       // delete the existing hbase table
-      if (hbaseAdmin.tableExists(HbaseTableName)) {
-        hbaseAdmin.disableTable(HbaseTableName)
-        hbaseAdmin.deleteTable(HbaseTableName)
+      if (TestHbase.hbaseAdmin.tableExists(HbaseTableName)) {
+        TestHbase.hbaseAdmin.disableTable(HbaseTableName)
+        TestHbase.hbaseAdmin.deleteTable(HbaseTableName)
       }
 
-      if (hbaseAdmin.tableExists(Metadata_Table)) {
-        hbaseAdmin.disableTable(Metadata_Table)
-        hbaseAdmin.deleteTable(Metadata_Table)
+      if (TestHbase.hbaseAdmin.tableExists(Metadata_Table)) {
+        TestHbase.hbaseAdmin.disableTable(Metadata_Table)
+        TestHbase.hbaseAdmin.deleteTable(Metadata_Table)
       }
 
       var allColumns = List[AbstractColumn]()
@@ -75,15 +75,14 @@ with Logging {
         null
       }
 
-      catalog = new HBaseCatalog(hbc)
-      catalog.createTable(TableName_a, null, HbaseTableName, allColumns, splitKeys)
+      TestHbase.catalog.createTable(TableName_a, null, HbaseTableName, allColumns, splitKeys)
 
-      hbc.sql( s"""CREATE TABLE $TableName_b(col1 STRING, col2 BYTE, col3 SHORT, col4 INTEGER,
+      TestHbase.sql( s"""CREATE TABLE $TableName_b(col1 STRING, col2 BYTE, col3 SHORT, col4 INTEGER,
           col5 LONG, col6 FLOAT, col7 INTEGER, PRIMARY KEY(col7, col1, col3))
           MAPPED BY ($HbaseTableName, COLS=[col2=cf1.cq11, col4=cf1.cq12, col5=cf2.cq21,
           col6=cf2.cq22])""".stripMargin)
 
-      if (!hbaseAdmin.tableExists(HbaseTableName)) {
+      if (!TestHbase.hbaseAdmin.tableExists(HbaseTableName)) {
         throw new IllegalArgumentException("where is our table?")
       }
     }
@@ -91,7 +90,7 @@ with Logging {
 
   def checkHBaseTableExists(hbaseTable: String): Boolean = {
     val tableName = TableName.valueOf(hbaseTable)
-    hbaseAdmin.tableExists(tableName)
+    TestHbase.hbaseAdmin.tableExists(tableName)
   }
 
   def insertTestData() = {
@@ -99,7 +98,7 @@ with Logging {
       throw new IllegalStateException(s"Unable to find table $HbaseTableName")
     }
 
-    val htable = new HTable(config, HbaseTableName)
+    val htable = new HTable(TestHbase.config, HbaseTableName)
 
     def putNewTableIntoHBase(keys: Seq[Any], keysType: Seq[DataType],
                              vals: Seq[Any], valsType: Seq[DataType]): Unit = {
@@ -220,7 +219,7 @@ with Logging {
 
   def testHBaseScanner() = {
     val scan = new Scan
-    val htable = new HTable(config, HbaseTableName)
+    val htable = new HTable(TestHbase.config, HbaseTableName)
     val scanner = htable.getScanner(scan)
     var res: Result = null
     do {

@@ -24,10 +24,9 @@ import org.apache.spark.sql.catalyst.plans.logical
 case class TestData(k: Int, v: String)
 
 object TestData {
-  val hbc = HBaseMainTest.hbc
-
-  import org.apache.spark.sql.hbase.TestData.hbc._
-
+  val hbc = TestHbase
+  import hbc._
+  
   val testData = hbc.sparkContext.parallelize(
     (1 to 100).map(i => TestData(i, i.toString))).toSchemaRDD
   testData.registerTempTable("testData")

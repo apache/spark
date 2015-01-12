@@ -23,138 +23,61 @@ import java.util.{Date, Random}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.client.HBaseAdmin
 import org.apache.hadoop.hbase.{HBaseConfiguration, HBaseTestingUtility, MiniHBaseCluster}
+import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.catalyst.plans
+import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.{Logging, SparkConf, SparkContext}
-import org.scalatest.{BeforeAndAfterAllConfigMap, ConfigMap, FunSuite, Suite}
+import org.scalatest.{BeforeAndAfterAll, ConfigMap, FunSuite, Suite}
 
-abstract class HBaseIntegrationTestBase(useMiniCluster: Boolean = true,
-                                        nRegionServers: Int = 2,
-                                        nDataNodes: Int = 2,
-                                        nMasters: Int = 1)
-  extends FunSuite with BeforeAndAfterAllConfigMap with Logging {
+abstract class HBaseIntegrationTestBase
+  extends FunSuite with BeforeAndAfterAll with Logging {
   self: Suite =>
 
-  @transient var sc: SparkContext = _
-  @transient var cluster: MiniHBaseCluster = null
-  @transient var config: Configuration = null
-  @transient var hbaseAdmin: HBaseAdmin = null
-  @transient var hbc: HBaseSQLContext = null
-  @transient var catalog: HBaseCatalog = null
-  @transient var testUtil: HBaseTestingUtility = null
-
-  def sparkContext: SparkContext = sc
-
   val startTime = (new Date).getTime
-  val sparkUiPort = 0xc000 + new Random().nextInt(0x3f00)
-  logInfo(s"SparkUIPort = $sparkUiPort\n")
 
-  val useMiniClusterInt = useMiniCluster // false
+  protected def checkAnswer(rdd: SchemaRDD, expectedAnswer: Any): Unit = {
+    val convertedAnswer = expectedAnswer match {
+      case s: Seq[_] if s.isEmpty => s
+      case s: Seq[_] if s.head.isInstanceOf[Product] &&
+        !s.head.isInstanceOf[Seq[_]] => s.map(_.asInstanceOf[Product].productIterator.toIndexedSeq)
+      case s: Seq[_] => s
+      case singleItem => Seq(Seq(singleItem))
+    }
 
-  val WorkDirProperty = "test.build.data.basedirectory"
-  val DefaultWorkDir = "/tmp/minihbase"
+    val isSorted = rdd.logicalPlan.collect { case s: plans.logical.Sort => s }.nonEmpty
+    def prepareAnswer(answer: Seq[Any]) = if (!isSorted) answer.sortBy(_.toString) else answer
+    val sparkAnswer = try rdd.collect().toSeq catch {
+      case e: Exception =>
+        fail(
+          s"""
+            |Exception thrown while executing query:
+            |${rdd.queryExecution}
+            |== Exception ==
+            |$e
+            |${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
+          """.stripMargin)
+    }
 
-  val workDir = System.getProperty(WorkDirProperty, DefaultWorkDir)
-  System.setProperty(WorkDirProperty, workDir)
-
-  logInfo(s"useMiniCluster=$useMiniClusterInt workingDir ($WorkDirProperty})=$workDir\n")
-  if (useMiniClusterInt) {
-    logDebug(s"Spin up hbase minicluster w/ $nMasters mast, $nRegionServers RS, $nDataNodes dataNodes")
-    testUtil = new HBaseTestingUtility
-    config = testUtil.getConfiguration
-  } else {
-    config = HBaseConfiguration.create
+    if (prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {
+      fail(s"""
+        |Results do not match for query:
+        |${rdd.logicalPlan}
+        |== Analyzed Plan ==
+        |${rdd.queryExecution.analyzed}
+        |== Physical Plan ==
+        |${rdd.queryExecution.executedPlan}
+        |== Results ==
+        |${sideBySide(
+        s"== Correct Answer - ${convertedAnswer.size} ==" +:
+          prepareAnswer(convertedAnswer).map(_.toString),
+        s"== Spark Answer - ${sparkAnswer.size} ==" +:
+          prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
+      """.stripMargin)
+    }
   }
-
-  val sconf = new SparkConf()
-  if (useMiniClusterInt) {
-    config.set("dfs.replication", "1")
-    config.set("dfs.client.socket-timeout", "480000")
-    config.set("dfs.datanode.socket.write.timeout", "480000")
-    config.set("zookeeper.session.timeout", "480000")
-    config.set("zookeeper.minSessionTimeout", "10")
-    config.set("zookeeper.tickTime", "10")
-    config.set("hbase.rpc.timeout", "480000")
-    config.set("ipc.client.connect.timeout", "480000")
-    config.set("dfs.namenode.stale.datanode.interval", "480000")
-    config.set("hbase.rpc.shortoperation.timeout", "480000")
-    config.set("hbase.master.port", "50001")
-    config.set("hbase.master.info.port", "50002")
-    config.set("hbase.regionserver.port", "50001")
-    config.set("hbase.regionserver.info.port", "50003")
-    config.set("hbase.regionserver.thrift.port", "50004")
-    config.set("hbase.rest.port", "50005")
-    config.set("hbase.rest.info.port", "50006")
-    config.set("hbase.thrift.info.port", "50007")
-
-    cluster = testUtil.startMiniCluster(nMasters, nRegionServers, nDataNodes)
-    logInfo(s"Started HBaseMiniCluster with region servers = ${cluster.countServedRegions}")
-
-    // Need to retrieve zkPort AFTER mini cluster is started
-    val zkPort = config.get("hbase.zookeeper.property.clientPort")
-    logInfo(s"After testUtil.getConfiguration the hbase.zookeeper.quorum="
-      + s"${config.get("hbase.zookeeper.quorum")} port=$zkPort")
-
-    // Inject the zookeeper port/quorum obtained from the HBaseMiniCluster
-    // into the SparkConf.
-    // The motivation: the SparkContext searches the SparkConf values for entries
-    // that start with "spark.hadoop" and then copies those values to the
-    // sparkContext.hadoopConfiguration (after stripping the "spark.hadoop" from the key/name)
-    sconf.set("spark.hadoop.hbase.zookeeper.property.clientPort", zkPort)
-    sconf.set("spark.hadoop.hbase.zookeeper.quorum",
-      "%s:%s".format(config.get("hbase.zookeeper.quorum"), zkPort))
-    // Do not use the default ui port: helps avoid BindException's
-    sconf.set("spark.ui.port", sparkUiPort.toString)
-    //      sconf.set("spark.hadoop.hbase.regionserver.info.port", "-1")
-    //      sconf.set("spark.hadoop.hbase.master.info.port", "-1")
-    // Increase the various timeout's to allow for debugging/breakpoints. If we simply
-    // leave default values then ZK connection timeouts tend to occur
-    sconf.set("spark.hadoop.dfs.client.socket-timeout", "480000")
-    sconf.set("spark.hadoop.dfs.datanode.socket.write.timeout", "480000")
-    sconf.set("spark.hadoop.zookeeper.session.timeout", "480000")
-    sconf.set("spark.hadoop.zookeeper.minSessionTimeout", "10")
-    sconf.set("spark.hadoop.zookeeper.tickTime", "10")
-    sconf.set("spark.hadoop.hbase.rpc.timeout", "480000")
-    sconf.set("spark.hadoop.ipc.client.connect.timeout", "480000")
-    sconf.set("spark.hadoop.dfs.namenode.stale.datanode.interval", "480000")
-    sconf.set("spark.hadoop.hbase.rpc.shortoperation.timeout", "480000")
-    sconf.set("spark.hadoop.hbase.master.port", "50001")
-    sconf.set("spark.hadoop.hbase.master.info.port", "50002")
-    sconf.set("spark.hadoop.hbase.regionserver.port", "50001")
-    sconf.set("spark.hadoop.hbase.regionserver.info.port", "50003")
-    sconf.set("spark.hadoop.hbase.regionserver.thrift.port", "50004")sql/hbase/src/test/scala/org/apache/spark/sql/hbase/HBaseMainTest.scala
-    sconf.set("spark.hadoop.hbase.rest.port", "50005")
-    sconf.set("spark.hadoop.hbase.rest.info.port", "50006")
-    sconf.set("spark.hadoop.hbase.thrift.info.port", "50007")
-
-    hbaseAdmin = testUtil.getHBaseAdmin
-  } else {
-    hbaseAdmin = new HBaseAdmin(config)
-  }
-
-  sc = new SparkContext("local[2]", "TestSQLContext", sconf)
-
-  hbc = new HBaseSQLContext(sc)
-  hbc.optConfiguration = Some(config)
-
-  logDebug(s"In testbase: HBaseAdmin.configuration zkPort="
-    + s"${hbaseAdmin.getConfiguration.get("hbase.zookeeper.property.clientPort")}")
 
   override protected def afterAll(configMap: ConfigMap): Unit = {
-    var msg = s"Test ${getClass.getName} completed at ${(new java.util.Date).toString} duration=${((new java.util.Date).getTime - startTime) / 1000}"
+    val msg = s"Test ${getClass.getName} completed at ${(new java.util.Date).toString} duration=${((new java.util.Date).getTime - startTime) / 1000}"
     logInfo(msg)
-    try {
-//      hbc.sparkContext.stop()
-    } catch {
-      case e: Throwable =>
-        logError(s"Exception shutting down sparkContext: ${e.getMessage}")
-    }
-    hbc = null
-    msg = "HBaseSQLContext was shut down"
-    logInfo(msg)
-    try {
-      testUtil.shutdownMiniCluster()
-    } catch {
-      case e: Throwable =>
-        logError(s"Exception shutting down HBaseMiniCluster: ${e.getMessage}")
-    }
   }
 }

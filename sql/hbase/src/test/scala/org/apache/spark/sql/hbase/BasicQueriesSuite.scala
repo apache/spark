@@ -19,7 +19,7 @@ package org.apache.spark.sql.hbase
 
 import org.apache.spark.Logging
 
-class BasicQueriesSuite extends QueriesSuiteBase with Logging {
+class BasicQueriesSuite extends QueriesSuiteBase {
 
   var testnm = "StarOperator * with limit"
   test("StarOperator * with limit") {

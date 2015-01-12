@@ -26,31 +26,25 @@ import org.scalatest._
  * Test insert / query against the table created by HBaseMainTest
  */
 
-class HBaseBasicOperationSuite extends QueryTest with BeforeAndAfterAll with Logging {
+class HBaseBasicOperationSuite extends HBaseIntegrationTestBase {
 
   val sqlContext: HBaseSQLContext = {
     HBaseMainTest.main(null)
-    HBaseMainTest.hbc
+    TestHbase
   }
 
   import sqlContext._
 
   override def afterAll() = {
-    import org.apache.spark.sql.hbase.HBaseMainTest._
-
-    if (config == null) {
-      config = HBaseConfiguration.create
+    if (TestHbase.hbaseAdmin.tableExists("ht0")) {
+      TestHbase.hbaseAdmin.disableTable("ht0")
+      TestHbase.hbaseAdmin.deleteTable("ht0")
     }
-    hbaseAdmin = new HBaseAdmin(config)
-
-    if (hbaseAdmin.tableExists("ht0")) {
-      hbaseAdmin.disableTable("ht0")
-      hbaseAdmin.deleteTable("ht0")
+    if (TestHbase.hbaseAdmin.tableExists("ht1")) {
+      TestHbase.hbaseAdmin.disableTable("ht1")
+      TestHbase.hbaseAdmin.deleteTable("ht1")
     }
-    if (hbaseAdmin.tableExists("ht1")) {
-      hbaseAdmin.disableTable("ht1")
-      hbaseAdmin.deleteTable("ht1")
-    }
+    super.afterAll()
   }
 
   test("Insert Into table0") {

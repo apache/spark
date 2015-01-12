@@ -25,8 +25,6 @@ import org.apache.spark.sql.catalyst.analysis.OverrideCatalog
 import org.apache.spark.sql.hbase.execution.HBaseStrategies
 
 class HBaseSQLContext(sc: SparkContext) extends SQLContext(sc) with HBaseSQLConf {
-  var optConfiguration: Option[Configuration] = None
-
   @transient
   override protected[sql] val sqlParser = {
     val fallback = new HBaseSQLParser
