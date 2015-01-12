@@ -80,7 +80,7 @@ private[hbase] class CriticalPointRange[T](start: Option[T], startInclusive: Boo
       // Leaf node
       Seq(new MDCriticalPointRange(prefix.toSeq, this, dt))
     } else {
-      prefix += (start.get, dt)
+      prefix += ((start.get, dt))
       require(isPoint, "Internal Logical Error: point range expected")
       nextDimCriticalPointRanges.map(_.flatten(prefix)).reduceLeft(_ ++ _)
     }

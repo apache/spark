@@ -67,7 +67,6 @@ class JavaHbaseSuite extends QueryTest with BeforeAndAfterAll with Logging {
     )
   }
 
-
   test("metadata is propagated correctly") {
     val tableA = sql("SELECT col7, col1, col3 FROM ta")
     val schema = tableA.schema

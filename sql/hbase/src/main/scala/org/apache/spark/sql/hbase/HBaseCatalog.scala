@@ -101,7 +101,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
 
   def createTable(tableName: String, hbaseNamespace: String, hbaseTableName: String,
                   allColumns: Seq[AbstractColumn], splitKeys: Array[Array[Byte]]): HBaseRelation = {
-    val table = getMetadataTable()
+    val table = getMetadataTable
 
     if (checkLogicalTableExist(tableName)) {
       throw new Exception(s"The logical table: $tableName already exists")
@@ -171,7 +171,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
 
   private def writeObjectToTable(hbaseRelation: HBaseRelation) = {
     val tableName = hbaseRelation.tableName
-    val table = getMetadataTable()
+    val table = getMetadataTable
 
     val put = new Put(Bytes.toBytes(tableName))
     val byteArrayOutputStream = new ByteArrayOutputStream()
@@ -192,7 +192,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
   def getTable(tableName: String): Option[HBaseRelation] = {
     var result = relationMapCache.get(processTableName(tableName))
     if (result.isEmpty) {
-      val table = getMetadataTable()
+      val table = getMetadataTable
       val get = new Get(Bytes.toBytes(tableName))
       val values = table.get(get)
       table.close()
@@ -221,7 +221,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
   }
 
   def getAllTableName: Seq[String] = {
-    val table = getMetadataTable()
+    val table = getMetadataTable
     val tables = new ArrayBuffer[String]()
     val scanner = table.getScanner(ColumnFamily)
     var result = scanner.next()
@@ -246,7 +246,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
   }
 
   def deleteTable(tableName: String): Unit = {
-    val table = getMetadataTable()
+    val table = getMetadataTable
     if (!checkLogicalTableExist(tableName)) {
       throw new IllegalStateException(s"The logical table $tableName does not exist")
     }
@@ -280,7 +280,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
   }
 
   private[hbase] def checkLogicalTableExist(tableName: String): Boolean = {
-    val table = getMetadataTable()
+    val table = getMetadataTable
     val get = new Get(Bytes.toBytes(tableName))
     val result = table.get(get)
 

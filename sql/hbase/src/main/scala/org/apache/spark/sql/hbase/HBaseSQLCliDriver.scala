@@ -54,7 +54,7 @@ object HBaseSQLCliDriver extends Logging {
 
     val reader = new ConsoleReader()
     reader.setBellEnabled(false)
-    getCompletors.foreach(reader.addCompletor())
+    getCompletors.foreach(reader.addCompletor)
 
     val historyDirectory = System.getProperty("user.home")
 
