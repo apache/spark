@@ -701,7 +701,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  private var customHostname: Option[String] = None
+  private var customHostname: Option[String] = sys.env.get("SPARK_LOCAL_HOSTNAME")
 
   /**
    * Allow setting a custom host name because when we run on Mesos we need to use the same
