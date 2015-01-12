@@ -1841,7 +1841,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     List<List<String>> expected = fileTestPrepare(testDir);
 
-    JavaDStream<String> input = ssc.textFileStream(testDir.toString());
+    JavaDStream<String> input = ssc.textFileStream(testDir.toString(), 1);
     JavaTestUtils.attachTestOutputStream(input);
     List<List<String>> result = JavaTestUtils.runStreams(ssc, 1, 1);
 
