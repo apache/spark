@@ -1706,16 +1706,17 @@ private[spark] object Utils extends Logging {
    * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
    *
    * @param startPort The initial port to start the service on.
-   * @param maxRetries Maximum number of retries to attempt.
-   *                   A value of 3 means attempting ports n, n+1, n+2, and n+3, for example.
    * @param startService Function to start service on a given port.
    *                     This is expected to throw java.net.BindException on port collision.
+   * @param conf Used to get maximum number of retries.
+   * @param serviceName Name of the service.
    */
   def startServiceOnPort[T](
       startPort: Int,
       startService: Int => (T, Int),
-      serviceName: String = "",
-      conf: SparkConf): (T, Int) = {
+      conf: SparkConf,
+      serviceName: String = ""
+      ): (T, Int) = {
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
     val maxRetries = portMaxRetries(conf)
     logInfo(s"Starting service$serviceString on port $startPort with maximum $maxRetries retries. ")

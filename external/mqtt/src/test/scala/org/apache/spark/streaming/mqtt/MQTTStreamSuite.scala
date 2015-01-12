@@ -29,6 +29,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.eclipse.paho.client.mqttv3._
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
+import org.apache.spark.SparkConf
 
 class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
 
@@ -101,7 +102,7 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
       val socket = new ServerSocket(trialPort)
       socket.close()
       (null, trialPort)
-    })._2
+    }, new SparkConf())._2
   }
 
   def publishData(data: String): Unit = {
