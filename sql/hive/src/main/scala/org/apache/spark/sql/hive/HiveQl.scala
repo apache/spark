@@ -24,8 +24,8 @@ import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.parse._
 import org.apache.hadoop.hive.ql.plan.PlanUtils
+import org.apache.spark.sql.SparkSQLParser
 
-import org.apache.spark.sql.catalyst.SparkSQLParser
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
@@ -33,6 +33,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable}
 
 /* Implicit conversions */
@@ -44,6 +45,22 @@ import scala.collection.JavaConversions._
  * cmd string.
  */
 private[hive] case object NativePlaceholder extends Command
+
+/**
+ * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
+ * @param table The table to be described.
+ * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
+ *                   It is effective only when the table is a Hive table.
+ */
+case class DescribeCommand(
+    table: LogicalPlan,
+    isExtended: Boolean) extends Command {
+  override def output = Seq(
+    // Column names are based on Hive.
+    AttributeReference("col_name", StringType, nullable = false)(),
+    AttributeReference("data_type", StringType, nullable = false)(),
+    AttributeReference("comment", StringType, nullable = false)())
+}
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
@@ -386,6 +403,15 @@ private[hive] object HiveQl {
     (db, tableName)
   }
 
+  protected def extractTableIdent(tableNameParts: Node): Seq[String] = {
+    tableNameParts.getChildren.map { case Token(part, Nil) => cleanIdentifier(part) } match {
+      case Seq(tableOnly) => Seq(tableOnly)
+      case Seq(databaseName, table) => Seq(databaseName, table)
+      case other => sys.error("Hive only supports tables names like 'tableName' " +
+        s"or 'databaseName.tableName', found '$other'")
+    }
+  }
+
   /**
    * SELECT MAX(value) FROM src GROUP BY k1, k2, k3 GROUPING SETS((k1, k2), (k2)) 
    * is equivalent to 
@@ -448,17 +474,23 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     // Just fake explain for any of the native commands.
     case Token("TOK_EXPLAIN", explainArgs)
       if noExplainCommands.contains(explainArgs.head.getText) =>
-      ExplainCommand(NoRelation)
+      ExplainCommand(NoRelation, Seq(AttributeReference("plan", StringType, nullable = false)()))
     case Token("TOK_EXPLAIN", explainArgs)
       if "TOK_CREATETABLE" == explainArgs.head.getText =>
       val Some(crtTbl) :: _ :: extended :: Nil =
         getClauses(Seq("TOK_CREATETABLE", "FORMATTED", "EXTENDED"), explainArgs)
-      ExplainCommand(nodeToPlan(crtTbl), extended != None)
+      ExplainCommand(
+        nodeToPlan(crtTbl),
+        Seq(AttributeReference("plan", StringType,nullable = false)()),
+        extended != None)
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
       val Some(query) :: _ :: extended :: Nil =
         getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
-      ExplainCommand(nodeToPlan(query), extended != None)
+      ExplainCommand(
+        nodeToPlan(query),
+        Seq(AttributeReference("plan", StringType, nullable = false)()),
+        extended != None)
 
     case Token("TOK_DESCTABLE", describeArgs) =>
       // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
@@ -475,16 +507,16 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               case Token(".", dbName :: tableName :: Nil) =>
                 // It is describing a table with the format like "describe db.table".
                 // TODO: Actually, a user may mean tableName.columnName. Need to resolve this issue.
-                val (db, tableName) = extractDbNameTableName(nameParts.head)
+                val tableIdent = extractTableIdent(nameParts.head)
                 DescribeCommand(
-                  UnresolvedRelation(db, tableName, None), extended.isDefined)
+                  UnresolvedRelation(tableIdent, None), extended.isDefined)
               case Token(".", dbName :: tableName :: colName :: Nil) =>
                 // It is describing a column with the format like "describe db.table column".
                 NativePlaceholder
               case tableName =>
                 // It is describing a table with the format like "describe table".
                 DescribeCommand(
-                  UnresolvedRelation(None, tableName.getText, None),
+                  UnresolvedRelation(Seq(tableName.getText), None),
                   extended.isDefined)
             }
           }
@@ -757,13 +789,15 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           nonAliasClauses)
       }
 
-      val (db, tableName) =
+      val tableIdent =
         tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
-          case Seq(tableOnly) => (None, tableOnly)
-          case Seq(databaseName, table) => (Some(databaseName), table)
+          case Seq(tableOnly) => Seq(tableOnly)
+          case Seq(databaseName, table) => Seq(databaseName, table)
+          case other => sys.error("Hive only supports tables names like 'tableName' " +
+            s"or 'databaseName.tableName', found '$other'")
       }
       val alias = aliasClause.map { case Token(a, Nil) => cleanIdentifier(a) }
-      val relation = UnresolvedRelation(db, tableName, alias)
+      val relation = UnresolvedRelation(tableIdent, alias)
 
       // Apply sampling if requested.
       (bucketSampleClause orElse splitSampleClause).map {
@@ -882,7 +916,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
       val Some(tableNameParts) :: partitionClause :: Nil =
         getClauses(Seq("TOK_TABNAME", "TOK_PARTSPEC"), tableArgs)
 
-      val (db, tableName) = extractDbNameTableName(tableNameParts)
+      val tableIdent = extractTableIdent(tableNameParts)
 
       val partitionKeys = partitionClause.map(_.getChildren.map {
         // Parse partitions. We also make keys case insensitive.
@@ -892,7 +926,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           cleanIdentifier(key.toLowerCase) -> None
       }.toMap).getOrElse(Map.empty)
 
-      InsertIntoTable(UnresolvedRelation(db, tableName, None), partitionKeys, query, overwrite)
+      InsertIntoTable(UnresolvedRelation(tableIdent, None), partitionKeys, query, overwrite)
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
@@ -1077,6 +1111,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
     case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
     case Token(OR(), left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
     case Token(NOT(), child :: Nil) => Not(nodeToExpr(child))
+    case Token("!", child :: Nil) => Not(nodeToExpr(child))
 
     /* Case statements */
     case Token("TOK_FUNCTION", Token(WHEN(), Nil) :: branches) =>

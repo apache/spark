@@ -212,7 +212,7 @@ class RowMatrix(
       tol: Double,
       mode: String): SingularValueDecomposition[RowMatrix, Matrix] = {
     val n = numCols().toInt
-    require(k > 0 && k <= n, s"Request up to n singular values but got k=$k and n=$n.")
+    require(k > 0 && k <= n, s"Requested k singular values but got k=$k and numCols=$n.")
 
     object SVDMode extends Enumeration {
       val LocalARPACK, LocalLAPACK, DistARPACK = Value

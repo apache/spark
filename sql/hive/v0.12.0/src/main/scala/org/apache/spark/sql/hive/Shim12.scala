@@ -44,7 +44,7 @@ import scala.language.implicitConversions
 
 import org.apache.spark.sql.catalyst.types.DecimalType
 
-class HiveFunctionWrapper(var functionClassName: String) extends java.io.Serializable {
+case class HiveFunctionWrapper(functionClassName: String) extends java.io.Serializable {
   // for Serialization
   def this() = this(null)
 
