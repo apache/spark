@@ -1059,11 +1059,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val config = wrappedConf.value
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
+      val taskAttemptId = (context.taskAttemptId % Int.MaxValue).toInt
 
       val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context, config)
 
-      writer.setup(context.stageId, context.partitionId, attemptNumber)
+      writer.setup(context.stageId, context.partitionId, taskAttemptId)
       writer.open()
       try {
         var recordsWritten = 0L
