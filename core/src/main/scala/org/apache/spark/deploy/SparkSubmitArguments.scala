@@ -151,7 +151,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
 
     // In yarn mode, app name can be set via SPARK_YARN_APP_NAME
     if (master.contains("yarn")) {
-      name = Option(name).orElse(env.get("SPARK_YARN_APP_NAME"))
+      name = Option(name).orElse(env.get("SPARK_YARN_APP_NAME")).orNull
     }
     // Set name from main class if not given
     name = Option(name).orElse(Option(mainClass)).orNull
