@@ -1130,6 +1130,7 @@
               <spark.executor.extraClassPath>${test_classpath}</spark.executor.extraClassPath>
               <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
             </systemProperties>
+            <failIfNoTests>false</failIfNoTests>
           </configuration>
         </plugin>
         <!-- Scalatest runs all Scala tests -->
