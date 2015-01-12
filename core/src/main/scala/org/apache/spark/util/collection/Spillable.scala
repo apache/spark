@@ -75,8 +75,7 @@ private[spark] trait Spillable[C] extends Logging {
     if (elementsRead > trackMemoryThreshold && elementsRead % 32 == 0 &&
         currentMemory >= myMemoryThreshold) {
       // Claim up to double our current memory from the shuffle memory pool
-      val amountToRequest = 2 * currentMemory - myMemoryThreshold
-      val granted = shuffleMemoryManager.tryToAcquire(amountToRequest)
+      val granted = shuffleMemoryManager.tryToAcquire(currentMemory)
       myMemoryThreshold += granted
       if (myMemoryThreshold <= currentMemory) {
         // We were granted too little memory to grow further (either tryToAcquire returned 0,
