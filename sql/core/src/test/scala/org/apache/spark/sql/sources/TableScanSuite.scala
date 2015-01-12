@@ -314,4 +314,20 @@ class TableScanSuite extends DataSourceTest {
       sql("SELECT * FROM oneToTenDef"),
       (1 to 10).map(Row(_)).toSeq)
   }
+
+  test("field case need to be consistent with hive") {
+    sql(
+      """
+       |CREATE TEMPORARY TABLE student(sTudenT_Name string)
+       |USING org.apache.spark.sql.sources.AllDataTypesScanSource
+       |OPTIONS (
+       |  from '1',
+       |  to '10'
+       |)
+     """.stripMargin)
+
+      val fieldName = sql("SELECT * FROM student").queryExecution.sparkPlan.
+          schema.fields.map(_.name).mkString("")
+      assert(fieldName == "student_name")
+    }
 }
