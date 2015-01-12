@@ -312,7 +312,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  case object DDLStrategy extends Strategy {
+  object DDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case CreateTableUsing(tableName, userSpecifiedSchema, provider, true, options) =>
         ExecutedCommand(
@@ -320,6 +320,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, options) =>
         sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
+
+      case _ => Nil
     }
   }
 }

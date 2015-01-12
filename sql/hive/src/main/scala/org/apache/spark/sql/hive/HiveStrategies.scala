@@ -209,6 +209,16 @@ private[hive] trait HiveStrategies {
     }
   }
 
+  object HiveDDLStrategy extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, options) =>
+        ExecutedCommand(
+          CreateMetastoreDataSource(tableName, userSpecifiedSchema, provider, options)) :: Nil
+
+      case _ => Nil
+    }
+  }
+
   case class HiveCommandStrategy(context: HiveContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case describe: DescribeCommand =>
@@ -220,10 +230,6 @@ private[hive] trait HiveStrategies {
           case o: LogicalPlan =>
             ExecutedCommand(RunnableDescribeCommand(planLater(o), describe.output)) :: Nil
         }
-
-      case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, options) =>
-        ExecutedCommand(
-          CreateMetastoreDataSource(tableName, userSpecifiedSchema, provider, options)) :: Nil
 
       case _ => Nil
     }
