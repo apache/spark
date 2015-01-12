@@ -55,10 +55,10 @@ class CatalogTestSuite extends FunSuite with BeforeAndAfterAll with Logging {
     allColumns = allColumns :+ NonKeyColumn("column3", BooleanType, family1, "qualifier1")
 
     val splitKeys: Array[Array[Byte]] = Array(
-        new GenericRow(Array(1024.0, "Upen", 128: Short)),
-        new GenericRow(Array(1024.0, "Upen", 256: Short)),
-        new GenericRow(Array(4096.0, "SF", 512: Short))
-      ).map(HBaseKVHelper.makeRowKey(_, Seq(DoubleType, StringType, ShortType)))
+      new GenericRow(Array(1024.0, "Upen", 128: Short)),
+      new GenericRow(Array(1024.0, "Upen", 256: Short)),
+      new GenericRow(Array(4096.0, "SF", 512: Short))
+    ).map(HBaseKVHelper.makeRowKey(_, Seq(DoubleType, StringType, ShortType)))
 
     catalog.createTable(tableName, namespace, hbaseTableName, allColumns, splitKeys)
 

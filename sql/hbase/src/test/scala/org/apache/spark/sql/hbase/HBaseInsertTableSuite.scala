@@ -29,7 +29,7 @@ class HBaseInsertTableSuite extends QueriesSuiteBase with Logging {
             PRIMARY KEY(doublecol, strcol, intcol)) 
             MAPPED BY (hinsertTestTable, COLS=[bytecol=cf1.hbytecol,
             shortcol=cf1.hshortcol, longcol=cf2.hlongcol, floatcol=cf2.hfloatcol])"""
-          .stripMargin
+      .stripMargin
     runQuery(createQuery)
 
     val insertQuery =
@@ -44,8 +44,7 @@ class HBaseInsertTableSuite extends QueriesSuiteBase with Logging {
 
     compareResults(testResult, targetResult)
 
-    //logInfo(s"$testQuery came back with ${testResult.size} results")
-    //logInfo(testResult.mkString)
+    runQuery("Drop Table insertTestTable")
   }
 
   testnm = "Insert few rows to the table from other table after applying filter"
@@ -55,7 +54,7 @@ class HBaseInsertTableSuite extends QueriesSuiteBase with Logging {
             PRIMARY KEY(doublecol, strcol, intcol)) 
             MAPPED BY (hinsertTestTableFilter, COLS=[bytecol=cf1.hbytecol,
             shortcol=cf1.hshortcol, longcol=cf2.hlongcol, floatcol=cf2.hfloatcol])"""
-          .stripMargin
+      .stripMargin
     runQuery(createQuery)
 
     val insertQuery =
@@ -71,10 +70,9 @@ class HBaseInsertTableSuite extends QueriesSuiteBase with Logging {
 
     compareResults(testResult, targetResult)
 
-    //logInfo(s"$testQuery came back with ${testResult.size} results")
-    //logInfo(testResult.mkString)
+    runQuery("Drop Table insertTestTableFilter")
   }
-  
+
   def compareResults(fetchResult: Array[Row], targetResult: Array[Row]) = {
     val res = {
       for (rx <- 0 until targetResult.size)
@@ -89,7 +87,7 @@ class HBaseInsertTableSuite extends QueriesSuiteBase with Logging {
             shortcol SHORT, intcol INTEGER, PRIMARY KEY(strcol, intcol)) 
             MAPPED BY (hinsertTestTableFewCols, COLS=[bytecol=cf1.hbytecol,
             shortcol=cf1.hshortcol])"""
-          .stripMargin
+      .stripMargin
     runQuery(createQuery)
 
     val insertQuery =
@@ -107,8 +105,7 @@ class HBaseInsertTableSuite extends QueriesSuiteBase with Logging {
 
     compareResults(testResult, targetResult)
 
-    //logInfo(s"$testQuery came back with ${testResult.size} results")
-    //logInfo(testResult.mkString)
+    runQuery("Drop Table insertTestTableFewCols")
   }
 
   testnm = "Insert into values test"
@@ -117,7 +114,7 @@ class HBaseInsertTableSuite extends QueriesSuiteBase with Logging {
             shortcol SHORT, intcol INTEGER, PRIMARY KEY(strcol, intcol)) 
             MAPPED BY (hinsertValuesTest, COLS=[bytecol=cf1.hbytecol,
             shortcol=cf1.hshortcol])"""
-          .stripMargin
+      .stripMargin
     runQuery(createQuery)
 
     val insertQuery1 = s"insert into insertValuesTest values('Row0','a',12340,23456780)"
@@ -141,7 +138,6 @@ class HBaseInsertTableSuite extends QueriesSuiteBase with Logging {
     }.foldLeft(true) { case (res1, newres) => res1 && newres}
     assert(res, "One or more rows did not match expected")
 
-    //logInfo(s"$testQuery came back with ${testResult.size} results")
-    //logInfo(testResult.mkString)
+    runQuery("Drop Table insertValuesTest")
   }
 }

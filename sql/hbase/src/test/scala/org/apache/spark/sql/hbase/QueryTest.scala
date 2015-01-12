@@ -37,7 +37,7 @@ class QueryTest extends FunSuite {
       case singleItem => Seq(Seq(singleItem))
     }
 
-    val isSorted = rdd.logicalPlan.collect { case s: plans.logical.Sort => s }.nonEmpty
+    val isSorted = rdd.logicalPlan.collect { case s: plans.logical.Sort => s}.nonEmpty
     def prepareAnswer(answer: Seq[Any]) = if (!isSorted) answer.sortBy(_.toString) else answer
     val sparkAnswer = try rdd.collect().toSeq catch {
       case e: Exception =>
@@ -52,7 +52,7 @@ class QueryTest extends FunSuite {
     }
 
     if (prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {
-      fail(s"""
+      fail( s"""
         |Results do not match for query:
         |${rdd.logicalPlan}
         |== Analyzed Plan ==
@@ -60,11 +60,13 @@ class QueryTest extends FunSuite {
         |== Physical Plan ==
         |${rdd.queryExecution.executedPlan}
         |== Results ==
-        |${sideBySide(
-        s"== Correct Answer - ${convertedAnswer.size} ==" +:
-          prepareAnswer(convertedAnswer).map(_.toString),
-        s"== Spark Answer - ${sparkAnswer.size} ==" +:
-          prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
+        |${
+        sideBySide(
+          s"== Correct Answer - ${convertedAnswer.size} ==" +:
+            prepareAnswer(convertedAnswer).map(_.toString),
+          s"== Spark Answer - ${sparkAnswer.size} ==" +:
+            prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")
+      }
       """.stripMargin)
     }
   }

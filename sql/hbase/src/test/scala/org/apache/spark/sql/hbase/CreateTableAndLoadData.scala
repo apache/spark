@@ -136,9 +136,19 @@ trait CreateTableAndLoadData extends Logging {
 
   def loadData(hbc: HBaseSQLContext, stagingTableName: String, tableName: String,
                loadFile: String) = {
+
+    val newLoadFile = "/home/xinyunh/github/MavenBuild/spark/sql/hbase/src/test/resources/" +
+      DefaultLoadFile
+    println("loadFile: " + newLoadFile)
+
     // then load data into table
-    val loadSql = s"LOAD DATA LOCAL INPATH '$loadFile' INTO TABLE $tableName"
+    val loadSql = s"LOAD DATA LOCAL INPATH '$newLoadFile' INTO TABLE $tableName"
     runSql(hbc, loadSql)
+
+    val query1 = s"select * from $tableName"
+
+    val result1 = runSql(hbc, query1)
+//    assert(result1.size == 3)
   }
 
   def cleanUp(hbc: HBaseSQLContext) = {

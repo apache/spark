@@ -17,18 +17,18 @@
 
 package org.apache.spark.sql.hbase
 
-import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.spark.Logging
 import org.apache.spark.sql.SQLContext
-import org.scalatest.ConfigMap
+import org.scalatest.{BeforeAndAfterAllConfigMap, ConfigMap, FunSuite}
 
-class QueriesSuiteBase() extends HBaseIntegrationTestBase(
-  System.getProperty("spark.testing.use-external-hbase", "false") == "false")
-    with CreateTableAndLoadData with Logging {
-  self: HBaseIntegrationTestBase =>
-
+class QueriesSuiteBase() extends FunSuite
+with CreateTableAndLoadData with BeforeAndAfterAllConfigMap with Logging {
   val tabName = DefaultTableName
   var AvoidByteDataTypeBug = true
+  val hbc: HBaseSQLContext = {
+    HBaseMainTest.main(null)
+    HBaseMainTest.hbc
+  }
 
   override protected def beforeAll(configMap: ConfigMap): Unit = {
     super.beforeAll(configMap)
@@ -36,6 +36,8 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase(
   }
 
   override protected def afterAll(configMap: ConfigMap): Unit = {
+    hbc.sql("Drop Table " + DefaultStagingTableName)
+    hbc.sql("Drop Table " + DefaultTableName)
     cleanUp(hbc)
   }
 
@@ -45,14 +47,14 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase(
     execQuery1.collect()
   }
 
-  def run(sqlCtx : SQLContext, testName: String, sql: String, exparr: Seq[Seq[Any]]) = {
+  def run(sqlCtx: SQLContext, testName: String, sql: String, exparr: Seq[Seq[Any]]) = {
     val execQuery1 = sqlCtx.executeSql(sql)
     val result1 = runQuery(sql)
     assert(result1.size == exparr.length, s"$testName failed on size")
     verify(testName,
       sql,
       for (rx <- 0 until exparr.size)
-        yield result1(rx).toSeq, exparr
+      yield result1(rx).toSeq, exparr
     )
   }
 
@@ -77,7 +79,7 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase(
         case (a: Float, e: Float) =>
           Math.abs(a - e) <= CompareTol
         case (a: Byte, e) if AvoidByteDataTypeBug =>
-         logError("We are sidestepping the byte datatype bug..")
+          logError("We are sidestepping the byte datatype bug..")
           true
         case (a, e) =>
           logDebug(s"atype=${a.getClass.getName} etype=${e.getClass.getName}")

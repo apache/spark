@@ -39,11 +39,11 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
   }
   val sparkHome = hbc.sparkContext.getSparkHome().getOrElse(".")
 
-  // Test if we can parse 'LOAD DATA LOCAL INPATH './usr/file.txt' INTO TABLE tb'
+  // Test if we can parse 'LOAD DATA LOCAL INPATH './usr/file.txt' INTO TABLE tb1'
   test("bulkload parser test, local file") {
 
     val parser = new HBaseSQLParser()
-    val sql = raw"LOAD DATA LOCAL INPATH './usr/file.txt' INTO TABLE tb"
+    val sql = raw"LOAD DATA LOCAL INPATH './usr/file.txt' INTO TABLE tb1"
 
     val plan: LogicalPlan = parser(sql)
     assert(plan != null)
@@ -52,14 +52,14 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
     val l = plan.asInstanceOf[ParallelizedBulkLoadIntoTableCommand]
     assert(l.path.equals(raw"./usr/file.txt"))
     assert(l.isLocal)
-    assert(l.tableName.equals("tb"))
+    assert(l.tableName.equals("tb1"))
   }
 
-  // Test if we can parse 'LOAD DATA INPATH '/usr/hdfsfile.txt' INTO TABLE tb'
+  // Test if we can parse 'LOAD DATA INPATH '/usr/hdfsfile.txt' INTO TABLE tb1'
   test("bulkload parser test, load hdfs file") {
 
     val parser = new HBaseSQLParser()
-    val sql = raw"LOAD DATA INPATH '/usr/hdfsfile.txt' INTO TABLE tb"
+    val sql = raw"LOAD DATA INPATH '/usr/hdfsfile.txt' INTO TABLE tb1"
     //val sql = "select"
 
     val plan: LogicalPlan = parser(sql)
@@ -69,13 +69,13 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
     val l = plan.asInstanceOf[ParallelizedBulkLoadIntoTableCommand]
     assert(l.path.equals(raw"/usr/hdfsfile.txt"))
     assert(!l.isLocal)
-    assert(l.tableName.equals("tb"))
+    assert(l.tableName.equals("tb1"))
   }
 
   test("bulkload parser test, using delimiter") {
 
     val parser = new HBaseSQLParser()
-    val sql = raw"LOAD DATA INPATH '/usr/hdfsfile.txt' INTO TABLE tb FIELDS TERMINATED BY '|' "
+    val sql = raw"LOAD DATA INPATH '/usr/hdfsfile.txt' INTO TABLE tb1 FIELDS TERMINATED BY '|' "
 
     val plan: LogicalPlan = parser(sql)
     assert(plan != null)
@@ -84,7 +84,7 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
     val l = plan.asInstanceOf[ParallelizedBulkLoadIntoTableCommand]
     assert(l.path.equals(raw"/usr/hdfsfile.txt"))
     assert(!l.isLocal)
-    assert(l.tableName.equals("tb"))
+    assert(l.tableName.equals("tb1"))
     assert(l.delimiter.get.equals("|"))
   }
 
@@ -283,7 +283,7 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
     hbc.sql("select * from testblk").collect().foreach(println)
 
     // cleanup
-    hbc.executeSql(drop)
+    hbc.sql(drop)
 
     // delete the temp files
     val fileSystem = FileSystem.get(hbc.sparkContext.hadoopConfiguration)
@@ -294,9 +294,5 @@ class BulkLoadIntoTableSuite extends FunSuite with BeforeAndAfterAll with Loggin
         fileSystem.delete(file.getPath, true)
       }
     }
-  }
-
-  override def afterAll() {
-    sc.stop()
   }
 }

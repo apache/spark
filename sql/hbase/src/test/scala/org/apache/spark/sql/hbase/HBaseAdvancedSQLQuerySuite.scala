@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.hbase
 
-import org.apache.spark.sql._
-import org.apache.spark.sql.SQLConf
+import org.apache.spark.sql.{SQLConf, _}
 import org.scalatest.BeforeAndAfterAll
 
 class HBaseAdvancedSQLQuerySuite extends QueryTest with BeforeAndAfterAll {

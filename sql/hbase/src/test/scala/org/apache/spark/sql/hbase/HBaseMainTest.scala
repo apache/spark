@@ -37,6 +37,7 @@ with Logging {
   val TableName_b: String = "tb"
   val HbaseTableName: String = "ht"
   val Metadata_Table = "metadata"
+  var alreadyInserted = false
 
   def createTable(useMultiplePartitions: Boolean) = {
     try {
@@ -229,9 +230,10 @@ with Logging {
   }
 
   def setupData(useMultiplePartitions: Boolean, needInsertData: Boolean = false) {
-    if (needInsertData) {
+    if (needInsertData && !alreadyInserted) {
       createTable(useMultiplePartitions)
       insertTestData()
+      alreadyInserted = true
     }
   }
 
