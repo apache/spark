@@ -127,18 +127,12 @@ private object ParallelCollectionRDD {
       })
     }
     seq match {
-      case r: Range.Inclusive => {
-        val sign = if (r.step < 0) {
-          -1
-        } else {
-          1
-        }
-        slice(new Range(
-          r.start, r.end + sign, r.step).asInstanceOf[Seq[T]], numSlices)
-      }
       case r: Range => {
-        positions(r.length, numSlices).map({
-          case (start, end) =>
+        val sign = r.isInclusive && (r.end == Int.MaxValue || r.end == Int.MinValue)
+        positions(r.length, numSlices).zipWithIndex.map({
+          case ((start, end), index) if sign && index == numSlices - 1 =>
+            new Range.Inclusive(r.start + start * r.step, r.end, r.step)
+          case ((start, end), _) =>
             new Range(r.start + start * r.step, r.start + end * r.step, r.step)
         }).toSeq.asInstanceOf[Seq[Seq[T]]]
       }
