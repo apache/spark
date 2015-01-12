@@ -17,9 +17,11 @@
 
 package org.apache.spark.mllib.util
 
+import org.apache.spark.annotation.DeveloperApi
 import scala.collection.JavaConversions._
 import java.lang.{Double => JDouble}
 
+@DeveloperApi
 object IsotonicDataGenerator {
 
   /**
@@ -29,7 +31,6 @@ object IsotonicDataGenerator {
    */
   def generateIsotonicInputAsList(labels: Array[Double]): java.util.List[(JDouble, JDouble)] = {
     seqAsJavaList(generateIsotonicInput(wrapDoubleArray(labels):_*).map(x => (new JDouble(x._1), new JDouble(x._2))))
-      //.map(d => new Tuple3(new java.lang.Double(d._1), new java.lang.Double(d._2), new java.lang.Double(d._3))))
   }
 
   /**
