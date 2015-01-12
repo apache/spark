@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.util.{List => JList}
 
-import com.google.common.cache.{CacheLoader, CacheBuilder}
+import com.google.common.cache.{LoadingCache, CacheLoader, CacheBuilder}
 
 import org.apache.hadoop.util.ReflectionUtils
 import org.apache.hadoop.hive.metastore.TableType
@@ -54,46 +54,47 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   // TODO: Use this everywhere instead of tuples or databaseName, tableName,.
   /** A fully qualified identifier for a table (i.e., database.tableName) */
-  case class TableIdent(database: String, name: String) {
-    def toLowerCase = TableIdent(database.toLowerCase, name.toLowerCase)
+  case class QualifiedTableName(database: String, name: String) {
+    def toLowerCase = QualifiedTableName(database.toLowerCase, name.toLowerCase)
   }
 
   /** A cache of Spark SQL data source tables that have been accessed. */
-  protected[hive] val cachedDataSourceTables = CacheBuilder.newBuilder()
-    .maximumSize(1000)
-    .build(
-      new CacheLoader[TableIdent, LogicalPlan]() {
-        override def load(in: TableIdent): LogicalPlan = {
-          logDebug(s"Creating new cached data source for $in")
-          val table = client.getTable(in.database, in.name)
-          val schemaString = table.getProperty("spark.sql.sources.schema")
-          val userSpecifiedSchema =
-            if (schemaString == null) {
-              None
-            } else {
-              Some(DataType.fromJson(schemaString).asInstanceOf[StructType])
-            }
-          // It does not appear that the ql client for the metastore has a way to enumerate all the
-          // SerDe properties directly...
-          val options = table.getTTable.getSd.getSerdeInfo.getParameters.toMap
+  protected[hive] val cachedDataSourceTables: LoadingCache[QualifiedTableName, LogicalPlan] = {
+    val cacheLoader = new CacheLoader[QualifiedTableName, LogicalPlan]() {
+      override def load(in: QualifiedTableName): LogicalPlan = {
+        logDebug(s"Creating new cached data source for $in")
+        val table = client.getTable(in.database, in.name)
+        val schemaString = table.getProperty("spark.sql.sources.schema")
+        val userSpecifiedSchema =
+          if (schemaString == null) {
+            None
+          } else {
+            Some(DataType.fromJson(schemaString).asInstanceOf[StructType])
+          }
+        // It does not appear that the ql client for the metastore has a way to enumerate all the
+        // SerDe properties directly...
+        val options = table.getTTable.getSd.getSerdeInfo.getParameters.toMap
 
-          val resolvedRelation =
-            ResolvedDataSource(
-              hive,
-              userSpecifiedSchema,
-              table.getProperty("spark.sql.sources.provider"),
-              options)
+        val resolvedRelation =
+          ResolvedDataSource(
+            hive,
+            userSpecifiedSchema,
+            table.getProperty("spark.sql.sources.provider"),
+            options)
 
-          LogicalRelation(resolvedRelation.relation)
-        }
-      })
+        LogicalRelation(resolvedRelation.relation)
+      }
+    }
+
+    CacheBuilder.newBuilder().maximumSize(1000).build(cacheLoader)
+  }
 
   def refreshTable(databaseName: String, tableName: String): Unit = {
-    cachedDataSourceTables.refresh(TableIdent(databaseName, tableName).toLowerCase)
+    cachedDataSourceTables.refresh(QualifiedTableName(databaseName, tableName).toLowerCase)
   }
 
   def invalidateTable(databaseName: String, tableName: String): Unit = {
-    cachedDataSourceTables.invalidate(TableIdent(databaseName, tableName).toLowerCase)
+    cachedDataSourceTables.invalidate(QualifiedTableName(databaseName, tableName).toLowerCase)
   }
 
   val caseSensitive: Boolean = false
@@ -143,7 +144,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     val table = client.getTable(databaseName, tblName)
 
     if (table.getProperty("spark.sql.sources.provider") != null) {
-      cachedDataSourceTables(TableIdent(databaseName, tblName).toLowerCase)
+      cachedDataSourceTables(QualifiedTableName(databaseName, tblName).toLowerCase)
     } else if (table.isView) {
       // if the unresolved relation is from hive view
       // parse the text into logic node.

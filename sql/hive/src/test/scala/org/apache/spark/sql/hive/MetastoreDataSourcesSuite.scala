@@ -49,7 +49,6 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
       jsonFile("src/test/resources/data/files/sample.json").collect().toSeq)
-
   }
 
   test ("persistent JSON table with a user specified schema") {
@@ -71,7 +70,6 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     checkAnswer(
       sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM jsonTable"),
       sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM expectedJsonTable").collect().toSeq)
-
   }
 
   test ("persistent JSON table with a user specified schema with a subset of fields") {
@@ -99,7 +97,6 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     checkAnswer(
       sql("SELECT b, `<d>`.`=` FROM jsonTable"),
       sql("SELECT b, `<d>`.`=` FROM expectedJsonTable").collect().toSeq)
-
   }
 
   test("resolve shortened provider names") {

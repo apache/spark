@@ -53,7 +53,9 @@ case class DropTable(
   override def run(sqlContext: SQLContext) = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
-    try hiveContext.tryUncacheQuery(hiveContext.table(tableName)) catch {
+    try {
+      hiveContext.tryUncacheQuery(hiveContext.table(tableName))
+    } catch {
       case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
     }
     hiveContext.invalidateTable(tableName)
