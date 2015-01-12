@@ -54,6 +54,17 @@ object HiveTypeCoercion {
       Some(if (valueTypes.size == 0) NullType else valueTypes.head)
     }
   }
+
+  // Conversion rules for integer types into fixed-precision decimals
+  val intTypeToFixed: Map[DataType, DecimalType] = Map(
+    ByteType -> DecimalType(3, 0),
+    ShortType -> DecimalType(5, 0),
+    IntegerType -> DecimalType(10, 0),
+    LongType -> DecimalType(20, 0)
+  )
+
+  def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
+
 }
 
 /**
@@ -155,6 +166,15 @@ trait HiveTypeCoercion {
    *
    * Additionally, all types when UNION-ed with strings will be promoted to strings.
    * Other string conversions are handled by PromoteStrings.
+   * when mixing non-decimal types with decimals, we use the following rules:
+   *   - BYTE gets turned into DECIMAL(3, 0)
+   *   - SHORT gets turned into DECIMAL(5, 0)
+   *   - INT gets turned into DECIMAL(10, 0)
+   *   - LONG gets turned into DECIMAL(20, 0)
+   *   - Fixed union decimals with precision/scale p1/s2 and p2/s2  will be promoted to
+   *   DecimalType(max(p1, p2), max(s1, s2))
+   *   - FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE (this is the same as Hive,
+   *   but note that unlimited decimals are considered bigger than doubles in WidenTypes)
    *
    * Widening types might result in loss of precision in the following cases:
    * - IntegerType to FloatType
@@ -163,20 +183,42 @@ trait HiveTypeCoercion {
    */
   object WidenTypes extends Rule[LogicalPlan] {
     import HiveTypeCoercion._
+    import scala.math.max
+
+    def findUnionType(t1: DataType, t2: DataType): Option[DataType] = {
+      (t1, t2) match {
+        // When a string is found on one side, make the other side a string too.
+        case (StringType, t) => Some(StringType)
+        case (t, StringType) => Some(StringType)
+        case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+          findTightestDecimalType(t1, t2)
+        case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
+          findTightestDecimalType(t1, intTypeToFixed(t2))
+        case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
+          findTightestDecimalType(intTypeToFixed(t1), t2)
+        case (t, DecimalType.Fixed(p, s)) if isFloat(t) => Some(DoubleType)
+        case (DecimalType.Fixed(p, s), t) if isFloat(t) => Some(DoubleType)
+        case _ => findTightestCommonType(t1, t2)
+      }
+    }
+
+    // Union decimals with precision/scale p1/s2 and p2/s2  will be promoted to
+    // DecimalType(max(p1, p2), max(s1, s2))
+    private def findTightestDecimalType(t1: DataType, t2: DataType): Option[DataType] = {
+      (t1, t2) match {
+        case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+          Some(DecimalType(max(p1, p2), max(s1, s2)))
+        case _ => None
+      }
+    }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      // TODO: unions with fixed-precision decimals
+
       case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
         val castedInput = left.output.zip(right.output).map {
-          // When a string is found on one side, make the other side a string too.
-          case (l, r) if l.dataType == StringType && r.dataType != StringType =>
-            (l, Alias(Cast(r, StringType), r.name)())
-          case (l, r) if l.dataType != StringType && r.dataType == StringType =>
-            (Alias(Cast(l, StringType), l.name)(), r)
-
           case (l, r) if l.dataType != r.dataType =>
             logDebug(s"Resolving mismatched union input ${l.dataType}, ${r.dataType}")
-            findTightestCommonType(l.dataType, r.dataType).map { widestType =>
+            findUnionType(l.dataType, r.dataType).map { widestType =>
               val newLeft =
                 if (l.dataType == widestType) l else Alias(Cast(l, widestType), l.name)()
               val newRight =
@@ -317,16 +359,6 @@ trait HiveTypeCoercion {
   // scalastyle:on
   object DecimalPrecision extends Rule[LogicalPlan] {
     import scala.math.{max, min}
-
-    // Conversion rules for integer types into fixed-precision decimals
-    val intTypeToFixed: Map[DataType, DecimalType] = Map(
-      ByteType -> DecimalType(3, 0),
-      ShortType -> DecimalType(5, 0),
-      IntegerType -> DecimalType(10, 0),
-      LongType -> DecimalType(20, 0)
-    )
-
-    def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
       // Skip nodes whose children have not been resolved yet

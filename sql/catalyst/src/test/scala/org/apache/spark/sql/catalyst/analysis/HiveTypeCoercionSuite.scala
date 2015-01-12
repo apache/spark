@@ -96,10 +96,89 @@ class HiveTypeCoercionSuite extends PlanTest {
     widenTest(StringType, TimestampType, None)
 
     // ComplexType
-    widenTest(NullType, MapType(IntegerType, StringType, false), Some(MapType(IntegerType, StringType, false)))
+    widenTest(NullType, MapType(IntegerType, StringType, false),
+      Some(MapType(IntegerType, StringType, false)))
     widenTest(NullType, StructType(Seq()), Some(StructType(Seq())))
     widenTest(StringType, MapType(IntegerType, StringType, true), None)
     widenTest(ArrayType(IntegerType), StructType(Seq()), None)
+  }
+
+  test("tightest bound for union types") {
+    val widenTypes = new HiveTypeCoercion { }.WidenTypes
+    def unionTypeTest(t1: DataType, t2: DataType, tightestCommon: Option[DataType]) {
+      var found = widenTypes.findUnionType(t1, t2)
+      assert(found == tightestCommon,
+        s"Expected $tightestCommon as tightest union type for $t1 and $t2, found $found")
+      // Test both directions to make sure the widening is symmetric.
+      found = widenTypes.findUnionType(t2, t1)
+      assert(found == tightestCommon,
+        s"Expected $tightestCommon as tightest union type for $t2 and $t1, found $found")
+    }
+    // Null
+    unionTypeTest(NullType, NullType, Some(NullType))
+
+    // Boolean
+    unionTypeTest(NullType, BooleanType, Some(BooleanType))
+    unionTypeTest(BooleanType, BooleanType, Some(BooleanType))
+    unionTypeTest(IntegerType, BooleanType, None)
+    unionTypeTest(LongType, BooleanType, None)
+
+    // Integral
+    unionTypeTest(NullType, ByteType, Some(ByteType))
+    unionTypeTest(NullType, IntegerType, Some(IntegerType))
+    unionTypeTest(NullType, LongType, Some(LongType))
+    unionTypeTest(ShortType, IntegerType, Some(IntegerType))
+    unionTypeTest(ShortType, LongType, Some(LongType))
+    unionTypeTest(IntegerType, LongType, Some(LongType))
+    unionTypeTest(LongType, LongType, Some(LongType))
+
+    // Floating point
+    unionTypeTest(NullType, FloatType, Some(FloatType))
+    unionTypeTest(NullType, DoubleType, Some(DoubleType))
+    unionTypeTest(FloatType, DoubleType, Some(DoubleType))
+    unionTypeTest(FloatType, FloatType, Some(FloatType))
+    unionTypeTest(DoubleType, DoubleType, Some(DoubleType))
+
+    // Integral mixed with floating point.
+    unionTypeTest(IntegerType, FloatType, Some(FloatType))
+    unionTypeTest(IntegerType, DoubleType, Some(DoubleType))
+    unionTypeTest(IntegerType, DoubleType, Some(DoubleType))
+    unionTypeTest(LongType, FloatType, Some(FloatType))
+    unionTypeTest(LongType, DoubleType, Some(DoubleType))
+
+    // Casting up to unlimited-precision decimal
+    unionTypeTest(IntegerType, DecimalType.Unlimited, Some(DecimalType.Unlimited))
+    unionTypeTest(DoubleType, DecimalType.Unlimited, Some(DecimalType.Unlimited))
+    unionTypeTest(DecimalType(3, 2), DecimalType.Unlimited, Some(DecimalType.Unlimited))
+    unionTypeTest(DecimalType.Unlimited, IntegerType, Some(DecimalType.Unlimited))
+    unionTypeTest(DecimalType.Unlimited, DoubleType, Some(DecimalType.Unlimited))
+    unionTypeTest(DecimalType.Unlimited, DecimalType(3, 2), Some(DecimalType.Unlimited))
+
+    // Casting up for fixed-precision decimal
+    unionTypeTest(DecimalType(2, 1), DecimalType(3, 2), Some(DecimalType(3, 2)))
+    unionTypeTest(DecimalType(2, 1), DoubleType, Some(DoubleType))
+    unionTypeTest(DecimalType(2, 1), IntegerType, Some(DecimalType(10, 1)))
+    unionTypeTest(DoubleType, DecimalType(2, 1), Some(DoubleType))
+    unionTypeTest(ShortType, DecimalType(2, 1), Some(DecimalType(5, 1)))
+
+    // StringType
+    unionTypeTest(NullType, StringType, Some(StringType))
+    unionTypeTest(StringType, StringType, Some(StringType))
+    unionTypeTest(IntegerType, StringType, Some(StringType))
+    unionTypeTest(LongType, StringType, Some(StringType))
+
+    // TimestampType
+    unionTypeTest(NullType, TimestampType, Some(TimestampType))
+    unionTypeTest(TimestampType, TimestampType, Some(TimestampType))
+    unionTypeTest(IntegerType, TimestampType, None)
+    unionTypeTest(StringType, TimestampType, Some(StringType))
+
+    // ComplexType
+    unionTypeTest(NullType, MapType(IntegerType, StringType, false),
+      Some(MapType(IntegerType, StringType, false)))
+    unionTypeTest(NullType, StructType(Seq()), Some(StructType(Seq())))
+    unionTypeTest(StringType, MapType(IntegerType, StringType, true), Some(StringType))
+    unionTypeTest(ArrayType(IntegerType), StructType(Seq()), None)
   }
 
   test("boolean casts") {
