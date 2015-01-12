@@ -94,6 +94,8 @@ public abstract class TaskContext implements Serializable {
   @Deprecated
   public abstract void addOnCompleteCallback(final Function0<Unit> f);
 
+  public abstract void addOnStopCallback(final Function1<String, Unit> f);
+
   public abstract int stageId();
 
   public abstract int partitionId();

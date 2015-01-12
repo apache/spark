@@ -39,6 +39,8 @@ private[spark] class TaskContextImpl(val stageId: Int,
   // Whether the task has completed.
   @volatile private var completed: Boolean = false
 
+  private var stopCallback = (message: String) => {}
+
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     onCompleteCallbacks += listener
     this
@@ -56,6 +58,10 @@ private[spark] class TaskContextImpl(val stageId: Int,
     onCompleteCallbacks += new TaskCompletionListener {
       override def onTaskCompletion(context: TaskContext): Unit = f()
     }
+  }
+
+  override def addOnStopCallback(f: String => Unit) {
+    stopCallback = f
   }
 
   /** Marks the task as completed and triggers the listeners. */
@@ -80,6 +86,10 @@ private[spark] class TaskContextImpl(val stageId: Int,
   /** Marks the task for interruption, i.e. cancellation. */
   private[spark] def markInterrupted(): Unit = {
     interrupted = true
+  }
+
+  def stop(message: String) {
+    stopCallback(message)
   }
 
   override def isCompleted: Boolean = completed

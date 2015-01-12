@@ -94,6 +94,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
     _killed = true
     if (context != null) {
       context.markInterrupted()
+      context.stop("Task was killed through ui.")
     }
     if (interruptThread && taskThread != null) {
       taskThread.interrupt()

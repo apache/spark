@@ -106,6 +106,10 @@ private[streaming] abstract class ReceiverSupervisor(
     startReceiver()
   }
 
+  val stop: String => Unit = (message: String) => {
+    stop(message, None)
+  }
+
   /** Mark the supervisor and the receiver for stopping */
   def stop(message: String, error: Option[Throwable]) {
     stoppingError = error.orNull

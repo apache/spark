@@ -23,10 +23,20 @@ import scala.language.existentials
 
 import akka.actor._
 
-import org.apache.spark.{Logging, SerializableWritable, SparkEnv, SparkException}
+import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver.{Receiver, ReceiverSupervisorImpl, StopReceiver}
+import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
+import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
+import org.apache.spark.streaming.scheduler.ReportError
+import org.apache.spark.streaming.scheduler.ReceiverInfo
+import org.apache.spark.streaming.scheduler.DeregisterReceiver
+import org.apache.spark.streaming.scheduler.AddBlock
+import scala.Some
+import org.apache.spark.streaming.scheduler.RegisterReceiver
+import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStopped
+import org.apache.spark.streaming.scheduler.StreamingListenerReceiverError
 
 /**
  * Messages used by the NetworkReceiver and the ReceiverTracker to communicate
@@ -266,7 +276,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       val serializableHadoopConf = new SerializableWritable(ssc.sparkContext.hadoopConfiguration)
 
       // Function to start the receiver on the worker node
-      val startReceiver = (iterator: Iterator[Receiver[_]]) => {
+      val startReceiver = (context: TaskContext, iterator: Iterator[Receiver[_]]) => {
         if (!iterator.hasNext) {
           throw new SparkException(
             "Could not start receiver as object not found.")
@@ -274,6 +284,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         val receiver = iterator.next()
         val supervisor = new ReceiverSupervisorImpl(
           receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
+        context.addOnStopCallback(supervisor.stop)
         supervisor.start()
         supervisor.awaitTermination()
       }
