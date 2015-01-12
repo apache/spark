@@ -38,9 +38,9 @@ object TestHbase
   logDebug(s"Spin up hbase minicluster w/ $nMasters master, $nRegionServers RS, $nDataNodes dataNodes")
 
   @transient val cluster: MiniHBaseCluster = testUtil.startMiniCluster(nMasters, nRegionServers, nDataNodes)
-  logInfo(s"Started HBaseMiniCluster with region servers = ${cluster.countServedRegions}")
+  logInfo(s"Started HBaseMiniCluster with regions = ${cluster.countServedRegions}")
 
-  logDebug(s"In testbase: HBaseAdmin.configuration zkPort="
+  logInfo(s"Configuration zkPort="
     + s"${config.get("hbase.zookeeper.property.clientPort")}")
 
   @transient lazy val hbaseAdmin: HBaseAdmin = catalog.admin
@@ -52,5 +52,5 @@ object TestHbase
  *
  */
 class TestHbaseContext(sc: SparkContext) extends HBaseSQLContext(sc) {
-//  System.setProperty("spark.hadoop.hbase.zookeeper.quorum", "localhost")
+  System.setProperty("spark.hadoop.hbase.zookeeper.quorum", "localhost")
 }
