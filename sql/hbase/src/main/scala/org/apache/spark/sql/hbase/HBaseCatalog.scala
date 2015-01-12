@@ -258,7 +258,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
     relationMapCache.remove(processTableName(tableName))
   }
 
-  def getMetadataTable(): HTable = {
+  def getMetadataTable: HTable = {
     // create the metadata table if it does not exist
     if (!admin.tableExists(MetaData)) {
       val descriptor = new HTableDescriptor(TableName.valueOf(MetaData))

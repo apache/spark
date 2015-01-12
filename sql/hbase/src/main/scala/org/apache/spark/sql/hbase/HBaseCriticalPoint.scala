@@ -45,7 +45,7 @@ case class CriticalPoint[T](value: T, ctype: CriticalPointType.CriticalPointType
     case _ => false
   }
 
-  override def toString() = {
+  override def toString = {
     s"CriticalPoint: value=$value, ctype=$ctype., dt=${dt.typeName}"
   }
 }
@@ -80,13 +80,13 @@ private[hbase] class CriticalPointRange[T](start: Option[T], startInclusive: Boo
       // Leaf node
       Seq(new MDCriticalPointRange(prefix.toSeq, this, dt))
     } else {
-      prefix += ((start.get, dt))
+      prefix += (start.get, dt)
       require(isPoint, "Internal Logical Error: point range expected")
       nextDimCriticalPointRanges.map(_.flatten(prefix)).reduceLeft(_ ++ _)
     }
   }
 
-  override def toString() = {
+  override def toString = {
     val result = new mutable.StringBuilder()
     if (startInclusive) result.append("[") else result.append("(")
     result.append(s"$start, $end")
@@ -192,7 +192,7 @@ private[hbase] case class MDCriticalPointRange[T](prefix: Seq[(Any, NativeType)]
     }
   }
 
-  override def toString() = {
+  override def toString = {
     val result = new mutable.StringBuilder()
     for (item <- prefix) {
       result.append(s"(${item._1} ${item._2}}) ")

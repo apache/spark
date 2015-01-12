@@ -42,7 +42,7 @@ object InsertWappers {
     val fqv = new ArrayBuffer[(Array[Byte], Array[Byte], Array[Byte])]
 
     def add(family: Array[Byte], qualifier: Array[Byte], value: Array[Byte]) =
-      fqv += ((family, qualifier, value))
+      fqv += (family, qualifier, value)
 
     def toPut = {
       val put = new Put(rowKey)
