@@ -1149,8 +1149,11 @@ class ChartModelView(LoginMixin, ModelView):
         ],
     }
 
-    def on_model_change(self, form, model, is_created):
-        model.iteration_no += 1
+    def on_model_change(self, form, model, is_created=True):
+        if not model.iteration_no:
+            model.iteration_no = 0
+        else:
+            model.iteration_no += 1
         if AUTHENTICATE and not model.user_id and flask_login.current_user:
             model.user_id = flask_login.current_user.id
 
