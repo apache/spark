@@ -129,6 +129,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
          |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=${"localhost"}
          |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_PORT}=$port
+         |  --conf spark.ui.enabled=false
        """.stripMargin.split("\\s+").toSeq
 
     val serverRunning = Promise[Unit]()
