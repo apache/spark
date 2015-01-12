@@ -78,11 +78,6 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
 
   lazy val admin = new HBaseAdmin(configuration)
 
-  if (!admin.tableExists(MetaData)) {
-    // create table
-    createMetadataTable()
-  }
-
   private def processTableName(tableName: String): String = {
     if (!caseSensitive) {
       tableName.toLowerCase
@@ -92,12 +87,6 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
   }
 
   val caseSensitive = true
-
-  // Use a single HBaseAdmin throughout this instance instead of creating a new one in
-  // each method
-  var hBaseAdmin = new HBaseAdmin(configuration)
-  logger.debug(s"HBaseAdmin.configuration zkPort="
-    + s"${hBaseAdmin.getConfiguration.get("hbase.zookeeper.property.clientPort")}")
 
   private def createHBaseUserTable(tableName: String,
                                    columns: Seq[NonKeyColumn],
@@ -112,6 +101,8 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
 
   def createTable(tableName: String, hbaseNamespace: String, hbaseTableName: String,
                   allColumns: Seq[AbstractColumn], splitKeys: Array[Array[Byte]]): HBaseRelation = {
+    val table = getMetadataTable()
+
     if (checkLogicalTableExist(tableName)) {
       throw new Exception(s"The logical table: $tableName already exists")
     }
@@ -130,14 +121,6 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
         }
     }
 
-    val avail = admin.isTableAvailable(MetaData)
-
-    if (!avail) {
-      // create table
-      createMetadataTable()
-    }
-
-    val table = new HTable(configuration, MetaData)
     table.setAutoFlushTo(false)
 
     val get = new Get(Bytes.toBytes(tableName))
@@ -188,7 +171,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
 
   private def writeObjectToTable(hbaseRelation: HBaseRelation) = {
     val tableName = hbaseRelation.tableName
-    val table = new HTable(configuration, MetaData)
+    val table = getMetadataTable()
 
     val put = new Put(Bytes.toBytes(tableName))
     val byteArrayOutputStream = new ByteArrayOutputStream()
@@ -207,10 +190,9 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
   }
 
   def getTable(tableName: String): Option[HBaseRelation] = {
+    val table = getMetadataTable()
     var result = relationMapCache.get(processTableName(tableName))
     if (result.isEmpty) {
-      val table = new HTable(configuration, MetaData)
-
       val get = new Get(Bytes.toBytes(tableName))
       val values = table.get(get)
       table.close()
@@ -220,7 +202,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
         result = Some(getRelationFromResult(values))
       }
     }
-    if (result.isDefined)  {
+    if (result.isDefined) {
       result.get.fetchPartitions()
     }
     result
@@ -239,8 +221,8 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
   }
 
   def getAllTableName: Seq[String] = {
+    val table = getMetadataTable()
     val tables = new ArrayBuffer[String]()
-    val table = new HTable(configuration, MetaData)
     val scanner = table.getScanner(ColumnFamily)
     var result = scanner.next()
     while (result != null) {
@@ -264,10 +246,10 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
   }
 
   def deleteTable(tableName: String): Unit = {
+    val table = getMetadataTable()
     if (!checkLogicalTableExist(tableName)) {
       throw new IllegalStateException(s"The logical table $tableName does not exist")
     }
-    val table = new HTable(configuration, MetaData)
 
     val delete = new Delete(Bytes.toBytes(tableName))
     table.delete(delete)
@@ -276,13 +258,18 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
     relationMapCache.remove(processTableName(tableName))
   }
 
-  def createMetadataTable() = {
-    val descriptor = new HTableDescriptor(TableName.valueOf(MetaData))
-    val columnDescriptor = new HColumnDescriptor(ColumnFamily)
-    descriptor.addFamily(columnDescriptor)
-    admin.createTable(descriptor)
-  }
+  def getMetadataTable(): HTable = {
+    // create the metadata table if it does not exist
+    if (!admin.tableExists(MetaData)) {
+      val descriptor = new HTableDescriptor(TableName.valueOf(MetaData))
+      val columnDescriptor = new HColumnDescriptor(ColumnFamily)
+      descriptor.addFamily(columnDescriptor)
+      admin.createTable(descriptor)
+    }
 
+    // return the metadata table
+    new HTable(configuration, MetaData)
+  }
 
   private[hbase] def checkHBaseTableExists(hbaseTableName: String): Boolean = {
     admin.tableExists(hbaseTableName)
@@ -293,12 +280,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
   }
 
   private[hbase] def checkLogicalTableExist(tableName: String): Boolean = {
-    if (!admin.tableExists(MetaData)) {
-      // create table
-      createMetadataTable()
-    }
-
-    val table = new HTable(configuration, MetaData)
+    val table = getMetadataTable()
     val get = new Get(Bytes.toBytes(tableName))
     val result = table.get(get)
 

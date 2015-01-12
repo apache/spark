@@ -63,7 +63,7 @@ trait CreateTableAndLoadData extends Logging {
   }
 
   def createNativeHbaseTable(hbc: HBaseSQLContext, tableName: String, families: Seq[String]) = {
-    val hbaseAdmin = hbc.catalog.hBaseAdmin
+    val hbaseAdmin = hbc.catalog.admin
     val hdesc = new HTableDescriptor(TableName.valueOf(tableName))
     families.foreach { f => hdesc.addFamily(new HColumnDescriptor(f))}
     try {
@@ -77,7 +77,7 @@ trait CreateTableAndLoadData extends Logging {
   def createTables(hbc: HBaseSQLContext, stagingTableName: String, tableName: String,
                    hbaseStagingTable: String, hbaseTable: String) = {
 
-    val hbaseAdmin = hbc.catalog.hBaseAdmin
+    val hbaseAdmin = hbc.catalog.admin
     if (!hbaseAdmin.tableExists(TableName.valueOf(hbaseStagingTable))) {
       createNativeHbaseTable(hbc, hbaseStagingTable, DefaultHbaseColFamiles)
     }
