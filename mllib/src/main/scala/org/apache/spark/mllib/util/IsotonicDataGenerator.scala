@@ -21,20 +21,28 @@ import org.apache.spark.annotation.DeveloperApi
 import scala.collection.JavaConversions._
 import java.lang.{Double => JDouble}
 
+/**
+ * :: DeveloperApi ::
+ * Generate test data for Isotonic regresision.
+ */
 @DeveloperApi
 object IsotonicDataGenerator {
 
   /**
    * Return a Java List of ordered labeled points
+   *
    * @param labels list of labels for the data points
    * @return Java List of input.
    */
   def generateIsotonicInputAsList(labels: Array[Double]): java.util.List[(JDouble, JDouble)] = {
-    seqAsJavaList(generateIsotonicInput(wrapDoubleArray(labels):_*).map(x => (new JDouble(x._1), new JDouble(x._2))))
+    seqAsJavaList(
+      generateIsotonicInput(
+        wrapDoubleArray(labels):_*).map(x => (new JDouble(x._1), new JDouble(x._2))))
   }
 
   /**
    * Return an ordered sequence of labeled data points with default weights
+   *
    * @param labels list of labels for the data points
    * @return sequence of data points
    */
@@ -45,6 +53,7 @@ object IsotonicDataGenerator {
 
   /**
    * Return an ordered sequence of labeled weighted data points
+   *
    * @param labels list of labels for the data points
    * @param weights list of weights for the data points
    * @return sequence of data points

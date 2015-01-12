@@ -86,10 +86,10 @@ public class JavaIsotonicRegressionSuite implements Serializable {
       }
     });
 
-    Double[] predictions = model.predict(testRDD).collect();
+    List<Double> predictions = model.predict(testRDD).collect();
 
-    Assert.assertTrue(predictions[0] == 1d);
-    Assert.assertTrue(predictions[11] == 12d);
+    Assert.assertTrue(predictions.get(0) == 1d);
+    Assert.assertTrue(predictions.get(11) == 12d);
   }
 }
 

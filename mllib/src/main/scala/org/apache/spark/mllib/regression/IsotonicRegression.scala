@@ -46,8 +46,8 @@ class IsotonicRegressionModel (
    * @param testData features to be labeled
    * @return predicted labels
    */
-  def predict(testData: JavaRDD[java.lang.Double]): RDD[java.lang.Double] =
-    testData.rdd.map(x => x.doubleValue()).map(predict)
+  def predict(testData: JavaRDD[java.lang.Double]): JavaRDD[java.lang.Double] =
+    testData.rdd.map(_.doubleValue()).map(predict).map(new java.lang.Double(_))
 
   /**
    * Predict a single label
