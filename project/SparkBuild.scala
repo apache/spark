@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import java.io.File
+
 import scala.util.Properties
 import scala.collection.JavaConversions._
 
@@ -23,7 +25,7 @@ import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.genjavadocSettings
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
-import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
+import com.typesafe.sbt.pom.{loadEffectivePom, PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
 
 object BuildCommons {
@@ -112,6 +114,17 @@ object SparkBuild extends PomBuild {
 
   override val userPropertiesMap = System.getProperties.toMap
 
+  // Handle case where hadoop.version is set via profile.
+  // Needed only because we read back this property in sbt
+  // when we create the assembly jar.
+  val pom = loadEffectivePom(new File("pom.xml"),
+    profiles = profiles,
+    userProps = userPropertiesMap)
+  if (System.getProperty("hadoop.version") == null) {
+    System.setProperty("hadoop.version",
+      pom.getProperties.get("hadoop.version").asInstanceOf[String])
+  }
+
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
@@ -153,7 +166,7 @@ object SparkBuild extends PomBuild {
 
   // TODO: Add Sql to mima checks
   allProjects.filterNot(x => Seq(spark, sql, hive, hiveThriftServer, catalyst, repl,
-    streamingFlumeSink, networkCommon, networkShuffle, networkYarn).contains(x)).foreach {
+    networkCommon, networkShuffle, networkYarn).contains(x)).foreach {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
 
@@ -214,8 +227,6 @@ object OldDeps {
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
     scalaVersion := "2.10.4",
-    // TODO: remove this as soon as 1.2.0 is published on Maven central.
-    resolvers += "spark-staging-1038" at "https://repository.apache.org/content/repositories/orgapachespark-1038/",
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
@@ -299,8 +310,7 @@ object Assembly {
         // This must match the same name used in maven (see network/yarn/pom.xml)
         "spark-" + v + "-yarn-shuffle.jar"
       } else {
-        mName + "-" + v + "-hadoop" +
-          Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar"
+        mName + "-" + v + "-hadoop" + System.getProperty("hadoop.version") + ".jar"
       }
     },
     mergeStrategy in assembly := {

@@ -284,6 +284,17 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
+}
 
-
+// TODO Semantically we probably not need GroupExpression
+// All we need is holding the Seq[Expression], and ONLY used in doing the
+// expressions transformation correctly. Probably will be removed since it's
+// not like a real expressions.
+case class GroupExpression(children: Seq[Expression]) extends Expression {
+  self: Product =>
+  type EvaluatedType = Seq[Any]
+  override def eval(input: Row): EvaluatedType = ???
+  override def nullable = false
+  override def foldable = false
+  override def dataType = ???
 }

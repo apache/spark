@@ -25,6 +25,7 @@ import scala.collection.{Map, mutable}
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
+import scala.util.DynamicVariable
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import org.apache.hadoop.conf.{Configurable, Configuration}
@@ -123,11 +124,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def aggregateByKey[U: ClassTag](zeroValue: U, partitioner: Partitioner)(seqOp: (U, V) => U,
       combOp: (U, U) => U): RDD[(K, U)] = {
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
-    val zeroBuffer = SparkEnv.get.closureSerializer.newInstance().serialize(zeroValue)
+    val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)
     val zeroArray = new Array[Byte](zeroBuffer.limit)
     zeroBuffer.get(zeroArray)
 
-    lazy val cachedSerializer = SparkEnv.get.closureSerializer.newInstance()
+    lazy val cachedSerializer = SparkEnv.get.serializer.newInstance()
     val createZero = () => cachedSerializer.deserialize[U](ByteBuffer.wrap(zeroArray))
 
     combineByKey[U]((v: V) => seqOp(createZero(), v), seqOp, combOp, partitioner)
@@ -168,12 +169,12 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def foldByKey(zeroValue: V, partitioner: Partitioner)(func: (V, V) => V): RDD[(K, V)] = {
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
-    val zeroBuffer = SparkEnv.get.closureSerializer.newInstance().serialize(zeroValue)
+    val zeroBuffer = SparkEnv.get.serializer.newInstance().serialize(zeroValue)
     val zeroArray = new Array[Byte](zeroBuffer.limit)
     zeroBuffer.get(zeroArray)
 
     // When deserializing, use a lazy val to create just one instance of the serializer per task
-    lazy val cachedSerializer = SparkEnv.get.closureSerializer.newInstance()
+    lazy val cachedSerializer = SparkEnv.get.serializer.newInstance()
     val createZero = () => cachedSerializer.deserialize[V](ByteBuffer.wrap(zeroArray))
 
     combineByKey[V]((v: V) => func(createZero(), v), func, func, partitioner)
@@ -436,6 +437,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Note: This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
+   *
+   * Note: As currently implemented, groupByKey must be able to hold all the key-value pairs for any
+   * key in memory. If a key has too many values, it can result in an [[OutOfMemoryError]].
    */
   def groupByKey(partitioner: Partitioner): RDD[(K, Iterable[V])] = {
     // groupByKey shouldn't use map side combine because map side combine does not
@@ -457,6 +461,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Note: This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
+   *
+   * Note: As currently implemented, groupByKey must be able to hold all the key-value pairs for any
+   * key in memory. If a key has too many values, it can result in an [[OutOfMemoryError]].
    */
   def groupByKey(numPartitions: Int): RDD[(K, Iterable[V])] = {
     groupByKey(new HashPartitioner(numPartitions))
@@ -483,7 +490,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    */
   def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
     this.cogroup(other, partitioner).flatMapValues( pair =>
-      for (v <- pair._1; w <- pair._2) yield (v, w)
+      for (v <- pair._1.iterator; w <- pair._2.iterator) yield (v, w)
     )
   }
 
@@ -496,9 +503,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def leftOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, Option[W]))] = {
     this.cogroup(other, partitioner).flatMapValues { pair =>
       if (pair._2.isEmpty) {
-        pair._1.map(v => (v, None))
+        pair._1.iterator.map(v => (v, None))
       } else {
-        for (v <- pair._1; w <- pair._2) yield (v, Some(w))
+        for (v <- pair._1.iterator; w <- pair._2.iterator) yield (v, Some(w))
       }
     }
   }
@@ -513,9 +520,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       : RDD[(K, (Option[V], W))] = {
     this.cogroup(other, partitioner).flatMapValues { pair =>
       if (pair._1.isEmpty) {
-        pair._2.map(w => (None, w))
+        pair._2.iterator.map(w => (None, w))
       } else {
-        for (v <- pair._1; w <- pair._2) yield (Some(v), w)
+        for (v <- pair._1.iterator; w <- pair._2.iterator) yield (Some(v), w)
       }
     }
   }
@@ -531,9 +538,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   def fullOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Option[V], Option[W]))] = {
     this.cogroup(other, partitioner).flatMapValues {
-      case (vs, Seq()) => vs.map(v => (Some(v), None))
-      case (Seq(), ws) => ws.map(w => (None, Some(w)))
-      case (vs, ws) => for (v <- vs; w <- ws) yield (Some(v), Some(w))
+      case (vs, Seq()) => vs.iterator.map(v => (Some(v), None))
+      case (Seq(), ws) => ws.iterator.map(w => (None, Some(w)))
+      case (vs, ws) => for (v <- vs.iterator; w <- ws.iterator) yield (Some(v), Some(w))
     }
   }
 
@@ -964,7 +971,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     val outfmt = job.getOutputFormatClass
     val jobFormat = outfmt.newInstance
 
-    if (self.conf.getBoolean("spark.hadoop.validateOutputSpecs", true)) {
+    if (isOutputSpecValidationEnabled) {
       // FileOutputFormat ignores the filesystem parameter
       jobFormat.checkOutputSpecs(job)
     }
@@ -1042,7 +1049,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
       valueClass.getSimpleName + ")")
 
-    if (self.conf.getBoolean("spark.hadoop.validateOutputSpecs", true)) {
+    if (isOutputSpecValidationEnabled) {
       // FileOutputFormat ignores the filesystem parameter
       val ignoredFs = FileSystem.get(hadoopConf)
       hadoopConf.getOutputFormat.checkOutputSpecs(ignoredFs, hadoopConf)
@@ -1117,8 +1124,22 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   private[spark] def valueClass: Class[_] = vt.runtimeClass
 
   private[spark] def keyOrdering: Option[Ordering[K]] = Option(ord)
+
+  // Note: this needs to be a function instead of a 'val' so that the disableOutputSpecValidation
+  // setting can take effect:
+  private def isOutputSpecValidationEnabled: Boolean = {
+    val validationDisabled = PairRDDFunctions.disableOutputSpecValidation.value
+    val enabledInConf = self.conf.getBoolean("spark.hadoop.validateOutputSpecs", true)
+    enabledInConf && !validationDisabled
+  }
 }
 
 private[spark] object PairRDDFunctions {
   val RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES = 256
+
+  /**
+   * Allows for the `spark.hadoop.validateOutputSpecs` checks to be disabled on a case-by-case
+   * basis; see SPARK-4835 for more details.
+   */
+  val disableOutputSpecValidation: DynamicVariable[Boolean] = new DynamicVariable[Boolean](false)
 }

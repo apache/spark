@@ -20,21 +20,18 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.util.{List => JList}
 
-import scala.util.parsing.combinator.RegexParsers
-
 import org.apache.hadoop.util.ReflectionUtils
-
 import org.apache.hadoop.hive.metastore.TableType
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table, HiveException}
+import org.apache.hadoop.hive.ql.metadata.InvalidTableException
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.{Deserializer, SerDeException}
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{Catalog, OverrideCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -55,18 +52,25 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   val caseSensitive: Boolean = false
 
-  def tableExists(db: Option[String], tableName: String): Boolean = {
-    val (databaseName, tblName) = processDatabaseAndTableName(
-      db.getOrElse(hive.sessionState.getCurrentDatabase), tableName)
-    client.getTable(databaseName, tblName, false) != null
+  def tableExists(tableIdentifier: Seq[String]): Boolean = {
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    val databaseName = tableIdent.lift(tableIdent.size - 2).getOrElse(
+      hive.sessionState.getCurrentDatabase)
+    val tblName = tableIdent.last
+    try {
+      client.getTable(databaseName, tblName) != null
+    } catch {
+      case ie: InvalidTableException => false
+    }
   }
 
   def lookupRelation(
-      db: Option[String],
-      tableName: String,
+      tableIdentifier: Seq[String],
       alias: Option[String]): LogicalPlan = synchronized {
-    val (databaseName, tblName) =
-      processDatabaseAndTableName(db.getOrElse(hive.sessionState.getCurrentDatabase), tableName)
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    val databaseName = tableIdent.lift(tableIdent.size - 2).getOrElse(
+      hive.sessionState.getCurrentDatabase)
+    val tblName = tableIdent.last
     val table = client.getTable(databaseName, tblName)
     if (table.isView) {
       // if the unresolved relation is from hive view
@@ -249,6 +253,26 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     }
   }
 
+  protected def processDatabaseAndTableName(
+      databaseName: Option[String],
+      tableName: String): (Option[String], String) = {
+    if (!caseSensitive) {
+      (databaseName.map(_.toLowerCase), tableName.toLowerCase)
+    } else {
+      (databaseName, tableName)
+    }
+  }
+
+  protected def processDatabaseAndTableName(
+      databaseName: String,
+      tableName: String): (String, String) = {
+    if (!caseSensitive) {
+      (databaseName.toLowerCase, tableName.toLowerCase)
+    } else {
+      (databaseName, tableName)
+    }
+  }
+
   /**
    * Creates any tables required for query execution.
    * For example, because of a CREATE TABLE X AS statement.
@@ -268,7 +292,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
 
         // Get the CreateTableDesc from Hive SemanticAnalyzer
-        val desc: Option[CreateTableDesc] = if (tableExists(Some(databaseName), tblName)) {
+        val desc: Option[CreateTableDesc] = if (tableExists(Seq(databaseName, tblName))) {
           None
         } else {
           val sa = new SemanticAnalyzer(hive.hiveconf) {
@@ -286,14 +310,24 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
           Some(sa.getQB().getTableDesc)
         }
 
-        CreateTableAsSelect(Some(databaseName), tblName, child, allowExisting, desc)
+        execution.CreateTableAsSelect(
+          databaseName,
+          tableName,
+          child,
+          allowExisting,
+          desc)
 
       case p: LogicalPlan if p.resolved => p
 
       case p @ CreateTableAsSelect(db, tableName, child, allowExisting, None) =>
         val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
         val databaseName = dbName.getOrElse(hive.sessionState.getCurrentDatabase)
-        CreateTableAsSelect(Some(databaseName), tblName, child, allowExisting, None)
+        execution.CreateTableAsSelect(
+          databaseName,
+          tableName,
+          child,
+          allowExisting,
+          None)
     }
   }
 
@@ -340,15 +374,13 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
    * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
    */
-  override def registerTable(
-      databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit = ???
+  override def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit = ???
 
   /**
    * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
    * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
    */
-  override def unregisterTable(
-      databaseName: Option[String], tableName: String): Unit = ???
+  override def unregisterTable(tableIdentifier: Seq[String]): Unit = ???
 
   override def unregisterAllTables() = {}
 }
@@ -371,88 +403,6 @@ private[hive] case class InsertIntoHiveTable(
   override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {
     case (childAttr, tableAttr) =>
       DataType.equalsIgnoreNullability(childAttr.dataType, tableAttr.dataType)
-  }
-}
-
-/**
- * :: DeveloperApi ::
- * Provides conversions between Spark SQL data types and Hive Metastore types.
- */
-@DeveloperApi
-object HiveMetastoreTypes extends RegexParsers {
-  protected lazy val primitiveType: Parser[DataType] =
-    "string" ^^^ StringType |
-    "float" ^^^ FloatType |
-    "int" ^^^ IntegerType |
-    "tinyint" ^^^ ByteType |
-    "smallint" ^^^ ShortType |
-    "double" ^^^ DoubleType |
-    "bigint" ^^^ LongType |
-    "binary" ^^^ BinaryType |
-    "boolean" ^^^ BooleanType |
-    fixedDecimalType |                     // Hive 0.13+ decimal with precision/scale
-    "decimal" ^^^ DecimalType.Unlimited |  // Hive 0.12 decimal with no precision/scale
-    "date" ^^^ DateType |
-    "timestamp" ^^^ TimestampType |
-    "varchar\\((\\d+)\\)".r ^^^ StringType
-
-  protected lazy val fixedDecimalType: Parser[DataType] =
-    ("decimal" ~> "(" ~> "\\d+".r) ~ ("," ~> "\\d+".r <~ ")") ^^ {
-      case precision ~ scale =>
-        DecimalType(precision.toInt, scale.toInt)
-    }
-
-  protected lazy val arrayType: Parser[DataType] =
-    "array" ~> "<" ~> dataType <~ ">" ^^ {
-      case tpe => ArrayType(tpe)
-    }
-
-  protected lazy val mapType: Parser[DataType] =
-    "map" ~> "<" ~> dataType ~ "," ~ dataType <~ ">" ^^ {
-      case t1 ~ _ ~ t2 => MapType(t1, t2)
-    }
-
-  protected lazy val structField: Parser[StructField] =
-    "[a-zA-Z0-9_]*".r ~ ":" ~ dataType ^^ {
-      case name ~ _ ~ tpe => StructField(name, tpe, nullable = true)
-    }
-
-  protected lazy val structType: Parser[DataType] =
-    "struct" ~> "<" ~> repsep(structField,",") <~ ">"  ^^ {
-      case fields => new StructType(fields)
-    }
-
-  protected lazy val dataType: Parser[DataType] =
-    arrayType |
-    mapType |
-    structType |
-    primitiveType
-
-  def toDataType(metastoreType: String): DataType = parseAll(dataType, metastoreType) match {
-    case Success(result, _) => result
-    case failure: NoSuccess => sys.error(s"Unsupported dataType: $metastoreType")
-  }
-
-  def toMetastoreType(dt: DataType): String = dt match {
-    case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"
-    case StructType(fields) =>
-      s"struct<${fields.map(f => s"${f.name}:${toMetastoreType(f.dataType)}").mkString(",")}>"
-    case MapType(keyType, valueType, _) =>
-      s"map<${toMetastoreType(keyType)},${toMetastoreType(valueType)}>"
-    case StringType => "string"
-    case FloatType => "float"
-    case IntegerType => "int"
-    case ByteType => "tinyint"
-    case ShortType => "smallint"
-    case DoubleType => "double"
-    case LongType => "bigint"
-    case BinaryType => "binary"
-    case BooleanType => "boolean"
-    case DateType => "date"
-    case d: DecimalType => HiveShim.decimalMetastoreString(d)
-    case TimestampType => "timestamp"
-    case NullType => "void"
-    case udt: UserDefinedType[_] => toMetastoreType(udt.sqlType)
   }
 }
 
@@ -513,7 +463,7 @@ private[hive] case class MetastoreRelation
   implicit class SchemaAttribute(f: FieldSchema) {
     def toAttribute = AttributeReference(
       f.getName,
-      HiveMetastoreTypes.toDataType(f.getType),
+      sqlContext.ddlParser.parseType(f.getType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
     )(qualifiers = Seq(alias.getOrElse(tableName)))
@@ -532,4 +482,28 @@ private[hive] case class MetastoreRelation
 
   /** An attribute map for determining the ordinal for non-partition columns. */
   val columnOrdinals = AttributeMap(attributes.zipWithIndex)
+}
+
+object HiveMetastoreTypes {
+  def toMetastoreType(dt: DataType): String = dt match {
+    case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"
+    case StructType(fields) =>
+      s"struct<${fields.map(f => s"${f.name}:${toMetastoreType(f.dataType)}").mkString(",")}>"
+    case MapType(keyType, valueType, _) =>
+      s"map<${toMetastoreType(keyType)},${toMetastoreType(valueType)}>"
+    case StringType => "string"
+    case FloatType => "float"
+    case IntegerType => "int"
+    case ByteType => "tinyint"
+    case ShortType => "smallint"
+    case DoubleType => "double"
+    case LongType => "bigint"
+    case BinaryType => "binary"
+    case BooleanType => "boolean"
+    case DateType => "date"
+    case d: DecimalType => HiveShim.decimalMetastoreString(d)
+    case TimestampType => "timestamp"
+    case NullType => "void"
+    case udt: UserDefinedType[_] => toMetastoreType(udt.sqlType)
+  }
 }
