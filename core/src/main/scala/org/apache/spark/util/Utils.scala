@@ -1692,12 +1692,12 @@ private[spark] object Utils extends Logging {
   /**
    * Default maximum number of retries when binding to a port before giving up.
    */
-  lazy val portMaxRetries: Int = {
+  def portMaxRetries(conf: SparkConf): Int = {
     if (sys.props.contains("spark.testing")) {
       // Set a higher number of retries for tests...
       sys.props.get("spark.port.maxRetries").map(_.toInt).getOrElse(100)
     } else {
-      sys.props.get("spark.port.maxRetries").map(_.toInt).getOrElse(16)
+      conf.getOption("spark.port.maxRetries").map(_.toInt).getOrElse(16)
     }
   }
 
@@ -1715,8 +1715,9 @@ private[spark] object Utils extends Logging {
       startPort: Int,
       startService: Int => (T, Int),
       serviceName: String = "",
-      maxRetries: Int = portMaxRetries): (T, Int) = {
+      conf: SparkConf): (T, Int) = {
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
+    val maxRetries = portMaxRetries(conf)
     logInfo(s"Starting service$serviceString on port $startPort with maximum $maxRetries retries. ")
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port

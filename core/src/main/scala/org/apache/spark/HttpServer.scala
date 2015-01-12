@@ -57,7 +57,7 @@ private[spark] class HttpServer(
     } else {
       logInfo("Starting HTTP Server")
       val (actualServer, actualPort) =
-        Utils.startServiceOnPort[Server](requestedPort, doStart, serverName)
+        Utils.startServiceOnPort[Server](requestedPort, doStart, serverName, new SparkConf())
       server = actualServer
       port = actualPort
     }
