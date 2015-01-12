@@ -39,6 +39,7 @@ protected[sql] object DataTypeConversions {
       scalaStructField.name,
       asJavaDataType(scalaStructField.dataType),
       scalaStructField.nullable,
+      scalaStructField.comment,
       (new JMetaDataBuilder).withMetadata(scalaStructField.metadata).build())
   }
 
@@ -82,7 +83,9 @@ protected[sql] object DataTypeConversions {
       javaStructField.getName,
       asScalaDataType(javaStructField.getDataType),
       javaStructField.isNullable,
-      javaStructField.getMetadata)
+      javaStructField.getComment,
+      javaStructField.getMetadata
+    )
   }
 
   /**

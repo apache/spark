@@ -146,13 +146,15 @@ public abstract class DataType {
   }
 
   /**
-   * Creates a StructField by specifying the name ({@code name}), data type ({@code dataType}) and
-   * whether values of this field can be null values ({@code nullable}).
+   * Creates a StructField by specifying the name ({@code name}), data type ({@code dataType}),
+   * whether values of this field can be null values ({@code nullable})
+   * and comment of this StructField({@code comment}).
    */
   public static StructField createStructField(
       String name,
       DataType dataType,
       boolean nullable,
+      String comment,
       Metadata metadata) {
     if (name == null) {
       throw new IllegalArgumentException("name should not be null.");
@@ -164,16 +166,16 @@ public abstract class DataType {
       throw new IllegalArgumentException("metadata should not be null.");
     }
 
-    return new StructField(name, dataType, nullable, metadata);
+    return new StructField(name, dataType, nullable, comment, metadata);
   }
 
   /**
    * Creates a StructField with empty metadata.
    *
-   * @see #createStructField(String, DataType, boolean, Metadata)
+   * @see #createStructField(String, DataType, boolean, String, Metadata)
    */
   public static StructField createStructField(String name, DataType dataType, boolean nullable) {
-    return createStructField(name, dataType, nullable, (new MetadataBuilder()).build());
+    return createStructField(name, dataType, nullable, "", (new MetadataBuilder()).build());
   }
 
   /**

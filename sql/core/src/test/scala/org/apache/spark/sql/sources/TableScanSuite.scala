@@ -21,6 +21,7 @@ import java.sql.{Timestamp, Date}
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.types.DecimalType
+import org.apache.spark.sql.sources.RelationProvider
 
 class DefaultSource extends SimpleScanSource
 
@@ -313,5 +314,22 @@ class TableScanSuite extends DataSourceTest {
     checkAnswer(
       sql("SELECT * FROM oneToTenDef"),
       (1 to 10).map(Row(_)).toSeq)
+  }
+
+  test("schema field with comment") {
+    sql(
+      """
+        |CREATE TEMPORARY TABLE people(name string comment "the name of a people")
+        |USING org.apache.spark.sql.sources.AllDataTypesScanSource
+        |OPTIONS (
+        |  from '1',
+        |  to '10'
+        |)
+      """.stripMargin)
+
+    val comment = sql("SELECT name FROM people").queryExecution.sparkPlan.
+      schema.fields.map(_.comment).mkString("")
+
+    assert(comment == "the name of a people")
   }
 }

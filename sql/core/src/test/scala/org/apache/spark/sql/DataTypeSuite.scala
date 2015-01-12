@@ -84,5 +84,5 @@ class DataTypeSuite extends FunSuite {
     StructType(Seq(
       StructField("a", IntegerType, nullable = true),
       StructField("b", ArrayType(DoubleType), nullable = false),
-      StructField("c", DoubleType, nullable = false, metadata))))
+      StructField("c", DoubleType, nullable = false, "", metadata))))
 }

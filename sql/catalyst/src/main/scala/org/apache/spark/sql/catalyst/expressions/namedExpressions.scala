@@ -67,7 +67,7 @@ abstract class Attribute extends NamedExpression {
   def withNullability(newNullability: Boolean): Attribute
   def withQualifiers(newQualifiers: Seq[String]): Attribute
   def withName(newName: String): Attribute
-
+  def withComment(newComment: String): Attribute
   def toAttribute = this
   def newInstance(): Attribute
 
@@ -90,7 +90,7 @@ case class Alias(child: Expression, name: String)
   override type EvaluatedType = Any
 
   override def eval(input: Row) = child.eval(input)
-
+  override def comment = child.comment
   override def dataType = child.dataType
   override def nullable = child.nullable
   override def metadata: Metadata = {
@@ -102,7 +102,7 @@ case class Alias(child: Expression, name: String)
 
   override def toAttribute = {
     if (resolved) {
-      AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifiers)
+      AttributeReference(name, child.dataType, child.nullable, "", metadata)(exprId, qualifiers)
     } else {
       UnresolvedAttribute(name)
     }
@@ -130,6 +130,7 @@ case class AttributeReference(
     name: String,
     dataType: DataType,
     nullable: Boolean = true,
+    override val comment: String = "",
     override val metadata: Metadata = Metadata.empty)(
     val exprId: ExprId = NamedExpression.newExprId,
     val qualifiers: Seq[String] = Nil) extends Attribute with trees.LeafNode[Expression] {
@@ -149,7 +150,7 @@ case class AttributeReference(
   }
 
   override def newInstance() =
-    AttributeReference(name, dataType, nullable, metadata)(qualifiers = qualifiers)
+    AttributeReference(name, dataType, nullable, comment, metadata)(qualifiers = qualifiers)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
@@ -158,7 +159,7 @@ case class AttributeReference(
     if (nullable == newNullability) {
       this
     } else {
-      AttributeReference(name, dataType, newNullability, metadata)(exprId, qualifiers)
+      AttributeReference(name, dataType, newNullability, comment, metadata)(exprId, qualifiers)
     }
   }
 
@@ -166,9 +167,18 @@ case class AttributeReference(
     if (name == newName) {
       this
     } else {
-      AttributeReference(newName, dataType, nullable)(exprId, qualifiers)
+      AttributeReference(newName, dataType, nullable, comment)(exprId, qualifiers)
     }
   }
+
+  override def withComment(newComment: String): AttributeReference = {
+    if (name == newComment) {
+      this
+    } else {
+      AttributeReference(name, dataType, nullable, newComment)(exprId, qualifiers)
+    }
+  }
+
 
   /**
    * Returns a copy of this [[AttributeReference]] with new qualifiers.
@@ -177,7 +187,7 @@ case class AttributeReference(
     if (newQualifiers.toSet == qualifiers.toSet) {
       this
     } else {
-      AttributeReference(name, dataType, nullable, metadata)(exprId, newQualifiers)
+      AttributeReference(name, dataType, nullable, comment, metadata)(exprId, newQualifiers)
     }
   }
 
@@ -190,5 +200,5 @@ case class AttributeReference(
 
 object VirtualColumn {
   val groupingIdName = "grouping__id"
-  def newGroupingId = AttributeReference(groupingIdName, IntegerType, false)()
+  def newGroupingId = AttributeReference(groupingIdName, IntegerType, false, "")()
 }

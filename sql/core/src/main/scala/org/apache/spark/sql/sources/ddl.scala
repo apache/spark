@@ -79,6 +79,7 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected val ARRAY = Keyword("ARRAY")
   protected val MAP = Keyword("MAP")
   protected val STRUCT = Keyword("STRUCT")
+  protected val COMMENT = Keyword("COMMENT")
 
   // Use reflection to find the reserved words defined in this class.
   protected val reservedWords =
@@ -120,8 +121,8 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected lazy val pair: Parser[(String, String)] = ident ~ stringLit ^^ { case k ~ v => (k,v) }
 
   protected lazy val column: Parser[StructField] =
-    ident ~ dataType ^^ { case columnName ~ typ =>
-      StructField(columnName, typ)
+    ident ~ dataType ~ (COMMENT ~> stringLit).?  ^^ { case columnName ~ typ ~ cm =>
+      StructField(columnName, typ, true, cm.getOrElse(""))
     }
 
   protected lazy val primitiveType: Parser[DataType] =

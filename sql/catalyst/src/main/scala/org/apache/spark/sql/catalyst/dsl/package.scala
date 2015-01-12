@@ -172,56 +172,56 @@ package object dsl {
       def attr = analysis.UnresolvedAttribute(s)
 
       /** Creates a new AttributeReference of type boolean */
-      def boolean = AttributeReference(s, BooleanType, nullable = true)()
+      def boolean = AttributeReference(s, BooleanType, nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type byte */
-      def byte = AttributeReference(s, ByteType, nullable = true)()
+      def byte = AttributeReference(s, ByteType, nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type short */
-      def short = AttributeReference(s, ShortType, nullable = true)()
+      def short = AttributeReference(s, ShortType, nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type int */
-      def int = AttributeReference(s, IntegerType, nullable = true)()
+      def int = AttributeReference(s, IntegerType, nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type long */
-      def long = AttributeReference(s, LongType, nullable = true)()
+      def long = AttributeReference(s, LongType, nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type float */
-      def float = AttributeReference(s, FloatType, nullable = true)()
+      def float = AttributeReference(s, FloatType, nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type double */
-      def double = AttributeReference(s, DoubleType, nullable = true)()
+      def double = AttributeReference(s, DoubleType, nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type string */
-      def string = AttributeReference(s, StringType, nullable = true)()
+      def string = AttributeReference(s, StringType, nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type date */
-      def date = AttributeReference(s, DateType, nullable = true)()
+      def date = AttributeReference(s, DateType, nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type decimal */
-      def decimal = AttributeReference(s, DecimalType.Unlimited, nullable = true)()
+      def decimal = AttributeReference(s, DecimalType.Unlimited, nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type decimal */
       def decimal(precision: Int, scale: Int) =
-        AttributeReference(s, DecimalType(precision, scale), nullable = true)()
+        AttributeReference(s, DecimalType(precision, scale), nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type timestamp */
-      def timestamp = AttributeReference(s, TimestampType, nullable = true)()
+      def timestamp = AttributeReference(s, TimestampType, nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type binary */
-      def binary = AttributeReference(s, BinaryType, nullable = true)()
+      def binary = AttributeReference(s, BinaryType, nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type array */
-      def array(dataType: DataType) = AttributeReference(s, ArrayType(dataType), nullable = true)()
+      def array(dataType: DataType) = AttributeReference(s, ArrayType(dataType), nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type map */
       def map(keyType: DataType, valueType: DataType): AttributeReference =
         map(MapType(keyType, valueType))
-      def map(mapType: MapType) = AttributeReference(s, mapType, nullable = true)()
+      def map(mapType: MapType) = AttributeReference(s, mapType, nullable = true, comment = "")()
 
       /** Creates a new AttributeReference of type struct */
       def struct(fields: StructField*): AttributeReference = struct(StructType(fields))
-      def struct(structType: StructType) = AttributeReference(s, structType, nullable = true)()
+      def struct(structType: StructType) = AttributeReference(s, structType, nullable = true, comment = "")()
     }
 
     implicit class DslAttribute(a: AttributeReference) {

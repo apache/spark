@@ -136,7 +136,7 @@ private[sql] object JsonRDD extends Logging {
 
   private[sql] def nullTypeToStringType(struct: StructType): StructType = {
     val fields = struct.fields.map {
-      case StructField(fieldName, dataType, nullable, _) => {
+      case StructField(fieldName, dataType, nullable, _, _) => {
         val newType = dataType match {
           case NullType => StringType
           case ArrayType(NullType, containsNull) => ArrayType(StringType, containsNull)
@@ -422,7 +422,7 @@ private[sql] object JsonRDD extends Logging {
     // TODO: Reuse the row instead of creating a new one for every record.
     val row = new GenericMutableRow(schema.fields.length)
     schema.fields.zipWithIndex.foreach {
-      case (StructField(name, dataType, _, _), i) =>
+      case (StructField(name, dataType, _, _, _), i) =>
         row.update(i, json.get(name).flatMap(v => Option(v)).map(
           enforceCorrectType(_, dataType)).orNull)
     }
