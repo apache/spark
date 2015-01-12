@@ -74,8 +74,6 @@ private[sql] trait SchemaRDDLike {
    * @group schema
    */
   def saveAsParquetFile(path: String): Unit = {
-    // We provide override functions for the ability of default function argument value,
-    // which is not naturely supported by Java
     saveAsParquetFile(path, false)
   }
 
@@ -85,8 +83,9 @@ private[sql] trait SchemaRDDLike {
    * function.
    * @param path      The destination path.
    * @param overwrite If it's false, an exception will raise if the path already existed,
-   *                  otherwise create a new file.
-   *                  If it's true, we either create a new file or overwrite the existed one.
+   *                  otherwise create it.
+   *                  If it's true, we either create the specified path or overwrite
+   *                  the existed one (by deleting the path and re-create it).
    * @group schema
    */
   def saveAsParquetFile(path: String, overwrite: Boolean): Unit = {

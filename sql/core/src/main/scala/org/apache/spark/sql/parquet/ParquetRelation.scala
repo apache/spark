@@ -151,20 +151,20 @@ private[sql] object ParquetRelation {
    *
    * @param pathString The directory the Parquetfile will be stored in.
    * @param attributes The schema of the relation.
-   * @param allowExisting Allow the file existed,
+   * @param overwrite  Overwrite the existed file path,
    *                      If it's false, an exception will raise if the path already existed,
-   *                                     otherwise create a new file.
-   *                      If it's true, we either create a new file or overwrite the existed one.
+   *                                     otherwise create a new file path.
+   *                      If it's true, we will remove the path if it's existed, and recreate it.
    * @param conf A configuration to be used.
    * @param sqlContext SQLContext
    * @return An empty ParquetRelation.
    */
   def createEmpty(pathString: String,
                   attributes: Seq[Attribute],
-                  allowExisting: Boolean,
+                  overwrite: Boolean,
                   conf: Configuration,
                   sqlContext: SQLContext): ParquetRelation = {
-    val path = checkPath(pathString, allowExisting, conf)
+    val path = createPath(pathString, overwrite, conf)
     conf.set(ParquetOutputFormat.COMPRESSION, shortParquetCompressionCodecNames.getOrElse(
       sqlContext.parquetCompressionCodec.toUpperCase, CompressionCodecName.UNCOMPRESSED).name())
     ParquetRelation.enableLogForwarding()
@@ -174,7 +174,7 @@ private[sql] object ParquetRelation {
     }
   }
 
-  private def checkPath(pathStr: String, allowExisting: Boolean, conf: Configuration): Path = {
+  private def createPath(pathStr: String, overwrite: Boolean, conf: Configuration): Path = {
     if (pathStr == null) {
       throw new IllegalArgumentException("Unable to create ParquetRelation: path is null")
     }
@@ -184,9 +184,24 @@ private[sql] object ParquetRelation {
       throw new IllegalArgumentException(
         s"Unable to create ParquetRelation: incorrectly formatted path $pathStr")
     }
+
     val path = origPath.makeQualified(fs)
-    if (!allowExisting && fs.exists(path)) {
-      sys.error(s"File $pathStr already exists.")
+    val pathExisted = fs.exists(path)
+
+    if (pathExisted) {
+      if (overwrite) {
+        try {
+          fs.delete(path, true)
+        } catch {
+          case e: IOException =>
+            throw new IOException(
+              s"Unable to clear output directory ${path}")
+        }
+      } else {
+        sys.error(s"File ${path} already exists.")
+      }
+    } else {
+      fs.mkdirs(path)
     }
 
     if (fs.exists(path) &&

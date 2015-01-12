@@ -856,7 +856,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val result1 = parquetFile(ParquetTestData.testNestedDir1.toString).toSchemaRDD
     val result2 = parquetFile(ParquetTestData.testNestedDir4.toString).toSchemaRDD
 
-    // test result1 (file does not exist with option overwrite = false)
+    // file does not exist with option overwrite = false
     result1.saveAsParquetFile(tmpdir.toString, overwrite = false)
     parquetFile(tmpdir.toString)
       .toSchemaRDD
@@ -864,7 +864,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val tmpdata1 = sql("SELECT * FROM tmpcopy").collect()
     assert(tmpdata1.size === 2) // output the testNestedDir1
 
-    // test result2 (file does exist with option overwrite = true)
+   // file does exist with option overwrite = true
     result2.saveAsParquetFile(tmpdir.toString, overwrite = true)
     parquetFile(tmpdir.toString)
       .toSchemaRDD
@@ -872,13 +872,13 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val tmpdata2 = sql("SELECT * FROM tmpcopy").collect()
     assert(tmpdata2.size === 1) // output the testNestedDir4
 
-    // test result2 (file does exist with option overwrite = false)
+    // file does exist with option overwrite = false
     intercept[Exception] {
       result1.saveAsParquetFile(tmpdir.toString, overwrite = false)
     }
 
     Utils.deleteRecursively(tmpdir)
-    // test result2 (file does not exist with option overwrite = true)
+    // file does not exist with option overwrite = true
     result2.saveAsParquetFile(tmpdir.toString, overwrite = true)
     parquetFile(tmpdir.toString)
       .toSchemaRDD
