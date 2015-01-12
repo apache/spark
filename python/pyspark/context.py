@@ -232,9 +232,9 @@ class SparkContext(object):
     def __getnewargs__(self):
         # This method is called when attempting to pickle SparkContext, which is always an error:
         raise Exception(
-            "It appears that you are attempting to reference SparkContext from a broadcast variable, action, "
-            "or transforamtion. SparkContext can only be used on the driver, not in code that it run on workers. "
-            "For more information, see SPARK-5063."
+            "It appears that you are attempting to reference SparkContext from a broadcast "
+            "variable, action, or transforamtion. SparkContext can only be used on the driver, "
+            "not in code that it run on workers. For more information, see SPARK-5063."
         )
 
     def __enter__(self):
