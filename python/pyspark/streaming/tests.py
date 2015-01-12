@@ -464,7 +464,7 @@ class StreamingContextTests(PySparkStreamingTestCase):
     def test_text_file_stream(self):
         d = tempfile.mkdtemp()
         self.ssc = StreamingContext(self.sc, self.duration)
-        dstream2 = self.ssc.textFileStream(d).map(int)
+        dstream2 = self.ssc.textFileStream(d, 1).map(int)
         result = self._collect(dstream2, 2, block=False)
         self.ssc.start()
         for name in ('a', 'b'):
@@ -524,7 +524,7 @@ class CheckpointTests(unittest.TestCase):
             conf = SparkConf().set("spark.default.parallelism", 1)
             sc = SparkContext(conf=conf)
             ssc = StreamingContext(sc, 0.5)
-            dstream = ssc.textFileStream(inputd).map(lambda x: (x, 1))
+            dstream = ssc.textFileStream(inputd, 1).map(lambda x: (x, 1))
             wc = dstream.updateStateByKey(updater)
             wc.map(lambda x: "%s,%d" % x).saveAsTextFiles(outputd + "test")
             wc.checkpoint(.5)

@@ -253,14 +253,14 @@ class StreamingContext(object):
         return DStream(self._jssc.socketTextStream(hostname, port, jlevel), self,
                        UTF8Deserializer())
 
-    def textFileStream(self, directory):
+    def textFileStream(self, directory, depth):
         """
         Create an input stream that monitors a Hadoop-compatible file system
         for new files and reads them as text files. Files must be wrriten to the
         monitored directory by "moving" them from another location within the same
         file system. File names starting with . are ignored.
         """
-        return DStream(self._jssc.textFileStream(directory), self, UTF8Deserializer())
+        return DStream(self._jssc.textFileStream(directory, depth), self, UTF8Deserializer())
 
     def binaryRecordsStream(self, directory, recordLength):
         """
