@@ -177,7 +177,7 @@ private[nio] class ConnectionManager(
   Utils.startServiceOnPort[ServerSocketChannel](port, startService, name)
   serverChannel.register(selector, SelectionKey.OP_ACCEPT)
 
-  val id = new ConnectionManagerId(Utils.localHostName, serverChannel.socket.getLocalPort)
+  val id = new ConnectionManagerId(Utils.localIpAddress, serverChannel.socket.getLocalPort)
   logInfo("Bound socket to port " + serverChannel.socket.getLocalPort() + " with id = " + id)
 
   // used in combination with the ConnectionManagerId to create unique Connection ids
