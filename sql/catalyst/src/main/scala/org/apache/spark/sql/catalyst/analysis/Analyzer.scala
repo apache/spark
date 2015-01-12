@@ -209,9 +209,9 @@ class Analyzer(catalog: Catalog,
 
           aggregateExprs.find { e =>
             !isValidAggregateExpression(e.transform {
-              // Should trim aliases. These aliases can only be introduced while resolving unnamed
-              // expressions like `GetField` and UDF calls, because GROUP BY clause doesn't allow
-              // aliasing.
+              // Should trim aliases. These aliases can be introduced while resolving unnamed
+              // expressions like `GetField` and UDF calls, and when a user explicitly assigns
+              // an alias to a grouping expression in the SELECT clause.
               case a: Alias => a.child
             })
           }.foreach { e =>
