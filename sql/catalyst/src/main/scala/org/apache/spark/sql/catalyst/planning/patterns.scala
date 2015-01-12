@@ -143,6 +143,8 @@ object PartialAggregation {
         // referenced in the second aggregation.
         val namedGroupingExpressions: Map[Expression, NamedExpression] = groupingExpressions.map {
           case n: NamedExpression => (n, n)
+          // TODO: When a UDF is used in the group by clause, for example, GROUP BY YEAR(...),
+          // PartialGroup will not be a proper name.
           case other => (other, Alias(other, "PartialGroup")())
         }.toMap
 
@@ -153,11 +155,11 @@ object PartialAggregation {
             partialEvaluations(new TreeNodeRef(e)).finalEvaluation
 
           case e: Expression =>
+            // Should trim aliases around `GetField`s. These aliases are introduced while
+            // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
+            // (Should we just turn `GetField` into a `NamedExpression`?)
             namedGroupingExpressions
-              // Should trim aliases. These aliases can only be introduced while resolving unnamed
-              // expressions like `GetField` and UDF calls, because GROUP BY clause doesn't allow
-              // aliasing.
-              .get(e.transform { case a: Alias => a.child })
+              .get(e.transform { case Alias(g: GetField, _) => g })
               .map(_.toAttribute)
               .getOrElse(e)
         }).asInstanceOf[Seq[NamedExpression]]
