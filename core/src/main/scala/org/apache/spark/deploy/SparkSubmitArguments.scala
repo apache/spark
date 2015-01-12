@@ -149,6 +149,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     // Global defaults. These should be keep to minimum to avoid confusing behavior.
     master = Option(master).getOrElse("local[*]")
 
+    // In yarn mode, app name can be set via SPARK_YARN_APP_NAME
+    if (master.contains("yarn")) {
+      name = Option(name).orElse(env.get("SPARK_YARN_APP_NAME"))
+    }
     // Set name from main class if not given
     name = Option(name).orElse(Option(mainClass)).orNull
     if (name == null && primaryResource != null) {

@@ -77,7 +77,6 @@ private[spark] class YarnClientSchedulerBackend(
         ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
         ("--executor-cores", "SPARK_EXECUTOR_CORES", "spark.executor.cores"),
         ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
-        ("--name", "SPARK_YARN_APP_NAME", "spark.app.name")
       )
     // Warn against the following deprecated environment variables: env var -> suggestion
     val deprecatedEnvVars = Map(
@@ -100,6 +99,7 @@ private[spark] class YarnClientSchedulerBackend(
         }
       }
     }
+    sc.getConf.getOption("spark.app.name").foreach(v => extraArgs += ("--name", v))
     extraArgs
   }
 
