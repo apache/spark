@@ -64,18 +64,17 @@ case class ParquetTableScan(
   // The resolution of Parquet attributes is case sensitive, so we resolve the original attributes
   // by exprId. note: output cannot be transient, see
   // https://issues.apache.org/jira/browse/SPARK-1367
-  val normalOutput =
-    attributes
-      .filterNot(a => relation.partitioningAttributes.map(_.exprId).contains(a.exprId))
-      .flatMap(a => relation.output.find(o => o.exprId == a.exprId))
+  val output = attributes.map(relation.attributeMap)
 
-  val partOutput =
-    attributes.flatMap(a => relation.partitioningAttributes.find(o => o.exprId == a.exprId))
+  // A mapping of ordinals partitionRow -> finalOutput.
+  val requestedPartitionOrdinals = {
+    val partitionAttributeOrdinals = AttributeMap(relation.partitioningAttributes.zipWithIndex)
 
-  def output = partOutput ++ normalOutput
-
-  assert(normalOutput.size + partOutput.size == attributes.size,
-    s"$normalOutput + $partOutput != $attributes, ${relation.output}")
+    attributes.zipWithIndex.flatMap {
+      case (attribute, finalOrdinal) =>
+        partitionAttributeOrdinals.get(attribute).map(_ -> finalOrdinal)
+    }
+  }.toArray
 
   override def execute(): RDD[Row] = {
     import parquet.filter2.compat.FilterCompat.FilterPredicateCompat
@@ -97,7 +96,7 @@ case class ParquetTableScan(
     // Store both requested and original schema in `Configuration`
     conf.set(
       RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-      ParquetTypesConverter.convertToString(normalOutput))
+      ParquetTypesConverter.convertToString(output))
     conf.set(
       RowWriteSupport.SPARK_ROW_SCHEMA,
       ParquetTypesConverter.convertToString(relation.output))
@@ -125,7 +124,7 @@ case class ParquetTableScan(
         classOf[Row],
         conf)
 
-    if (partOutput.nonEmpty) {
+    if (requestedPartitionOrdinals.nonEmpty) {
       baseRDD.mapPartitionsWithInputSplit { case (split, iter) =>
         val partValue = "([^=]+)=([^=]+)".r
         val partValues =
@@ -138,15 +137,25 @@ case class ParquetTableScan(
               case _ => None
             }.toMap
 
+        // Convert the partitioning attributes into the correct types
         val partitionRowValues =
-          partOutput.map(a => Cast(Literal(partValues(a.name)), a.dataType).eval(EmptyRow))
+          relation.partitioningAttributes
+            .map(a => Cast(Literal(partValues(a.name)), a.dataType).eval(EmptyRow))
 
         new Iterator[Row] {
-          private[this] val joinedRow = new JoinedRow5(Row(partitionRowValues:_*), null)
-
           def hasNext = iter.hasNext
+          def next() = {
+            val row = iter.next()._2.asInstanceOf[SpecificMutableRow]
 
-          def next() = joinedRow.withRight(iter.next()._2)
+            // Parquet will leave partitioning columns empty, so we fill them in here.
+            var i = 0
+            while (i < requestedPartitionOrdinals.size) {
+              row(requestedPartitionOrdinals(i)._2) =
+                partitionRowValues(requestedPartitionOrdinals(i)._1)
+              i += 1
+            }
+            row
+          }
         }
       }
     } else {
