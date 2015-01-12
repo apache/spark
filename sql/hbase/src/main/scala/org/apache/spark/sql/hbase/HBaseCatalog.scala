@@ -190,9 +190,9 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
   }
 
   def getTable(tableName: String): Option[HBaseRelation] = {
-    val table = getMetadataTable()
     var result = relationMapCache.get(processTableName(tableName))
     if (result.isEmpty) {
+      val table = getMetadataTable()
       val get = new Get(Bytes.toBytes(tableName))
       val values = table.get(get)
       table.close()
