@@ -142,8 +142,25 @@ if [ -n "${ZINC_INSTALL_FLAG}" -o -z "`${ZINC_BIN} -status`" ]; then
     -scala-library "${SCALA_LIBRARY}" &>/dev/null
 fi
 
+# Find the java binary
+if [ -n "${JAVA_HOME}" ]; then
+  RUNNER="${JAVA_HOME}/bin/java"
+else
+  if [ `command -v java` ]; then
+    RUNNER="java"
+  else
+    echo "JAVA_HOME is not set" >&2
+    exit 1
+  fi
+fi
+JAVA_VERSION=$("$RUNNER" -version 2>&1 | grep 'version' | sed 's/.* version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q')
+
 # Set any `mvn` options if not already present
-export MAVEN_OPTS=${MAVEN_OPTS:-"-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"}
+if [ "$JAVA_VERSION" -ge 18 ]; then
+  export MAVEN_OPTS=${MAVEN_OPTS:-"-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"}
+else
+  export MAVEN_OPTS=${MAVEN_OPTS:-"-Xmx2g -XX:ReservedCodeCacheSize=512m"}
+fi
 
 # Last, call the `mvn` command as usual
 ${MVN_BIN} "$@"
