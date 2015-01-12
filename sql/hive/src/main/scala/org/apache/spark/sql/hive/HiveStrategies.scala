@@ -72,13 +72,15 @@ private[hive] trait HiveStrategies {
     }
 
     implicit class PhysicalPlanHacks(originalPlan: SparkPlan) {
-      def fakeOutput(newOutput: Seq[Attribute]) =
+      def fakeOutput(newOutput: Seq[Attribute]) = {
+        originalPlan.output.foreach(a =>
+          newOutput.find(a.name.toLowerCase == _.name.toLowerCase)
+          .getOrElse(
+            sys.error(s"Can't find attribute $a to fake in set ${newOutput.mkString(",")}")))
         OutputFaker(
-          originalPlan.output.map(a =>
-            newOutput.find(a.name.toLowerCase == _.name.toLowerCase)
-              .getOrElse(
-                sys.error(s"Can't find attribute $a to fake in set ${newOutput.mkString(",")}"))),
+          newOutput,
           originalPlan)
+        }
     }
 
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
