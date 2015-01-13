@@ -24,7 +24,7 @@ TODO
 * ...
 
 #### Backend
-* CeleryExecutor
+* Add decorator to timeout imports on master process [lib](https://github.com/pnpnpn/timeout-decorator)
 * Clear should kill running jobs
 * Mysql port should carry through (using default now)
 
