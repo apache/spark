@@ -38,7 +38,7 @@ import org.apache.spark.sql.hbase._
 import org.apache.spark.sql.hbase.util.{HBaseKVHelper, Util}
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.{SerializableWritable, SparkEnv, TaskContext}
-import org.apache.spark.sql.hbase.util.InsertWappers._
+import org.apache.spark.sql.hbase.util.InsertWrappers._
 import org.apache.spark.sql.catalyst.types.StringType
 
 import scala.collection.JavaConversions._
