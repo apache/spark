@@ -608,7 +608,9 @@ private[spark] class Client(
    * throw an appropriate SparkException.
    */
   def run(): Unit = {
-    val (yarnApplicationState, finalApplicationStatus) = monitorApplication(submitApplication())
+    val appId = createApplication()
+    submitApplication()
+    val (yarnApplicationState, finalApplicationStatus) = monitorApplication(appId)
     if (yarnApplicationState == YarnApplicationState.FAILED ||
       finalApplicationStatus == FinalApplicationStatus.FAILED) {
       throw new SparkException("Application finished with failed status")
