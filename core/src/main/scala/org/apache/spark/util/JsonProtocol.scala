@@ -592,14 +592,14 @@ private[spark] object JsonProtocol {
       return TaskMetrics.empty
     }
     val metrics = new TaskMetrics
-    metrics.setHostname((json \ "Host Name").extract[String])
-    metrics.incExecutorDeserializeTime((json \ "Executor Deserialize Time").extract[Long])
-    metrics.incExecutorRunTime((json \ "Executor Run Time").extract[Long])
-    metrics.incResultSize((json \ "Result Size").extract[Long])
-    metrics.incJvmGCTime((json \ "JVM GC Time").extract[Long])
-    metrics.incResultSerializationTime((json \ "Result Serialization Time").extract[Long])
-    metrics.incMemoryBytesSpilled((json \ "Memory Bytes Spilled").extract[Long])
-    metrics.incDiskBytesSpilled((json \ "Disk Bytes Spilled").extract[Long])
+    metrics.hostname = (json \ "Host Name").extract[String]
+    metrics.executorDeserializeTime = (json \ "Executor Deserialize Time").extract[Long]
+    metrics.executorRunTime = (json \ "Executor Run Time").extract[Long]
+    metrics.resultSize = (json \ "Result Size").extract[Long]
+    metrics.jvmGCTime = (json \ "JVM GC Time").extract[Long]
+    metrics.resultSerializationTime = (json \ "Result Serialization Time").extract[Long]
+    metrics.memoryBytesSpilled = (json \ "Memory Bytes Spilled").extract[Long]
+    metrics.diskBytesSpilled = (json \ "Disk Bytes Spilled").extract[Long]
     metrics.setShuffleReadMetrics(
       Utils.jsonOption(json \ "Shuffle Read Metrics").map(shuffleReadMetricsFromJson))
     metrics.shuffleWriteMetrics =

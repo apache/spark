@@ -39,67 +39,42 @@ class TaskMetrics extends Serializable {
   /**
    * Host's name the task runs on
    */
-  private var _hostname: String = _
-  def hostname = _hostname
-  def setHostname(value : String) = _hostname = value
-  
+  var hostname: String = _
+
   /**
    * Time taken on the executor to deserialize this task
    */
-  private var _executorDeserializeTime: Long = _
-  def executorDeserializeTime = _executorDeserializeTime
-  def incExecutorDeserializeTime(value: Long) = _executorDeserializeTime += value
-  def decExecutorDeserializeTime(value: Long) = _executorDeserializeTime -= value
-  
-  
+  var executorDeserializeTime: Long = _
+
   /**
    * Time the executor spends actually running the task (including fetching shuffle data)
    */
-  private var _executorRunTime: Long = _
-  def executorRunTime = _executorRunTime
-  def incExecutorRunTime(value: Long) = _executorRunTime += value
-  def decExecutorRunTime(value: Long) = _executorRunTime -= value
-  
+  var executorRunTime: Long = _
+
   /**
    * The number of bytes this task transmitted back to the driver as the TaskResult
    */
-  private var _resultSize: Long = _
-  def resultSize = _resultSize
-  def incResultSize(value: Long) = _resultSize += value
-  def decResultSize(value: Long) = _resultSize -= value
-
+  var resultSize: Long = _
 
   /**
    * Amount of time the JVM spent in garbage collection while executing this task
    */
-  private var _jvmGCTime: Long = _
-  def jvmGCTime = _jvmGCTime
-  def incJvmGCTime(value: Long) = _jvmGCTime += value
-  def decJvmGCTime(value: Long) = _jvmGCTime -= value
+  var jvmGCTime: Long = _
 
   /**
    * Amount of time spent serializing the task result
    */
-  private var _resultSerializationTime: Long = _
-  def resultSerializationTime = _resultSerializationTime
-  def incResultSerializationTime(value: Long) = _resultSerializationTime += value
-  def decResultSerializationTime(value: Long) = _resultSerializationTime -= value
+  var resultSerializationTime: Long = _
 
   /**
    * The number of in-memory bytes spilled by this task
    */
-  private var _memoryBytesSpilled: Long = _
-  def memoryBytesSpilled = _memoryBytesSpilled
-  def incMemoryBytesSpilled(value: Long) = _memoryBytesSpilled += value
-  def decMemoryBytesSpilled(value: Long) = _memoryBytesSpilled -= value
+  var memoryBytesSpilled: Long = _
 
   /**
    * The number of on-disk bytes spilled by this task
    */
-  private var _diskBytesSpilled: Long = _
-  def diskBytesSpilled = _diskBytesSpilled
-  def incDiskBytesSpilled(value: Long) = _diskBytesSpilled += value
-  def decDiskBytesSpilled(value: Long) = _diskBytesSpilled -= value
+  var diskBytesSpilled: Long = _
 
   /**
    * If this task reads from a HadoopRDD or from persisted data, metrics on how much data was read

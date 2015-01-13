@@ -194,10 +194,10 @@ private[spark] class Executor(
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          m.incExecutorDeserializeTime(taskStart - deserializeStartTime)
-          m.incExecutorRunTime(taskFinish - taskStart)
-          m.incJvmGCTime(gcTime - startGCTime)
-          m.incResultSerializationTime(afterSerialization - beforeSerialization)
+          m.executorDeserializeTime = taskStart - deserializeStartTime
+          m.executorRunTime = taskFinish - taskStart
+          m.jvmGCTime = gcTime - startGCTime
+          m.resultSerializationTime = afterSerialization - beforeSerialization
         }
 
         val accumUpdates = Accumulators.values
@@ -248,8 +248,8 @@ private[spark] class Executor(
           val serviceTime = System.currentTimeMillis() - taskStart
           val metrics = attemptedTask.flatMap(t => t.metrics)
           for (m <- metrics) {
-            m.incExecutorRunTime(serviceTime)
-            m.incJvmGCTime(gcTime - startGCTime)
+            m.executorRunTime = serviceTime
+            m.jvmGCTime = gcTime - startGCTime
           }
           val reason = new ExceptionFailure(t, metrics)
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))

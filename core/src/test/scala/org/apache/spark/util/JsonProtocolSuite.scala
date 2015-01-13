@@ -599,13 +599,13 @@ class JsonProtocolSuite extends FunSuite {
       hasHadoopInput: Boolean,
       hasOutput: Boolean) = {
     val t = new TaskMetrics
-    t.setHostname("localhost")
-    t.incExecutorDeserializeTime(a)
-    t.incExecutorRunTime(b)
-    t.incResultSize(c)
-    t.incJvmGCTime(d)
-    t.incResultSerializationTime(a + b)
-    t.incMemoryBytesSpilled(a + c)
+    t.hostname = "localhost"
+    t.executorDeserializeTime = a
+    t.executorRunTime = b
+    t.resultSize = c
+    t.jvmGCTime = d
+    t.resultSerializationTime = a + b
+    t.memoryBytesSpilled = a + c
 
     if (hasHadoopInput) {
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
