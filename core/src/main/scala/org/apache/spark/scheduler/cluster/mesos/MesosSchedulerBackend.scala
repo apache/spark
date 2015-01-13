@@ -18,12 +18,11 @@
 package org.apache.spark.scheduler.cluster.mesos
 
 import java.io.File
-import java.nio.ByteBuffer
 import java.util.{ArrayList => JArrayList, List => JList}
 import java.util.Collections
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Scheduler => MScheduler}
@@ -291,22 +290,13 @@ private[spark] class MesosSchedulerBackend(
       .setType(Value.Type.SCALAR)
       .setScalar(Value.Scalar.newBuilder().setValue(scheduler.CPUS_PER_TASK).build())
       .build()
-    // Encode the attemptId as part of the data payload, since there's not a MesosTaskInfo field
-    // to hold it:
-    val data: ByteString = {
-      val serializedTask = task.serializedTask
-      val dataBuffer = ByteBuffer.allocate(4 + serializedTask.limit())
-      dataBuffer.putInt(task.attemptNumber)
-      dataBuffer.put(serializedTask)
-      ByteString.copyFrom(dataBuffer)
-    }
     MesosTaskInfo.newBuilder()
       .setTaskId(taskId)
       .setSlaveId(SlaveID.newBuilder().setValue(slaveId).build())
       .setExecutor(createExecutorInfo(slaveId))
       .setName(task.name)
       .addResources(cpuResource)
-      .setData(data)
+      .setData(MesosTaskLaunchData(task.serializedTask, task.attemptNumber).toByteString)
       .build()
   }
 
