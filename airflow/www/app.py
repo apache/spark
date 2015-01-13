@@ -1032,9 +1032,9 @@ admin.add_view(mv)
 
 
 class ConnectionModelView(LoginMixin, ModelView):
-    column_list = ('conn_id', 'db_type', 'host', 'port')
+    column_list = ('conn_id', 'conn_type', 'host', 'port')
     form_choices = {
-        'db_type': [
+        'conn_type': [
             ('hive', 'Hive',),
             ('presto', 'Presto',),
             ('mysql', 'MySQL',),
