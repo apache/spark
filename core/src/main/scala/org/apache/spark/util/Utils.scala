@@ -1690,17 +1690,15 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Default maximum number of retries when binding to a port before giving up.
+   * Maximum number of retries when binding to a port before giving up.
    */
-  val portMaxRetries: Int = {
-    if (sys.props.contains("spark.testing")) {
+  def portMaxRetries(conf: SparkConf): Int = {
+    val maxRetries = conf.getOption("spark.port.maxRetries").map(_.toInt)
+    if (conf.contains("spark.testing")) {
       // Set a higher number of retries for tests...
-      sys.props.get("spark.port.maxRetries").map(_.toInt).getOrElse(100)
+      maxRetries.getOrElse(100)
     } else {
-      Option(SparkEnv.get)
-        .flatMap(_.conf.getOption("spark.port.maxRetries"))
-        .map(_.toInt)
-        .getOrElse(16)
+      maxRetries.getOrElse(16)
     }
   }
 
@@ -1709,17 +1707,18 @@ private[spark] object Utils extends Logging {
    * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
    *
    * @param startPort The initial port to start the service on.
-   * @param maxRetries Maximum number of retries to attempt.
-   *                   A value of 3 means attempting ports n, n+1, n+2, and n+3, for example.
    * @param startService Function to start service on a given port.
    *                     This is expected to throw java.net.BindException on port collision.
+   * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
+   * @param serviceName Name of the service.
    */
   def startServiceOnPort[T](
       startPort: Int,
       startService: Int => (T, Int),
-      serviceName: String = "",
-      maxRetries: Int = portMaxRetries): (T, Int) = {
+      conf: SparkConf,
+      serviceName: String = ""): (T, Int) = {
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
+    val maxRetries = portMaxRetries(conf)
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
       val tryPort = if (startPort == 0) {
