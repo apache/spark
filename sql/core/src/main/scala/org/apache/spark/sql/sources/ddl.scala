@@ -92,21 +92,21 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected lazy val ddl: Parser[LogicalPlan] = createTable
 
   /**
-   * `CREATE TEMPORARY TABLE avroTable
+   * `CREATE [TEMPORARY] TABLE avroTable
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    * or
-   * `CREATE TEMPORARY TABLE avroTable(intField int, stringField string...)
+   * `CREATE [TEMPORARY] TABLE avroTable(intField int, stringField string...)
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    */
   protected lazy val createTable: Parser[LogicalPlan] =
   (
-    CREATE ~ TEMPORARY ~ TABLE ~> ident
+    (CREATE ~> TEMPORARY.? <~ TABLE) ~ ident
       ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
-      case tableName ~ columns ~ provider ~ opts =>
+      case temp ~ tableName ~ columns ~ provider ~ opts =>
         val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
-        CreateTableUsing(tableName, userSpecifiedSchema, provider, opts)
+        CreateTableUsing(tableName, userSpecifiedSchema, provider, temp.isDefined, opts)
     }
   )
 
@@ -175,13 +175,12 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
     primitiveType
 }
 
-private[sql] case class CreateTableUsing(
-    tableName: String,
-    userSpecifiedSchema: Option[StructType],
-    provider: String,
-    options: Map[String, String]) extends RunnableCommand {
-
-  def run(sqlContext: SQLContext) = {
+object ResolvedDataSource {
+  def apply(
+      sqlContext: SQLContext,
+      userSpecifiedSchema: Option[StructType],
+      provider: String,
+      options: Map[String, String]): ResolvedDataSource = {
     val loader = Utils.getContextOrSparkClassLoader
     val clazz: Class[_] = try loader.loadClass(provider) catch {
       case cnf: java.lang.ClassNotFoundException =>
@@ -199,22 +198,44 @@ private[sql] case class CreateTableUsing(
               .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
               .createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
           case _ =>
-            sys.error(s"${clazz.getCanonicalName} should extend SchemaRelationProvider.")
+            sys.error(s"${clazz.getCanonicalName} does not allow user-specified schemas.")
         }
       }
       case None => {
         clazz.newInstance match {
-          case dataSource: org.apache.spark.sql.sources.RelationProvider  =>
+          case dataSource: org.apache.spark.sql.sources.RelationProvider =>
             dataSource
               .asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
               .createRelation(sqlContext, new CaseInsensitiveMap(options))
           case _ =>
-            sys.error(s"${clazz.getCanonicalName} should extend RelationProvider.")
+            sys.error(s"A schema needs to be specified when using ${clazz.getCanonicalName}.")
         }
       }
     }
 
-    sqlContext.baseRelationToSchemaRDD(relation).registerTempTable(tableName)
+    new ResolvedDataSource(clazz, relation)
+  }
+}
+
+private[sql] case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
+
+private[sql] case class CreateTableUsing(
+    tableName: String,
+    userSpecifiedSchema: Option[StructType],
+    provider: String,
+    temporary: Boolean,
+    options: Map[String, String]) extends Command
+
+private [sql] case class CreateTempTableUsing(
+    tableName: String,
+    userSpecifiedSchema: Option[StructType],
+    provider: String,
+    options: Map[String, String])  extends RunnableCommand {
+
+  def run(sqlContext: SQLContext) = {
+    val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
+
+    sqlContext.baseRelationToSchemaRDD(resolved.relation).registerTempTable(tableName)
     Seq.empty
   }
 }

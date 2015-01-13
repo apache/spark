@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.sql.sources.{CreateTempTableUsing, CreateTableUsing}
 import org.apache.spark.sql.{SQLContext, Strategy, execution}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning._
@@ -307,6 +308,19 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case e @ EvaluatePython(udf, child, _) =>
         BatchPythonEvaluation(udf, e.output, planLater(child)) :: Nil
       case LogicalRDD(output, rdd) => PhysicalRDD(output, rdd) :: Nil
+      case _ => Nil
+    }
+  }
+
+  object DDLStrategy extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case CreateTableUsing(tableName, userSpecifiedSchema, provider, true, options) =>
+        ExecutedCommand(
+          CreateTempTableUsing(tableName, userSpecifiedSchema, provider, options)) :: Nil
+
+      case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, options) =>
+        sys.error("Tables created with SQLContext must be TEMPORARY. Use a HiveContext instead.")
+
       case _ => Nil
     }
   }

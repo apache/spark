@@ -623,7 +623,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     assertResult(
       Array(
-        Array("# Registered as a temporary table", null, null),
         Array("a", "IntegerType", null),
         Array("b", "StringType", null))
     ) {

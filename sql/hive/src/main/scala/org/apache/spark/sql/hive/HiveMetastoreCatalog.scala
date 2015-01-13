@@ -20,10 +20,11 @@ package org.apache.spark.sql.hive
 import java.io.IOException
 import java.util.{List => JList}
 
+import com.google.common.cache.{LoadingCache, CacheLoader, CacheBuilder}
+
 import org.apache.hadoop.util.ReflectionUtils
 import org.apache.hadoop.hive.metastore.TableType
-import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
+import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition, FieldSchema}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table, HiveException}
 import org.apache.hadoop.hive.ql.metadata.InvalidTableException
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc
@@ -39,6 +40,7 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.sources.{LogicalRelation, ResolvedDataSource}
 import org.apache.spark.util.Utils
 
 /* Implicit conversions */
@@ -50,7 +52,75 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   /** Connection to hive metastore.  Usages should lock on `this`. */
   protected[hive] val client = Hive.get(hive.hiveconf)
 
+  // TODO: Use this everywhere instead of tuples or databaseName, tableName,.
+  /** A fully qualified identifier for a table (i.e., database.tableName) */
+  case class QualifiedTableName(database: String, name: String) {
+    def toLowerCase = QualifiedTableName(database.toLowerCase, name.toLowerCase)
+  }
+
+  /** A cache of Spark SQL data source tables that have been accessed. */
+  protected[hive] val cachedDataSourceTables: LoadingCache[QualifiedTableName, LogicalPlan] = {
+    val cacheLoader = new CacheLoader[QualifiedTableName, LogicalPlan]() {
+      override def load(in: QualifiedTableName): LogicalPlan = {
+        logDebug(s"Creating new cached data source for $in")
+        val table = client.getTable(in.database, in.name)
+        val schemaString = table.getProperty("spark.sql.sources.schema")
+        val userSpecifiedSchema =
+          if (schemaString == null) {
+            None
+          } else {
+            Some(DataType.fromJson(schemaString).asInstanceOf[StructType])
+          }
+        // It does not appear that the ql client for the metastore has a way to enumerate all the
+        // SerDe properties directly...
+        val options = table.getTTable.getSd.getSerdeInfo.getParameters.toMap
+
+        val resolvedRelation =
+          ResolvedDataSource(
+            hive,
+            userSpecifiedSchema,
+            table.getProperty("spark.sql.sources.provider"),
+            options)
+
+        LogicalRelation(resolvedRelation.relation)
+      }
+    }
+
+    CacheBuilder.newBuilder().maximumSize(1000).build(cacheLoader)
+  }
+
+  def refreshTable(databaseName: String, tableName: String): Unit = {
+    cachedDataSourceTables.refresh(QualifiedTableName(databaseName, tableName).toLowerCase)
+  }
+
+  def invalidateTable(databaseName: String, tableName: String): Unit = {
+    cachedDataSourceTables.invalidate(QualifiedTableName(databaseName, tableName).toLowerCase)
+  }
+
   val caseSensitive: Boolean = false
+
+  def createDataSourceTable(
+      tableName: String,
+      userSpecifiedSchema: Option[StructType],
+      provider: String,
+      options: Map[String, String]) = {
+    val (dbName, tblName) = processDatabaseAndTableName("default", tableName)
+    val tbl = new Table(dbName, tblName)
+
+    tbl.setProperty("spark.sql.sources.provider", provider)
+    if (userSpecifiedSchema.isDefined) {
+      tbl.setProperty("spark.sql.sources.schema", userSpecifiedSchema.get.json)
+    }
+    options.foreach { case (key, value) => tbl.setSerdeParam(key, value) }
+
+    tbl.setProperty("EXTERNAL", "TRUE")
+    tbl.setTableType(TableType.EXTERNAL_TABLE)
+
+    // create the table
+    synchronized {
+      client.createTable(tbl, false)
+    }
+  }
 
   def tableExists(tableIdentifier: Seq[String]): Boolean = {
     val tableIdent = processTableIdentifier(tableIdentifier)
@@ -72,7 +142,10 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
       hive.sessionState.getCurrentDatabase)
     val tblName = tableIdent.last
     val table = client.getTable(databaseName, tblName)
-    if (table.isView) {
+
+    if (table.getProperty("spark.sql.sources.provider") != null) {
+      cachedDataSourceTables(QualifiedTableName(databaseName, tblName).toLowerCase)
+    } else if (table.isView) {
       // if the unresolved relation is from hive view
       // parse the text into logic node.
       HiveQl.createPlanForView(table, alias)
