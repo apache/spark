@@ -314,4 +314,34 @@ class TableScanSuite extends DataSourceTest {
       sql("SELECT * FROM oneToTenDef"),
       (1 to 10).map(Row(_)).toSeq)
   }
+
+  test("exceptions") {
+    // Make sure we do throw correct exception when users use a relation provider that
+    // only implements the RelationProvier or the SchemaRelationProvider.
+    val schemaNotAllowed = intercept[Exception] {
+      sql(
+        """
+          |CREATE TEMPORARY TABLE relationProvierWithSchema (i int)
+          |USING org.apache.spark.sql.sources.SimpleScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10'
+          |)
+        """.stripMargin)
+    }
+    assert(schemaNotAllowed.getMessage.contains("does not allow user-specified schemas"))
+
+    val schemaNeeded = intercept[Exception] {
+      sql(
+        """
+          |CREATE TEMPORARY TABLE schemaRelationProvierWithoutSchema
+          |USING org.apache.spark.sql.sources.AllDataTypesScanSource
+          |OPTIONS (
+          |  From '1',
+          |  To '10'
+          |)
+        """.stripMargin)
+    }
+    assert(schemaNeeded.getMessage.contains("A schema needs to be specified when using"))
+  }
 }

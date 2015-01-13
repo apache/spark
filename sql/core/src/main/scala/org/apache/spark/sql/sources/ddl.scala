@@ -198,7 +198,7 @@ object ResolvedDataSource {
               .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
               .createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
           case _ =>
-            sys.error(s"${clazz.getCanonicalName} should extend SchemaRelationProvider.")
+            sys.error(s"${clazz.getCanonicalName} does not allow user-specified schemas.")
         }
       }
       case None => {
@@ -208,7 +208,7 @@ object ResolvedDataSource {
               .asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
               .createRelation(sqlContext, new CaseInsensitiveMap(options))
           case _ =>
-            sys.error(s"${clazz.getCanonicalName} should extend RelationProvider.")
+            sys.error(s"A schema needs to be specified when using ${clazz.getCanonicalName}.")
         }
       }
     }
