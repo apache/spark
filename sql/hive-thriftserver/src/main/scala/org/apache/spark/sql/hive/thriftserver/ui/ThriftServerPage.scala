@@ -24,13 +24,11 @@ import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.Logging
 import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui._
-import org.apache.spark.util.Distribution
 
 import scala.xml.Node
 
 /** Page for Spark Web UI that shows statistics of a streaming job */
-private[ui] class ThriftServerPage(parent: ThriftServerTab)
-  extends WebUIPage("") with Logging {
+private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage("") with Logging {
 
   private val listener = parent.listener
   private val startTime = Calendar.getInstance().getTime()
@@ -59,7 +57,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab)
     </ul>
   }
 
-  /** Generate stats of batch jobs of the streaming program */
+  /** Generate stats of batch statements of the thrift server program */
   private def generateSQLStatsTable(): Seq[Node] = {
     val numBatches = listener.executeList.size
     val table = if (numBatches > 0) {
@@ -81,7 +79,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab)
           <td>{formatDurationOption(Some(info.totalTime))}</td>
           <td>{info.statement}</td>
           <td>{info.state}</td>
-          <td>{errorMessageCell(detail)}</td>
+          {errorMessageCell(detail)}
         </tr>
       }
 
@@ -126,7 +124,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab)
     <td>{errorSummary}{details}</td>
   }
 
-  /** Generate stats of batch jobs of the streaming program */
+  /** Generate stats of batch sessions of the thrift server program */
   private def generateSessionStatsTable(): Seq[Node] = {
     val numBatches = listener.sessionList.size
     val table = if (numBatches > 0) {
@@ -134,7 +132,6 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab)
         listener.sessionList.values.toSeq.sortBy(_.startTimestamp).reverse.map(session =>{
         Seq(
           session.session.getUsername,
-          session.session.getIpAddress,
           session.sessionID,
           formatDate(session.startTimestamp),
           formatDate(session.finishTimestamp),
@@ -142,7 +139,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab)
           session.totalExecute.toString
         )
       }).toSeq
-      val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
+      val headerRow = Seq("User", "Session ID", "Start Time", "Finish Time", "Duration",
         "Total Execute")
       Some(listingTable(headerRow, dataRows))
     } else {

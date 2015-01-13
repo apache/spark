@@ -17,12 +17,11 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
-import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerUIEventListener
-
 import scala.collection.JavaConversions._
 
 import org.apache.spark.scheduler.StatsReportListener
 import org.apache.spark.sql.hive.{HiveShim, HiveContext}
+import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerUIEventListener
 import org.apache.spark.{Logging, SparkConf, SparkContext}
 
 /** A singleton object for the master program. The slaves should not access this. */

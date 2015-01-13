@@ -31,27 +31,29 @@ import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
 
 private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
-  extends SessionManager
+  extends SparkSQLSessionManagerShim(hiveContext)
   with ReflectedCompositeService {
 
   private lazy val sparkSqlOperationManager = new SparkSQLOperationManager(hiveContext)
 
   override def init(hiveConf: HiveConf) {
-    setSuperField(this, "hiveConf", hiveConf)
+
+    setAncestorField(this, 2, "hiveConf", hiveConf)
 
     val backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS)
-    setSuperField(this, "backgroundOperationPool", Executors.newFixedThreadPool(backgroundPoolSize))
-    getAncestorField[Log](this, 3, "LOG").info(
+    setAncestorField(this, 2, "backgroundOperationPool",
+      Executors.newFixedThreadPool(backgroundPoolSize))
+    getAncestorField[Log](this, 4, "LOG").info(
       s"HiveServer2: Async execution pool size $backgroundPoolSize")
 
-    setSuperField(this, "operationManager", sparkSqlOperationManager)
+    setAncestorField(this, 2, "operationManager", sparkSqlOperationManager)
     addService(sparkSqlOperationManager)
 
-    initCompositeService(hiveConf)
+    initCompositeService(hiveConf, 3)
   }
 
   override def closeSession(sessionHandle: SessionHandle) {
-    SparkSQLEnv.sqlEventListener.onDisconnected(super.getSession(sessionHandle))
+    SparkSQLEnv.sqlEventListener.onSessionClosed(super.getSession(sessionHandle))
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool -= sessionHandle
   }

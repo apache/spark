@@ -26,7 +26,7 @@ import org.apache.spark.{Logging, SparkException}
  * Spark Web UI tab that shows statistics of a streaming job.
  * This assumes the given SparkContext has enabled its SparkUI.
  */
-private[hive] class ThriftServerTab()
+private[thriftserver] class ThriftServerTab()
   extends SparkUITab(getSparkUI(), "ThriftServer") with Logging {
 
   val parent = getSparkUI()
@@ -36,7 +36,7 @@ private[hive] class ThriftServerTab()
   parent.attachTab(this)
 }
 
-private object ThriftServerTab {
+private[thriftserver] object ThriftServerTab {
   def getSparkUI(): SparkUI = {
     SparkSQLEnv.sparkContext.ui.getOrElse {
       throw new SparkException("Parent SparkUI to attach this tab to not found!")

@@ -64,50 +64,22 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
     val smallKvWithNull = getTestDataFilePath("small_kv_with_null.txt")
   }
 
-  def randomListeningPort =  {
+  def randomListeningPorts(n: Int) = {
     // Let the system to choose a random available port to avoid collision with other parallel
     // builds.
-    val socket = new ServerSocket(0)
-    val port = socket.getLocalPort
-    socket.close()
-    port
-  }
-
-  def withThriftUIAndJDBC(
-      uiPort: Int,
-      serverStartTimeout: FiniteDuration = 1.minute,
-      httpMode: Boolean = false)(
-      f: Statement => Unit) {
-    val port = randomListeningPort
-
-    startThriftServerWithUIPort(port, uiPort, serverStartTimeout, httpMode) {
-      val jdbcUri = if (httpMode) {
-        s"jdbc:hive2://${"localhost"}:$port/" +
-          "default?hive.server2.transport.mode=http;hive.server2.thrift.http.path=cliservice"
-      } else {
-        s"jdbc:hive2://${"localhost"}:$port/"
-      }
-
-      val user = System.getProperty("user.name")
-      val connection = DriverManager.getConnection(jdbcUri, user, "")
-      val statement = connection.createStatement()
-
-      try {
-        f(statement)
-      } finally {
-        statement.close()
-        connection.close()
-      }
-    }
+    val sockets = Array.fill(n)(new ServerSocket(0))
+    val ports = sockets.map(_.getLocalPort)
+    sockets.foreach(_.close())
+    ports
   }
 
   def withJdbcStatement(
       serverStartTimeout: FiniteDuration = 1.minute,
       httpMode: Boolean = false)(
-      f: Statement => Unit) {
-    val port = randomListeningPort
+      f: (Int, Int, Statement) => Unit) {
+    val Array(port, uiPort) = randomListeningPorts(2)
 
-    startThriftServer(port, serverStartTimeout, httpMode) {
+    startThriftServer(port, uiPort, serverStartTimeout, httpMode) {
       val jdbcUri = if (httpMode) {
         s"jdbc:hive2://${"localhost"}:$port/" +
           "default?hive.server2.transport.mode=http;hive.server2.thrift.http.path=cliservice"
@@ -120,7 +92,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
       val statement = connection.createStatement()
 
       try {
-        f(statement)
+        f(port, uiPort, statement)
       } finally {
         statement.close()
         connection.close()
@@ -131,9 +103,9 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   def withCLIServiceClient(
       serverStartTimeout: FiniteDuration = 1.minute)(
       f: ThriftCLIServiceClient => Unit) {
-    val port = randomListeningPort
+    val Array(port, uiPort) = randomListeningPorts(2)
 
-    startThriftServer(port) {
+    startThriftServer(port, uiPort) {
       // Transport creation logics below mimics HiveConnection.createBinaryTransport
       val rawTransport = new TSocket("localhost", port)
       val user = System.getProperty("user.name")
@@ -152,19 +124,11 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   }
 
   def startThriftServer(
-      thriftPort: Int,
-      serverStartTimeout: FiniteDuration = 1.minute,
-      httpMode: Boolean = false)(
-      f: => Unit): Unit = {
-    startThriftServerWithUIPort(thriftPort, randomListeningPort, serverStartTimeout, httpMode)(f)
-  }
-
-  def startThriftServerWithUIPort(
       port: Int,
       uiPort: Int,
       serverStartTimeout: FiniteDuration = 1.minute,
       httpMode: Boolean = false)(
-      f: => Unit) {
+      f: => Unit): Unit = {
     val startScript = "../../sbin/start-thriftserver.sh".split("/").mkString(File.separator)
     val stopScript = "../../sbin/stop-thriftserver.sh".split("/").mkString(File.separator)
 
@@ -268,7 +232,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   }
 
   test("Test JDBC query execution") {
-    withJdbcStatement() { statement =>
+    withJdbcStatement() { (port, uiPort, statement) =>
       val queries = Seq(
         "SET spark.sql.shuffle.partitions=3",
         "DROP TABLE IF EXISTS test",
@@ -287,7 +251,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   }
 
   test("Test JDBC query execution in Http Mode") {
-    withJdbcStatement(httpMode = true) { statement =>
+    withJdbcStatement(httpMode = true) { (port, uiPort, statement) =>
       val queries = Seq(
         "SET spark.sql.shuffle.partitions=3",
         "DROP TABLE IF EXISTS test",
@@ -306,7 +270,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   }
 
   test("SPARK-3004 regression: result set containing NULL") {
-    withJdbcStatement() { statement =>
+    withJdbcStatement() { (port, uiPort, statement) =>
       val queries = Seq(
         "DROP TABLE IF EXISTS test_null",
         "CREATE TABLE test_null(key INT, val STRING)",
@@ -348,7 +312,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   }
 
   test("Checks Hive version") {
-    withJdbcStatement() { statement =>
+    withJdbcStatement() { (port, uiPort, statement) =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
       assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
@@ -356,7 +320,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   }
 
   test("Checks Hive version in Http Mode") {
-    withJdbcStatement(httpMode = true) { statement =>
+    withJdbcStatement(httpMode = true) { (port, uiPort, statement) =>
       val resultSet = statement.executeQuery("SET spark.sql.hive.version")
       resultSet.next()
       assert(resultSet.getString(1) === s"spark.sql.hive.version=${HiveShim.version}")
@@ -364,7 +328,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   }
 
   test("SPARK-4292 regression: result set iterator issue") {
-    withJdbcStatement() { statement =>
+    withJdbcStatement() { (port, uiPort, statement) =>
       val queries = Seq(
         "DROP TABLE IF EXISTS test_4292",
         "CREATE TABLE test_4292(key INT, val STRING)",
@@ -384,7 +348,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   }
 
   test("SPARK-4309 regression: Date type support") {
-    withJdbcStatement() { statement =>
+    withJdbcStatement() { (port, uiPort, statement) =>
       val queries = Seq(
         "DROP TABLE IF EXISTS test_date",
         "CREATE TABLE test_date(key INT, value STRING)",
@@ -402,7 +366,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   }
 
   test("SPARK-4407 regression: Complex type support") {
-    withJdbcStatement() { statement =>
+    withJdbcStatement() { (port, uiPort, statement) =>
       val queries = Seq(
         "DROP TABLE IF EXISTS test_map",
         "CREATE TABLE test_map(key INT, value STRING)",
@@ -426,8 +390,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
   }
 
   test("SPARK-5100 monitor page") {
-    val uiPort = randomListeningPort
-    withThriftUIAndJDBC(uiPort) { statement =>
+    withJdbcStatement() { (port, uiPort, statement) =>
       val queries = Seq(
         "DROP TABLE IF EXISTS test_map",
         "CREATE TABLE test_map(key INT, value STRING)",
@@ -447,7 +410,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
         assert(!html.contains("random data that should not be present"))
 
         // check whether statements exists
-        queries.foreach{ line =>
+        queries.foreach { line =>
           assert(html.toLowerCase.contains(line.toLowerCase))
         }
       }
