@@ -28,8 +28,7 @@ object TestHbase
   extends TestHbaseContext(
     new SparkContext("local[2]", "TestSQLContext", new SparkConf(true))) {
 
-  @transient val config: Configuration = catalog.configuration
-  @transient val testUtil: HBaseTestingUtility = new HBaseTestingUtility(config)
+  @transient val testUtil: HBaseTestingUtility = new HBaseTestingUtility(configuration)
 
   val nRegionServers: Int = 1
   val nDataNodes: Int = 1
@@ -41,7 +40,7 @@ object TestHbase
   logInfo(s"Started HBaseMiniCluster with regions = ${cluster.countServedRegions}")
 
   logInfo(s"Configuration zkPort="
-    + s"${config.get("hbase.zookeeper.property.clientPort")}")
+    + s"${configuration.get("hbase.zookeeper.property.clientPort")}")
 
   @transient lazy val hbaseAdmin: HBaseAdmin = catalog.admin
 }

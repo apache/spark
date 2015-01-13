@@ -385,7 +385,7 @@ case class ParallelizedBulkLoadIntoTableCommand(
       .relation.asInstanceOf[HBaseRelation]
     val hbContext = sqlContext.asInstanceOf[HBaseSQLContext]
     val logger = Logger.getLogger(getClass.getName)
-    val conf = hbContext.catalog.configuration
+    val conf = hbContext.configuration
 
     val hadoopReader = if (isLocal) {
       val fs = FileSystem.getLocal(conf)

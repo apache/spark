@@ -98,7 +98,7 @@ object HBaseMainTest extends HBaseIntegrationTestBase
       throw new IllegalStateException(s"Unable to find table $HbaseTableName")
     }
 
-    val htable = new HTable(TestHbase.config, HbaseTableName)
+    val htable = new HTable(TestHbase.configuration, HbaseTableName)
 
     def putNewTableIntoHBase(keys: Seq[Any], keysType: Seq[DataType],
                              vals: Seq[Any], valsType: Seq[DataType]): Unit = {
@@ -219,7 +219,7 @@ object HBaseMainTest extends HBaseIntegrationTestBase
 
   def testHBaseScanner() = {
     val scan = new Scan
-    val htable = new HTable(TestHbase.config, HbaseTableName)
+    val htable = new HTable(TestHbase.configuration, HbaseTableName)
     val scanner = htable.getScanner(scan)
     var res: Result = null
     do {
