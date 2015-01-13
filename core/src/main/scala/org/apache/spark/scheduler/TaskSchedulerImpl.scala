@@ -361,7 +361,7 @@ private[spark] class TaskSchedulerImpl(
     dagScheduler.executorHeartbeatReceived(execId, metricsWithStageIds, blockManagerId)
   }
 
-  def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long) {
+  def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long): Unit = synchronized {
     taskSetManager.handleTaskGettingResult(tid)
   }
 
