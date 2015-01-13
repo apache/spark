@@ -72,7 +72,11 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase
           Math.abs(a - e) <= CompareTol
         case (a: Byte, e)  => true //For now, we assume it is ok
         case (a, e) =>
-          logDebug(s"atype=${a.getClass.getName} etype=${e.getClass.getName}")
+          if(a == null && e == null) {
+            logDebug(s"a=null e=null")
+          } else {
+            logDebug(s"atype=${a.getClass.getName} etype=${e.getClass.getName}")
+          }
           a == e
         case _ => throw new IllegalArgumentException("Expected tuple")
       }

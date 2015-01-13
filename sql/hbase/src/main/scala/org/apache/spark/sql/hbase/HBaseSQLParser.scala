@@ -88,8 +88,13 @@ class HBaseSQLParser extends SqlParser {
     }
       |
       INSERT ~> INTO ~> ident ~ (VALUES ~> "(" ~> values <~ ")") ^^ {
-        case tableName ~ valueSeq =>
-          InsertValueIntoTableCommand(tableName, valueSeq.map(_.value.toString))
+        case tableName ~ valueSeq => {
+          val valueStringSeq = valueSeq.map{case v =>
+            if (v.value == null) null
+            else v.value.toString
+          }
+          InsertValueIntoTableCommand(tableName, valueStringSeq)
+        }
       }
       )
 

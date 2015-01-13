@@ -42,13 +42,23 @@ private[hbase] class HadoopReader(
         new Array[(Array[Byte], Array[Byte],Array[Byte])](relation.nonKeyColumns.size)
       val lineBuffer = HBaseKVHelper.createLineBuffer(relation.output)
       iter.map { line =>
-        HBaseKVHelper.string2KV(line.split(splitRegex), relation,
-          lineBuffer, keyBytes, valueBytes)
+        // If the last column in the text file is null, the java parser will
+        // return a String[] containing only the non-null text values.
+        // In this case we need to append another element (null) to
+        // the array returned by line.split(splitRegex).
+        var textValueArray = line.split(splitRegex)
+        if(textValueArray.length == relation.output.length -1) {
+          textValueArray = textValueArray :+ null
+        }
+        HBaseKVHelper.string2KV(textValueArray, relation, lineBuffer, keyBytes, valueBytes)
         val rowKeyData = HBaseKVHelper.encodingRawKeyColumns(keyBytes)
         val rowKey = new ImmutableBytesWritableWrapper(rowKeyData)
         val put = new PutWrapper(rowKeyData)
-        valueBytes.foreach { case (family, qualifier, value) if value != null =>
-          put.add(family, qualifier, value.clone())
+        valueBytes.foreach {
+          case (_, _, null)  =>
+            // Do not create an HBase Put for a null column value.
+          case (family, qualifier, value) =>
+            put.add(family, qualifier, value.clone())
         }
         (rowKey, put)
       }
