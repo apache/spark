@@ -51,19 +51,19 @@ trait CreateTableAndLoadData extends Logging {
   }
   private[hbase] val CsvPath = tpath(0)
 
-  def createTableAndLoadData(hbc: HBaseSQLContext) = {
-    createTables(hbc, DefaultStagingTableName, DefaultTableName,
+  def createTableAndLoadData = {
+    createTables(DefaultStagingTableName, DefaultTableName,
       DefaultHbaseStagingTableName, DefaultHbaseTabName)
-    loadData(hbc, DefaultStagingTableName, DefaultTableName, s"$CsvPath/$DefaultLoadFile")
+    loadData(DefaultStagingTableName, DefaultTableName, s"$CsvPath/$DefaultLoadFile")
   }
 
-  def createTables(hbc: HBaseSQLContext): Unit = {
-    createTables(hbc, DefaultStagingTableName, DefaultTableName,
+  def createTables: Unit = {
+    createTables(DefaultStagingTableName, DefaultTableName,
       DefaultHbaseStagingTableName, DefaultHbaseTabName)
   }
 
-  def createNativeHbaseTable(hbc: HBaseSQLContext, tableName: String, families: Seq[String]) = {
-    val hbaseAdmin = hbc.catalog.admin
+  def createNativeHbaseTable(tableName: String, families: Seq[String]) = {
+    val hbaseAdmin = TestHbase.catalog.admin
     val hdesc = new HTableDescriptor(TableName.valueOf(tableName))
     families.foreach { f => hdesc.addFamily(new HColumnDescriptor(f))}
     try {
@@ -74,25 +74,25 @@ trait CreateTableAndLoadData extends Logging {
     }
   }
 
-  def createTables(hbc: HBaseSQLContext, stagingTableName: String, tableName: String,
+  def createTables(stagingTableName: String, tableName: String,
                    hbaseStagingTable: String, hbaseTable: String) = {
 
-    val hbaseAdmin = hbc.catalog.admin
+    val hbaseAdmin = TestHbase.catalog.admin
     if (!hbaseAdmin.tableExists(TableName.valueOf(hbaseStagingTable))) {
-      createNativeHbaseTable(hbc, hbaseStagingTable, DefaultHbaseColFamilies)
+      createNativeHbaseTable(hbaseStagingTable, DefaultHbaseColFamilies)
     }
     if (!hbaseAdmin.tableExists(TableName.valueOf(hbaseTable))) {
-      createNativeHbaseTable(hbc, hbaseTable, DefaultHbaseColFamilies)
+      createNativeHbaseTable(hbaseTable, DefaultHbaseColFamilies)
     }
 
-    if (hbc.catalog.checkLogicalTableExist(stagingTableName)) {
+    if (TestHbase.catalog.checkLogicalTableExist(stagingTableName)) {
       val dropSql = s"drop table $stagingTableName"
-      runSql(hbc, dropSql)
+      runSql(dropSql)
     }
 
-    if (hbc.catalog.checkLogicalTableExist(tableName)) {
+    if (TestHbase.catalog.checkLogicalTableExist(tableName)) {
       val dropSql = s"drop table $tableName"
-      runSql(hbc, dropSql)
+      runSql(dropSql)
     }
 
     val (stagingSql, tabSql) =
@@ -110,7 +110,7 @@ trait CreateTableAndLoadData extends Logging {
         )
     try {
       logInfo(s"invoking $stagingSql ..")
-      runSql(hbc, stagingSql)
+      runSql(stagingSql)
     } catch {
       case e: TableExistsException =>
         logInfo("IF NOT EXISTS still not implemented so we get the following exception", e)
@@ -122,36 +122,40 @@ trait CreateTableAndLoadData extends Logging {
 
     try {
       logInfo(s"invoking $tabSql ..")
-      runSql(hbc, tabSql)
+      runSql(tabSql)
     } catch {
       case e: TableExistsException =>
         logInfo("IF NOT EXISTS still not implemented so we get the following exception", e)
     }
   }
 
-  def runSql(hbc: HBaseSQLContext, sql: String) = {
+  def runSql(sql: String) = {
     logInfo(sql)
-    hbc.sql(sql).collect()
+    logInfo(s"1############ Configuration zkPort="
+      + s"${TestHbase.config.get("hbase.zookeeper.property.clientPort")}")
+    val a = TestHbase.sql(sql)
+    logInfo(s"2############ Configuration zkPort="
+      + s"${TestHbase.config.get("hbase.zookeeper.property.clientPort")}")
+    a.collect()
   }
 
-  def loadData(hbc: HBaseSQLContext, stagingTableName: String, tableName: String,
-               loadFile: String) = {
+  def loadData(stagingTableName: String, tableName: String, loadFile: String) = {
 
     // then load data into table
     val loadSql = s"LOAD DATA LOCAL INPATH '$loadFile' INTO TABLE $tableName"
-    runSql(hbc, loadSql)
+    runSql(loadSql)
 
     val query1 = s"select * from $tableName"
 
-    val result1 = runSql(hbc, query1)
+    val result1 = runSql(query1)
 //    assert(result1.size == 3)
   }
 
-  def cleanUp(hbc: HBaseSQLContext) = {
+  def cleanUp() = {
     // delete the temp files
-    val sparkHome = hbc.sparkContext.getSparkHome().getOrElse(".")
+    val sparkHome = TestHbase.sparkContext.getSparkHome().getOrElse(".")
 
-    val fileSystem = FileSystem.get(hbc.sparkContext.hadoopConfiguration)
+    val fileSystem = FileSystem.get(TestHbase.sparkContext.hadoopConfiguration)
     val files = fileSystem.listStatus(new Path(sparkHome))
     for (file <- files) {
       println(file.getPath.getName)

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hbase
 
-import org.apache.hadoop.fs.{LocatedFileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat2
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.mapreduce.Job
@@ -27,17 +27,13 @@ import org.apache.spark.sql.catalyst.types.IntegerType
 import org.apache.spark.sql.hbase.execution._
 import org.apache.spark.sql.hbase.util.InsertWappers._
 import org.apache.spark.sql.hbase.util.{BytesUtils, Util}
-import org.apache.spark.{Logging, SerializableWritable, SparkContext}
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.apache.spark.{SerializableWritable, SparkContext}
 
 import scala.collection.mutable.ArrayBuffer
 
 class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
-  val (hbc: HBaseSQLContext, sc: SparkContext) = {
-    HBaseMainTest.setupData(useMultiplePartitions = true)
-    (TestHbase, TestHbase.sparkContext)
-  }
-  val sparkHome = hbc.sparkContext.getSparkHome().getOrElse(".")
+  val sc: SparkContext = TestHbase.sparkContext
+  val sparkHome = TestHbase.sparkContext.getSparkHome().getOrElse(".")
 
   // Test if we can parse 'LOAD DATA LOCAL INPATH './usr/file.txt' INTO TABLE tb1'
   test("bulkload parser test, local file") {
@@ -90,21 +86,21 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
 
   test("write data to HFile") {
     val columns = Seq(new KeyColumn("k1", IntegerType, 0), new NonKeyColumn("v1", IntegerType, "cf1", "c1"))
-    val hbaseRelation = HBaseRelation("testtablename", "hbasenamespace", "hbasetablename", columns)(hbc)
+    val hbaseRelation = HBaseRelation("testtablename", "hbasenamespace", "hbasetablename", columns)(TestHbase)
     val bulkLoad = BulkLoadIntoTableCommand(sparkHome + "/sql/hbase/src/test/resources/test.txt", "hbasetablename",
       isLocal = true, Option(","))
     val splitKeys = (1 to 40).filter(_ % 5 == 0).map { r =>
       val bytesUtils = BytesUtils.create(IntegerType)
       new ImmutableBytesWritableWrapper(bytesUtils.toBytes(r))
     }
-    val conf = hbc.sparkContext.hadoopConfiguration
+    val conf = TestHbase.sparkContext.hadoopConfiguration
 
     val job = Job.getInstance(conf)
 
     val hadoopReader = {
       val fs = FileSystem.getLocal(conf)
       val pathString = fs.pathToFile(new Path(bulkLoad.path)).getCanonicalPath
-      new HadoopReader(hbc.sparkContext, pathString, bulkLoad.delimiter)(hbaseRelation)
+      new HadoopReader(TestHbase.sparkContext, pathString, bulkLoad.delimiter)(hbaseRelation)
     }
     val tmpPath = Util.getTempFilePath(conf, hbaseRelation.tableName)
     bulkLoad.makeBulkLoadRDD(splitKeys.toArray, hadoopReader, job, tmpPath, hbaseRelation)
@@ -113,7 +109,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
 
   test("write data to HFile with optimized bulk loading") {
     val columns = Seq(new KeyColumn("k1", IntegerType, 0), new NonKeyColumn("v1", IntegerType, "cf1", "c1"))
-    val hbaseRelation = HBaseRelation("testtablename", "hbasenamespace", "hbasetablename", columns)(hbc)
+    val hbaseRelation = HBaseRelation("testtablename", "hbasenamespace", "hbasetablename", columns)(TestHbase)
     val bulkLoad =
       ParallelizedBulkLoadIntoTableCommand(
         "./sql/hbase/src/test/resources/test.txt",
@@ -124,12 +120,12 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
       val bytesUtils = BytesUtils.create(IntegerType)
       new ImmutableBytesWritableWrapper(bytesUtils.toBytes(r))
     }
-    val conf = hbc.sparkContext.hadoopConfiguration
+    val conf = TestHbase.sparkContext.hadoopConfiguration
 
     val hadoopReader = {
       val fs = FileSystem.getLocal(conf)
       val pathString = fs.pathToFile(new Path(bulkLoad.path)).getCanonicalPath
-      new HadoopReader(hbc.sparkContext, pathString, bulkLoad.delimiter)(hbaseRelation)
+      new HadoopReader(TestHbase.sparkContext, pathString, bulkLoad.delimiter)(hbaseRelation)
     }
     val tmpPath = Util.getTempFilePath(conf, hbaseRelation.tableName)
     val wrappedConf = new SerializableWritable(conf)
@@ -148,7 +144,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
   test("hfile output format, delete me when ready") {
     import org.apache.spark.sql.catalyst.types._
     val splitRegex = ","
-    val conf = hbc.sparkContext.hadoopConfiguration
+    val conf = TestHbase.sparkContext.hadoopConfiguration
     val inputFile = sparkHome + "/sql/hbase/src/test/resources/test.txt"
 
     FileSystem.get(conf).delete(new Path("./hfileoutput"), true)
@@ -248,7 +244,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
   test("load data into hbase") {
 
     val drop = "drop table testblk"
-    val executeSql0 = hbc.executeSql(drop)
+    val executeSql0 = TestHbase.executeSql(drop)
     try {
       executeSql0.toRdd.collect().foreach(println)
     } catch {
@@ -267,10 +263,10 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
       s"""select * from testblk limit 5"""
         .stripMargin
 
-    val executeSql1 = hbc.executeSql(sql1)
+    val executeSql1 = TestHbase.executeSql(sql1)
     executeSql1.toRdd.collect().foreach(println)
 
-    val executeSql2 = hbc.executeSql(sql2)
+    val executeSql2 = TestHbase.executeSql(sql2)
     executeSql2.toRdd.collect().foreach(println)
 
     val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadData.txt'"
@@ -278,16 +274,16 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     // then load data into table
     val loadSql = "LOAD DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
 
-    val executeSql3 = hbc.executeSql(loadSql)
+    val executeSql3 = TestHbase.executeSql(loadSql)
     executeSql3.toRdd.collect().foreach(println)
-    val rows = hbc.sql("select * from testblk").collect()
+    val rows = TestHbase.sql("select * from testblk").collect()
     assert(rows.length == 3, s"load data into hbase test failed to bulkload data into htable")
 
     // cleanup
-    hbc.sql(drop)
+    TestHbase.sql(drop)
 
     // delete the temp files
-    val fileSystem = FileSystem.get(hbc.sparkContext.hadoopConfiguration)
+    val fileSystem = FileSystem.get(TestHbase.sparkContext.hadoopConfiguration)
     val files = fileSystem.listStatus(new Path(sparkHome))
     for (file <- files) {
       println(file.getPath.getName)

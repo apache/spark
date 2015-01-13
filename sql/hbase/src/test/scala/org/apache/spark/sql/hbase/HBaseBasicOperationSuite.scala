@@ -17,23 +17,15 @@
 
 package org.apache.spark.sql.hbase
 
-import org.apache.hadoop.hbase.HBaseConfiguration
-import org.apache.hadoop.hbase.client.HBaseAdmin
-import org.apache.spark.Logging
-import org.scalatest._
-
 /**
  * Test insert / query against the table created by HBaseMainTest
  */
 
 class HBaseBasicOperationSuite extends HBaseIntegrationTestBase {
 
-  val sqlContext: HBaseSQLContext = {
-    HBaseMainTest.main(null)
-    TestHbase
-  }
+  HBaseMainTest.main(null)
 
-  import sqlContext._
+  import org.apache.spark.sql.hbase.TestHbase._
 
   override def afterAll() = {
     if (TestHbase.hbaseAdmin.tableExists("ht0")) {

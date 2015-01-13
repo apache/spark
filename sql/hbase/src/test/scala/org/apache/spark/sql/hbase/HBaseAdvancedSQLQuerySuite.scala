@@ -18,19 +18,13 @@
 package org.apache.spark.sql.hbase
 
 import org.apache.spark.sql.{SQLConf, _}
-import org.scalatest.BeforeAndAfterAll
 
 class HBaseAdvancedSQLQuerySuite extends HBaseIntegrationTestBase {
   // Make sure the tables are loaded.
-
-  val sqlContext: SQLContext = {
-    HBaseMainTest.main(null)
-    TestHbase
-  }
-
-  import sqlContext._
-
+  HBaseMainTest.main(null)
   TestData
+
+  import org.apache.spark.sql.hbase.TestHbase._
 
   test("aggregation with codegen") {
     val originalValue = codegenEnabled

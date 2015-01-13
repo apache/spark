@@ -24,18 +24,16 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.hbase.TestData._
-import org.scalatest.BeforeAndAfterAll
 
 class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   // Make sure the tables are loaded.
-  val sqlContext:SQLContext = {
-    HBaseMainTest.main(null)
-    TestHbase
-  }
-  import sqlContext._
+  HBaseMainTest.main(null)
   TestData
 
+  import org.apache.spark.sql.hbase.TestHbase._
+
   var origZone: TimeZone = _
+
   override protected def beforeAll() {
     origZone = TimeZone.getDefault
     TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
@@ -46,7 +44,7 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   }
 
   test("grouping on nested fields") {
-    jsonRDD(sparkContext.parallelize("""{"nested": {"attribute": 1}, "v": 2}""" :: Nil))
+    jsonRDD(sparkContext.parallelize( """{"nested": {"attribute": 1}, "v": 2}""" :: Nil))
       .registerTempTable("rows")
 
     checkAnswer(
@@ -160,7 +158,7 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   test("left semi greater than predicate") {
     checkAnswer(
       sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2"),
-      Seq((3,1), (3,2))
+      Seq((3, 1), (3, 2))
     )
   }
 
@@ -177,7 +175,7 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   test("agg") {
     checkAnswer(
       sql("SELECT a, SUM(b) FROM testData2 GROUP BY a"),
-      Seq((1,3),(2,3),(3,3)))
+      Seq((1, 3), (2, 3), (3, 3)))
   }
 
   test("aggregates with nulls") {
@@ -202,19 +200,19 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   def sortTest() = {
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a ASC, b ASC"),
-      Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)))
+      Seq((1, 1), (1, 2), (2, 1), (2, 2), (3, 1), (3, 2)))
 
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a ASC, b DESC"),
-      Seq((1,2), (1,1), (2,2), (2,1), (3,2), (3,1)))
+      Seq((1, 2), (1, 1), (2, 2), (2, 1), (3, 2), (3, 1)))
 
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a DESC, b DESC"),
-      Seq((3,2), (3,1), (2,2), (2,1), (1,2), (1,1)))
+      Seq((3, 2), (3, 1), (2, 2), (2, 1), (1, 2), (1, 1)))
 
     checkAnswer(
       sql("SELECT * FROM testData2 ORDER BY a DESC, b ASC"),
-      Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
+      Seq((3, 1), (3, 2), (2, 1), (2, 2), (1, 1), (1, 2)))
 
     checkAnswer(
       sql("SELECT b FROM binaryData ORDER BY a ASC"),
@@ -240,20 +238,21 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
       sql("SELECT * FROM mapData ORDER BY dt[1] DESC"),
       mapData.collect().sortBy(_.data(1)).reverse.toSeq)
   }
-//
-//  test("sorting") {
-//    val before = externalSortEnabled
-//    setConf(SQLConf.EXTERNAL_SORT, "false")
-//    sortTest()
-//    setConf(SQLConf.EXTERNAL_SORT, before.toString)
-//  }
-//
-//  test("external sorting") {
-//    val before = externalSortEnabled
-//    setConf(SQLConf.EXTERNAL_SORT, "true")
-//    sortTest()
-//    setConf(SQLConf.EXTERNAL_SORT, before.toString)
-//  }
+
+  //
+  //  test("sorting") {
+  //    val before = externalSortEnabled
+  //    setConf(SQLConf.EXTERNAL_SORT, "false")
+  //    sortTest()
+  //    setConf(SQLConf.EXTERNAL_SORT, before.toString)
+  //  }
+  //
+  //  test("external sorting") {
+  //    val before = externalSortEnabled
+  //    setConf(SQLConf.EXTERNAL_SORT, "true")
+  //    sortTest()
+  //    setConf(SQLConf.EXTERNAL_SORT, before.toString)
+  //  }
 
   test("limit") {
     checkAnswer(
@@ -278,7 +277,7 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   test("average overflow") {
     checkAnswer(
       sql("SELECT AVG(a),b FROM largeAndSmallInts group by b"),
-      Seq((2147483645.0,1),(2.0,2)))
+      Seq((2147483645.0, 1), (2.0, 2)))
   }
 
   test("count") {
@@ -337,15 +336,15 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
 
   test("inner join, where, multiple matches") {
     checkAnswer(
-      sql("""
-            |SELECT * FROM
-            |  (SELECT * FROM testData2 WHERE a = 1) x JOIN
-            |  (SELECT * FROM testData2 WHERE a = 1) y
-            |WHERE x.a = y.a""".stripMargin),
-      (1,1,1,1) ::
-        (1,1,1,2) ::
-        (1,2,1,1) ::
-        (1,2,1,2) :: Nil)
+      sql( """
+             |SELECT * FROM
+             |  (SELECT * FROM testData2 WHERE a = 1) x JOIN
+             |  (SELECT * FROM testData2 WHERE a = 1) y
+             |WHERE x.a = y.a""".stripMargin),
+      (1, 1, 1, 1) ::
+        (1, 1, 1, 2) ::
+        (1, 2, 1, 1) ::
+        (1, 2, 1, 2) :: Nil)
   }
 
   test("inner join, no matches") {
@@ -378,15 +377,15 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
       testData.flatMap(
         row => Seq.fill(16)((row ++ row).toSeq)).collect().toSeq)
   }
-//
-//  ignore("cartesian product join") {
-//    checkAnswer(
-//      testData3.join(testData3),
-//      (1, null, 1, null) ::
-//        (1, null, 2, 2) ::
-//        (2, 2, 1, null) ::
-//        (2, 2, 2, 2) :: Nil)
-//  }
+  //
+  //  ignore("cartesian product join") {
+  //    checkAnswer(
+  //      testData3.join(testData3),
+  //      (1, null, 1, null) ::
+  //        (1, null, 2, 2) ::
+  //        (2, 2, 1, null) ::
+  //        (2, 2, 2, 2) :: Nil)
+  //  }
 
   test("left outer join") {
     checkAnswer(
@@ -527,23 +526,23 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   test("UNION") {
     checkAnswer(
       sql("SELECT * FROM lowerCaseData UNION SELECT * FROM upperCaseData"),
-      (1, "A") :: (1, "a") :: (2, "B") :: (2, "b") :: (3, "C") :: (3, "c") ::
-        (4, "D") :: (4, "d") :: (5, "E") :: (6, "F") :: Nil)
+      (1, "A") ::(1, "a") ::(2, "B") ::(2, "b") ::(3, "C") ::(3, "c") ::
+        (4, "D") ::(4, "d") ::(5, "E") ::(6, "F") :: Nil)
     checkAnswer(
       sql("SELECT * FROM lowerCaseData UNION SELECT * FROM lowerCaseData"),
-      (1, "a") :: (2, "b") :: (3, "c") :: (4, "d") :: Nil)
+      (1, "a") ::(2, "b") ::(3, "c") ::(4, "d") :: Nil)
     checkAnswer(
       sql("SELECT * FROM lowerCaseData UNION ALL SELECT * FROM lowerCaseData"),
-      (1, "a") :: (1, "a") :: (2, "b") :: (2, "b") :: (3, "c") :: (3, "c") ::
-        (4, "d") :: (4, "d") :: Nil)
+      (1, "a") ::(1, "a") ::(2, "b") ::(2, "b") ::(3, "c") ::(3, "c") ::
+        (4, "d") ::(4, "d") :: Nil)
   }
 
   test("UNION with column mismatches") {
     // Column name mismatches are allowed.
     checkAnswer(
       sql("SELECT n,l FROM lowerCaseData UNION SELECT N as x1, L as x2 FROM upperCaseData"),
-      (1, "A") :: (1, "a") :: (2, "B") :: (2, "b") :: (3, "C") :: (3, "c") ::
-        (4, "D") :: (4, "d") :: (5, "E") :: (6, "F") :: Nil)
+      (1, "A") ::(1, "a") ::(2, "B") ::(2, "b") ::(3, "C") ::(3, "c") ::
+        (4, "D") ::(4, "d") ::(5, "E") ::(6, "F") :: Nil)
     // Column type mismatches are not allowed, forcing a type coercion.
     checkAnswer(
       sql("SELECT n FROM lowerCaseData UNION SELECT L FROM upperCaseData"),
@@ -926,7 +925,7 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   }
 
   test("SPARK-3483 Special chars in column names") {
-    val dt = sparkContext.parallelize(Seq("""{"k?number1": "value1", "k.number2": "value2"}"""))
+    val dt = sparkContext.parallelize(Seq( """{"k?number1": "value1", "k.number2": "value2"}"""))
     jsonRDD(dt).registerTempTable("records")
     checkAnswer(sql("SELECT `k?number1` FROM records"), "value1")
   }
@@ -968,11 +967,11 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   }
 
   test("SPARK-4322 Grouping field with struct field as sub expression") {
-    jsonRDD(sparkContext.makeRDD("""{"a": {"b": [{"c": 1}]}}""" :: Nil)).registerTempTable("dt")
+    jsonRDD(sparkContext.makeRDD( """{"a": {"b": [{"c": 1}]}}""" :: Nil)).registerTempTable("dt")
     checkAnswer(sql("SELECT a.b[0].c FROM dt GROUP BY a.b[0].c"), 1)
     dropTempTable("dt")
 
-    jsonRDD(sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("dt")
+    jsonRDD(sparkContext.makeRDD( """{"a": {"b": 1}}""" :: Nil)).registerTempTable("dt")
     checkAnswer(sql("SELECT a.b + 1 FROM dt GROUP BY a.b + 1"), 2)
     dropTempTable("dt")
   }
@@ -980,15 +979,15 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   test("SPARK-4432 Fix attribute reference resolution error when using ORDER BY") {
     checkAnswer(
       sql("SELECT a + b FROM testData2 ORDER BY a"),
-      Seq(2, 3, 3 ,4 ,4 ,5).map(Seq(_))
+      Seq(2, 3, 3, 4, 4, 5).map(Seq(_))
     )
   }
 
   test("Supporting relational operator '<=>' in Spark SQL") {
-    val nullCheckData1 = TestData(1,"1") :: TestData(2,null) :: Nil
+    val nullCheckData1 = TestData(1, "1") :: TestData(2, null) :: Nil
     val rdd1 = sparkContext.parallelize((0 to 1).map(i => nullCheckData1(i)))
     rdd1.registerTempTable("nulldata1")
-    val nullCheckData2 = TestData(1,"1") :: TestData(2,null) :: Nil
+    val nullCheckData2 = TestData(1, "1") :: TestData(2, null) :: Nil
     val rdd2 = sparkContext.parallelize((0 to 1).map(i => nullCheckData2(i)))
     rdd2.registerTempTable("nulldata2")
     checkAnswer(sql("SELECT nulldata1.k FROM nulldata1 join " +
@@ -997,7 +996,7 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
   }
 
   test("Multi-column COUNT(DISTINCT ...)") {
-    val dt = TestData(1,"val_1") :: TestData(2,"val_2") :: Nil
+    val dt = TestData(1, "val_1") :: TestData(2, "val_2") :: Nil
     val rdd = sparkContext.parallelize((0 to 1).map(i => dt(i)))
     rdd.registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT k,v) FROM distinctData"), 2)

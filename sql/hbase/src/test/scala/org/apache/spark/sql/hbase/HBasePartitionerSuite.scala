@@ -23,15 +23,11 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.hbase.util.InsertWappers._
 import org.apache.spark.sql.hbase.util.{BytesUtils, HBaseKVHelper}
-import org.scalatest.BeforeAndAfterAll
 
 import scala.collection.mutable.ArrayBuffer
 
 class HBasePartitionerSuite extends HBaseIntegrationTestBase {
-  val sc = {
-    HBaseMainTest.setupData(useMultiplePartitions = true)
-    TestHbase.sparkContext
-  }
+  val sc = TestHbase.sparkContext
 
   test("test hbase partitioner") {
     val data = (1 to 40).map { r =>

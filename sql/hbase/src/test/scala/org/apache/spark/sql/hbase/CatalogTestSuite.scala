@@ -18,19 +18,14 @@ package org.apache.spark.sql.hbase
 
 import org.apache.hadoop.hbase._
 import org.apache.hadoop.hbase.client.HBaseAdmin
-import org.apache.spark._
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 import org.apache.spark.sql.catalyst.plans.logical.Subquery
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.hbase.util.HBaseKVHelper
 import org.apache.spark.sql.sources.LogicalRelation
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 class CatalogTestSuite extends HBaseIntegrationTestBase {
-  val (hbaseContext, catalog, configuration) = {
-    HBaseMainTest.setupData(useMultiplePartitions = true)
-    (TestHbase, TestHbase.catalog, TestHbase.config)
-  }
+  val (catalog, configuration) = (TestHbase.catalog, TestHbase.config)
 
   test("Create Table") {
     // prepare the test data

@@ -17,37 +17,19 @@
 
 package org.apache.spark.sql.hbase.api.java
 
-import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql._
-import org.apache.spark.sql.hbase.{HBaseSQLContext, TestHbase, HBaseIntegrationTestBase, HBaseMainTest}
-
-import scala.util.Try
-
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
-
-import org.apache.spark.sql.api.java.{JavaSQLContext, JavaSchemaRDD}
-import org.apache.spark.sql.execution.ExplainCommand
-import org.apache.spark.sql.hbase.HBaseMainTest._
+import org.apache.spark.sql.hbase.{HBaseIntegrationTestBase, HBaseMainTest, TestHbase}
 
 // Implicits
 import scala.collection.JavaConversions._
 
 class JavaHbaseSuite extends HBaseIntegrationTestBase {
   // Make sure the tables are loaded.
-//  TestData
+  HBaseMainTest.main(null)
 
-  val hbc = {
-    HBaseMainTest.main(null)
-    TestHbase
-  }
-  import hbc._
+  import org.apache.spark.sql.hbase.TestHbase._
 
-  lazy val javaCtx = new JavaSparkContext(TestHbase.sparkContext)
-
-
-  // There is a little trickery here to avoid instantiating two HiveContexts in the same JVM
-  lazy val javaHbaseCtx = new JavaHbaseContext(javaCtx)
-//  javaHbaseCtx.sqlContext.asInstanceOf[HBaseSQLContext].optConfiguration = hbc.optConfiguration
+  lazy val javaHbaseCtx = new JavaHbaseContext(TestHbase)
 
   test("aggregation with codegen") {
     val originalValue = javaHbaseCtx.sqlContext.getConf(SQLConf.CODEGEN_ENABLED, "false") //codegenEnabled

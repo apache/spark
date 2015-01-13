@@ -26,20 +26,16 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase
   self: HBaseIntegrationTestBase =>
   val tabName = DefaultTableName
   var AvoidByteDataTypeBug = true
-  val hbc: HBaseSQLContext = {
-    HBaseMainTest.main(null)
-    TestHbase
-  }
 
   override protected def beforeAll(configMap: ConfigMap): Unit = {
     super.beforeAll(configMap)
-    createTableAndLoadData(TestHbase)
+    createTableAndLoadData
   }
 
   override protected def afterAll(configMap: ConfigMap): Unit = {
-    hbc.sql("Drop Table " + DefaultStagingTableName)
-    hbc.sql("Drop Table " + DefaultTableName)
-    cleanUp(hbc)
+    TestHbase.sql("Drop Table " + DefaultStagingTableName)
+    TestHbase.sql("Drop Table " + DefaultTableName)
+    cleanUp
   }
 
   def runQuery(sql: String) = {
