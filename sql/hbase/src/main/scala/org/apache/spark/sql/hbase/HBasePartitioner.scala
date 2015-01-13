@@ -22,7 +22,7 @@ import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.util.{CollectionsUtils, Utils}
 import org.apache.spark.{Partitioner, SparkEnv}
-import org.apache.spark.sql.hbase.util.InsertWappers._
+import org.apache.spark.sql.hbase.util.InsertWrappers._
 
 class HBasePartitioner (var splitKeys: Array[ImmutableBytesWritableWrapper]) extends Partitioner {
 

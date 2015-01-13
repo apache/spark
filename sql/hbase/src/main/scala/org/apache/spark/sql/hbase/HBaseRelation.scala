@@ -31,7 +31,7 @@ import org.apache.spark.sql.hbase.catalyst.expressions.PartialPredicateOperation
 import org.apache.spark.sql.hbase.catalyst.types.PartitionRange
 import org.apache.spark.sql.hbase.util.{DataTypeUtils, HBaseKVHelper, BytesUtils, Util}
 import org.apache.spark.sql.sources.{BaseRelation, CatalystScan, LogicalRelation, RelationProvider}
-import org.apache.spark.sql.hbase.util.InsertWappers._
+import org.apache.spark.sql.hbase.util.InsertWrappers._
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.{ArrayBuffer, ListBuffer}

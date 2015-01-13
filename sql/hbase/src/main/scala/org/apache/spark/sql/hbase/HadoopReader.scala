@@ -20,7 +20,7 @@ package org.apache.spark.sql.hbase
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.hbase.util.HBaseKVHelper
-import org.apache.spark.sql.hbase.util.InsertWappers._
+import org.apache.spark.sql.hbase.util.InsertWrappers._
 
 /**
  * Helper class for scanning files stored in Hadoop - e.g., to read text file when bulk loading.
