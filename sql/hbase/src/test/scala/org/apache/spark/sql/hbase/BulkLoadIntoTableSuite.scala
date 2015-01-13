@@ -33,7 +33,9 @@ import scala.collection.mutable.ArrayBuffer
 
 class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
   val sc: SparkContext = TestHbase.sparkContext
-  val sparkHome = TestHbase.sparkContext.getSparkHome().getOrElse(".")
+  val sparkHome = TestHbase.sparkContext.getSparkHome().orNull
+  if (sparkHome == null || sparkHome.isEmpty)
+    logError("Spark Home is not defined; may lead to unexpected error!")
 
   // Test if we can parse 'LOAD DATA LOCAL INPATH './usr/file.txt' INTO TABLE tb1'
   test("bulkload parser test, local file") {
