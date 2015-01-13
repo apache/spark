@@ -449,6 +449,16 @@ class SparseVector(
   override def toString: String =
     "(%s,%s,%s)".format(size, indices.mkString("[", ",", "]"), values.mkString("[", ",", "]"))
 
+  override def equals(other: Any): Boolean = {
+    other match {
+      case v: SparseVector =>
+        this.size == v.size &&
+          util.Arrays.equals(this.indices, v.indices) &&
+          util.Arrays.equals(this.values, v.values)
+      case _ => super.equals(other)
+    }
+  }
+
   override def toArray: Array[Double] = {
     val data = new Array[Double](size)
     var i = 0
