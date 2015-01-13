@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql._
+import org.apache.spark.util.Utils
 
 /* Implicits */
 import org.apache.spark.sql.hive.test.TestHive._
@@ -36,24 +37,26 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     reset()
   }
 
+  val filePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
+
   test ("persistent JSON table") {
     sql(
-      """
+      s"""
         |CREATE TABLE jsonTable
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
-        |  path 'src/test/resources/sample.json'
+        |  path '${filePath}'
         |)
       """.stripMargin)
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
-      jsonFile("src/test/resources/sample.json").collect().toSeq)
+      jsonFile(filePath).collect().toSeq)
   }
 
   test ("persistent JSON table with a user specified schema") {
     sql(
-      """
+      s"""
         |CREATE TABLE jsonTable (
         |a string,
         |b String,
@@ -61,11 +64,11 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
         |`<d>` Struct<`d!`:array<int>, `=`:array<struct<Dd2: boolean>>>)
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
-        |  path 'src/test/resources/sample.json'
+        |  path '${filePath}'
         |)
       """.stripMargin)
 
-    jsonFile("src/test/resources/sample.json").registerTempTable("expectedJsonTable")
+    jsonFile(filePath).registerTempTable("expectedJsonTable")
 
     checkAnswer(
       sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM jsonTable"),
@@ -76,11 +79,11 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     // This works because JSON objects are self-describing and JSONRelation can get needed
     // field values based on field names.
     sql(
-      """
+      s"""
         |CREATE TABLE jsonTable (`<d>` Struct<`=`:array<struct<Dd2: boolean>>>, b String)
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
-        |  path 'src/test/resources/sample.json'
+        |  path '${filePath}'
         |)
       """.stripMargin)
 
@@ -92,7 +95,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     assert(expectedSchema == table("jsonTable").schema)
 
-    jsonFile("src/test/resources/sample.json").registerTempTable("expectedJsonTable")
+    jsonFile(filePath).registerTempTable("expectedJsonTable")
 
     checkAnswer(
       sql("SELECT b, `<d>`.`=` FROM jsonTable"),
@@ -101,32 +104,32 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
   test("resolve shortened provider names") {
     sql(
-      """
+      s"""
         |CREATE TABLE jsonTable
         |USING org.apache.spark.sql.json
         |OPTIONS (
-        |  path 'src/test/resources/sample.json'
+        |  path '${filePath}'
         |)
       """.stripMargin)
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
-      jsonFile("src/test/resources/sample.json").collect().toSeq)
+      jsonFile(filePath).collect().toSeq)
   }
 
   test("drop table") {
     sql(
-      """
+      s"""
         |CREATE TABLE jsonTable
         |USING org.apache.spark.sql.json
         |OPTIONS (
-        |  path 'src/test/resources/sample.json'
+        |  path '${filePath}'
         |)
       """.stripMargin)
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
-      jsonFile("src/test/resources/sample.json").collect().toSeq)
+      jsonFile(filePath).collect().toSeq)
 
     sql("DROP TABLE jsonTable")
 
@@ -212,15 +215,15 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
   test("invalidate cache and reload") {
     sql(
-      """
+      s"""
         |CREATE TABLE jsonTable (`c_!@(3)` int)
         |USING org.apache.spark.sql.json.DefaultSource
         |OPTIONS (
-        |  path 'src/test/resources/sample.json'
+        |  path '${filePath}'
         |)
       """.stripMargin)
 
-    jsonFile("src/test/resources/sample.json").registerTempTable("expectedJsonTable")
+    jsonFile(filePath).registerTempTable("expectedJsonTable")
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
