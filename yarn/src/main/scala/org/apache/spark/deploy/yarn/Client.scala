@@ -108,11 +108,6 @@ private[spark] class Client(
   }
 
   /**
-   * Submit an application running our ApplicationMaster to the ResourceManager.
-   *
-   * The stable Yarn API provides a convenience method (YarnClient#createApplication) for
-   * creating applications and setting up the application submission context. This was not
-   * available in the alpha API.
    * Submit the application submission context containing resources requests
    * to the ResourceManager. When the ResourceManager gets this submission message,
    * it will schedule and grant resources for this application.
