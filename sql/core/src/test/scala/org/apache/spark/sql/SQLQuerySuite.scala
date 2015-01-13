@@ -79,7 +79,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("aggregation with codegen") {
-    val originalValue = codegenEnabled
+    val originalValue = conf.codegenEnabled
     setConf(SQLConf.CODEGEN_ENABLED, "true")
     sql("SELECT key FROM testData GROUP BY key").collect()
     setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
@@ -245,14 +245,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("sorting") {
-    val before = externalSortEnabled
+    val before = conf.externalSortEnabled
     setConf(SQLConf.EXTERNAL_SORT, "false")
     sortTest()
     setConf(SQLConf.EXTERNAL_SORT, before.toString)
   }
 
   test("external sorting") {
-    val before = externalSortEnabled
+    val before = conf.externalSortEnabled
     setConf(SQLConf.EXTERNAL_SORT, "true")
     sortTest()
     setConf(SQLConf.EXTERNAL_SORT, before.toString)
@@ -600,7 +600,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SET commands semantics using sql()") {
-    clear()
+    conf.clear()
     val testKey = "test.key.0"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
@@ -632,7 +632,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql(s"SET $nonexistentKey"),
       Seq(Seq(s"$nonexistentKey=<undefined>"))
     )
-    clear()
+    conf.clear()
   }
 
   test("apply schema") {

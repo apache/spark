@@ -713,7 +713,7 @@ class JsonSuite extends QueryTest {
 
   test("Corrupt records") {
     // Test if we can query corrupt records.
-    val oldColumnNameOfCorruptRecord = TestSQLContext.columnNameOfCorruptRecord
+    val oldColumnNameOfCorruptRecord = TestSQLContext.conf.columnNameOfCorruptRecord
     TestSQLContext.setConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD, "_unparsed")
 
     val jsonSchemaRDD = jsonRDD(corruptRecords)

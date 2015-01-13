@@ -99,7 +99,7 @@ abstract class BaseRelation {
    * large to broadcast.  This method will be called multiple times during query planning
    * and thus should not perform expensive operations for each invocation.
    */
-  def sizeInBytes = sqlContext.defaultSizeInBytes
+  def sizeInBytes = sqlContext.conf.defaultSizeInBytes
 }
 
 /**

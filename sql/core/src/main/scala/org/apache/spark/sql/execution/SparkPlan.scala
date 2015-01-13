@@ -51,7 +51,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
   // the value of codegenEnabled will be set by the desserializer after the constructor has run.
   val codegenEnabled: Boolean = if (sqlContext != null) {
-    sqlContext.codegenEnabled
+    sqlContext.conf.codegenEnabled
   } else {
     false
   }
