@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.util.concurrent.Semaphore
 
+import org.apache.sparktest.tags.IntegrationTest
+
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -62,7 +64,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(sc.parallelize(1 to 10, 2).count === 10)
   }
 
-  test("cluster mode, FIFO scheduler") {
+  test("cluster mode, FIFO scheduler", IntegrationTest) {
     val conf = new SparkConf().set("spark.scheduler.mode", "FIFO")
     sc = new SparkContext("local-cluster[2,1,512]", "test", conf)
     testCount()
@@ -71,7 +73,7 @@ class JobCancellationSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(sc.parallelize(1 to 10, 2).count === 10)
   }
 
-  test("cluster mode, fair scheduler") {
+  test("cluster mode, fair scheduler", IntegrationTest) {
     val conf = new SparkConf().set("spark.scheduler.mode", "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     conf.set("spark.scheduler.allocation.file", xmlPath)

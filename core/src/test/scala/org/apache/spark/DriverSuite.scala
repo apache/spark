@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.File
 
+import org.apache.sparktest.tags.IntegrationTest
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.prop.TableDrivenPropertyChecks._
@@ -28,7 +29,7 @@ import org.apache.spark.util.Utils
 
 class DriverSuite extends FunSuite with Timeouts {
 
-  test("driver should exit after finishing") {
+  test("driver should exit after finishing", IntegrationTest) {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     // Regression test for SPARK-530: "Spark driver process doesn't exit after finishing"
     val masters = Table(("master"), ("local"), ("local-cluster[2,1,512]"))

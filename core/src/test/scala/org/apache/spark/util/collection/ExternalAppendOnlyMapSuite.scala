@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection
 
+import org.apache.sparktest.tags.IntegrationTest
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.FunSuite
@@ -214,11 +216,11 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  test("spilling") {
+  test("spilling", IntegrationTest) {
     testSimpleSpilling()
   }
 
-  test("spilling with compression") {
+  test("spilling with compression", IntegrationTest) {
     // Keep track of which compression codec we're using to report in test failure messages
     var lastCompressionCodec: Option[String] = None
     try {
@@ -291,7 +293,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  test("spilling with hash collisions") {
+  test("spilling with hash collisions", IntegrationTest) {
     val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -340,7 +342,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  test("spilling with many hash collisions") {
+  test("spilling with many hash collisions", IntegrationTest) {
     val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.0001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -365,7 +367,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  test("spilling with hash collisions using the Int.MaxValue key") {
+  test("spilling with hash collisions using the Int.MaxValue key", IntegrationTest) {
     val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -382,7 +384,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with LocalSparkContext {
     sc.stop()
   }
 
-  test("spilling with null keys and values") {
+  test("spilling with null keys and values", IntegrationTest) {
     val conf = createSparkConf(loadDefaults = true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)

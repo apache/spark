@@ -19,6 +19,8 @@ package org.apache.spark.deploy.worker
 
 import java.io.File
 
+import org.apache.sparktest.tags.IntegrationTest
+
 import scala.collection.JavaConversions._
 
 import org.scalatest.FunSuite
@@ -27,7 +29,7 @@ import org.apache.spark.deploy.{ApplicationDescription, Command, ExecutorState}
 import org.apache.spark.SparkConf
 
 class ExecutorRunnerTest extends FunSuite {
-  test("command includes appId") {
+  test("command includes appId", IntegrationTest) {
     val appId = "12345-worker321-9876"
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
     val appDesc = new ApplicationDescription("app name", Some(8), 500,

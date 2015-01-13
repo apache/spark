@@ -19,6 +19,8 @@ package org.apache.spark.deploy
 
 import java.io._
 
+import org.apache.sparktest.tags.IntegrationTest
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark._
@@ -284,7 +286,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
   }
 
-  test("launch simple application with spark-submit") {
+  test("launch simple application with spark-submit", IntegrationTest) {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
       "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
@@ -295,7 +297,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     runSparkSubmit(args)
   }
 
-  test("includes jars passed in through --jars") {
+  test("includes jars passed in through --jars", IntegrationTest) {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val jar1 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassA"))
     val jar2 = TestUtils.createJarWithClasses(Seq("SparkSubmitClassB"))

@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.lang.ref.WeakReference
 
+import org.apache.sparktest.tags.IntegrationTest
+
 import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.language.existentials
 import scala.util.Random
@@ -235,7 +237,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
     }, askSlaves = true).isEmpty)
   }
 
-  test("automatically cleanup RDD + shuffle + broadcast in distributed mode") {
+  test("automatically cleanup RDD + shuffle + broadcast in distributed mode", IntegrationTest) {
     sc.stop()
 
     val conf2 = new SparkConf()
@@ -312,7 +314,7 @@ class SortShuffleContextCleanerSuite extends ContextCleanerSuiteBase(classOf[Sor
     postGCTester.assertCleanup()
   }
 
-  test("automatically cleanup RDD + shuffle + broadcast in distributed mode") {
+  test("automatically cleanup RDD + shuffle + broadcast in distributed mode", IntegrationTest) {
     sc.stop()
 
     val conf2 = new SparkConf()

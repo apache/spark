@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.io.{File, PrintWriter}
 
+import org.apache.sparktest.tags.IntegrationTest
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
@@ -71,12 +72,12 @@ class ReplayListenerSuite extends FunSuite with BeforeAndAfter {
   }
 
   // This assumes the correctness of EventLoggingListener
-  test("End-to-end replay") {
+  test("End-to-end replay", IntegrationTest) {
     testApplicationReplay()
   }
 
   // This assumes the correctness of EventLoggingListener
-  test("End-to-end replay with compression") {
+  test("End-to-end replay with compression", IntegrationTest) {
     CompressionCodec.ALL_COMPRESSION_CODECS.foreach { codec =>
       testApplicationReplay(Some(codec))
     }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection
 
+import org.apache.sparktest.tags.IntegrationTest
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.{PrivateMethodTester, FunSuite}
@@ -174,7 +176,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     sorter.stop()
   }
 
-  test("spilling in local cluster") {
+  test("spilling in local cluster", IntegrationTest) {
     val conf = createSparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
@@ -245,7 +247,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     assert(resultE === (0 until 100000).map(i => (i/4, i)).toSeq)
   }
 
-  test("spilling in local cluster with many reduce tasks") {
+  test("spilling in local cluster with many reduce tasks", IntegrationTest) {
     val conf = createSparkConf(true)  // Load defaults, otherwise SPARK_HOME is not found
     conf.set("spark.shuffle.memoryFraction", "0.001")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
@@ -548,7 +550,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     assert(results === expected)
   }
 
-  test("spilling with hash collisions") {
+  test("spilling with hash collisions", IntegrationTest) {
     val conf = createSparkConf(true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -605,7 +607,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     assert(count === 100000 + collisionPairs.size * 2)
   }
 
-  test("spilling with many hash collisions") {
+  test("spilling with many hash collisions", IntegrationTest) {
     val conf = createSparkConf(true)
     conf.set("spark.shuffle.memoryFraction", "0.0001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -628,7 +630,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     assert(count === 10000)
   }
 
-  test("spilling with hash collisions using the Int.MaxValue key") {
+  test("spilling with hash collisions using the Int.MaxValue key", IntegrationTest) {
     val conf = createSparkConf(true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -649,7 +651,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     }
   }
 
-  test("spilling with null keys and values") {
+  test("spilling with null keys and values", IntegrationTest) {
     val conf = createSparkConf(true)
     conf.set("spark.shuffle.memoryFraction", "0.001")
     sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
@@ -711,7 +713,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
     assertDidNotBypassMergeSort(sorter4)
   }
 
-  test("sort without breaking sorting contracts") {
+  test("sort without breaking sorting contracts", IntegrationTest) {
     val conf = createSparkConf(true)
     conf.set("spark.shuffle.memoryFraction", "0.01")
     conf.set("spark.shuffle.manager", "sort")

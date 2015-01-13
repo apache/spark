@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import org.apache.sparktest.tags.IntegrationTest
 import org.scalatest.{FunSuite, PrivateMethodTester}
 
 import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
