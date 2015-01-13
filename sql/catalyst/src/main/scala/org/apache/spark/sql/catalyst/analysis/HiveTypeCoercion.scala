@@ -172,7 +172,7 @@ trait HiveTypeCoercion {
    *   - INT gets turned into DECIMAL(10, 0)
    *   - LONG gets turned into DECIMAL(20, 0)
    *   - Fixed union decimals with precision/scale p1/s2 and p2/s2  will be promoted to
-   *   DecimalType(max(p1, p2), max(s1, s2))
+   *   DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
    *   - FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE (this is the same as Hive,
    *   but note that unlimited decimals are considered bigger than doubles in WidenTypes)
    *
@@ -203,11 +203,11 @@ trait HiveTypeCoercion {
     }
 
     // Union decimals with precision/scale p1/s2 and p2/s2  will be promoted to
-    // DecimalType(max(p1, p2), max(s1, s2))
+    // DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
     private def findTightestDecimalType(t1: DataType, t2: DataType): Option[DataType] = {
       (t1, t2) match {
         case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
-          Some(DecimalType(max(p1, p2), max(s1, s2)))
+          Some(DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2)))
         case _ => None
       }
     }
