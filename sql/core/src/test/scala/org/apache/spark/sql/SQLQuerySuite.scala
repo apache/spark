@@ -78,6 +78,18 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       2.5)
   }
 
+  test("Add string concat in Spark SQL") {
+    checkAnswer(
+      sql("""SELECT CONCAT("ab", "bcd")"""),
+      "abbcd")
+    checkAnswer(
+      sql("""SELECT CONCAT("ab", null, "ccc", "b")"""),
+      "abcccb")
+    checkAnswer(
+      sql("""SELECT CONCAT(null, "bcd")"""),
+      "bcd")
+  }
+
   test("aggregation with codegen") {
     val originalValue = codegenEnabled
     setConf(SQLConf.CODEGEN_ENABLED, "true")
