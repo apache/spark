@@ -130,13 +130,14 @@ private object ParallelCollectionRDD {
       case r: Range => {
         // 1 to Int.MaxValue and (-2 to Int.MinValue by -1) can trigger exclusive range int overflow
         val needsInclusiveRange = r.isInclusive && (r.end == Int.MaxValue || r.end == Int.MinValue)
-        positions(r.length, numSlices).zipWithIndex.map({
-          // we need an inclusive range to avoid int overflow and setting the last range to be
-          // inclusive is suffice 
-          case ((start, end), index) if needsInclusiveRange && index == numSlices - 1 =>
+        positions(r.length, numSlices).zipWithIndex.map({ case ((start, end), index) =>
+          // If the range needs to be inclusive, include the last element in the last slice
+          if (needsInclusiveRange && index == numSlices - 1) {
             new Range.Inclusive(r.start + start * r.step, r.end, r.step)
-          case ((start, end), _) =>
+          }
+          else {
             new Range(r.start + start * r.step, r.start + end * r.step, r.step)
+          }
         }).toSeq.asInstanceOf[Seq[Seq[T]]]
       }
       case nr: NumericRange[_] => {
