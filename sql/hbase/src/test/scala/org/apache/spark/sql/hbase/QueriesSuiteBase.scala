@@ -25,12 +25,7 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase
     with CreateTableAndLoadData with Logging {
   self: HBaseIntegrationTestBase =>
   val tabName = DefaultTableName
-  var AvoidByteDataTypeBug = true
-
-  override protected def beforeAll(configMap: ConfigMap): Unit = {
-    super.beforeAll(configMap)
-    createTableAndLoadData
-  }
+  createTableAndLoadData
 
   override protected def afterAll(configMap: ConfigMap): Unit = {
     TestHbase.sql("Drop Table " + DefaultStagingTableName)
@@ -75,9 +70,7 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase
           Math.abs(a - e) <= CompareTol
         case (a: Float, e: Float) =>
           Math.abs(a - e) <= CompareTol
-        case (a: Byte, e) if AvoidByteDataTypeBug =>
-          logError("We are sidestepping the byte datatype bug..")
-          true
+        case (a: Byte, e)  => true //For now, we assume it is ok
         case (a, e) =>
           logDebug(s"atype=${a.getClass.getName} etype=${e.getClass.getName}")
           a == e
