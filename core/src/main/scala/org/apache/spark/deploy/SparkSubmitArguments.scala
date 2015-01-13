@@ -405,7 +405,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
         |  --num-executors NUM         Number of executors to launch (Default: 2).
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
-        |                              working directory of each executor.""".stripMargin
+        |                              working directory of each executor.
+      """.stripMargin
     )
     SparkSubmit.exitFn()
   }

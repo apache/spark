@@ -174,6 +174,18 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
   }
 
   Seq("partitioned_parquet", "partitioned_parquet_with_key").foreach { table =>
+    test(s"ordering of the partitioning columns $table") {
+      checkAnswer(
+        sql(s"SELECT p, stringField FROM $table WHERE p = 1"),
+        Seq.fill(10)((1, "part-1"))
+      )
+
+      checkAnswer(
+        sql(s"SELECT stringField, p FROM $table WHERE p = 1"),
+        Seq.fill(10)(("part-1", 1))
+      )
+    }
+
     test(s"project the partitioning column $table") {
       checkAnswer(
         sql(s"SELECT p, count(*) FROM $table group by p"),
