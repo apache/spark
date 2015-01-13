@@ -142,7 +142,7 @@ case class InsertValueIntoTableCommand(tableName: String, valueSeq: Seq[String])
     HBaseKVHelper.string2KV(valueSeq, relation, lineBuffer, keyBytes, valueBytes)
     val rowKey = HBaseKVHelper.encodingRawKeyColumns(keyBytes)
     val put = new Put(rowKey)
-    valueBytes.foreach { case (family, qualifier, value) =>
+    valueBytes.foreach { case (family, qualifier, value) if value != null =>
       put.add(family, qualifier, value)
     }
     relation.htable.put(put)

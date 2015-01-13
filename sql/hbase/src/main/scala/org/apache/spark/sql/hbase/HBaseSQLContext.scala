@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hbase
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hbase.HBaseConfiguration
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.SparkSQLParser
@@ -32,12 +33,11 @@ class HBaseSQLContext(sc: SparkContext) extends SQLContext(sc) with HBaseSQLConf
   }
 
   @transient
-  override protected[sql] lazy val catalog: HBaseCatalog =
-    new HBaseCatalog(this) with OverrideCatalog
+  lazy val configuration = HBaseConfiguration.create(sc.hadoopConfiguration)
 
-  // convenience variable for HBase-enclosing Hadoop configuration
   @transient
-  lazy val configuration = catalog.configuration
+  override protected[sql] lazy val catalog: HBaseCatalog =
+    new HBaseCatalog(this, configuration) with OverrideCatalog
 
   extraStrategies = Seq((new SparkPlanner with HBaseStrategies).HBaseDataSource)
 }

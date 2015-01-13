@@ -47,7 +47,7 @@ private[hbase] class HadoopReader(
         val rowKeyData = HBaseKVHelper.encodingRawKeyColumns(keyBytes)
         val rowKey = new ImmutableBytesWritableWrapper(rowKeyData)
         val put = new PutWrapper(rowKeyData)
-        valueBytes.foreach { case (family, qualifier, value) =>
+        valueBytes.foreach { case (family, qualifier, value) if value != null =>
           put.add(family, qualifier, value.clone())
         }
         (rowKey, put)

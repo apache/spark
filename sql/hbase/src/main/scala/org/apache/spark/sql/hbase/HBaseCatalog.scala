@@ -19,6 +19,7 @@ package org.apache.spark.sql.hbase
 import java.io._
 import java.util.zip._
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hbase.client._
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{HBaseConfiguration, HColumnDescriptor, HTableDescriptor, TableName}
@@ -66,11 +67,11 @@ case class NonKeyColumn(sqlName: String, dataType: DataType, family: String, qua
   }
 }
 
-private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext)
+private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
+                                  @transient configuration: Configuration)
   extends Catalog with Logging with Serializable {
 
   lazy val logger = Logger.getLogger(getClass.getName)
-  lazy val configuration = HBaseConfiguration.create(hbaseContext.sparkContext.hadoopConfiguration)
 
   lazy val relationMapCache = new mutable.HashMap[String, HBaseRelation]
     with mutable.SynchronizedMap[String, HBaseRelation]

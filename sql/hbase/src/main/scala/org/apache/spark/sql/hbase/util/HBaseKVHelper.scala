@@ -100,7 +100,9 @@ object HBaseKVHelper {
       val nkc = relation.nonKeyColumns(i)
       val family = nkc.familyRaw
       val qualifier = nkc.qualifierRaw
-      val bytes = string2Bytes(values(nkc.ordinal), lineBuffer(nkc.ordinal))
+      val bytes = if (values(nkc.ordinal) != null) {
+        string2Bytes(values(nkc.ordinal), lineBuffer(nkc.ordinal))
+      } else null
       valueBytes(i) = (family, qualifier, bytes)
     }
   }
