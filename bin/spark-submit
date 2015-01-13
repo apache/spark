@@ -44,7 +44,10 @@ while (($#)); do
   shift
 done
 
-DEFAULT_PROPERTIES_FILE="$SPARK_HOME/conf/spark-defaults.conf"
+if [ -z "$SPARK_CONF_DIR" ]; then
+  export SPARK_CONF_DIR="$SPARK_HOME/conf"
+fi
+DEFAULT_PROPERTIES_FILE="$SPARK_CONF_DIR/spark-defaults.conf"
 if [ "$MASTER" == "yarn-cluster" ]; then
   SPARK_SUBMIT_DEPLOY_MODE=cluster
 fi

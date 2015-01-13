@@ -38,22 +38,26 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var amMemory: Int = 512 // MB
   var appName: String = "Spark"
   var priority = 0
+  def isClusterMode: Boolean = userClass != null
+
+  private var driverMemory: Int = 512 // MB
+  private val driverMemOverheadKey = "spark.yarn.driver.memoryOverhead"
+  private val amMemKey = "spark.yarn.am.memory"
+  private val amMemOverheadKey = "spark.yarn.am.memoryOverhead"
+  private val isDynamicAllocationEnabled =
+    sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
 
   parseArgs(args.toList)
+  loadEnvironmentArgs()
+  validateArgs()
 
   // Additional memory to allocate to containers
-  // For now, use driver's memory overhead as our AM container's memory overhead
-  val amMemoryOverhead = sparkConf.getInt("spark.yarn.driver.memoryOverhead",
+  val amMemoryOverheadConf = if (isClusterMode) driverMemOverheadKey else amMemOverheadKey
+  val amMemoryOverhead = sparkConf.getInt(amMemoryOverheadConf,
     math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
 
   val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
-
-  private val isDynamicAllocationEnabled =
-    sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
-
-  loadEnvironmentArgs()
-  validateArgs()
 
   /** Load any default arguments provided through environment variables and Spark properties. */
   private def loadEnvironmentArgs(): Unit = {
@@ -87,6 +91,21 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       throw new IllegalArgumentException(
         "You must specify at least 1 executor!\n" + getUsageMessage())
     }
+    if (isClusterMode) {
+      for (key <- Seq(amMemKey, amMemOverheadKey)) {
+        if (sparkConf.contains(key)) {
+          println(s"$key is set but does not apply in cluster mode.")
+        }
+      }
+      amMemory = driverMemory
+    } else {
+      if (sparkConf.contains(driverMemOverheadKey)) {
+        println(s"$driverMemOverheadKey is set but does not apply in client mode.")
+      }
+      sparkConf.getOption(amMemKey)
+        .map(Utils.memoryStringToMb)
+        .foreach { mem => amMemory = mem }
+    }
   }
 
   private def parseArgs(inputArgs: List[String]): Unit = {
@@ -118,7 +137,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           if (args(0) == "--master-memory") {
             println("--master-memory is deprecated. Use --driver-memory instead.")
           }
-          amMemory = value
+          driverMemory = value
           args = tail
 
         case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>

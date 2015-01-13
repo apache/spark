@@ -21,7 +21,7 @@ import breeze.linalg.{DenseVector => BreezeVector}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Matrix, Vector}
-import org.apache.spark.mllib.stat.impl.MultivariateGaussian
+import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLUtils
 
 /**
