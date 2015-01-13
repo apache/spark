@@ -183,7 +183,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
   test("Broadcast variables cannot be created after SparkContext is stopped (SPARK-5065)") {
     sc = new SparkContext("local", "test")
     sc.stop()
-    val thrown = intercept[SparkException] {
+    val thrown = intercept[IllegalStateException] {
       sc.broadcast(Seq(1, 2, 3))
     }
     assert(thrown.getMessage.toLowerCase.contains("stopped"))
