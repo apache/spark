@@ -338,9 +338,18 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
   }
 
-  // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
-  // constructor
-  taskScheduler.start()
+  private val appSlowStart = conf.getBoolean("spark.scheduler.app.slowstart", false)
+  if (appSlowStart) {
+    assert(master.contains("yarn"),
+      "Slow start of application is currently only supported in YARN mode")
+    logInfo("TaskScheduler will start later.")
+  } else {
+    // start TaskScheduler after taskScheduler sets DAGScheduler reference in DAGScheduler's
+    // constructor
+    if (taskScheduler.started.compareAndSet(false, true)) {
+      taskScheduler.start()
+    }
+  }
 
   val applicationId: String = taskScheduler.applicationId()
   conf.set("spark.app.id", applicationId)

@@ -66,6 +66,7 @@ private[spark] class Client(
   private val executorMemoryOverhead = args.executorMemoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
   private val isClusterMode = args.isClusterMode
+  private var appContext: ApplicationSubmissionContext = null
 
 
   def stop(): Unit = yarnClient.stop()
@@ -77,13 +78,15 @@ private[spark] class Client(
    * ------------------------------------------------------------------------------------- */
 
   /**
-   * Submit an application running our ApplicationMaster to the ResourceManager.
+   * Create an application running our ApplicationMaster to the ResourceManager.
+   * This gets ApplicationId from the ResourceManager. However it doesn't submit the application
+   * submission context containing resources requests to the ResourceManager.
    *
    * The stable Yarn API provides a convenience method (YarnClient#createApplication) for
    * creating applications and setting up the application submission context. This was not
    * available in the alpha API.
    */
-  def submitApplication(): ApplicationId = {
+  def createApplication(): ApplicationId = {
     yarnClient.init(yarnConf)
     yarnClient.start()
 
@@ -100,12 +103,26 @@ private[spark] class Client(
 
     // Set up the appropriate contexts to launch our AM
     val containerContext = createContainerLaunchContext(newAppResponse)
-    val appContext = createApplicationSubmissionContext(newApp, containerContext)
-
-    // Finally, submit and monitor the application
-    logInfo(s"Submitting application ${appId.getId} to ResourceManager")
-    yarnClient.submitApplication(appContext)
+    appContext = createApplicationSubmissionContext(newApp, containerContext)
     appId
+  }
+
+  /**
+   * Submit an application running our ApplicationMaster to the ResourceManager.
+   *
+   * The stable Yarn API provides a convenience method (YarnClient#createApplication) for
+   * creating applications and setting up the application submission context. This was not
+   * available in the alpha API.
+   * Submit the application submission context containing resources requests
+   * to the ResourceManager. When the ResourceManager gets this submission message,
+   * it will schedule and grant resources for this application.
+   * This will actually trigger resources scheduling in the cluster.
+   */
+  def submitApplication() = {
+    // Finally, submit and monitor the application
+    logInfo(s"Submitting application context of ${appContext.getApplicationId().getId} " +
+             "to ResourceManager")
+    yarnClient.submitApplication(appContext)
   }
 
   /**

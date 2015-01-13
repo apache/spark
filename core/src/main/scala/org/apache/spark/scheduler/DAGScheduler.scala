@@ -1330,7 +1330,9 @@ class DAGScheduler(
   def stop() {
     logInfo("Stopping DAGScheduler")
     dagSchedulerActorSupervisor ! PoisonPill
-    taskScheduler.stop()
+    if (taskScheduler.started.compareAndSet(true, false)) {
+      taskScheduler.stop()
+    }
   }
 }
 
