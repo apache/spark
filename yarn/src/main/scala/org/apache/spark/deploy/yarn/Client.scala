@@ -23,7 +23,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.{YarnClient, YarnClientApplication}
-import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.Records
 
@@ -46,7 +45,6 @@ private[spark] class Client(
 
   val yarnClient = YarnClient.createYarnClient
   val yarnConf = new YarnConfiguration(hadoopConf)
-  var appContext: ApplicationSubmissionContext = null
 
   def stop(): Unit = yarnClient.stop()
 
@@ -57,15 +55,13 @@ private[spark] class Client(
    * ------------------------------------------------------------------------------------- */
 
   /**
-   * Create an application running our ApplicationMaster to the ResourceManager.
-   * This gets ApplicationId from the ResourceManager. However it doesn't submit the application
-   * submission context containing resources requests to the ResourceManager.
+   * Submit an application running our ApplicationMaster to the ResourceManager.
    *
    * The stable Yarn API provides a convenience method (YarnClient#createApplication) for
    * creating applications and setting up the application submission context. This was not
    * available in the alpha API.
    */
-  override def createApplication(): ApplicationId = {
+  override def submitApplication(): ApplicationId = {
     yarnClient.init(yarnConf)
     yarnClient.start()
 
@@ -79,29 +75,15 @@ private[spark] class Client(
 
     // Verify whether the cluster has enough resources for our AM
     verifyClusterResources(newAppResponse)
-    
+
     // Set up the appropriate contexts to launch our AM
     val containerContext = createContainerLaunchContext(newAppResponse)
-    appContext = createApplicationSubmissionContext(newApp, containerContext)
-    appId
-  }
-  
-  /**
-   * Submit the application submission context containing resources requests
-   * to the ResourceManager. When the ResourceManager gets this submission message,
-   * it will schedule and grant resources for this application.
-   * This will actually trigger resources scheduling in the cluster.
-   */
-  override def submitApplication() = {
-    if (appContext == null) {
-      throw new IllegalArgumentException("AppContext is null. " +
-                "The method createApplication should be called in advance.")
-    }
-    
+    val appContext = createApplicationSubmissionContext(newApp, containerContext)
+
     // Finally, submit and monitor the application
-    logInfo(s"Submitting application context of ${appContext.getApplicationId().getId} " +
-             "to ResourceManager")
+    logInfo(s"Submitting application ${appId.getId} to ResourceManager")
     yarnClient.submitApplication(appContext)
+    appId
   }
 
   /**
