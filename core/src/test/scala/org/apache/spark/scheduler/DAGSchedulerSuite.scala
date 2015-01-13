@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
+import scala.util.control.NonFatal
 
 import org.scalatest.{BeforeAndAfter, FunSuiteLike}
 import org.scalatest.concurrent.Timeouts
@@ -30,8 +31,6 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.CallSite
 import org.apache.spark.executor.TaskMetrics
-
-import scala.util.control.NonFatal
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
