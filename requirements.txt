@@ -14,6 +14,7 @@ mysql-python
 pandas
 pygments
 python-dateutil
+setproctitle
 sphinx
 sphinx_rtd_theme
 sqlalchemy
