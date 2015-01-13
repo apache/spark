@@ -104,8 +104,10 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       amMemory = driverMemory
       amCores = driverCores
     } else {
-      if (sparkConf.contains(driverMemOverheadKey, driverCoresKey)) {
-        println(s"$driverMemOverheadKey is set but does not apply in client mode.")
+      for (key <- Seq(driverMemOverheadKey, driverCoresKey)) {
+        if (sparkConf.contains(key)) {
+          println(s"$key is set but does not apply in client mode.")
+        }
       }
       sparkConf.getOption(amMemKey)
         .map(Utils.memoryStringToMb)
