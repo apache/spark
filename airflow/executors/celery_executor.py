@@ -17,10 +17,11 @@ airflow worker
 
 
 class CeleryConfig(object):
-    BROKER_URL = conf.get('celery', 'BROKER_URL')
-    CELERY_RESULT_BACKEND = conf.get('celery', 'CELERY_RESULT_BACKEND')
     CELERY_ACCEPT_CONTENT = ['json', 'pickle']
     CELERYD_PREFETCH_MULTIPLIER = 1
+    CELERY_ACKS_LATE = True
+    BROKER_URL = conf.get('celery', 'BROKER_URL')
+    CELERY_RESULT_BACKEND = conf.get('celery', 'CELERY_RESULT_BACKEND')
     CELERYD_CONCURRENCY = int(conf.get('celery', 'CELERYD_CONCURRENCY'))
 
 app = Celery(
