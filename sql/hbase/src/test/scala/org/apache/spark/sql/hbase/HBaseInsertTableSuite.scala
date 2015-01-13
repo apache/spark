@@ -22,7 +22,6 @@ import org.apache.spark.sql.Row
 
 class HBaseInsertTableSuite extends QueriesSuiteBase {
 
-  /*
   var testnm = "Insert all rows to the table from other table"
   test("Insert all rows to the table from other table") {
     val createQuery = s"""CREATE TABLE insertTestTable(strcol STRING, bytecol BYTE, shortcol SHORT,
@@ -141,25 +140,24 @@ class HBaseInsertTableSuite extends QueriesSuiteBase {
 
     runQuery("Drop Table insertValuesTest")
   }
-  */
 
-  var testnm = "Insert nullable values test"
-  test("Insert into values test") {
-    val createQuery = s"""CREATE TABLE insertValuesTest(strcol STRING, bytecol BYTE,
+  testnm = "Insert nullable values test"
+  test("Insert nullable values test") {
+    val createQuery = s"""CREATE TABLE insertNullValuesTest(strcol STRING, bytecol BYTE,
             shortcol SHORT, intcol INTEGER, PRIMARY KEY(strcol))
-            MAPPED BY (hinsertValuesTest, COLS=[bytecol=cf1.hbytecol,
+            MAPPED BY (hinsertNullValuesTest, COLS=[bytecol=cf1.hbytecol,
             shortcol=cf1.hshortcol, intcol=cf1.hintcol])"""
       .stripMargin
     runQuery(createQuery)
 
-    val insertQuery1 = s"insert into insertValuesTest values('Row0', null,  12340, 23456780)"
-    val insertQuery2 = s"insert into insertValuesTest values('Row1', 'b',   null, 23456789)"
-    val insertQuery3 = s"insert into insertValuesTest values('Row2', 'c',  12342, null)"
+    val insertQuery1 = s"insert into insertNullValuesTest values('Row0', null,  12340, 23456780)"
+    val insertQuery2 = s"insert into insertNullValuesTest values('Row1', 'b',   null, 23456789)"
+    val insertQuery3 = s"insert into insertNullValuesTest values('Row2', 'c',  12342, null)"
     runQuery(insertQuery1)
     runQuery(insertQuery2)
     runQuery(insertQuery3)
 
-    val testQuery = "select * from insertValuesTest order by strcol"
+    val testQuery = "select * from insertNullValuesTest order by strcol"
     val testResult = runQuery(testQuery)
 
     assert(testResult.size == 3, s"$testnm failed on size")
@@ -190,7 +188,7 @@ class HBaseInsertTableSuite extends QueriesSuiteBase {
     assert(testResult(currentResultRow)(3) == null, s"$testnm failed on returned Row2, null col3 value")
 
 
-    runQuery("Drop Table insertValuesTest")
+    runQuery("Drop Table insertNullValuesTest")
   }
 
 
