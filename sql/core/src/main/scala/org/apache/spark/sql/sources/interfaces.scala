@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Attribute}
 /**
  * ::DeveloperApi::
  * Implemented by objects that produce relations for a specific kind of data source.  When
- * Spark SQL is given a DDL operation with a USING clause specified, this interface is used to
- * pass in the parameters specified by a user.
+ * Spark SQL is given a DDL operation with a USING clause specified (to specify the implemented
+ * RelationProvider), this interface is used to pass in the parameters specified by a user.
  *
  * Users may specify the fully qualified class name of a given data source.  When that class is
  * not found Spark SQL will append the class name `DefaultSource` to the path, allowing for
@@ -46,10 +46,10 @@ trait RelationProvider {
 
 /**
  * ::DeveloperApi::
- * Implemented by objects that produce relations for a specific kind of data source.  When
- * Spark SQL is given a DDL operation with
- * 1. USING clause: to specify the implemented SchemaRelationProvider
- * 2. User defined schema: users can define schema optionally when create table
+ * Implemented by objects that produce relations for a specific kind of data source
+ * with a given schema.  When Spark SQL is given a DDL operation with a USING clause specified (
+ * to specify the implemented SchemaRelationProvider) and a user defined schema, this interface
+ * is used to pass in the parameters specified by a user.
  *
  * Users may specify the fully qualified class name of a given data source.  When that class is
  * not found Spark SQL will append the class name `DefaultSource` to the path, allowing for
@@ -57,6 +57,11 @@ trait RelationProvider {
  * data source 'org.apache.spark.sql.json.DefaultSource'
  *
  * A new instance of this class with be instantiated each time a DDL call is made.
+ *
+ * The difference between a [[RelationProvider]] and a [[SchemaRelationProvider]] is that
+ * users need to provide a schema when using a SchemaRelationProvider.
+ * A relation provider can inherits both [[RelationProvider]] and [[SchemaRelationProvider]]
+ * if it can support both schema inference and user-specified schemas.
  */
 @DeveloperApi
 trait SchemaRelationProvider {

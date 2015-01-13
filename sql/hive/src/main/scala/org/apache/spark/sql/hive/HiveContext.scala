@@ -115,6 +115,16 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     catalog.createTable("default", tableName, ScalaReflection.attributesFor[A], allowExisting)
   }
 
+  def refreshTable(tableName: String): Unit = {
+    // TODO: Database support...
+    catalog.refreshTable("default", tableName)
+  }
+
+  protected[hive] def invalidateTable(tableName: String): Unit = {
+    // TODO: Database support...
+    catalog.invalidateTable("default", tableName)
+  }
+
   /**
    * Analyzes the given table in the current database to generate statistics, which will be
    * used in query optimizations.
@@ -340,6 +350,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     override def strategies: Seq[Strategy] = extraStrategies ++ Seq(
       DataSourceStrategy,
       HiveCommandStrategy(self),
+      HiveDDLStrategy,
+      DDLStrategy,
       TakeOrdered,
       ParquetOperations,
       InMemoryScans,
