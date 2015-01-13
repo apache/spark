@@ -22,7 +22,7 @@ import java.util.Random
 import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, sum => brzSum, normalize}
 
 import org.apache.spark.graphx._
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors, Matrix, Matrices}
+import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors, Matrix, Matrices}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 
@@ -79,6 +79,11 @@ class LDA private (
    * This value should be > 0.0, where larger values mean more smoothing (more regularization).
    * If set <= 0, then topicSmoothing is set to equal 50 / k (where k is the number of topics).
    *  (default = 50 / k)
+   *
+   * Details on this parameter:
+   * The above description tells how the base value of topicSmoothing is set.  However, following
+   * Asuncion et al. (2009), we adjust the base value based on the algorithm.
+   *  - For EM, we increase topicSmoothing by +1.0.
    */
   def getTopicSmoothing: Double = topicSmoothing
 
@@ -96,6 +101,11 @@ class LDA private (
    *
    * This value should be > 0.0.
    *  (default = 0.1)
+   *
+   * Details on this parameter:
+   * The above description tells how the base value of topicSmoothing is set.  However, following
+   * Asuncion et al. (2009), we adjust the base value based on the algorithm.
+   *  - For EM, we increase topicSmoothing by +1.0.
    */
   def getTermSmoothing: Double = termSmoothing
 
@@ -131,6 +141,12 @@ class LDA private (
    * @return  Inferred LDA model
    */
   def run(docs: RDD[Document]): DistributedLDAModel = {
+    val termSmoothing = this.termSmoothing + 1.0
+    val topicSmoothing = if (this.topicSmoothing > 0) {
+      this.topicSmoothing
+    } else {
+      50.0 / k
+    } + 1.0
     var state =
       LDA.initialState(docs, k, termSmoothing, topicSmoothing, seed)
     var iter = 0
@@ -288,29 +304,37 @@ class DistributedLDAModel private[clustering] (
   */
 
   /**
+   * Return the topics described by the top-weighted terms.
    *
-   * @param maxTermsPerTopic
+   * Note: This is approximate; it may not return exactly the top-weighted terms for each topic.
+   *       To get a more precise set of top terms, increase maxTermsPerTopic.
+   *
+   * @param maxTermsPerTopic  Maximum number of terms to collect for each topic.
    * @return  Array over topics, where each element is a set of top terms represented
    *          as (term weight in topic, term index).
+   *          Each topic's terms are sorted in order of decreasing weight.
    */
   def getTopics(maxTermsPerTopic: Int): Array[Array[(Double, Int)]] = {
-    val nt = maxTermsPerTopic
-    state.graph.vertices.filter(_._1 < 0) // select term vertices
-      .mapPartitions { items =>
-      // Create queue of
-      val queues = Array.fill(nt)(new BoundedPriorityQueue[(Double, Int)](maxTermsPerTopic))
-      for ((termId, factor) <- items) {
-        var t = 0
-        while (t < nt) {
-          queues(t) += (factor(t)  -> termId.toInt)
-          t += 1
+    val numTopics = k
+    val N_k: TopicCounts = state.collectTopicTotals()
+    state.graph.vertices.filter(isTermVertex)
+      .mapPartitions { termVertices =>
+      // For this partition, collect the most common terms for each topic in queues:
+      //  queues(topic) = queue of (term weight, term index).
+      // Term weights are N_{wk} / N_k.
+      val queues = Array.fill(numTopics)(new BoundedPriorityQueue[(Double, Int)](maxTermsPerTopic))
+      for ((termId, n_wk) <- termVertices) {
+        var topic = 0
+        while (topic < numTopics) {
+          queues(topic) += (n_wk(topic) / N_k(topic) -> index2term(termId.toInt))
+          topic += 1
         }
       }
       Iterator(queues)
     }.reduce { (q1, q2) =>
-      q1.zip(q2).foreach { case (a,b) => a ++= b }
+      q1.zip(q2).foreach { case (a, b) => a ++= b}
       q1
-    }.map ( q => q.toArray )
+    }.map(_.toArray.sortBy(_._1))
   }
 
 }
@@ -387,19 +411,17 @@ object LDA {
 
   private[clustering] def index2term(termIndex: Long): Int = -(1 + termIndex).toInt
 
-  private[clustering] def isTermVertex(v: Tuple2[VertexId, _]): Boolean = v._1 < 0
-
-  private[clustering] def isDocVertex(v: Tuple2[VertexId, _]): Boolean = v._1 >= 0
+  private[clustering] def isTermVertex(v: (VertexId, _)): Boolean = v._1 < 0
 
   /**
+   * State for EM algorithm: data + parameter graph, plus algorithm parameters.
    *
-   * Has all the information needed to run collapsed Gibbs sampling.
-   *
-   * @param graph
-   * @param k
-   * @param vocabSize
-   * @param topicSmoothing
-   * @param termSmoothing
+   * @param graph  EM graph, storing current parameter estimates in vertex descriptors and
+   *               data (token counts) in edge descriptors.
+   * @param k  Number of topics
+   * @param vocabSize  Number of unique terms
+   * @param topicSmoothing  "alpha"
+   * @param termSmoothing  "eta"
    */
   private[clustering] case class LearningState(
       graph: Graph[TopicCounts, TokenCount],
@@ -408,7 +430,7 @@ object LDA {
       topicSmoothing: Double,
       termSmoothing: Double) {
 
-    // TODO: Checkpoint periodically
+    // TODO: Checkpoint periodically?
     def next() = copy(graph = step(graph))
 
     private def step(graph: Graph[TopicCounts, TokenCount]): Graph[TopicCounts, TokenCount] = {
@@ -434,64 +456,21 @@ object LDA {
       graph.outerJoinVertices(docTopicDistributions){ (vid, oldDist, newDist) => newDist.get }
     }
 
-    /*
-    /**
-     * Update document topic distributions, i.e., theta_doc = p(z|doc) for each doc.
-     * @return Graph with updated document vertex descriptors
-     */
-    private def updateDocs(graph: Graph[TopicCounts, TokenCount]): Graph[TopicCounts, TokenCount] = {
-      val alpha = topicSmoothing
-      // Compute smoothed topic distributions for each document (size: numDocuments x k).
-      val docTopicTotals = updateExpectedCounts(_.srcId)
-      val newTotals = docTopicTotals.mapValues(total => normalize(total += alpha, 1))
-      println(s"E-STEP newTotals.take(1): ${newTotals.take(1)(0)._2}")
-      // Update document vertices with new topic distributions.
-      graph.outerJoinVertices(newTotals){ (vid, old, newOpt) => newOpt.getOrElse(old) }
-    }
-
-    /**
-     * Update topics, i.e., beta_z = p(w|z) for each topic z.
-     * (Conceptually, these are the topics.  However, they are stored transposed, where each
-     *  term vertex stores the distribution value for each topic.)
-     * @return Graph with updated term vertex descriptors
-     */
-    private def updateTerms(graph: Graph[TopicCounts, TokenCount]): Graph[TopicCounts, TokenCount] = {
-      // Compute new topics.
-      val termTotals = updateExpectedCounts(_.dstId)
-      // Collect the aggregate counts over terms (summing all topics).
-      val eta: Double = termSmoothing
-      val topicTotals = termTotals.map(_._2).fold(BDV.zeros[Double](k))(_ + _)
-      topicTotals += (eta * vocabSize)
-      println(s"M-STEP topicTotals: $topicTotals")
-      // Update term vertices with new topic weights.
-      graph.outerJoinVertices(termTotals)( (vid, old, newOpt) =>
-        newOpt
-          .map { counts => (counts += eta) :/= topicTotals } // smooth individual counts; normalize
-          .getOrElse(old)
-      )
-    }
-
-    private def updateExpectedCounts(sendToWhere: (EdgeTriplet[_, _]) => VertexId): VertexRDD[TopicCounts] = {
-      //  Collect N_k from term vertices.
-      val N_k = collectTopicTotals()
-      val eta = termSmoothing
-      val W = vocabSize
-      val alpha = topicSmoothing
-      graph.mapReduceTriplets[TopicCounts]({
-        trip => Iterator(sendToWhere(trip) -> computePTopic(trip, N_k, W, eta, alpha))
-      }, _ += _)
-    }
-    */
-
-    private def collectTopicTotals(): TopicCounts = {
+    private[clustering] def collectTopicTotals(): TopicCounts = {
       val numTopics = k
       graph.vertices.filter(isTermVertex).map(_._2).fold(BDV.zeros[Double](numTopics))(_ + _)
     }
-
   }
 
-  private def computePTopic(edgeContext: EdgeContext[TopicCounts, TokenCount, TopicCounts],
-                            N_k: TopicCounts, vocabSize: Int, eta: Double, alpha: Double): TopicCounts = {
+  /**
+   * Compute gamma_{wjk}, a distribution over topics k.
+   */
+  private def computePTopic(
+      edgeContext: EdgeContext[TopicCounts, TokenCount, TopicCounts],
+      N_k: TopicCounts,
+      vocabSize: Int,
+      eta: Double,
+      alpha: Double): TopicCounts = {
     val smoothed_N_wk: TopicCounts = edgeContext.dstAttr + (eta - 1.0)
     val smoothed_N_kj: TopicCounts = edgeContext.srcAttr + (alpha - 1.0)
     val smoothed_N_k: TopicCounts = N_k + (vocabSize * (eta - 1.0))
@@ -500,18 +479,6 @@ object LDA {
     // normalize
     unnormalizedGamma /= brzSum(unnormalizedGamma)
   }
-
-  /*
-  private def computePTopic(edge: EdgeTriplet[TopicCounts, TokenCount], N_k: TopicCounts, vocabSize: Int, eta: Double, alpha: Double): TopicCounts = {
-    val smoothed_N_wk: TopicCounts = edge.dstAttr + (eta - 1.0)
-    val smoothed_N_kj: TopicCounts = edge.srcAttr + (alpha - 1.0)
-    val smoothed_N_k: TopicCounts = N_k + (vocabSize * (eta - 1.0))
-    // proportional to p(w|z) * p(z|d) / p(z)
-    val unnormalizedGamma = smoothed_N_wk :* smoothed_N_kj :/ smoothed_N_k
-    // normalize
-    unnormalizedGamma /= brzSum(unnormalizedGamma)
-  }
-  */
 
   /**
    * Compute bipartite term/doc graph.

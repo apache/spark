@@ -42,12 +42,14 @@ import org.apache.spark.rdd.RDD
  */
 object LDAExample {
 
-  case class Params(
-                     input: Seq[String] = Seq.empty,
-                     k: Int = 20,
-                     topicSmoothing: Double = 0.1,
-                     termSmoothing: Double = 0.1,
-                     vocabSize: Int = 10000) extends AbstractParams[Params]
+  private case class Params(
+      input: Seq[String] = Seq.empty,
+      k: Int = 20,
+      maxIterations: Int = 10,
+      topicSmoothing: Double = 0.1,
+      termSmoothing: Double = 0.1,
+      vocabSize: Int = 10000,
+      stopwordFile: String = "") extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -57,6 +59,9 @@ object LDAExample {
       opt[Int]("k")
         .text(s"number of topics. default: ${defaultParams.k}")
         .action((x, c) => c.copy(k = x))
+      opt[Int]("maxIterations")
+        .text(s"number of iterations of learning. default: ${defaultParams.maxIterations}")
+        .action((x, c) => c.copy(maxIterations = x))
       opt[Double]("topicSmoothing")
         .text(s"amount of topic smoothing to use.  default: ${defaultParams.topicSmoothing}")
         .action((x, c) => c.copy(topicSmoothing = x))
@@ -67,6 +72,10 @@ object LDAExample {
         .text(s"number of distinct word types to use, chosen by frequency." +
           s"  default: ${defaultParams.vocabSize}")
         .action((x, c) => c.copy(vocabSize = x))
+      opt[String]("stopwordFile")
+        .text(s"filepath for a list of stopwords. Note: This must fit on a single machine." +
+        s"  default: ${defaultParams.stopwordFile}")
+        .action((x, c) => c.copy(stopwordFile = x))
       arg[String]("<input>...")
         .text("input paths (directories) to plain text corpora")
         .unbounded()
@@ -88,15 +97,30 @@ object LDAExample {
 
     Logger.getRootLogger.setLevel(Level.WARN)
 
-    val corpus = preprocess(sc, params.input, params.vocabSize)
-    corpus.cache()
+    // Load documents, and prepare them for LDA.
+    val (corpus, vocabArray) = preprocess(sc, params.input, params.vocabSize, params.stopwordFile)
+    corpus.cache() // cache since LDA is iterative
 
+    // Run LDA.
     val lda = new LDA()
     lda.setK(params.k)
-      .setMaxIterations(4)
+      .setMaxIterations(params.maxIterations)
       .setTopicSmoothing(params.topicSmoothing)
       .setTermSmoothing(params.termSmoothing)
     val ldaModel = lda.run(corpus)
+
+    // Print the topics, showing the top-weighted terms for each topic.
+    val topicIndices = ldaModel.getTopics(maxTermsPerTopic = 10)
+    val topics = topicIndices.map { topic =>
+      topic.map { case (weight, term) => (weight, vocabArray(term)) }
+    }
+    println(s"${params.k} topics:")
+    topics.zipWithIndex.foreach { case (topic, i) =>
+      println(s"TOPIC $i")
+      topic.foreach { case (weight, term) =>
+        println(s"$term\t$weight")
+      }
+    }
 
     // TODO: print log likelihood
 
@@ -108,7 +132,8 @@ object LDAExample {
   private def preprocess(
       sc: SparkContext,
       paths: Seq[String],
-      vocabSize: Int): RDD[Document] = {
+      vocabSize: Int,
+      stopwordFile: String): (RDD[Document], Array[String]) = {
 
     val files: Seq[RDD[(String, String)]] = for (p <- paths) yield {
       sc.wholeTextFiles(p)
@@ -120,8 +145,9 @@ object LDAExample {
       .map { case (path, text) => text }
 
     // Split text into words
+    val tokenizer = new SimpleTokenizer(sc, stopwordFile)
     val tokenized: RDD[(Long, IndexedSeq[String])] = textRDD.zipWithIndex().map { case (text, id) =>
-      id -> SimpleTokenizer.getWords(text)
+      id -> tokenizer.getWords(text)
     }
 
     // Counts words: RDD[(word, wordCount)]
@@ -153,16 +179,26 @@ object LDAExample {
       LDA.Document(sb, id)
     }
 
-    documents
+    val vocabArray = new Array[String](vocab.size)
+    vocab.foreach { case (term, i) => vocabArray(i) = term }
+
+    (documents, vocabArray)
   }
 }
 
 /**
  * Simple Tokenizer.
  *
- * TODO: Formalize the interface, and make it a public class in mllib.feature
+ * TODO: Formalize the interface, and make this a public class in mllib.feature
  */
-private object SimpleTokenizer {
+private class SimpleTokenizer(sc: SparkContext, stopwordFile: String) extends Serializable {
+
+  private val stopwords: Set[String] = if (stopwordFile.isEmpty) {
+    Set.empty[String]
+  } else {
+    val stopwordText = sc.textFile(stopwordFile).collect()
+    stopwordText.flatMap(_.stripMargin.split("\\s+")).toSet
+  }
 
   // Matches sequences of Unicode letters
   private val allWordRegex = "^(\\p{L}*)$".r
@@ -186,7 +222,7 @@ private object SimpleTokenizer {
       val word: String = text.substring(current, end).toLowerCase
       // Remove short words and strings that aren't only letters
       word match {
-        case allWordRegex(w) if w.length >= minWordLength =>
+        case allWordRegex(w) if w.length >= minWordLength && !stopwords.contains(w) =>
           words += word
         case _ =>
       }
@@ -196,7 +232,5 @@ private object SimpleTokenizer {
     }
     words
   }
-
-  // TODO: stopwords
 
 }
