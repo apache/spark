@@ -96,24 +96,16 @@ public abstract class TaskContext implements Serializable {
   public abstract void addOnCompleteCallback(final Function0<Unit> f);
 
   /**
-   * Add a callback function to be executed on task stop.
-   * This will be called when task is being killed.
-   *
-   * @param f Callback function.
-   */
-  public abstract void addOnStopCallback(final Function1<String, Unit> f);
-
-  /**
-   * Add a (Java friendly) listener to be executed on task completion.
-   * This will be called in all situation - success, failure, or cancellation.
-   * An example use is for HadoopRDD to register a callback to close the input stream.
+   * Add a (Java friendly) listener to be executed when kill a task. We add this
+   * listener for some more clean works. For example, we need to register a "kill"
+   * callback to completely stop a receiver supervisor.
    */
   public abstract TaskContext addTaskKilledListener(TaskKilledListener listener);
 
   /**
-   * Add a listener in the form of a Scala closure to be executed on task completion.
-   * This will be called in all situations - success, failure, or cancellation.
-   * An example use is for HadoopRDD to register a callback to close the input stream.
+   * Add a (Java friendly) listener to be executed when kill a task. We add this
+   * listener for some more clean works. For example, we need to register a "kill"
+   * callback to completely stop a receiver supervisor.
    */
   public abstract TaskContext addTaskKilledListener(final Function1<TaskContext, Unit> f);
 
