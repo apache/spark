@@ -59,8 +59,8 @@ private[sql] case class JSONRelation(
       JsonRDD.inferSchema(
         baseRDD,
         samplingRatio,
-        sqlContext.columnNameOfCorruptRecord)))
+        sqlContext.conf.columnNameOfCorruptRecord)))
 
   override def buildScan() =
-    JsonRDD.jsonStringToRow(baseRDD, schema, sqlContext.columnNameOfCorruptRecord)
+    JsonRDD.jsonStringToRow(baseRDD, schema, sqlContext.conf.columnNameOfCorruptRecord)
 }

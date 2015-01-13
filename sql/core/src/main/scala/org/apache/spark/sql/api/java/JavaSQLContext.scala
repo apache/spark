@@ -52,7 +52,7 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
    * @group userf
    */
   def sql(sqlText: String): JavaSchemaRDD = {
-    if (sqlContext.dialect == "sql") {
+    if (sqlContext.conf.dialect == "sql") {
       new JavaSchemaRDD(sqlContext, sqlContext.parseSql(sqlText))
     } else {
       sys.error(s"Unsupported SQL dialect: $sqlContext.dialect")
@@ -164,7 +164,7 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
    * It goes through the entire dataset once to determine the schema.
    */
   def jsonRDD(json: JavaRDD[String]): JavaSchemaRDD = {
-    val columnNameOfCorruptJsonRecord = sqlContext.columnNameOfCorruptRecord
+    val columnNameOfCorruptJsonRecord = sqlContext.conf.columnNameOfCorruptRecord
     val appliedScalaSchema =
       JsonRDD.nullTypeToStringType(
         JsonRDD.inferSchema(json.rdd, 1.0, columnNameOfCorruptJsonRecord))
@@ -182,7 +182,7 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
    */
   @Experimental
   def jsonRDD(json: JavaRDD[String], schema: StructType): JavaSchemaRDD = {
-    val columnNameOfCorruptJsonRecord = sqlContext.columnNameOfCorruptRecord
+    val columnNameOfCorruptJsonRecord = sqlContext.conf.columnNameOfCorruptRecord
     val appliedScalaSchema =
       Option(asScalaDataType(schema)).getOrElse(
         JsonRDD.nullTypeToStringType(

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql
 
+import java.util.Properties
+
+import scala.collection.immutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
@@ -49,13 +52,36 @@ import org.apache.spark.sql.sources.{DataSourceStrategy, BaseRelation, DDLParser
 @AlphaComponent
 class SQLContext(@transient val sparkContext: SparkContext)
   extends org.apache.spark.Logging
-  with SQLConf
   with CacheManager
   with ExpressionConversions
   with UDFRegistration
   with Serializable {
 
   self =>
+
+  // Note that this is a lazy val so we can override the default value in subclasses.
+  private[sql] lazy val conf: SQLConf = new SQLConf
+
+  /** Set Spark SQL configuration properties. */
+  def setConf(props: Properties): Unit = conf.setConf(props)
+
+  /** Set the given Spark SQL configuration property. */
+  def setConf(key: String, value: String): Unit = conf.setConf(key, value)
+
+  /** Return the value of Spark SQL configuration property for the given key. */
+  def getConf(key: String): String = conf.getConf(key)
+
+  /**
+   * Return the value of Spark SQL configuration property for the given key. If the key is not set
+   * yet, return `defaultValue`.
+   */
+  def getConf(key: String, defaultValue: String): String = conf.getConf(key, defaultValue)
+
+  /**
+   * Return all the configuration properties that have been set (i.e. not the default).
+   * This creates a new copy of the config properties in the form of a Map.
+   */
+  def getAllConfs: immutable.Map[String, String] = conf.getAllConfs
 
   @transient
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog(true)
@@ -212,7 +238,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], schema: StructType): SchemaRDD = {
-    val columnNameOfCorruptJsonRecord = columnNameOfCorruptRecord
+    val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
     val appliedSchema =
       Option(schema).getOrElse(
         JsonRDD.nullTypeToStringType(
@@ -226,7 +252,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @Experimental
   def jsonRDD(json: RDD[String], samplingRatio: Double): SchemaRDD = {
-    val columnNameOfCorruptJsonRecord = columnNameOfCorruptRecord
+    val columnNameOfCorruptJsonRecord = conf.columnNameOfCorruptRecord
     val appliedSchema =
       JsonRDD.nullTypeToStringType(
         JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
@@ -299,10 +325,10 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def sql(sqlText: String): SchemaRDD = {
-    if (dialect == "sql") {
+    if (conf.dialect == "sql") {
       new SchemaRDD(this, parseSql(sqlText))
     } else {
-      sys.error(s"Unsupported SQL dialect: $dialect")
+      sys.error(s"Unsupported SQL dialect: ${conf.dialect}")
     }
   }
 
@@ -323,9 +349,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     val sqlContext: SQLContext = self
 
-    def codegenEnabled = self.codegenEnabled
+    def codegenEnabled = self.conf.codegenEnabled
 
-    def numPartitions = self.numShufflePartitions
+    def numPartitions = self.conf.numShufflePartitions
 
     def strategies: Seq[Strategy] =
       extraStrategies ++ (
