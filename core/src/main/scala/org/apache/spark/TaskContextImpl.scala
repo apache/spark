@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
+import org.apache.spark.util.{TaskKilledListener, TaskKilledListenerException, TaskCompletionListener, TaskCompletionListenerException}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -33,14 +33,14 @@ private[spark] class TaskContextImpl(val stageId: Int,
   // List of callback functions to execute when the task completes.
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
 
+  // List of callback functions to execute when kill the task.
+  @transient private val onKilledCallbacks = new ArrayBuffer[TaskKilledListener]
+
   // Whether the corresponding task has been killed.
   @volatile private var interrupted: Boolean = false
 
   // Whether the task has completed.
   @volatile private var completed: Boolean = false
-
-  // Do nothing acquiescently
-  private var stopCallback = (message: String) => {}
 
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     onCompleteCallbacks += listener
@@ -61,8 +61,16 @@ private[spark] class TaskContextImpl(val stageId: Int,
     }
   }
 
-  override def addOnStopCallback(f: String => Unit) {
-    stopCallback = f
+  override def addTaskKilledListener(listener: TaskKilledListener): this.type = {
+    onKilledCallbacks += listener
+    this
+  }
+
+  override def addTaskKilledListener(f: TaskContext => Unit): this.type = {
+    onKilledCallbacks += new TaskKilledListener {
+      override def onTaskKilled(context: TaskContext): Unit = f(context)
+    }
+    this
   }
 
   /** Marks the task as completed and triggers the listeners. */
@@ -84,14 +92,34 @@ private[spark] class TaskContextImpl(val stageId: Int,
     }
   }
 
+  /**
+   * Marks the task as interruption, i.e. cancellation. We add this
+   * method for some more clean works. For example, we need to register
+   * a "kill" callback to completely stop a receiver supervisor. And more,
+   * we reuse the "interrupted" flag to indicate whether the corresponding
+   * task has been killed.
+   */
+  private[spark] def markTaskKilled(): Unit = {
+    interrupted = true
+    val errorMsgs = new ArrayBuffer[String](2)
+    // Process kill callbacks in the reverse order of registration
+    onKilledCallbacks.reverse.foreach { listener =>
+      try {
+        listener.onTaskKilled(this)
+      } catch {
+        case e: Throwable =>
+          errorMsgs += e.getMessage
+          logError("Error in TaskKilledListener", e)
+      }
+    }
+    if (errorMsgs.nonEmpty) {
+      throw new TaskKilledListenerException(errorMsgs)
+    }
+  }
+
   /** Marks the task for interruption, i.e. cancellation. */
   private[spark] def markInterrupted(): Unit = {
     interrupted = true
-  }
-
-  /** Stop the task by custom style. */
-  private[spark] def stop(message: String) {
-    stopCallback(message)
   }
 
   override def isCompleted: Boolean = completed

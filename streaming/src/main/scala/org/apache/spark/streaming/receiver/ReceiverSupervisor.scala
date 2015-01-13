@@ -114,12 +114,6 @@ private[streaming] abstract class ReceiverSupervisor(
     stopLatch.countDown()
   }
 
-  val stop: String => Unit = (message: String) => {
-    if (receiverState != Stopped) {
-      stop(message, None)
-    }
-  }
-
   /** Start receiver */
   def startReceiver(): Unit = synchronized {
     try {

@@ -26,6 +26,7 @@ import scala.Unit;
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.util.TaskCompletionListener;
+import org.apache.spark.util.TaskKilledListener;
 
 /**
  * Contextual information about a task which can be read or mutated during
@@ -101,6 +102,20 @@ public abstract class TaskContext implements Serializable {
    * @param f Callback function.
    */
   public abstract void addOnStopCallback(final Function1<String, Unit> f);
+
+  /**
+   * Add a (Java friendly) listener to be executed on task completion.
+   * This will be called in all situation - success, failure, or cancellation.
+   * An example use is for HadoopRDD to register a callback to close the input stream.
+   */
+  public abstract TaskContext addTaskKilledListener(TaskKilledListener listener);
+
+  /**
+   * Add a listener in the form of a Scala closure to be executed on task completion.
+   * This will be called in all situations - success, failure, or cancellation.
+   * An example use is for HadoopRDD to register a callback to close the input stream.
+   */
+  public abstract TaskContext addTaskKilledListener(final Function1<TaskContext, Unit> f);
 
   public abstract int stageId();
 
