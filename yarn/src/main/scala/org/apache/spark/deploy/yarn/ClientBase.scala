@@ -517,9 +517,7 @@ private[spark] trait ClientBase extends Logging {
    * throw an appropriate SparkException.
    */
   def run(): Unit = {
-    val appId = createApplication()
-    submitApplication()
-    val (yarnApplicationState, finalApplicationStatus) = monitorApplication(appId)
+    val (yarnApplicationState, finalApplicationStatus) = monitorApplication(submitApplication())
     if (yarnApplicationState == YarnApplicationState.FAILED ||
       finalApplicationStatus == FinalApplicationStatus.FAILED) {
       throw new SparkException("Application finished with failed status")
@@ -537,20 +535,8 @@ private[spark] trait ClientBase extends Logging {
    |  Methods that cannot be implemented here due to API differences across hadoop versions  |
    * --------------------------------------------------------------------------------------- */
 
-  /**
-   * Create an application running our ApplicationMaster to the ResourceManager.
-   * This gets ApplicationId from the ResourceManager. However it doesn't submit the application
-   * submission context containing resources requests to the ResourceManager.
-   */
-  def createApplication(): ApplicationId
-  
-  /**
-   * Submit the application submission context containing resources requests
-   * to the ResourceManager. When the ResourceManager gets this submission message,
-   * it will schedule and grant resources for this application.
-   * This will actually trigger resources scheduling in the cluster.
-   */
-  def submitApplication(): Unit
+  /** Submit an application running our ApplicationMaster to the ResourceManager. */
+  def submitApplication(): ApplicationId
 
   /** Set up security tokens for launching our ApplicationMaster container. */
   protected def setupSecurityToken(containerContext: ContainerLaunchContext): Unit
