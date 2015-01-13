@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 
+import scala.language.existentials
 import scala.util.control.NonFatal
 
 import org.apache.spark._
