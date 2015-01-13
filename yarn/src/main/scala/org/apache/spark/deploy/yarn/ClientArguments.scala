@@ -36,14 +36,18 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
   var amQueue = sparkConf.get("spark.yarn.queue", "default")
   var amMemory: Int = 512 // MB
+  var amCores: Int = 1
   var appName: String = "Spark"
   var priority = 0
   def isClusterMode: Boolean = userClass != null
 
   private var driverMemory: Int = 512 // MB
+  private var driverCores: Int = 1
   private val driverMemOverheadKey = "spark.yarn.driver.memoryOverhead"
   private val amMemKey = "spark.yarn.am.memory"
   private val amMemOverheadKey = "spark.yarn.am.memoryOverhead"
+  private val driverCoresKey = "spark.driver.cores"
+  private val amCoresKey = "spark.yarn.am.cores"
   private val isDynamicAllocationEnabled =
     sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
 
@@ -92,19 +96,23 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
         "You must specify at least 1 executor!\n" + getUsageMessage())
     }
     if (isClusterMode) {
-      for (key <- Seq(amMemKey, amMemOverheadKey)) {
+      for (key <- Seq(amMemKey, amMemOverheadKey, amCoresKey)) {
         if (sparkConf.contains(key)) {
           println(s"$key is set but does not apply in cluster mode.")
         }
       }
       amMemory = driverMemory
+      amCores = driverCores
     } else {
-      if (sparkConf.contains(driverMemOverheadKey)) {
+      if (sparkConf.contains(driverMemOverheadKey, driverCoresKey)) {
         println(s"$driverMemOverheadKey is set but does not apply in client mode.")
       }
       sparkConf.getOption(amMemKey)
         .map(Utils.memoryStringToMb)
         .foreach { mem => amMemory = mem }
+      sparkConf.getOption(amCoresKey)
+        .map(_.toInt)
+        .foreach { cores => amCores = cores }
     }
   }
 
@@ -138,6 +146,10 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
             println("--master-memory is deprecated. Use --driver-memory instead.")
           }
           driverMemory = value
+          args = tail
+
+        case ("--cores") :: IntParam(value) :: tail =>
+          driverCores = value
           args = tail
 
         case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>
