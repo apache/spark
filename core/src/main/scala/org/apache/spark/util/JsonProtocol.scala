@@ -621,31 +621,31 @@ private[spark] object JsonProtocol {
 
   def shuffleReadMetricsFromJson(json: JValue): ShuffleReadMetrics = {
     val metrics = new ShuffleReadMetrics
-    metrics.incRemoteBlocksFetched((json \ "Remote Blocks Fetched").extract[Int])
-    metrics.incLocalBlocksFetched((json \ "Local Blocks Fetched").extract[Int])
-    metrics.incFetchWaitTime((json \ "Fetch Wait Time").extract[Long])
-    metrics.incRemoteBytesRead((json \ "Remote Bytes Read").extract[Long])
+    metrics.remoteBlocksFetched = (json \ "Remote Blocks Fetched").extract[Int]
+    metrics.localBlocksFetched = (json \ "Local Blocks Fetched").extract[Int]
+    metrics.fetchWaitTime = (json \ "Fetch Wait Time").extract[Long]
+    metrics.remoteBytesRead = (json \ "Remote Bytes Read").extract[Long]
     metrics
   }
 
   def shuffleWriteMetricsFromJson(json: JValue): ShuffleWriteMetrics = {
     val metrics = new ShuffleWriteMetrics
-    metrics.incShuffleBytesWritten((json \ "Shuffle Bytes Written").extract[Long])
-    metrics.incShuffleWriteTime((json \ "Shuffle Write Time").extract[Long])
+    metrics.shuffleBytesWritten = (json \ "Shuffle Bytes Written").extract[Long]
+    metrics.shuffleWriteTime = (json \ "Shuffle Write Time").extract[Long]
     metrics
   }
 
   def inputMetricsFromJson(json: JValue): InputMetrics = {
     val metrics = new InputMetrics(
       DataReadMethod.withName((json \ "Data Read Method").extract[String]))
-    metrics.incBytesRead((json \ "Bytes Read").extract[Long])
+    metrics.bytesRead = (json \ "Bytes Read").extract[Long]
     metrics
   }
 
   def outputMetricsFromJson(json: JValue): OutputMetrics = {
     val metrics = new OutputMetrics(
       DataWriteMethod.withName((json \ "Data Write Method").extract[String]))
-    metrics.incBytesWritten((json \ "Bytes Written").extract[Long])
+    metrics.bytesWritten = (json \ "Bytes Written").extract[Long]
     metrics
   }
 

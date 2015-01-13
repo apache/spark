@@ -609,24 +609,24 @@ class JsonProtocolSuite extends FunSuite {
 
     if (hasHadoopInput) {
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      inputMetrics.incBytesRead(d + e + f)
+      inputMetrics.bytesRead = d + e + f
       t.inputMetrics = Some(inputMetrics)
     } else {
       val sr = new ShuffleReadMetrics
-      sr.incRemoteBytesRead(b + d)
-      sr.incLocalBlocksFetched(e)
-      sr.incFetchWaitTime(a + d)
-      sr.incRemoteBlocksFetched(f)
+      sr.remoteBytesRead = b + d
+      sr.localBlocksFetched = e
+      sr.fetchWaitTime = a + d
+      sr.remoteBlocksFetched = f
       t.setShuffleReadMetrics(Some(sr))
     }
     if (hasOutput) {
       val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
-      outputMetrics.incBytesWritten(a + b + c)
+      outputMetrics.bytesWritten = a + b + c
       t.outputMetrics = Some(outputMetrics)
     } else {
       val sw = new ShuffleWriteMetrics
-      sw.incShuffleBytesWritten(a + b + c)
-      sw.incShuffleWriteTime(b + c + d)
+      sw.shuffleBytesWritten = a + b + c
+      sw.shuffleWriteTime = b + c + d
       t.shuffleWriteMetrics = Some(sw)
     }
     // Make at most 6 blocks

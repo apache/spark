@@ -252,7 +252,7 @@ class HadoopRDD[K, V](
             && bytesReadCallback.isDefined) {
           recordsSinceMetricsUpdate = 0
           val bytesReadFn = bytesReadCallback.get
-          inputMetrics.incBytesRead(bytesReadFn())
+          inputMetrics.bytesRead = bytesReadFn()
         } else {
           recordsSinceMetricsUpdate += 1
         }
@@ -264,12 +264,12 @@ class HadoopRDD[K, V](
           reader.close()
           if (bytesReadCallback.isDefined) {
             val bytesReadFn = bytesReadCallback.get
-            inputMetrics.incBytesRead(bytesReadFn())
+            inputMetrics.bytesRead = bytesReadFn()
           } else if (split.inputSplit.value.isInstanceOf[FileSplit]) {
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
-              inputMetrics.incBytesRead(split.inputSplit.value.getLength)
+              inputMetrics.bytesRead = split.inputSplit.value.getLength
               context.taskMetrics.inputMetrics = Some(inputMetrics)
             } catch {
               case e: java.io.IOException =>
