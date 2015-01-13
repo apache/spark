@@ -31,21 +31,22 @@ import java.util.regex.Pattern;
  * <p/>
  * This launcher extends SparkLauncher to add command line parsing compatible with
  * SparkSubmit. It handles setting driver-side options and special parsing needed
- * for the different shells.
+ * for the different specialClasses.
  * <p/>
  * This class has also some special features to aid PySparkLauncher.
  */
 public class SparkSubmitCliLauncher extends SparkLauncher {
 
   /**
-   * This map must match the class names for available shells, since this modifies the way
-   * command line parsing works. This maps the shell class name to the resource to use when
-   * calling spark-submit.
+   * This map must match the class names for available special classes, since this modifies the way
+   * command line parsing works. This maps the class name to the resource to use when calling
+   * spark-submit.
    */
-  private static final Map<String, String> shells = new HashMap<String, String>();
+  private static final Map<String, String> specialClasses = new HashMap<String, String>();
   static {
-    shells.put("org.apache.spark.repl.Main", "spark-shell");
-    shells.put("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver", "spark-internal");
+    specialClasses.put("org.apache.spark.repl.Main", "spark-shell");
+    specialClasses.put("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
+      "spark-internal");
   }
 
   private final List<String> driverArgs;
@@ -56,28 +57,27 @@ public class SparkSubmitCliLauncher extends SparkLauncher {
   }
 
   SparkSubmitCliLauncher(boolean hasMixedArguments, List<String> args) {
-    boolean sparkSubmitOptionsEnded = false;
     this.driverArgs = new ArrayList<String>();
     this.hasMixedArguments = hasMixedArguments;
     new OptionParser().parse(args);
   }
 
-  /** Visible for PySparkLauncher. */
+  // Visible for PySparkLauncher.
   String getAppResource() {
-    return userResource;
+    return appResource;
   }
 
-  /** Visible for PySparkLauncher. */
-  List<String> getArgs() {
-    return userArgs;
+  // Visible for PySparkLauncher.
+  List<String> getAppArgs() {
+    return appArgs;
   }
 
-  /** Visible for PySparkLauncher. */
+  // Visible for PySparkLauncher.
   List<String> getSparkArgs() {
     return sparkArgs;
   }
 
-  /** Visible for PySparkLauncher. */
+  // Visible for PySparkLauncher.
   List<String> getDriverArgs() {
     return driverArgs;
   }
@@ -108,26 +108,26 @@ public class SparkSubmitCliLauncher extends SparkLauncher {
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(DRIVER_JAVA_OPTIONS)) {
-        setConf(LauncherCommon.DRIVER_JAVA_OPTIONS, value);
+        setConf(LauncherCommon.DRIVER_EXTRA_JAVA_OPTIONS, value);
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(DRIVER_LIBRARY_PATH)) {
-        setConf(LauncherCommon.DRIVER_LIBRARY_PATH, value);
+        setConf(LauncherCommon.DRIVER_EXTRA_LIBRARY_PATH, value);
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(DRIVER_CLASS_PATH)) {
-        setConf(LauncherCommon.DRIVER_CLASSPATH, value);
+        setConf(LauncherCommon.DRIVER_EXTRA_CLASSPATH, value);
         driverArgs.add(opt);
         driverArgs.add(value);
       } else if (opt.equals(CLASS)) {
-        // The shell launchers require some special command line handling, since they allow
+        // The special classes require some special command line handling, since they allow
         // mixing spark-submit arguments with arguments that should be propagated to the shell
         // itself. Note that for this to work, the "--class" argument must come before any
         // non-spark-submit arguments.
-        setClass(value);
-        if (shells.containsKey(value)) {
+        setMainClass(value);
+        if (specialClasses.containsKey(value)) {
           hasMixedArguments = true;
-          setAppResource(shells.get(value));
+          setAppResource(specialClasses.get(value));
         }
       } else {
         addSparkArgs(opt, value);
@@ -141,7 +141,7 @@ public class SparkSubmitCliLauncher extends SparkLauncher {
       // In normal mode, any unrecognized parameter triggers the end of command line parsing.
       // The remaining params will be appended to the list of SparkSubmit arguments.
       if (hasMixedArguments) {
-        addArgs(opt);
+        addAppArgs(opt);
         return true;
       } else {
         addSparkArgs(opt);

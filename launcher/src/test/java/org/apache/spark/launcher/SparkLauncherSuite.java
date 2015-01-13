@@ -55,10 +55,10 @@ public class SparkLauncherSuite {
       .setSparkHome(System.getProperty("spark.test.home"))
       .setMaster("local")
       .setAppResource("spark-internal")
-      .setConf(SparkLauncher.DRIVER_JAVA_OPTIONS, "-Dfoo=bar -Dtest.name=-testChildProcLauncher")
-      .setConf(SparkLauncher.DRIVER_CLASSPATH, System.getProperty("java.class.path"))
-      .setClass(SparkLauncherTestApp.class.getName())
-      .addArgs("proc");
+      .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Dfoo=bar -Dtest.name=-testChildProcLauncher")
+      .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
+      .setMainClass(SparkLauncherTestApp.class.getName())
+      .addAppArgs("proc");
 
     printArgs(launcher.buildLauncherCommand());
 
@@ -94,9 +94,9 @@ public class SparkLauncherSuite {
       .setSparkHome(System.getProperty("spark.test.home"))
       .setMaster("local")
       .setAppResource("spark-internal")
-      .setConf(SparkLauncher.DRIVER_CLASSPATH, System.getProperty("java.class.path"))
-      .setClass(SparkLauncherTestApp.class.getName())
-      .addArgs("thread");
+      .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
+      .setMainClass(SparkLauncherTestApp.class.getName())
+      .addAppArgs("thread");
 
     printArgs(launcher.buildLauncherCommand());
 
@@ -113,9 +113,9 @@ public class SparkLauncherSuite {
 
   @Test
   public void testInProcessDriverArgValidator() throws Exception {
-    testInvalidDriverConf(SparkLauncher.DRIVER_JAVA_OPTIONS);
+    testInvalidDriverConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS);
     testInvalidDriverConf(SparkLauncher.DRIVER_MEMORY);
-    testInvalidDriverConf(SparkLauncher.DRIVER_LIBRARY_PATH);
+    testInvalidDriverConf(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH);
   }
 
   private void testCmdBuilder(boolean isDriver) throws Exception {
@@ -127,12 +127,12 @@ public class SparkLauncherSuite {
       .setDeployMode(deployMode)
       .setAppResource("/foo")
       .setAppName("MyApp")
-      .setClass("my.Class")
-      .addArgs("foo", "bar")
+      .setMainClass("my.Class")
+      .addAppArgs("foo", "bar")
       .setConf(SparkLauncher.DRIVER_MEMORY, "1g")
-      .setConf(SparkLauncher.DRIVER_CLASSPATH, "/driver")
-      .setConf(SparkLauncher.DRIVER_JAVA_OPTIONS, "-Ddriver")
-      .setConf(SparkLauncher.DRIVER_LIBRARY_PATH, "/native")
+      .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, "/driver")
+      .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Ddriver")
+      .setConf(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native")
       .setConf("spark.foo", "foo");
 
     List<String> cmd = launcher.buildLauncherCommand();
@@ -203,8 +203,8 @@ public class SparkLauncherSuite {
       new SparkLauncher()
         .setSparkHome(System.getProperty("spark.test.home"))
         .setAppResource("spark-internal")
-        .setClass(SparkLauncherTestApp.class.getName())
-        .addArgs("thread")
+        .setMainClass(SparkLauncherTestApp.class.getName())
+        .addAppArgs("thread")
         .setConf(key, "foo")
         .start(null, true);
       fail("Should have failed to start app.");

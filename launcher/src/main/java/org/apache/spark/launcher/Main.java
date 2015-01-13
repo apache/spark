@@ -17,13 +17,9 @@
 
 package org.apache.spark.launcher;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Command line interface for the Spark launcher. Used internally by Spark scripts.
@@ -50,20 +46,20 @@ public class Main extends LauncherCommon {
     List<String> args = new ArrayList<String>(Arrays.asList(argsArray));
     String className = args.remove(0);
 
-    boolean printLaunchCommand = false;
+    boolean printLaunchCommand;
     AbstractLauncher<?> launcher;
     try {
       if (className.equals("org.apache.spark.deploy.SparkSubmit")) {
         launcher = new SparkSubmitCliLauncher(args);
-        printLaunchCommand = !isEmpty(System.getenv("SPARK_PRINT_LAUNCH_COMMAND"));
       } else if (className.equals("pyspark")) {
         launcher = new PySparkLauncher(args);
       } else {
         launcher = new SparkClassLauncher(className, args);
-        printLaunchCommand = !isEmpty(System.getenv("SPARK_PRINT_LAUNCH_COMMAND"));
       }
+      printLaunchCommand = !isEmpty(System.getenv("SPARK_PRINT_LAUNCH_COMMAND"));
     } catch (IllegalArgumentException e) {
       launcher = new UsageLauncher();
+      printLaunchCommand = false;
     }
 
     List<String> cmd = launcher.buildLauncherCommand();

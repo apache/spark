@@ -23,7 +23,6 @@ import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -32,7 +31,7 @@ import java.util.concurrent.atomic.AtomicLong;
 /**
  * Launcher for Spark applications.
  * <p/>
- * Use this class to start Spark applications programatically. The class uses a builder pattern
+ * Use this class to start Spark applications programmatically. The class uses a builder pattern
  * to allow clients to configure the Spark application and launch it as a child process.
  * <p/>
  * There's also support for running the application on a separate thread, although that is to
@@ -49,17 +48,17 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
   protected String appName;
   protected String master;
   protected String deployMode;
-  protected String userClass;
-  protected String userResource;
+  protected String mainClass;
+  protected String appResource;
   protected final List<String> sparkArgs;
-  protected final List<String> userArgs;
+  protected final List<String> appArgs;
   protected final List<String> jars;
   protected final List<String> files;
   protected final List<String> pyFiles;
 
   public SparkLauncher() {
     this.sparkArgs = new ArrayList<String>();
-    this.userArgs = new ArrayList<String>();
+    this.appArgs = new ArrayList<String>();
     this.jars = new ArrayList<String>();
     this.files = new ArrayList<String>();
     this.pyFiles = new ArrayList<String>();
@@ -90,46 +89,46 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
    * Set the main application resource. This should be the location of a jar file for Scala/Java
    * applications, or a python script for PySpark applications.
    */
-  public SparkLauncher setAppResource(String path) {
-    checkNotNull(path, "path");
-    this.userResource = path;
+  public SparkLauncher setAppResource(String resource) {
+    checkNotNull(resource, "resource");
+    this.appResource = resource;
     return this;
   }
 
   /** Sets the application class name for Java/Scala applications. */
-  public SparkLauncher setClass(String userClass) {
-    checkNotNull(userClass, "userClass");
-    this.userClass = userClass;
+  public SparkLauncher setMainClass(String mainClass) {
+    checkNotNull(mainClass, "mainClass");
+    this.mainClass = mainClass;
     return this;
   }
 
   /** Adds command line arguments for the application. */
-  public SparkLauncher addArgs(String... args) {
+  public SparkLauncher addAppArgs(String... args) {
     for (String arg : args) {
       checkNotNull(arg, "arg");
-      userArgs.add(arg);
+      appArgs.add(arg);
     }
     return this;
   }
 
   /** Adds a jar file to be submitted with the application. */
-  public SparkLauncher addJar(String path) {
-    checkNotNull(path, "path");
-    jars.add(path);
+  public SparkLauncher addJar(String jar) {
+    checkNotNull(jar, "jar");
+    jars.add(jar);
     return this;
   }
 
   /** Adds a file to be submitted with the application. */
-  public SparkLauncher addFile(String path) {
-    checkNotNull(path, "path");
-    files.add(path);
+  public SparkLauncher addFile(String file) {
+    checkNotNull(file, "file");
+    files.add(file);
     return this;
   }
 
-  /** Adds a a python file / zip / egg to be submitted with the application. */
-  public SparkLauncher addPyFile(String path) {
-    checkNotNull(path, "path");
-    pyFiles.add(path);
+  /** Adds a python file / zip / egg to be submitted with the application. */
+  public SparkLauncher addPyFile(String file) {
+    checkNotNull(file, "file");
+    pyFiles.add(file);
     return this;
   }
 
@@ -167,17 +166,17 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
     // cannot be set in this mode.
     Properties props = loadPropertiesFile();
     String extraClassPath = null;
-    if (isRunningDriver(props)) {
+    if (isClientMode(props)) {
       checkState(
-        find(DRIVER_JAVA_OPTIONS, conf, props) == null,
+        find(DRIVER_EXTRA_JAVA_OPTIONS, conf, props) == null,
         "Cannot set driver VM options when running in-process.");
       checkState(
-        find(DRIVER_LIBRARY_PATH, conf, props) == null,
+        find(DRIVER_EXTRA_LIBRARY_PATH, conf, props) == null,
         "Cannot set native library path when running in-process.");
       checkState(
         find(DRIVER_MEMORY, conf, props) == null,
         "Cannot set driver memory when running in-process.");
-      extraClassPath = find(DRIVER_CLASSPATH, conf, props);
+      extraClassPath = find(DRIVER_EXTRA_CLASSPATH, conf, props);
     }
 
     List<String> cp = buildClassPath(extraClassPath);
@@ -276,23 +275,23 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
       args.add(join(",", pyFiles));
     }
 
-    if (userClass != null) {
+    if (mainClass != null) {
       args.add("--class");
-      args.add(userClass);
+      args.add(mainClass);
     }
 
     args.addAll(sparkArgs);
-    if (userResource != null) {
-      args.add(userResource);
+    if (appResource != null) {
+      args.add(appResource);
     }
-    args.addAll(userArgs);
+    args.addAll(appArgs);
 
     return args;
   }
 
   @Override
   protected List<String> buildLauncherCommand() throws IOException {
-    List<String> cmd = createJavaCommand();
+    List<String> cmd = buildJavaCommand();
     addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
     addOptionString(cmd, System.getenv("SPARK_JAVA_OPTS"));
 
@@ -300,49 +299,40 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
     // or just launching a cluster app. When running the driver, the JVM's argument will be
     // modified to cover the driver's configuration.
     Properties props = loadPropertiesFile();
-    boolean isRunningDriver = isRunningDriver(props);
+    boolean isClientMode = isClientMode(props);
 
-    String extraClassPath = isRunningDriver ? find(DRIVER_CLASSPATH, conf, props) : null;
+    String extraClassPath = isClientMode ? find(DRIVER_EXTRA_CLASSPATH, conf, props) : null;
     cmd.add("-cp");
     cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath)));
 
     String libPath = null;
-    if (isRunningDriver) {
+    if (isClientMode) {
       // Figuring out where the memory value come from is a little tricky due to precedence.
       // Precedence is observed in the following order:
       // - explicit configuration (setConf()), which also covers --driver-memory cli argument.
-      // - user properties, if properties file is explicitly set.
+      // - properties file.
+      // - SPARK_DRIVER_MEMORY env variable
       // - SPARK_MEM env variable
-      // - user properties, if using default file
       // - default value (512m)
-      String userMemSetting;
-      String defaultMemFromProps = null;
-      if (propertiesFile != null) {
-        userMemSetting = find(DRIVER_MEMORY, conf, props);
-      } else {
-        userMemSetting = conf.get(DRIVER_MEMORY);
-        defaultMemFromProps = props.getProperty(DRIVER_MEMORY);
-      }
-
-      String memory = first(userMemSetting, System.getenv("SPARK_MEM"), defaultMemFromProps,
-        DEFAULT_MEM);
+      String memory = firstNonEmpty(find(DRIVER_MEMORY, conf, props),
+        System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
       cmd.add("-Xms" + memory);
       cmd.add("-Xmx" + memory);
-      addOptionString(cmd, find(DRIVER_JAVA_OPTIONS, conf, props));
-      libPath = find(DRIVER_LIBRARY_PATH, conf, props);
+      addOptionString(cmd, find(DRIVER_EXTRA_JAVA_OPTIONS, conf, props));
+      libPath = find(DRIVER_EXTRA_LIBRARY_PATH, conf, props);
     }
 
     cmd.add("org.apache.spark.deploy.SparkSubmit");
     cmd.addAll(buildSparkSubmitArgs());
-    return prepareForOs(cmd, libPath, Collections.<String, String>emptyMap());
+    return prepareForOs(cmd, libPath);
   }
 
-  private boolean isRunningDriver(Properties userProps) {
-    String userMaster = first(master, (String) userProps.get(SPARK_MASTER));
+  private boolean isClientMode(Properties userProps) {
+    String userMaster = firstNonEmpty(master, (String) userProps.get(SPARK_MASTER));
     return userMaster == null ||
       "client".equals(deployMode) ||
       "yarn-client".equals(userMaster) ||
-      (deployMode == null && userMaster != null && !userMaster.startsWith("yarn-"));
+      (deployMode == null && !userMaster.startsWith("yarn-"));
   }
 
   private static class SparkSubmitRunner implements Runnable {

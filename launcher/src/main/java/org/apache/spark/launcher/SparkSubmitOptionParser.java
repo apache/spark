@@ -34,30 +34,33 @@ public abstract class SparkSubmitOptionParser {
 
   // The following constants define the "main" name for the available options. They're defined
   // to avoid copy & paste of the raw strings where they're needed.
-  protected static final String ARCHIVES = "--archives";
   protected static final String CLASS = "--class";
   protected static final String CONF = "--conf";
   protected static final String DEPLOY_MODE = "--deploy-mode";
   protected static final String DRIVER_CLASS_PATH = "--driver-class-path";
   protected static final String DRIVER_CORES = "--driver-cores";
   protected static final String DRIVER_JAVA_OPTIONS =  "--driver-java-options";
-  protected static final String DRIVER_LIBRARY_PATH = "--driver-library -path";
+  protected static final String DRIVER_LIBRARY_PATH = "--driver-library-path";
   protected static final String DRIVER_MEMORY = "--driver-memory";
-  protected static final String EXECUTOR_CORES = "--executor-cores";
   protected static final String EXECUTOR_MEMORY = "--executor-memory";
   protected static final String FILES = "--files";
   protected static final String JARS = "--jars";
   protected static final String MASTER = "--master";
   protected static final String NAME = "--name";
-  protected static final String NUM_EXECUTORS = "--num-executors";
   protected static final String PROPERTIES_FILE = "--properties-file";
   protected static final String PY_FILES = "--py-files";
-  protected static final String QUEUE = "--queue";
   protected static final String TOTAL_EXECUTOR_CORES = "--total-executor-cores";
 
+  // Options that do not take arguments.
   protected static final String HELP = "--help";
   protected static final String SUPERVISE = "--supervise";
   protected static final String VERBOSE = "--verbose";
+
+  // YARN-only options.
+  protected static final String ARCHIVES = "--archives";
+  protected static final String EXECUTOR_CORES = "--executor-cores";
+  protected static final String QUEUE = "--queue";
+  protected static final String NUM_EXECUTORS = "--num-executors";
 
   /**
    * This is the canonical list of spark-submit options. Each entry in the array contains the

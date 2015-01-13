@@ -44,7 +44,7 @@ class PySparkLauncher extends AbstractLauncher<PySparkLauncher> {
 
     // For backwards compatibility, if a script is specified in
     // the pyspark command line, then run it using spark-submit.
-    if (!launcher.getArgs().isEmpty() && launcher.getArgs().get(0).endsWith(".py")) {
+    if (!launcher.getAppArgs().isEmpty() && launcher.getAppArgs().get(0).endsWith(".py")) {
       System.err.println(
         "WARNING: Running python applications through 'pyspark' is deprecated as of Spark 1.0.\n" +
         "Use ./bin/spark-submit <python file>");
@@ -54,24 +54,24 @@ class PySparkLauncher extends AbstractLauncher<PySparkLauncher> {
     // When launching the pyspark shell, the spark-submit arguments should be stored in the
     // PYSPARK_SUBMIT_ARGS env variable. The executable is the PYSPARK_DRIVER_PYTHON env variable
     // set by the pyspark script, followed by PYSPARK_DRIVER_PYTHON_OPTS.
-    checkArgument(launcher.getArgs().isEmpty(),
-        "pyspark does not support any application options.");
+    checkArgument(launcher.getAppArgs().isEmpty(),
+      "pyspark does not support any application options.");
 
     Properties props = loadPropertiesFile();
-    String libPath = find(DRIVER_LIBRARY_PATH, conf, props);
+    String libPath = find(DRIVER_EXTRA_LIBRARY_PATH, conf, props);
 
     StringBuilder submitArgs = new StringBuilder();
     for (String arg : launcher.getSparkArgs()) {
       if (submitArgs.length() > 0) {
         submitArgs.append(" ");
       }
-      submitArgs.append(shQuote(arg));
+      submitArgs.append(quote(arg));
     }
     for (String arg : launcher.getDriverArgs()) {
       if (submitArgs.length() > 0) {
         submitArgs.append(" ");
       }
-      submitArgs.append(shQuote(arg));
+      submitArgs.append(quote(arg));
     }
 
     Map<String, String> env = new HashMap<String, String>();
@@ -85,6 +85,22 @@ class PySparkLauncher extends AbstractLauncher<PySparkLauncher> {
     }
 
     return prepareForOs(pyargs, libPath, env);
+  }
+
+  /**
+   * Quotes a string so that it can be used in a command string and be parsed back into a single
+   * argument by python's "shlex.split()" function.
+   */
+  private String quote(String s) {
+    StringBuilder quoted = new StringBuilder().append('"');
+    for (int i = 0; i < s.length(); i++) {
+      int cp = s.codePointAt(i);
+      if (cp == '"' || cp == '\\') {
+        quoted.appendCodePoint('\\');
+      }
+      quoted.appendCodePoint(cp);
+    }
+    return quoted.append('"').toString();
   }
 
 }

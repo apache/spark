@@ -117,7 +117,7 @@ private class CommandLauncher(sparkHome: String, memory: Int, env: Map[String, S
   setSparkHome(sparkHome)
 
   override def buildLauncherCommand(): JList[String] = {
-    val cmd = createJavaCommand()
+    val cmd = buildJavaCommand()
     cmd.add("-cp")
     cmd.add(buildClassPath(null).mkString(File.pathSeparator))
     cmd.add(s"-Xms${memory}M")

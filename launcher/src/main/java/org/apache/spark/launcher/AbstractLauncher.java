@@ -25,12 +25,11 @@ import java.io.InputStreamReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Enumeration;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.regex.Pattern;
 
@@ -39,6 +38,7 @@ import java.util.regex.Pattern;
  */
 public abstract class AbstractLauncher<T extends AbstractLauncher> extends LauncherCommon {
 
+  private static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
   protected static final String DEFAULT_MEM = "512m";
 
   protected String javaHome;
@@ -93,6 +93,11 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
    */
   protected abstract List<String> buildLauncherCommand() throws IOException;
 
+  /**
+   * Loads the configuration file for the application, if it exists. This is  either the
+   * user-specified properties file, or the spark-defaults.conf file under the Spark configuration
+   * directory.
+   */
   protected Properties loadPropertiesFile() throws IOException {
     Properties props = new Properties();
     File propsFile;
@@ -100,11 +105,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
       propsFile = new File(propertiesFile);
       checkArgument(propsFile.isFile(), "Invalid properties file '%s'.", propertiesFile);
     } else {
-      String confDir = getenv("SPARK_CONF_DIR");
-      if (confDir == null) {
-        confDir = join(File.separator, getSparkHome(), "conf");
-      }
-      propsFile = new File(confDir, "spark-defaults.conf");
+      propsFile = new File(getConfDir(), DEFAULT_PROPERTIES_FILE);
     }
 
     if (propsFile.isFile()) {
@@ -127,16 +128,16 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
   }
 
   protected String getSparkHome() {
-    String path = first(sparkHome, getenv("SPARK_HOME"));
+    String path = firstNonEmpty(sparkHome, getenv("SPARK_HOME"));
     checkState(path != null,
-        "Spark home not found; set it explicitly or use the SPARK_HOME environment variable.");
+      "Spark home not found; set it explicitly or use the SPARK_HOME environment variable.");
     return path;
   }
 
-  protected List<String> createJavaCommand() throws IOException {
+  protected List<String> buildJavaCommand() throws IOException {
     List<String> cmd = new ArrayList<String>();
     if (javaHome == null) {
-      cmd.add(join(File.separator, System.getProperty("java.home"), "..", "bin", "java"));
+      cmd.add(join(File.separator, System.getProperty("java.home"), "bin", "java"));
     } else {
       cmd.add(join(File.separator, javaHome, "bin", "java"));
     }
@@ -186,12 +187,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
     addToClassPath(cp, getenv("SPARK_CLASSPATH"));
     addToClassPath(cp, appClassPath);
 
-    String confDir = getenv("SPARK_CONF_DIR");
-    if (!isEmpty(confDir)) {
-      addToClassPath(cp, confDir);
-    } else {
-      addToClassPath(cp, join(File.separator, getSparkHome(), "conf"));
-    }
+    addToClassPath(cp, getConfDir());
 
     boolean prependClasses = !isEmpty(getenv("SPARK_PREPEND_CLASSES"));
     boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
@@ -236,7 +232,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
     } catch (IOException ioe) {
       if (ioe.getMessage().indexOf("invalid CEN header") > 0) {
         System.err.println(
-          "Loading Spark jar with '$JAR_CMD' failed.\n" +
+          "Loading Spark jar failed.\n" +
           "This is likely because Spark was compiled with Java 7 and run\n" +
           "with Java 6 (see SPARK-1703). Please use Java 7 to run Spark\n" +
           "or build Spark with Java 6.");
@@ -279,6 +275,12 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
     return cp;
   }
 
+  /**
+   * Adds entries to the classpath.
+   *
+   * @param cp List where to appended the new classpath entries.
+   * @param entries New classpath entries (separated by File.pathSeparator).
+   */
   private void addToClassPath(List<String> cp, String entries) {
     if (isEmpty(entries)) {
       return;
@@ -317,7 +319,14 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
     throw new IllegalStateException("Should not reach here.");
   }
 
+  protected List<String> prepareForOs(List<String> cmd, String libPath) {
+    return prepareForOs(cmd, libPath, Collections.<String, String>emptyMap());
+  }
+
   /**
+   * Prepare the command for execution under the current OS, setting the passed environment
+   * variables.
+   *
    * Which OS is running defines two things:
    * - the name of the environment variable used to define the lookup path for native libs
    * - how to execute the command in general.
@@ -329,7 +338,8 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
    *
     * For Win32, see {@link #prepareForWindows(List<String>,String)}.
    */
-  protected List<String> prepareForOs(List<String> cmd,
+  protected List<String> prepareForOs(
+      List<String> cmd,
       String libPath,
       Map<String, String> env) {
 
@@ -365,128 +375,6 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
     return newCmd;
   }
 
-  protected String shQuote(String s) {
-    StringBuilder quoted = new StringBuilder();
-    boolean hasWhitespace = false;
-    for (int i = 0; i < s.length(); i++) {
-      if (Character.isWhitespace(s.codePointAt(i))) {
-        quoted.append('"');
-        hasWhitespace = true;
-        break;
-      }
-    }
-
-    for (int i = 0; i < s.length(); i++) {
-      int cp = s.codePointAt(i);
-      switch (cp) {
-        case '\'':
-          if (hasWhitespace) {
-            quoted.appendCodePoint(cp);
-            break;
-          }
-        case '"':
-        case '\\':
-          quoted.append('\\');
-          // Fall through.
-        default:
-          if (Character.isWhitespace(cp)) {
-            hasWhitespace=true;
-          }
-          quoted.appendCodePoint(cp);
-      }
-    }
-    if (hasWhitespace) {
-      quoted.append('"');
-    }
-    return quoted.toString();
-  }
-
-  // Visible for testing.
-  List<String> parseOptionString(String s) {
-    List<String> opts = new ArrayList<String>();
-    StringBuilder opt = new StringBuilder();
-    boolean inOpt = false;
-    boolean inSingleQuote = false;
-    boolean inDoubleQuote = false;
-    boolean escapeNext = false;
-    boolean hasData = false;
-
-    for (int i = 0; i < s.length(); i++) {
-      int c = s.codePointAt(i);
-      if (escapeNext) {
-        if (!inOpt) {
-          inOpt = true;
-        }
-        opt.appendCodePoint(c);
-        escapeNext = false;
-      } else if (inOpt) {
-        switch (c) {
-        case '\\':
-          if (inSingleQuote) {
-            opt.appendCodePoint(c);
-          } else {
-            escapeNext = true;
-          }
-          break;
-        case '\'':
-          if (inDoubleQuote) {
-            opt.appendCodePoint(c);
-          } else {
-            inSingleQuote = !inSingleQuote;
-          }
-          break;
-        case '"':
-          if (inSingleQuote) {
-            opt.appendCodePoint(c);
-          } else {
-            inDoubleQuote = !inDoubleQuote;
-          }
-          break;
-        default:
-          if (inSingleQuote || inDoubleQuote || !Character.isWhitespace(c)) {
-            opt.appendCodePoint(c);
-          } else {
-            finishOpt(opts, opt);
-            inOpt = false;
-            hasData = false;
-          }
-        }
-      } else {
-        switch (c) {
-        case '\'':
-          inSingleQuote = true;
-          inOpt = true;
-          hasData = true;
-          break;
-        case '"':
-          inDoubleQuote = true;
-          inOpt = true;
-          hasData = true;
-          break;
-        case '\\':
-          escapeNext = true;
-          break;
-        default:
-          if (!Character.isWhitespace(c)) {
-            inOpt = true;
-            opt.appendCodePoint(c);
-          }
-        }
-      }
-    }
-
-    checkArgument(!inSingleQuote && !inDoubleQuote && !escapeNext, "Invalid option string: %s", s);
-    if (opt.length() > 0 || hasData) {
-      opts.add(opt.toString());
-    }
-    return opts;
-  }
-
-  private void finishOpt(List<String> opts, StringBuilder opt) {
-    opts.add(opt.toString());
-    opt.setLength(0);
-  }
-
   private String findAssembly(String scalaVersion) {
     String sparkHome = getSparkHome();
     File libdir;
@@ -512,7 +400,12 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
   }
 
   private String getenv(String key) {
-    return first(env != null ? env.get(key) : null, System.getenv(key));
+    return firstNonEmpty(env != null ? env.get(key) : null, System.getenv(key));
+  }
+
+  private String getConfDir() {
+    String confDir = getenv("SPARK_CONF_DIR");
+    return confDir != null ? confDir : join(File.separator, getSparkHome(), "conf");
   }
 
   /**
@@ -526,8 +419,12 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
    * - Quote all arguments so that spaces are handled as expected. Quotes within arguments are
    *   "double quoted" (which is batch for escaping a quote). This page has more details about
    *   quoting and other batch script fun stuff: http://ss64.com/nt/syntax-esc.html
+   *
+   * The command is executed using "cmd /c" and formatted in a single line, since that's the
+   * easiest way to consume this from a batch script (see spark-class2.cmd).
    */
-  private List<String> prepareForWindows(List<String> cmd,
+  private List<String> prepareForWindows(
+      List<String> cmd,
       String libPath,
       Map<String, String> env) {
     StringBuilder cmdline = new StringBuilder("cmd /c \"");
@@ -535,6 +432,9 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
       cmdline.append("set PATH=%PATH%;").append(libPath).append(" &&");
     }
     for (Map.Entry<String, String> e : env.entrySet()) {
+      if (cmdline.length() > 0) {
+        cmdline.append(" ");
+      }
       cmdline.append(String.format("set %s=%s", e.getKey(), e.getValue()));
       cmdline.append(" &&");
     }
@@ -542,27 +442,25 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
       if (cmdline.length() > 0) {
         cmdline.append(" ");
       }
-      cmdline.append(quote(arg));
+      cmdline.append(quoteForBatchScript(arg));
     }
     cmdline.append("\"");
     return Arrays.asList(cmdline.toString());
   }
 
   /**
-   * Quoting arguments that don't need quoting in Windows seems to cause weird issues. So only
-   * quote arguments when there is whitespace in them.
+   * Quote a command argument for a command to be run by a Windows batch script, if the argument
+   * needs quoting. Arguments only seem to need quotes in batch scripts if they have whitespace.
    */
-  private boolean needsQuoting(String arg) {
+  private String quoteForBatchScript(String arg) {
+    boolean needsQuotes = false;
     for (int i = 0; i < arg.length(); i++) {
       if (Character.isWhitespace(arg.codePointAt(i))) {
-        return true;
+        needsQuotes = true;
+        break;
       }
     }
-    return false;
-  }
-
-  private String quote(String arg) {
-    if (!needsQuoting(arg)) {
+    if (!needsQuotes) {
       return arg;
     }
     StringBuilder quoted = new StringBuilder();
@@ -576,25 +474,6 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
     }
     quoted.append("\"");
     return quoted.toString();
-  }
-
-  // Visible for testing.
-  String getLibPathEnvName() {
-    if (isWindows()) {
-      return "PATH";
-    }
-
-    String os = System.getProperty("os.name");
-    if (os.startsWith("Mac OS X")) {
-      return "DYLD_LIBRARY_PATH";
-    } else {
-      return "LD_LIBRARY_PATH";
-    }
-  }
-
-  protected boolean isWindows() {
-    String os = System.getProperty("os.name");
-    return os.startsWith("Windows");
   }
 
 }

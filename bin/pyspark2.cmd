@@ -35,5 +35,4 @@ set PYTHONPATH=%SPARK_HOME%\python\lib\py4j-0.8.2.1-src.zip;%PYTHONPATH%
 set OLD_PYTHONSTARTUP=%PYTHONSTARTUP%
 set PYTHONSTARTUP=%SPARK_HOME%\python\pyspark\shell.py
 
-echo Running %PYSPARK_PYTHON% with PYTHONPATH=%PYTHONPATH%
 call %SPARK_HOME%\bin\spark-class2.cmd pyspark %*

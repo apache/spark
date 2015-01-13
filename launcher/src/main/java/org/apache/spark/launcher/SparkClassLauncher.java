@@ -20,7 +20,6 @@ package org.apache.spark.launcher;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -91,19 +90,19 @@ class SparkClassLauncher extends AbstractLauncher<SparkClassLauncher> {
       return buildSparkSubmitCommand();
     }
 
-    List<String> cmd = createJavaCommand();
+    List<String> cmd = buildJavaCommand();
     for (String key : javaOptsKeys) {
       addOptionString(cmd, System.getenv(key));
     }
 
-    String mem = first(memKey != null ? System.getenv(memKey) : null, DEFAULT_MEM);
+    String mem = firstNonEmpty(memKey != null ? System.getenv(memKey) : null, DEFAULT_MEM);
     cmd.add("-Xms" + mem);
     cmd.add("-Xmx" + mem);
     cmd.add("-cp");
     cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath)));
     cmd.add(className);
     cmd.addAll(classArgs);
-    return prepareForOs(cmd, null, Collections.<String, String>emptyMap());
+    return prepareForOs(cmd, null);
   }
 
   private List<String> buildSparkSubmitCommand() throws IOException {

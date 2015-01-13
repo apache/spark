@@ -24,14 +24,9 @@ import java.util.List;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-public class AbstractLauncherSuite {
+import static org.apache.spark.launcher.LauncherCommon.*;
 
-  private AbstractLauncher launcher = new AbstractLauncher() {
-    @Override
-    protected List<String> buildLauncherCommand() {
-      throw new UnsupportedOperationException();
-    }
-  };
+public class LauncherCommonSuite {
 
   @Test
   public void testValidOptionStrings() {
@@ -39,6 +34,7 @@ public class AbstractLauncherSuite {
     testOpt("a 'b c' \"d\" e", Arrays.asList("a", "b c", "d", "e"));
     testOpt("a 'b\\\"c' \"'d'\" e", Arrays.asList("a", "b\\\"c", "'d'", "e"));
     testOpt("a 'b\"c' \"\\\"d\\\"\" e", Arrays.asList("a", "b\"c", "\"d\"", "e"));
+    testOpt(" a b c \\\\ ", Arrays.asList("a", "b", "c", "\\"));
 
     // Following tests ported from UtilsSuite.scala.
     testOpt("", new ArrayList<String>());
@@ -66,7 +62,7 @@ public class AbstractLauncherSuite {
   }
 
   @Test
-  public void testInalidOptionStrings() {
+  public void testInvalidOptionStrings() {
     testInvalidOpt("\\");
     testInvalidOpt("\"abcde");
     testInvalidOpt("'abcde");
@@ -74,12 +70,12 @@ public class AbstractLauncherSuite {
 
   private void testOpt(String opts, List<String> expected) {
     assertEquals(String.format("test string failed to parse: [[ %s ]]", opts),
-        expected, launcher.parseOptionString(opts));
+        expected, parseOptionString(opts));
   }
 
   private void testInvalidOpt(String opts) {
     try {
-      launcher.parseOptionString(opts);
+      parseOptionString(opts);
       fail("Expected exception for invalid option string.");
     } catch (IllegalArgumentException e) {
       // pass.

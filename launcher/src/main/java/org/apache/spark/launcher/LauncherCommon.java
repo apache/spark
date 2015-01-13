@@ -17,6 +17,8 @@
 
 package org.apache.spark.launcher;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -30,27 +32,29 @@ public class LauncherCommon {
   /** Configuration key for the driver memory. */
   public static final String DRIVER_MEMORY = "spark.driver.memory";
   /** Configuration key for the driver class path. */
-  public static final String DRIVER_CLASSPATH = "spark.driver.extraClassPath";
+  public static final String DRIVER_EXTRA_CLASSPATH = "spark.driver.extraClassPath";
   /** Configuration key for the driver VM options. */
-  public static final String DRIVER_JAVA_OPTIONS = "spark.driver.extraJavaOptions";
+  public static final String DRIVER_EXTRA_JAVA_OPTIONS = "spark.driver.extraJavaOptions";
   /** Configuration key for the driver native library path. */
-  public static final String DRIVER_LIBRARY_PATH = "spark.driver.extraLibraryPath";
+  public static final String DRIVER_EXTRA_LIBRARY_PATH = "spark.driver.extraLibraryPath";
 
   /** Configuration key for the executor memory. */
   public static final String EXECUTOR_MEMORY = "spark.executor.memory";
   /** Configuration key for the executor class path. */
-  public static final String EXECUTOR_CLASSPATH = "spark.executor.extraClassPath";
+  public static final String EXECUTOR_EXTRA_CLASSPATH = "spark.executor.extraClassPath";
   /** Configuration key for the executor VM options. */
-  public static final String EXECUTOR_JAVA_OPTIONS = "spark.executor.extraJavaOptions";
+  public static final String EXECUTOR_EXTRA_JAVA_OPTIONS = "spark.executor.extraJavaOptions";
   /** Configuration key for the executor native library path. */
-  public static final String EXECUTOR_LIBRARY_PATH = "spark.executor.extraLibraryOptions";
+  public static final String EXECUTOR_EXTRA_LIBRARY_PATH = "spark.executor.extraLibraryOptions";
   /** Configuration key for the number of executor CPU cores. */
   public static final String EXECUTOR_CORES = "spark.executor.cores";
 
+  /** Returns whether the given string is null or empty. */
   protected static boolean isEmpty(String s) {
     return s == null || s.isEmpty();
   }
 
+  /** Joins a list of strings using the given separator. */
   protected static String join(String sep, String... elements) {
     StringBuilder sb = new StringBuilder();
     for (String e : elements) {
@@ -64,6 +68,7 @@ public class LauncherCommon {
     return sb.toString();
   }
 
+  /** Joins a list of strings using the given separator. */
   protected static String join(String sep, Iterable<String> elements) {
     StringBuilder sb = new StringBuilder();
     for (String e : elements) {
@@ -77,6 +82,7 @@ public class LauncherCommon {
     return sb.toString();
   }
 
+  /** Returns the first value mapped to the given key in the given maps. */
   protected static String find(String key, Map<?, ?>... maps) {
     for (Map<?, ?> map : maps) {
       String value = (String) map.get(key);
@@ -87,7 +93,8 @@ public class LauncherCommon {
     return null;
   }
 
-  protected static String first(String... candidates) {
+  /** Returns the first non-empty, non-null string in the given list. */
+  protected static String firstNonEmpty(String... candidates) {
     for (String s : candidates) {
       if (!isEmpty(s)) {
         return s;
@@ -96,18 +103,129 @@ public class LauncherCommon {
     return null;
   }
 
+  /** Returns the name of the env variable that holds the native library path. */
+  protected static String getLibPathEnvName() {
+    if (isWindows()) {
+      return "PATH";
+    }
+
+    String os = System.getProperty("os.name");
+    if (os.startsWith("Mac OS X")) {
+      return "DYLD_LIBRARY_PATH";
+    } else {
+      return "LD_LIBRARY_PATH";
+    }
+  }
+
+  /** Returns whether the OS is Windows. */
+  protected static boolean isWindows() {
+    String os = System.getProperty("os.name");
+    return os.startsWith("Windows");
+  }
+
+  /**
+   * Parse a string as if it were a list of arguments, in the way that a shell would.
+   * This tries to follow the way bash parses strings. For example:
+   *
+   * Input: "\"ab cd\" efgh 'i \" j'"
+   * Output: [ "ab cd", "efgh", "i \" j" ]
+   */
+  protected static List<String> parseOptionString(String s) {
+    List<String> opts = new ArrayList<String>();
+    StringBuilder opt = new StringBuilder();
+    boolean inOpt = false;
+    boolean inSingleQuote = false;
+    boolean inDoubleQuote = false;
+    boolean escapeNext = false;
+    boolean hasData = false;
+
+    for (int i = 0; i < s.length(); i++) {
+      int c = s.codePointAt(i);
+      if (escapeNext) {
+        opt.appendCodePoint(c);
+        escapeNext = false;
+      } else if (inOpt) {
+        switch (c) {
+        case '\\':
+          if (inSingleQuote) {
+            opt.appendCodePoint(c);
+          } else {
+            escapeNext = true;
+          }
+          break;
+        case '\'':
+          if (inDoubleQuote) {
+            opt.appendCodePoint(c);
+          } else {
+            inSingleQuote = !inSingleQuote;
+          }
+          break;
+        case '"':
+          if (inSingleQuote) {
+            opt.appendCodePoint(c);
+          } else {
+            inDoubleQuote = !inDoubleQuote;
+          }
+          break;
+        default:
+          if (inSingleQuote || inDoubleQuote || !Character.isWhitespace(c)) {
+            opt.appendCodePoint(c);
+          } else {
+            opts.add(opt.toString());
+            opt.setLength(0);
+            inOpt = false;
+            hasData = false;
+          }
+        }
+      } else {
+        switch (c) {
+        case '\'':
+          inSingleQuote = true;
+          inOpt = true;
+          hasData = true;
+          break;
+        case '"':
+          inDoubleQuote = true;
+          inOpt = true;
+          hasData = true;
+          break;
+        case '\\':
+          escapeNext = true;
+          inOpt = true;
+          hasData = true;
+          break;
+        default:
+          if (!Character.isWhitespace(c)) {
+            inOpt = true;
+            hasData = true;
+            opt.appendCodePoint(c);
+          }
+        }
+      }
+    }
+
+    checkArgument(!inSingleQuote && !inDoubleQuote && !escapeNext, "Invalid option string: %s", s);
+    if (hasData) {
+      opts.add(opt.toString());
+    }
+    return opts;
+  }
+
+  /** Throws IllegalArgumentException if the given object is null. */
   protected static void checkNotNull(Object o, String arg) {
     if (o == null) {
       throw new IllegalArgumentException(String.format("'%s' must not be null.", arg));
     }
   }
 
+  /** Throws IllegalArgumentException with the given message if the check is false. */
   protected static void checkArgument(boolean check, String msg, Object... args) {
     if (!check) {
       throw new IllegalArgumentException(String.format(msg, args));
     }
   }
 
+  /** Throws IllegalStateException with the given message if the check is false. */
   protected static void checkState(boolean check, String msg, Object... args) {
     if (!check) {
       throw new IllegalStateException(String.format(msg, args));
