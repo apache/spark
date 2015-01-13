@@ -91,8 +91,8 @@ private[sql] trait CacheManager {
         CachedData(
           planToCache,
           InMemoryRelation(
-            useCompression,
-            columnBatchSize,
+            conf.useCompression,
+            conf.columnBatchSize,
             storageLevel,
             query.queryExecution.executedPlan,
             tableName))

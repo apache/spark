@@ -213,7 +213,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     def checkCompressionCodec(codec: CompressionCodecName): Unit = {
       withSQLConf(SQLConf.PARQUET_COMPRESSION -> codec.name()) {
         withParquetFile(data) { path =>
-          assertResult(parquetCompressionCodec.toUpperCase) {
+          assertResult(conf.parquetCompressionCodec.toUpperCase) {
             compressionCodecFor(path)
           }
         }
@@ -221,7 +221,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     }
 
     // Checks default compression codec
-    checkCompressionCodec(CompressionCodecName.fromConf(parquetCompressionCodec))
+    checkCompressionCodec(CompressionCodecName.fromConf(conf.parquetCompressionCodec))
 
     checkCompressionCodec(CompressionCodecName.UNCOMPRESSED)
     checkCompressionCodec(CompressionCodecName.GZIP)

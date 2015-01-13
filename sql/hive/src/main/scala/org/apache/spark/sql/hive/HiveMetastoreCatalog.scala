@@ -515,7 +515,7 @@ private[hive] case class MetastoreRelation
         // if the size is still less than zero, we use default size
         Option(totalSize).map(_.toLong).filter(_ > 0)
           .getOrElse(Option(rawDataSize).map(_.toLong).filter(_ > 0)
-          .getOrElse(sqlContext.defaultSizeInBytes)))
+          .getOrElse(sqlContext.conf.defaultSizeInBytes)))
     }
   )
 
