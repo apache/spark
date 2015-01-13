@@ -173,7 +173,8 @@ private[hive] trait HiveStrategies {
           } else {
             (output, false)
           }
-        ScriptTransformation(input, script, newOutput, planLater(child))(hiveContext, schemaLess) :: Nil
+        ScriptTransformation(input, script, newOutput,
+          planLater(child))(hiveContext, schemaLess) :: Nil
       case _ => Nil
     }
   }
