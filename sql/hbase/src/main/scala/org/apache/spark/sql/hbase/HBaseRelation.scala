@@ -124,8 +124,6 @@ private[hbase] case class HBaseRelation(
 
   @transient var config: Configuration = _
 
-  def configuration() = getConf
-
   private def getConf: Configuration = {
     if (config == null) {
       config = {
@@ -210,6 +208,8 @@ private[hbase] case class HBaseRelation(
   @transient var partitions: Seq[HBasePartition] = _
 
   @transient private[hbase] lazy val dimSize = keyColumns.size
+
+  val scannerFetchSize = context.scannerFetchSize
 
   private[hbase] def generateRange(partition: HBasePartition, pred: Expression,
                                    index: Int): PartitionRange[_] = {

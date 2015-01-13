@@ -21,6 +21,7 @@ import org.apache.spark.sql.SQLConf
 
 private[hbase] object HBaseSQLConf {
   val PARTITION_EXPIRATION = "spark.sql.hbase.partition.expiration"
+  val SCANNER_FETCH_SIZE = "spark.sql.hbase.scanner.fetchsize"
 }
 
 /**
@@ -32,4 +33,5 @@ private[hbase] trait HBaseSQLConf extends SQLConf {
 
   /** The expiration of cached partition (i.e., region) info; defaults to 10 minutes . */
   private[spark] def partitionExpiration: Long = getConf(PARTITION_EXPIRATION, "600").toLong
+  private[spark] def scannerFetchSize: Int = getConf(SCANNER_FETCH_SIZE, "1000").toInt
 }
