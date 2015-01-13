@@ -134,7 +134,7 @@
             "#FFAA91", "#B4A76C", "#9CA299", "#565A5C"
         ],
       });
-      url = "{{ url_for('airflow.chart_data', chart_id=chart.id) }}" + location.search;
+      url = "{{ url_for('airflow.chart_data') }}" + location.search;
       $.getJSON(url, function(payload) {
         console.log(payload);
         $('#loading').hide();

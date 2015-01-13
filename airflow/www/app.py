@@ -423,6 +423,7 @@ class Airflow(BaseView):
             payload['state'] = 'SUCCESS'
             payload['hc'] = hc
             payload['data'] = data
+            payload['request_dict'] = request_dict
 
         def date_handler(obj):
             return obj.isoformat() if hasattr(obj, 'isoformat') else obj
