@@ -131,12 +131,7 @@ trait CreateTableAndLoadData extends Logging {
 
   def runSql(sql: String) = {
     logInfo(sql)
-    logInfo(s"1############ Configuration zkPort="
-      + s"${TestHbase.config.get("hbase.zookeeper.property.clientPort")}")
-    val a = TestHbase.sql(sql)
-    logInfo(s"2############ Configuration zkPort="
-      + s"${TestHbase.config.get("hbase.zookeeper.property.clientPort")}")
-    a.collect()
+    TestHbase.sql(sql).collect()
   }
 
   def loadData(stagingTableName: String, tableName: String, loadFile: String) = {
