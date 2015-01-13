@@ -20,7 +20,6 @@ package org.apache.spark.streaming.mqtt
 import java.net.{URI, ServerSocket}
 
 import org.apache.activemq.broker.{TransportConnector, BrokerService}
-import org.apache.spark.util.Utils
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.concurrent.Eventually
 import scala.concurrent.duration._
@@ -29,6 +28,8 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.eclipse.paho.client.mqttv3._
 import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
+import org.apache.spark.SparkConf
+import org.apache.spark.util.Utils
 
 class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
 
@@ -101,7 +102,7 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
       val socket = new ServerSocket(trialPort)
       socket.close()
       (null, trialPort)
-    })._2
+    }, new SparkConf())._2
   }
 
   def publishData(data: String): Unit = {
