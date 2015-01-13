@@ -327,7 +327,19 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
+ 
+  test("Schema-Less transform") {
+    val expected = sql("SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src").collect().head
+    val res = sql("SELECT TRANSFORM (key) USING 'cat' FROM src").collect().head
+    
+    assert(expected(0) === res(0))
 
+    val expected2 = sql("SELECT TRANSFORM (*) USING 'cat' AS (tKey, tValue) FROM src").collect().head
+    val res2 = sql("SELECT TRANSFORM (*) USING 'cat' FROM src").collect().head
+
+    assert(expected2(0) === res2(0) && expected2(1) === res2(1))
+  }
+ 
   createQueryTest("LIKE",
     "SELECT * FROM src WHERE value LIKE '%1%'")
 
