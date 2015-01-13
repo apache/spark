@@ -197,16 +197,15 @@ class IsotonicRegressionClusterSuite
   extends FunSuite
   with LocalClusterSparkContext {
 
-  //TODO: FIX
   test("task size should be small in both training and prediction") {
-    val n = 135000
+    val n = 1000
 
     val trainData = (0 to n).map(i => (i.toDouble, i.toDouble, 1d))
-    val points = sc.parallelize(trainData, 1)
+    val points = sc.parallelize(trainData, 2)
 
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
-    val model = IsotonicRegression.train(points, true)
+    val model = IsotonicRegression.train(points)
     val predictions = model.predict(points.map(_._2))
   }
 }

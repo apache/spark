@@ -98,7 +98,7 @@ class PoolAdjacentViolators private [mllib]
 
   override def run(
       input: RDD[(Double, Double, Double)],
-      isotonic: Boolean): IsotonicRegressionModel = {
+      isotonic: Boolean = true): IsotonicRegressionModel = {
     createModel(
       parallelPoolAdjacentViolators(input, isotonic),
       isotonic)
@@ -217,18 +217,20 @@ object IsotonicRegression {
   }
 
   /**
-   * Train a monotone regression model given an RDD of (label, feature).
+   * Train a monotone regression model given an RDD of (label, feature, weight).
    * Label is the dependent y value
-   * Weight defaults to 1
+   * Weight of the data point is the number of measurements. Default is 1
    *
-   * @param input RDD of (label, feature).
+   * @param input RDD of (label, feature, weight).
    * @param isotonic isotonic (increasing) or antitonic (decreasing) sequence
    * @return
    */
   def train(
-      input: JavaPairRDD[java.lang.Double, java.lang.Double],
+      input: JavaRDD[(java.lang.Double, java.lang.Double, java.lang.Double)],
       isotonic: Boolean): IsotonicRegressionModel = {
     new PoolAdjacentViolators()
-      .run(input.rdd.map(x => (x._1.doubleValue(), x._2.doubleValue(), 1d)), isotonic)
+      .run(
+        input.rdd.map(x => (x._1.doubleValue(), x._2.doubleValue(), x._3.doubleValue())),
+        isotonic)
   }
 }

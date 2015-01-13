@@ -34,10 +34,11 @@ object IsotonicDataGenerator {
    * @param labels list of labels for the data points
    * @return Java List of input.
    */
-  def generateIsotonicInputAsList(labels: Array[Double]): java.util.List[(JDouble, JDouble)] = {
+  def generateIsotonicInputAsList(
+      labels: Array[Double]):java.util.List[(JDouble, JDouble, JDouble)] = {
     seqAsJavaList(
-      generateIsotonicInput(
-        wrapDoubleArray(labels):_*).map(x => (new JDouble(x._1), new JDouble(x._2))))
+      generateIsotonicInput(wrapDoubleArray(labels):_*)
+        .map(x => (new JDouble(x._1), new JDouble(x._2), new JDouble(1))))
   }
 
   /**

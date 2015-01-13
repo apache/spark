@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.regression;
 
-import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
@@ -26,7 +25,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import scala.Tuple2;
+import scala.Tuple3;
 
 import java.io.Serializable;
 import java.util.List;
@@ -45,11 +44,11 @@ public class JavaIsotonicRegressionSuite implements Serializable {
     sc = null;
   }
 
-  double difference(List<Tuple2<Double, Double>> expected, IsotonicRegressionModel model) {
+  double difference(List<Tuple3<Double, Double, Double>> expected, IsotonicRegressionModel model) {
     double diff = 0;
 
     for(int i = 0; i < model.predictions().length(); i++) {
-      Tuple2<Double, Double> exp = expected.get(i);
+      Tuple3<Double, Double, Double> exp = expected.get(i);
       diff += Math.abs(model.predict(exp._2()) - exp._1());
     }
 
@@ -58,13 +57,13 @@ public class JavaIsotonicRegressionSuite implements Serializable {
 
   @Test
   public void runIsotonicRegressionUsingStaticMethod() {
-    JavaPairRDD<Double, Double> trainRDD = sc.parallelizePairs(
+    JavaRDD<Tuple3<Double, Double, Double>> trainRDD = sc.parallelize(
       IsotonicDataGenerator.generateIsotonicInputAsList(
         new double[]{1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12})).cache();
 
     IsotonicRegressionModel model = IsotonicRegression.train(trainRDD, true);
 
-    List<Tuple2<Double, Double>> expected = IsotonicDataGenerator
+    List<Tuple3<Double, Double, Double>> expected = IsotonicDataGenerator
       .generateIsotonicInputAsList(
         new double[] {1, 2, 7d/3, 7d/3, 7d/3, 6, 7, 8, 10, 10, 10, 12});
 
@@ -73,15 +72,15 @@ public class JavaIsotonicRegressionSuite implements Serializable {
 
   @Test
   public void testPredictJavaRDD() {
-    JavaPairRDD<Double, Double> trainRDD = sc.parallelizePairs(
+    JavaRDD<Tuple3<Double, Double, Double>> trainRDD = sc.parallelize(
       IsotonicDataGenerator.generateIsotonicInputAsList(
         new double[]{1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12})).cache();
 
     IsotonicRegressionModel model = IsotonicRegression.train(trainRDD, true);
 
-    JavaRDD<Double> testRDD = trainRDD.map(new Function<Tuple2<Double, Double>, Double>() {
+    JavaRDD<Double> testRDD = trainRDD.map(new Function<Tuple3<Double, Double, Double>, Double>() {
       @Override
-      public Double call(Tuple2<Double, Double> v) throws Exception {
+      public Double call(Tuple3<Double, Double, Double> v) throws Exception {
         return v._2();
       }
     });
@@ -92,4 +91,3 @@ public class JavaIsotonicRegressionSuite implements Serializable {
     Assert.assertTrue(predictions.get(11) == 12d);
   }
 }
-
