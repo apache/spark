@@ -510,6 +510,22 @@ class SparseVector(Vector):
                 and np.array_equal(other.indices, self.indices)
                 and np.array_equal(other.values, self.values))
 
+    def __getitem__(self, item):
+        inds = self.indices
+        vals = self.values
+        if not isinstance(item, int):
+            raise ValueError("Indices must be of type integer")
+        if item < 0:
+            item += self.size
+        if item >= self.size or item < 0:
+            raise ValueError("Index out of bounds.")
+
+        insert_item = np.searchsorted(inds, item)
+        row_ind = inds[insert_item]
+        if row_ind == item:
+            return vals[insert_item]
+        return 0.
+
     def __ne__(self, other):
         return not self.__eq__(other)
 
