@@ -15,28 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive
+package org.apache.spark.scheduler
 
-import org.scalatest.FunSuite
+import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
 
-import org.apache.spark.sql.catalyst.types.StructType
-import org.apache.spark.sql.sources.DDLParser
-import org.apache.spark.sql.test.ExamplePointUDT
+import org.apache.spark.TaskContext
 
-class HiveMetastoreCatalogSuite extends FunSuite {
+/**
+ * A Task implementation that fails to serialize.
+ */
+private[spark] class NotSerializableFakeTask(myId: Int, stageId: Int) extends Task[Array[Byte]](stageId, 0) {
+  override def runTask(context: TaskContext): Array[Byte] = Array.empty[Byte]
+  override def preferredLocations: Seq[TaskLocation] = Seq[TaskLocation]()
 
-  test("struct field should accept underscore in sub-column name") {
-    val metastr = "struct<a: int, b_1: string, c: string>"
-
-    val ddlParser = new DDLParser
-
-    val datatype = ddlParser.parseType(metastr)
-    assert(datatype.isInstanceOf[StructType])
+  @throws(classOf[IOException])
+  private def writeObject(out: ObjectOutputStream): Unit = {
+    if (stageId == 0) {
+      throw new IllegalStateException("Cannot serialize")
+    }
   }
 
-  test("udt to metastore type conversion") {
-    val udt = new ExamplePointUDT
-    assert(HiveMetastoreTypes.toMetastoreType(udt) ===
-      HiveMetastoreTypes.toMetastoreType(udt.sqlType))
-  }
+  @throws(classOf[IOException])
+  private def readObject(in: ObjectInputStream): Unit = {}
 }

@@ -76,7 +76,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @transient
   protected[sql] val sqlParser = {
     val fallback = new catalyst.SqlParser
-    new catalyst.SparkSQLParser(fallback(_))
+    new SparkSQLParser(fallback(_))
   }
 
   protected[sql] def parseSql(sql: String): LogicalPlan = {
@@ -276,7 +276,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    catalog.registerTable(None, tableName, rdd.queryExecution.logical)
+    catalog.registerTable(Seq(tableName), rdd.queryExecution.logical)
   }
 
   /**
@@ -289,7 +289,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   def dropTempTable(tableName: String): Unit = {
     tryUncacheQuery(table(tableName))
-    catalog.unregisterTable(None, tableName)
+    catalog.unregisterTable(Seq(tableName))
   }
 
   /**
@@ -308,7 +308,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /** Returns the specified table as a SchemaRDD */
   def table(tableName: String): SchemaRDD =
-    new SchemaRDD(this, catalog.lookupRelation(None, tableName))
+    new SchemaRDD(this, catalog.lookupRelation(Seq(tableName)))
 
   /**
    * :: DeveloperApi ::
@@ -329,7 +329,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
     def strategies: Seq[Strategy] =
       extraStrategies ++ (
-      CommandStrategy ::
       DataSourceStrategy ::
       TakeOrdered ::
       HashAggregation ::
