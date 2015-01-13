@@ -28,7 +28,7 @@ import parquet.schema.MessageType
 
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{AttributeMap, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 
 /**
@@ -66,6 +66,8 @@ private[sql] case class ParquetRelation(
       new Path(path.split(",").head),
       conf,
       sqlContext.isParquetBinaryAsString)
+
+  lazy val attributeMap = AttributeMap(output.map(o => o -> o))
 
   override def newInstance() = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
 

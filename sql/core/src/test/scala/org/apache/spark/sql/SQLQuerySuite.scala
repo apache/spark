@@ -272,6 +272,23 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       mapData.collect().take(1).toSeq)
   }
 
+  test("from follow multiple brackets") {
+    checkAnswer(sql(
+      "select key from ((select * from testData limit 1) union all (select * from testData limit 1)) x limit 1"),
+      1
+    )
+
+    checkAnswer(sql(
+      "select key from (select * from testData) x limit 1"),
+      1
+    )
+
+    checkAnswer(sql(
+      "select key from (select * from testData limit 1 union all select * from testData limit 1) x limit 1"),
+      1
+    )
+  }
+
   test("average") {
     checkAnswer(
       sql("SELECT AVG(a) FROM testData2"),
@@ -984,6 +1001,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT a + b FROM testData2 ORDER BY a"),
       Seq(2, 3, 3 ,4 ,4 ,5).map(Seq(_))
+    )
+  }
+
+  test("oder by asc by default when not specify ascending and descending") {
+    checkAnswer(
+      sql("SELECT a, b FROM testData2 ORDER BY a desc, b"),
+      Seq((3, 1), (3, 2), (2, 1), (2,2), (1, 1), (1, 2))
     )
   }
 

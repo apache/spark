@@ -56,6 +56,21 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
   }
 
+  test("SPARK-4908: concurent hive native commands") {
+    (1 to 100).par.map { _ =>
+      sql("USE default")
+      sql("SHOW TABLES")
+    }
+  }
+  
+  createQueryTest("! operator",
+    """
+      |SELECT a FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 2 AS a FROM src LIMIT 1) table
+      |WHERE !(a>1)
+    """.stripMargin)
+
   createQueryTest("constant object inspector for generic udf",
     """SELECT named_struct(
       lower("AA"), "10",

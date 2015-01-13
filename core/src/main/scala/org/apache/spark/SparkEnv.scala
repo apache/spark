@@ -395,7 +395,7 @@ object SparkEnv extends Logging {
     val sparkProperties = (conf.getAll ++ schedulerMode).sorted
 
     // System properties that are not java classpaths
-    val systemProperties = System.getProperties.iterator.toSeq
+    val systemProperties = Utils.getSystemProperties.toSeq
     val otherProperties = systemProperties.filter { case (k, _) =>
       k != "java.class.path" && !k.startsWith("spark.")
     }.sorted
