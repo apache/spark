@@ -106,7 +106,7 @@ import org.apache.spark.util.Utils
     val virtualDirectory                              = new PlainFile(outputDir) // "directory" for classfiles
     /** Jetty server that will serve our classes to worker nodes */
     val classServerPort                               = conf.getInt("spark.replClassServer.port", 0)
-    val classServer                                   = new HttpServer(outputDir, new SecurityManager(conf), classServerPort, "HTTP class server")
+    val classServer                                   = new HttpServer(conf, outputDir, new SecurityManager(conf), classServerPort, "HTTP class server")
     private var currentSettings: Settings             = initialSettings
     var printResults                                  = true      // whether to print result lines
     var totalSilence                                  = false     // whether to print anything
