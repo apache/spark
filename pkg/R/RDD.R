@@ -1865,13 +1865,12 @@ setGeneric("name", function(rdd) { standardGeneric("name") })
 setMethod("name",
           signature(rdd = "RDD"),
           function(rdd) {
-            .jcall(getJRDD(rdd), "S", "name")
-          }
-)
+            .jcall(getJRDD(rdd), "Ljava/lang/String;", "name")
+          })
 
 #' Set an RDD's name.
 #'
-#' @param rdd The RDD whose name is returned
+#' @param rdd The RDD whose name is to be set.
 #' @param name The RDD name to be set.
 #' @return a new RDD renamed.
 #' @rdname setName
@@ -1892,5 +1891,4 @@ setMethod("setName",
           function(rdd, name) {
             .jcall(getJRDD(rdd), "Lorg/apache/spark/api/java/JavaRDD;", "setName", name)
             rdd
-          }
-)
+          })
