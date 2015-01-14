@@ -42,6 +42,8 @@ import org.apache.spark.util.Utils
  * Contains util methods to interact with Hadoop from spark.
  */
 class YarnSparkHadoopUtil extends SparkHadoopUtil {
+  val sparkConf = new SparkConf()
+  UserGroupInformation.setConfiguration(newConfiguration(sparkConf))
 
   override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     dest.addCredentials(source.getCredentials())
@@ -69,6 +71,12 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
   override def addCurrentUserCredentials(creds: Credentials) {
     UserGroupInformation.getCurrentUser().addCredentials(creds)
+  }
+
+  override def getAuthenticatedUgiForSparkUser(user: String): UserGroupInformation = {
+    val ugi = UserGroupInformation.createRemoteUser(user)
+    transferCredentials(UserGroupInformation.getCurrentUser, ugi)
+    ugi
   }
 
   override def addSecretKeyToUserCredentials(key: String, secret: String) {

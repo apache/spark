@@ -39,9 +39,7 @@ import scala.collection.JavaConversions._
  * Contains util methods to interact with Hadoop from Spark.
  */
 @DeveloperApi
-class SparkHadoopUtil extends Logging {
-  val conf: Configuration = newConfiguration(new SparkConf())
-  UserGroupInformation.setConfiguration(conf)
+abstract class SparkHadoopUtil extends Logging {
 
   /**
    * Runs the given function with a Hadoop UserGroupInformation as a thread local variable
@@ -54,12 +52,15 @@ class SparkHadoopUtil extends Logging {
   def runAsSparkUser(func: () => Unit) {
     val user = Utils.getCurrentUserName()
     logDebug("running as user: " + user)
-    val ugi = UserGroupInformation.createRemoteUser(user)
+    val ugi = getAuthenticatedUgiForSparkUser(user)
     transferCredentials(UserGroupInformation.getCurrentUser(), ugi)
     ugi.doAs(new PrivilegedExceptionAction[Unit] {
       def run: Unit = func()
     })
   }
+
+  // Log in as the Spark user, if necessary.
+  def loginAsSparkUser() {}
 
   def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
     for (token <- source.getTokens()) {
@@ -120,6 +121,8 @@ class SparkHadoopUtil extends Logging {
   def loginUserFromKeytab(principalName: String, keytabFilename: String) {
     UserGroupInformation.loginUserFromKeytab(principalName, keytabFilename)
   }
+
+  protected def getAuthenticatedUgiForSparkUser(user: String): UserGroupInformation
 
   /**
    * Returns a function that can be called to find Hadoop FileSystem bytes read. If
@@ -205,7 +208,7 @@ class SparkHadoopUtil extends Logging {
 
 object SparkHadoopUtil {
 
-  private val hadoop = {
+  private lazy val hadoop = {
     val yarnMode = java.lang.Boolean.valueOf(
         System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
     if (yarnMode) {
@@ -217,7 +220,7 @@ object SparkHadoopUtil {
        case e: Exception => throw new SparkException("Unable to load YARN support", e)
       }
     } else {
-      new SparkHadoopUtil
+      new StandaloneSparkHadoopUtil
     }
   }
 
