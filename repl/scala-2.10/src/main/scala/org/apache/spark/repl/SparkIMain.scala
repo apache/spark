@@ -194,6 +194,16 @@ import org.apache.spark.annotation.DeveloperApi
     // NOTE: Exposed to repl package since used by SparkExprTyper and SparkILoop
     private[repl] lazy val reporter: ConsoleReporter = new SparkIMain.ReplReporter(this)
 
+    /**
+     * Determines if errors were reported (typically during compilation).
+     *
+     * @note This is not for runtime errors
+     *
+     * @return True if had errors, otherwise false
+     */
+    @DeveloperApi
+    def isReportingErrors = reporter.hasErrors
+
     import formatting._
     import reporter.{ printMessage, withoutTruncating }
 
