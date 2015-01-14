@@ -17,6 +17,7 @@
 
 package org.apache.spark.util
 
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.{BlockingQueue, LinkedBlockingDeque}
 
 import scala.util.control.NonFatal
@@ -34,12 +35,14 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
 
   private val eventQueue: BlockingQueue[E] = new LinkedBlockingDeque[E]()
 
+  private val stopped = new AtomicBoolean(false)
+
   private val eventThread = new Thread(name) {
     setDaemon(true)
 
     override def run(): Unit = {
       try {
-        while (true) {
+        while (!stopped.get) {
           val event = eventQueue.take()
           try {
             onReceive(event)
@@ -62,16 +65,23 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
   }
 
   def start(): Unit = {
+    if (stopped.get) {
+      throw new IllegalStateException(name + " has already been stopped")
+    }
     // Call onStart before starting the event thread to make sure it happens before onReceive
     onStart()
     eventThread.start()
   }
 
   def stop(): Unit = {
-    eventThread.interrupt()
-    eventThread.join()
-    // Call onStop after the event thread exits to make sure onReceive happens before onStop
-    onStop()
+    if (stopped.compareAndSet(false ,true)) {
+      eventThread.interrupt()
+      eventThread.join()
+      // Call onStop after the event thread exits to make sure onReceive happens before onStop
+      onStop()
+    } else {
+      // Keep quiet to allow calling `stop` multiple times.
+    }
   }
 
   /**

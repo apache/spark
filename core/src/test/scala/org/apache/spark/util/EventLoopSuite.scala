@@ -80,4 +80,81 @@ class EventLoopSuite extends FunSuite {
     }
     eventLoop.stop()
   }
+
+  test("EventLoop: error thrown from onError should not crash the event thread") {
+    val e = new RuntimeException("Oops")
+    val receivedError = new AtomicReference[Throwable]()
+    val eventLoop = new EventLoop[Int]("test") {
+
+      override def onReceive(event: Int): Unit = {
+        throw e
+      }
+
+      override def onError(e: Throwable): Unit = {
+        receivedError.set(e)
+        throw new RuntimeException("Oops")
+      }
+    }
+    eventLoop.start()
+    eventLoop.post(1)
+    eventually(timeout(5 seconds), interval(200 millis)) {
+      assert(e === receivedError.get)
+      assert(eventLoop.isActive)
+    }
+    eventLoop.stop()
+  }
+
+  test("EventLoop: calling stop multiple times should only call onStop once") {
+    var onStopTimes = 0
+    val eventLoop = new EventLoop[Int]("test") {
+
+      override def onReceive(event: Int): Unit = {
+      }
+
+      override def onError(e: Throwable): Unit = {
+      }
+
+      override def onStop(): Unit = {
+        onStopTimes += 1
+      }
+    }
+
+    eventLoop.start()
+
+    eventLoop.stop()
+    eventLoop.stop()
+    eventLoop.stop()
+
+    assert(1 === onStopTimes)
+  }
+
+  test("EventLoop: post event in multiple threads") {
+    var receivedEventsCount = 0
+    val eventLoop = new EventLoop[Int]("test") {
+
+      override def onReceive(event: Int): Unit = {
+        receivedEventsCount += 1
+      }
+
+      override def onError(e: Throwable): Unit = {
+      }
+
+    }
+    eventLoop.start()
+
+    val threadNum = 5
+    val eventsFromEachThread = 100
+    (1 to threadNum).foreach { _ =>
+      new Thread() {
+        override def run(): Unit = {
+          (1 to eventsFromEachThread).foreach(eventLoop.post)
+        }
+      }.start()
+    }
+
+    eventually(timeout(5 seconds), interval(200 millis)) {
+      assert(threadNum * eventsFromEachThread === receivedEventsCount)
+    }
+    eventLoop.stop()
+  }
 }
