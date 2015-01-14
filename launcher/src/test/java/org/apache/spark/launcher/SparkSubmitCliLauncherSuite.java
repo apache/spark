@@ -67,7 +67,7 @@ public class SparkSubmitCliLauncherSuite {
 
     List<String> cmd = new SparkSubmitCliLauncher(sparkSubmitArgs)
       .setSparkHome(System.getProperty("spark.test.home"))
-      .buildLauncherCommand();
+      .buildShellCommand();
     assertEquals("python", cmd.get(cmd.size() - 1));
     assertTrue(cmd.contains("PYSPARK_SUBMIT_ARGS=\"--master\" \"foo\" \"--deploy-mode\" \"bar\""));
   }
@@ -82,7 +82,7 @@ public class SparkSubmitCliLauncherSuite {
 
     List<String> cmd = new SparkSubmitCliLauncher(sparkSubmitArgs)
       .setSparkHome(System.getProperty("spark.test.home"))
-      .buildLauncherCommand();
+      .buildShellCommand();
     assertEquals("foo", findArgValue(cmd, "--master"));
     assertEquals("bar", findArgValue(cmd, "--deploy-mode"));
     assertEquals("script.py", cmd.get(cmd.size() - 2));

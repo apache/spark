@@ -17,6 +17,7 @@
 
 package org.apache.spark.launcher;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -121,6 +122,17 @@ public class LauncherCommon {
   protected static boolean isWindows() {
     String os = System.getProperty("os.name");
     return os.startsWith("Windows");
+  }
+
+  /**
+   * Updates the user environment to contain the merged value of "envKey" after appending
+   * the given path list.
+   */
+  protected void mergeEnvPathList(Map<String, String> userEnv, String envKey, String pathList) {
+    if (!isEmpty(pathList)) {
+      String current = firstNonEmpty(userEnv.get(envKey), System.getenv(envKey));
+      userEnv.put(envKey, join(File.pathSeparator, current, pathList));
+    }
   }
 
   /**

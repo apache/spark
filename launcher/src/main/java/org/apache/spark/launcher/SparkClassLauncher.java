@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -40,7 +41,7 @@ class SparkClassLauncher extends AbstractLauncher<SparkClassLauncher> {
   }
 
   @Override
-  protected List<String> buildLauncherCommand() throws IOException {
+  protected List<String> buildLauncherCommand(Map<String, String> env) throws IOException {
     List<String> javaOptsKeys = new ArrayList<String>();
     String memKey = null;
     String extraClassPath = null;
@@ -87,7 +88,7 @@ class SparkClassLauncher extends AbstractLauncher<SparkClassLauncher> {
       javaOptsKeys.add("SPARK_JAVA_OPTS");
     } else {
       // Any classes not explicitly listed above are submitted using SparkSubmit.
-      return buildSparkSubmitCommand();
+      return buildSparkSubmitCommand(env);
     }
 
     List<String> cmd = buildJavaCommand();
@@ -102,17 +103,17 @@ class SparkClassLauncher extends AbstractLauncher<SparkClassLauncher> {
     cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath)));
     cmd.add(className);
     cmd.addAll(classArgs);
-    return prepareForOs(cmd, null);
+    return cmd;
   }
 
-  private List<String> buildSparkSubmitCommand() throws IOException {
+  private List<String> buildSparkSubmitCommand(Map<String, String> env) throws IOException {
     List<String> sparkSubmitArgs = new ArrayList<String>(classArgs);
     sparkSubmitArgs.add(SparkSubmitOptionParser.CLASS);
     sparkSubmitArgs.add(className);
 
     SparkSubmitCliLauncher launcher = new SparkSubmitCliLauncher(true, sparkSubmitArgs);
     launcher.setAppResource("spark-internal");
-    return launcher.buildLauncherCommand();
+    return launcher.buildLauncherCommand(env);
   }
 
 }

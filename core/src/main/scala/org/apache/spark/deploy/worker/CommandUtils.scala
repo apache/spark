@@ -19,7 +19,7 @@ package org.apache.spark.deploy.worker
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
 import java.lang.System._
-import java.util.{ArrayList, List => JList}
+import java.util.{ArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -59,7 +59,8 @@ object CommandUtils extends Logging {
   private def buildCommandSeq(command: Command, memory: Int, sparkHome: String): Seq[String] = {
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
-    val cmd = new CommandLauncher(sparkHome, memory, command.environment).buildLauncherCommand()
+    val cmd = new CommandLauncher(sparkHome, memory, command.environment)
+      .buildLauncherCommand(command.environment)
     cmd.toSeq ++ Seq(command.mainClass) ++ command.arguments
   }
 
@@ -116,7 +117,7 @@ private class CommandLauncher(sparkHome: String, memory: Int, env: Map[String, S
 
   setSparkHome(sparkHome)
 
-  override def buildLauncherCommand(): JList[String] = {
+  override def buildLauncherCommand(env: JMap[String, String]): JList[String] = {
     val cmd = buildJavaCommand()
     cmd.add("-cp")
     cmd.add(buildClassPath(null).mkString(File.pathSeparator))

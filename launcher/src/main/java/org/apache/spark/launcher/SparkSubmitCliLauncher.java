@@ -83,15 +83,15 @@ public class SparkSubmitCliLauncher extends SparkLauncher {
   }
 
   @Override
-  protected List<String> buildLauncherCommand() throws IOException {
+  protected List<String> buildLauncherCommand(Map<String, String> env) throws IOException {
     if (PYSPARK_SHELL.equals(appResource)) {
-      return buildPySparkShellCommand();
+      return buildPySparkShellCommand(env);
     } else {
-      return super.buildLauncherCommand();
+      return super.buildLauncherCommand(env);
     }
   }
 
-  private List<String> buildPySparkShellCommand() throws IOException {
+  private List<String> buildPySparkShellCommand(Map<String, String> env) throws IOException {
     // For backwards compatibility, if a script is specified in
     // the pyspark command line, then run it using spark-submit.
     if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".py")) {
@@ -100,7 +100,7 @@ public class SparkSubmitCliLauncher extends SparkLauncher {
         "Use ./bin/spark-submit <python file>");
       setAppResource(appArgs.get(0));
       appArgs.remove(0);
-      return buildLauncherCommand();
+      return buildLauncherCommand(env);
     }
 
     // When launching the pyspark shell, the spark-submit arguments should be stored in the
@@ -109,7 +109,7 @@ public class SparkSubmitCliLauncher extends SparkLauncher {
     checkArgument(appArgs.isEmpty(), "pyspark does not support any application options.");
 
     Properties props = loadPropertiesFile();
-    String libPath = find(DRIVER_EXTRA_LIBRARY_PATH, conf, props);
+    mergeEnvPathList(env, getLibPathEnvName(), find(DRIVER_EXTRA_LIBRARY_PATH, conf, props));
 
     StringBuilder submitArgs = new StringBuilder();
     for (String arg : sparkArgs) {
@@ -125,7 +125,6 @@ public class SparkSubmitCliLauncher extends SparkLauncher {
       submitArgs.append(quote(arg));
     }
 
-    Map<String, String> env = new HashMap<String, String>();
     env.put("PYSPARK_SUBMIT_ARGS", submitArgs.toString());
 
     List<String> pyargs = new ArrayList<String>();
@@ -135,7 +134,7 @@ public class SparkSubmitCliLauncher extends SparkLauncher {
       pyargs.addAll(parseOptionString(pyOpts));
     }
 
-    return prepareForOs(pyargs, libPath, env);
+    return pyargs;
   }
 
   /**

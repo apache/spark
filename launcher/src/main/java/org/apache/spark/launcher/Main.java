@@ -20,6 +20,7 @@ package org.apache.spark.launcher;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Command line interface for the Spark launcher. Used internally by Spark scripts.
@@ -63,7 +64,7 @@ public class Main extends LauncherCommon {
       printLaunchCommand = false;
     }
 
-    List<String> cmd = launcher.buildLauncherCommand();
+    List<String> cmd = launcher.buildShellCommand();
     if (printLaunchCommand) {
       System.err.println("Spark Command: " + join(" ", cmd));
       System.err.println("========================================");
@@ -96,7 +97,7 @@ public class Main extends LauncherCommon {
   private static class UsageLauncher extends AbstractLauncher<UsageLauncher> {
 
     @Override
-    protected List<String> buildLauncherCommand() {
+    protected List<String> buildLauncherCommand(Map<String, String> env) {
       if (isWindows()) {
         return Arrays.asList("set SPARK_LAUNCHER_USAGE_ERROR=1");
       } else {

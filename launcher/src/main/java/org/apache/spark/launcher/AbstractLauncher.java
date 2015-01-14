@@ -38,37 +38,39 @@ import java.util.regex.Pattern;
  */
 public abstract class AbstractLauncher<T extends AbstractLauncher> extends LauncherCommon {
 
+  private static final String ENV_SPARK_HOME = "SPARK_HOME";
   private static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
   protected static final String DEFAULT_MEM = "512m";
 
   protected String javaHome;
   protected String sparkHome;
   protected String propertiesFile;
-  protected final Map<String, String> conf = new HashMap<String, String>();
-  private final Map<String, String> env;
+  protected final Map<String, String> conf;
+  protected final Map<String, String> launcherEnv;
 
   protected AbstractLauncher() {
-    this(null);
+    this(Collections.<String, String>emptyMap());
   }
 
   protected AbstractLauncher(Map<String, String> env) {
-    this.env = env;
+    this.conf = new HashMap<String, String>();
+    this.launcherEnv = new HashMap<String, String>(env);
   }
 
   @SuppressWarnings("unchecked")
   private final T THIS = (T) this;
 
   /** Set a custom JAVA_HOME for launching the Spark application. */
-  public T setJavaHome(String path) {
-    checkNotNull(path, "path");
-    this.javaHome = path;
+  public T setJavaHome(String javaHome) {
+    checkNotNull(javaHome, "javaHome");
+    this.javaHome = javaHome;
     return THIS;
   }
 
   /** Set a custom Spark installation location for the application. */
-  public T setSparkHome(String path) {
-    checkNotNull(path, "path");
-    this.sparkHome = path;
+  public T setSparkHome(String sparkHome) {
+    checkNotNull(sparkHome, "sparkHome");
+    launcherEnv.put(ENV_SPARK_HOME, sparkHome);
     return THIS;
   }
 
@@ -89,9 +91,22 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
   }
 
   /**
-   * Launchers should implement this to create the command to be executed.
+   * Launchers should implement this to create the command to be executed. This method should
+   * also update the environment map with any environment variables needed by the child process.
+   *
+   * @param env Map containing environment variables to set for the Spark job.
    */
-  protected abstract List<String> buildLauncherCommand() throws IOException;
+  protected abstract List<String> buildLauncherCommand(Map<String, String> env) throws IOException;
+
+  /**
+   * Prepares the launcher command for execution from a shell script. This is used by the `Main`
+   * class to service the scripts shipped with the Spark distribution.
+   */
+  List<String> buildShellCommand() throws IOException {
+    Map<String, String> childEnv = new HashMap<String, String>(launcherEnv);
+    List<String> cmd = buildLauncherCommand(childEnv);
+    return isWindows() ? prepareForWindows(cmd, childEnv) : prepareForBash(cmd, childEnv);
+  }
 
   /**
    * Loads the configuration file for the application, if it exists. This is  either the
@@ -128,7 +143,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
   }
 
   protected String getSparkHome() {
-    String path = firstNonEmpty(sparkHome, getenv("SPARK_HOME"));
+    String path = getenv(ENV_SPARK_HOME);
     checkState(path != null,
       "Spark home not found; set it explicitly or use the SPARK_HOME environment variable.");
     return path;
@@ -319,62 +334,6 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
     throw new IllegalStateException("Should not reach here.");
   }
 
-  protected List<String> prepareForOs(List<String> cmd, String libPath) {
-    return prepareForOs(cmd, libPath, Collections.<String, String>emptyMap());
-  }
-
-  /**
-   * Prepare the command for execution under the current OS, setting the passed environment
-   * variables.
-   *
-   * Which OS is running defines two things:
-   * - the name of the environment variable used to define the lookup path for native libs
-   * - how to execute the command in general.
-   *
-   * The name is easy: PATH on Win32, DYLD_LIBRARY_PATH on MacOS, LD_LIBRARY_PATH elsewhere.
-   *
-   * On Unix-like, we're assuming bash is available. So we print one argument per line to
-   * the output, and use bash's array handling to execute the right thing.
-   *
-    * For Win32, see {@link #prepareForWindows(List<String>,String)}.
-   */
-  protected List<String> prepareForOs(
-      List<String> cmd,
-      String libPath,
-      Map<String, String> env) {
-
-    // If SPARK_HOME does not come from the environment, explicitly set it
-    // in the child's environment.
-    Map<String, String> childEnv = env;
-    if (System.getenv("SPARK_HOME") == null && !env.containsKey("SPARK_HOME")) {
-      childEnv = new HashMap<String, String>(env);
-      childEnv.put("SPARK_HOME", sparkHome);
-    }
-
-    if (isWindows()) {
-      return prepareForWindows(cmd, libPath, childEnv);
-    }
-
-    if (isEmpty(libPath) && childEnv.isEmpty()) {
-      return cmd;
-    }
-
-    List<String> newCmd = new ArrayList<String>();
-    newCmd.add("env");
-
-    if (!isEmpty(libPath)) {
-      String envName = getLibPathEnvName();
-      String currEnvValue = getenv(envName);
-      String newEnvValue = join(File.pathSeparator, currEnvValue, libPath);
-      newCmd.add(String.format("%s=%s", envName, newEnvValue));
-    }
-    for (Map.Entry<String, String> e : childEnv.entrySet()) {
-      newCmd.add(String.format("%s=%s", e.getKey(), e.getValue()));
-    }
-    newCmd.addAll(cmd);
-    return newCmd;
-  }
-
   private String findAssembly(String scalaVersion) {
     String sparkHome = getSparkHome();
     File libdir;
@@ -400,7 +359,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
   }
 
   private String getenv(String key) {
-    return firstNonEmpty(env != null ? env.get(key) : null, System.getenv(key));
+    return firstNonEmpty(launcherEnv.get(key), System.getenv(key));
   }
 
   private String getConfDir() {
@@ -409,7 +368,26 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
   }
 
   /**
-   * Prepare a command line for execution on Windows.
+   * Prepare the command for execution from a bash script. The final command will have commands to
+   * set up any needed environment variables needed by the child process.
+   */
+  private List<String> prepareForBash(List<String> cmd, Map<String, String> childEnv) {
+    if (childEnv.isEmpty()) {
+      return cmd;
+    }
+
+    List<String> newCmd = new ArrayList<String>();
+    newCmd.add("env");
+
+    for (Map.Entry<String, String> e : childEnv.entrySet()) {
+      newCmd.add(String.format("%s=%s", e.getKey(), e.getValue()));
+    }
+    newCmd.addAll(cmd);
+    return newCmd;
+  }
+
+  /**
+   * Prepare a command line for execution from a Windows batch script.
    *
    * Two things need to be done:
    *
@@ -420,18 +398,12 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
    *   "double quoted" (which is batch for escaping a quote). This page has more details about
    *   quoting and other batch script fun stuff: http://ss64.com/nt/syntax-esc.html
    *
-   * The command is executed using "cmd /c" and formatted in a single line, since that's the
+   * The command is executed using "cmd /c" and formatted as single line, since that's the
    * easiest way to consume this from a batch script (see spark-class2.cmd).
    */
-  private List<String> prepareForWindows(
-      List<String> cmd,
-      String libPath,
-      Map<String, String> env) {
-    StringBuilder cmdline = new StringBuilder("\"");
-    if (libPath != null) {
-      cmdline.append("set PATH=%PATH%;").append(libPath).append(" &&");
-    }
-    for (Map.Entry<String, String> e : env.entrySet()) {
+  private List<String> prepareForWindows(List<String> cmd, Map<String, String> childEnv) {
+    StringBuilder cmdline = new StringBuilder("cmd /c \"");
+    for (Map.Entry<String, String> e : childEnv.entrySet()) {
       if (cmdline.length() > 0) {
         cmdline.append(" ");
       }
@@ -445,7 +417,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
       cmdline.append(quoteForBatchScript(arg));
     }
     cmdline.append("\"");
-    return Arrays.asList("cmd", "/c", cmdline.toString());
+    return Arrays.asList(cmdline.toString());
   }
 
   /**

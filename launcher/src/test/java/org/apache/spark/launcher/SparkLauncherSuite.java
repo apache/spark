@@ -56,11 +56,12 @@ public class SparkLauncherSuite {
       .setSparkHome(System.getProperty("spark.test.home"))
       .setMaster("local")
       .setAppResource("spark-internal")
-      .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, "-Dfoo=bar -Dtest.name=-testChildProcLauncher")
+      .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,
+        "-Dfoo=bar -Dtest.name=-testChildProcLauncher")
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .setMainClass(SparkLauncherTestApp.class.getName())
       .addAppArgs("proc");
-    printArgs(launcher.buildLauncherCommand());
+    printArgs(launcher.buildShellCommand());
     final Process app = launcher.launch();
     new Redirector("stdout", app.getInputStream()).start();
     new Redirector("stderr", app.getErrorStream()).start();
@@ -80,7 +81,7 @@ public class SparkLauncherSuite {
       .setMainClass(SparkLauncherTestApp.class.getName())
       .addAppArgs("thread");
 
-    printArgs(launcher.buildLauncherCommand());
+    printArgs(launcher.buildShellCommand());
 
     Thread app = launcher.start(new Thread.UncaughtExceptionHandler() {
       @Override
@@ -117,7 +118,7 @@ public class SparkLauncherSuite {
       .setConf(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native")
       .setConf("spark.foo", "foo");
 
-    List<String> cmd = launcher.buildLauncherCommand();
+    List<String> cmd = launcher.buildShellCommand();
 
     // Checks below are different for driver and non-driver mode.
 
@@ -152,7 +153,8 @@ public class SparkLauncherSuite {
     }
     if (isDriver) {
       assertNotNull("Native library path should be set.", libPath);
-      assertTrue("Native library path should contain provided entry.", contains("/native", libPath));
+      assertTrue("Native library path should contain provided entry.",
+        contains("/native", libPath));
     } else {
       assertNull("Native library should not be set.", libPath);
     }

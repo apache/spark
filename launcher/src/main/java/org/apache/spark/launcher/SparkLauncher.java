@@ -23,6 +23,7 @@ import java.lang.reflect.Method;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -216,8 +217,13 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
    * @return A process handle for the Spark app.
    */
   public Process launch() throws IOException {
-    List<String> cmd = buildLauncherCommand();
-    return Runtime.getRuntime().exec(cmd.toArray(new String[cmd.size()]));
+    Map<String, String> childEnv = new HashMap<String, String>(launcherEnv);
+    List<String> cmd = buildLauncherCommand(childEnv);
+    ProcessBuilder pb = new ProcessBuilder(cmd.toArray(new String[cmd.size()]));
+    for (Map.Entry<String, String> e : childEnv.entrySet()) {
+      pb.environment().put(e.getKey(), e.getValue());
+    }
+    return pb.start();
   }
 
   SparkLauncher addSparkArgs(String... args) {
@@ -290,7 +296,7 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
   }
 
   @Override
-  protected List<String> buildLauncherCommand() throws IOException {
+  protected List<String> buildLauncherCommand(Map<String, String> env) throws IOException {
     List<String> cmd = buildJavaCommand();
     addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
     addOptionString(cmd, System.getenv("SPARK_JAVA_OPTS"));
@@ -305,7 +311,6 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
     cmd.add("-cp");
     cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath)));
 
-    String libPath = null;
     if (isClientMode) {
       // Figuring out where the memory value come from is a little tricky due to precedence.
       // Precedence is observed in the following order:
@@ -319,12 +324,12 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
       cmd.add("-Xms" + memory);
       cmd.add("-Xmx" + memory);
       addOptionString(cmd, find(DRIVER_EXTRA_JAVA_OPTIONS, conf, props));
-      libPath = find(DRIVER_EXTRA_LIBRARY_PATH, conf, props);
+      mergeEnvPathList(env, getLibPathEnvName(), find(DRIVER_EXTRA_LIBRARY_PATH, conf, props));
     }
 
     cmd.add("org.apache.spark.deploy.SparkSubmit");
     cmd.addAll(buildSparkSubmitArgs());
-    return prepareForOs(cmd, libPath);
+    return cmd;
   }
 
   private boolean isClientMode(Properties userProps) {
