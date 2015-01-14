@@ -520,10 +520,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /** Distribute a local Scala collection to form an RDD.
    *
-   * @note Parallelize acts lazily. If `seq` is a mutable collection and is
-   * altered after the call to parallelize and before the first action on the
-   * RDD, the resultant RDD will reflect the modified collection. Pass a copy of
-   * the argument to avoid this.
+   * @note Parallelize acts lazily. If `seq` is a mutable collection and is altered after the call
+   * to parallelize and before the first action on the RDD, the resultant RDD will reflect the
+   * modified collection. Pass a copy of the argument to avoid this.
+   *
+   * @note When splitting Range, the sub Range is exclusive. However the last slice for inclusive
+   * Range is inclusive.
    */
   def parallelize[T: ClassTag](seq: Seq[T], numSlices: Int = defaultParallelism): RDD[T] = {
     new ParallelCollectionRDD[T](this, seq, numSlices, Map[Int, Seq[String]]())
