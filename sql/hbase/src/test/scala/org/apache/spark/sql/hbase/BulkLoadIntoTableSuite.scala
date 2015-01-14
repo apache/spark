@@ -258,7 +258,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     // create sql table map with hbase table and run simple sql
     val sql1 =
       s"""CREATE TABLE testblk(col1 STRING, col2 STRING, col3 STRING, PRIMARY KEY(col1))
-          MAPPED BY (wf, COLS=[col2=cf1.a, col3=cf1.b])"""
+          MAPPED BY (testblkHTable, COLS=[col2=cf1.a, col3=cf1.b])"""
         .stripMargin
 
     val sql2 =
@@ -283,15 +283,53 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
 
     // cleanup
     TestHbase.sql(drop)
+  }
 
-    // delete the temp files
-    val fileSystem = FileSystem.get(TestHbase.sparkContext.hadoopConfiguration)
-    val files = fileSystem.listStatus(new Path(sparkHome))
-    for (file <- files) {
-      println(file.getPath.getName)
-      if (file.getPath.getName.indexOf("testblk") != -1) {
-        fileSystem.delete(file.getPath, true)
-      }
+  test("load data with null column values into hbase") {
+
+    val drop = "drop table testNullColumnBulkload"
+    val executeSql0 = TestHbase.executeSql(drop)
+    try {
+      executeSql0.toRdd.collect().foreach(println)
+    } catch {
+      case e: IllegalStateException =>
+        // do not throw exception here
+        println(e.getMessage)
     }
+
+    // create sql table map with hbase table and run simple sql
+    val sql1 =
+      s"""CREATE TABLE testNullColumnBulkload(col1 STRING, col2 STRING, col3 STRING, col4 STRING, PRIMARY KEY(col1))
+          MAPPED BY (testNullColumnBulkloadHTable, COLS=[col2=cf1.a, col3=cf1.b, col4=cf1.c])"""
+        .stripMargin
+
+    val sql2 =
+      s"""select * from testNullColumnBulkload"""
+        .stripMargin
+
+    val executeSql1 = TestHbase.executeSql(sql1)
+    executeSql1.toRdd.collect().foreach(println)
+
+    val executeSql2 = TestHbase.executeSql(sql2)
+    executeSql2.toRdd.collect().foreach(println)
+
+    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadNullableData.txt'"
+
+    //val conf = TestHbase.sparkContext.hadoopConfiguration
+    //FileSystem.get(conf).delete(new Path("./hfileoutput"), true)
+
+    // then load data into table
+    val loadSql = "LOAD DATA LOCAL INPATH " + inputFile + " INTO TABLE testNullColumnBulkload"
+
+    val executeSql3 = TestHbase.executeSql(loadSql)
+    executeSql3.toRdd.collect().foreach(println)
+    val rows = TestHbase.sql("select * from testNullColumnBulkload").collect()
+    assert(rows.length == 3, s"load data with null column values into hbase")
+    assert(rows(0)(1).asInstanceOf[String].isEmpty, s"load data into hbase test failed to select empty-string col1 value")
+    assert(rows(1)(2).asInstanceOf[String].isEmpty, s"load data into hbase test failed to select empty-string col2 value")
+    assert(rows(2)(3) == null, s"load data into hbase test failed to select null col3 value")
+
+    // cleanup
+    TestHbase.sql(drop)
   }
 }
