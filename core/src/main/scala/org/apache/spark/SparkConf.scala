@@ -141,6 +141,26 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     this
   }
 
+  /** Set a boolean parameter */
+  def setBoolean(key: String, value: Boolean): SparkConf = {
+    set(key, value.toString)
+  }
+
+  /** Set a long parameter */
+  def setLong(key: String, value: Long): SparkConf = {
+    set(key, value.toString)
+  }
+
+  /** Set a float parameter */
+  def setFloat(key: String, value: Float): SparkConf = {
+    set(key, value.toString)
+  }
+
+  /** Set a double parameter */
+  def setDouble(key: String, value: Double): SparkConf = {
+    set(key, value.toString)
+  }
+
   /**
    * Use Kryo serialization and register the given set of classes with Kryo.
    * If called multiple times, this will append the classes from all calls together.
