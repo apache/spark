@@ -25,7 +25,6 @@ import parquet.schema.MessageType
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.parquet.CatalystConverter.FieldType
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.decimal.Decimal
 
 /**
  * Collection of converters of Parquet types (group and primitive types) that
