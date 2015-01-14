@@ -66,9 +66,9 @@ class DeterministicKafkaInputDStream[
 
   protected[streaming] override val checkpointData = new DeterministicKafkaInputDStreamCheckpointData
 
-  private val kc = new KafkaCluster(kafkaParams)
+  protected val kc = new KafkaCluster(kafkaParams)
 
-  private val maxMessagesPerPartition: Option[Long] = {
+  protected val maxMessagesPerPartition: Option[Long] = {
     val ratePerSec = context.sparkContext.getConf.getInt("spark.streaming.receiver.maxRate", 0)
     if (ratePerSec > 0) {
       val secsPerBatch = context.graph.batchDuration.milliseconds.toDouble / 1000
@@ -78,10 +78,10 @@ class DeterministicKafkaInputDStream[
     }
   }
 
-  private var currentOffsets = fromOffsets
+  protected var currentOffsets = fromOffsets
 
   @tailrec
-  private def latestLeaderOffsets(retries: Int): Map[TopicAndPartition, LeaderOffset] = {
+  protected final def latestLeaderOffsets(retries: Int): Map[TopicAndPartition, LeaderOffset] = {
     val o = kc.getLatestLeaderOffsets(currentOffsets.keySet)
     // Either.fold would confuse @tailrec, do it manually
     if (o.isLeft) {
@@ -98,7 +98,7 @@ class DeterministicKafkaInputDStream[
     }
   }
 
-  private def clamp(
+  protected def clamp(
     leaderOffsets: Map[TopicAndPartition, LeaderOffset]): Map[TopicAndPartition, LeaderOffset] = {
     maxMessagesPerPartition.map { mmp =>
       leaderOffsets.map { case (tp, lo) =>
