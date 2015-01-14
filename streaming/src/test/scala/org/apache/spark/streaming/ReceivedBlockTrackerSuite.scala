@@ -82,11 +82,6 @@ class ReceivedBlockTrackerSuite
     receivedBlockTracker.allocateBlocksToBatch(2)
     receivedBlockTracker.getBlocksOfBatchAndStream(2, streamId) shouldBe empty
 
-    // Verify that batch 2 cannot be allocated again
-    intercept[SparkException] {
-      receivedBlockTracker.allocateBlocksToBatch(2)
-    }
-
     // Verify that older batches cannot be allocated again
     intercept[SparkException] {
       receivedBlockTracker.allocateBlocksToBatch(1)
