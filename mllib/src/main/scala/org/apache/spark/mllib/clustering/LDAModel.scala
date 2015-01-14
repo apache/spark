@@ -89,7 +89,7 @@ abstract class LDAModel private[clustering] {
    *                   Document IDs must be >= 0.
    * @return  Estimated log likelihood of the data under this model
    */
-  //def logLikelihood(documents: RDD[Document]): Double
+  // def logLikelihood(documents: RDD[Document]): Double
 
   /* TODO
    * Compute the estimated topic distribution for each document.
@@ -143,7 +143,7 @@ class LocalLDAModel private[clustering] (
   }
 
   // TODO
-  //override def logLikelihood(documents: RDD[Document]): Double = ???
+  // override def logLikelihood(documents: RDD[Document]): Double = ???
 
   // TODO:
   // override def topicDistributions(documents: RDD[Document]): RDD[(Long, Vector)] = ???
@@ -227,7 +227,7 @@ class DistributedLDAModel private[clustering] (
   }
 
   // TODO
-  //override def logLikelihood(documents: RDD[Document]): Double = ???
+  // override def logLikelihood(documents: RDD[Document]): Double = ???
 
   /**
    * Compute the log likelihood of the observed tokens in the training set,
