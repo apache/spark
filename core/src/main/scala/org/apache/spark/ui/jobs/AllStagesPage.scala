@@ -37,12 +37,18 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
       val numCompletedStages = listener.numCompletedStages
       val failedStages = listener.failedStages.reverse.toSeq
       val numFailedStages = listener.numFailedStages
+      val pendingStages = listener.pendingStages.values.toSeq
+      val numWaitingStages = pendingStages.size
       val now = System.currentTimeMillis
 
       val activeStagesTable =
         new StageTableBase(activeStages.sortBy(_.submissionTime).reverse,
           parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
           killEnabled = parent.killEnabled)
+      val pendingStagesTable =
+        new StageTableBase(pendingStages.sortBy(_.submissionTime).reverse,
+          parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+          killEnabled = false)
       val completedStagesTable =
         new StageTableBase(completedStages.sortBy(_.submissionTime).reverse, parent.basePath,
           parent.listener, isFairScheduler = parent.isFairScheduler, killEnabled = false)
@@ -69,6 +75,10 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
               {listener.schedulingMode.map(_.toString).getOrElse("Unknown")}
             </li>
             <li>
+              <a href="#pending"><strong>Pending Stages:</strong></a>
+              {pendingStages.size}
+            </li>
+            <li>
               <a href="#active"><strong>Active Stages:</strong></a>
               {activeStages.size}
             </li>
@@ -89,6 +99,8 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         } else {
           Seq[Node]()
         }} ++
+        <h4 id="pending">Pending Stages ({pendingStages.size})</h4> ++
+        pendingStagesTable.toNodeSeq ++
         <h4 id="active">Active Stages ({activeStages.size})</h4> ++
         activeStagesTable.toNodeSeq ++
         <h4 id="completed">Completed Stages ({numCompletedStages})</h4> ++
