@@ -30,6 +30,7 @@ import org.apache.spark.executor._
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 import org.apache.spark._
+import org.apache.hadoop.hdfs.web.JsonUtil
 
 /**
  * Serializes SparkListener events to/from JSON.  This protocol provides strong backwards-
@@ -471,7 +472,8 @@ private[spark] object JsonProtocol {
 
   def jobStartFromJson(json: JValue): SparkListenerJobStart = {
     val jobId = (json \ "Job ID").extract[Int]
-    val submissionTime = (json \ "Submission Time").extractOpt[Long]
+    val submissionTime =
+      Utils.jsonOption(json \ "Submission Time").map(_.extract[Long]).getOrElse(-1L)
     val stageIds = (json \ "Stage IDs").extract[List[JValue]].map(_.extract[Int])
     val properties = propertiesFromJson(json \ "Properties")
     // The "Stage Infos" field was added in Spark 1.2.0
@@ -484,7 +486,8 @@ private[spark] object JsonProtocol {
 
   def jobEndFromJson(json: JValue): SparkListenerJobEnd = {
     val jobId = (json \ "Job ID").extract[Int]
-    val completionTime = (json \ "Completion Time").extractOpt[Long]
+    val completionTime =
+      Utils.jsonOption(json \ "Completion Time").map(_.extract[Long]).getOrElse(-1L)
     val jobResult = jobResultFromJson(json \ "Job Result")
     SparkListenerJobEnd(jobId, completionTime, jobResult)
   }

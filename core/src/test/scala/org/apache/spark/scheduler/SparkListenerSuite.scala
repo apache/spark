@@ -34,7 +34,7 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
 
-  val jobCompletionTime = Option(1421191296660L)
+  val jobCompletionTime = 1421191296660L
 
   before {
     sc = new SparkContext("local", "SparkListenerSuite")

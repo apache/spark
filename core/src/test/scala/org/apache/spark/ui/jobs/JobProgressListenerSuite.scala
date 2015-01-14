@@ -28,8 +28,8 @@ import org.apache.spark.util.Utils
 
 class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matchers {
 
-  val jobSubmissionTime = Option(1421191042750L)
-  val jobCompletionTime = Option(1421191296660L)
+  val jobSubmissionTime = 1421191042750L
+  val jobCompletionTime = 1421191296660L
 
   private def createStageStartEvent(stageId: Int) = {
     val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
