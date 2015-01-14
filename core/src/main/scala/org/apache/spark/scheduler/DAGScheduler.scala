@@ -1046,10 +1046,9 @@ class DAGScheduler(
 
         if (disallowStageRetryForTest) {
           abortStage(failedStage, "Fetch failure will not retry stage due to testing config")
-        } else if (failedStages.isEmpty && eventProcessLoop != null) {
+        } else if (failedStages.isEmpty) {
           // Don't schedule an event to resubmit failed stages if failed isn't empty, because
-          // in that case the event will already have been scheduled. eventProcessLoop may be
-          // null during unit tests.
+          // in that case the event will already have been scheduled.
           // TODO: Cancel running tasks in the stage
           logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
             s"$failedStage (${failedStage.name}) due to fetch failure")
