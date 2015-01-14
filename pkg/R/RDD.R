@@ -1844,3 +1844,50 @@ setMethod("cogroup",
             cogroup.rdd <- mapValues(groupByKey(union.rdd, numPartitions), 
                                      group.func)
           })
+
+# TODO: Consider caching the name in the RDD's environment
+#' Return an RDD's name.
+#'
+#' @param rdd The RDD whose name is returned.
+#' @rdname name
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(1,2,3))
+#' name(rdd) # NULL (if not set before)
+#'}
+setGeneric("name", function(rdd) { standardGeneric("name") })
+
+#' @rdname name
+#' @aliases name,RDD
+setMethod("name",
+          signature(rdd = "RDD"),
+          function(rdd) {
+            .jcall(getJRDD(rdd), "Ljava/lang/String;", "name")
+          })
+
+#' Set an RDD's name.
+#'
+#' @param rdd The RDD whose name is to be set.
+#' @param name The RDD name to be set.
+#' @return a new RDD renamed.
+#' @rdname setName
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, list(1,2,3))
+#' setName(rdd, "myRDD")
+#' name(rdd) # "myRDD"
+#'}
+setGeneric("setName", function(rdd, name) { standardGeneric("setName") })
+
+#' @rdname setName
+#' @aliases setName,RDD
+setMethod("setName",
+          signature(rdd = "RDD", name = "character"),
+          function(rdd, name) {
+            .jcall(getJRDD(rdd), "Lorg/apache/spark/api/java/JavaRDD;", "setName", name)
+            rdd
+          })
