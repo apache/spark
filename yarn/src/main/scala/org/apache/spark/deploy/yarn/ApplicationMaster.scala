@@ -240,7 +240,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       host,
       port,
       YarnSchedulerBackend.ACTOR_NAME)
-    actor = actorSystem.actorOf(Props(new AMActor(driverUrl, false)), name = "YarnAM")
+    actor = actorSystem.actorOf(Props(new AMActor(driverUrl, isDriver)), name = "YarnAM")
   }
 
   private def runDriver(securityMgr: SecurityManager): Unit = {
