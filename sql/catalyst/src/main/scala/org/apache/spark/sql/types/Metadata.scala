@@ -15,24 +15,31 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.util
+package org.apache.spark.sql.types
 
 import scala.collection.mutable
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.annotation.DeveloperApi
+
+
 /**
+ * :: DeveloperApi ::
+ *
  * Metadata is a wrapper over Map[String, Any] that limits the value type to simple ones: Boolean,
  * Long, Double, String, Metadata, Array[Boolean], Array[Long], Array[Double], Array[String], and
  * Array[Metadata]. JSON is used for serialization.
  *
  * The default constructor is private. User should use either [[MetadataBuilder]] or
- * [[Metadata$#fromJson]] to create Metadata instances.
+ * [[Metadata.fromJson()]] to create Metadata instances.
  *
  * @param map an immutable map that stores the data
  */
-sealed class Metadata private[util] (private[util] val map: Map[String, Any]) extends Serializable {
+@DeveloperApi
+sealed class Metadata private[types] (private[types] val map: Map[String, Any])
+  extends Serializable {
 
   /** Tests whether this Metadata contains a binding for a key. */
   def contains(key: String): Boolean = map.contains(key)
@@ -201,8 +208,11 @@ object Metadata {
 }
 
 /**
+ * :: DeveloperApi ::
+ *
  * Builder for [[Metadata]]. If there is a key collision, the latter will overwrite the former.
  */
+@DeveloperApi
 class MetadataBuilder {
 
   private val map: mutable.Map[String, Any] = mutable.Map.empty

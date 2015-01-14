@@ -18,14 +18,14 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import com.google.common.cache.{CacheLoader, CacheBuilder}
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types.decimal.Decimal
 
 import scala.language.existentials
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 // These classes are here to avoid issues with serialization and integration with quasiquotes.
 class IntegerHashSet extends org.apache.spark.util.collection.OpenHashSet[Int]
@@ -541,11 +541,11 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
         childEval.code ++
         q"""
          var $nullTerm = ${childEval.nullTerm}
-         var $primitiveTerm: org.apache.spark.sql.catalyst.types.decimal.Decimal =
+         var $primitiveTerm: org.apache.spark.sql.types.decimal.Decimal =
            ${defaultPrimitive(DecimalType())}
 
          if (!$nullTerm) {
-           $primitiveTerm = new org.apache.spark.sql.catalyst.types.decimal.Decimal()
+           $primitiveTerm = new org.apache.spark.sql.types.decimal.Decimal()
            $primitiveTerm = $primitiveTerm.setOrNull(${childEval.primitiveTerm}, $precision, $scale)
            $nullTerm = $primitiveTerm == null
          }
@@ -627,7 +627,7 @@ abstract class CodeGenerator[InType <: AnyRef, OutType <: AnyRef] extends Loggin
     case LongType => ru.Literal(Constant(1L))
     case ByteType => ru.Literal(Constant(-1.toByte))
     case DoubleType => ru.Literal(Constant(-1.toDouble))
-    case DecimalType() => q"org.apache.spark.sql.catalyst.types.decimal.Decimal(-1)"
+    case DecimalType() => q"org.apache.spark.sql.types.decimal.Decimal(-1)"
     case IntegerType => ru.Literal(Constant(-1))
     case _ => ru.Literal(Constant(null))
   }

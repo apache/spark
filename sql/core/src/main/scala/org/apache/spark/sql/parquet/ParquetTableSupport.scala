@@ -29,8 +29,8 @@ import parquet.schema.MessageType
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.decimal.Decimal
 
 /**
  * A `parquet.io.api.RecordMaterializer` for Rows.

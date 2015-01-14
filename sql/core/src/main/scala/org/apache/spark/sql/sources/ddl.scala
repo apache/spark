@@ -23,11 +23,11 @@ import scala.util.parsing.combinator.PackratParsers
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.SqlLexical
+import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * A parser for foreign DDL commands.
@@ -162,10 +162,10 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
 
   protected lazy val structType: Parser[DataType] =
     (STRUCT ~> "<" ~> repsep(structField, ",") <~ ">" ^^ {
-    case fields => new StructType(fields)
+    case fields => StructType(fields)
     }) |
     (STRUCT ~> "<>" ^^ {
-      case fields => new StructType(Nil)
+      case fields => StructType(Nil)
     })
 
   private[sql] lazy val dataType: Parser[DataType] =

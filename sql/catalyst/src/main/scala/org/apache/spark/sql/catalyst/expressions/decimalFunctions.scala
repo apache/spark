@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
-import org.apache.spark.sql.catalyst.types.{DecimalType, LongType, DoubleType, DataType}
+import org.apache.spark.sql.types.decimal.Decimal
+import org.apache.spark.sql.types.{DecimalType, LongType, DoubleType, DataType}
 
 /** Return the unscaled Long value of a Decimal, assuming it fits in a Long */
 case class UnscaledValue(child: Expression) extends UnaryExpression {
