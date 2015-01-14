@@ -1845,8 +1845,7 @@ setMethod("cogroup",
                                      group.func)
           })
 
-# TODO:
-# bind to env?
+# TODO: Consider caching the name in the RDD's environment
 #' Return an RDD's name.
 #'
 #' @param rdd The RDD whose name is returned.
