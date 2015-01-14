@@ -23,7 +23,7 @@ import scala.collection.JavaConversions
 import scala.math.BigDecimal
 
 import org.apache.spark.api.java.JavaUtils.mapAsSerializableJavaMap
-import org.apache.spark.sql.catalyst.expressions.{Row => ScalaRow}
+import org.apache.spark.sql.{Row => ScalaRow}
 
 /**
  * A result row from a Spark SQL query.

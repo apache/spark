@@ -19,68 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.types.NativeType
 
-object Row {
-  /**
-   * This method can be used to extract fields from a [[Row]] object in a pattern match. Example:
-   * {{{
-   * import org.apache.spark.sql._
-   *
-   * val pairs = sql("SELECT key, value FROM src").rdd.map {
-   *   case Row(key: Int, value: String) =>
-   *     key -> value
-   * }
-   * }}}
-   */
-  def unapplySeq(row: Row): Some[Seq[Any]] = Some(row)
-
-  /**
-   * This method can be used to construct a [[Row]] with the given values.
-   */
-  def apply(values: Any*): Row = new GenericRow(values.toArray)
-
-  /**
-   * This method can be used to construct a [[Row]] from a [[Seq]] of values.
-   */
-  def fromSeq(values: Seq[Any]): Row = new GenericRow(values.toArray)
-}
-
-/**
- * Represents one row of output from a relational operator.  Allows both generic access by ordinal,
- * which will incur boxing overhead for primitives, as well as native primitive access.
- *
- * It is invalid to use the native primitive interface to retrieve a value that is null, instead a
- * user must check [[isNullAt]] before attempting to retrieve a value that might be null.
- */
-trait Row extends Seq[Any] with Serializable {
-  def apply(i: Int): Any
-
-  def isNullAt(i: Int): Boolean
-
-  def getInt(i: Int): Int
-  def getLong(i: Int): Long
-  def getDouble(i: Int): Double
-  def getFloat(i: Int): Float
-  def getBoolean(i: Int): Boolean
-  def getShort(i: Int): Short
-  def getByte(i: Int): Byte
-  def getString(i: Int): String
-  def getAs[T](i: Int): T = apply(i).asInstanceOf[T]
-
-  override def toString() =
-    s"[${this.mkString(",")}]"
-
-  def copy(): Row
-
-  /** Returns true if there are any NULL values in this row. */
-  def anyNull: Boolean = {
-    var i = 0
-    while (i < length) {
-      if (isNullAt(i)) { return true }
-      i += 1
-    }
-    false
-  }
-}
 
 /**
  * An extended interface to [[Row]] that allows the values for each column to be updated.  Setting
@@ -105,22 +43,19 @@ trait MutableRow extends Row {
  * A row with no data.  Calling any methods will result in an error.  Can be used as a placeholder.
  */
 object EmptyRow extends Row {
-  def apply(i: Int): Any = throw new UnsupportedOperationException
-
-  def iterator = Iterator.empty
-  def length = 0
-  def isNullAt(i: Int): Boolean = throw new UnsupportedOperationException
-
-  def getInt(i: Int): Int = throw new UnsupportedOperationException
-  def getLong(i: Int): Long = throw new UnsupportedOperationException
-  def getDouble(i: Int): Double = throw new UnsupportedOperationException
-  def getFloat(i: Int): Float = throw new UnsupportedOperationException
-  def getBoolean(i: Int): Boolean = throw new UnsupportedOperationException
-  def getShort(i: Int): Short = throw new UnsupportedOperationException
-  def getByte(i: Int): Byte = throw new UnsupportedOperationException
-  def getString(i: Int): String = throw new UnsupportedOperationException
+  override def apply(i: Int): Any = throw new UnsupportedOperationException
+  override def iterator = Iterator.empty
+  override def length = 0
+  override def isNullAt(i: Int): Boolean = throw new UnsupportedOperationException
+  override def getInt(i: Int): Int = throw new UnsupportedOperationException
+  override def getLong(i: Int): Long = throw new UnsupportedOperationException
+  override def getDouble(i: Int): Double = throw new UnsupportedOperationException
+  override def getFloat(i: Int): Float = throw new UnsupportedOperationException
+  override def getBoolean(i: Int): Boolean = throw new UnsupportedOperationException
+  override def getShort(i: Int): Short = throw new UnsupportedOperationException
+  override def getByte(i: Int): Byte = throw new UnsupportedOperationException
+  override def getString(i: Int): String = throw new UnsupportedOperationException
   override def getAs[T](i: Int): T = throw new UnsupportedOperationException
-
   def copy() = this
 }
 
@@ -135,50 +70,50 @@ class GenericRow(protected[sql] val values: Array[Any]) extends Row {
 
   def this(size: Int) = this(new Array[Any](size))
 
-  def iterator = values.iterator
+  override def iterator = values.iterator
 
-  def length = values.length
+  override def length = values.length
 
-  def apply(i: Int) = values(i)
+  override def apply(i: Int) = values(i)
 
-  def isNullAt(i: Int) = values(i) == null
+  override def isNullAt(i: Int) = values(i) == null
 
-  def getInt(i: Int): Int = {
+  override def getInt(i: Int): Int = {
     if (values(i) == null) sys.error("Failed to check null bit for primitive int value.")
     values(i).asInstanceOf[Int]
   }
 
-  def getLong(i: Int): Long = {
+  override def getLong(i: Int): Long = {
     if (values(i) == null) sys.error("Failed to check null bit for primitive long value.")
     values(i).asInstanceOf[Long]
   }
 
-  def getDouble(i: Int): Double = {
+  override def getDouble(i: Int): Double = {
     if (values(i) == null) sys.error("Failed to check null bit for primitive double value.")
     values(i).asInstanceOf[Double]
   }
 
-  def getFloat(i: Int): Float = {
+  override def getFloat(i: Int): Float = {
     if (values(i) == null) sys.error("Failed to check null bit for primitive float value.")
     values(i).asInstanceOf[Float]
   }
 
-  def getBoolean(i: Int): Boolean = {
+  override def getBoolean(i: Int): Boolean = {
     if (values(i) == null) sys.error("Failed to check null bit for primitive boolean value.")
     values(i).asInstanceOf[Boolean]
   }
 
-  def getShort(i: Int): Short = {
+  override def getShort(i: Int): Short = {
     if (values(i) == null) sys.error("Failed to check null bit for primitive short value.")
     values(i).asInstanceOf[Short]
   }
 
-  def getByte(i: Int): Byte = {
+  override def getByte(i: Int): Byte = {
     if (values(i) == null) sys.error("Failed to check null bit for primitive byte value.")
     values(i).asInstanceOf[Byte]
   }
 
-  def getString(i: Int): String = {
+  override def getString(i: Int): String = {
     if (values(i) == null) sys.error("Failed to check null bit for primitive String value.")
     values(i).asInstanceOf[String]
   }
