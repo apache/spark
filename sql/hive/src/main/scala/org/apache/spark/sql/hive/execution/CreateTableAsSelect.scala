@@ -50,7 +50,7 @@ case class CreateTableAsSelect(
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     lazy val metastoreRelation: MetastoreRelation = {
       // Create Hive Table
-      hiveContext.catalog.createTable(database, tableName, query.output, allowExisting, desc)
+      hiveContext.catalog.createTable(Seq(database, tableName), query.output, allowExisting, desc)
 
       // Get the Metastore Relation
       hiveContext.catalog.lookupRelation(Seq(database, tableName), None) match {

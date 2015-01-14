@@ -99,12 +99,20 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   val caseSensitive: Boolean = false
 
+  protected def getDBAndTableName(tableIdentifier: Seq[String]): (String, String) = {
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    val dbName = tableIdent.lift(tableIdent.size - 2).getOrElse(
+      hive.sessionState.getCurrentDatabase)
+    val tblName = tableIdent.last
+    (dbName, tblName)
+  }
+
   def createDataSourceTable(
-      tableName: String,
+      tableIdentifier: Seq[String],
       userSpecifiedSchema: Option[StructType],
       provider: String,
       options: Map[String, String]) = {
-    val (dbName, tblName) = processDatabaseAndTableName("default", tableName)
+    val (dbName, tblName) = getDBAndTableName(tableIdentifier)
     val tbl = new Table(dbName, tblName)
 
     tbl.setProperty("spark.sql.sources.provider", provider)
@@ -123,12 +131,9 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   }
 
   def tableExists(tableIdentifier: Seq[String]): Boolean = {
-    val tableIdent = processTableIdentifier(tableIdentifier)
-    val databaseName = tableIdent.lift(tableIdent.size - 2).getOrElse(
-      hive.sessionState.getCurrentDatabase)
-    val tblName = tableIdent.last
+    val (dbName, tblName) = getDBAndTableName(tableIdentifier)
     try {
-      client.getTable(databaseName, tblName) != null
+      client.getTable(dbName, tblName) != null
     } catch {
       case ie: InvalidTableException => false
     }
@@ -137,10 +142,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   def lookupRelation(
       tableIdentifier: Seq[String],
       alias: Option[String]): LogicalPlan = synchronized {
-    val tableIdent = processTableIdentifier(tableIdentifier)
-    val databaseName = tableIdent.lift(tableIdent.size - 2).getOrElse(
-      hive.sessionState.getCurrentDatabase)
-    val tblName = tableIdent.last
+    val (databaseName, tblName) = getDBAndTableName(tableIdentifier)
     val table = client.getTable(databaseName, tblName)
 
     if (table.getProperty("spark.sql.sources.provider") != null) {
@@ -166,8 +168,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
 
   /**
    * Create table with specified database, table name, table description and schema
-   * @param databaseName Database Name
-   * @param tableName Table Name
+   * @param tableIdentifier A fully qualified identifier for a table (i.e., database.tableName)
    * @param schema Schema of the new table, if not specified, will use the schema
    *               specified in crtTbl
    * @param allowExisting if true, ignore AlreadyExistsException
@@ -175,14 +176,13 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
    *               we support most of the features except the bucket.
    */
   def createTable(
-      databaseName: String,
-      tableName: String,
+      tableIdentifier: Seq[String],
       schema: Seq[Attribute],
       allowExisting: Boolean = false,
       desc: Option[CreateTableDesc] = None) {
     val hconf = hive.hiveconf
 
-    val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
+    val (dbName, tblName) = getDBAndTableName(tableIdentifier)
     val tbl = new Table(dbName, tblName)
 
     val crtTbl: CreateTableDesc = desc.getOrElse(null)

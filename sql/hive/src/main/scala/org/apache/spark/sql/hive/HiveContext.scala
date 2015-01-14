@@ -113,7 +113,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * @tparam A A case class that is used to describe the schema of the table to be created.
    */
   def createTable[A <: Product : TypeTag](tableName: String, allowExisting: Boolean = true) {
-    catalog.createTable("default", tableName, ScalaReflection.attributesFor[A], allowExisting)
+    catalog.createTable(Seq("default", tableName), ScalaReflection.attributesFor[A], allowExisting)
   }
 
   def refreshTable(tableName: String): Unit = {

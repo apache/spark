@@ -101,7 +101,11 @@ case class CreateMetastoreDataSource(
 
   override def run(sqlContext: SQLContext) = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
-    hiveContext.catalog.createDataSourceTable(tableName, userSpecifiedSchema, provider, options)
+    hiveContext.catalog.createDataSourceTable(
+      Seq("default", tableName),
+      userSpecifiedSchema,
+      provider,
+      options)
 
     Seq.empty[Row]
   }
