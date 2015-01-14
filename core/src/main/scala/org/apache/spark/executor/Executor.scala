@@ -289,13 +289,13 @@ private[spark] class Executor(
 
     // For each of the jars in the jarSet, add them to the class loader.
     // We assume each of the files has already been fetched.
-    val urls = userClassPath ++ currentJars.keySet.map { uri =>
+    val urls = (userClassPath ++ currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
-    }
-    val userClassPathFirst = conf.getBoolean("spark.executor.userClassPathFirst", false)
-    userClassPathFirst match {
-      case true => new ChildExecutorURLClassLoader(urls.toArray, currentLoader)
-      case false => new ExecutorURLClassLoader(urls.toArray, currentLoader)
+    }).toArray
+    if (conf.getBoolean("spark.executor.userClassPathFirst", false)) {
+      new ChildExecutorURLClassLoader(urls, currentLoader)
+    } else {
+      new ExecutorURLClassLoader(urls, currentLoader)
     }
   }
 

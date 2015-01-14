@@ -400,7 +400,9 @@ private[spark] object SparkConf extends Logging {
   def getConfKey(userKey: String, warn: Boolean = false): String = {
     val deprecatedKey = deprecatedConfigs.getOrElse(userKey, null)
     if (deprecatedKey != null) {
-      deprecatedKey.warn()
+      if (warn) {
+        deprecatedKey.warn()
+      }
       if (deprecatedKey.newName != null) deprecatedKey.newName else userKey
     } else {
       userKey
