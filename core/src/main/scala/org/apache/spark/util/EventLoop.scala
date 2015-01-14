@@ -26,6 +26,9 @@ import org.apache.spark.Logging
 /**
  * An event loop to receive events from the caller and process all events in the event thread. It
  * will start an exclusive event thread to process all events.
+ *
+ * Note: The event queue will grow indefinitely. So subclasses should make sure `onReceive` can
+ * handle events in time to avoid the potential OOM.
  */
 private[spark] abstract class EventLoop[E](name: String) extends Logging {
 
@@ -84,17 +87,17 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
   def isActive: Boolean = eventThread.isAlive
 
   /**
-   * Invoke when `start()` is called. It's also invoked before the event thread starts.
+   * Invoked when `start()` is called but before the event thread starts.
    */
   def onStart(): Unit = {}
 
   /**
-   * Invoke when `stop()` is called and the event thread exits.
+   * Invoked when `stop()` is called and the event thread exits.
    */
   def onStop(): Unit = {}
 
   /**
-   * Invoke in the event thread when polling events from the event queue.
+   * Invoked in the event thread when polling events from the event queue.
    *
    * Note: Should avoid calling blocking actions in `onReceive`, or the event thread will be blocked
    * and cannot process events in time. If you want to call some blocking actions, run them in
@@ -103,7 +106,8 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
   def onReceive(event: E): Unit
 
   /**
-   * Invoke if `onReceive` throws any non fatal error. `onError` must not throw any non fatal error.
+   * Invoked if `onReceive` throws any non fatal error. Any non fatal error thrown from `onError`
+   * will be ignored.
    */
   def onError(e: Throwable): Unit
 
