@@ -59,7 +59,6 @@ for /f %%i in ('echo %1^| findstr /R "\.py"') do (
 )
 
 if [%PYTHON_FILE%] == [] (
-  set PYSPARK_SHELL=1
   if [%IPYTHON%] == [1] (
 	ipython %IPYTHON_OPTS%
   ) else (

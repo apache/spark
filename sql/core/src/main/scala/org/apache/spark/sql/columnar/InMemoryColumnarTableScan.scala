@@ -36,8 +36,9 @@ private[sql] object InMemoryRelation {
       useCompression: Boolean,
       batchSize: Int,
       storageLevel: StorageLevel,
-      child: SparkPlan): InMemoryRelation =
-    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child)()
+      child: SparkPlan,
+      tableName: Option[String]): InMemoryRelation =
+    new InMemoryRelation(child.output, useCompression, batchSize, storageLevel, child, tableName)()
 }
 
 private[sql] case class CachedBatch(buffers: Array[Array[Byte]], stats: Row)
@@ -47,7 +48,8 @@ private[sql] case class InMemoryRelation(
     useCompression: Boolean,
     batchSize: Int,
     storageLevel: StorageLevel,
-    child: SparkPlan)(
+    child: SparkPlan,
+    tableName: Option[String])(
     private var _cachedColumnBuffers: RDD[CachedBatch] = null,
     private var _statistics: Statistics = null)
   extends LogicalPlan with MultiInstanceRelation {
@@ -80,7 +82,7 @@ private[sql] case class InMemoryRelation(
     if (batchStats.value.isEmpty) {
       // Underlying columnar RDD hasn't been materialized, no useful statistics information
       // available, return the default statistics.
-      Statistics(sizeInBytes = child.sqlContext.defaultSizeInBytes)
+      Statistics(sizeInBytes = child.sqlContext.conf.defaultSizeInBytes)
     } else {
       // Underlying columnar RDD has been materialized, required information has also been collected
       // via the `batchStats` accumulator, compute the final statistics, and update `_statistics`.
@@ -137,13 +139,13 @@ private[sql] case class InMemoryRelation(
       }
     }.persist(storageLevel)
 
-    cached.setName(child.toString)
+    cached.setName(tableName.map(n => s"In-memory table $n").getOrElse(child.toString))
     _cachedColumnBuffers = cached
   }
 
   def withOutput(newOutput: Seq[Attribute]): InMemoryRelation = {
     InMemoryRelation(
-      newOutput, useCompression, batchSize, storageLevel, child)(
+      newOutput, useCompression, batchSize, storageLevel, child, tableName)(
       _cachedColumnBuffers, statisticsToBePropagated)
   }
 
@@ -155,7 +157,8 @@ private[sql] case class InMemoryRelation(
       useCompression,
       batchSize,
       storageLevel,
-      child)(
+      child,
+      tableName)(
       _cachedColumnBuffers,
       statisticsToBePropagated).asInstanceOf[this.type]
   }
@@ -172,8 +175,6 @@ private[sql] case class InMemoryColumnarTableScan(
     relation: InMemoryRelation)
   extends LeafNode {
 
-  @transient override val sqlContext = relation.child.sqlContext
-
   override def output: Seq[Attribute] = attributes
 
   private def statsFor(a: Attribute) = relation.partitionStatistics.forAttribute(a)
@@ -182,8 +183,8 @@ private[sql] case class InMemoryColumnarTableScan(
   // to evaluate to `true' based on statistics collected about this partition batch.
   val buildFilter: PartialFunction[Expression, Expression] = {
     case And(lhs: Expression, rhs: Expression)
-      if buildFilter.isDefinedAt(lhs) && buildFilter.isDefinedAt(rhs) =>
-      buildFilter(lhs) && buildFilter(rhs)
+      if buildFilter.isDefinedAt(lhs) || buildFilter.isDefinedAt(rhs) =>
+      (buildFilter.lift(lhs) ++ buildFilter.lift(rhs)).reduce(_ && _)
 
     case Or(lhs: Expression, rhs: Expression)
       if buildFilter.isDefinedAt(lhs) && buildFilter.isDefinedAt(rhs) =>
@@ -232,7 +233,7 @@ private[sql] case class InMemoryColumnarTableScan(
   val readPartitions = sparkContext.accumulator(0)
   val readBatches = sparkContext.accumulator(0)
 
-  private val inMemoryPartitionPruningEnabled = sqlContext.inMemoryPartitionPruning
+  private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
   override def execute() = {
     readPartitions.setValue(0)

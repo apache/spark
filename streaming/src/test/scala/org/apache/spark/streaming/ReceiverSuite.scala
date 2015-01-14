@@ -138,7 +138,7 @@ class ReceiverSuite extends FunSuite with Timeouts {
     blockGenerator.start()
     var count = 0
     while(System.currentTimeMillis - startTime < waitTime) {
-      blockGenerator += count
+      blockGenerator.addData(count)
       generatedData += count
       count += 1
       Thread.sleep(10)
@@ -168,7 +168,7 @@ class ReceiverSuite extends FunSuite with Timeouts {
     blockGenerator.start()
     var count = 0
     while(System.currentTimeMillis - startTime < waitTime) {
-      blockGenerator += count
+      blockGenerator.addData(count)
       generatedData += count
       count += 1
       Thread.sleep(1)
@@ -298,6 +298,10 @@ class ReceiverSuite extends FunSuite with Timeouts {
     // buffer of data received as ArrayBuffers
     val arrayBuffers = new ArrayBuffer[ArrayBuffer[Int]]
     val errors = new ArrayBuffer[Throwable]
+
+    def onAddData(data: Any, metadata: Any) { }
+
+    def onGenerateBlock(blockId: StreamBlockId) { }
 
     def onPushBlock(blockId: StreamBlockId, arrayBuffer: ArrayBuffer[_]) {
       val bufferOfInts = arrayBuffer.map(_.asInstanceOf[Int])

@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.api.java
 
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
-
 import scala.beans.BeanProperty
 
 import org.scalatest.FunSuite
@@ -26,6 +24,7 @@ import org.scalatest.FunSuite
 import org.apache.spark.api.java.JavaSparkContext
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.types.NullType
 
 // Implicits
 import scala.collection.JavaConversions._
@@ -66,6 +65,22 @@ class JavaSQLSuite extends FunSuite {
 
     schemaRDD.registerTempTable("people")
     javaSqlCtx.sql("SELECT * FROM people").collect()
+  }
+
+  test("schema with null from JavaBeans") {
+    val person = new PersonBean
+    person.setName("Michael")
+    person.setAge(29)
+
+    val rdd = javaCtx.parallelize(person :: Nil)
+    val schemaRDD = javaSqlCtx.applySchema(rdd, classOf[PersonBean])
+
+    schemaRDD.registerTempTable("people")
+    val nullRDD = javaSqlCtx.sql("SELECT null FROM people")
+    val structFields = nullRDD.schema.fields
+    assert(structFields.size == 1)
+    assert(structFields(0).dataType === NullType)
+    assert(nullRDD.collect().head.row === Seq(null))
   }
 
   test("all types in JavaBeans") {

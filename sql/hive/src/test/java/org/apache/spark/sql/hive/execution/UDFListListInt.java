@@ -23,25 +23,21 @@ import java.util.List;
 
 public class UDFListListInt extends UDF {
   /**
-   *
    * @param obj
-   *   SQL schema: array<struct<x: int, y: int, z: int>>
-   *   Java Type: List<List<Integer>>
-   * @return
+   *   SQL schema: array&lt;struct&lt;x: int, y: int, z: int&gt;&gt;
+   *   Java Type: List&lt;List&lt;Integer&gt;&gt;
    */
+  @SuppressWarnings("unchecked")
   public long evaluate(Object obj) {
     if (obj == null) {
-      return 0l;
+      return 0L;
     }
-    List<List> listList = (List<List>) obj;
+    List<List<?>> listList = (List<List<?>>) obj;
     long retVal = 0;
-    for (List aList : listList) {
-      @SuppressWarnings("unchecked")
-      List<Object> list = (List<Object>) aList;
-      @SuppressWarnings("unchecked")
-      Integer someInt = (Integer) list.get(1);
+    for (List<?> aList : listList) {
+      Number someInt = (Number) aList.get(1);
       try {
-        retVal += (long) (someInt.intValue());
+        retVal += someInt.longValue();
       } catch (NullPointerException e) {
         System.out.println(e);
       }

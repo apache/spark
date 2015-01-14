@@ -116,6 +116,7 @@ class ALS private (
 
   /** storage level for user/product in/out links */
   private var intermediateRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
+  private var finalRDDStorageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK
 
   /**
    * Set the number of blocks for both user blocks and product blocks to parallelize the computation
@@ -201,6 +202,19 @@ class ALS private (
   @DeveloperApi
   def setIntermediateRDDStorageLevel(storageLevel: StorageLevel): this.type = {
     this.intermediateRDDStorageLevel = storageLevel
+    this
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Sets storage level for final RDDs (user/product used in MatrixFactorizationModel). The default
+   * value is `MEMORY_AND_DISK`. Users can change it to a serialized storage, e.g. 
+   * `MEMORY_AND_DISK_SER` and set `spark.rdd.compress` to `true` to reduce the space requirement,
+   * at the cost of speed.
+   */
+  @DeveloperApi
+  def setFinalRDDStorageLevel(storageLevel: StorageLevel): this.type = {
+    this.finalRDDStorageLevel = storageLevel
     this
   }
 
@@ -307,8 +321,8 @@ class ALS private (
     val usersOut = unblockFactors(users, userOutLinks)
     val productsOut = unblockFactors(products, productOutLinks)
 
-    usersOut.setName("usersOut").persist(StorageLevel.MEMORY_AND_DISK)
-    productsOut.setName("productsOut").persist(StorageLevel.MEMORY_AND_DISK)
+    usersOut.setName("usersOut").persist(finalRDDStorageLevel)
+    productsOut.setName("productsOut").persist(finalRDDStorageLevel)
 
     // Materialize usersOut and productsOut.
     usersOut.count()
@@ -746,7 +760,7 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
-   * @param alpha      confidence parameter (only applies when immplicitPrefs = true)
+   * @param alpha      confidence parameter
    * @param seed       random seed
    */
   def trainImplicit(
@@ -773,7 +787,7 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    * @param blocks     level of parallelism to split computation into
-   * @param alpha      confidence parameter (only applies when immplicitPrefs = true)
+   * @param alpha      confidence parameter
    */
   def trainImplicit(
       ratings: RDD[Rating],
@@ -797,6 +811,7 @@ object ALS {
    * @param rank       number of features to use
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
+   * @param alpha      confidence parameter
    */
   def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double, alpha: Double)
     : MatrixFactorizationModel = {

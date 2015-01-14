@@ -17,7 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io.File
+import java.io.{IOException, File}
 import java.text.SimpleDateFormat
 import java.util.{Date, Random, UUID}
 
@@ -71,7 +71,9 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
           old
         } else {
           val newDir = new File(localDirs(dirId), "%02x".format(subDirId))
-          newDir.mkdir()
+          if (!newDir.exists() && !newDir.mkdir()) {
+            throw new IOException(s"Failed to create local dir in $newDir.")
+          }
           subDirs(dirId)(subDirId) = newDir
           newDir
         }
@@ -164,7 +166,7 @@ private[spark] class DiskBlockManager(blockManager: BlockManager, conf: SparkCon
   /** Cleanup local dirs and stop shuffle sender. */
   private[spark] def stop() {
     // Only perform cleanup if an external service is not serving our shuffle files.
-    if (!blockManager.externalShuffleServiceEnabled) {
+    if (!blockManager.externalShuffleServiceEnabled || blockManager.blockManagerId.isDriver) {
       localDirs.foreach { localDir =>
         if (localDir.isDirectory() && localDir.exists()) {
           try {

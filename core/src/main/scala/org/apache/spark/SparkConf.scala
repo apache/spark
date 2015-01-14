@@ -61,7 +61,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
       throw new NullPointerException("null key")
     }
     if (value == null) {
-      throw new NullPointerException("null value")
+      throw new NullPointerException("null value for " + key)
     }
     settings(key) = value
     this
@@ -370,7 +370,9 @@ private[spark] object SparkConf {
   }
 
   /**
-   * Return whether the given config is a Spark port config.
+   * Return true if the given config matches either `spark.*.port` or `spark.port.*`.
    */
-  def isSparkPortConf(name: String): Boolean = name.startsWith("spark.") && name.endsWith(".port")
+  def isSparkPortConf(name: String): Boolean = {
+    (name.startsWith("spark.") && name.endsWith(".port")) || name.startsWith("spark.port.")
+  }
 }

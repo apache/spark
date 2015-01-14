@@ -19,7 +19,6 @@ package org.apache.spark
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.util.NonSerializable
 
 import java.io.NotSerializableException

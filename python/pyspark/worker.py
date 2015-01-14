@@ -30,8 +30,7 @@ from pyspark.accumulators import _accumulatorRegistry
 from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, write_int, read_long, \
-    write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer, \
-    CompressedSerializer
+    write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer
 from pyspark import shuffle
 
 pickleSer = PickleSerializer()
@@ -78,12 +77,11 @@ def main(infile, outfile):
 
         # fetch names and values of broadcast variables
         num_broadcast_variables = read_int(infile)
-        ser = CompressedSerializer(pickleSer)
         for _ in range(num_broadcast_variables):
             bid = read_long(infile)
             if bid >= 0:
-                value = ser._read_with_length(infile)
-                _broadcastRegistry[bid] = Broadcast(bid, value)
+                path = utf8_deserializer.loads(infile)
+                _broadcastRegistry[bid] = Broadcast(path=path)
             else:
                 bid = - bid - 1
                 _broadcastRegistry.pop(bid)

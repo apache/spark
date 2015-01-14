@@ -25,7 +25,7 @@ import org.apache.spark.ui.jobs.UIData.StageUIData
 import org.apache.spark.util.Utils
 
 /** Stage summary grouped by executors. */
-private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: JobProgressTab) {
+private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: StagesTab) {
   private val listener = parent.listener
 
   def toNodeSeq: Seq[Node] = {
@@ -36,7 +36,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: JobPr
 
   /** Special table which merges two header cells. */
   private def executorTable[T](): Seq[Node] = {
-    <table class={UIUtils.TABLE_CLASS}>
+    <table class={UIUtils.TABLE_CLASS_STRIPED}>
       <thead>
         <th>Executor ID</th>
         <th>Address</th>

@@ -45,9 +45,9 @@ private[spark] class HashShuffleReader[K, C](
       } else {
         new InterruptibleIterator(context, dep.aggregator.get.combineValuesByKey(iter, context))
       }
-    } else if (dep.aggregator.isEmpty && dep.mapSideCombine) {
-      throw new IllegalStateException("Aggregator is empty for map-side combine")
     } else {
+      require(!dep.mapSideCombine, "Map-side combine without Aggregator specified!")
+
       // Convert the Product2s to pairs since this is what downstream RDDs currently expect
       iter.asInstanceOf[Iterator[Product2[K, C]]].map(pair => (pair._1, pair._2))
     }

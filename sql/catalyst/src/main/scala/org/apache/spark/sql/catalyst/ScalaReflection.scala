@@ -20,11 +20,9 @@ package org.apache.spark.sql.catalyst
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.util.Utils
-import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference, Row}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types._
 
 
 /**
@@ -118,7 +116,19 @@ trait ScalaReflection {
       case t if t <:< typeOf[Product] =>
         val formalTypeArgs = t.typeSymbol.asClass.typeParams
         val TypeRef(_, _, actualTypeArgs) = t
-        val params = t.member(nme.CONSTRUCTOR).asMethod.paramss
+        val constructorSymbol = t.member(nme.CONSTRUCTOR)
+        val params = if (constructorSymbol.isMethod) {
+          constructorSymbol.asMethod.paramss
+        } else {
+          // Find the primary constructor, and use its parameter ordering.
+          val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
+            s => s.isMethod && s.asMethod.isPrimaryConstructor)
+          if (primaryConstructorSymbol.isEmpty) {
+            sys.error("Internal SQL error: Product object did not have a primary constructor.")
+          } else {
+            primaryConstructorSymbol.get.asMethod.paramss
+          }
+        }
         Schema(StructType(
           params.head.map { p =>
             val Schema(dataType, nullable) =

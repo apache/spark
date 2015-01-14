@@ -22,7 +22,6 @@ import java.util.Properties
 import kafka.producer._
 
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.kafka._
 import org.apache.spark.SparkConf
 

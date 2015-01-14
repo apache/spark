@@ -19,15 +19,16 @@ package org.apache.spark.sql
 
 import java.util.{List => JList}
 
-import org.apache.spark.api.python.SerDeUtil
-
 import scala.collection.JavaConversions._
+
+import com.fasterxml.jackson.core.JsonFactory
 
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{Dependency, OneToOneDependency, Partition, Partitioner, TaskContext}
 import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.api.java.JavaSchemaRDD
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -36,6 +37,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
+import org.apache.spark.sql.json.JsonRDD
+import org.apache.spark.sql.types.{BooleanType, StructType}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -131,6 +134,20 @@ class SchemaRDD(
    */
   lazy val schema: StructType = queryExecution.analyzed.schema
 
+  /**
+   * Returns a new RDD with each row transformed to a JSON string.
+   *
+   * @group schema
+   */
+  def toJSON: RDD[String] = {
+    val rowSchema = this.schema
+    this.mapPartitions { iter =>
+      val jsonFactory = new JsonFactory()
+      iter.map(JsonRDD.rowToJSON(rowSchema, jsonFactory))
+    }
+  }
+
+
   // =======================================================================
   // Query DSL
   // =======================================================================
@@ -197,7 +214,20 @@ class SchemaRDD(
    * @group Query
    */
   def orderBy(sortExprs: SortOrder*): SchemaRDD =
-    new SchemaRDD(sqlContext, Sort(sortExprs, logicalPlan))
+    new SchemaRDD(sqlContext, Sort(sortExprs, true, logicalPlan))
+
+  /**
+   * Sorts the results by the given expressions within partition.
+   * {{{
+   *   schemaRDD.sortBy('a)
+   *   schemaRDD.sortBy('a, 'b)
+   *   schemaRDD.sortBy('a.asc, 'b.desc)
+   * }}}
+   *
+   * @group Query
+   */
+  def sortBy(sortExprs: SortOrder*): SchemaRDD =
+    new SchemaRDD(sqlContext, Sort(sortExprs, false, logicalPlan))
 
   @deprecated("use limit with integer argument", "1.1.0")
   def limit(limitExpr: Expression): SchemaRDD =
@@ -208,6 +238,7 @@ class SchemaRDD(
    * {{{
    *   schemaRDD.limit(10)
    * }}}
+   * @group Query
    */
   def limit(limitNum: Int): SchemaRDD =
     new SchemaRDD(sqlContext, Limit(Literal(limitNum), logicalPlan))
@@ -290,7 +321,7 @@ class SchemaRDD(
    * Filters tuples using a function over the value of the specified column.
    *
    * {{{
-   *   schemaRDD.sfilter('a)((a: Int) => ...)
+   *   schemaRDD.where('a)((a: Int) => ...)
    * }}}
    *
    * @group Query
@@ -338,6 +369,8 @@ class SchemaRDD(
    * Return the number of elements in the RDD. Unlike the base RDD implementation of count, this
    * implementation leverages the query optimizer to compute the count on the SchemaRDD, which
    * supports features such as filter pushdown.
+   * 
+   * @group Query
    */
   @Experimental
   override def count(): Long = aggregate(Count(Literal(1))).collect().head.getLong(0)
@@ -399,6 +432,21 @@ class SchemaRDD(
     val fieldTypes = schema.fields.map(_.dataType)
     val pickle = new Pickler
     new java.util.ArrayList(collect().map { row =>
+      EvaluatePython.rowToArray(row, fieldTypes)
+    }.grouped(100).map(batched => pickle.dumps(batched.toArray)).toIterable)
+  }
+
+  /**
+   * Serializes the Array[Row] returned by SchemaRDD's takeSample(), using the same
+   * format as javaToPython and collectToPython. It is used by pyspark.
+   */
+  private[sql] def takeSampleToPython(
+      withReplacement: Boolean,
+      num: Int,
+      seed: Long): JList[Array[Byte]] = {
+    val fieldTypes = schema.fields.map(_.dataType)
+    val pickle = new Pickler
+    new java.util.ArrayList(this.takeSample(withReplacement, num, seed).map { row =>
       EvaluatePython.rowToArray(row, fieldTypes)
     }.grouped(100).map(batched => pickle.dumps(batched.toArray)).toIterable)
   }
@@ -475,12 +523,12 @@ class SchemaRDD(
   }
 
   override def persist(newLevel: StorageLevel): this.type = {
-    sqlContext.cacheQuery(this, newLevel)
+    sqlContext.cacheQuery(this, None, newLevel)
     this
   }
 
   override def unpersist(blocking: Boolean): this.type = {
-    sqlContext.uncacheQuery(this, blocking)
+    sqlContext.tryUncacheQuery(this, blocking)
     this
   }
 }

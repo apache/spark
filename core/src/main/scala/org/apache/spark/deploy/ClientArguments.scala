@@ -75,7 +75,8 @@ private[spark] class ClientArguments(args: Array[String]) {
 
       if (!ClientArguments.isValidJarUrl(_jarUrl)) {
         println(s"Jar url '${_jarUrl}' is not in valid format.")
-        println(s"Must be a jar file path in URL format (e.g. hdfs://XX.jar, file://XX.jar)")
+        println(s"Must be a jar file path in URL format " +
+          "(e.g. hdfs://host:port/XX.jar, file:///XX.jar)")
         printUsageAndExit(-1)
       }
 
@@ -119,7 +120,7 @@ object ClientArguments {
   def isValidJarUrl(s: String): Boolean = {
     try {
       val uri = new URI(s)
-      uri.getScheme != null && uri.getAuthority != null && s.endsWith("jar")
+      uri.getScheme != null && uri.getPath != null && uri.getPath.endsWith(".jar")
     } catch {
       case _: URISyntaxException => false
     }

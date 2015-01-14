@@ -20,12 +20,12 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.util.Metadata
+import org.apache.spark.sql.types._
 
 object NamedExpression {
   private val curId = new java.util.concurrent.atomic.AtomicLong()
   def newExprId = ExprId(curId.getAndIncrement())
+  def unapply(expr: NamedExpression): Option[(String, DataType)] = Some(expr.name, expr.dataType)
 }
 
 /**
@@ -185,4 +185,9 @@ case class AttributeReference(
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
+}
+
+object VirtualColumn {
+  val groupingIdName = "grouping__id"
+  def newGroupingId = AttributeReference(groupingIdName, IntegerType, false)()
 }

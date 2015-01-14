@@ -138,6 +138,7 @@ class DAGScheduler(
   }
 
   initializeEventProcessActor()
+  taskScheduler.setDAGScheduler(this)
 
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
@@ -449,7 +450,6 @@ class DAGScheduler(
               }
               // data structures based on StageId
               stageIdToStage -= stageId
-
               logDebug("After removal of stage %d, remaining stages = %d"
                 .format(stageId, stageIdToStage.size))
             }
@@ -635,8 +635,8 @@ class DAGScheduler(
     try {
       val rdd = job.finalStage.rdd
       val split = rdd.partitions(job.partitions(0))
-      val taskContext =
-        new TaskContextImpl(job.finalStage.id, job.partitions(0), 0, true)
+      val taskContext = new TaskContextImpl(job.finalStage.id, job.partitions(0), taskAttemptId = 0,
+        attemptNumber = 0, runningLocally = true)
       TaskContextHelper.setTaskContext(taskContext)
       try {
         val result = job.func(taskContext, rdd.iterator(split, taskContext))
@@ -751,14 +751,15 @@ class DAGScheduler(
         localExecutionEnabled && allowLocal && finalStage.parents.isEmpty && partitions.length == 1
       if (shouldRunLocally) {
         // Compute very short actions like first() or take() with no parent stages locally.
-        listenerBus.post(SparkListenerJobStart(job.jobId, Array[Int](), properties))
+        listenerBus.post(SparkListenerJobStart(job.jobId, Seq.empty, properties))
         runLocally(job)
       } else {
         jobIdToActiveJob(jobId) = job
         activeJobs += job
         finalStage.resultOfJob = Some(job)
-        listenerBus.post(SparkListenerJobStart(job.jobId, jobIdToStageIds(jobId).toArray,
-          properties))
+        val stageIds = jobIdToStageIds(jobId).toArray
+        val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
+        listenerBus.post(SparkListenerJobStart(job.jobId, stageInfos, properties))
         submitStage(finalStage)
       }
     }
@@ -865,26 +866,6 @@ class DAGScheduler(
     }
 
     if (tasks.size > 0) {
-      // Preemptively serialize a task to make sure it can be serialized. We are catching this
-      // exception here because it would be fairly hard to catch the non-serializable exception
-      // down the road, where we have several different implementations for local scheduler and
-      // cluster schedulers.
-      //
-      // We've already serialized RDDs and closures in taskBinary, but here we check for all other
-      // objects such as Partition.
-      try {
-        closureSerializer.serialize(tasks.head)
-      } catch {
-        case e: NotSerializableException =>
-          abortStage(stage, "Task not serializable: " + e.toString)
-          runningStages -= stage
-          return
-        case NonFatal(e) => // Other exceptions, such as IllegalArgumentException from Kryo.
-          abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
-          runningStages -= stage
-          return
-      }
-
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       stage.pendingTasks ++= tasks
       logDebug("New pending tasks: " + stage.pendingTasks)
@@ -898,6 +879,34 @@ class DAGScheduler(
       logDebug("Stage " + stage + " is actually done; %b %d %d".format(
         stage.isAvailable, stage.numAvailableOutputs, stage.numPartitions))
       runningStages -= stage
+    }
+  }
+
+  /** Merge updates from a task to our local accumulator values */
+  private def updateAccumulators(event: CompletionEvent): Unit = {
+    val task = event.task
+    val stage = stageIdToStage(task.stageId)
+    if (event.accumUpdates != null) {
+      try {
+        Accumulators.add(event.accumUpdates)
+        event.accumUpdates.foreach { case (id, partialValue) =>
+          val acc = Accumulators.originals(id).asInstanceOf[Accumulable[Any, Any]]
+          // To avoid UI cruft, ignore cases where value wasn't updated
+          if (acc.name.isDefined && partialValue != acc.zero) {
+            val name = acc.name.get
+            val stringPartialValue = Accumulators.stringifyPartialValue(partialValue)
+            val stringValue = Accumulators.stringifyValue(acc.value)
+            stage.latestInfo.accumulables(id) = AccumulableInfo(id, name, stringValue)
+            event.taskInfo.accumulables +=
+              AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
+          }
+        }
+      } catch {
+        // If we see an exception during accumulator update, just log the
+        // error and move on.
+        case e: Exception =>
+          logError(s"Failed to update accumulators for $task", e)
+      }
     }
   }
 
@@ -941,27 +950,6 @@ class DAGScheduler(
     }
     event.reason match {
       case Success =>
-        if (event.accumUpdates != null) {
-          try {
-            Accumulators.add(event.accumUpdates)
-            event.accumUpdates.foreach { case (id, partialValue) =>
-              val acc = Accumulators.originals(id).asInstanceOf[Accumulable[Any, Any]]
-              // To avoid UI cruft, ignore cases where value wasn't updated
-              if (acc.name.isDefined && partialValue != acc.zero) {
-                val name = acc.name.get
-                val stringPartialValue = Accumulators.stringifyPartialValue(partialValue)
-                val stringValue = Accumulators.stringifyValue(acc.value)
-                stage.latestInfo.accumulables(id) = AccumulableInfo(id, name, stringValue)
-                event.taskInfo.accumulables +=
-                  AccumulableInfo(id, name, Some(stringPartialValue), stringValue)
-              }
-            }
-          } catch {
-            // If we see an exception during accumulator update, just log the error and move on.
-            case e: Exception =>
-              logError(s"Failed to update accumulators for $task", e)
-          }
-        }
         listenerBus.post(SparkListenerTaskEnd(stageId, stage.latestInfo.attemptId, taskType,
           event.reason, event.taskInfo, event.taskMetrics))
         stage.pendingTasks -= task
@@ -970,6 +958,7 @@ class DAGScheduler(
             stage.resultOfJob match {
               case Some(job) =>
                 if (!job.finished(rt.outputId)) {
+                  updateAccumulators(event)
                   job.finished(rt.outputId) = true
                   job.numFinished += 1
                   // If the whole job has finished, remove it
@@ -994,6 +983,7 @@ class DAGScheduler(
             }
 
           case smt: ShuffleMapTask =>
+            updateAccumulators(event)
             val status = event.result.asInstanceOf[MapStatus]
             val execId = status.location.executorId
             logDebug("ShuffleMapTask finished on " + execId)
@@ -1082,7 +1072,6 @@ class DAGScheduler(
         }
         failedStages += failedStage
         failedStages += mapStage
-
         // Mark the map whose fetch failed as broken in the map stage
         if (mapId != -1) {
           mapStage.removeOutputLoc(mapId, bmAddress)
@@ -1366,12 +1355,6 @@ private[scheduler] class DAGSchedulerActorSupervisor(dagScheduler: DAGScheduler)
 
 private[scheduler] class DAGSchedulerEventProcessActor(dagScheduler: DAGScheduler)
   extends Actor with Logging {
-
-  override def preStart() {
-    // set DAGScheduler for taskScheduler to ensure eventProcessActor is always
-    // valid when the messages arrive
-    dagScheduler.taskScheduler.setDAGScheduler(dagScheduler)
-  }
 
   /**
    * The main event loop of the DAG scheduler.

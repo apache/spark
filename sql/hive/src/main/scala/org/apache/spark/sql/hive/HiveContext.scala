@@ -19,38 +19,28 @@ package org.apache.spark.sql.hive
 
 import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
 import java.sql.{Date, Timestamp}
-import java.util.{ArrayList => JArrayList}
-
-import org.apache.hadoop.hive.common.`type`.HiveDecimal
-import org.apache.spark.sql.catalyst.types.DecimalType
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
-import scala.reflect.runtime.universe.{TypeTag, typeTag}
+import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.hadoop.fs.FileSystem
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.serde2.io.TimestampWritable
-import org.apache.hadoop.hive.serde2.io.DateWritable
+import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperators}
-import org.apache.spark.sql.catalyst.analysis.{OverrideCatalog, OverrideFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperators, OverrideCatalog, OverrideFunctionRegistry}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.ExtractPythonUdfs
-import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.sql.execution.{Command => PhysicalCommand}
-import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
+import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand, QueryExecutionException}
+import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTableCommand}
 import org.apache.spark.sql.sources.DataSourceStrategy
+import org.apache.spark.sql.types._
 
 /**
  * DEPRECATED: Use HiveContext instead.
@@ -81,8 +71,9 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
-  // Change the default SQL dialect to HiveQL
-  override private[spark] def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+  private[sql] override lazy val conf: SQLConf = new SQLConf {
+    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+  }
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
@@ -97,12 +88,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   override def sql(sqlText: String): SchemaRDD = {
     // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
-    if (dialect == "sql") {
+    if (conf.dialect == "sql") {
       super.sql(sqlText)
-    } else if (dialect == "hiveql") {
+    } else if (conf.dialect == "hiveql") {
       new SchemaRDD(this, ddlParser(sqlText).getOrElse(HiveQl.parseSql(sqlText)))
     }  else {
-      sys.error(s"Unsupported SQL dialect: $dialect.  Try 'sql' or 'hiveql'")
+      sys.error(s"Unsupported SQL dialect: ${conf.dialect}.  Try 'sql' or 'hiveql'")
     }
   }
 
@@ -125,6 +116,16 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     catalog.createTable("default", tableName, ScalaReflection.attributesFor[A], allowExisting)
   }
 
+  def refreshTable(tableName: String): Unit = {
+    // TODO: Database support...
+    catalog.refreshTable("default", tableName)
+  }
+
+  protected[hive] def invalidateTable(tableName: String): Unit = {
+    // TODO: Database support...
+    catalog.invalidateTable("default", tableName)
+  }
+
   /**
    * Analyzes the given table in the current database to generate statistics, which will be
    * used in query optimizations.
@@ -133,10 +134,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * in the Hive metastore.
    */
   def analyze(tableName: String) {
-    val relation = EliminateAnalysisOperators(catalog.lookupRelation(None, tableName))
+    val relation = EliminateAnalysisOperators(catalog.lookupRelation(Seq(tableName)))
 
     relation match {
-      case relation: MetastoreRelation => {
+      case relation: MetastoreRelation =>
         // This method is mainly based on
         // org.apache.hadoop.hive.ql.stats.StatsUtils.getFileSizeForTable(HiveConf, Table)
         // in Hive 0.13 (except that we do not use fs.getContentSummary).
@@ -157,7 +158,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         }
 
         def getFileSizeForTable(conf: HiveConf, table: Table): Long = {
-          val path = table.getPath()
+          val path = table.getPath
           var size: Long = 0L
           try {
             val fs = path.getFileSystem(conf)
@@ -187,15 +188,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
           val hiveTTable = relation.hiveQlTable.getTTable
           hiveTTable.setParameters(tableParameters)
           val tableFullName =
-            relation.hiveQlTable.getDbName() + "." + relation.hiveQlTable.getTableName()
+            relation.hiveQlTable.getDbName + "." + relation.hiveQlTable.getTableName
 
           catalog.client.alterTable(tableFullName, new Table(hiveTTable))
         }
-      }
       case otherRelation =>
         throw new NotImplementedError(
           s"Analyze has only implemented for Hive tables, " +
-            s"but ${tableName} is a ${otherRelation.nodeName}")
+            s"but $tableName is a ${otherRelation.nodeName}")
     }
   }
 
@@ -294,7 +294,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * Execute the command using Hive and return the results as a sequence. Each element
    * in the sequence is one row.
    */
-  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = {
+  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = synchronized {
     try {
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
@@ -348,10 +348,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   val hivePlanner = new SparkPlanner with HiveStrategies {
     val hiveContext = self
 
-    override val strategies: Seq[Strategy] = extraStrategies ++ Seq(
+    override def strategies: Seq[Strategy] = extraStrategies ++ Seq(
       DataSourceStrategy,
-      CommandStrategy(self),
       HiveCommandStrategy(self),
+      HiveDDLStrategy,
+      DDLStrategy,
       TakeOrdered,
       ParquetOperations,
       InMemoryScans,
@@ -374,76 +375,83 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   /** Extends QueryExecution with hive specific features. */
   protected[sql] abstract class QueryExecution extends super.QueryExecution {
 
-    protected val primitiveTypes =
-      Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
-        ShortType, DateType, TimestampType, BinaryType)
-
-    protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
-      case (struct: Row, StructType(fields)) =>
-        struct.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
-        }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ, _)) =>
-        seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_,_], MapType(kType, vType, _)) =>
-        map.map {
-          case (key, value) =>
-            toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
-        }.toSeq.sorted.mkString("{", ",", "}")
-      case (null, _) => "NULL"
-      case (d: Date, DateType) => new DateWritable(d).toString
-      case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
-      case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
-      case (decimal: Decimal, DecimalType()) =>  // Hive strips trailing zeros so use its toString
-        HiveShim.createDecimal(decimal.toBigDecimal.underlying()).toString
-      case (other, tpe) if primitiveTypes contains tpe => other.toString
-    }
-
-    /** Hive outputs fields of structs slightly differently than top level attributes. */
-    protected def toHiveStructString(a: (Any, DataType)): String = a match {
-      case (struct: Row, StructType(fields)) =>
-        struct.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
-        }.mkString("{", ",", "}")
-      case (seq: Seq[_], ArrayType(typ, _)) =>
-        seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
-      case (map: Map[_, _], MapType(kType, vType, _)) =>
-        map.map {
-          case (key, value) =>
-            toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
-        }.toSeq.sorted.mkString("{", ",", "}")
-      case (null, _) => "null"
-      case (s: String, StringType) => "\"" + s + "\""
-      case (decimal, DecimalType()) => decimal.toString
-      case (other, tpe) if primitiveTypes contains tpe => other.toString
-    }
-
     /**
      * Returns the result as a hive compatible sequence of strings.  For native commands, the
      * execution is simply passed back to Hive.
      */
     def stringResult(): Seq[String] = executedPlan match {
-      case describeHiveTableCommand: DescribeHiveTableCommand =>
+      case ExecutedCommand(desc: DescribeHiveTableCommand) =>
         // If it is a describe command for a Hive table, we want to have the output format
         // be similar with Hive.
-        describeHiveTableCommand.hiveString
-      case command: PhysicalCommand =>
+        desc.run(self).map {
+          case Row(name: String, dataType: String, comment) =>
+            Seq(name, dataType,
+              Option(comment.asInstanceOf[String]).getOrElse(""))
+              .map(s => String.format(s"%-20s", s))
+              .mkString("\t")
+        }
+      case command: ExecutedCommand =>
         command.executeCollect().map(_.head.toString)
 
       case other =>
-        val result: Seq[Seq[Any]] = toRdd.map(_.copy()).collect().toSeq
+        val result: Seq[Seq[Any]] = other.executeCollect().toSeq
         // We need the types so we can output struct field names
         val types = analyzed.output.map(_.dataType)
         // Reformat to match hive tab delimited output.
-        val asString = result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t")).toSeq
-        asString
+        result.map(_.zip(types).map(HiveContext.toHiveString)).map(_.mkString("\t")).toSeq
     }
 
     override def simpleString: String =
       logical match {
-        case _: NativeCommand => "<Native command: executed by Hive>"
+        case _: HiveNativeCommand => "<Native command: executed by Hive>"
         case _: SetCommand => "<SET command: executed by Hive, and noted by SQLContext>"
         case _ => super.simpleString
       }
+  }
+}
+
+object HiveContext {
+  protected val primitiveTypes =
+    Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
+      ShortType, DateType, TimestampType, BinaryType)
+
+  protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
+    case (struct: Row, StructType(fields)) =>
+      struct.zip(fields).map {
+        case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+      }.mkString("{", ",", "}")
+    case (seq: Seq[_], ArrayType(typ, _)) =>
+      seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
+    case (map: Map[_,_], MapType(kType, vType, _)) =>
+      map.map {
+        case (key, value) =>
+          toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
+      }.toSeq.sorted.mkString("{", ",", "}")
+    case (null, _) => "NULL"
+    case (d: Date, DateType) => new DateWritable(d).toString
+    case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
+    case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
+    case (decimal: BigDecimal, DecimalType()) => // Hive strips trailing zeros so use its toString
+      HiveShim.createDecimal(decimal.underlying()).toString
+    case (other, tpe) if primitiveTypes contains tpe => other.toString
+  }
+
+  /** Hive outputs fields of structs slightly differently than top level attributes. */
+  protected def toHiveStructString(a: (Any, DataType)): String = a match {
+    case (struct: Row, StructType(fields)) =>
+      struct.zip(fields).map {
+        case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+      }.mkString("{", ",", "}")
+    case (seq: Seq[_], ArrayType(typ, _)) =>
+      seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
+    case (map: Map[_, _], MapType(kType, vType, _)) =>
+      map.map {
+        case (key, value) =>
+          toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
+      }.toSeq.sorted.mkString("{", ",", "}")
+    case (null, _) => "null"
+    case (s: String, StringType) => "\"" + s + "\""
+    case (decimal, DecimalType()) => decimal.toString
+    case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
 }

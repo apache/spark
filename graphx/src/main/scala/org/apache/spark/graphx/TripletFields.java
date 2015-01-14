@@ -24,10 +24,17 @@ import java.io.Serializable;
  * system to populate only those fields for efficiency.
  */
 public class TripletFields implements Serializable {
+
+  /** Indicates whether the source vertex attribute is included. */
   public final boolean useSrc;
+
+  /** Indicates whether the destination vertex attribute is included. */
   public final boolean useDst;
+
+  /** Indicates whether the edge attribute is included. */
   public final boolean useEdge;
 
+  /** Constructs a default TripletFields in which all fields are included. */
   public TripletFields() {
     this(true, true, true);
   }
@@ -38,14 +45,28 @@ public class TripletFields implements Serializable {
     this.useEdge = useEdge;
   }
 
+  /**
+   * None of the triplet fields are exposed.
+   */
   public static final TripletFields None = new TripletFields(false, false, false);
+
+  /**
+   * Expose only the edge field and not the source or destination field.
+   */
   public static final TripletFields EdgeOnly = new TripletFields(false, false, true);
-  public static final TripletFields SrcOnly = new TripletFields(true, false, false);
-  public static final TripletFields DstOnly = new TripletFields(false, true, false);
-  public static final TripletFields SrcDstOnly = new TripletFields(true, true, false);
-  public static final TripletFields SrcAndEdge = new TripletFields(true, false, true);
-  public static final TripletFields Src = SrcAndEdge;
-  public static final TripletFields DstAndEdge = new TripletFields(false, true, true);
-  public static final TripletFields Dst = DstAndEdge;
+
+  /**
+   * Expose the source and edge fields but not the destination field. (Same as Src)
+   */
+  public static final TripletFields Src = new TripletFields(true, false, true);
+
+  /**
+   * Expose the destination and edge fields but not the source field. (Same as Dst)
+   */
+  public static final TripletFields Dst = new TripletFields(false, true, true);
+
+  /**
+   * Expose all the fields (source, edge, and destination).
+   */
   public static final TripletFields All = new TripletFields(true, true, true);
 }

@@ -21,6 +21,7 @@ import org.apache.spark.sql.QueryTest
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.util.Utils
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -32,6 +33,13 @@ case class Nested3(f3: Int)
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest {
+  test("SPARK-4512 Fix attribute reference resolution error when using SORT BY") {
+    checkAnswer(
+      sql("SELECT * FROM (SELECT key + key AS a FROM src SORT BY value) t ORDER BY t.a"),
+      sql("SELECT key + key as a FROM src ORDER BY a").collect().toSeq
+    )
+  }
+
   test("CTAS with serde") {
     sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect
     sql(
@@ -119,6 +127,15 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT f1.f2.f3 FROM nested"),
       1)
+    checkAnswer(sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested"),
+      Seq.empty[Row])
+    checkAnswer(
+      sql("SELECT * FROM test_ctas_1234"),
+      sql("SELECT * FROM nested").collect().toSeq)
+
+    intercept[org.apache.hadoop.hive.ql.metadata.InvalidTableException] {
+      sql("CREATE TABLE test_ctas_12345 AS SELECT * from notexists").collect()
+    }
   }
 
   test("test CTAS") {
@@ -126,6 +143,19 @@ class SQLQuerySuite extends QueryTest {
     checkAnswer(
       sql("SELECT key, value FROM test_ctas_123 ORDER BY key"), 
       sql("SELECT key, value FROM src ORDER BY key").collect().toSeq)
+  }
+
+  test("SPARK-4825 save join to table") {
+    val testData = sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString))
+    sql("CREATE TABLE test1 (key INT, value STRING)")
+    testData.insertInto("test1")
+    sql("CREATE TABLE test2 (key INT, value STRING)")
+    testData.insertInto("test2")
+    testData.insertInto("test2")
+    sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").saveAsTable("test")
+    checkAnswer(
+      table("test"),
+      sql("SELECT COUNT(a.value) FROM test1 a JOIN test2 b ON a.key = b.key").collect().toSeq)
   }
 
   test("SPARK-3708 Backticks aren't handled correctly is aliases") {
@@ -163,9 +193,25 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT case when ~1=-2 then 1 else 0 end FROM src"),
       sql("SELECT 1 FROM src").collect().toSeq)
   }
-  
- test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
-    checkAnswer(sql("SELECT key FROM src WHERE key not between 0 and 10 order by key"), 
-        sql("SELECT key FROM src WHERE key between 11 and 500 order by key").collect().toSeq)
+
+  test("SPARK-4154 Query does not work if it has 'not between' in Spark SQL and HQL") {
+    checkAnswer(sql("SELECT key FROM src WHERE key not between 0 and 10 order by key"),
+      sql("SELECT key FROM src WHERE key between 11 and 500 order by key").collect().toSeq)
+  }
+
+  test("SPARK-2554 SumDistinct partial aggregation") {
+    checkAnswer(sql("SELECT sum( distinct key) FROM src group by key order by key"),
+      sql("SELECT distinct key FROM src order by key").collect().toSeq)
+  }
+
+  test("SPARK-4963 SchemaRDD sample on mutable row return wrong result") {
+    sql("SELECT * FROM src WHERE key % 2 = 0")
+      .sample(withReplacement = false, fraction = 0.3)
+      .registerTempTable("sampled")
+    (1 to 10).foreach { i =>
+      checkAnswer(
+        sql("SELECT * FROM sampled WHERE key % 2 = 1"),
+        Seq.empty[Row])
+    }
   }
 }

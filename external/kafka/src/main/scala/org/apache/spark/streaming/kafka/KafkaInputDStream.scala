@@ -17,13 +17,12 @@
 
 package org.apache.spark.streaming.kafka
 
+import java.util.Properties
+
 import scala.collection.Map
 import scala.reflect.{classTag, ClassTag}
 
-import java.util.Properties
-import java.util.concurrent.Executors
-
-import kafka.consumer._
+import kafka.consumer.{KafkaStream, Consumer, ConsumerConfig, ConsumerConnector}
 import kafka.serializer.Decoder
 import kafka.utils.VerifiableProperties
 
@@ -32,6 +31,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receiver.Receiver
+import org.apache.spark.util.Utils
 
 /**
  * Input stream that pulls messages from a Kafka Broker.
@@ -51,12 +51,16 @@ class KafkaInputDStream[
     @transient ssc_ : StreamingContext,
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
+    useReliableReceiver: Boolean,
     storageLevel: StorageLevel
   ) extends ReceiverInputDStream[(K, V)](ssc_) with Logging {
 
   def getReceiver(): Receiver[(K, V)] = {
-    new KafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)
-        .asInstanceOf[Receiver[(K, V)]]
+    if (!useReliableReceiver) {
+      new KafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)
+    } else {
+      new ReliableKafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)
+    }
   }
 }
 
@@ -69,14 +73,15 @@ class KafkaReceiver[
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
     storageLevel: StorageLevel
-  ) extends Receiver[Any](storageLevel) with Logging {
+  ) extends Receiver[(K, V)](storageLevel) with Logging {
 
   // Connection to Kafka
-  var consumerConnector : ConsumerConnector = null
+  var consumerConnector: ConsumerConnector = null
 
   def onStop() {
     if (consumerConnector != null) {
       consumerConnector.shutdown()
+      consumerConnector = null
     }
   }
 
@@ -102,11 +107,11 @@ class KafkaReceiver[
       .newInstance(consumerConfig.props)
       .asInstanceOf[Decoder[V]]
 
-    // Create Threads for each Topic/Message Stream we are listening
+    // Create threads for each topic/message Stream we are listening
     val topicMessageStreams = consumerConnector.createMessageStreams(
       topics, keyDecoder, valueDecoder)
 
-    val executorPool = Executors.newFixedThreadPool(topics.values.sum)
+    val executorPool = Utils.newDaemonFixedThreadPool(topics.values.sum, "KafkaMessageHandler")
     try {
       // Start the messages handler for each partition
       topicMessageStreams.values.foreach { streams =>
@@ -117,13 +122,15 @@ class KafkaReceiver[
     }
   }
 
-  // Handles Kafka Messages
-  private class MessageHandler[K: ClassTag, V: ClassTag](stream: KafkaStream[K, V])
+  // Handles Kafka messages
+  private class MessageHandler(stream: KafkaStream[K, V])
     extends Runnable {
     def run() {
       logInfo("Starting MessageHandler.")
       try {
-        for (msgAndMetadata <- stream) {
+        val streamIterator = stream.iterator()
+        while (streamIterator.hasNext()) {
+          val msgAndMetadata = streamIterator.next()
           store((msgAndMetadata.key, msgAndMetadata.message))
         }
       } catch {
