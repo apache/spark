@@ -35,6 +35,7 @@ import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.mapred.JobID
 import org.apache.hadoop.mapred.TaskAttemptID
 import org.apache.hadoop.mapred.TaskID
+import org.apache.hadoop.mapred.lib.CombineFileSplit
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
@@ -220,8 +221,8 @@ class HadoopRDD[K, V](
       // creating RecordReader, because RecordReader's constructor might read some bytes
       val bytesReadCallback = inputMetrics.bytesReadCallback.orElse(
         split.inputSplit.value match {
-          case split: FileSplit =>
-            SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(split.getPath, jobConf)
+          case FileSplit | CombineFileSplit =>
+            SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(jobConf)
           case _ => None
         }
       )

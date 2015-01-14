@@ -133,10 +133,10 @@ class SparkHadoopUtil extends Logging {
    * statistics are only available as of Hadoop 2.5 (see HADOOP-10688).
    * Returns None if the required method can't be found.
    */
-  private[spark] def getFSBytesReadOnThreadCallback(path: Path, conf: Configuration)
+  private[spark] def getFSBytesReadOnThreadCallback(conf: Configuration)
     : Option[() => Long] = {
     try {
-      val threadStats = getFileSystemThreadStatistics(path, conf)
+      val threadStats = getFileSystemThreadStatistics(conf)
       val getBytesReadMethod = getFileSystemThreadStatisticsMethod("getBytesRead")
       val f = () => threadStats.map(getBytesReadMethod.invoke(_).asInstanceOf[Long]).sum
       val baselineBytesRead = f()
@@ -156,10 +156,10 @@ class SparkHadoopUtil extends Logging {
    * statistics are only available as of Hadoop 2.5 (see HADOOP-10688).
    * Returns None if the required method can't be found.
    */
-  private[spark] def getFSBytesWrittenOnThreadCallback(path: Path, conf: Configuration)
+  private[spark] def getFSBytesWrittenOnThreadCallback(conf: Configuration)
     : Option[() => Long] = {
     try {
-      val threadStats = getFileSystemThreadStatistics(path, conf)
+      val threadStats = getFileSystemThreadStatistics(conf)
       val getBytesWrittenMethod = getFileSystemThreadStatisticsMethod("getBytesWritten")
       val f = () => threadStats.map(getBytesWrittenMethod.invoke(_).asInstanceOf[Long]).sum
       val baselineBytesWritten = f()
@@ -172,10 +172,8 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
-  private def getFileSystemThreadStatistics(path: Path, conf: Configuration): Seq[AnyRef] = {
-    val qualifiedPath = path.getFileSystem(conf).makeQualified(path)
-    val scheme = qualifiedPath.toUri().getScheme()
-    val stats = FileSystem.getAllStatistics().filter(_.getScheme().equals(scheme))
+  private def getFileSystemThreadStatistics(conf: Configuration): Seq[AnyRef] = {
+    val stats = FileSystem.getAllStatistics()
     stats.map(Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
   }
 

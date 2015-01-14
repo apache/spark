@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
-import org.apache.hadoop.mapreduce.lib.input.FileSplit
+import org.apache.hadoop.mapreduce.lib.input.{CombineFileSplit, FileSplit}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.input.WholeTextFileInputFormat
@@ -116,8 +116,8 @@ class NewHadoopRDD[K, V](
       // creating RecordReader, because RecordReader's constructor might read some bytes
       val bytesReadCallback = inputMetrics.bytesReadCallback.orElse(
         split.serializableHadoopSplit.value match {
-          case split: FileSplit =>
-            SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(split.getPath, conf)
+          case FileSplit | CombineFileSplit =>
+            SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(conf)
           case _ => None
         }
       )
