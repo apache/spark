@@ -62,6 +62,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("SHOW TABLES")
     }
   }
+  
+  createQueryTest("! operator",
+    """
+      |SELECT a FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 2 AS a FROM src LIMIT 1) table
+      |WHERE !(a>1)
+    """.stripMargin)
 
   createQueryTest("constant object inspector for generic udf",
     """SELECT named_struct(
@@ -615,7 +623,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     assertResult(
       Array(
-        Array("# Registered as a temporary table", null, null),
         Array("a", "IntegerType", null),
         Array("b", "StringType", null))
     ) {
@@ -840,7 +847,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         case Row(key: String, value: String) => key -> value
         case Row(KV(key, value)) => key -> value
       }.toSet
-    clear()
+    conf.clear()
 
     // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
@@ -872,7 +879,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       collectResults(sql(s"SET $nonexistentKey"))
     }
 
-    clear()
+    conf.clear()
   }
 
   createQueryTest("select from thrift based table",

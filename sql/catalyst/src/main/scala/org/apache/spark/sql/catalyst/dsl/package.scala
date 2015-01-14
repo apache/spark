@@ -26,8 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types._
 
 /**
  * A collection of implicit conversions that create a DSL for constructing catalyst data structures.
@@ -290,7 +289,7 @@ package object dsl {
 
     def insertInto(tableName: String, overwrite: Boolean = false) =
       InsertIntoTable(
-        analysis.UnresolvedRelation(None, tableName), Map.empty, logicalPlan, overwrite)
+        analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite)
 
     def analyze = analysis.SimpleAnalyzer(logicalPlan)
   }

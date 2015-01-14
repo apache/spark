@@ -22,7 +22,7 @@ import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{VectorUDT, Vector}
-import org.apache.spark.sql.catalyst.types.DataType
+import org.apache.spark.sql.types.DataType
 
 /**
  * :: AlphaComponent ::

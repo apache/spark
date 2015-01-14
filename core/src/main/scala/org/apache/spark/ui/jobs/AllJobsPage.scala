@@ -47,7 +47,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val lastStageData = lastStageInfo.flatMap { s =>
         listener.stageIdToData.get((s.stageId, s.attemptId))
       }
-      val isComplete = job.status == JobExecutionStatus.SUCCEEDED
+
       val lastStageName = lastStageInfo.map(_.name).getOrElse("(Unknown Stage Name)")
       val lastStageDescription = lastStageData.flatMap(_.description).getOrElse("")
       val duration: Option[Long] = {
@@ -107,6 +107,10 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val failedJobsTable =
         jobsTable(failedJobs.sortBy(_.endTime.getOrElse(-1L)).reverse)
 
+      val shouldShowActiveJobs = activeJobs.nonEmpty
+      val shouldShowCompletedJobs = completedJobs.nonEmpty
+      val shouldShowFailedJobs = failedJobs.nonEmpty
+
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
@@ -121,27 +125,47 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
               <strong>Scheduling Mode: </strong>
               {listener.schedulingMode.map(_.toString).getOrElse("Unknown")}
             </li>
-            <li>
-              <a href="#active"><strong>Active Jobs:</strong></a>
-              {activeJobs.size}
-            </li>
-            <li>
-              <a href="#completed"><strong>Completed Jobs:</strong></a>
-              {completedJobs.size}
-            </li>
-            <li>
-              <a href="#failed"><strong>Failed Jobs:</strong></a>
-              {failedJobs.size}
-            </li>
+            {
+              if (shouldShowActiveJobs) {
+                <li>
+                  <a href="#active"><strong>Active Jobs:</strong></a>
+                  {activeJobs.size}
+                </li>
+              }
+            }
+            {
+              if (shouldShowCompletedJobs) {
+                <li>
+                  <a href="#completed"><strong>Completed Jobs:</strong></a>
+                  {completedJobs.size}
+                </li>
+              }
+            }
+            {
+              if (shouldShowFailedJobs) {
+                <li>
+                  <a href="#failed"><strong>Failed Jobs:</strong></a>
+                  {failedJobs.size}
+                </li>
+              }
+            }
           </ul>
         </div>
 
-      val content = summary ++
-        <h4 id="active">Active Jobs ({activeJobs.size})</h4> ++ activeJobsTable ++
-        <h4 id="completed">Completed Jobs ({completedJobs.size})</h4> ++ completedJobsTable ++
-        <h4 id ="failed">Failed Jobs ({failedJobs.size})</h4> ++ failedJobsTable
-
-      val helpText = """A job is triggered by a action, like "count()" or "saveAsTextFile()".""" +
+      var content = summary
+      if (shouldShowActiveJobs) {
+        content ++= <h4 id="active">Active Jobs ({activeJobs.size})</h4> ++
+          activeJobsTable
+      }
+      if (shouldShowCompletedJobs) {
+        content ++= <h4 id="completed">Completed Jobs ({completedJobs.size})</h4> ++
+          completedJobsTable
+      }
+      if (shouldShowFailedJobs) {
+        content ++= <h4 id ="failed">Failed Jobs ({failedJobs.size})</h4> ++
+          failedJobsTable
+      }
+      val helpText = """A job is triggered by an action, like "count()" or "saveAsTextFile()".""" +
         " Click on a job's title to see information about the stages of tasks associated with" +
         " the job."
 

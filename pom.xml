@@ -123,7 +123,7 @@
     <hadoop.version>1.0.4</hadoop.version>
     <protobuf.version>2.4.1</protobuf.version>
     <yarn.version>${hadoop.version}</yarn.version>
-    <hbase.version>0.94.6</hbase.version>
+    <hbase.version>0.98.7-hadoop1</hbase.version>
     <hbase.artifact>hbase</hbase.artifact>
     <flume.version>1.4.0</flume.version>
     <zookeeper.version>3.4.5</zookeeper.version>
@@ -1137,6 +1137,7 @@
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
               <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
             </systemProperties>
+            <failIfNoTests>false</failIfNoTests>
           </configuration>
         </plugin>
         <!-- Scalatest runs all Scala tests -->
@@ -1472,6 +1473,7 @@
       <properties>
         <hadoop.version>2.2.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
+        <hbase.version>0.98.7-hadoop2</hbase.version>
         <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
       </properties>
     </profile>
@@ -1482,6 +1484,7 @@
         <hadoop.version>2.3.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
         <jets3t.version>0.9.0</jets3t.version>
+        <hbase.version>0.98.7-hadoop2</hbase.version>
         <commons.math3.version>3.1.1</commons.math3.version>
         <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
       </properties>
@@ -1493,6 +1496,7 @@
         <hadoop.version>2.4.0</hadoop.version>
         <protobuf.version>2.5.0</protobuf.version>
         <jets3t.version>0.9.0</jets3t.version>
+        <hbase.version>0.98.7-hadoop2</hbase.version>
         <commons.math3.version>3.1.1</commons.math3.version>
         <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
       </properties>

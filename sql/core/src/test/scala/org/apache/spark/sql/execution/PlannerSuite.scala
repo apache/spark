@@ -60,7 +60,7 @@ class PlannerSuite extends FunSuite {
   }
 
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
-    val origThreshold = autoBroadcastJoinThreshold
+    val origThreshold = conf.autoBroadcastJoinThreshold
     setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 81920.toString)
 
     // Using a threshold that is definitely larger than the small testing table (b) below
@@ -78,7 +78,7 @@ class PlannerSuite extends FunSuite {
   }
 
   test("InMemoryRelation statistics propagation") {
-    val origThreshold = autoBroadcastJoinThreshold
+    val origThreshold = conf.autoBroadcastJoinThreshold
     setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 81920.toString)
 
     testData.limit(3).registerTempTable("tiny")
