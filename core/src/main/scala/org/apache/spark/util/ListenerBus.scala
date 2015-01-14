@@ -89,7 +89,7 @@ abstract class ListenerBus[L <: AnyRef, E](name: String) extends ListenerHelper[
    * listens for any additional events asynchronously while the listener bus is still running.
    * This should only be called once.
    */
-  final def start() {
+  def start() {
     if (started.compareAndSet(false, true)) {
       listenerThread.start()
     } else {
@@ -134,7 +134,7 @@ abstract class ListenerBus[L <: AnyRef, E](name: String) extends ListenerHelper[
    * For testing only. Return whether the listener daemon thread is still alive.
    */
   @VisibleForTesting
-  final def listenerThreadIsAlive: Boolean = listenerThread.isAlive
+  def listenerThreadIsAlive: Boolean = listenerThread.isAlive
 
   /**
    * Return whether the event queue is empty.
@@ -148,7 +148,7 @@ abstract class ListenerBus[L <: AnyRef, E](name: String) extends ListenerHelper[
    * Stop the listener bus. It will wait until the queued events have been processed, but drop the
    * new events after stopping.
    */
-  final def stop() {
+  def stop() {
     if (!started.get()) {
       throw new IllegalStateException("Attempted to stop " + name + " that has not yet started!")
     }
