@@ -215,83 +215,51 @@ class BlockMatrix(
     new BDM[Double](localMat.numRows, localMat.numCols, localMat.toArray)
   }
 
-  def add(other: DistributedMatrix): DistributedMatrix = {
-    other match {
-      // We really need a function to check if two matrices are partitioned similarly
-      case otherBlocked: BlockMatrix =>
-        if (checkPartitioning(otherBlocked, OperationNames.add)){
-          val addedBlocks = rdd.zip(otherBlocked.rdd).map{ case (a, b) =>
-            val result = a.mat.toBreeze + b.mat.toBreeze
-            new SubMatrix(a.blockRowIndex, a.blockColIndex,
-              Matrices.fromBreeze(result).asInstanceOf[DenseMatrix])
-          }
-          new BlockMatrix(numRowBlocks, numColBlocks, addedBlocks, partitioner)
-        } else {
-          throw new SparkException(
-            "Cannot add matrices with non-matching partitioners")
-        }
-      case _ =>
-        throw new IllegalArgumentException("Cannot add matrices of different types")
+  def add(other: BlockMatrix): BlockMatrix = {
+    if (checkPartitioning(other, OperationNames.add)) {
+      val addedBlocks = rdd.zip(other.rdd).map{ case (a, b) =>
+        val result = a._2.toBreeze + b._2.toBreeze
+        new SubMatrix((a._1._1, a._1._2), Matrices.fromBreeze(result))
+      }
+      new BlockMatrix(numRowBlocks, numColBlocks, addedBlocks)
+    } else {
+      throw new SparkException(
+        "Cannot add matrices with non-matching partitioners")
     }
   }
 
-  def multiply(other: DistributedMatrix): BlockMatrix = {
-    other match {
-      case otherBlocked: BlockMatrix =>
-        if (checkPartitioning(otherBlocked, OperationNames.multiply)){
-          val otherPartitioner = otherBlocked.partitioner
-          val resultPartitioner = new GridPartitioner(numRowBlocks, otherBlocked.numColBlocks,
-            partitioner.rowPerBlock, otherBlocked.partitioner.colPerBlock)
+  def multiply(other: BlockMatrix): BlockMatrix = {
+    if (checkPartitioning(other, OperationNames.multiply)) {
+      val otherPartitioner = other.partitioner
+      val resultPartitioner = new GridPartitioner(numRowBlocks, other.numColBlocks,
+        partitioner.rowPerBlock, otherPartitioner.colPerBlock, partitioner.numPartitions)
 
-          val newBlocks =
-            if (partitioner.name == "column" && otherPartitioner.name == "row" &&
-              partitioner.numPartitions == otherPartitioner.numPartitions) {
+      val flatA = rdd.flatMap{ case (index, block) =>
+        val rowId = index._1
+        val colId = index._2
+        Array.tabulate(other.numColBlocks)(j => ((rowId, colId, j), block))
+      }
 
-              val multiplyBlocks = matrixRDD.join(otherBlocked.matrixRDD, partitioner).
-                  map { case (key, (mat1, mat2)) =>
-                  val C = mat1.mat multiply mat2.mat
-                  (mat1.blockRowIndex + numRowBlocks * mat2.blockColIndex, C.toBreeze)
-                }.reduceByKey(resultPartitioner, (a, b) => a + b)
+      val flatB = other.rdd.flatMap{ case (index, block) =>
+        val rowId = index._1
+        val colId = index._2
+        Array.tabulate(numRowBlocks)(i => ((i, rowId, colId), block))
+      }
 
-              multiplyBlocks.map{ case (index, mat) =>
-                val colId = index / numRowBlocks
-                val rowId = index - colId * numRowBlocks
-                new SubMatrix(rowId, colId, Matrices.fromBreeze(mat).asInstanceOf[DenseMatrix])
-              }
-            } else {
-              val flatA = matrixRDD.flatMap{ case (index, block) =>
-                val colId = block.blockColIndex
-                val rowId = block.blockRowIndex
+      val multiplyBlocks = flatA.join(flatB, resultPartitioner).
+        map { case ((rowId, j, colId), (mat1, mat2)) =>
+          val C = mat1.multiply(mat2.asInstanceOf[DenseMatrix])
+          ((rowId, colId), C.toBreeze)
+      }.reduceByKey(resultPartitioner, (a, b) => a + b)
 
-                for (j <- 0 until otherBlocked.numColBlocks) yield ((rowId, colId, j), block)
-              }
+      val newBlocks = multiplyBlocks.map { case (index, mat) =>
+          new SubMatrix(index, Matrices.fromBreeze(mat))
+      }
 
-              val flatB = otherBlocked.matrixRDD.flatMap{ case (index, block) =>
-                val colId = block.blockColIndex
-                val rowId = block.blockRowIndex
-
-                for (i <- 0 until numRowBlocks) yield ((i, rowId, colId), block)
-              }
-
-              val multiplyBlocks = flatA.join(flatB, resultPartitioner).
-                map { case ((rowId, j, colId), (mat1, mat2)) =>
-                  val C = mat1.mat multiply mat2.mat
-                  (rowId + numRowBlocks * colId, C.toBreeze)
-              }.reduceByKey(resultPartitioner, (a, b) => a + b)
-
-              multiplyBlocks.map{ case (index, mat) =>
-                val colId = index / numRowBlocks
-                val rowId = index - colId * numRowBlocks
-                new SubMatrix(rowId, colId, Matrices.fromBreeze(mat).asInstanceOf[DenseMatrix])
-              }
-            }
-          new BlockMatrix(numRowBlocks, otherBlocked.numColBlocks, newBlocks, resultPartitioner)
-        } else {
-          throw new SparkException(
-            "Cannot multiply matrices with non-matching partitioners")
-        }
-      case _ =>
-        throw new IllegalArgumentException("Cannot add matrices of different types")
+      new BlockMatrix(numRowBlocks, other.numColBlocks, newBlocks)
+    } else {
+      throw new SparkException(
+        "Cannot multiply matrices with non-matching partitioners")
     }
   }
 
