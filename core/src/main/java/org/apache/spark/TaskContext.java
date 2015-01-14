@@ -96,18 +96,18 @@ public abstract class TaskContext implements Serializable {
   public abstract void addOnCompleteCallback(final Function0<Unit> f);
 
   /**
-   * Add a (Java friendly) listener to be executed when kill a task. We add this
+   * Add a listener to be executed when kill a task. We add this
    * listener for some more clean works. For example, we need to register a "kill"
    * callback to completely stop a receiver supervisor.
    */
   public abstract TaskContext addTaskKilledListener(TaskKilledListener listener);
 
   /**
-   * Add a (Java friendly) listener to be executed when kill a task. We add this
+   * Add a listener to be executed when kill a task. We add this
    * listener for some more clean works. For example, we need to register a "kill"
    * callback to completely stop a receiver supervisor.
    */
-  public abstract TaskContext addTaskKilledListener(final Function1<TaskContext, Unit> f);
+  public abstract TaskContext addTaskKilledCallback(final Function1<TaskContext, Unit> f);
 
   public abstract int stageId();
 

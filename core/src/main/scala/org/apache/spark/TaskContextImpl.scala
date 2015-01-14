@@ -66,7 +66,7 @@ private[spark] class TaskContextImpl(val stageId: Int,
     this
   }
 
-  override def addTaskKilledListener(f: TaskContext => Unit): this.type = {
+  override def addTaskKilledCallback(f: TaskContext => Unit): this.type = {
     onKilledCallbacks += new TaskKilledListener {
       override def onTaskKilled(context: TaskContext): Unit = f(context)
     }

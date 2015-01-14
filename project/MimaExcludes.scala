@@ -92,6 +92,9 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.TaskContext.addTaskKilledListener"
             ),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.TaskContext.addTaskKilledCallback"
+            ),
             ProblemFilters.exclude[IncompatibleTemplateDefProblem](
               "org.apache.spark.util.collection.SortDataFormat")
           ) ++ Seq(

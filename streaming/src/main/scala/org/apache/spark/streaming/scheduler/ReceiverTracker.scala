@@ -284,7 +284,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         val receiver = iterator.next()
         val supervisor = new ReceiverSupervisorImpl(
           receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
-        context.addTaskKilledListener(context => supervisor.stop("Receiver was killed.", None))
+        context.addTaskKilledCallback(context => supervisor.stop("Receiver was killed.", None))
         supervisor.start()
         supervisor.awaitTermination()
       }
