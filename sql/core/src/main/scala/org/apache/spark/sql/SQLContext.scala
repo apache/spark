@@ -24,7 +24,6 @@ import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.hadoop.conf.Configuration
-
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
 import org.apache.spark.rdd.RDD
@@ -32,14 +31,14 @@ import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.dsl.ExpressionConversions
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.optimizer.{Optimizer, DefaultOptimizer}
+import org.apache.spark.sql.catalyst.optimizer.{DefaultOptimizer, Optimizer}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
-import org.apache.spark.sql.catalyst.types.UserDefinedType
-import org.apache.spark.sql.execution.{SparkStrategies, _}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.json._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.sources.{DataSourceStrategy, BaseRelation, DDLParser, LogicalRelation}
+import org.apache.spark.sql.sources.{BaseRelation, DDLParser, DataSourceStrategy, LogicalRelation}
+import org.apache.spark.sql.types._
 
 /**
  * :: AlphaComponent ::

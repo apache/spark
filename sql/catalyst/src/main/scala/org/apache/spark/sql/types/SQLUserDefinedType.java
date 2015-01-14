@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.annotation;
+package org.apache.spark.sql.types;
 
 import java.lang.annotation.*;
 
 import org.apache.spark.annotation.DeveloperApi;
-import org.apache.spark.sql.catalyst.types.UserDefinedType;
 
 /**
  * ::DeveloperApi::

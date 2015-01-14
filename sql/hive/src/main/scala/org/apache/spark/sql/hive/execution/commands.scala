@@ -18,11 +18,11 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.types.StructType
 
 /**
  * :: DeveloperApi ::

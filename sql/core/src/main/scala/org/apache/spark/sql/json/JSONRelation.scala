@@ -18,8 +18,9 @@
 package org.apache.spark.sql.json
 
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.types.StructType
+
 
 private[sql] class DefaultSource extends RelationProvider with SchemaRelationProvider {
 

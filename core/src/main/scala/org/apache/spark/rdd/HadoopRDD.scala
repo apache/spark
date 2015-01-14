@@ -229,7 +229,7 @@ class HadoopRDD[K, V](
       var reader: RecordReader[K, V] = null
       val inputFormat = getInputFormat(jobConf)
       HadoopRDD.addLocalConfiguration(new SimpleDateFormat("yyyyMMddHHmm").format(createTime),
-        context.stageId, theSplit.index, context.attemptId.toInt, jobConf)
+        context.stageId, theSplit.index, context.attemptNumber, jobConf)
       reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
 
       // Register an on-task-completion callback to close the input stream.

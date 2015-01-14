@@ -60,6 +60,24 @@ object MimaExcludes {
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.streaming.flume.sink.SparkAvroCallbackHandler." +
                 "removeAndGetProcessor")
+          ) ++ Seq(
+            // SPARK-5123 (SparkSQL data type change) - alpha component only
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.ml.feature.HashingTF.outputDataType"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.ml.feature.Tokenizer.outputDataType"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.ml.feature.Tokenizer.validateInputType"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.ml.classification.LogisticRegressionModel.validateAndTransformSchema"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.ml.classification.LogisticRegression.validateAndTransformSchema")
+          ) ++ Seq(
+            // SPARK-4014
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.TaskContext.taskAttemptId"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.TaskContext.attemptNumber")
           )
 
         case v if v.startsWith("1.2") =>
