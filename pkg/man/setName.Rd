@@ -12,7 +12,7 @@ setName(rdd, name)
 \S4method{setName}{RDD,character}(rdd, name)
 }
 \arguments{
-\item{rdd}{The RDD whose name is returned}
+\item{rdd}{The RDD whose name is to be set.}
 
 \item{name}{The RDD name to be set.}
 }
