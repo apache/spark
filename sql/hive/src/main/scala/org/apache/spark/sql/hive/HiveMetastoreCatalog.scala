@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.sources.{LogicalRelation, ResolvedDataSource}
+import org.apache.spark.sql.sources.{DDLParser, LogicalRelation, ResolvedDataSource}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -558,6 +558,12 @@ private[hive] case class MetastoreRelation
 }
 
 object HiveMetastoreTypes {
+  protected val ddlParser = new DDLParser
+
+  def toDataType(metastoreType: String): DataType = synchronized {
+    ddlParser.parseType(metastoreType)
+  }
+
   def toMetastoreType(dt: DataType): String = dt match {
     case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"
     case StructType(fields) =>
