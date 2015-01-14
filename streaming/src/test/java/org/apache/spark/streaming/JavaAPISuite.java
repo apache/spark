@@ -30,6 +30,13 @@ import com.google.common.collect.Lists;
 import com.google.common.io.Files;
 import com.google.common.collect.Sets;
 
+import org.apache.hadoop.io.Writable;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat;
+
+import org.apache.spark.Accumulator;
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -1746,6 +1753,65 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @Test
   public void testTextFileStream() {
     JavaDStream<String> test = ssc.textFileStream("/tmp/foo");
+  }
+
+
+  @Test
+  public void testFileStream() throws Exception {
+    // Disable manual clock as FileInputDStream does not work with manual clock
+    System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock");
+    ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
+    ssc.checkpoint("checkpoint");
+    // Set up some sequence files for streaming to read in
+    List<Tuple2<Long, Integer>> test_input = new ArrayList<Tuple2<Long, Integer> >();
+    test_input.add(new Tuple2(1L, 123456));
+    test_input.add(new Tuple2(2L, 123456));
+    JavaPairRDD<Long, Integer> rdd = ssc.sc().parallelizePairs(test_input);
+    File tempDir = Files.createTempDir();
+    JavaPairRDD<LongWritable, IntWritable> saveable = rdd.mapToPair(
+      new PairFunction<Tuple2<Long, Integer>, LongWritable, IntWritable>() {
+        public Tuple2<LongWritable, IntWritable> call(Tuple2<Long, Integer> record) {
+          return new Tuple2(new LongWritable(record._1), new IntWritable(record._2));
+        }});
+    saveable.saveAsNewAPIHadoopFile(tempDir.getAbsolutePath()+"/1/",
+                                    LongWritable.class, IntWritable.class,
+                                    SequenceFileOutputFormat.class);
+    saveable.saveAsNewAPIHadoopFile(tempDir.getAbsolutePath()+"/2/",
+                                    LongWritable.class, IntWritable.class,
+                                    SequenceFileOutputFormat.class);
+
+    // Construct a file stream from the above saved data
+    JavaPairDStream<LongWritable, IntWritable> testRaw = ssc.fileStream(
+      tempDir.getAbsolutePath() + "/" , SequenceFileInputFormat.class, LongWritable.class,
+      IntWritable.class, false);
+    JavaPairDStream<Long, Integer> test = testRaw.mapToPair(
+      new PairFunction<Tuple2<LongWritable, IntWritable>, Long, Integer>() {
+        public Tuple2<Long, Integer> call(Tuple2<LongWritable, IntWritable> input) {
+          return new Tuple2(input._1().get(), input._2().get());
+        }
+      });
+    final Accumulator<Integer> elem = ssc.sc().intAccumulator(0);
+    final Accumulator<Integer> total = ssc.sc().intAccumulator(0);
+    final Accumulator<Integer> calls = ssc.sc().intAccumulator(0);
+    test.foreachRDD(new Function<JavaPairRDD<Long, Integer>, Void>() {
+        public Void call(JavaPairRDD<Long, Integer> rdd) {
+          rdd.foreach(new VoidFunction<Tuple2<Long, Integer>>() {
+              public void call(Tuple2<Long, Integer> e) {
+                if (e._1() == 1l) {
+                  elem.add(1);
+                }
+                total.add(1);
+              }
+            });
+          calls.add(1);
+          return null;
+        }
+      });
+    ssc.start();
+    Thread.sleep(5000);
+    Assert.assertTrue(calls.value() > 0);
+    Assert.assertEquals(new Long(4L), new Long(total.value()));
+    Assert.assertEquals(new Long(2L), new Long(elem.value()));
   }
 
   @Test

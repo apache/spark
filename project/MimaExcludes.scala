@@ -125,6 +125,12 @@ object MimaExcludes {
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.SparkContext.org$apache$spark$SparkContext$$createTaskScheduler")
           ) ++ Seq(
+            // Making Java Spark Streaming callable from Java
+              ProblemFilters.exclude[MissingMethodProblem](
+                "org.apache.spark.streaming.StreamingContext.fileStream"),
+              ProblemFilters.exclude[MissingMethodProblem](
+                "org.apache.spark.streaming.api.java.JavaStreamingContext.fileStream")
+          ) ++ Seq(
             // SPARK-1209
             ProblemFilters.exclude[MissingClassProblem](
               "org.apache.hadoop.mapreduce.SparkHadoopMapReduceUtil"),

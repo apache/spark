@@ -335,8 +335,8 @@ class StreamingContext private[streaming] (
     K: ClassTag,
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
-  ] (directory: String): InputDStream[(K, V)] = {
-    new FileInputDStream[K, V, F](this, directory)
+  ] (directory: String, newFilesOnly: Boolean = true): InputDStream[(K, V)] = {
+    new FileInputDStream[K, V, F](this, directory, newFilesOnly = newFilesOnly)
   }
 
   /**
