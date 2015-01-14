@@ -17,14 +17,17 @@
 
 package org.apache.spark.util
 
+import java.util.concurrent.CountDownLatch
+
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
 import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts
 import org.scalatest.FunSuite
 
-class EventLoopSuite extends FunSuite {
+class EventLoopSuite extends FunSuite with Timeouts {
 
   test("EventLoop") {
     val buffer = new mutable.ArrayBuffer[Int] with mutable.SynchronizedBuffer[Int]
@@ -154,5 +157,32 @@ class EventLoopSuite extends FunSuite {
       assert(threadNum * eventsFromEachThread === receivedEventsCount)
     }
     eventLoop.stop()
+  }
+
+  test("EventLoop: onReceive swallows InterruptException") {
+    val onReceiveLatch = new CountDownLatch(1)
+    val eventLoop = new EventLoop[Int]("test") {
+
+      override def onReceive(event: Int): Unit = {
+        onReceiveLatch.countDown()
+        try {
+          Thread.sleep(5000)
+        } catch {
+          case ie: InterruptedException => // swallow
+        }
+      }
+
+      override def onError(e: Throwable): Unit = {
+      }
+
+    }
+    eventLoop.start()
+    eventLoop.post(1)
+    failAfter(5 seconds) {
+      // Wait until we enter `onReceive`
+      onReceiveLatch.await()
+      eventLoop.stop()
+    }
+    assert(false === eventLoop.isActive)
   }
 }
