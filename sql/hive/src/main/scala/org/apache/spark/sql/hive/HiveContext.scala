@@ -37,10 +37,10 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperators, OverrideCatalog, OverrideFunctionRegistry}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.types.DecimalType
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand, QueryExecutionException}
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTableCommand}
 import org.apache.spark.sql.sources.DataSourceStrategy
+import org.apache.spark.sql.types._
 
 /**
  * DEPRECATED: Use HiveContext instead.
@@ -71,8 +71,9 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
-  // Change the default SQL dialect to HiveQL
-  override private[spark] def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+  private[sql] override lazy val conf: SQLConf = new SQLConf {
+    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+  }
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
@@ -87,12 +88,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   override def sql(sqlText: String): SchemaRDD = {
     // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
-    if (dialect == "sql") {
+    if (conf.dialect == "sql") {
       super.sql(sqlText)
-    } else if (dialect == "hiveql") {
+    } else if (conf.dialect == "hiveql") {
       new SchemaRDD(this, ddlParser(sqlText).getOrElse(HiveQl.parseSql(sqlText)))
     }  else {
-      sys.error(s"Unsupported SQL dialect: $dialect.  Try 'sql' or 'hiveql'")
+      sys.error(s"Unsupported SQL dialect: ${conf.dialect}.  Try 'sql' or 'hiveql'")
     }
   }
 
@@ -113,6 +114,16 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    */
   def createTable[A <: Product : TypeTag](tableName: String, allowExisting: Boolean = true) {
     catalog.createTable("default", tableName, ScalaReflection.attributesFor[A], allowExisting)
+  }
+
+  def refreshTable(tableName: String): Unit = {
+    // TODO: Database support...
+    catalog.refreshTable("default", tableName)
+  }
+
+  protected[hive] def invalidateTable(tableName: String): Unit = {
+    // TODO: Database support...
+    catalog.invalidateTable("default", tableName)
   }
 
   /**
@@ -340,6 +351,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     override def strategies: Seq[Strategy] = extraStrategies ++ Seq(
       DataSourceStrategy,
       HiveCommandStrategy(self),
+      HiveDDLStrategy,
+      DDLStrategy,
       TakeOrdered,
       ParquetOperations,
       InMemoryScans,
