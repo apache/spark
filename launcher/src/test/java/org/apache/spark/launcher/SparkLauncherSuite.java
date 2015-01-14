@@ -19,6 +19,7 @@ package org.apache.spark.launcher;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.List;
@@ -59,29 +60,10 @@ public class SparkLauncherSuite {
       .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
       .setMainClass(SparkLauncherTestApp.class.getName())
       .addAppArgs("proc");
-
     printArgs(launcher.buildLauncherCommand());
-
     final Process app = launcher.launch();
-    Thread stderr = new Thread(new Runnable() {
-      @Override
-      public void run() {
-        try {
-          BufferedReader in = new BufferedReader(
-              new InputStreamReader(app.getErrorStream(), "UTF-8"));
-          String line;
-          while ((line = in.readLine()) != null) {
-            LOG.warn(line);
-          }
-        } catch (Exception e) {
-          e.printStackTrace();
-        }
-      }
-    });
-    stderr.setDaemon(true);
-    stderr.setName("stderr");
-    stderr.start();
-
+    new Redirector("stdout", app.getInputStream()).start();
+    new Redirector("stderr", app.getErrorStream()).start();
     assertEquals(0, app.waitFor());
   }
 
@@ -267,13 +249,40 @@ public class SparkLauncherSuite {
 
   public static class SparkLauncherTestApp {
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
       if (args[0].equals("proc")) {
         assertEquals("bar", System.getProperty("foo"));
+      } else if (args[0].equals("arg")) {
+        assertEquals("newline=", args[1]);
       } else {
         assertEquals("thread", args[0]);
       }
       assertEquals("local", System.getProperty(SparkLauncher.SPARK_MASTER));
+    }
+
+  }
+
+  private static class Redirector extends Thread {
+
+    private final InputStream in;
+
+    Redirector(String name, InputStream in) {
+      this.in = in;
+      setName(name);
+      setDaemon(true);
+    }
+
+    @Override
+    public void run() {
+      try {
+        BufferedReader reader = new BufferedReader(new InputStreamReader(in, "UTF-8"));
+        String line;
+        while ((line = reader.readLine()) != null) {
+          LOG.warn(line);
+        }
+      } catch (Exception e) {
+        LOG.error("Error reading process output.", e);
+      }
     }
 
   }
