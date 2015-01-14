@@ -24,9 +24,9 @@ import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.decimal.Decimal
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -43,7 +43,7 @@ import scala.collection.JavaConversions._
  *     long / scala.Long
  *     short / scala.Short
  *     byte / scala.Byte
- *     org.apache.spark.sql.catalyst.types.decimal.Decimal
+ *     org.apache.spark.sql.types.decimal.Decimal
  *     Array[Byte]
  *     java.sql.Date
  *     java.sql.Timestamp
@@ -504,7 +504,8 @@ private[hive] trait HiveInspectors {
     case DecimalType() => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
     case StructType(fields) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
-        fields.map(f => f.name), fields.map(f => toInspector(f.dataType)))
+        java.util.Arrays.asList(fields.map(f => f.name) :_*),
+        java.util.Arrays.asList(fields.map(f => toInspector(f.dataType)) :_*))
   }
 
   /**
@@ -618,7 +619,9 @@ private[hive] trait HiveInspectors {
       case ArrayType(elemType, _) =>
         getListTypeInfo(elemType.toTypeInfo)
       case StructType(fields) =>
-        getStructTypeInfo(fields.map(_.name), fields.map(_.dataType.toTypeInfo))
+        getStructTypeInfo(
+          java.util.Arrays.asList(fields.map(_.name) :_*),
+          java.util.Arrays.asList(fields.map(_.dataType.toTypeInfo) :_*))
       case MapType(keyType, valueType, _) =>
         getMapTypeInfo(keyType.toTypeInfo, valueType.toTypeInfo)
       case BinaryType => binaryTypeInfo

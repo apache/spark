@@ -15,7 +15,7 @@
 * limitations under the License.
 */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.types
 
 import org.scalatest.FunSuite
 
