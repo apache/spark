@@ -379,7 +379,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     }
   }
 
-  private def waitForSparkDriver(securityMgr: SecurityManager): ActorRef = {
+  private def waitForSparkDriver(securityMgr: SecurityManager): Unit = {
     logInfo("Waiting for Spark driver to be reachable.")
     var driverUp = false
     val hostport = args.userArgs(0)
