@@ -40,10 +40,18 @@ case class ScriptTransformation(
     input: Seq[Expression],
     script: String,
     output: Seq[Attribute],
-    child: SparkPlan)(@transient sc: HiveContext, schemaLess: Boolean)
+    child: SparkPlan,
+    inputFormat: Seq[(String, String)],
+    outputFormat: Seq[(String, String)])(@transient sc: HiveContext, schemaLess: Boolean)
   extends UnaryNode {
 
   override def otherCopyArgs = sc :: Nil
+
+  val defaultFormat = Map(("TOK_TABLEROWFORMATFIELD", "\t"),
+                          ("TOK_TABLEROWFORMATLINES", "\n"))
+
+  val inputFormatMap = inputFormat.toMap.withDefault((k) => defaultFormat(k))
+  val outputFormatMap = outputFormat.toMap.withDefault((k) => defaultFormat(k))
 
   def execute() = {
     child.execute().mapPartitions { iter =>
@@ -54,31 +62,42 @@ case class ScriptTransformation(
       val outputStream = proc.getOutputStream
       val reader = new BufferedReader(new InputStreamReader(inputStream))
 
-      // TODO: This should be exposed as an iterator instead of reading in all the data at once.
-      val outputLines = collection.mutable.ArrayBuffer[Row]()
-      val readerThread = new Thread("Transform OutputReader") {
-        override def run() {
-          var curLine = reader.readLine()
-          while (curLine != null) {
-            // TODO: Use SerDe
-            if (!schemaLess) {
-              outputLines += new GenericRow(curLine.split("\t").asInstanceOf[Array[Any]])
-            } else {
-              outputLines += new GenericRow(curLine.split("\t", 2).asInstanceOf[Array[Any]])
-            }
+      val iterator: Iterator[Row] = new Iterator[Row] {
+        var curLine: String = null
+        override def hasNext: Boolean = {
+          if (curLine == null) {
             curLine = reader.readLine()
+            curLine != null
+          } else {
+            true
+          }
+        }
+        override def next(): Row = {
+          if (!hasNext) {
+            throw new NoSuchElementException
+          }
+          val prevLine = curLine
+          curLine = reader.readLine()
+          // TODO: Use SerDe
+          if (!schemaLess) {
+            new GenericRow(
+              prevLine.split(outputFormatMap("TOK_TABLEROWFORMATFIELD")).asInstanceOf[Array[Any]])
+          } else {
+            new GenericRow(
+              prevLine.split(outputFormatMap("TOK_TABLEROWFORMATFIELD"), 2).asInstanceOf[Array[Any]])
           }
         }
       }
-      readerThread.start()
+
       val outputProjection = new InterpretedProjection(input, child.output)
       iter
         .map(outputProjection)
         // TODO: Use SerDe
-        .map(_.mkString("", "\t", "\n").getBytes("utf-8")).foreach(outputStream.write)
+        .map(_.mkString("", inputFormatMap("TOK_TABLEROWFORMATFIELD"),
+          inputFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8"))
+        .foreach(outputStream.write)
       outputStream.close()
-      readerThread.join()
-      outputLines.toIterator
+      iterator
     }
   }
 }

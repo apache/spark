@@ -627,11 +627,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
           case Token("TOK_SELEXPR",
                  Token("TOK_TRANSFORM",
                    Token("TOK_EXPLIST", inputExprs) ::
-                   Token("TOK_SERDE", Nil) ::
+                   Token("TOK_SERDE", inputSerdeClause) ::
                    Token("TOK_RECORDWRITER", writerClause) ::
                    // TODO: Need to support other types of (in/out)put
                    Token(script, Nil) ::
-                   Token("TOK_SERDE", serdeClause) ::
+                   Token("TOK_SERDE", outputSerdeClause) ::
                    Token("TOK_RECORDREADER", readerClause) ::
                    outputClause) :: Nil) =>
 
@@ -644,6 +644,21 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               case Nil =>
                 Nil
             }
+            
+            val inputFormat = inputSerdeClause match {
+              case Token("TOK_SERDEPROPS", props) :: Nil =>
+                props.map { case Token(name, Token(value, Nil) :: Nil) => (name, value) }
+              case Nil =>
+                Nil
+            }
+            
+            val outputFormat = outputSerdeClause match {
+              case Token("TOK_SERDEPROPS", props) :: Nil =>
+                props.map { case Token(name, Token(value, Nil) :: Nil) => (name, value) }
+              case Nil =>
+                Nil
+            }
+
             val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
 
             Some(
@@ -651,7 +666,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 inputExprs.map(nodeToExpr),
                 unescapedScript,
                 output,
-                withWhere))
+                withWhere, inputFormat, outputFormat))
           case _ => None
         }
 

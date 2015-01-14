@@ -62,7 +62,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("SHOW TABLES")
     }
   }
-  
+
   createQueryTest("! operator",
     """
       |SELECT a FROM (
@@ -336,6 +336,17 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     val expected2 = sql("SELECT TRANSFORM (*) USING 'cat' AS (tKey, tValue) FROM src").collect().head
     val res2 = sql("SELECT TRANSFORM (*) USING 'cat' FROM src").collect().head
+
+    assert(expected2(0) === res2(0) && expected2(1) === res2(1))
+  }
+
+  test("transform with custom field delimiter") {
+    val expected = sql("SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\002' USING 'cat' AS (tKey) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\002' FROM src").collect().head
+    val res = sql("SELECT TRANSFORM (key) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\002' USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY '\002' FROM src").collect().head
+    assert(expected(0) === res(0))
+
+    val expected2 = sql("SELECT TRANSFORM (*) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\002' USING 'cat' AS (tKey, tValue) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\002' FROM src").collect().head
+    val res2 = sql("SELECT TRANSFORM (*) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\002' USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY '\002' FROM src").collect().head
 
     assert(expected2(0) === res2(0) && expected2(1) === res2(1))
   }

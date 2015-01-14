@@ -30,4 +30,6 @@ case class ScriptTransformation(
     input: Seq[Expression],
     script: String,
     output: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode
+    child: LogicalPlan,
+    inputFormat: Seq[(String, String)],
+    outputFormat: Seq[(String, String)]) extends UnaryNode
