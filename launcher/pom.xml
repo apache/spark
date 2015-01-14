@@ -79,23 +79,5 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-    <plugins>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-jar-plugin</artifactId>
-        <configuration>
-          <outputDirectory>target/scala-${scala.binary.version}</outputDirectory>
-        </configuration>
-      </plugin>
-      <plugin>
-        <groupId>org.scalatest</groupId>
-        <artifactId>scalatest-maven-plugin</artifactId>
-        <configuration>
-          <systemProperties>
-            <spark.test.home>${project.basedir}/..</spark.test.home>
-          </systemProperties>
-        </configuration>
-      </plugin>
-    </plugins>
   </build>
 </project>

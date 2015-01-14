@@ -29,31 +29,30 @@ if "x%1"=="x" (
   exit /b 1
 )
 
-set LAUNCHER_JAR=0
-if exist "%SPARK_HOME%\RELEASE" goto find_release_launcher
+set LAUNCHER_CP=0
+if exist %SPARK_HOME%\RELEASE goto find_release_launcher
 
-rem Look for the Spark launcher in both Scala build directories. The launcher doesn't use
-rem Scala so it doesn't really matter which one is picked up.
-for %%d in (%SPARK_HOME%\launcher\target\scala-2.10\spark-launcher*.jar) do (
-  set LAUNCHER_JAR=%%d
-  set SPARK_SCALA_VERSION=2.10
+rem Look for the Spark launcher in both Scala build directories. The launcher doesn't use Scala so
+rem it doesn't really matter which one is picked up. Add the compiled classes directly to the
+rem classpath instead of looking for a jar file, since it's very common for people using sbt to use
+rem the "assembly" target instead of "package".
+set LAUNCHER_CLASSES=%SPARK_HOME%\launcher\target\scala-2.10\classes
+if exist %LAUNCHER_CLASSES% (
+  set LAUNCHER_CP=%LAUNCHER_CLASSES%
 )
-for %%d in (%SPARK_HOME%\launcher\target\scala-2.11\spark-launcher*.jar) do (
-  set LAUNCHER_JAR=%%d
-  set SPARK_SCALA_VERSION=2.11
-)
-if not "x%SPARK_PREPEND_CLASSES"=="x" (
-  set LAUNCHER_JAR=%SPARK_HOME%\launcher\target\scala-%SPARK_SCALA_VERSION%\classes;%LAUNCHER_JAR%
+set LAUNCHER_CLASSES=%SPARK_HOME%\launcher\target\scala-2.11\classes
+if exist %LAUNCHER_CLASSES% (
+  set LAUNCHER_CP=%LAUNCHER_CLASSES%
 )
 goto check_launcher
 
 :find_release_launcher
 for %%d in (%SPARK_HOME%\lib\spark-launcher*.jar) do (
-  set LAUNCHER_JAR=%%d
+  set LAUNCHER_CP=%%d
 )
 
 :check_launcher
-if "%LAUNCHER_JAR%"=="0" (
+if "%LAUNCHER_CP%"=="0" (
   echo Failed to find Spark launcher JAR.
   echo You need to build Spark before running this program.
   exit /b 1
@@ -63,7 +62,7 @@ rem Figure out where java is.
 set RUNNER=java
 if not "x%JAVA_HOME%"=="x" set RUNNER=%JAVA_HOME%\bin\java
 
-for /f "tokens=*" %%i in ('cmd /C ""%RUNNER%" -cp %LAUNCHER_JAR% org.apache.spark.launcher.Main %*"') do (
+for /f "tokens=*" %%i in ('cmd /C ""%RUNNER%" -cp %LAUNCHER_CP% org.apache.spark.launcher.Main %*"') do (
   set SPARK_CMD=%%i
 )
 %SPARK_CMD%

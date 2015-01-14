@@ -40,32 +40,37 @@ else
   fi
 fi
 
+# Look for the launcher. In non-release mode, add the compiled classes directly to the classpath
+# instead of looking for a jar file, since it's very common for people using sbt to use the
+# "assembly" target instead of "package".
 SPARK_LAUNCHER_CP=
 if [ -f $SPARK_HOME/RELEASE ]; then
   LAUNCHER_DIR="$SPARK_HOME/lib"
+  num_jars="$(ls -1 "$LAUNCHER_DIR" | grep "^spark-launcher.*\.jar$" | wc -l)"
+  if [ "$num_jars" -eq "0" -a -z "$SPARK_LAUNCHER_CP" ]; then
+    echo "Failed to find Spark launcher in $LAUNCHER_DIR." 1>&2
+    echo "You need to build Spark before running this program." 1>&2
+    exit 1
+  fi
+
+  LAUNCHER_JARS="$(ls -1 "$LAUNCHER_DIR" | grep "^spark-launcher.*\.jar$" || true)"
+  if [ "$num_jars" -gt "1" ]; then
+    echo "Found multiple Spark launcher jars in $LAUNCHER_DIR:" 1>&2
+    echo "$LAUNCHER_JARS" 1>&2
+    echo "Please remove all but one jar." 1>&2
+    exit 1
+  fi
+
+  SPARK_LAUNCHER_CP="${LAUNCHER_DIR}/${LAUNCHER_JARS}"
 else
   LAUNCHER_DIR="$SPARK_HOME/launcher/target/scala-$SPARK_SCALA_VERSION"
-  if [ -n "$SPARK_PREPEND_CLASSES" ]; then
-    SPARK_LAUNCHER_CP="$LAUNCHER_DIR/classes:"
+  if [ ! -d "$LAUNCHER_DIR/classes" ]; then
+    echo "Failed to find Spark launcher classes in $LAUNCHER_DIR." 1>&2
+    echo "You need to build Spark before running this program." 1>&2
+    exit 1
   fi
+  SPARK_LAUNCHER_CP="$LAUNCHER_DIR/classes"
 fi
-
-num_jars="$(ls -1 "$LAUNCHER_DIR" | grep "^spark-launcher.*\.jar$" | wc -l)"
-if [ "$num_jars" -eq "0" ]; then
-  echo "Failed to find Spark launcher in $LAUNCHER_DIR." 1>&2
-  echo "You need to build Spark before running this program." 1>&2
-  exit 1
-fi
-
-LAUNCHER_JARS="$(ls -1 "$LAUNCHER_DIR" | grep "^spark-launcher.*\.jar$")"
-if [ "$num_jars" -gt "1" ]; then
-  echo "Found multiple Spark launcher jars in $LAUNCHER_DIR:" 1>&2
-  echo "$LAUNCHER_JARS" 1>&2
-  echo "Please remove all but one jar." 1>&2
-  exit 1
-fi
-
-SPARK_LAUNCHER_CP="${SPARK_LAUNCHER_CP}${LAUNCHER_DIR}/${LAUNCHER_JARS}"
 
 # The launcher library will print arguments separated by a NULL character. Read that in a while
 # loop, populating an array that will be used to exec the final command.
