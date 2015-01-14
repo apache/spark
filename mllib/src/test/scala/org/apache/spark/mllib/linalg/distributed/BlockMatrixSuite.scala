@@ -41,26 +41,26 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
     val entries: Seq[SubMatrix] = Seq(
       new SubMatrix((0, 0), new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 2.0))),
       new SubMatrix((0, 1), new DenseMatrix(2, 2, Array(0.0, 1.0, 0.0, 0.0))),
-      new SubMatrix((1, 0), new DenseMatrix(2, 2, Array(3.0, 0.0, 1.5, 0.0))),
-      new SubMatrix((1, 1), new DenseMatrix(2, 2, Array(1.0, 4.0, 0.0, 1.0))),
-      new SubMatrix((2, 0), new DenseMatrix(1, 2, Array(1.0, 0.0))),
+      new SubMatrix((1, 0), new DenseMatrix(2, 2, Array(3.0, 0.0, 1.0, 1.0))),
+      new SubMatrix((1, 1), new DenseMatrix(2, 2, Array(1.0, 2.0, 0.0, 1.0))),
       new SubMatrix((2, 1), new DenseMatrix(1, 2, Array(1.0, 5.0))))
 
     gridBasedMat = new BlockMatrix(numRowBlocks, numColBlocks, sc.parallelize(entries, 2))
   }
 
-  test("size") {
+  test("size and frobenius norm") {
     assert(gridBasedMat.numRows() === m)
     assert(gridBasedMat.numCols() === n)
+    assert(gridBasedMat.normFro() === 7.0)
   }
 
   test("toBreeze and toLocalMatrix") {
     val expected = BDM(
       (1.0, 0.0, 0.0, 0.0),
       (0.0, 2.0, 1.0, 0.0),
-      (3.0, 1.5, 1.0, 0.0),
-      (0.0, 0.0, 4.0, 1.0),
-      (1.0, 0.0, 1.0, 5.0))
+      (3.0, 1.0, 1.0, 0.0),
+      (0.0, 1.0, 2.0, 1.0),
+      (0.0, 0.0, 1.0, 5.0))
 
     val dense = Matrices.fromBreeze(expected).asInstanceOf[DenseMatrix]
     assert(gridBasedMat.toBreeze() === expected)
