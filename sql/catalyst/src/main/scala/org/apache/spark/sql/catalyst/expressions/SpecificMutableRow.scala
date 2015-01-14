@@ -238,73 +238,59 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
   override def getString(ordinal: Int) = apply(ordinal).asInstanceOf[String]
 
   override def setInt(ordinal: Int, value: Int): Unit = {
-    val currentValue = values(ordinal).asInstanceOf[MutableInt]
-    currentValue.isNull = false
-    currentValue.value = value
+    values(ordinal).update(value)
   }
 
   override def getInt(i: Int): Int = {
-    values(i).asInstanceOf[MutableInt].value
+    values(i).boxed.asInstanceOf[Int]
   }
 
   override def setFloat(ordinal: Int, value: Float): Unit = {
-    val currentValue = values(ordinal).asInstanceOf[MutableFloat]
-    currentValue.isNull = false
-    currentValue.value = value
+    values(ordinal).update(value)
   }
 
   override def getFloat(i: Int): Float = {
-    values(i).asInstanceOf[MutableFloat].value
+    values(i).boxed.asInstanceOf[Float]
   }
 
   override def setBoolean(ordinal: Int, value: Boolean): Unit = {
-    val currentValue = values(ordinal).asInstanceOf[MutableBoolean]
-    currentValue.isNull = false
-    currentValue.value = value
+    values(ordinal).update(value)
   }
 
   override def getBoolean(i: Int): Boolean = {
-    values(i).asInstanceOf[MutableBoolean].value
+    values(i).boxed.asInstanceOf[Boolean]
   }
 
   override def setDouble(ordinal: Int, value: Double): Unit = {
-    val currentValue = values(ordinal).asInstanceOf[MutableDouble]
-    currentValue.isNull = false
-    currentValue.value = value
+    values(ordinal).update(value)
   }
 
   override def getDouble(i: Int): Double = {
-    values(i).asInstanceOf[MutableDouble].value
+    values(i).boxed.asInstanceOf[Double]
   }
 
   override def setShort(ordinal: Int, value: Short): Unit = {
-    val currentValue = values(ordinal).asInstanceOf[MutableShort]
-    currentValue.isNull = false
-    currentValue.value = value
+    values(ordinal).update(value)
   }
 
   override def getShort(i: Int): Short = {
-    values(i).asInstanceOf[MutableShort].value
+    values(i).boxed.asInstanceOf[Short]
   }
 
   override def setLong(ordinal: Int, value: Long): Unit = {
-    val currentValue = values(ordinal).asInstanceOf[MutableLong]
-    currentValue.isNull = false
-    currentValue.value = value
+    values(ordinal).update(value)
   }
 
   override def getLong(i: Int): Long = {
-    values(i).asInstanceOf[MutableLong].value
+    values(i).boxed.asInstanceOf[Long]
   }
 
   override def setByte(ordinal: Int, value: Byte): Unit = {
-    val currentValue = values(ordinal).asInstanceOf[MutableByte]
-    currentValue.isNull = false
-    currentValue.value = value
+    values(ordinal).update(value)
   }
 
   override def getByte(i: Int): Byte = {
-    values(i).asInstanceOf[MutableByte].value
+    values(i).boxed.asInstanceOf[Byte]
   }
 
   override def getAs[T](i: Int): T = {
