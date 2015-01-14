@@ -96,4 +96,4 @@ fi
 
 export PYSPARK_DRIVER_PYTHON
 export PYSPARK_DRIVER_PYTHON_OPTS
-exec "$SPARK_HOME"/bin/spark-class pyspark "$@"
+exec "$SPARK_HOME"/bin/spark-submit pyspark-shell-main "$@"

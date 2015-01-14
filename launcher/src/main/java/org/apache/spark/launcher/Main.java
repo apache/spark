@@ -51,8 +51,6 @@ public class Main extends LauncherCommon {
     try {
       if (className.equals("org.apache.spark.deploy.SparkSubmit")) {
         launcher = new SparkSubmitCliLauncher(args);
-      } else if (className.equals("pyspark")) {
-        launcher = new PySparkLauncher(args);
       } else {
         launcher = new SparkClassLauncher(className, args);
       }

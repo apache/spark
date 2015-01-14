@@ -58,6 +58,37 @@ public class SparkSubmitCliLauncherSuite {
     assertEquals("bar", findArgValue(cmd, "--deploy-mode"));
   }
 
+  @Test
+  public void testPySparkLauncher() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(
+      SparkSubmitCliLauncher.PYSPARK_SHELL,
+      "--master=foo",
+      "--deploy-mode=bar");
+
+    List<String> cmd = new SparkSubmitCliLauncher(sparkSubmitArgs)
+      .setSparkHome(System.getProperty("spark.test.home"))
+      .buildLauncherCommand();
+    assertEquals("python", cmd.get(cmd.size() - 1));
+    assertTrue(cmd.contains("PYSPARK_SUBMIT_ARGS=\"--master\" \"foo\" \"--deploy-mode\" \"bar\""));
+  }
+
+  @Test
+  public void testPySparkFallback() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(
+      "--master=foo",
+      "--deploy-mode=bar",
+      "script.py",
+      "arg1");
+
+    List<String> cmd = new SparkSubmitCliLauncher(sparkSubmitArgs)
+      .setSparkHome(System.getProperty("spark.test.home"))
+      .buildLauncherCommand();
+    assertEquals("foo", findArgValue(cmd, "--master"));
+    assertEquals("bar", findArgValue(cmd, "--deploy-mode"));
+    assertEquals("script.py", cmd.get(cmd.size() - 2));
+    assertEquals("arg1", cmd.get(cmd.size() - 1));
+  }
+
   private String findArgValue(List<String> cmd, String name) {
     for (int i = 0; i < cmd.size(); i++) {
       if (cmd.get(i).equals(name)) {

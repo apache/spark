@@ -17,12 +17,14 @@
 
 package org.apache.spark.launcher;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -36,6 +38,15 @@ import java.util.regex.Pattern;
  * This class has also some special features to aid PySparkLauncher.
  */
 public class SparkSubmitCliLauncher extends SparkLauncher {
+
+  /**
+   * Name of the app resource used to identify the PySpark shell. The command line parser expects
+   * the resource name to be the very first argument to spark-submit in this case.
+   *
+   * NOTE: this cannot be "pyspark-shell" since that identifies the PySpark shell to SparkSubmit
+   * (see java_gateway.py), and can cause this code to enter into an infinite loop.
+   */
+  static final String PYSPARK_SHELL = "pyspark-shell-main";
 
   /**
    * This map must match the class names for available special classes, since this modifies the way
@@ -58,33 +69,89 @@ public class SparkSubmitCliLauncher extends SparkLauncher {
 
   SparkSubmitCliLauncher(boolean hasMixedArguments, List<String> args) {
     this.driverArgs = new ArrayList<String>();
-    this.hasMixedArguments = hasMixedArguments;
-    new OptionParser().parse(args);
+
+    List<String> submitArgs = args;
+    if (args.size() > 0 && args.get(0).equals(PYSPARK_SHELL)) {
+      this.hasMixedArguments = true;
+      setAppResource(PYSPARK_SHELL);
+      submitArgs = args.subList(1, args.size());
+    } else {
+      this.hasMixedArguments = hasMixedArguments;
+    }
+
+    new OptionParser().parse(submitArgs);
   }
 
-  // Visible for PySparkLauncher.
-  String getAppResource() {
-    return appResource;
+  @Override
+  protected List<String> buildLauncherCommand() throws IOException {
+    if (PYSPARK_SHELL.equals(appResource)) {
+      return buildPySparkShellCommand();
+    } else {
+      return super.buildLauncherCommand();
+    }
   }
 
-  // Visible for PySparkLauncher.
-  List<String> getAppArgs() {
-    return appArgs;
+  private List<String> buildPySparkShellCommand() throws IOException {
+    // For backwards compatibility, if a script is specified in
+    // the pyspark command line, then run it using spark-submit.
+    if (!appArgs.isEmpty() && appArgs.get(0).endsWith(".py")) {
+      System.err.println(
+        "WARNING: Running python applications through 'pyspark' is deprecated as of Spark 1.0.\n" +
+        "Use ./bin/spark-submit <python file>");
+      setAppResource(appArgs.get(0));
+      appArgs.remove(0);
+      return buildLauncherCommand();
+    }
+
+    // When launching the pyspark shell, the spark-submit arguments should be stored in the
+    // PYSPARK_SUBMIT_ARGS env variable. The executable is the PYSPARK_DRIVER_PYTHON env variable
+    // set by the pyspark script, followed by PYSPARK_DRIVER_PYTHON_OPTS.
+    checkArgument(appArgs.isEmpty(), "pyspark does not support any application options.");
+
+    Properties props = loadPropertiesFile();
+    String libPath = find(DRIVER_EXTRA_LIBRARY_PATH, conf, props);
+
+    StringBuilder submitArgs = new StringBuilder();
+    for (String arg : sparkArgs) {
+      if (submitArgs.length() > 0) {
+        submitArgs.append(" ");
+      }
+      submitArgs.append(quote(arg));
+    }
+    for (String arg : driverArgs) {
+      if (submitArgs.length() > 0) {
+        submitArgs.append(" ");
+      }
+      submitArgs.append(quote(arg));
+    }
+
+    Map<String, String> env = new HashMap<String, String>();
+    env.put("PYSPARK_SUBMIT_ARGS", submitArgs.toString());
+
+    List<String> pyargs = new ArrayList<String>();
+    pyargs.add(firstNonEmpty(System.getenv("PYSPARK_DRIVER_PYTHON"), "python"));
+    String pyOpts = System.getenv("PYSPARK_DRIVER_PYTHON_OPTS");
+    if (!isEmpty(pyOpts)) {
+      pyargs.addAll(parseOptionString(pyOpts));
+    }
+
+    return prepareForOs(pyargs, libPath, env);
   }
 
-  // Visible for PySparkLauncher.
-  List<String> getSparkArgs() {
-    return sparkArgs;
-  }
-
-  // Visible for PySparkLauncher.
-  List<String> getDriverArgs() {
-    return driverArgs;
-  }
-
-  private String getArgValue(Iterator<String> it, String name) {
-    checkArgument(it.hasNext(), "Missing argument for '%s'.", name);
-    return it.next();
+  /**
+   * Quotes a string so that it can be used in a command string and be parsed back into a single
+   * argument by python's "shlex.split()" function.
+   */
+  private String quote(String s) {
+    StringBuilder quoted = new StringBuilder().append('"');
+    for (int i = 0; i < s.length(); i++) {
+      int cp = s.codePointAt(i);
+      if (cp == '"' || cp == '\\') {
+        quoted.appendCodePoint('\\');
+      }
+      quoted.appendCodePoint(cp);
+    }
+    return quoted.append('"').toString();
   }
 
   private class OptionParser extends SparkSubmitOptionParser {
@@ -129,6 +196,9 @@ public class SparkSubmitCliLauncher extends SparkLauncher {
           hasMixedArguments = true;
           setAppResource(specialClasses.get(value));
         }
+      } else if (opt.equals(PYSPARK_SHELL)) {
+        hasMixedArguments = true;
+        setAppResource(opt);
       } else {
         addSparkArgs(opt, value);
       }
