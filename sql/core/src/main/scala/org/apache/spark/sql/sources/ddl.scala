@@ -224,7 +224,13 @@ private[sql] case class CreateTableUsing(
     userSpecifiedSchema: Option[StructType],
     provider: String,
     temporary: Boolean,
-    options: Map[String, String]) extends Command
+    options: Map[String, String]) extends RunnableCommand {
+
+  def run(sqlContext: SQLContext) = {
+    sqlContext.catalog.createDataSourceTable(tableName, userSpecifiedSchema, provider, options)
+    Seq.empty
+  }
+}
 
 private [sql] case class CreateTempTableUsing(
     tableName: String,
