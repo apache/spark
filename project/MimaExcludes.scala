@@ -72,6 +72,12 @@ object MimaExcludes {
               "org.apache.spark.ml.classification.LogisticRegressionModel.validateAndTransformSchema"),
             ProblemFilters.exclude[IncompatibleMethTypeProblem](
               "org.apache.spark.ml.classification.LogisticRegression.validateAndTransformSchema")
+          ) ++ Seq(
+            // SPARK-4014
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.TaskContext.taskAttemptId"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.TaskContext.attemptNumber")
           )
 
         case v if v.startsWith("1.2") =>
