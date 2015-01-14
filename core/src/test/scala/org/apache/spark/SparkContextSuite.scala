@@ -17,10 +17,11 @@
 
 package org.apache.spark
 
+import java.io.File
+
 import org.scalatest.FunSuite
 
 import org.apache.hadoop.io.BytesWritable
-import java.io.File
 
 class SparkContextSuite extends FunSuite with LocalSparkContext {
 

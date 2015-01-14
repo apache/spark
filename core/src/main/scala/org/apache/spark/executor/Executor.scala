@@ -171,7 +171,7 @@ private[spark] class Executor(
       startGCTime = gcTime
 
       try {
-        val (taskFiles, taskJars, taskDirs, taskBytes) =
+        val (taskFiles, taskJars, taskBytes) =
           Task.deserializeWithDependencies(serializedTask)
         updateDependencies(taskFiles, taskJars)
         task = ser.deserialize[Task[Any]](taskBytes, Thread.currentThread.getContextClassLoader)

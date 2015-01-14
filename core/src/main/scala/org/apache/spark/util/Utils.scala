@@ -481,7 +481,7 @@ private[spark] object Utils extends Logging {
       removeSourceFile: Boolean = false): Unit = {
 
     if (destFile.exists) {
-      if (!Files.equal(sourceFile, destFile)) {
+      if (!filesEqualRecursive(sourceFile, destFile)) {
         if (fileOverwrite) {
           logInfo(
             s"File $destFile exists and does not match contents of $url, replacing it with $url"
@@ -516,7 +516,34 @@ private[spark] object Utils extends Logging {
       Files.move(sourceFile, destFile)
     } else {
       logInfo(s"Copying ${sourceFile.getAbsolutePath} to ${destFile.getAbsolutePath}")
-      Files.copy(sourceFile, destFile)
+      copyRecursive(sourceFile, destFile)
+    }
+  }
+
+  private def filesEqualRecursive(file1: File, file2: File): Boolean = {
+    if (file1.isDirectory && file2.isDirectory) {
+      val subfiles1 = file1.listFiles()
+      val subfiles2 = file2.listFiles()
+      if (subfiles1.size != subfiles2.size) {
+        return false
+      }
+      subfiles1.sortBy(_.getName).zip(subfiles2.sortBy(_.getName)).dropWhile {
+        case (f1, f2) => filesEqualRecursive(f1, f2)
+      }.isEmpty
+    } else if (file1.isFile && file2.isFile) {
+      Files.equal(file1, file2)
+    } else {
+      false
+    }
+  }
+
+  private def copyRecursive(source: File, dest: File): Unit = {
+    if (source.isDirectory) {
+      dest.mkdir()
+      val subfiles = source.listFiles()
+      subfiles.foreach(f => copyRecursive(f, new File(dest, f.getName)))
+    } else {
+      Files.copy(source, dest)
     }
   }
 
