@@ -23,10 +23,15 @@ import scala.Predef._
 /**
  * Command class enabling Spark-specific command line options (provided by
  * <i>org.apache.spark.repl.SparkRunnerSettings</i>).
+ *
+ * @example new SparkCommandLine(Nil).settings
+ *
+ * @param args The list of command line arguments
+ * @param settings The underlying settings to associate with this set of
+ *                 command-line options
  */
 class SparkCommandLine(args: List[String], override val settings: Settings)
     extends CompilerCommand(args, settings) {
-
   def this(args: List[String], error: String => Unit) {
     this(args, new SparkRunnerSettings(error))
   }
