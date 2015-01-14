@@ -54,17 +54,6 @@ object HiveTypeCoercion {
       Some(if (valueTypes.size == 0) NullType else valueTypes.head)
     }
   }
-
-  // Conversion rules for integer types into fixed-precision decimals
-  val intTypeToFixed: Map[DataType, DecimalType] = Map(
-    ByteType -> DecimalType(3, 0),
-    ShortType -> DecimalType(5, 0),
-    IntegerType -> DecimalType(10, 0),
-    LongType -> DecimalType(20, 0)
-  )
-
-  def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
-
 }
 
 /**
@@ -166,15 +155,6 @@ trait HiveTypeCoercion {
    *
    * Additionally, all types when UNION-ed with strings will be promoted to strings.
    * Other string conversions are handled by PromoteStrings.
-   * when mixing non-decimal types with decimals, we use the following rules:
-   *   - BYTE gets turned into DECIMAL(3, 0)
-   *   - SHORT gets turned into DECIMAL(5, 0)
-   *   - INT gets turned into DECIMAL(10, 0)
-   *   - LONG gets turned into DECIMAL(20, 0)
-   *   - Fixed union decimals with precision/scale p1/s2 and p2/s2  will be promoted to
-   *   DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
-   *   - FLOAT and DOUBLE cause fixed-length decimals to turn into DOUBLE (this is the same as Hive,
-   *   but note that unlimited decimals are considered bigger than doubles in WidenTypes)
    *
    * Widening types might result in loss of precision in the following cases:
    * - IntegerType to FloatType
@@ -183,42 +163,20 @@ trait HiveTypeCoercion {
    */
   object WidenTypes extends Rule[LogicalPlan] {
     import HiveTypeCoercion._
-    import scala.math.max
-
-    def findUnionType(t1: DataType, t2: DataType): Option[DataType] = {
-      (t1, t2) match {
-        // When a string is found on one side, make the other side a string too.
-        case (StringType, t) => Some(StringType)
-        case (t, StringType) => Some(StringType)
-        case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
-          findTightestDecimalType(t1, t2)
-        case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
-          findTightestDecimalType(t1, intTypeToFixed(t2))
-        case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
-          findTightestDecimalType(intTypeToFixed(t1), t2)
-        case (t, DecimalType.Fixed(p, s)) if isFloat(t) => Some(DoubleType)
-        case (DecimalType.Fixed(p, s), t) if isFloat(t) => Some(DoubleType)
-        case _ => findTightestCommonType(t1, t2)
-      }
-    }
-
-    // Union decimals with precision/scale p1/s2 and p2/s2  will be promoted to
-    // DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
-    private def findTightestDecimalType(t1: DataType, t2: DataType): Option[DataType] = {
-      (t1, t2) match {
-        case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
-          Some(DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2)))
-        case _ => None
-      }
-    }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-
+      // TODO: unions with fixed-precision decimals
       case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
         val castedInput = left.output.zip(right.output).map {
+          // When a string is found on one side, make the other side a string too.
+          case (l, r) if l.dataType == StringType && r.dataType != StringType =>
+            (l, Alias(Cast(r, StringType), r.name)())
+          case (l, r) if l.dataType != StringType && r.dataType == StringType =>
+            (Alias(Cast(l, StringType), l.name)(), r)
+
           case (l, r) if l.dataType != r.dataType =>
             logDebug(s"Resolving mismatched union input ${l.dataType}, ${r.dataType}")
-            findUnionType(l.dataType, r.dataType).map { widestType =>
+            findTightestCommonType(l.dataType, r.dataType).map { widestType =>
               val newLeft =
                 if (l.dataType == widestType) l else Alias(Cast(l, widestType), l.name)()
               val newRight =
@@ -338,6 +296,7 @@ trait HiveTypeCoercion {
    *   e1 * e2      p1 + p2 + 1                             s1 + s2
    *   e1 / e2      p1 - s1 + s2 + max(6, s1 + p2 + 1)      max(6, s1 + p2 + 1)
    *   e1 % e2      min(p1-s1, p2-s2) + max(s1, s2)         max(s1, s2)
+   *   union        max(s1, s2) + max(p1-s1, p2-s2)         max(s1, s2)
    *   sum(e1)      p1 + 10                                 s1
    *   avg(e1)      p1 + 4                                  s1 + 4
    *
@@ -360,76 +319,130 @@ trait HiveTypeCoercion {
   object DecimalPrecision extends Rule[LogicalPlan] {
     import scala.math.{max, min}
 
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-      // Skip nodes whose children have not been resolved yet
-      case e if !e.childrenResolved => e
+    // Conversion rules for integer types into fixed-precision decimals
+    val intTypeToFixed: Map[DataType, DecimalType] = Map(
+      ByteType -> DecimalType(3, 0),
+      ShortType -> DecimalType(5, 0),
+      IntegerType -> DecimalType(10, 0),
+      LongType -> DecimalType(20, 0)
+    )
 
-      case Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-        Cast(
-          Add(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
-          DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
-        )
+    def isFloat(t: DataType): Boolean = t == FloatType || t == DoubleType
 
-      case Subtract(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-        Cast(
-          Subtract(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
-          DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
-        )
-
-      case Multiply(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-        Cast(
-          Multiply(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
-          DecimalType(p1 + p2 + 1, s1 + s2)
-        )
-
-      case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-        Cast(
-          Divide(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
-          DecimalType(p1 - s1 + s2 + max(6, s1 + p2 + 1), max(6, s1 + p2 + 1))
-        )
-
-      case Remainder(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
-        Cast(
-          Remainder(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
-          DecimalType(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
-        )
-
-      case LessThan(e1 @ DecimalType.Expression(p1, s1),
-          e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
-        LessThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
-
-      case LessThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
-          e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
-        LessThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
-
-      case GreaterThan(e1 @ DecimalType.Expression(p1, s1),
-          e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
-        GreaterThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
-
-      case GreaterThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
-          e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
-        GreaterThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
-
-      // Promote integers inside a binary expression with fixed-precision decimals to decimals,
-      // and fixed-precision decimals in an expression with floats / doubles to doubles
-      case b: BinaryExpression if b.left.dataType != b.right.dataType =>
-        (b.left.dataType, b.right.dataType) match {
-          case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
-            b.makeCopy(Array(Cast(b.left, intTypeToFixed(t)), b.right))
-          case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
-            b.makeCopy(Array(b.left, Cast(b.right, intTypeToFixed(t))))
-          case (t, DecimalType.Fixed(p, s)) if isFloat(t) =>
-            b.makeCopy(Array(b.left, Cast(b.right, DoubleType)))
-          case (DecimalType.Fixed(p, s), t) if isFloat(t) =>
-            b.makeCopy(Array(Cast(b.left, DoubleType), b.right))
-          case _ =>
-            b
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      // fix decimal precision for union
+      case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
+        val castedInput = left.output.zip(right.output).map {
+          case (l, r) if l.dataType != r.dataType =>
+            (l.dataType, r.dataType) match {
+              case (DecimalType.Fixed(p1, s1), DecimalType.Fixed(p2, s2)) =>
+                // Union decimals with precision/scale p1/s2 and p2/s2  will be promoted to
+                // DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
+                val fixType = DecimalType(max(s1, s2) + max(p1-s1, p2-s2), max(s1, s2))
+                (Alias(Cast(l, fixType), l.name)(), Alias(Cast(r, fixType), r.name)())
+              case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
+                (Alias(Cast(l, intTypeToFixed(t)), l.name)(), r)
+              case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
+                (l, Alias(Cast(r, intTypeToFixed(t)), r.name)())
+              case (t, DecimalType.Fixed(p, s)) if isFloat(t) =>
+                (l, Alias(Cast(r, DoubleType), r.name)())
+              case (DecimalType.Fixed(p, s), t) if isFloat(t) =>
+                (Alias(Cast(l, DoubleType), l.name)(), r)
+              case _ => (l, r)
+            }
+          case other => other
         }
 
-      // TODO: MaxOf, MinOf, etc might want other rules
+        val (castedLeft, castedRight) = castedInput.unzip
 
-      // SUM and AVERAGE are handled by the implementations of those expressions
+        val newLeft =
+          if (castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
+            Project(castedLeft, left)
+          } else {
+            left
+          }
+
+        val newRight =
+          if (castedRight.map(_.dataType) != right.output.map(_.dataType)) {
+            Project(castedRight, right)
+          } else {
+            right
+          }
+
+        Union(newLeft, newRight)
+      // fix decimal precision for expressions
+      case q => q.transformExpressions {
+        // Skip nodes whose children have not been resolved yet
+        case e if !e.childrenResolved => e
+
+        case Add(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+          Cast(
+            Add(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
+            DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
+          )
+
+        case Subtract(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+          Cast(
+            Subtract(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
+            DecimalType(max(s1, s2) + max(p1 - s1, p2 - s2) + 1, max(s1, s2))
+          )
+
+        case Multiply(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+          Cast(
+            Multiply(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
+            DecimalType(p1 + p2 + 1, s1 + s2)
+          )
+
+        case Divide(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+          Cast(
+            Divide(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
+            DecimalType(p1 - s1 + s2 + max(6, s1 + p2 + 1), max(6, s1 + p2 + 1))
+          )
+
+        case Remainder(e1 @ DecimalType.Expression(p1, s1), e2 @ DecimalType.Expression(p2, s2)) =>
+          Cast(
+            Remainder(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited)),
+            DecimalType(min(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2))
+          )
+
+        case LessThan(e1 @ DecimalType.Expression(p1, s1),
+        e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+          LessThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
+
+        case LessThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
+        e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+          LessThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
+
+        case GreaterThan(e1 @ DecimalType.Expression(p1, s1),
+        e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+          GreaterThan(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
+
+        case GreaterThanOrEqual(e1 @ DecimalType.Expression(p1, s1),
+        e2 @ DecimalType.Expression(p2, s2)) if p1 != p2 || s1 != s2 =>
+          GreaterThanOrEqual(Cast(e1, DecimalType.Unlimited), Cast(e2, DecimalType.Unlimited))
+
+        // Promote integers inside a binary expression with fixed-precision decimals to decimals,
+        // and fixed-precision decimals in an expression with floats / doubles to doubles
+        case b: BinaryExpression if b.left.dataType != b.right.dataType =>
+          (b.left.dataType, b.right.dataType) match {
+            case (t, DecimalType.Fixed(p, s)) if intTypeToFixed.contains(t) =>
+              b.makeCopy(Array(Cast(b.left, intTypeToFixed(t)), b.right))
+            case (DecimalType.Fixed(p, s), t) if intTypeToFixed.contains(t) =>
+              b.makeCopy(Array(b.left, Cast(b.right, intTypeToFixed(t))))
+            case (t, DecimalType.Fixed(p, s)) if isFloat(t) =>
+              b.makeCopy(Array(b.left, Cast(b.right, DoubleType)))
+            case (DecimalType.Fixed(p, s), t) if isFloat(t) =>
+              b.makeCopy(Array(Cast(b.left, DoubleType), b.right))
+            case _ =>
+              b
+          }
+
+        // TODO: MaxOf, MinOf, etc might want other rules
+
+        // SUM and AVERAGE are handled by the implementations of those expressions
+      }
     }
+
   }
 
   /**
@@ -455,7 +468,7 @@ trait HiveTypeCoercion {
       case e: EqualNullSafe => e
       // Otherwise turn them to Byte types so that there exists and ordering.
       case p: BinaryComparison
-          if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
+        if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
         p.makeCopy(Array(Cast(p.left, ByteType), Cast(p.right, ByteType)))
     }
   }
@@ -596,7 +609,7 @@ trait HiveTypeCoercion {
           val commonType = valueTypes.reduce { (v1, v2) =>
             findTightestCommonType(v1, v2)
               .getOrElse(sys.error(
-                s"Types in CASE WHEN must be the same or coercible to a common type: $v1 != $v2"))
+              s"Types in CASE WHEN must be the same or coercible to a common type: $v1 != $v2"))
           }
           val transformedBranches = branches.sliding(2, 2).map {
             case Seq(cond, value) if value.dataType != commonType =>

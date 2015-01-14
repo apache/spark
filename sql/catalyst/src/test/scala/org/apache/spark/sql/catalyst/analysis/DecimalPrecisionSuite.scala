@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Union, Project, LocalRelation}
 import org.apache.spark.sql.types._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
@@ -58,6 +58,17 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
     assert(comparison.right.dataType === expectedType)
   }
 
+  private def checkUnion(left: Expression, right: Expression, expectedType: DataType): Unit = {
+    val plan =
+      Union(Project(Seq(Alias(left, "l")()), relation),
+        Project(Seq(Alias(right, "r")()), relation))
+    val (l, r) = analyzer(plan).collect {
+      case Union(left, right) => (left.output.head, right.output.head)
+    }.head
+    assert(l.dataType === expectedType)
+    assert(r.dataType === expectedType)
+  }
+
   test("basic operations") {
     checkType(Add(d1, d2), DecimalType(6, 2))
     checkType(Subtract(d1, d2), DecimalType(6, 2))
@@ -80,6 +91,17 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
     checkComparison(GreaterThan(d2, u), DecimalType.Unlimited)
     checkComparison(GreaterThanOrEqual(d1, f), DoubleType)
     checkComparison(GreaterThan(d2, d2), DecimalType(5, 2))
+  }
+
+  test("decimal precision for union") {
+    checkUnion(d1, i, DecimalType(11, 1))
+    checkUnion(i, d2, DecimalType(12, 2))
+    checkUnion(d1, d2, DecimalType(5, 2))
+    checkUnion(d2, d1, DecimalType(5, 2))
+    checkUnion(d1, f, DoubleType)
+    checkUnion(f, d2, DoubleType)
+    checkUnion(d1, u, DecimalType.Unlimited)
+    checkUnion(u, d2, DecimalType.Unlimited)
   }
 
   test("bringing in primitive types") {
