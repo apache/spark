@@ -1327,14 +1327,6 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Traverses the lineage chain and calls partitions on each RDD.
-   */
-  private[spark] def doPreGetPartitions() {
-    dependencies.foreach(_.rdd.doPreGetPartitions())
-    partitions
-  }
-
-  /**
    * Changes the dependencies of this RDD from its original parents to a new RDD (`newRDD`)
    * created from the checkpoint file, and forget its old dependencies and partitions.
    */
