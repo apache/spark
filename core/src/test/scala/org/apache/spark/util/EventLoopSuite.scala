@@ -17,8 +17,6 @@
 
 package org.apache.spark.util
 
-import java.util.concurrent.atomic.AtomicReference
-
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -62,7 +60,7 @@ class EventLoopSuite extends FunSuite {
 
   test("EventLoop: onError") {
     val e = new RuntimeException("Oops")
-    val receivedError = new AtomicReference[Throwable]()
+    @volatile var receivedError: Throwable = null
     val eventLoop = new EventLoop[Int]("test") {
 
       override def onReceive(event: Int): Unit = {
@@ -70,20 +68,20 @@ class EventLoopSuite extends FunSuite {
       }
 
       override def onError(e: Throwable): Unit = {
-        receivedError.set(e)
+        receivedError = e
       }
     }
     eventLoop.start()
     eventLoop.post(1)
     eventually(timeout(5 seconds), interval(200 millis)) {
-      assert(e === receivedError.get)
+      assert(e === receivedError)
     }
     eventLoop.stop()
   }
 
   test("EventLoop: error thrown from onError should not crash the event thread") {
     val e = new RuntimeException("Oops")
-    val receivedError = new AtomicReference[Throwable]()
+    @volatile var receivedError: Throwable = null
     val eventLoop = new EventLoop[Int]("test") {
 
       override def onReceive(event: Int): Unit = {
@@ -91,14 +89,14 @@ class EventLoopSuite extends FunSuite {
       }
 
       override def onError(e: Throwable): Unit = {
-        receivedError.set(e)
+        receivedError = e
         throw new RuntimeException("Oops")
       }
     }
     eventLoop.start()
     eventLoop.post(1)
     eventually(timeout(5 seconds), interval(200 millis)) {
-      assert(e === receivedError.get)
+      assert(e === receivedError)
       assert(eventLoop.isActive)
     }
     eventLoop.stop()
@@ -129,7 +127,7 @@ class EventLoopSuite extends FunSuite {
   }
 
   test("EventLoop: post event in multiple threads") {
-    var receivedEventsCount = 0
+    @volatile var receivedEventsCount = 0
     val eventLoop = new EventLoop[Int]("test") {
 
       override def onReceive(event: Int): Unit = {
