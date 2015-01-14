@@ -30,6 +30,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.{Logging, SparkEnv, SparkException}
 import org.apache.spark.storage.StreamBlockId
+import org.apache.spark.streaming.Time
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -89,6 +90,9 @@ private[streaming] class ReceiverSupervisorImpl(
         case StopReceiver =>
           logInfo("Received stop signal")
           stop("Stopped by driver", None)
+        case DeleteOldBatch(threshTime) =>
+          logDebug("Received delete old batch signal")
+          cleanupOldReceivedBatchData(threshTime)
       }
 
       def ref = self
@@ -200,4 +204,10 @@ private[streaming] class ReceiverSupervisorImpl(
 
   /** Generate new block ID */
   private def nextBlockId = StreamBlockId(streamId, newBlockId.getAndIncrement)
+
+  private def cleanupOldReceivedBatchData(cleanupThreshTime: Time): Unit = {
+    logInfo("Received DeleteOldBatch message to clean up the related data older than" +
+      s"$cleanupThreshTime")
+    receivedBlockHandler.cleanupOldBlocks(cleanupThreshTime.milliseconds)
+  }
 }
