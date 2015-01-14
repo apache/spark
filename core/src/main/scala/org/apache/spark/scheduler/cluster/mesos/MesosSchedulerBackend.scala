@@ -126,9 +126,8 @@ private[spark] class MesosSchedulerBackend(
     val uri = sc.conf.get("spark.executor.uri", null)
     val executorBackendName = classOf[MesosExecutorBackend].getName
     if (uri == null) {
-      val executorPath = new File(executorSparkHome, s"/bin/spark-class $executorBackendName")
-        .getCanonicalPath
-      command.setValue("%s %s".format(prefixEnv, executorPath))
+      val executorPath = new File(executorSparkHome, "/bin/spark-class").getCanonicalPath
+      command.setValue(s"$prefixEnv $executorPath $executorBackendName")
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
