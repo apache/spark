@@ -102,11 +102,10 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.memory</code></td>
-  <td>512m</td>
+  <td><code>spark.driver.cores</code></td>
+  <td>1</td>
   <td>
-    Amount of memory to use per executor process, in the same format as JVM memory strings
-    (e.g. <code>512m</code>, <code>2g</code>).
+    Number of cores to use for the driver process, only in cluster mode.
   </td>
 </tr>
 <tr>
@@ -114,6 +113,14 @@ of the most common options to set are:
   <td>512m</td>
   <td>
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
+    (e.g. <code>512m</code>, <code>2g</code>).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.memory</code></td>
+  <td>512m</td>
+  <td>
+    Amount of memory to use per executor process, in the same format as JVM memory strings
     (e.g. <code>512m</code>, <code>2g</code>).
   </td>
 </tr>

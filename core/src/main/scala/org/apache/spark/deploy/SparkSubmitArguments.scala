@@ -404,6 +404,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |  --total-executor-cores NUM  Total cores for all executors.
         |
         | YARN-only:
+        |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode
+        |                              (Default: 1).
         |  --executor-cores NUM        Number of cores per executor (Default: 1).
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
         |  --num-executors NUM         Number of executors to launch (Default: 2).
