@@ -22,10 +22,10 @@ import scala.util.Random
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, LocalSparkContext}
+import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
 
-class KMeansSuite extends FunSuite with LocalSparkContext {
+class KMeansSuite extends FunSuite with MLlibTestSparkContext {
 
   import org.apache.spark.mllib.clustering.KMeans.{K_MEANS_PARALLEL, RANDOM}
 

@@ -23,6 +23,7 @@ import java.util.{Locale, TimeZone}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.SQLConf
+import org.apache.spark.sql.hive.HiveShim
 import org.apache.spark.sql.hive.test.TestHive
 
 /**
@@ -35,8 +36,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
-  private val originalColumnBatchSize = TestHive.columnBatchSize
-  private val originalInMemoryPartitionPruning = TestHive.inMemoryPartitionPruning
+  private val originalColumnBatchSize = TestHive.conf.columnBatchSize
+  private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
 
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
@@ -88,7 +89,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "authorization_5",
     "keyword_1",
     "misc_json",
-    "create_like_tbl_props",
     "load_overwrite",
     "alter_table_serde2",
     "alter_table_not_sorted",
@@ -99,16 +99,18 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "protectmode2",
     //"describe_table",
     "describe_comment_nonascii",
-    "udf5",
-    "udf_java_method",
+
     "create_merge_compressed",
+    "create_view",
+    "create_view_partitioned",
+    "database_location",
+    "database_properties",
 
     // DFS commands
     "symlink_text_input_format",
 
     // Weird DDL differences result in failures on jenkins.
     "create_like2",
-    "create_view_translate",
     "partitions_json",
 
     // This test is totally fine except that it includes wrong queries and expects errors, but error
@@ -135,6 +137,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "stats20",
     "alter_merge_stats",
     "columnstats.*",
+    "annotate_stats.*",
+    "database_drop",
+    "index_serde",
 
 
     // Hive seems to think 1.0 > NaN = true && 1.0 < NaN = false... which is wrong.
@@ -211,8 +216,23 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "describe_comment_indent",
 
     // Limit clause without a ordering, which causes failure.
-    "orc_predicate_pushdown"
-  )
+    "orc_predicate_pushdown",
+
+    // Requires precision decimal support:
+    "udf_when",
+    "udf_case",
+
+    // Needs constant object inspectors
+    "udf_round",
+
+    // Sort with Limit clause causes failure.
+    "ctas",
+    "ctas_hadoop20",
+
+    // timestamp in array, the output format of Hive contains double quotes, while
+    // Spark SQL doesn't
+    "udf_sort_array"
+  ) ++ HiveShim.compatibilityBlackList
 
   /**
    * The set of tests that are believed to be working in catalyst. Tests not on whiteList or
@@ -239,6 +259,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter_varchar2",
     "alter_view_as_select",
     "ambiguous_col",
+    "annotate_stats_join",
+    "annotate_stats_limit",
+    "annotate_stats_part",
+    "annotate_stats_table",
+    "annotate_stats_union",
     "auto_join0",
     "auto_join1",
     "auto_join10",
@@ -282,6 +307,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "auto_sortmerge_join_13",
     "auto_sortmerge_join_14",
     "auto_sortmerge_join_15",
+    "auto_sortmerge_join_16",
     "auto_sortmerge_join_2",
     "auto_sortmerge_join_3",
     "auto_sortmerge_join_4",
@@ -318,14 +344,26 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "count",
     "cp_mj_rc",
     "create_insert_outputformat",
+    "create_like_tbl_props",
     "create_like_view",
     "create_nested_type",
     "create_skewed_table1",
     "create_struct_table",
+    "create_view_translate",
     "cross_join",
+    "cross_product_check_1",
+    "cross_product_check_2",
     "ct_case_insensitive",
+    "database_drop",
     "database_location",
     "database_properties",
+    "date_2",
+    "date_3",
+    "date_4",
+    "date_comparison",
+    "date_join1",
+    "date_serde",
+    "date_udf",
     "decimal_1",
     "decimal_4",
     "decimal_join",
@@ -336,8 +374,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "diff_part_input_formats",
     "disable_file_format_check",
     "disallow_incompatible_type_change_off",
+    "distinct_stats",
+    "drop_database_removes_partition_dirs",
     "drop_function",
     "drop_index",
+    "drop_index_removes_partition_dirs",
     "drop_multi_partitions",
     "drop_partitions_filter",
     "drop_partitions_filter2",
@@ -345,23 +386,37 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "drop_partitions_ignore_protection",
     "drop_table",
     "drop_table2",
+    "drop_table_removes_partition_dirs",
     "drop_view",
+    "dynamic_partition_skip_default",
     "escape_clusterby1",
     "escape_distributeby1",
     "escape_orderby1",
     "escape_sortby1",
+    "explain_rearrange",
     "fetch_aggregation",
+    "fileformat_mix",
     "fileformat_sequencefile",
     "fileformat_text",
     "filter_join_breaktask",
     "filter_join_breaktask2",
     "groupby1",
     "groupby11",
+    "groupby12",
+    "groupby1_limit",
+    "groupby_grouping_id1",
+    "groupby_grouping_id2",
+    "groupby_grouping_sets1",
+    "groupby_grouping_sets2",
+    "groupby_grouping_sets3",
+    "groupby_grouping_sets4",
+    "groupby_grouping_sets5",
     "groupby1_map",
     "groupby1_map_nomap",
     "groupby1_map_skew",
     "groupby1_noskew",
     "groupby2",
+    "groupby2_limit",
     "groupby2_map",
     "groupby2_map_skew",
     "groupby2_noskew",
@@ -382,6 +437,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby7_map_multi_single_reducer",
     "groupby7_map_skew",
     "groupby7_noskew",
+    "groupby7_noskew_multi_single_reducer",
     "groupby8",
     "groupby8_map",
     "groupby8_map_skew",
@@ -408,6 +464,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "groupby_sort_test_1",
     "having",
     "implicit_cast1",
+    "index_serde",
+    "infer_bucket_sort_dyn_part",
     "innerjoin",
     "inoutdriver",
     "input",
@@ -478,7 +536,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "join17",
     "join18",
     "join19",
-    "join_1to1",
     "join2",
     "join20",
     "join21",
@@ -510,6 +567,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "join7",
     "join8",
     "join9",
+    "join_1to1",
     "join_array",
     "join_casesensitive",
     "join_empty",
@@ -533,7 +591,21 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "literal_double",
     "literal_ints",
     "literal_string",
+    "load_dyn_part1",
+    "load_dyn_part10",
+    "load_dyn_part11",
+    "load_dyn_part12",
+    "load_dyn_part13",
+    "load_dyn_part14",
+    "load_dyn_part14_win",
+    "load_dyn_part2",
+    "load_dyn_part3",
+    "load_dyn_part4",
+    "load_dyn_part5",
+    "load_dyn_part6",
     "load_dyn_part7",
+    "load_dyn_part8",
+    "load_dyn_part9",
     "load_file_with_space_in_the_name",
     "loadpart1",
     "louter_join_ppr",
@@ -554,13 +626,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "merge1",
     "merge2",
     "mergejoins",
-    "multigroupby_singlemr",
+    "multiMapJoin1",
+    "multiMapJoin2",
     "multi_insert_gby",
     "multi_insert_gby3",
     "multi_insert_lateral_view",
     "multi_join_union",
-    "multiMapJoin1",
-    "multiMapJoin2",
+    "multigroupby_singlemr",
     "noalias_subq1",
     "nomore_ambiguous_table_col",
     "nonblock_op_deduplicate",
@@ -583,12 +655,14 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "outer_join_ppr",
     "parallel",
     "parenthesis_star_by",
-    "partcols1",
     "part_inherit_tbl_props",
     "part_inherit_tbl_props_empty",
     "part_inherit_tbl_props_with_star",
+    "partcols1",
+    "partition_date",
     "partition_schema1",
     "partition_serde_format",
+    "partition_type_check",
     "partition_varchar1",
     "partition_wise_fileformat4",
     "partition_wise_fileformat5",
@@ -615,7 +689,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "ppd_outer_join5",
     "ppd_random",
     "ppd_repeated_alias",
-    "ppd_transform",
     "ppd_udf_col",
     "ppd_union",
     "ppr_allchildsarenull",
@@ -648,15 +721,15 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "serde_regex",
     "serde_reported_schema",
     "set_variable_sub",
-    "show_create_table_partitioned",
-    "show_create_table_delimited",
+    "show_columns",
     "show_create_table_alter",
-    "show_create_table_view",
-    "show_create_table_serde",
     "show_create_table_db_table",
+    "show_create_table_delimited",
     "show_create_table_does_not_exist",
     "show_create_table_index",
-    "show_columns",
+    "show_create_table_partitioned",
+    "show_create_table_serde",
+    "show_create_table_view",
     "show_describe_func_quotes",
     "show_functions",
     "show_partitions",
@@ -705,6 +778,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "touch",
     "transform_ppr1",
     "transform_ppr2",
+    "truncate_table",
     "type_cast_1",
     "type_widening",
     "udaf_collect_set",
@@ -712,12 +786,15 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udaf_covar_pop",
     "udaf_covar_samp",
     "udaf_histogram_numeric",
-    "udf_10_trims",
     "udf2",
+    "udf5",
     "udf6",
     "udf7",
     "udf8",
     "udf9",
+    "udf_10_trims",
+    "udf_E",
+    "udf_PI",
     "udf_abs",
     "udf_acos",
     "udf_add",
@@ -748,14 +825,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_cos",
     "udf_count",
     "udf_date_add",
-    "udf_datediff",
     "udf_date_sub",
+    "udf_datediff",
     "udf_day",
     "udf_dayofmonth",
     "udf_degrees",
     "udf_div",
     "udf_double",
-    "udf_E",
     "udf_elt",
     "udf_equal",
     "udf_exp",
@@ -793,6 +869,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_minute",
     "udf_modulo",
     "udf_month",
+    "udf_named_struct",
     "udf_negative",
     "udf_not",
     "udf_notequal",
@@ -800,7 +877,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_nvl",
     "udf_or",
     "udf_parse_url",
-    "udf_PI",
+    "udf_pmod",
     "udf_positive",
     "udf_pow",
     "udf_power",
@@ -826,6 +903,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_stddev_pop",
     "udf_stddev_samp",
     "udf_string",
+    "udf_struct",
     "udf_substring",
     "udf_subtract",
     "udf_sum",
@@ -886,6 +964,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "union7",
     "union8",
     "union9",
+    "union_date",
     "union_lateralview",
     "union_ppr",
     "union_remove_11",
@@ -894,6 +973,9 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "union_script",
     "varchar_2",
     "varchar_join1",
-    "varchar_union1"
+    "varchar_union1",
+    "view",
+    "view_cast",
+    "view_inputs"
   )
 }

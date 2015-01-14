@@ -17,42 +17,171 @@
 
 package org.apache.spark.metrics
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
+
 import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.master.MasterSource
+import org.apache.spark.metrics.source.Source
 
-class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
+import com.codahale.metrics.MetricRegistry
+
+import scala.collection.mutable.ArrayBuffer
+
+class MetricsSystemSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester{
   var filePath: String = _
   var conf: SparkConf = null
   var securityMgr: SecurityManager = null
 
   before {
-    filePath = getClass.getClassLoader.getResource("test_metrics_system.properties").getFile()
+    filePath = getClass.getClassLoader.getResource("test_metrics_system.properties").getFile
     conf = new SparkConf(false).set("spark.metrics.conf", filePath)
     securityMgr = new SecurityManager(conf)
   }
 
   test("MetricsSystem with default config") {
     val metricsSystem = MetricsSystem.createMetricsSystem("default", conf, securityMgr)
-    val sources = metricsSystem.sources
-    val sinks = metricsSystem.sinks
+    metricsSystem.start()
+    val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
+    val sinks = PrivateMethod[ArrayBuffer[Source]]('sinks)
 
-    assert(sources.length === 0)
-    assert(sinks.length === 0)
-    assert(!metricsSystem.getServletHandlers.isEmpty)
+    assert(metricsSystem.invokePrivate(sources()).length === 0)
+    assert(metricsSystem.invokePrivate(sinks()).length === 0)
+    assert(metricsSystem.getServletHandlers.nonEmpty)
   }
 
   test("MetricsSystem with sources add") {
     val metricsSystem = MetricsSystem.createMetricsSystem("test", conf, securityMgr)
-    val sources = metricsSystem.sources
-    val sinks = metricsSystem.sinks
+    metricsSystem.start()
+    val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
+    val sinks = PrivateMethod[ArrayBuffer[Source]]('sinks)
 
-    assert(sources.length === 0)
-    assert(sinks.length === 1)
-    assert(!metricsSystem.getServletHandlers.isEmpty)
+    assert(metricsSystem.invokePrivate(sources()).length === 0)
+    assert(metricsSystem.invokePrivate(sinks()).length === 1)
+    assert(metricsSystem.getServletHandlers.nonEmpty)
 
     val source = new MasterSource(null)
     metricsSystem.registerSource(source)
-    assert(sources.length === 1)
+    assert(metricsSystem.invokePrivate(sources()).length === 1)
+  }
+
+  test("MetricsSystem with Driver instance") {
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val appId = "testId"
+    val executorId = "driver"
+    conf.set("spark.app.id", appId)
+    conf.set("spark.executor.id", executorId)
+
+    val instanceName = "driver"
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+
+    val metricName = driverMetricsSystem.buildRegistryName(source)
+    assert(metricName === s"$appId.$executorId.${source.sourceName}")
+  }
+
+  test("MetricsSystem with Driver instance and spark.app.id is not set") {
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val executorId = "driver"
+    conf.set("spark.executor.id", executorId)
+
+    val instanceName = "driver"
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+
+    val metricName = driverMetricsSystem.buildRegistryName(source)
+    assert(metricName === source.sourceName)
+  }
+
+  test("MetricsSystem with Driver instance and spark.executor.id is not set") {
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val appId = "testId"
+    conf.set("spark.app.id", appId)
+
+    val instanceName = "driver"
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+
+    val metricName = driverMetricsSystem.buildRegistryName(source)
+    assert(metricName === source.sourceName)
+  }
+
+  test("MetricsSystem with Executor instance") {
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val appId = "testId"
+    val executorId = "1"
+    conf.set("spark.app.id", appId)
+    conf.set("spark.executor.id", executorId)
+
+    val instanceName = "executor"
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+
+    val metricName = driverMetricsSystem.buildRegistryName(source)
+    assert(metricName === s"$appId.$executorId.${source.sourceName}")
+  }
+
+  test("MetricsSystem with Executor instance and spark.app.id is not set") {
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val executorId = "1"
+    conf.set("spark.executor.id", executorId)
+
+    val instanceName = "executor"
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+
+    val metricName = driverMetricsSystem.buildRegistryName(source)
+    assert(metricName === source.sourceName)
+  }
+
+  test("MetricsSystem with Executor instance and spark.executor.id is not set") {
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val appId = "testId"
+    conf.set("spark.app.id", appId)
+
+    val instanceName = "executor"
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+
+    val metricName = driverMetricsSystem.buildRegistryName(source)
+    assert(metricName === source.sourceName)
+  }
+
+  test("MetricsSystem with instance which is neither Driver nor Executor") {
+    val source = new Source {
+      override val sourceName = "dummySource"
+      override val metricRegistry = new MetricRegistry()
+    }
+
+    val appId = "testId"
+    val executorId = "dummyExecutorId"
+    conf.set("spark.app.id", appId)
+    conf.set("spark.executor.id", executorId)
+
+    val instanceName = "testInstance"
+    val driverMetricsSystem = MetricsSystem.createMetricsSystem(instanceName, conf, securityMgr)
+
+    val metricName = driverMetricsSystem.buildRegistryName(source)
+
+    // Even if spark.app.id and spark.executor.id are set, they are not used for the metric name.
+    assert(metricName != s"$appId.$executorId.${source.sourceName}")
+    assert(metricName === source.sourceName)
   }
 }

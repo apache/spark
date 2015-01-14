@@ -18,9 +18,10 @@
 package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.Vector
 
 /**
  * :: Experimental ::
@@ -46,10 +47,21 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * Predict values for the given data set using the model trained.
    *
    * @param features RDD representing data points to be predicted
-   * @return RDD[Int] where each entry contains the corresponding prediction
+   * @return RDD of predictions for each of the given data points
    */
   def predict(features: RDD[Vector]): RDD[Double] = {
     features.map(x => predict(x))
+  }
+
+
+  /**
+   * Predict values for the given data set using the model trained.
+   *
+   * @param features JavaRDD representing data points to be predicted
+   * @return JavaRDD of predictions for each of the given data points
+   */
+  def predict(features: JavaRDD[Vector]): JavaRDD[Double] = {
+    predict(features.rdd)
   }
 
   /**
@@ -68,15 +80,23 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
   }
 
   /**
-   * Print full model.
+   * Print a summary of the model.
    */
   override def toString: String = algo match {
     case Classification =>
-      s"DecisionTreeModel classifier\n" + topNode.subtreeToString(2)
+      s"DecisionTreeModel classifier of depth $depth with $numNodes nodes"
     case Regression =>
-      s"DecisionTreeModel regressor\n" + topNode.subtreeToString(2)
+      s"DecisionTreeModel regressor of depth $depth with $numNodes nodes"
     case _ => throw new IllegalArgumentException(
       s"DecisionTreeModel given unknown algo parameter: $algo.")
+  }
+
+  /**
+   * Print the full model to a string.
+   */
+  def toDebugString: String = {
+    val header = toString + "\n"
+    header + topNode.subtreeToString(2)
   }
 
 }

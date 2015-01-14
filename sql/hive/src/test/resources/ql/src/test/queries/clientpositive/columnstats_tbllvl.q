@@ -13,7 +13,7 @@ CREATE TABLE UserVisits_web_text_none (
   avgTimeOnSite int)
 row format delimited fields terminated by '|'  stored as textfile;
 
-LOAD DATA LOCAL INPATH "../data/files/UserVisits.dat" INTO TABLE UserVisits_web_text_none;
+LOAD DATA LOCAL INPATH "../../data/files/UserVisits.dat" INTO TABLE UserVisits_web_text_none;
 
 explain 
 analyze table UserVisits_web_text_none compute statistics for columns sourceIP, avgTimeOnSite, adRevenue;

@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.MLUtils._
+import org.apache.spark.storage.StorageLevel
 
 /**
  * :: DeveloperApi ::
@@ -74,6 +75,8 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
   def predict(testData: Vector): Double = {
     predictPoint(testData, weights, intercept)
   }
+
+  override def toString() = "(weights=%s, intercept=%s)".format(weights, intercept)
 }
 
 /**
@@ -149,6 +152,11 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
    */
   def run(input: RDD[LabeledPoint], initialWeights: Vector): M = {
 
+    if (input.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data is not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
+    }
+
     // Check the data properties before running the optimizer
     if (validateData && !validators.forall(func => func(input))) {
       throw new SparkException("Input validation failed.")
@@ -221,6 +229,12 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
      */
     if (useFeatureScaling) {
       weights = scaler.transform(weights)
+    }
+
+    // Warn at the end of the run as well, for increased visibility.
+    if (input.getStorageLevel == StorageLevel.NONE) {
+      logWarning("The input data was not directly cached, which may hurt performance if its"
+        + " parent RDDs are also uncached.")
     }
 
     createModel(weights, intercept)

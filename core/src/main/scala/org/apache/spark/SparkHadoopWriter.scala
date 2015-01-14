@@ -26,6 +26,7 @@ import org.apache.hadoop.mapred._
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.HadoopRDD
 
 /**
@@ -116,7 +117,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
         }
       }
     } else {
-      logWarning ("No need to commit output of task: " + taID.value)
+      logInfo ("No need to commit output of task: " + taID.value)
     }
   }
 

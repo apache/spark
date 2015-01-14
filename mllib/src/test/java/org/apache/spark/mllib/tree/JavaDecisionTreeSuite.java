@@ -74,7 +74,7 @@ public class JavaDecisionTreeSuite implements Serializable {
         maxBins, categoricalFeaturesInfo);
 
     DecisionTree learner = new DecisionTree(strategy);
-    DecisionTreeModel model = learner.train(rdd.rdd());
+    DecisionTreeModel model = learner.run(rdd.rdd());
 
     int numCorrect = validatePrediction(arr, model);
     Assert.assertTrue(numCorrect == rdd.count());

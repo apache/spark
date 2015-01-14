@@ -138,6 +138,16 @@ class SparkSink extends AbstractSink with Logging with Configurable {
         throw new RuntimeException("Server was not started!")
       )
   }
+
+  /**
+   * Pass in a [[CountDownLatch]] for testing purposes. This batch is counted down when each
+   * batch is received. The test can simply call await on this latch till the expected number of
+   * batches are received.
+   * @param latch
+   */
+  private[flume] def countdownWhenBatchReceived(latch: CountDownLatch) {
+    handler.foreach(_.countDownWhenBatchAcked(latch))
+  }
 }
 
 /**

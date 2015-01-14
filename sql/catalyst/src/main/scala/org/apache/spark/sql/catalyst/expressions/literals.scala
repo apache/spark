@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
+import org.apache.spark.sql.types.decimal.Decimal
 
 object Literal {
   def apply(v: Any): Literal = v match {
@@ -31,10 +32,21 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(s, StringType)
     case b: Boolean => Literal(b, BooleanType)
-    case d: BigDecimal => Literal(d, DecimalType)
+    case d: BigDecimal => Literal(Decimal(d), DecimalType.Unlimited)
+    case d: Decimal => Literal(d, DecimalType.Unlimited)
     case t: Timestamp => Literal(t, TimestampType)
+    case d: Date => Literal(d, DateType)
     case a: Array[Byte] => Literal(a, BinaryType)
     case null => Literal(null, NullType)
+  }
+}
+
+/**
+ * An extractor that matches non-null literal values
+ */
+object NonNullLiteral {
+  def unapply(literal: Literal): Option[(Any, DataType)] = {
+    Option(literal.value).map(_ => (literal.value, literal.dataType))
   }
 }
 
@@ -61,7 +73,7 @@ case class Literal(value: Any, dataType: DataType) extends LeafExpression {
 }
 
 // TODO: Specialize
-case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true) 
+case class MutableLiteral(var value: Any, dataType: DataType, nullable: Boolean = true)
     extends LeafExpression {
   type EvaluatedType = Any
 

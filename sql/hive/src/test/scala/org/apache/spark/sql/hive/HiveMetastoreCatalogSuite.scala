@@ -19,14 +19,24 @@ package org.apache.spark.sql.hive
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.sql.catalyst.types.{DataType, StructType}
+import org.apache.spark.sql.sources.DDLParser
+import org.apache.spark.sql.test.ExamplePointUDT
+import org.apache.spark.sql.types.StructType
 
 class HiveMetastoreCatalogSuite extends FunSuite {
 
   test("struct field should accept underscore in sub-column name") {
     val metastr = "struct<a: int, b_1: string, c: string>"
 
-    val datatype = HiveMetastoreTypes.toDataType(metastr)
+    val ddlParser = new DDLParser
+
+    val datatype = ddlParser.parseType(metastr)
     assert(datatype.isInstanceOf[StructType])
+  }
+
+  test("udt to metastore type conversion") {
+    val udt = new ExamplePointUDT
+    assert(HiveMetastoreTypes.toMetastoreType(udt) ===
+      HiveMetastoreTypes.toMetastoreType(udt.sqlType))
   }
 }

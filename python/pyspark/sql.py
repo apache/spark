@@ -15,29 +15,43 @@
 # limitations under the License.
 #
 
+"""
+public classes of Spark SQL:
 
-import sys
-import types
+    - L{SQLContext}
+      Main entry point for SQL functionality.
+    - L{SchemaRDD}
+      A Resilient Distributed Dataset (RDD) with Schema information for the data contained. In
+      addition to normal RDD operations, SchemaRDDs also support SQL.
+    - L{Row}
+      A Row of data returned by a Spark SQL query.
+    - L{HiveContext}
+      Main entry point for accessing data stored in Apache Hive..
+"""
+
 import itertools
-import warnings
 import decimal
 import datetime
 import keyword
 import warnings
+import json
+import re
 from array import array
 from operator import itemgetter
-
-from pyspark.rdd import RDD, PipelinedRDD
-from pyspark.serializers import BatchedSerializer, PickleSerializer, CloudPickleSerializer
-
-from itertools import chain, ifilter, imap
+from itertools import imap
 
 from py4j.protocol import Py4JError
 from py4j.java_collections import ListConverter, MapConverter
 
+from pyspark.rdd import RDD
+from pyspark.serializers import BatchedSerializer, AutoBatchedSerializer, PickleSerializer, \
+    CloudPickleSerializer, UTF8Deserializer
+from pyspark.storagelevel import StorageLevel
+from pyspark.traceback_utils import SCCallSiteSync
+
 
 __all__ = [
-    "StringType", "BinaryType", "BooleanType", "TimestampType", "DecimalType",
+    "StringType", "BinaryType", "BooleanType", "DateType", "TimestampType", "DecimalType",
     "DoubleType", "FloatType", "ByteType", "IntegerType", "LongType",
     "ShortType", "ArrayType", "MapType", "StructField", "StructType",
     "SQLContext", "HiveContext", "SchemaRDD", "Row"]
@@ -59,6 +73,18 @@ class DataType(object):
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    @classmethod
+    def typeName(cls):
+        return cls.__name__[:-4].lower()
+
+    def jsonValue(self):
+        return self.typeName()
+
+    def json(self):
+        return json.dumps(self.jsonValue(),
+                          separators=(',', ':'),
+                          sort_keys=True)
 
 
 class PrimitiveTypeSingleton(type):
@@ -82,6 +108,15 @@ class PrimitiveType(DataType):
     def __eq__(self, other):
         # because they should be the same object
         return self is other
+
+
+class NullType(PrimitiveType):
+
+    """Spark SQL NullType
+
+    The data type representing None, used for the types which has not
+    been inferred.
+    """
 
 
 class StringType(PrimitiveType):
@@ -108,6 +143,14 @@ class BooleanType(PrimitiveType):
     """
 
 
+class DateType(PrimitiveType):
+
+    """Spark SQL DateType
+
+    The data type representing datetime.date values.
+    """
+
+
 class TimestampType(PrimitiveType):
 
     """Spark SQL TimestampType
@@ -116,12 +159,29 @@ class TimestampType(PrimitiveType):
     """
 
 
-class DecimalType(PrimitiveType):
+class DecimalType(DataType):
 
     """Spark SQL DecimalType
 
     The data type representing decimal.Decimal values.
     """
+
+    def __init__(self, precision=None, scale=None):
+        self.precision = precision
+        self.scale = scale
+        self.hasPrecisionInfo = precision is not None
+
+    def jsonValue(self):
+        if self.hasPrecisionInfo:
+            return "decimal(%d,%d)" % (self.precision, self.scale)
+        else:
+            return "decimal"
+
+    def __repr__(self):
+        if self.hasPrecisionInfo:
+            return "DecimalType(%d,%d)" % (self.precision, self.scale)
+        else:
+            return "DecimalType()"
 
 
 class DoubleType(PrimitiveType):
@@ -199,9 +259,19 @@ class ArrayType(DataType):
         self.elementType = elementType
         self.containsNull = containsNull
 
-    def __str__(self):
+    def __repr__(self):
         return "ArrayType(%s,%s)" % (self.elementType,
                                      str(self.containsNull).lower())
+
+    def jsonValue(self):
+        return {"type": self.typeName(),
+                "elementType": self.elementType.jsonValue(),
+                "containsNull": self.containsNull}
+
+    @classmethod
+    def fromJson(cls, json):
+        return ArrayType(_parse_datatype_json_value(json["elementType"]),
+                         json["containsNull"])
 
 
 class MapType(DataType):
@@ -243,6 +313,18 @@ class MapType(DataType):
         return "MapType(%s,%s,%s)" % (self.keyType, self.valueType,
                                       str(self.valueContainsNull).lower())
 
+    def jsonValue(self):
+        return {"type": self.typeName(),
+                "keyType": self.keyType.jsonValue(),
+                "valueType": self.valueType.jsonValue(),
+                "valueContainsNull": self.valueContainsNull}
+
+    @classmethod
+    def fromJson(cls, json):
+        return MapType(_parse_datatype_json_value(json["keyType"]),
+                       _parse_datatype_json_value(json["valueType"]),
+                       json["valueContainsNull"])
+
 
 class StructField(DataType):
 
@@ -259,12 +341,15 @@ class StructField(DataType):
 
     """
 
-    def __init__(self, name, dataType, nullable):
+    def __init__(self, name, dataType, nullable=True, metadata=None):
         """Creates a StructField
         :param name: the name of this field.
         :param dataType: the data type of this field.
         :param nullable: indicates whether values of this field
                          can be null.
+        :param metadata: metadata of this field, which is a map from string
+                         to simple type that can be serialized to JSON
+                         automatically
 
         >>> (StructField("f1", StringType, True)
         ...      == StructField("f1", StringType, True))
@@ -276,10 +361,24 @@ class StructField(DataType):
         self.name = name
         self.dataType = dataType
         self.nullable = nullable
+        self.metadata = metadata or {}
 
     def __repr__(self):
         return "StructField(%s,%s,%s)" % (self.name, self.dataType,
                                           str(self.nullable).lower())
+
+    def jsonValue(self):
+        return {"name": self.name,
+                "type": self.dataType.jsonValue(),
+                "nullable": self.nullable,
+                "metadata": self.metadata}
+
+    @classmethod
+    def fromJson(cls, json):
+        return StructField(json["name"],
+                           _parse_datatype_json_value(json["type"]),
+                           json["nullable"],
+                           json["metadata"])
 
 
 class StructType(DataType):
@@ -287,7 +386,7 @@ class StructType(DataType):
     """Spark SQL StructType
 
     The data type representing rows.
-    A StructType object comprises a list of L{StructField}s.
+    A StructType object comprises a list of L{StructField}.
 
     """
 
@@ -310,42 +409,99 @@ class StructType(DataType):
         return ("StructType(List(%s))" %
                 ",".join(str(field) for field in self.fields))
 
+    def jsonValue(self):
+        return {"type": self.typeName(),
+                "fields": [f.jsonValue() for f in self.fields]}
 
-def _parse_datatype_list(datatype_list_string):
-    """Parses a list of comma separated data types."""
-    index = 0
-    datatype_list = []
-    start = 0
-    depth = 0
-    while index < len(datatype_list_string):
-        if depth == 0 and datatype_list_string[index] == ",":
-            datatype_string = datatype_list_string[start:index].strip()
-            datatype_list.append(_parse_datatype_string(datatype_string))
-            start = index + 1
-        elif datatype_list_string[index] == "(":
-            depth += 1
-        elif datatype_list_string[index] == ")":
-            depth -= 1
-
-        index += 1
-
-    # Handle the last data type
-    datatype_string = datatype_list_string[start:index].strip()
-    datatype_list.append(_parse_datatype_string(datatype_string))
-    return datatype_list
+    @classmethod
+    def fromJson(cls, json):
+        return StructType([StructField.fromJson(f) for f in json["fields"]])
 
 
-_all_primitive_types = dict((k, v) for k, v in globals().iteritems()
-                            if type(v) is PrimitiveTypeSingleton and v.__base__ == PrimitiveType)
+class UserDefinedType(DataType):
+    """
+    .. note:: WARN: Spark Internal Use Only
+    SQL User-Defined Type (UDT).
+    """
+
+    @classmethod
+    def typeName(cls):
+        return cls.__name__.lower()
+
+    @classmethod
+    def sqlType(cls):
+        """
+        Underlying SQL storage type for this UDT.
+        """
+        raise NotImplementedError("UDT must implement sqlType().")
+
+    @classmethod
+    def module(cls):
+        """
+        The Python module of the UDT.
+        """
+        raise NotImplementedError("UDT must implement module().")
+
+    @classmethod
+    def scalaUDT(cls):
+        """
+        The class name of the paired Scala UDT.
+        """
+        raise NotImplementedError("UDT must have a paired Scala UDT.")
+
+    def serialize(self, obj):
+        """
+        Converts the a user-type object into a SQL datum.
+        """
+        raise NotImplementedError("UDT must implement serialize().")
+
+    def deserialize(self, datum):
+        """
+        Converts a SQL datum into a user-type object.
+        """
+        raise NotImplementedError("UDT must implement deserialize().")
+
+    def json(self):
+        return json.dumps(self.jsonValue(), separators=(',', ':'), sort_keys=True)
+
+    def jsonValue(self):
+        schema = {
+            "type": "udt",
+            "class": self.scalaUDT(),
+            "pyClass": "%s.%s" % (self.module(), type(self).__name__),
+            "sqlType": self.sqlType().jsonValue()
+        }
+        return schema
+
+    @classmethod
+    def fromJson(cls, json):
+        pyUDT = json["pyClass"]
+        split = pyUDT.rfind(".")
+        pyModule = pyUDT[:split]
+        pyClass = pyUDT[split+1:]
+        m = __import__(pyModule, globals(), locals(), [pyClass], -1)
+        UDT = getattr(m, pyClass)
+        return UDT()
+
+    def __eq__(self, other):
+        return type(self) == type(other)
 
 
-def _parse_datatype_string(datatype_string):
-    """Parses the given data type string.
+_all_primitive_types = dict((v.typeName(), v)
+                            for v in globals().itervalues()
+                            if type(v) is PrimitiveTypeSingleton and
+                            v.__base__ == PrimitiveType)
 
+
+_all_complex_types = dict((v.typeName(), v)
+                          for v in [ArrayType, MapType, StructType])
+
+
+def _parse_datatype_json_string(json_string):
+    """Parses the given data type JSON string.
     >>> def check_datatype(datatype):
-    ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(str(datatype))
-    ...     python_datatype = _parse_datatype_string(
-    ...                          scala_datatype.toString())
+    ...     scala_datatype = sqlCtx._ssql_ctx.parseDataType(datatype.json())
+    ...     python_datatype = _parse_datatype_json_string(scala_datatype.json())
     ...     return datatype == python_datatype
     >>> all(check_datatype(cls()) for cls in _all_primitive_types.values())
     True
@@ -370,7 +526,8 @@ def _parse_datatype_string(datatype_string):
     ...     StructField("simpleArray", simple_arraytype, True),
     ...     StructField("simpleMap", simple_maptype, True),
     ...     StructField("simpleStruct", simple_structtype, True),
-    ...     StructField("boolean", BooleanType(), False)])
+    ...     StructField("boolean", BooleanType(), False),
+    ...     StructField("withMeta", DoubleType(), False, {"name": "age"})])
     >>> check_datatype(complex_structtype)
     True
     >>> # Complex ArrayType.
@@ -382,87 +539,86 @@ def _parse_datatype_string(datatype_string):
     ...                           complex_arraytype, False)
     >>> check_datatype(complex_maptype)
     True
+    >>> check_datatype(ExamplePointUDT())
+    True
+    >>> structtype_with_udt = StructType([StructField("label", DoubleType(), False),
+    ...                                   StructField("point", ExamplePointUDT(), False)])
+    >>> check_datatype(structtype_with_udt)
+    True
     """
-    index = datatype_string.find("(")
-    if index == -1:
-        # It is a primitive type.
-        index = len(datatype_string)
-    type_or_field = datatype_string[:index]
-    rest_part = datatype_string[index + 1:len(datatype_string) - 1].strip()
-
-    if type_or_field in _all_primitive_types:
-        return _all_primitive_types[type_or_field]()
-
-    elif type_or_field == "ArrayType":
-        last_comma_index = rest_part.rfind(",")
-        containsNull = True
-        if rest_part[last_comma_index + 1:].strip().lower() == "false":
-            containsNull = False
-        elementType = _parse_datatype_string(
-            rest_part[:last_comma_index].strip())
-        return ArrayType(elementType, containsNull)
-
-    elif type_or_field == "MapType":
-        last_comma_index = rest_part.rfind(",")
-        valueContainsNull = True
-        if rest_part[last_comma_index + 1:].strip().lower() == "false":
-            valueContainsNull = False
-        keyType, valueType = _parse_datatype_list(
-            rest_part[:last_comma_index].strip())
-        return MapType(keyType, valueType, valueContainsNull)
-
-    elif type_or_field == "StructField":
-        first_comma_index = rest_part.find(",")
-        name = rest_part[:first_comma_index].strip()
-        last_comma_index = rest_part.rfind(",")
-        nullable = True
-        if rest_part[last_comma_index + 1:].strip().lower() == "false":
-            nullable = False
-        dataType = _parse_datatype_string(
-            rest_part[first_comma_index + 1:last_comma_index].strip())
-        return StructField(name, dataType, nullable)
-
-    elif type_or_field == "StructType":
-        # rest_part should be in the format like
-        # List(StructField(field1,IntegerType,false)).
-        field_list_string = rest_part[rest_part.find("(") + 1:-1]
-        fields = _parse_datatype_list(field_list_string)
-        return StructType(fields)
+    return _parse_datatype_json_value(json.loads(json_string))
 
 
-# Mapping Python types to Spark SQL DateType
+_FIXED_DECIMAL = re.compile("decimal\\((\\d+),(\\d+)\\)")
+
+
+def _parse_datatype_json_value(json_value):
+    if type(json_value) is unicode:
+        if json_value in _all_primitive_types.keys():
+            return _all_primitive_types[json_value]()
+        elif json_value == u'decimal':
+            return DecimalType()
+        elif _FIXED_DECIMAL.match(json_value):
+            m = _FIXED_DECIMAL.match(json_value)
+            return DecimalType(int(m.group(1)), int(m.group(2)))
+        else:
+            raise ValueError("Could not parse datatype: %s" % json_value)
+    else:
+        tpe = json_value["type"]
+        if tpe in _all_complex_types:
+            return _all_complex_types[tpe].fromJson(json_value)
+        elif tpe == 'udt':
+            return UserDefinedType.fromJson(json_value)
+        else:
+            raise ValueError("not supported type: %s" % tpe)
+
+
+# Mapping Python types to Spark SQL DataType
 _type_mappings = {
+    type(None): NullType,
     bool: BooleanType,
     int: IntegerType,
     long: LongType,
     float: DoubleType,
     str: StringType,
     unicode: StringType,
+    bytearray: BinaryType,
     decimal.Decimal: DecimalType,
+    datetime.date: DateType,
     datetime.datetime: TimestampType,
-    datetime.date: TimestampType,
     datetime.time: TimestampType,
 }
 
 
 def _infer_type(obj):
-    """Infer the DataType from obj"""
+    """Infer the DataType from obj
+
+    >>> p = ExamplePoint(1.0, 2.0)
+    >>> _infer_type(p)
+    ExamplePointUDT
+    """
     if obj is None:
         raise ValueError("Can not infer type for None")
+
+    if hasattr(obj, '__UDT__'):
+        return obj.__UDT__
 
     dataType = _type_mappings.get(type(obj))
     if dataType is not None:
         return dataType()
 
     if isinstance(obj, dict):
-        if not obj:
-            raise ValueError("Can not infer type for empty dict")
-        key, value = obj.iteritems().next()
-        return MapType(_infer_type(key), _infer_type(value), True)
+        for key, value in obj.iteritems():
+            if key is not None and value is not None:
+                return MapType(_infer_type(key), _infer_type(value), True)
+        else:
+            return MapType(NullType(), NullType(), True)
     elif isinstance(obj, (list, array)):
-        if not obj:
-            raise ValueError("Can not infer type for empty list/array")
-        return ArrayType(_infer_type(obj[0]), True)
+        for v in obj:
+            if v is not None:
+                return ArrayType(_infer_type(obj[0]), True)
+        else:
+            return ArrayType(NullType(), True)
     else:
         try:
             return _infer_schema(obj)
@@ -495,60 +651,181 @@ def _infer_schema(row):
     return StructType(fields)
 
 
-def _create_converter(obj, dataType):
+def _need_python_to_sql_conversion(dataType):
+    """
+    Checks whether we need python to sql conversion for the given type.
+    For now, only UDTs need this conversion.
+
+    >>> _need_python_to_sql_conversion(DoubleType())
+    False
+    >>> schema0 = StructType([StructField("indices", ArrayType(IntegerType(), False), False),
+    ...                       StructField("values", ArrayType(DoubleType(), False), False)])
+    >>> _need_python_to_sql_conversion(schema0)
+    False
+    >>> _need_python_to_sql_conversion(ExamplePointUDT())
+    True
+    >>> schema1 = ArrayType(ExamplePointUDT(), False)
+    >>> _need_python_to_sql_conversion(schema1)
+    True
+    >>> schema2 = StructType([StructField("label", DoubleType(), False),
+    ...                       StructField("point", ExamplePointUDT(), False)])
+    >>> _need_python_to_sql_conversion(schema2)
+    True
+    """
+    if isinstance(dataType, StructType):
+        return any([_need_python_to_sql_conversion(f.dataType) for f in dataType.fields])
+    elif isinstance(dataType, ArrayType):
+        return _need_python_to_sql_conversion(dataType.elementType)
+    elif isinstance(dataType, MapType):
+        return _need_python_to_sql_conversion(dataType.keyType) or \
+            _need_python_to_sql_conversion(dataType.valueType)
+    elif isinstance(dataType, UserDefinedType):
+        return True
+    else:
+        return False
+
+
+def _python_to_sql_converter(dataType):
+    """
+    Returns a converter that converts a Python object into a SQL datum for the given type.
+
+    >>> conv = _python_to_sql_converter(DoubleType())
+    >>> conv(1.0)
+    1.0
+    >>> conv = _python_to_sql_converter(ArrayType(DoubleType(), False))
+    >>> conv([1.0, 2.0])
+    [1.0, 2.0]
+    >>> conv = _python_to_sql_converter(ExamplePointUDT())
+    >>> conv(ExamplePoint(1.0, 2.0))
+    [1.0, 2.0]
+    >>> schema = StructType([StructField("label", DoubleType(), False),
+    ...                      StructField("point", ExamplePointUDT(), False)])
+    >>> conv = _python_to_sql_converter(schema)
+    >>> conv((1.0, ExamplePoint(1.0, 2.0)))
+    (1.0, [1.0, 2.0])
+    """
+    if not _need_python_to_sql_conversion(dataType):
+        return lambda x: x
+
+    if isinstance(dataType, StructType):
+        names, types = zip(*[(f.name, f.dataType) for f in dataType.fields])
+        converters = map(_python_to_sql_converter, types)
+
+        def converter(obj):
+            if isinstance(obj, dict):
+                return tuple(c(obj.get(n)) for n, c in zip(names, converters))
+            elif isinstance(obj, tuple):
+                if hasattr(obj, "_fields") or hasattr(obj, "__FIELDS__"):
+                    return tuple(c(v) for c, v in zip(converters, obj))
+                elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):  # k-v pairs
+                    d = dict(obj)
+                    return tuple(c(d.get(n)) for n, c in zip(names, converters))
+                else:
+                    return tuple(c(v) for c, v in zip(converters, obj))
+            else:
+                raise ValueError("Unexpected tuple %r with type %r" % (obj, dataType))
+        return converter
+    elif isinstance(dataType, ArrayType):
+        element_converter = _python_to_sql_converter(dataType.elementType)
+        return lambda a: [element_converter(v) for v in a]
+    elif isinstance(dataType, MapType):
+        key_converter = _python_to_sql_converter(dataType.keyType)
+        value_converter = _python_to_sql_converter(dataType.valueType)
+        return lambda m: dict([(key_converter(k), value_converter(v)) for k, v in m.items()])
+    elif isinstance(dataType, UserDefinedType):
+        return lambda obj: dataType.serialize(obj)
+    else:
+        raise ValueError("Unexpected type %r" % dataType)
+
+
+def _has_nulltype(dt):
+    """ Return whether there is NullType in `dt` or not """
+    if isinstance(dt, StructType):
+        return any(_has_nulltype(f.dataType) for f in dt.fields)
+    elif isinstance(dt, ArrayType):
+        return _has_nulltype((dt.elementType))
+    elif isinstance(dt, MapType):
+        return _has_nulltype(dt.keyType) or _has_nulltype(dt.valueType)
+    else:
+        return isinstance(dt, NullType)
+
+
+def _merge_type(a, b):
+    if isinstance(a, NullType):
+        return b
+    elif isinstance(b, NullType):
+        return a
+    elif type(a) is not type(b):
+        # TODO: type cast (such as int -> long)
+        raise TypeError("Can not merge type %s and %s" % (a, b))
+
+    # same type
+    if isinstance(a, StructType):
+        nfs = dict((f.name, f.dataType) for f in b.fields)
+        fields = [StructField(f.name, _merge_type(f.dataType, nfs.get(f.name, NullType())))
+                  for f in a.fields]
+        names = set([f.name for f in fields])
+        for n in nfs:
+            if n not in names:
+                fields.append(StructField(n, nfs[n]))
+        return StructType(fields)
+
+    elif isinstance(a, ArrayType):
+        return ArrayType(_merge_type(a.elementType, b.elementType), True)
+
+    elif isinstance(a, MapType):
+        return MapType(_merge_type(a.keyType, b.keyType),
+                       _merge_type(a.valueType, b.valueType),
+                       True)
+    else:
+        return a
+
+
+def _create_converter(dataType):
     """Create an converter to drop the names of fields in obj """
     if isinstance(dataType, ArrayType):
-        conv = _create_converter(obj[0], dataType.elementType)
+        conv = _create_converter(dataType.elementType)
         return lambda row: map(conv, row)
 
     elif isinstance(dataType, MapType):
-        value = obj.values()[0]
-        conv = _create_converter(value, dataType.valueType)
-        return lambda row: dict((k, conv(v)) for k, v in row.iteritems())
+        kconv = _create_converter(dataType.keyType)
+        vconv = _create_converter(dataType.valueType)
+        return lambda row: dict((kconv(k), vconv(v)) for k, v in row.iteritems())
+
+    elif isinstance(dataType, NullType):
+        return lambda x: None
 
     elif not isinstance(dataType, StructType):
         return lambda x: x
 
     # dataType must be StructType
     names = [f.name for f in dataType.fields]
+    converters = [_create_converter(f.dataType) for f in dataType.fields]
 
-    if isinstance(obj, dict):
-        conv = lambda o: tuple(o.get(n) for n in names)
+    def convert_struct(obj):
+        if obj is None:
+            return
 
-    elif isinstance(obj, tuple):
-        if hasattr(obj, "_fields"):  # namedtuple
-            conv = tuple
-        elif hasattr(obj, "__FIELDS__"):
-            conv = tuple
-        elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):
-            conv = lambda o: tuple(v for k, v in o)
+        if isinstance(obj, tuple):
+            if hasattr(obj, "_fields"):
+                d = dict(zip(obj._fields, obj))
+            elif hasattr(obj, "__FIELDS__"):
+                d = dict(zip(obj.__FIELDS__, obj))
+            elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):
+                d = dict(obj)
+            else:
+                raise ValueError("unexpected tuple: %s" % str(obj))
+
+        elif isinstance(obj, dict):
+            d = obj
+        elif hasattr(obj, "__dict__"):  # object
+            d = obj.__dict__
         else:
-            raise ValueError("unexpected tuple")
+            raise ValueError("Unexpected obj: %s" % obj)
 
-    elif hasattr(obj, "__dict__"):  # object
-        conv = lambda o: [o.__dict__.get(n, None) for n in names]
+        return tuple([conv(d.get(name)) for name, conv in zip(names, converters)])
 
-    if all(isinstance(f.dataType, PrimitiveType) for f in dataType.fields):
-        return conv
-
-    row = conv(obj)
-    convs = [_create_converter(v, f.dataType)
-             for v, f in zip(row, dataType.fields)]
-
-    def nested_conv(row):
-        return tuple(f(v) for f, v in zip(convs, conv(row)))
-
-    return nested_conv
-
-
-def _drop_schema(rows, schema):
-    """ all the names of fields, becoming tuples"""
-    iterator = iter(rows)
-    row = iterator.next()
-    converter = _create_converter(row, schema)
-    yield converter(row)
-    for i in iterator:
-        yield converter(i)
+    return convert_struct
 
 
 _BRACKETS = {'(': ')', '[': ']', '{': '}'}
@@ -647,10 +924,10 @@ def _infer_schema_type(obj, dataType):
     """
     Fill the dataType with types infered from obj
 
-    >>> schema = _parse_schema_abstract("a b c")
-    >>> row = (1, 1.0, "str")
+    >>> schema = _parse_schema_abstract("a b c d")
+    >>> row = (1, 1.0, "str", datetime.date(2014, 10, 10))
     >>> _infer_schema_type(row, schema)
-    StructType...IntegerType...DoubleType...StringType...
+    StructType...IntegerType...DoubleType...StringType...DateType...
     >>> row = [[1], {"key": (1, 2.0)}]
     >>> schema = _parse_schema_abstract("a[] b{c d}")
     >>> _infer_schema_type(row, schema)
@@ -660,7 +937,7 @@ def _infer_schema_type(obj, dataType):
         return _infer_type(obj)
 
     if not obj:
-        raise ValueError("Can not infer type from empty value")
+        return NullType()
 
     if isinstance(dataType, ArrayType):
         eType = _infer_schema_type(obj[0], dataType.elementType)
@@ -668,7 +945,7 @@ def _infer_schema_type(obj, dataType):
 
     elif isinstance(dataType, MapType):
         k, v = obj.iteritems().next()
-        return MapType(_infer_type(k),
+        return MapType(_infer_schema_type(k, dataType.keyType),
                        _infer_schema_type(v, dataType.valueType))
 
     elif isinstance(dataType, StructType):
@@ -688,11 +965,13 @@ _acceptable_types = {
     ByteType: (int, long),
     ShortType: (int, long),
     IntegerType: (int, long),
-    LongType: (long,),
+    LongType: (int, long),
     FloatType: (float,),
     DoubleType: (float,),
     DecimalType: (decimal.Decimal,),
     StringType: (str, unicode),
+    BinaryType: (bytearray,),
+    DateType: (datetime.date,),
     TimestampType: (datetime.datetime,),
     ArrayType: (list, tuple, array),
     MapType: (dict,),
@@ -720,17 +999,28 @@ def _verify_type(obj, dataType):
     Traceback (most recent call last):
         ...
     ValueError:...
+    >>> _verify_type(ExamplePoint(1.0, 2.0), ExamplePointUDT())
+    >>> _verify_type([1.0, 2.0], ExamplePointUDT()) # doctest: +IGNORE_EXCEPTION_DETAIL
+    Traceback (most recent call last):
+        ...
+    ValueError:...
     """
     # all objects are nullable
     if obj is None:
         return
 
-    _type = type(dataType)
-    if _type not in _acceptable_types:
+    if isinstance(dataType, UserDefinedType):
+        if not (hasattr(obj, '__UDT__') and obj.__UDT__ == dataType):
+            raise ValueError("%r is not an instance of type %r" % (obj, dataType))
+        _verify_type(dataType.serialize(obj), dataType.sqlType())
         return
 
+    _type = type(dataType)
+    assert _type in _acceptable_types, "unkown datatype: %s" % dataType
+
+    # subclass of them can not be deserialized in JVM
     if type(obj) not in _acceptable_types[_type]:
-        raise TypeError("%s can not accept abject in type %s"
+        raise TypeError("%s can not accept object in type %s"
                         % (dataType, type(obj)))
 
     if isinstance(dataType, ArrayType):
@@ -757,7 +1047,7 @@ def _restore_object(dataType, obj):
     """ Restore object during unpickling. """
     # use id(dataType) as key to speed up lookup in dict
     # Because of batched pickling, dataType will be the
-    # same object in mose cases.
+    # same object in most cases.
     k = id(dataType)
     cls = _cached_cls.get(k)
     if cls is None:
@@ -772,6 +1062,10 @@ def _restore_object(dataType, obj):
 
 def _create_object(cls, v):
     """ Create an customized object with class `cls`. """
+    # datetime.date would be deserialized as datetime.datetime
+    # from java type, so we need to set it back.
+    if cls is datetime.date and isinstance(v, datetime.datetime):
+        return v.date()
     return cls(v) if v is not None else v
 
 
@@ -785,14 +1079,18 @@ def _create_getter(dt, i):
     return getter
 
 
-def _has_struct(dt):
-    """Return whether `dt` is or has StructType in it"""
+def _has_struct_or_date(dt):
+    """Return whether `dt` is or has StructType/DateType in it"""
     if isinstance(dt, StructType):
         return True
     elif isinstance(dt, ArrayType):
-        return _has_struct(dt.elementType)
+        return _has_struct_or_date(dt.elementType)
     elif isinstance(dt, MapType):
-        return _has_struct(dt.valueType)
+        return _has_struct_or_date(dt.keyType) or _has_struct_or_date(dt.valueType)
+    elif isinstance(dt, DateType):
+        return True
+    elif isinstance(dt, UserDefinedType):
+        return True
     return False
 
 
@@ -805,7 +1103,7 @@ def _create_properties(fields):
                 or keyword.iskeyword(name)):
             warnings.warn("field name %s can not be accessed in Python,"
                           "use position to access it instead" % name)
-        if _has_struct(f.dataType):
+        if _has_struct_or_date(f.dataType):
             # delay creating object until accessing it
             getter = _create_getter(f.dataType, i)
         else:
@@ -834,48 +1132,42 @@ def _create_cls(dataType):
     >>> obj = _create_cls(schema)(row)
     >>> pickle.loads(pickle.dumps(obj))
     Row(a=[1], b={'key': Row(c=1, d=2.0)})
+    >>> pickle.loads(pickle.dumps(obj.a))
+    [1]
+    >>> pickle.loads(pickle.dumps(obj.b))
+    {'key': Row(c=1, d=2.0)}
     """
 
     if isinstance(dataType, ArrayType):
         cls = _create_cls(dataType.elementType)
 
-        class List(list):
-
-            def __getitem__(self, i):
-                # create object with datetype
-                return _create_object(cls, list.__getitem__(self, i))
-
-            def __repr__(self):
-                # call collect __repr__ for nested objects
-                return "[%s]" % (", ".join(repr(self[i])
-                                           for i in range(len(self))))
-
-            def __reduce__(self):
-                return list.__reduce__(self)
+        def List(l):
+            if l is None:
+                return
+            return [_create_object(cls, v) for v in l]
 
         return List
 
     elif isinstance(dataType, MapType):
+        kcls = _create_cls(dataType.keyType)
         vcls = _create_cls(dataType.valueType)
 
-        class Dict(dict):
-
-            def __getitem__(self, k):
-                # create object with datetype
-                return _create_object(vcls, dict.__getitem__(self, k))
-
-            def __repr__(self):
-                # call collect __repr__ for nested objects
-                return "{%s}" % (", ".join("%r: %r" % (k, self[k])
-                                           for k in self))
-
-            def __reduce__(self):
-                return dict.__reduce__(self)
+        def Dict(d):
+            if d is None:
+                return
+            return dict((_create_object(kcls, k), _create_object(vcls, v)) for k, v in d.items())
 
         return Dict
 
+    elif isinstance(dataType, DateType):
+        return datetime.date
+
+    elif isinstance(dataType, UserDefinedType):
+        return lambda datum: dataType.deserialize(datum)
+
     elif not isinstance(dataType, StructType):
-        raise Exception("unexpected data type: %s" % dataType)
+        # no wrapper for primitive types
+        return lambda x: x
 
     class Row(tuple):
 
@@ -886,6 +1178,10 @@ def _create_cls(dataType):
 
         # create property for fast access
         locals().update(_create_properties(dataType.fields))
+
+        def asDict(self):
+            """ Return as a dict """
+            return dict((n, getattr(self, n)) for n in self.__FIELDS__)
 
         def __repr__(self):
             # call collect __repr__ for nested objects
@@ -898,19 +1194,19 @@ def _create_cls(dataType):
     return Row
 
 
-class SQLContext:
+class SQLContext(object):
 
     """Main entry point for Spark SQL functionality.
 
-    A SQLContext can be used create L{SchemaRDD}s, register L{SchemaRDD}s as
+    A SQLContext can be used create L{SchemaRDD}, register L{SchemaRDD} as
     tables, execute SQL over tables, cache tables, and read parquet files.
     """
 
     def __init__(self, sparkContext, sqlContext=None):
         """Create a new SQLContext.
 
-        @param sparkContext: The SparkContext to wrap.
-        @param sqlContext: An optional JVM Scala SQLContext. If set, we do not instatiate a new
+        :param sparkContext: The SparkContext to wrap.
+        :param sqlContext: An optional JVM Scala SQLContext. If set, we do not instatiate a new
         SQLContext in the JVM, instead we make all calls to this object.
 
         >>> srdd = sqlCtx.inferSchema(rdd)
@@ -941,7 +1237,6 @@ class SQLContext:
         self._sc = sparkContext
         self._jsc = self._sc._jsc
         self._jvm = self._sc._jvm
-        self._pythonToJava = self._jvm.PythonRDD.pythonToJavaArray
         self._scala_SQLContext = sqlContext
 
     @property
@@ -970,10 +1265,14 @@ class SQLContext:
         [Row(c0=4)]
         """
         func = lambda _, it: imap(lambda x: f(*x), it)
-        command = (func,
-                   BatchedSerializer(PickleSerializer(), 1024),
-                   BatchedSerializer(PickleSerializer(), 1024))
-        pickled_command = CloudPickleSerializer().dumps(command)
+        command = (func, None,
+                   AutoBatchedSerializer(PickleSerializer()),
+                   AutoBatchedSerializer(PickleSerializer()))
+        ser = CloudPickleSerializer()
+        pickled_command = ser.dumps(command)
+        if len(pickled_command) > (1 << 20):  # 1M
+            broadcast = self._sc.broadcast(pickled_command)
+            pickled_command = ser.dumps(broadcast)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self._sc._pickled_broadcast_vars],
             self._sc._gateway._gateway_client)
@@ -989,20 +1288,22 @@ class SQLContext:
                                       self._sc.pythonExec,
                                       broadcast_vars,
                                       self._sc._javaAccumulator,
-                                      str(returnType))
+                                      returnType.json())
 
-    def inferSchema(self, rdd):
-        """Infer and apply a schema to an RDD of L{Row}s.
+    def inferSchema(self, rdd, samplingRatio=None):
+        """Infer and apply a schema to an RDD of L{Row}.
 
-        We peek at the first row of the RDD to determine the fields' names
-        and types. Nested collections are supported, which include array,
-        dict, list, Row, tuple, namedtuple, or object.
+        When samplingRatio is specified, the schema is inferred by looking
+        at the types of each row in the sampled dataset. Otherwise, the
+        first 100 rows of the RDD are inspected. Nested collections are
+        supported, which can include array, dict, list, Row, tuple,
+        namedtuple, or object.
 
-        All the rows in `rdd` should have the same type with the first one,
-        or it will cause runtime exceptions.
+        Each row could be L{pyspark.sql.Row} object or namedtuple or objects.
+        Using top level dicts is deprecated, as dict is used to represent Maps.
 
-        Each row could be L{pyspark.sql.Row} object or namedtuple or objects,
-        using dict is deprecated.
+        If a single column has multiple distinct inferred types, it may cause
+        runtime exceptions.
 
         >>> rdd = sc.parallelize(
         ...     [Row(field1=1, field2="row1"),
@@ -1026,6 +1327,16 @@ class SQLContext:
         >>> srdd = sqlCtx.inferSchema(nestedRdd2)
         >>> srdd.collect()
         [Row(f1=[[1, 2], [2, 3]], f2=[1, 2]), ..., f2=[2, 3])]
+
+        >>> from collections import namedtuple
+        >>> CustomRow = namedtuple('CustomRow', 'field1 field2')
+        >>> rdd = sc.parallelize(
+        ...     [CustomRow(field1=1, field2="row1"),
+        ...      CustomRow(field1=2, field2="row2"),
+        ...      CustomRow(field1=3, field2="row3")])
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.collect()[0]
+        Row(field1=1, field2=u'row1')
         """
 
         if isinstance(rdd, SchemaRDD):
@@ -1039,13 +1350,28 @@ class SQLContext:
             warnings.warn("Using RDD of dict to inferSchema is deprecated,"
                           "please use pyspark.sql.Row instead")
 
-        schema = _infer_schema(first)
-        rdd = rdd.mapPartitions(lambda rows: _drop_schema(rows, schema))
+        if samplingRatio is None:
+            schema = _infer_schema(first)
+            if _has_nulltype(schema):
+                for row in rdd.take(100)[1:]:
+                    schema = _merge_type(schema, _infer_schema(row))
+                    if not _has_nulltype(schema):
+                        break
+                else:
+                    warnings.warn("Some of types cannot be determined by the "
+                                  "first 100 rows, please try again with sampling")
+        else:
+            if samplingRatio > 0.99:
+                rdd = rdd.sample(False, float(samplingRatio))
+            schema = rdd.map(_infer_schema).reduce(_merge_type)
+
+        converter = _create_converter(schema)
+        rdd = rdd.map(converter)
         return self.applySchema(rdd, schema)
 
     def applySchema(self, rdd, schema):
         """
-        Applies the given schema to the given RDD of L{tuple} or L{list}s.
+        Applies the given schema to the given RDD of L{tuple} or L{list}.
 
         These tuples or lists can contain complex nested structures like
         lists, maps or nested rows.
@@ -1064,8 +1390,9 @@ class SQLContext:
         >>> srdd2.collect()
         [Row(field1=1, field2=u'row1'),..., Row(field1=3, field2=u'row3')]
 
-        >>> from datetime import datetime
+        >>> from datetime import date, datetime
         >>> rdd = sc.parallelize([(127, -128L, -32768, 32767, 2147483647L, 1.0,
+        ...     date(2010, 1, 1),
         ...     datetime(2010, 1, 1, 1, 1, 1),
         ...     {"a": 1}, (2,), [1, 2, 3], None)])
         >>> schema = StructType([
@@ -1075,6 +1402,7 @@ class SQLContext:
         ...     StructField("short2", ShortType(), False),
         ...     StructField("int", IntegerType(), False),
         ...     StructField("float", FloatType(), False),
+        ...     StructField("date", DateType(), False),
         ...     StructField("time", TimestampType(), False),
         ...     StructField("map",
         ...         MapType(StringType(), IntegerType(), False), False),
@@ -1084,10 +1412,11 @@ class SQLContext:
         ...     StructField("null", DoubleType(), True)])
         >>> srdd = sqlCtx.applySchema(rdd, schema)
         >>> results = srdd.map(
-        ...     lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int, x.float, x.time,
-        ...         x.map["a"], x.struct.b, x.list, x.null))
-        >>> results.collect()[0]
-        (127, -128, -32768, 32767, 2147483647, 1.0, ...(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
+        ...     lambda x: (x.byte1, x.byte2, x.short1, x.short2, x.int, x.float, x.date,
+        ...         x.time, x.map["a"], x.struct.b, x.list, x.null))
+        >>> results.collect()[0] # doctest: +NORMALIZE_WHITESPACE
+        (127, -128, -32768, 32767, 2147483647, 1.0, datetime.date(2010, 1, 1),
+             datetime.datetime(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
 
         >>> srdd.registerTempTable("table2")
         >>> sqlCtx.sql(
@@ -1115,13 +1444,21 @@ class SQLContext:
 
         # take the first few rows to verify schema
         rows = rdd.take(10)
+        # Row() cannot been deserialized by Pyrolite
+        if rows and isinstance(rows[0], tuple) and rows[0].__class__.__name__ == 'Row':
+            rdd = rdd.map(tuple)
+            rows = rdd.take(10)
+
         for row in rows:
             _verify_type(row, schema)
 
-        batched = isinstance(rdd._jrdd_deserializer, BatchedSerializer)
-        jrdd = self._pythonToJava(rdd._jrdd, batched)
-        srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), str(schema))
-        return SchemaRDD(srdd, self)
+        # convert python objects to sql data
+        converter = _python_to_sql_converter(schema)
+        rdd = rdd.map(converter)
+
+        jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
+        srdd = self._ssql_ctx.applySchemaToPythonRDD(jrdd.rdd(), schema.json())
+        return SchemaRDD(srdd.toJavaSchemaRDD(), self)
 
     def registerRDDAsTable(self, rdd, tableName):
         """Registers the given RDD as a temporary table in the catalog.
@@ -1133,8 +1470,8 @@ class SQLContext:
         >>> sqlCtx.registerRDDAsTable(srdd, "table1")
         """
         if (rdd.__class__ is SchemaRDD):
-            jschema_rdd = rdd._jschema_rdd
-            self._ssql_ctx.registerRDDAsTable(jschema_rdd, tableName)
+            srdd = rdd._jschema_rdd.baseSchemaRDD()
+            self._ssql_ctx.registerRDDAsTable(srdd, tableName)
         else:
             raise ValueError("Can only register SchemaRDD as table")
 
@@ -1150,10 +1487,10 @@ class SQLContext:
         >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
-        jschema_rdd = self._ssql_ctx.parquetFile(path)
+        jschema_rdd = self._ssql_ctx.parquetFile(path).toJavaSchemaRDD()
         return SchemaRDD(jschema_rdd, self)
 
-    def jsonFile(self, path, schema=None):
+    def jsonFile(self, path, schema=None, samplingRatio=1.0):
         """
         Loads a text file storing one JSON object per line as a
         L{SchemaRDD}.
@@ -1161,8 +1498,8 @@ class SQLContext:
         If the schema is provided, applies the given schema to this
         JSON dataset.
 
-        Otherwise, it goes through the entire dataset once to determine
-        the schema.
+        Otherwise, it samples the dataset with ratio `samplingRatio` to
+        determine the schema.
 
         >>> import tempfile, shutil
         >>> jsonFile = tempfile.mkdtemp()
@@ -1181,6 +1518,7 @@ class SQLContext:
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22,..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
+
         >>> srdd3 = sqlCtx.jsonFile(jsonFile, srdd1.schema())
         >>> sqlCtx.registerRDDAsTable(srdd3, "table2")
         >>> srdd4 = sqlCtx.sql(
@@ -1191,6 +1529,7 @@ class SQLContext:
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22,..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
+
         >>> schema = StructType([
         ...     StructField("field2", StringType(), True),
         ...     StructField("field3",
@@ -1206,20 +1545,20 @@ class SQLContext:
         [Row(f1=u'row1', f2=None, f3=None)...Row(f1=u'row3', f2=[], f3=None)]
         """
         if schema is None:
-            jschema_rdd = self._ssql_ctx.jsonFile(path)
+            srdd = self._ssql_ctx.jsonFile(path, samplingRatio)
         else:
-            scala_datatype = self._ssql_ctx.parseDataType(str(schema))
-            jschema_rdd = self._ssql_ctx.jsonFile(path, scala_datatype)
-        return SchemaRDD(jschema_rdd, self)
+            scala_datatype = self._ssql_ctx.parseDataType(schema.json())
+            srdd = self._ssql_ctx.jsonFile(path, scala_datatype)
+        return SchemaRDD(srdd.toJavaSchemaRDD(), self)
 
-    def jsonRDD(self, rdd, schema=None):
+    def jsonRDD(self, rdd, schema=None, samplingRatio=1.0):
         """Loads an RDD storing one JSON object per string as a L{SchemaRDD}.
 
         If the schema is provided, applies the given schema to this
         JSON dataset.
 
-        Otherwise, it goes through the entire dataset once to determine
-        the schema.
+        Otherwise, it samples the dataset with ratio `samplingRatio` to
+        determine the schema.
 
         >>> srdd1 = sqlCtx.jsonRDD(json)
         >>> sqlCtx.registerRDDAsTable(srdd1, "table1")
@@ -1231,6 +1570,7 @@ class SQLContext:
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
+
         >>> srdd3 = sqlCtx.jsonRDD(json, srdd1.schema())
         >>> sqlCtx.registerRDDAsTable(srdd3, "table2")
         >>> srdd4 = sqlCtx.sql(
@@ -1241,6 +1581,7 @@ class SQLContext:
         Row(f1=1, f2=u'row1', f3=Row(field4=11, field5=None), f4=None)
         Row(f1=2, f2=None, f3=Row(field4=22..., f4=[Row(field7=u'row2')])
         Row(f1=None, f2=u'row3', f3=Row(field4=33, field5=[]), f4=None)
+
         >>> schema = StructType([
         ...     StructField("field2", StringType(), True),
         ...     StructField("field3",
@@ -1274,11 +1615,11 @@ class SQLContext:
         keyed._bypass_serializer = True
         jrdd = keyed._jrdd.map(self._jvm.BytesToString())
         if schema is None:
-            jschema_rdd = self._ssql_ctx.jsonRDD(jrdd.rdd())
+            srdd = self._ssql_ctx.jsonRDD(jrdd.rdd(), samplingRatio)
         else:
-            scala_datatype = self._ssql_ctx.parseDataType(str(schema))
-            jschema_rdd = self._ssql_ctx.jsonRDD(jrdd.rdd(), scala_datatype)
-        return SchemaRDD(jschema_rdd, self)
+            scala_datatype = self._ssql_ctx.parseDataType(schema.json())
+            srdd = self._ssql_ctx.jsonRDD(jrdd.rdd(), scala_datatype)
+        return SchemaRDD(srdd.toJavaSchemaRDD(), self)
 
     def sql(self, sqlQuery):
         """Return a L{SchemaRDD} representing the result of the given query.
@@ -1289,7 +1630,7 @@ class SQLContext:
         >>> srdd2.collect()
         [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
         """
-        return SchemaRDD(self._ssql_ctx.sql(sqlQuery), self)
+        return SchemaRDD(self._ssql_ctx.sql(sqlQuery).toJavaSchemaRDD(), self)
 
     def table(self, tableName):
         """Returns the specified table as a L{SchemaRDD}.
@@ -1300,7 +1641,7 @@ class SQLContext:
         >>> sorted(srdd.collect()) == sorted(srdd2.collect())
         True
         """
-        return SchemaRDD(self._ssql_ctx.table(tableName), self)
+        return SchemaRDD(self._ssql_ctx.table(tableName).toJavaSchemaRDD(), self)
 
     def cacheTable(self, tableName):
         """Caches the specified table in-memory."""
@@ -1322,8 +1663,8 @@ class HiveContext(SQLContext):
     def __init__(self, sparkContext, hiveContext=None):
         """Create a new HiveContext.
 
-        @param sparkContext: The SparkContext to wrap.
-        @param hiveContext: An optional JVM Scala HiveContext. If set, we do not instatiate a new
+        :param sparkContext: The SparkContext to wrap.
+        :param hiveContext: An optional JVM Scala HiveContext. If set, we do not instatiate a new
         HiveContext in the JVM, instead we make all calls to this object.
         """
         SQLContext.__init__(self, sparkContext)
@@ -1340,7 +1681,7 @@ class HiveContext(SQLContext):
         except Py4JError as e:
             raise Exception("You must build Spark with Hive. "
                             "Export 'SPARK_HIVE=true' and run "
-                            "sbt/sbt assembly", e)
+                            "build/sbt assembly", e)
 
     def _get_hive_ctx(self):
         return self._jvm.HiveContext(self._jsc.sc())
@@ -1352,7 +1693,7 @@ class HiveContext(SQLContext):
         warnings.warn("hiveql() is deprecated as the sql function now parses using HiveQL by" +
                       "default. The SQL dialect for parsing can be set using 'spark.sql.dialect'",
                       DeprecationWarning)
-        return SchemaRDD(self._ssql_ctx.hiveql(hqlQuery), self)
+        return SchemaRDD(self._ssql_ctx.hiveql(hqlQuery).toJavaSchemaRDD(), self)
 
     def hql(self, hqlQuery):
         """
@@ -1365,33 +1706,6 @@ class HiveContext(SQLContext):
 
 
 class LocalHiveContext(HiveContext):
-
-    """Starts up an instance of hive where metadata is stored locally.
-
-    An in-process metadata data is created with data stored in ./metadata.
-    Warehouse data is stored in in ./warehouse.
-
-    >>> import os
-    >>> hiveCtx = LocalHiveContext(sc)
-    >>> try:
-    ...     supress = hiveCtx.sql("DROP TABLE src")
-    ... except Exception:
-    ...     pass
-    >>> kv1 = os.path.join(os.environ["SPARK_HOME"],
-    ...        'examples/src/main/resources/kv1.txt')
-    >>> supress = hiveCtx.sql(
-    ...     "CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-    >>> supress = hiveCtx.sql("LOAD DATA LOCAL INPATH '%s' INTO TABLE src"
-    ...        % kv1)
-    >>> results = hiveCtx.sql("FROM src SELECT value"
-    ...      ).map(lambda r: int(r.value.split('_')[1]))
-    >>> num = results.count()
-    >>> reduce_sum = results.reduce(lambda x, y: x + y)
-    >>> num
-    500
-    >>> reduce_sum
-    130091
-    """
 
     def __init__(self, sparkContext, sqlContext=None):
         HiveContext.__init__(self, sparkContext, sqlContext)
@@ -1456,6 +1770,14 @@ class Row(tuple):
 
         else:
             raise ValueError("No args or kwargs")
+
+    def asDict(self):
+        """
+        Return as an dict
+        """
+        if not hasattr(self, "__FIELDS__"):
+            raise TypeError("Cannot convert a Row class into dict")
+        return dict(zip(self.__FIELDS__, self))
 
     # let obect acs like class
     def __call__(self, *args):
@@ -1523,13 +1845,15 @@ class SchemaRDD(RDD):
     def __init__(self, jschema_rdd, sql_ctx):
         self.sql_ctx = sql_ctx
         self._sc = sql_ctx._sc
+        clsName = jschema_rdd.getClass().getName()
+        assert clsName.endswith("JavaSchemaRDD"), "jschema_rdd must be JavaSchemaRDD"
         self._jschema_rdd = jschema_rdd
-
+        self._id = None
         self.is_cached = False
         self.is_checkpointed = False
         self.ctx = self.sql_ctx._sc
         # the _jrdd is created by javaToPython(), serialized by pickle
-        self._jrdd_deserializer = BatchedSerializer(PickleSerializer())
+        self._jrdd_deserializer = AutoBatchedSerializer(PickleSerializer())
 
     @property
     def _jrdd(self):
@@ -1539,12 +1863,40 @@ class SchemaRDD(RDD):
         L{pyspark.rdd.RDD} super class (map, filter, etc.).
         """
         if not hasattr(self, '_lazy_jrdd'):
-            self._lazy_jrdd = self._jschema_rdd.javaToPython()
+            self._lazy_jrdd = self._jschema_rdd.baseSchemaRDD().javaToPython()
         return self._lazy_jrdd
 
-    @property
-    def _id(self):
-        return self._jrdd.id()
+    def id(self):
+        if self._id is None:
+            self._id = self._jrdd.id()
+        return self._id
+
+    def limit(self, num):
+        """Limit the result count to the number specified.
+
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.limit(2).collect()
+        [Row(field1=1, field2=u'row1'), Row(field1=2, field2=u'row2')]
+        >>> srdd.limit(0).collect()
+        []
+        """
+        rdd = self._jschema_rdd.baseSchemaRDD().limit(num).toJavaSchemaRDD()
+        return SchemaRDD(rdd, self.sql_ctx)
+
+    def toJSON(self, use_unicode=False):
+        """Convert a SchemaRDD into a MappedRDD of JSON documents; one document per row.
+
+        >>> srdd1 = sqlCtx.jsonRDD(json)
+        >>> sqlCtx.registerRDDAsTable(srdd1, "table1")
+        >>> srdd2 = sqlCtx.sql( "SELECT * from table1")
+        >>> srdd2.toJSON().take(1)[0] == '{"field1":1,"field2":"row1","field3":{"field4":11}}'
+        True
+        >>> srdd3 = sqlCtx.sql( "SELECT field3.field4 from table1")
+        >>> srdd3.toJSON().collect() == ['{"field4":11}', '{"field4":22}', '{"field4":33}']
+        True
+        """
+        rdd = self._jschema_rdd.baseSchemaRDD().toJSON()
+        return RDD(rdd.toJavaRDD(), self._sc, UTF8Deserializer(use_unicode))
 
     def saveAsParquetFile(self, path):
         """Save the contents as a Parquet file, preserving the schema.
@@ -1596,7 +1948,7 @@ class SchemaRDD(RDD):
     def schema(self):
         """Returns the schema of this SchemaRDD (represented by
         a L{StructType})."""
-        return _parse_datatype_string(self._jschema_rdd.schema().toString())
+        return _parse_datatype_json_string(self._jschema_rdd.baseSchemaRDD().schema().json())
 
     def schemaString(self):
         """Returns the output schema in the tree format."""
@@ -1622,15 +1974,39 @@ class SchemaRDD(RDD):
         return self._jschema_rdd.count()
 
     def collect(self):
-        """
-        Return a list that contains all of the rows in this RDD.
+        """Return a list that contains all of the rows in this RDD.
 
-        Each object in the list is on Row, the fields can be accessed as
+        Each object in the list is a Row, the fields can be accessed as
         attributes.
+
+        Unlike the base RDD implementation of collect, this implementation
+        leverages the query optimizer to perform a collect on the SchemaRDD,
+        which supports features such as filter pushdown.
+
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.collect()
+        [Row(field1=1, field2=u'row1'), ..., Row(field1=3, field2=u'row3')]
         """
-        rows = RDD.collect(self)
+        with SCCallSiteSync(self.context) as css:
+            bytesInJava = self._jschema_rdd.baseSchemaRDD().collectToPython().iterator()
         cls = _create_cls(self.schema())
-        return map(cls, rows)
+        return map(cls, self._collect_iterator_through_file(bytesInJava))
+
+    def take(self, num):
+        """Take the first num rows of the RDD.
+
+        Each object in the list is a Row, the fields can be accessed as
+        attributes.
+
+        Unlike the base RDD implementation of take, this implementation
+        leverages the query optimizer to perform a collect on a SchemaRDD,
+        which supports features such as filter pushdown.
+
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.take(2)
+        [Row(field1=1, field2=u'row1'), Row(field1=2, field2=u'row2')]
+        """
+        return self.limit(num).collect()
 
     # Convert each object in the RDD to a Row with the right class
     # for this SchemaRDD, so that fields can be accessed as attributes.
@@ -1647,8 +2023,6 @@ class SchemaRDD(RDD):
         rdd = RDD(self._jrdd, self._sc, self._jrdd_deserializer)
 
         schema = self.schema()
-        import pickle
-        pickle.loads(pickle.dumps(schema))
 
         def applySchema(_, it):
             cls = _create_cls(schema)
@@ -1665,7 +2039,7 @@ class SchemaRDD(RDD):
         self._jschema_rdd.cache()
         return self
 
-    def persist(self, storageLevel):
+    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
         self.is_cached = True
         javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
         self._jschema_rdd.persist(javaStorageLevel)
@@ -1685,17 +2059,18 @@ class SchemaRDD(RDD):
 
     def getCheckpointFile(self):
         checkpointFile = self._jschema_rdd.getCheckpointFile()
-        if checkpointFile.isDefined():
+        if checkpointFile.isPresent():
             return checkpointFile.get()
-        else:
-            return None
 
     def coalesce(self, numPartitions, shuffle=False):
         rdd = self._jschema_rdd.coalesce(numPartitions, shuffle)
         return SchemaRDD(rdd, self.sql_ctx)
 
-    def distinct(self):
-        rdd = self._jschema_rdd.distinct()
+    def distinct(self, numPartitions=None):
+        if numPartitions is None:
+            rdd = self._jschema_rdd.distinct()
+        else:
+            rdd = self._jschema_rdd.distinct(numPartitions)
         return SchemaRDD(rdd, self.sql_ctx)
 
     def intersection(self, other):
@@ -1720,18 +2095,44 @@ class SchemaRDD(RDD):
         else:
             raise ValueError("Can only subtract another SchemaRDD")
 
+    def sample(self, withReplacement, fraction, seed=None):
+        """
+        Return a sampled subset of this SchemaRDD.
+
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.sample(False, 0.5, 97).count()
+        2L
+        """
+        assert fraction >= 0.0, "Negative fraction value: %s" % fraction
+        seed = seed if seed is not None else random.randint(0, sys.maxint)
+        rdd = self._jschema_rdd.sample(withReplacement, fraction, long(seed))
+        return SchemaRDD(rdd, self.sql_ctx)
+
+    def takeSample(self, withReplacement, num, seed=None):
+        """Return a fixed-size sampled subset of this SchemaRDD.
+
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.takeSample(False, 2, 97)
+        [Row(field1=3, field2=u'row3'), Row(field1=1, field2=u'row1')]
+        """
+        seed = seed if seed is not None else random.randint(0, sys.maxint)
+        with SCCallSiteSync(self.context) as css:
+            bytesInJava = self._jschema_rdd.baseSchemaRDD() \
+                .takeSampleToPython(withReplacement, num, long(seed)) \
+                .iterator()
+        cls = _create_cls(self.schema())
+        return map(cls, self._collect_iterator_through_file(bytesInJava))
+
 
 def _test():
     import doctest
-    from array import array
     from pyspark.context import SparkContext
     # let doctest run in pyspark.sql, so DataTypes can be picklable
     import pyspark.sql
     from pyspark.sql import Row, SQLContext
+    from pyspark.tests import ExamplePoint, ExamplePointUDT
     globs = pyspark.sql.__dict__.copy()
-    # The small batch size here ensures that we see multiple batches,
-    # even in these small test examples:
-    sc = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['sqlCtx'] = SQLContext(sc)
     globs['rdd'] = sc.parallelize(
@@ -1739,6 +2140,8 @@ def _test():
          Row(field1=2, field2="row2"),
          Row(field1=3, field2="row3")]
     )
+    globs['ExamplePoint'] = ExamplePoint
+    globs['ExamplePointUDT'] = ExamplePointUDT
     jsonStrings = [
         '{"field1": 1, "field2": "row1", "field3":{"field4":11}}',
         '{"field1" : 2, "field3":{"field4":22, "field5": [10, 11]},'

@@ -19,17 +19,12 @@ package org.apache.spark
 
 import java.io.File
 
-import org.apache.log4j.Logger
-import org.apache.log4j.Level
-
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.prop.TableDrivenPropertyChecks._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.util.Utils
-
-import scala.language.postfixOps
 
 class DriverSuite extends FunSuite with Timeouts {
 
@@ -40,7 +35,7 @@ class DriverSuite extends FunSuite with Timeouts {
     forAll(masters) { (master: String) =>
       failAfter(60 seconds) {
         Utils.executeAndGetOutput(
-          Seq("./bin/spark-class", "org.apache.spark.DriverWithoutCleanup", master),
+          Seq(s"$sparkHome/bin/spark-class", "org.apache.spark.DriverWithoutCleanup", master),
           new File(sparkHome),
           Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
       }
@@ -54,8 +49,11 @@ class DriverSuite extends FunSuite with Timeouts {
  */
 object DriverWithoutCleanup {
   def main(args: Array[String]) {
-    Logger.getRootLogger().setLevel(Level.WARN)
-    val sc = new SparkContext(args(0), "DriverWithoutCleanup")
+    Utils.configTestLog4j("INFO")
+    // Bind the web UI to an ephemeral port in order to avoid conflicts with other tests running on
+    // the same machine (we shouldn't just disable the UI here, since that might mask bugs):
+    val conf = new SparkConf().set("spark.ui.port", "0")
+    val sc = new SparkContext(args(0), "DriverWithoutCleanup", conf)
     sc.parallelize(1 to 100, 4).count()
   }
 }

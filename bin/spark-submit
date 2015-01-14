@@ -19,8 +19,11 @@
 
 # NOTE: Any changes in this file must be reflected in SparkSubmitDriverBootstrapper.scala!
 
-export SPARK_HOME="$(cd `dirname $0`/..; pwd)"
+export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
 ORIG_ARGS=("$@")
+
+# Set COLUMNS for progress bar
+export COLUMNS=`tput cols`
 
 while (($#)); do
   if [ "$1" = "--deploy-mode" ]; then
@@ -35,11 +38,19 @@ while (($#)); do
     export SPARK_SUBMIT_CLASSPATH=$2
   elif [ "$1" = "--driver-java-options" ]; then
     export SPARK_SUBMIT_OPTS=$2
+  elif [ "$1" = "--master" ]; then
+    export MASTER=$2
   fi
   shift
 done
 
-DEFAULT_PROPERTIES_FILE="$SPARK_HOME/conf/spark-defaults.conf"
+if [ -z "$SPARK_CONF_DIR" ]; then
+  export SPARK_CONF_DIR="$SPARK_HOME/conf"
+fi
+DEFAULT_PROPERTIES_FILE="$SPARK_CONF_DIR/spark-defaults.conf"
+if [ "$MASTER" == "yarn-cluster" ]; then
+  SPARK_SUBMIT_DEPLOY_MODE=cluster
+fi
 export SPARK_SUBMIT_DEPLOY_MODE=${SPARK_SUBMIT_DEPLOY_MODE:-"client"}
 export SPARK_SUBMIT_PROPERTIES_FILE=${SPARK_SUBMIT_PROPERTIES_FILE:-"$DEFAULT_PROPERTIES_FILE"}
 
@@ -59,5 +70,5 @@ if [[ "$SPARK_SUBMIT_DEPLOY_MODE" == "client" && -f "$SPARK_SUBMIT_PROPERTIES_FI
   fi
 fi
 
-exec $SPARK_HOME/bin/spark-class org.apache.spark.deploy.SparkSubmit "${ORIG_ARGS[@]}"
+exec "$SPARK_HOME"/bin/spark-class org.apache.spark.deploy.SparkSubmit "${ORIG_ARGS[@]}"
 

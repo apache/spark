@@ -130,7 +130,7 @@ private class ClientActor(driverArgs: ClientArguments, conf: SparkConf)
       println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
       System.exit(-1)
 
-    case AssociationErrorEvent(cause, _, remoteAddress, _) =>
+    case AssociationErrorEvent(cause, _, remoteAddress, _, _) =>
       println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
       println(s"Cause was: $cause")
       System.exit(-1)
@@ -160,6 +160,8 @@ object Client {
     val (actorSystem, _) = AkkaUtils.createActorSystem(
       "driverClient", Utils.localHostName(), 0, conf, new SecurityManager(conf))
 
+    // Verify driverArgs.master is a valid url so that we can use it in ClientActor safely
+    Master.toAkkaUrl(driverArgs.master)
     actorSystem.actorOf(Props(classOf[ClientActor], driverArgs, conf))
 
     actorSystem.awaitTermination()

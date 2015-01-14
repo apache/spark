@@ -21,7 +21,6 @@ import java.lang.ref.WeakReference
 
 import scala.collection.mutable.{HashSet, SynchronizedSet}
 import scala.language.existentials
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
@@ -29,7 +28,6 @@ import org.scalatest.concurrent.{PatienceConfiguration, Eventually}
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
 import org.apache.spark.shuffle.hash.HashShuffleManager

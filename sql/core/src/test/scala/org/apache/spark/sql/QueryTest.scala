@@ -19,8 +19,29 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.columnar.InMemoryRelation
 
 class QueryTest extends PlanTest {
+
+  /**
+   * Runs the plan and makes sure the answer contains all of the keywords, or the
+   * none of keywords are listed in the answer
+   * @param rdd the [[SchemaRDD]] to be executed
+   * @param exists true for make sure the keywords are listed in the output, otherwise
+   *               to make sure none of the keyword are not listed in the output
+   * @param keywords keyword in string array
+   */
+  def checkExistence(rdd: SchemaRDD, exists: Boolean, keywords: String*) {
+    val outputs = rdd.collect().map(_.mkString).mkString
+    for (key <- keywords) {
+      if (exists) {
+        assert(outputs.contains(key), s"Failed for $rdd ($key doens't exist in result)")
+      } else {
+        assert(!outputs.contains(key), s"Failed for $rdd ($key existed in the result)")
+      }
+    }
+  }
+
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param rdd the [[SchemaRDD]] to be executed
@@ -59,11 +80,31 @@ class QueryTest extends PlanTest {
         |${rdd.queryExecution.executedPlan}
         |== Results ==
         |${sideBySide(
-            s"== Correct Answer - ${convertedAnswer.size} ==" +:
-              prepareAnswer(convertedAnswer).map(_.toString),
-            s"== Spark Answer - ${sparkAnswer.size} ==" +:
-              prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
+        s"== Correct Answer - ${convertedAnswer.size} ==" +:
+          prepareAnswer(convertedAnswer).map(_.toString),
+        s"== Spark Answer - ${sparkAnswer.size} ==" +:
+          prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
       """.stripMargin)
     }
   }
+
+  def sqlTest(sqlString: String, expectedAnswer: Any)(implicit sqlContext: SQLContext): Unit = {
+    test(sqlString) {
+      checkAnswer(sqlContext.sql(sqlString), expectedAnswer)
+    }
+  }
+
+  /** Asserts that a given SchemaRDD will be executed using the given number of cached results. */
+  def assertCached(query: SchemaRDD, numCachedTables: Int = 1): Unit = {
+    val planWithCaching = query.queryExecution.withCachedData
+    val cachedData = planWithCaching collect {
+      case cached: InMemoryRelation => cached
+    }
+
+    assert(
+      cachedData.size == numCachedTables,
+      s"Expected query to contain $numCachedTables, but it actually had ${cachedData.size}\n" +
+        planWithCaching)
+  }
+
 }

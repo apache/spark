@@ -24,6 +24,7 @@ import scala.collection.mutable
 import scala.collection.JavaConversions._
 import scala.reflect.runtime.universe.runtimeMirror
 import scala.reflect.runtime.{universe => unv}
+import scala.util.Try
 
 /**
  * A tool for generating classes to be excluded during binary checking with MIMA. It is expected
@@ -121,12 +122,17 @@ object GenerateMIMAIgnore {
   }
 
   def main(args: Array[String]) {
+    import scala.tools.nsc.io.File
     val (privateClasses, privateMembers) = privateWithin("org.apache.spark")
-    scala.tools.nsc.io.File(".generated-mima-class-excludes").
-      writeAll(privateClasses.mkString("\n"))
+    val previousContents = Try(File(".generated-mima-class-excludes").lines()).
+      getOrElse(Iterator.empty).mkString("\n")
+    File(".generated-mima-class-excludes")
+      .writeAll(previousContents + privateClasses.mkString("\n"))
     println("Created : .generated-mima-class-excludes in current directory.")
-    scala.tools.nsc.io.File(".generated-mima-member-excludes").
-      writeAll(privateMembers.mkString("\n"))
+    val previousMembersContents = Try(File(".generated-mima-member-excludes").lines)
+      .getOrElse(Iterator.empty).mkString("\n")
+    File(".generated-mima-member-excludes").writeAll(previousMembersContents +
+      privateMembers.mkString("\n"))
     println("Created : .generated-mima-member-excludes in current directory.")
   }
 

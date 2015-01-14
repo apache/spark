@@ -28,8 +28,6 @@ import scala.collection.JavaConversions._
  * A set of test cases that validate partition and column pruning.
  */
 class PruningSuite extends HiveComparisonTest with BeforeAndAfter {
-  // MINOR HACK: You must run a query before calling reset the first time.
-  TestHive.sql("SHOW TABLES")
   TestHive.cacheTables = false
 
   // Column/partition pruning is not implemented for `InMemoryColumnarTableScan` yet, need to reset

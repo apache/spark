@@ -21,45 +21,40 @@ import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
 import java.util.concurrent.TimeUnit
 
-import akka.actor._
-import akka.pattern.ask
-import akka.util.Timeout
-import org.apache.spark.shuffle.hash.HashShuffleManager
-
-import org.mockito.invocation.InvocationOnMock
-import org.mockito.Matchers.any
-import org.mockito.Mockito.{doAnswer, mock, spy, when}
-import org.mockito.stubbing.Answer
-
-import org.scalatest.{BeforeAndAfter, FunSuite, PrivateMethodTester}
-import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.Timeouts._
-import org.scalatest.Matchers
-
-import org.apache.spark.{MapOutputTrackerMaster, SecurityManager, SparkConf}
-import org.apache.spark.executor.DataReadMethod
-import org.apache.spark.network.{Message, ConnectionManagerId}
-import org.apache.spark.scheduler.LiveListenerBus
-import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
-import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
-import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
-
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.implicitConversions
 import scala.language.postfixOps
-import org.apache.spark.shuffle.ShuffleBlockManager
 
-class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
-  with PrivateMethodTester {
+import akka.actor._
+import akka.pattern.ask
+import akka.util.Timeout
+
+import org.mockito.Mockito.{mock, when}
+
+import org.scalatest._
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts._
+
+import org.apache.spark.{MapOutputTrackerMaster, SparkConf, SparkContext, SecurityManager}
+import org.apache.spark.executor.DataReadMethod
+import org.apache.spark.network.nio.NioBlockTransferService
+import org.apache.spark.scheduler.LiveListenerBus
+import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
+import org.apache.spark.shuffle.hash.HashShuffleManager
+import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
+import org.apache.spark.util._
+
+
+class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfterEach
+  with PrivateMethodTester with ResetSystemProperties {
 
   private val conf = new SparkConf(false)
   var store: BlockManager = null
   var store2: BlockManager = null
   var actorSystem: ActorSystem = null
   var master: BlockManagerMaster = null
-  var oldArch: String = null
   conf.set("spark.authenticate", "false")
   val securityMgr = new SecurityManager(conf)
   val mapOutputTracker = new MapOutputTrackerMaster(conf)
@@ -73,18 +68,23 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
   implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
   def rdd(rddId: Int, splitId: Int) = RDDBlockId(rddId, splitId)
 
-  private def makeBlockManager(maxMem: Long, name: String = "<driver>"): BlockManager = {
-    new BlockManager(name, actorSystem, master, serializer, maxMem, conf, securityMgr,
-      mapOutputTracker, shuffleManager)
+  private def makeBlockManager(
+      maxMem: Long,
+      name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
+    val transfer = new NioBlockTransferService(conf, securityMgr)
+    val manager = new BlockManager(name, actorSystem, master, serializer, maxMem, conf,
+      mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+    manager.initialize("app-id")
+    manager
   }
 
-  before {
+  override def beforeEach(): Unit = {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
       "test", "localhost", 0, conf = conf, securityManager = securityMgr)
     this.actorSystem = actorSystem
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
-    oldArch = System.setProperty("os.arch", "amd64")
+    System.setProperty("os.arch", "amd64")
     conf.set("os.arch", "amd64")
     conf.set("spark.test.useCompressedOops", "true")
     conf.set("spark.driver.port", boundPort.toString)
@@ -99,7 +99,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     SizeEstimator invokePrivate initialize()
   }
 
-  after {
+  override def afterEach(): Unit = {
     if (store != null) {
       store.stop()
       store = null
@@ -112,14 +112,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     actorSystem.awaitTermination()
     actorSystem = null
     master = null
-
-    if (oldArch != null) {
-      conf.set("os.arch", oldArch)
-    } else {
-      System.clearProperty("os.arch")
-    }
-
-    System.clearProperty("spark.test.useCompressedOops")
   }
 
   test("StorageLevel object caching") {
@@ -190,7 +182,7 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     store = makeBlockManager(2000, "exec1")
     store2 = makeBlockManager(2000, "exec2")
 
-    val peers = master.getPeers(store.blockManagerId, 1)
+    val peers = master.getPeers(store.blockManagerId)
     assert(peers.size === 1, "master did not return the other manager as a peer")
     assert(peers.head === store2.blockManagerId, "peer returned by master is not the other manager")
 
@@ -449,7 +441,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     val list2DiskGet = store.get("list2disk")
     assert(list2DiskGet.isDefined, "list2memory expected to be in store")
     assert(list2DiskGet.get.data.size === 3)
-    System.out.println(list2DiskGet)
     // We don't know the exact size of the data on disk, but it should certainly be > 0.
     assert(list2DiskGet.get.inputMetrics.bytesRead > 0)
     assert(list2DiskGet.get.inputMetrics.readMethod === DataReadMethod.Disk)
@@ -793,8 +784,10 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
 
   test("block store put failure") {
     // Use Java serializer so we can create an unserializable error.
-    store = new BlockManager("<driver>", actorSystem, master, new JavaSerializer(conf), 1200, conf,
-      securityMgr, mapOutputTracker, shuffleManager)
+    val transfer = new NioBlockTransferService(conf, securityMgr)
+    store = new BlockManager(SparkContext.DRIVER_IDENTIFIER, actorSystem, master,
+      new JavaSerializer(conf), 1200, conf, mapOutputTracker, shuffleManager, transfer, securityMgr,
+      0)
 
     // The put should fail since a1 is not serializable.
     class UnserializableClass
@@ -1003,109 +996,6 @@ class BlockManagerSuite extends FunSuite with Matchers with BeforeAndAfter
     assert(store.memoryStore.contains(rdd(0, 0)), "rdd_0_0 was not in store")
     assert(store.memoryStore.contains(rdd(0, 1)), "rdd_0_1 was not in store")
     assert(!store.memoryStore.contains(rdd(1, 0)), "rdd_1_0 was in store")
-  }
-
-  test("return error message when error occurred in BlockManagerWorker#onBlockMessageReceive") {
-    store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker, shuffleManager)
-
-    val worker = spy(new BlockManagerWorker(store))
-    val connManagerId = mock(classOf[ConnectionManagerId])
-
-    // setup request block messages
-    val reqBlId1 = ShuffleBlockId(0,0,0)
-    val reqBlId2 = ShuffleBlockId(0,1,0)
-    val reqBlockMessage1 = BlockMessage.fromGetBlock(GetBlock(reqBlId1))
-    val reqBlockMessage2 = BlockMessage.fromGetBlock(GetBlock(reqBlId2))
-    val reqBlockMessages = new BlockMessageArray(
-      Seq(reqBlockMessage1, reqBlockMessage2))
-    val reqBufferMessage = reqBlockMessages.toBufferMessage
-
-    val answer = new Answer[Option[BlockMessage]] {
-      override def answer(invocation: InvocationOnMock)
-          :Option[BlockMessage]= {
-        throw new Exception
-      }
-    }
-
-    doAnswer(answer).when(worker).processBlockMessage(any())
-
-    // Test when exception was thrown during processing block messages
-    var ackMessage = worker.onBlockMessageReceive(reqBufferMessage, connManagerId)
-    
-    assert(ackMessage.isDefined, "When Exception was thrown in " +
-      "BlockManagerWorker#processBlockMessage, " +
-      "ackMessage should be defined")
-    assert(ackMessage.get.hasError, "When Exception was thown in " +
-      "BlockManagerWorker#processBlockMessage, " +
-      "ackMessage should have error")
-
-    val notBufferMessage = mock(classOf[Message])
-
-    // Test when not BufferMessage was received
-    ackMessage = worker.onBlockMessageReceive(notBufferMessage, connManagerId)
-    assert(ackMessage.isDefined, "When not BufferMessage was passed to " +
-      "BlockManagerWorker#onBlockMessageReceive, " +
-      "ackMessage should be defined")
-    assert(ackMessage.get.hasError, "When not BufferMessage was passed to " +
-      "BlockManagerWorker#onBlockMessageReceive, " +
-      "ackMessage should have error")
-  }
-
-  test("return ack message when no error occurred in BlocManagerWorker#onBlockMessageReceive") {
-    store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf,
-      securityMgr, mapOutputTracker, shuffleManager)
-
-    val worker = spy(new BlockManagerWorker(store))
-    val connManagerId = mock(classOf[ConnectionManagerId])
-
-    // setup request block messages
-    val reqBlId1 = ShuffleBlockId(0,0,0)
-    val reqBlId2 = ShuffleBlockId(0,1,0)
-    val reqBlockMessage1 = BlockMessage.fromGetBlock(GetBlock(reqBlId1))
-    val reqBlockMessage2 = BlockMessage.fromGetBlock(GetBlock(reqBlId2))
-    val reqBlockMessages = new BlockMessageArray(
-      Seq(reqBlockMessage1, reqBlockMessage2))
-
-    val tmpBufferMessage = reqBlockMessages.toBufferMessage
-    val buffer = ByteBuffer.allocate(tmpBufferMessage.size)
-    val arrayBuffer = new ArrayBuffer[ByteBuffer]
-    tmpBufferMessage.buffers.foreach{ b =>
-      buffer.put(b)
-    }
-    buffer.flip()
-    arrayBuffer += buffer
-    val reqBufferMessage = Message.createBufferMessage(arrayBuffer)
-
-    // setup ack block messages
-    val buf1 = ByteBuffer.allocate(4)
-    val buf2 = ByteBuffer.allocate(4)
-    buf1.putInt(1)
-    buf1.flip()
-    buf2.putInt(1)
-    buf2.flip()
-    val ackBlockMessage1 = BlockMessage.fromGotBlock(GotBlock(reqBlId1, buf1))
-    val ackBlockMessage2 = BlockMessage.fromGotBlock(GotBlock(reqBlId2, buf2))
-
-    val answer = new Answer[Option[BlockMessage]] {
-      override def answer(invocation: InvocationOnMock)
-          :Option[BlockMessage]= {
-        if (invocation.getArguments()(0).asInstanceOf[BlockMessage].eq(
-          reqBlockMessage1)) {
-          return Some(ackBlockMessage1)
-        } else {
-          return Some(ackBlockMessage2)
-        }
-      }
-    }
-
-    doAnswer(answer).when(worker).processBlockMessage(any())
-
-    val ackMessage = worker.onBlockMessageReceive(reqBufferMessage, connManagerId)
-    assert(ackMessage.isDefined, "When BlockManagerWorker#onBlockMessageReceive " +
-      "was executed successfully, ackMessage should be defined")
-    assert(!ackMessage.get.hasError, "When BlockManagerWorker#onBlockMessageReceive " +
-      "was executed successfully, ackMessage should not have error")
   }
 
   test("reserve/release unroll memory") {

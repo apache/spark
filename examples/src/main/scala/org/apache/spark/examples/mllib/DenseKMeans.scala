@@ -44,7 +44,7 @@ object DenseKMeans {
       input: String = null,
       k: Int = -1,
       numIterations: Int = 10,
-      initializationMode: InitializationMode = Parallel)
+      initializationMode: InitializationMode = Parallel) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()

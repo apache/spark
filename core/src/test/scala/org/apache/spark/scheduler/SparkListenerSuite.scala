@@ -25,21 +25,17 @@ import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 import org.scalatest.Matchers
 
 import org.apache.spark.{LocalSparkContext, SparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.util.ResetSystemProperties
 
-class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
-  with BeforeAndAfter with BeforeAndAfterAll {
+class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers with BeforeAndAfter
+  with BeforeAndAfterAll with ResetSystemProperties {
 
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
 
   before {
     sc = new SparkContext("local", "SparkListenerSuite")
-  }
-
-  override def afterAll() {
-    System.clearProperty("spark.akka.frameSize")
   }
 
   test("basic creation and shutdown of LiveListenerBus") {
@@ -180,7 +176,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     rdd3.count()
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be {2} // Shuffle map stage + result stage
-    val stageInfo3 = listener.stageInfos.keys.find(_.stageId == 2).get
+    val stageInfo3 = listener.stageInfos.keys.find(_.stageId == 3).get
     stageInfo3.rddInfos.size should be {1} // ShuffledRDD
     stageInfo3.rddInfos.forall(_.numPartitions == 4) should be {true}
     stageInfo3.rddInfos.exists(_.name == "Trois") should be {true}
@@ -252,6 +248,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
         taskMetrics.resultSize should be > (0l)
         if (stageInfo.rddInfos.exists(info => info.name == d2.name || info.name == d3.name)) {
           taskMetrics.inputMetrics should not be ('defined)
+          taskMetrics.outputMetrics should not be ('defined)
           taskMetrics.shuffleWriteMetrics should be ('defined)
           taskMetrics.shuffleWriteMetrics.get.shuffleBytesWritten should be > (0l)
         }

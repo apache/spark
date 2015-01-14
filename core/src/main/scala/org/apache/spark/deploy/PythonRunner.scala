@@ -34,7 +34,8 @@ object PythonRunner {
     val pythonFile = args(0)
     val pyFiles = args(1)
     val otherArgs = args.slice(2, args.length)
-    val pythonExec = sys.env.get("PYSPARK_PYTHON").getOrElse("python") // TODO: get this from conf
+    val pythonExec =
+      sys.env.getOrElse("PYSPARK_DRIVER_PYTHON", sys.env.getOrElse("PYSPARK_PYTHON", "python"))
 
     // Format python file paths before adding them to the PYTHONPATH
     val formattedPythonFile = formatPath(pythonFile)
@@ -54,9 +55,11 @@ object PythonRunner {
     val pythonPath = PythonUtils.mergePythonPaths(pathElements: _*)
 
     // Launch Python process
-    val builder = new ProcessBuilder(Seq(pythonExec, "-u", formattedPythonFile) ++ otherArgs)
+    val builder = new ProcessBuilder(Seq(pythonExec, formattedPythonFile) ++ otherArgs)
     val env = builder.environment()
     env.put("PYTHONPATH", pythonPath)
+    // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
+    env.put("PYTHONUNBUFFERED", "YES") // value is needed to be set to a non-empty string
     env.put("PYSPARK_GATEWAY_PORT", "" + gatewayServer.getListeningPort)
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
     val process = builder.start()
@@ -84,8 +87,8 @@ object PythonRunner {
     // Strip the URI scheme from the path
     formattedPath =
       new URI(formattedPath).getScheme match {
-        case Utils.windowsDrive(d) if windows => formattedPath
         case null => formattedPath
+        case Utils.windowsDrive(d) if windows => formattedPath
         case _ => new URI(formattedPath).getPath
       }
 

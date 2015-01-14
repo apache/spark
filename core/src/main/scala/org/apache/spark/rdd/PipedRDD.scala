@@ -63,7 +63,7 @@ private[spark] class PipedRDD[T: ClassTag](
 
   /**
    * A FilenameFilter that accepts anything that isn't equal to the name passed in.
-   * @param name of file or directory to leave out
+   * @param filterName of file or directory to leave out
    */
   class NotEqualsFileNameFilter(filterName: String) extends FilenameFilter {
     def accept(dir: File, name: String): Boolean = {
@@ -131,7 +131,6 @@ private[spark] class PipedRDD[T: ClassTag](
     // Start a thread to feed the process input from our parent's iterator
     new Thread("stdin writer for " + command) {
       override def run() {
-        SparkEnv.set(env)
         val out = new PrintWriter(proc.getOutputStream)
 
         // input the pipe context firstly

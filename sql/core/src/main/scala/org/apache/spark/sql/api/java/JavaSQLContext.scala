@@ -23,12 +23,13 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.sql.json.JsonRDD
-import org.apache.spark.sql.{SQLContext, StructType => SStructType}
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
+import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.execution.{ExistingRdd, SparkLogicalPlan}
-import org.apache.spark.sql.types.util.DataTypeConversions.asScalaDataType
+import org.apache.spark.sql.sources.{LogicalRelation, BaseRelation}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
@@ -38,6 +39,10 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
 
   def this(sparkContext: JavaSparkContext) = this(new SQLContext(sparkContext.sc))
 
+  def baseRelationToSchemaRDD(baseRelation: BaseRelation): JavaSchemaRDD = {
+    new JavaSchemaRDD(sqlContext, LogicalRelation(baseRelation))
+  }
+
   /**
    * Executes a SQL query using Spark, returning the result as a SchemaRDD.  The dialect that is
    * used for SQL parsing can be configured with 'spark.sql.dialect'.
@@ -45,7 +50,7 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
    * @group userf
    */
   def sql(sqlText: String): JavaSchemaRDD = {
-    if (sqlContext.dialect == "sql") {
+    if (sqlContext.conf.dialect == "sql") {
       new JavaSchemaRDD(sqlContext, sqlContext.parseSql(sqlText))
     } else {
       sys.error(s"Unsupported SQL dialect: $sqlContext.dialect")
@@ -85,9 +90,12 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
 
   /**
    * Applies a schema to an RDD of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
    */
   def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): JavaSchemaRDD = {
-    val schema = getSchema(beanClass)
+    val attributeSeq = getSchema(beanClass)
     val className = beanClass.getName
     val rowRdd = rdd.rdd.mapPartitions { iter =>
       // BeanInfo is not serializable so we must rediscover it remotely for each partition.
@@ -97,10 +105,14 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
         localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
 
       iter.map { row =>
-        new GenericRow(extractors.map(e => e.invoke(row)).toArray[Any]): ScalaRow
+        new GenericRow(
+          extractors.zip(attributeSeq).map { case (e, attr) =>
+            DataTypeConversions.convertJavaToCatalyst(e.invoke(row), attr.dataType)
+          }.toArray[Any]
+        ): ScalaRow
       }
     }
-    new JavaSchemaRDD(sqlContext, SparkLogicalPlan(ExistingRdd(schema, rowRdd))(sqlContext))
+    new JavaSchemaRDD(sqlContext, LogicalRDD(attributeSeq, rowRdd)(sqlContext))
   }
 
   /**
@@ -112,14 +124,15 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
   @DeveloperApi
   def applySchema(rowRDD: JavaRDD[Row], schema: StructType): JavaSchemaRDD = {
     val scalaRowRDD = rowRDD.rdd.map(r => r.row)
-    val scalaSchema = asScalaDataType(schema).asInstanceOf[SStructType]
     val logicalPlan =
-      SparkLogicalPlan(ExistingRdd(scalaSchema.toAttributes, scalaRowRDD))(sqlContext)
+      LogicalRDD(schema.toAttributes, scalaRowRDD)(sqlContext)
     new JavaSchemaRDD(sqlContext, logicalPlan)
   }
 
   /**
-   * Loads a parquet file, returning the result as a [[JavaSchemaRDD]].
+   * Loads a parquet file from regular path or files that match file patterns in path,
+   * returning the result as a [[JavaSchemaRDD]].
+   * Supported glob file pattern information at ([[http://tinyurl.com/kcqrzn8]]).
    */
   def parquetFile(path: String): JavaSchemaRDD =
     new JavaSchemaRDD(
@@ -148,10 +161,14 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
    * It goes through the entire dataset once to determine the schema.
    */
   def jsonRDD(json: JavaRDD[String]): JavaSchemaRDD = {
-    val appliedScalaSchema = JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json.rdd, 1.0))
-    val scalaRowRDD = JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema)
+    val columnNameOfCorruptJsonRecord = sqlContext.conf.columnNameOfCorruptRecord
+    val appliedScalaSchema =
+      JsonRDD.nullTypeToStringType(
+        JsonRDD.inferSchema(json.rdd, 1.0, columnNameOfCorruptJsonRecord))
+    val scalaRowRDD =
+      JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema, columnNameOfCorruptJsonRecord)
     val logicalPlan =
-      SparkLogicalPlan(ExistingRdd(appliedScalaSchema.toAttributes, scalaRowRDD))(sqlContext)
+      LogicalRDD(appliedScalaSchema.toAttributes, scalaRowRDD)(sqlContext)
     new JavaSchemaRDD(sqlContext, logicalPlan)
   }
 
@@ -162,12 +179,16 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
    */
   @Experimental
   def jsonRDD(json: JavaRDD[String], schema: StructType): JavaSchemaRDD = {
+    val columnNameOfCorruptJsonRecord = sqlContext.conf.columnNameOfCorruptRecord
     val appliedScalaSchema =
-      Option(asScalaDataType(schema)).getOrElse(
-        JsonRDD.nullTypeToStringType(JsonRDD.inferSchema(json.rdd, 1.0))).asInstanceOf[SStructType]
-    val scalaRowRDD = JsonRDD.jsonStringToRow(json.rdd, appliedScalaSchema)
+      Option(schema).getOrElse(
+        JsonRDD.nullTypeToStringType(
+          JsonRDD.inferSchema(
+            json.rdd, 1.0, columnNameOfCorruptJsonRecord)))
+    val scalaRowRDD = JsonRDD.jsonStringToRow(
+      json.rdd, appliedScalaSchema, columnNameOfCorruptJsonRecord)
     val logicalPlan =
-      SparkLogicalPlan(ExistingRdd(appliedScalaSchema.toAttributes, scalaRowRDD))(sqlContext)
+      LogicalRDD(appliedScalaSchema.toAttributes, scalaRowRDD)(sqlContext)
     new JavaSchemaRDD(sqlContext, logicalPlan)
   }
 
@@ -179,45 +200,40 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
     sqlContext.registerRDDAsTable(rdd.baseSchemaRDD, tableName)
   }
 
-  /** Returns a Catalyst Schema for the given java bean class. */
+  /**
+   * Returns a Catalyst Schema for the given java bean class.
+   */
   protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
     // TODO: All of this could probably be moved to Catalyst as it is mostly not Spark specific.
     val beanInfo = Introspector.getBeanInfo(beanClass)
 
+    // Note: The ordering of elements may differ from when the schema is inferred in Scala.
+    //       This is because beanInfo.getPropertyDescriptors gives no guarantees about
+    //       element ordering.
     val fields = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
     fields.map { property =>
       val (dataType, nullable) = property.getPropertyType match {
-        case c: Class[_] if c == classOf[java.lang.String] =>
-          (org.apache.spark.sql.StringType, true)
-        case c: Class[_] if c == java.lang.Short.TYPE =>
-          (org.apache.spark.sql.ShortType, false)
-        case c: Class[_] if c == java.lang.Integer.TYPE =>
-          (org.apache.spark.sql.IntegerType, false)
-        case c: Class[_] if c == java.lang.Long.TYPE =>
-          (org.apache.spark.sql.LongType, false)
-        case c: Class[_] if c == java.lang.Double.TYPE =>
-          (org.apache.spark.sql.DoubleType, false)
-        case c: Class[_] if c == java.lang.Byte.TYPE =>
-          (org.apache.spark.sql.ByteType, false)
-        case c: Class[_] if c == java.lang.Float.TYPE =>
-          (org.apache.spark.sql.FloatType, false)
-        case c: Class[_] if c == java.lang.Boolean.TYPE =>
-          (org.apache.spark.sql.BooleanType, false)
+        case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+          (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
+        case c: Class[_] if c == classOf[java.lang.String] => (StringType, true)
+        case c: Class[_] if c == java.lang.Short.TYPE => (ShortType, false)
+        case c: Class[_] if c == java.lang.Integer.TYPE => (IntegerType, false)
+        case c: Class[_] if c == java.lang.Long.TYPE => (LongType, false)
+        case c: Class[_] if c == java.lang.Double.TYPE => (DoubleType, false)
+        case c: Class[_] if c == java.lang.Byte.TYPE => (ByteType, false)
+        case c: Class[_] if c == java.lang.Float.TYPE => (FloatType, false)
+        case c: Class[_] if c == java.lang.Boolean.TYPE => (BooleanType, false)
 
-        case c: Class[_] if c == classOf[java.lang.Short] =>
-          (org.apache.spark.sql.ShortType, true)
-        case c: Class[_] if c == classOf[java.lang.Integer] =>
-          (org.apache.spark.sql.IntegerType, true)
-        case c: Class[_] if c == classOf[java.lang.Long] =>
-          (org.apache.spark.sql.LongType, true)
-        case c: Class[_] if c == classOf[java.lang.Double] =>
-          (org.apache.spark.sql.DoubleType, true)
-        case c: Class[_] if c == classOf[java.lang.Byte] =>
-          (org.apache.spark.sql.ByteType, true)
-        case c: Class[_] if c == classOf[java.lang.Float] =>
-          (org.apache.spark.sql.FloatType, true)
-        case c: Class[_] if c == classOf[java.lang.Boolean] =>
-          (org.apache.spark.sql.BooleanType, true)
+        case c: Class[_] if c == classOf[java.lang.Short] => (ShortType, true)
+        case c: Class[_] if c == classOf[java.lang.Integer] => (IntegerType, true)
+        case c: Class[_] if c == classOf[java.lang.Long] => (LongType, true)
+        case c: Class[_] if c == classOf[java.lang.Double] => (DoubleType, true)
+        case c: Class[_] if c == classOf[java.lang.Byte] => (ByteType, true)
+        case c: Class[_] if c == classOf[java.lang.Float] => (FloatType, true)
+        case c: Class[_] if c == classOf[java.lang.Boolean] => (BooleanType, true)
+        case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType(), true)
+        case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
+        case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
       }
       AttributeReference(property.getName, dataType, nullable)()
     }

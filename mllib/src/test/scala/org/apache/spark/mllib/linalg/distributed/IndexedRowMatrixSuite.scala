@@ -21,11 +21,11 @@ import org.scalatest.FunSuite
 
 import breeze.linalg.{diag => brzDiag, DenseMatrix => BDM, DenseVector => BDV}
 
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.{Matrices, Vectors}
 
-class IndexedRowMatrixSuite extends FunSuite with LocalSparkContext {
+class IndexedRowMatrixSuite extends FunSuite with MLlibTestSparkContext {
 
   val m = 4
   val n = 3
@@ -111,6 +111,13 @@ class IndexedRowMatrixSuite extends FunSuite with LocalSparkContext {
     assert(closeToZero(U.t * U - BDM.eye[Double](n)))
     assert(closeToZero(V.t * V - BDM.eye[Double](n)))
     assert(closeToZero(U * brzDiag(s) * V.t - localA))
+  }
+
+  test("validate k in svd") {
+    val A = new IndexedRowMatrix(indexedRows)
+    intercept[IllegalArgumentException] {
+      A.computeSVD(-1)
+    }
   }
 
   def closeToZero(G: BDM[Double]): Boolean = {

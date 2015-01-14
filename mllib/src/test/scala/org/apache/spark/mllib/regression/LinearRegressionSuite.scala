@@ -23,9 +23,9 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, LinearDataGenerator,
-  LocalSparkContext}
+  MLlibTestSparkContext}
 
-class LinearRegressionSuite extends FunSuite with LocalSparkContext {
+class LinearRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>

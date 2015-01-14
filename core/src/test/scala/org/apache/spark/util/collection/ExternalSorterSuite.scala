@@ -22,7 +22,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.{PrivateMethodTester, FunSuite}
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
+
+import scala.util.Random
 
 class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMethodTester {
   private def createSparkConf(loadDefaults: Boolean): SparkConf = {
@@ -125,6 +126,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
   test("empty partitions with spilling") {
     val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.spill.initialMemoryThreshold", "512")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
 
@@ -150,6 +152,7 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
   test("empty partitions with spilling, bypass merge-sort") {
     val conf = createSparkConf(false)
     conf.set("spark.shuffle.memoryFraction", "0.001")
+    conf.set("spark.shuffle.spill.initialMemoryThreshold", "512")
     conf.set("spark.shuffle.manager", "org.apache.spark.shuffle.sort.SortShuffleManager")
     sc = new SparkContext("local", "test", conf)
 
@@ -707,4 +710,57 @@ class ExternalSorterSuite extends FunSuite with LocalSparkContext with PrivateMe
       Some(agg), Some(new HashPartitioner(FEW_PARTITIONS)), None, None)
     assertDidNotBypassMergeSort(sorter4)
   }
+
+  test("sort without breaking sorting contracts") {
+    val conf = createSparkConf(true)
+    conf.set("spark.shuffle.memoryFraction", "0.01")
+    conf.set("spark.shuffle.manager", "sort")
+    sc = new SparkContext("local-cluster[1,1,512]", "test", conf)
+
+    // Using wrongOrdering to show integer overflow introduced exception.
+    val rand = new Random(100L)
+    val wrongOrdering = new Ordering[String] {
+      override def compare(a: String, b: String) = {
+        val h1 = if (a == null) 0 else a.hashCode()
+        val h2 = if (b == null) 0 else b.hashCode()
+        h1 - h2
+      }
+    }
+
+    val testData = Array.tabulate(100000) { _ => rand.nextInt().toString }
+
+    val sorter1 = new ExternalSorter[String, String, String](
+      None, None, Some(wrongOrdering), None)
+    val thrown = intercept[IllegalArgumentException] {
+      sorter1.insertAll(testData.iterator.map(i => (i, i)))
+      sorter1.iterator
+    }
+
+    assert(thrown.getClass() === classOf[IllegalArgumentException])
+    assert(thrown.getMessage().contains("Comparison method violates its general contract"))
+    sorter1.stop()
+
+    // Using aggregation and external spill to make sure ExternalSorter using
+    // partitionKeyComparator.
+    def createCombiner(i: String) = ArrayBuffer(i)
+    def mergeValue(c: ArrayBuffer[String], i: String) = c += i
+    def mergeCombiners(c1: ArrayBuffer[String], c2: ArrayBuffer[String]) = c1 ++= c2
+
+    val agg = new Aggregator[String, String, ArrayBuffer[String]](
+      createCombiner, mergeValue, mergeCombiners)
+
+    val sorter2 = new ExternalSorter[String, String, ArrayBuffer[String]](
+      Some(agg), None, None, None)
+    sorter2.insertAll(testData.iterator.map(i => (i, i)))
+
+    // To validate the hash ordering of key
+    var minKey = Int.MinValue
+    sorter2.iterator.foreach { case (k, v) =>
+      val h = k.hashCode()
+      assert(h >= minKey)
+      minKey = h
+    }
+
+    sorter2.stop()
+ }
 }

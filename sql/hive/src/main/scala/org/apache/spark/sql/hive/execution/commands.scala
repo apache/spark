@@ -18,10 +18,11 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.execution.{Command, LeafNode}
+import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.types.StructType
 
 /**
  * :: DeveloperApi ::
@@ -32,13 +33,10 @@ import org.apache.spark.sql.hive.HiveContext
  * in the Hive metastore.
  */
 @DeveloperApi
-case class AnalyzeTable(tableName: String) extends LeafNode with Command {
-  def hiveContext = sqlContext.asInstanceOf[HiveContext]
+case class AnalyzeTable(tableName: String) extends RunnableCommand {
 
-  def output = Seq.empty
-
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
-    hiveContext.analyze(tableName)
+  override def run(sqlContext: SQLContext) = {
+    sqlContext.asInstanceOf[HiveContext].analyze(tableName)
     Seq.empty[Row]
   }
 }
@@ -48,15 +46,21 @@ case class AnalyzeTable(tableName: String) extends LeafNode with Command {
  * Drops a table from the metastore and removes it if it is cached.
  */
 @DeveloperApi
-case class DropTable(tableName: String, ifExists: Boolean) extends LeafNode with Command {
-  def hiveContext = sqlContext.asInstanceOf[HiveContext]
+case class DropTable(
+    tableName: String,
+    ifExists: Boolean) extends RunnableCommand {
 
-  def output = Seq.empty
-
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
+  override def run(sqlContext: SQLContext) = {
+    val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
+    try {
+      hiveContext.tryUncacheQuery(hiveContext.table(tableName))
+    } catch {
+      case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
+    }
+    hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")
-    hiveContext.catalog.unregisterTable(None, tableName)
+    hiveContext.catalog.unregisterTable(Seq(tableName))
     Seq.empty[Row]
   }
 }
@@ -65,14 +69,40 @@ case class DropTable(tableName: String, ifExists: Boolean) extends LeafNode with
  * :: DeveloperApi ::
  */
 @DeveloperApi
-case class AddJar(path: String) extends LeafNode with Command {
-  def hiveContext = sqlContext.asInstanceOf[HiveContext]
+case class AddJar(path: String) extends RunnableCommand {
 
-  override def output = Seq.empty
-
-  override protected[sql] lazy val sideEffectResult: Seq[Row] = {
+  override def run(sqlContext: SQLContext) = {
+    val hiveContext = sqlContext.asInstanceOf[HiveContext]
     hiveContext.runSqlHive(s"ADD JAR $path")
     hiveContext.sparkContext.addJar(path)
+    Seq.empty[Row]
+  }
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class AddFile(path: String) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext) = {
+    val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    hiveContext.runSqlHive(s"ADD FILE $path")
+    hiveContext.sparkContext.addFile(path)
+    Seq.empty[Row]
+  }
+}
+
+case class CreateMetastoreDataSource(
+    tableName: String,
+    userSpecifiedSchema: Option[StructType],
+    provider: String,
+    options: Map[String, String]) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext) = {
+    val hiveContext = sqlContext.asInstanceOf[HiveContext]
+    hiveContext.catalog.createDataSourceTable(tableName, userSpecifiedSchema, provider, options)
+
     Seq.empty[Row]
   }
 }

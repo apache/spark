@@ -37,15 +37,17 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   def dataType = if (resolved) {
     children.head.dataType
   } else {
-    throw new UnresolvedException(this, "Coalesce cannot have children of different types.")
+    val childTypes = children.map(c => s"$c: ${c.dataType}").mkString(", ")
+    throw new UnresolvedException(
+      this, s"Coalesce cannot have children of different types. $childTypes")
   }
 
   override def eval(input: Row): Any = {
     var i = 0
     var result: Any = null
-    while(i < children.size && result == null) {
-      result = children(i).eval(input)
-      i += 1
+    val childIterator = children.iterator
+    while (childIterator.hasNext && result == null) {
+      result = childIterator.next().eval(input)
     }
     result
   }

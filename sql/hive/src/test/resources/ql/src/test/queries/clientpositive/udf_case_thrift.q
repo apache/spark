@@ -1,3 +1,5 @@
+set hive.fetch.task.conversion=more;
+
 EXPLAIN
 SELECT CASE src_thrift.lint[0]
         WHEN 0 THEN src_thrift.lint[0] + 1
@@ -14,7 +16,7 @@ SELECT CASE src_thrift.lint[0]
         WHEN '0' THEN src_thrift.lstring
         ELSE NULL
        END)[0]
-FROM src_thrift LIMIT 3;
+FROM src_thrift tablesample (3 rows);
 
 SELECT CASE src_thrift.lint[0]
         WHEN 0 THEN src_thrift.lint[0] + 1
@@ -31,4 +33,4 @@ SELECT CASE src_thrift.lint[0]
         WHEN '0' THEN src_thrift.lstring
         ELSE NULL
        END)[0]
-FROM src_thrift LIMIT 3;
+FROM src_thrift tablesample (3 rows);

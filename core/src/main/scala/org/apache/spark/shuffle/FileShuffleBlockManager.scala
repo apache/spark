@@ -24,8 +24,10 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.JavaConversions._
 
-import org.apache.spark.{SparkEnv, SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf, SparkEnv}
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.network.buffer.{FileSegmentManagedBuffer, ManagedBuffer}
+import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.FileShuffleBlockManager.ShuffleFileGroup
 import org.apache.spark.storage._
@@ -61,10 +63,13 @@ private[spark] trait ShuffleWriterGroup {
  * each block stored in each file. In order to find the location of a shuffle block, we search the
  * files within a ShuffleFileGroups associated with the block's reducer.
  */
-
+// Note: Changes to the format in this file should be kept in sync with
+// org.apache.spark.network.shuffle.StandaloneShuffleBlockManager#getHashBasedShuffleBlockData().
 private[spark]
 class FileShuffleBlockManager(conf: SparkConf)
   extends ShuffleBlockManager with Logging {
+
+  private val transportConf = SparkTransportConf.fromSparkConf(conf)
 
   private lazy val blockManager = SparkEnv.get.blockManager
 
@@ -166,32 +171,29 @@ class FileShuffleBlockManager(conf: SparkConf)
     }
   }
 
-  /**
-   * Returns the physical file segment in which the given BlockId is located.
-   */
-  private def getBlockLocation(id: ShuffleBlockId): FileSegment = {
+  override def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer] = {
+    val segment = getBlockData(blockId)
+    Some(segment.nioByteBuffer())
+  }
+
+  override def getBlockData(blockId: ShuffleBlockId): ManagedBuffer = {
     if (consolidateShuffleFiles) {
       // Search all file groups associated with this shuffle.
-      val shuffleState = shuffleStates(id.shuffleId)
+      val shuffleState = shuffleStates(blockId.shuffleId)
       val iter = shuffleState.allFileGroups.iterator
       while (iter.hasNext) {
-        val segment = iter.next.getFileSegmentFor(id.mapId, id.reduceId)
-        if (segment.isDefined) { return segment.get }
+        val segmentOpt = iter.next.getFileSegmentFor(blockId.mapId, blockId.reduceId)
+        if (segmentOpt.isDefined) {
+          val segment = segmentOpt.get
+          return new FileSegmentManagedBuffer(
+            transportConf, segment.file, segment.offset, segment.length)
+        }
       }
-      throw new IllegalStateException("Failed to find shuffle block: " + id)
+      throw new IllegalStateException("Failed to find shuffle block: " + blockId)
     } else {
-      val file = blockManager.diskBlockManager.getFile(id)
-      new FileSegment(file, 0, file.length())
+      val file = blockManager.diskBlockManager.getFile(blockId)
+      new FileSegmentManagedBuffer(transportConf, file, 0, file.length)
     }
-  }
-
-  override def getBytes(blockId: ShuffleBlockId): Option[ByteBuffer] = {
-    val segment = getBlockLocation(blockId)
-    blockManager.diskStore.getBytes(segment)
-  }
-
-  override def getBlockData(blockId: ShuffleBlockId): Either[FileSegment, ByteBuffer] = {
-    Left(getBlockLocation(blockId.asInstanceOf[ShuffleBlockId]))
   }
 
   /** Remove all the blocks / files and metadata related to a particular shuffle. */

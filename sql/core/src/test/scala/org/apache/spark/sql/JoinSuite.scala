@@ -19,16 +19,13 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.catalyst.plans.{LeftOuter, RightOuter, FullOuter, Inner, LeftSemi}
-import org.apache.spark.sql.execution._
-import org.apache.spark.sql.test.TestSQLContext
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, RightOuter}
+import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.test.TestSQLContext._
 
 class JoinSuite extends QueryTest with BeforeAndAfterEach {
-
   // Ensures tables are loaded.
   TestData
 
@@ -40,54 +37,71 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
     assert(planned.size === 1)
   }
 
-  test("join operator selection") {
-    def assertJoin(sqlString: String, c: Class[_]): Any = {
-      val rdd = sql(sqlString)
-      val physical = rdd.queryExecution.sparkPlan
-      val operators = physical.collect {
-        case j: ShuffledHashJoin => j
-        case j: HashOuterJoin => j
-        case j: LeftSemiJoinHash => j
-        case j: BroadcastHashJoin => j
-        case j: LeftSemiJoinBNL => j
-        case j: CartesianProduct => j
-        case j: BroadcastNestedLoopJoin => j
-      }
-
-      assert(operators.size === 1)
-      if (operators(0).getClass() != c) {
-        fail(s"$sqlString expected operator: $c, but got ${operators(0)}\n physical: \n$physical")
-      }
+  def assertJoin(sqlString: String, c: Class[_]): Any = {
+    val rdd = sql(sqlString)
+    val physical = rdd.queryExecution.sparkPlan
+    val operators = physical.collect {
+      case j: ShuffledHashJoin => j
+      case j: HashOuterJoin => j
+      case j: LeftSemiJoinHash => j
+      case j: BroadcastHashJoin => j
+      case j: LeftSemiJoinBNL => j
+      case j: CartesianProduct => j
+      case j: BroadcastNestedLoopJoin => j
+      case j: BroadcastLeftSemiJoinHash => j
     }
 
-    val cases1 = Seq(
-      ("SELECT * FROM testData left semi join testData2 ON key = a", classOf[LeftSemiJoinHash]),
-      ("SELECT * FROM testData left semi join testData2", classOf[LeftSemiJoinBNL]),
-      ("SELECT * FROM testData join testData2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData join testData2 where key=2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData left join testData2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData right join testData2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData full outer join testData2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData left join testData2 where key=2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData right join testData2 where key=2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData full outer join testData2 where key=2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData join testData2 where key>a", classOf[CartesianProduct]),
-      ("SELECT * FROM testData full outer join testData2 where key>a", classOf[CartesianProduct]),
-      ("SELECT * FROM testData join testData2 ON key = a", classOf[ShuffledHashJoin]),
-      ("SELECT * FROM testData join testData2 ON key = a and key=2", classOf[ShuffledHashJoin]),
-      ("SELECT * FROM testData join testData2 ON key = a where key=2", classOf[ShuffledHashJoin]),
-      ("SELECT * FROM testData left join testData2 ON key = a", classOf[HashOuterJoin]),
-      ("SELECT * FROM testData right join testData2 ON key = a where key=2", 
+    assert(operators.size === 1)
+    if (operators(0).getClass() != c) {
+      fail(s"$sqlString expected operator: $c, but got ${operators(0)}\n physical: \n$physical")
+    }
+  }
+
+  test("join operator selection") {
+    clearCache()
+
+    Seq(
+      ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
+      ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[LeftSemiJoinBNL]),
+      ("SELECT * FROM testData JOIN testData2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData LEFT JOIN testData2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData RIGHT JOIN testData2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData FULL OUTER JOIN testData2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData LEFT JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData RIGHT JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
+      ("SELECT * FROM testData JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
+      ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[ShuffledHashJoin]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[ShuffledHashJoin]),
+      ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[ShuffledHashJoin]),
+      ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[HashOuterJoin]),
+      ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
         classOf[HashOuterJoin]),
-      ("SELECT * FROM testData right join testData2 ON key = a and key=2", 
+      ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
         classOf[HashOuterJoin]),
       ("SELECT * FROM testData full outer join testData2 ON key = a", classOf[HashOuterJoin]),
-      ("SELECT * FROM testData join testData2 ON key = a", classOf[ShuffledHashJoin]),
-      ("SELECT * FROM testData join testData2 ON key = a and key=2", classOf[ShuffledHashJoin]),
-      ("SELECT * FROM testData join testData2 ON key = a where key=2", classOf[ShuffledHashJoin])
-    // TODO add BroadcastNestedLoopJoin
-    )
-    cases1.foreach { c => assertJoin(c._1, c._2) }
+      ("SELECT * FROM testData left JOIN testData2 ON (key * a != key + a)",
+        classOf[BroadcastNestedLoopJoin]),
+      ("SELECT * FROM testData right JOIN testData2 ON (key * a != key + a)",
+        classOf[BroadcastNestedLoopJoin]),
+      ("SELECT * FROM testData full JOIN testData2 ON (key * a != key + a)",
+        classOf[BroadcastNestedLoopJoin])
+    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+  }
+
+  test("broadcasted hash join operator selection") {
+    clearCache()
+    sql("CACHE TABLE testData")
+
+    Seq(
+      ("SELECT * FROM testData join testData2 ON key = a", classOf[BroadcastHashJoin]),
+      ("SELECT * FROM testData join testData2 ON key = a and key = 2", classOf[BroadcastHashJoin]),
+      ("SELECT * FROM testData join testData2 ON key = a where key = 2", classOf[BroadcastHashJoin])
+    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+
+    sql("UNCACHE TABLE testData")
   }
 
   test("multiple-key equi-join is hash-join") {
@@ -170,7 +184,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       (4, "D", 4, "d") ::
       (5, "E", null, null) ::
       (6, "F", null, null) :: Nil)
-    
+
     checkAnswer(
       upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N && 'n > 1)),
       (1, "A", null, null) ::
@@ -179,7 +193,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       (4, "D", 4, "d") ::
       (5, "E", null, null) ::
       (6, "F", null, null) :: Nil)
-    
+
     checkAnswer(
       upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N && 'N > 1)),
       (1, "A", null, null) ::
@@ -188,7 +202,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       (4, "D", 4, "d") ::
       (5, "E", null, null) ::
       (6, "F", null, null) :: Nil)
-    
+
     checkAnswer(
       upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N && 'l > 'L)),
       (1, "A", 1, "a") ::
@@ -288,8 +302,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
     upperCaseData.where('N <= 4).registerTempTable("left")
     upperCaseData.where('N >= 3).registerTempTable("right")
 
-    val left = UnresolvedRelation(None, "left", None)
-    val right = UnresolvedRelation(None, "right", None)
+    val left = UnresolvedRelation(Seq("left"), None)
+    val right = UnresolvedRelation(Seq("right"), None)
 
     checkAnswer(
       left.join(right, FullOuter, Some("left.N".attr === "right.N".attr)),
@@ -299,7 +313,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       (4, "D", 4, "D") ::
       (null, null, 5, "E") ::
       (null, null, 6, "F") :: Nil)
-    
+
     checkAnswer(
       left.join(right, FullOuter, Some(("left.N".attr === "right.N".attr) && ("left.N".attr !== 3))),
       (1, "A", null, null) ::
@@ -309,7 +323,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
       (4, "D", 4, "D") ::
       (null, null, 5, "E") ::
       (null, null, 6, "F") :: Nil)
-    
+
     checkAnswer(
       left.join(right, FullOuter, Some(("left.N".attr === "right.N".attr) && ("right.N".attr !== 3))),
       (1, "A", null, null) ::
@@ -368,5 +382,42 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
           |GROUP BY r.a
         """.stripMargin),
       (null, 10) :: Nil)
+  }
+
+  test("broadcasted left semi join operator selection") {
+    clearCache()
+    sql("CACHE TABLE testData")
+    val tmp = conf.autoBroadcastJoinThreshold
+
+    sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=1000000000")
+    Seq(
+      ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
+        classOf[BroadcastLeftSemiJoinHash])
+    ).foreach {
+      case (query, joinClass) => assertJoin(query, joinClass)
+    }
+
+    sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=-1")
+
+    Seq(
+      ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash])
+    ).foreach {
+      case (query, joinClass) => assertJoin(query, joinClass)
+    }
+
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, tmp.toString)
+    sql("UNCACHE TABLE testData")
+  }
+
+  test("left semi join") {
+    val rdd = sql("SELECT * FROM testData2 LEFT SEMI JOIN testData ON key = a")
+    checkAnswer(rdd,
+      (1, 1) ::
+      (1, 2) ::
+      (2, 1) ::
+      (2, 2) ::
+      (3, 1) ::
+      (3, 2) :: Nil)
+
   }
 }

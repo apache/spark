@@ -13,9 +13,9 @@ delimited fields terminated by ',' stored as textfile;
 create table hive_count (bar_id int, n int) row format delimited fields 
 terminated by ',' stored as textfile;
 
-load data local inpath '../data/files/hive_626_foo.txt' overwrite into table hive_foo;
-load data local inpath '../data/files/hive_626_bar.txt' overwrite into table hive_bar;
-load data local inpath '../data/files/hive_626_count.txt' overwrite into table hive_count;
+load data local inpath '../../data/files/hive_626_foo.txt' overwrite into table hive_foo;
+load data local inpath '../../data/files/hive_626_bar.txt' overwrite into table hive_bar;
+load data local inpath '../../data/files/hive_626_count.txt' overwrite into table hive_count;
 
 explain
 select hive_foo.foo_name, hive_bar.bar_name, n from hive_foo join hive_bar on hive_foo.foo_id =

@@ -24,10 +24,9 @@
 set -o posix
 
 # Figure out where Spark is installed
-FWDIR="$(cd `dirname $0`/..; pwd)"
+FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 CLASS="org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"
-CLASS_NOT_FOUND_EXIT_STATUS=1
 
 function usage {
   echo "Usage: ./sbin/start-thriftserver [options] [thrift server options]"
@@ -38,10 +37,10 @@ function usage {
   pattern+="\|======="
   pattern+="\|--help"
 
-  $FWDIR/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
+  "$FWDIR"/bin/spark-submit --help 2>&1 | grep -v Usage 1>&2
   echo
   echo "Thrift server options:"
-  $FWDIR/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
+  "$FWDIR"/bin/spark-class $CLASS --help 2>&1 | grep -v "$pattern" 1>&2
 }
 
 if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
@@ -49,17 +48,6 @@ if [[ "$@" = *--help ]] || [[ "$@" = *-h ]]; then
   exit 0
 fi
 
-source $FWDIR/bin/utils.sh
-SUBMIT_USAGE_FUNCTION=usage
-gatherSparkSubmitOpts "$@"
+export SUBMIT_USAGE_FUNCTION=usage
 
-"$FWDIR"/bin/spark-submit --class $CLASS "${SUBMISSION_OPTS[@]}" spark-internal "${APPLICATION_OPTS[@]}"
-exit_status=$?
-
-if [[ exit_status -eq CLASS_NOT_FOUND_EXIT_STATUS ]]; then
-  echo
-  echo "Failed to load Hive Thrift server main class $CLASS."
-  echo "You need to build Spark with -Phive."
-fi
-
-exit $exit_status
+exec "$FWDIR"/sbin/spark-daemon.sh spark-submit $CLASS 1 "$@"

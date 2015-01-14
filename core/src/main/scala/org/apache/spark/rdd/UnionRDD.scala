@@ -24,6 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{Dependency, Partition, RangeDependency, SparkContext, TaskContext}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.Utils
 
 /**
  * Partition for UnionRDD.
@@ -48,7 +49,7 @@ private[spark] class UnionPartition[T: ClassTag](
   override val index: Int = idx
 
   @throws(classOf[IOException])
-  private def writeObject(oos: ObjectOutputStream) {
+  private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     // Update the reference to parent split at the time of task serialization
     parentPartition = rdd.partitions(parentRddPartitionIndex)
     oos.defaultWriteObject()

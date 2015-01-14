@@ -22,13 +22,51 @@ package org.apache.spark.scheduler
  * In the latter case, we will prefer to launch the task on that executorID, but our next level
  * of preference will be executors on the same host if this is not possible.
  */
-private[spark]
-class TaskLocation private (val host: String, val executorId: Option[String]) extends Serializable {
-  override def toString: String = "TaskLocation(" + host + ", " + executorId + ")"
+private[spark] sealed trait TaskLocation {
+  def host: String
+}
+
+/**
+ * A location that includes both a host and an executor id on that host.
+ */
+private [spark] case class ExecutorCacheTaskLocation(override val host: String,
+    val executorId: String) extends TaskLocation {
+}
+
+/**
+ * A location on a host.
+ */
+private [spark] case class HostTaskLocation(override val host: String) extends TaskLocation {
+  override def toString = host
+}
+
+/**
+ * A location on a host that is cached by HDFS.
+ */
+private [spark] case class HDFSCacheTaskLocation(override val host: String)
+    extends TaskLocation {
+  override def toString = TaskLocation.inMemoryLocationTag + host
 }
 
 private[spark] object TaskLocation {
-  def apply(host: String, executorId: String) = new TaskLocation(host, Some(executorId))
+  // We identify hosts on which the block is cached with this prefix.  Because this prefix contains
+  // underscores, which are not legal characters in hostnames, there should be no potential for
+  // confusion.  See  RFC 952 and RFC 1123 for information about the format of hostnames.
+  val inMemoryLocationTag = "hdfs_cache_"
 
-  def apply(host: String) = new TaskLocation(host, None)
+  def apply(host: String, executorId: String) = new ExecutorCacheTaskLocation(host, executorId)
+
+  /**
+   * Create a TaskLocation from a string returned by getPreferredLocations.
+   * These strings have the form [hostname] or hdfs_cache_[hostname], depending on whether the
+   * location is cached.
+   */
+  def apply(str: String) = {
+    val hstr = str.stripPrefix(inMemoryLocationTag)
+    if (hstr.equals(str)) {
+      new HostTaskLocation(str)
+    } else {
+      new HostTaskLocation(hstr)
+    }
+  }
 }

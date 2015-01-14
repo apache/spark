@@ -64,16 +64,17 @@ class LogisticRegressionModel (
     val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
     val score = 1.0 / (1.0 + math.exp(-margin))
     threshold match {
-      case Some(t) => if (score < t) 0.0 else 1.0
+      case Some(t) => if (score > t) 1.0 else 0.0
       case None => score
     }
   }
 }
 
 /**
- * Train a classification model for Logistic Regression using Stochastic Gradient Descent.
- * NOTE: Labels used in Logistic Regression should be {0, 1}
- *
+ * Train a classification model for Logistic Regression using Stochastic Gradient Descent. By
+ * default L2 regularization is used, which can be changed via
+ * [[LogisticRegressionWithSGD.optimizer]].
+ * NOTE: Labels used in Logistic Regression should be {0, 1}.
  * Using [[LogisticRegressionWithLBFGS]] is recommended over this.
  */
 class LogisticRegressionWithSGD private (
@@ -84,7 +85,7 @@ class LogisticRegressionWithSGD private (
   extends GeneralizedLinearAlgorithm[LogisticRegressionModel] with Serializable {
 
   private val gradient = new LogisticGradient()
-  private val updater = new SimpleUpdater()
+  private val updater = new SquaredL2Updater()
   override val optimizer = new GradientDescent(gradient, updater)
     .setStepSize(stepSize)
     .setNumIterations(numIterations)
@@ -93,9 +94,10 @@ class LogisticRegressionWithSGD private (
   override protected val validators = List(DataValidators.binaryLabelValidator)
 
   /**
-   * Construct a LogisticRegression object with default parameters
+   * Construct a LogisticRegression object with default parameters: {stepSize: 1.0,
+   * numIterations: 100, regParm: 0.01, miniBatchFraction: 1.0}.
    */
-  def this() = this(1.0, 100, 0.0, 1.0)
+  def this() = this(1.0, 100, 0.01, 1.0)
 
   override protected def createModel(weights: Vector, intercept: Double) = {
     new LogisticRegressionModel(weights, intercept)

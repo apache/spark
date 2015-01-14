@@ -20,13 +20,12 @@ package org.apache.spark.sql.api.java
 import java.util.{List => JList}
 
 import org.apache.spark.Partitioner
-import org.apache.spark.api.java.{JavaRDDLike, JavaRDD}
+import org.apache.spark.api.java.{JavaRDD, JavaRDDLike}
 import org.apache.spark.api.java.function.{Function => JFunction}
-import org.apache.spark.sql.types.util.DataTypeConversions
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SQLContext, SchemaRDD, SchemaRDDLike}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import DataTypeConversions._
-import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -47,6 +46,9 @@ class JavaSchemaRDD(
 
   private[sql] val baseSchemaRDD = new SchemaRDD(sqlContext, logicalPlan)
 
+  /** Returns the underlying Scala SchemaRDD. */
+  val schemaRDD: SchemaRDD = baseSchemaRDD
+
   override val classTag = scala.reflect.classTag[Row]
 
   override def wrapRDD(rdd: RDD[Row]): JavaRDD[Row] = JavaRDD.fromRDD(rdd)
@@ -56,8 +58,7 @@ class JavaSchemaRDD(
   override def toString: String = baseSchemaRDD.toString
 
   /** Returns the schema of this JavaSchemaRDD (represented by a StructType). */
-  def schema: StructType =
-    asJavaDataType(baseSchemaRDD.schema).asInstanceOf[StructType]
+  def schema: StructType = baseSchemaRDD.schema.asInstanceOf[StructType]
 
   // =======================================================================
   // Base RDD functions that do NOT change schema
@@ -112,6 +113,8 @@ class JavaSchemaRDD(
     new java.util.ArrayList(arr)
   }
 
+  override def count(): Long = baseSchemaRDD.count
+
   override def take(num: Int): JList[Row] = {
     import scala.collection.JavaConversions._
     val arr: java.util.Collection[Row] = baseSchemaRDD.take(num).toSeq.map(new Row(_))
@@ -119,6 +122,12 @@ class JavaSchemaRDD(
   }
 
   // Transformations (return a new RDD)
+
+  /**
+   * Returns a new RDD with each row transformed to a JSON string.
+   */
+  def toJSON(): JavaRDD[String] =
+    baseSchemaRDD.toJSON.toJavaRDD
 
   /**
    * Return a new RDD that is reduced into `numPartitions` partitions.
@@ -191,7 +200,7 @@ class JavaSchemaRDD(
    * Return an RDD with the elements from `this` that are not in `other`.
    *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
-   * RDD will be <= us.
+   * RDD will be &lt;= us.
    */
   def subtract(other: JavaSchemaRDD): JavaSchemaRDD =
     this.baseSchemaRDD.subtract(other.baseSchemaRDD).toJavaSchemaRDD
@@ -207,4 +216,10 @@ class JavaSchemaRDD(
    */
   def subtract(other: JavaSchemaRDD, p: Partitioner): JavaSchemaRDD =
     this.baseSchemaRDD.subtract(other.baseSchemaRDD, p).toJavaSchemaRDD
+
+  /**
+   * Return a SchemaRDD with a sampled version of the underlying dataset.
+   */
+  def sample(withReplacement: Boolean, fraction: Double, seed: Long): JavaSchemaRDD =
+    this.baseSchemaRDD.sample(withReplacement, fraction, seed).toJavaSchemaRDD
 }

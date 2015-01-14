@@ -28,32 +28,106 @@ import org.apache.spark.util.Utils
 
 class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matchers {
 
+
+  private def createStageStartEvent(stageId: Int) = {
+    val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
+    SparkListenerStageSubmitted(stageInfo)
+  }
+
+  private def createStageEndEvent(stageId: Int, failed: Boolean = false) = {
+    val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
+    if (failed) {
+      stageInfo.failureReason = Some("Failed!")
+    }
+    SparkListenerStageCompleted(stageInfo)
+  }
+
+  private def createJobStartEvent(jobId: Int, stageIds: Seq[Int]) = {
+    val stageInfos = stageIds.map { stageId =>
+      new StageInfo(stageId, 0, stageId.toString, 0, null, "")
+    }
+    SparkListenerJobStart(jobId, stageInfos)
+  }
+
+  private def createJobEndEvent(jobId: Int, failed: Boolean = false) = {
+    val result = if (failed) JobFailed(new Exception("dummy failure")) else JobSucceeded
+    SparkListenerJobEnd(jobId, result)
+  }
+
+  private def runJob(listener: SparkListener, jobId: Int, shouldFail: Boolean = false) {
+    val stagesThatWontBeRun = jobId * 200 to jobId * 200 + 10
+    val stageIds = jobId * 100 to jobId * 100 + 50
+    listener.onJobStart(createJobStartEvent(jobId, stageIds ++ stagesThatWontBeRun))
+    for (stageId <- stageIds) {
+      listener.onStageSubmitted(createStageStartEvent(stageId))
+      listener.onStageCompleted(createStageEndEvent(stageId, failed = stageId % 2 == 0))
+    }
+    listener.onJobEnd(createJobEndEvent(jobId, shouldFail))
+  }
+
+  private def assertActiveJobsStateIsEmpty(listener: JobProgressListener) {
+    listener.getSizesOfActiveStateTrackingCollections.foreach { case (fieldName, size) =>
+      assert(size === 0, s"$fieldName was not empty")
+    }
+  }
+
   test("test LRU eviction of stages") {
     val conf = new SparkConf()
     conf.set("spark.ui.retainedStages", 5.toString)
     val listener = new JobProgressListener(conf)
 
-    def createStageStartEvent(stageId: Int) = {
-      val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
-      SparkListenerStageSubmitted(stageInfo)
-    }
-
-    def createStageEndEvent(stageId: Int) = {
-      val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
-      SparkListenerStageCompleted(stageInfo)
-    }
-
     for (i <- 1 to 50) {
       listener.onStageSubmitted(createStageStartEvent(i))
       listener.onStageCompleted(createStageEndEvent(i))
     }
+    assertActiveJobsStateIsEmpty(listener)
 
     listener.completedStages.size should be (5)
-    listener.completedStages.count(_.stageId == 50) should be (1)
-    listener.completedStages.count(_.stageId == 49) should be (1)
-    listener.completedStages.count(_.stageId == 48) should be (1)
-    listener.completedStages.count(_.stageId == 47) should be (1)
-    listener.completedStages.count(_.stageId == 46) should be (1)
+    listener.completedStages.map(_.stageId).toSet should be (Set(50, 49, 48, 47, 46))
+  }
+
+  test("test LRU eviction of jobs") {
+    val conf = new SparkConf()
+    conf.set("spark.ui.retainedStages", 5.toString)
+    conf.set("spark.ui.retainedJobs", 5.toString)
+    val listener = new JobProgressListener(conf)
+
+    // Run a bunch of jobs to get the listener into a state where we've exceeded both the
+    // job and stage retention limits:
+    for (jobId <- 1 to 10) {
+      runJob(listener, jobId, shouldFail = false)
+    }
+    for (jobId <- 200 to 210) {
+      runJob(listener, jobId, shouldFail = true)
+    }
+    assertActiveJobsStateIsEmpty(listener)
+    // Snapshot the sizes of various soft- and hard-size-limited collections:
+    val softLimitSizes = listener.getSizesOfSoftSizeLimitedCollections
+    val hardLimitSizes = listener.getSizesOfHardSizeLimitedCollections
+    // Run some more jobs:
+    for (jobId <- 11 to 50) {
+      runJob(listener, jobId, shouldFail = false)
+      // We shouldn't exceed the hard / soft limit sizes after the jobs have finished:
+      listener.getSizesOfSoftSizeLimitedCollections should be (softLimitSizes)
+      listener.getSizesOfHardSizeLimitedCollections should be (hardLimitSizes)
+    }
+
+    listener.completedJobs.size should be (5)
+    listener.completedJobs.map(_.jobId).toSet should be (Set(50, 49, 48, 47, 46))
+
+    for (jobId <- 51 to 100) {
+      runJob(listener, jobId, shouldFail = true)
+      // We shouldn't exceed the hard / soft limit sizes after the jobs have finished:
+      listener.getSizesOfSoftSizeLimitedCollections should be (softLimitSizes)
+      listener.getSizesOfHardSizeLimitedCollections should be (hardLimitSizes)
+    }
+    assertActiveJobsStateIsEmpty(listener)
+
+    // Completed and failed jobs each their own size limits, so this should still be the same:
+    listener.completedJobs.size should be (5)
+    listener.completedJobs.map(_.jobId).toSet should be (Set(50, 49, 48, 47, 46))
+    listener.failedJobs.size should be (5)
+    listener.failedJobs.map(_.jobId).toSet should be (Set(100, 99, 98, 97, 96))
   }
 
   test("test executor id to summary") {
@@ -115,11 +189,11 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     // Go through all the failure cases to make sure we are counting them as failures.
     val taskFailedReasons = Seq(
       Resubmitted,
-      new FetchFailed(null, 0, 0, 0),
-      new ExceptionFailure("Exception", "description", null, None),
+      new FetchFailed(null, 0, 0, 0, "ignored"),
+      ExceptionFailure("Exception", "description", null, null, None),
       TaskResultLost,
       TaskKilled,
-      ExecutorLostFailure,
+      ExecutorLostFailure("0"),
       UnknownReason)
     var failCount = 0
     for (reason <- taskFailedReasons) {
@@ -159,6 +233,9 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       taskMetrics.inputMetrics = Some(inputMetrics)
       inputMetrics.bytesRead = base + 7
+      val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
+      taskMetrics.outputMetrics = Some(outputMetrics)
+      outputMetrics.bytesWritten = base + 8
       taskMetrics
     }
 
@@ -193,6 +270,8 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     assert(stage1Data.memoryBytesSpilled == 206)
     assert(stage0Data.inputBytes == 114)
     assert(stage1Data.inputBytes == 207)
+    assert(stage0Data.outputBytes == 116)
+    assert(stage1Data.outputBytes == 208)
     assert(stage0Data.taskData.get(1234L).get.taskMetrics.get.shuffleReadMetrics.get
       .totalBlocksFetched == 2)
     assert(stage0Data.taskData.get(1235L).get.taskMetrics.get.shuffleReadMetrics.get
@@ -221,6 +300,8 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     assert(stage1Data.memoryBytesSpilled == 612)
     assert(stage0Data.inputBytes == 414)
     assert(stage1Data.inputBytes == 614)
+    assert(stage0Data.outputBytes == 416)
+    assert(stage1Data.outputBytes == 616)
     assert(stage0Data.taskData.get(1234L).get.taskMetrics.get.shuffleReadMetrics.get
       .totalBlocksFetched == 302)
     assert(stage1Data.taskData.get(1237L).get.taskMetrics.get.shuffleReadMetrics.get

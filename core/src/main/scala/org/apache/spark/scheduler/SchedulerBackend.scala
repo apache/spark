@@ -23,6 +23,8 @@ package org.apache.spark.scheduler
  * machines become available and can launch tasks on them.
  */
 private[spark] trait SchedulerBackend {
+  private val appId = "spark-application-" + System.currentTimeMillis
+
   def start(): Unit
   def stop(): Unit
   def reviveOffers(): Unit
@@ -33,10 +35,10 @@ private[spark] trait SchedulerBackend {
   def isReady(): Boolean = true
 
   /**
-   * The application ID associated with the job, if any.
+   * Get an application ID associated with the job.
    *
-   * @return The application ID, or None if the backend does not provide an ID.
+   * @return An application ID
    */
-  def applicationId(): Option[String] = None
+  def applicationId(): String = appId
 
 }

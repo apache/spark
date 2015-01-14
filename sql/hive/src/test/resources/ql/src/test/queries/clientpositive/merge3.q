@@ -37,7 +37,7 @@ where ds is not null;
 
 show partitions merge_src_part2;
 
-select * from merge_src_part2 where ds is not null ORDER BY key ASC, value ASC;
+select * from merge_src_part2 where ds is not null ORDER BY key ASC, value ASC, ds ASC;
 
 drop table merge_src_part2;
 
@@ -54,4 +54,4 @@ select key, value, ds;
 
 show partitions merge_src_part2;
 
-select * from merge_src_part2 where ds is not null ORDER BY key ASC, value ASC;
+select * from merge_src_part2 where ds is not null ORDER BY key ASC, value ASC, ds ASC;

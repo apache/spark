@@ -37,8 +37,7 @@ private[spark] class ExecutorSource(val executor: Executor, executorId: String) 
 
   override val metricRegistry = new MetricRegistry()
 
-  // TODO: It would be nice to pass the application name here
-  override val sourceName = "executor.%s".format(executorId)
+  override val sourceName = "executor"
 
   // Gauge for executor thread pool's actively executing task counts
   metricRegistry.register(MetricRegistry.name("threadpool", "activeTasks"), new Gauge[Int] {

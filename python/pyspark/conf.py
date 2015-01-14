@@ -83,11 +83,11 @@ class SparkConf(object):
         """
         Create a new Spark configuration.
 
-        @param loadDefaults: whether to load values from Java system
+        :param loadDefaults: whether to load values from Java system
                properties (True by default)
-        @param _jvm: internal parameter used to pass a handle to the
+        :param _jvm: internal parameter used to pass a handle to the
                Java VM; does not need to be set by users
-        @param _jconf: Optionally pass in an existing SparkConf handle
+        :param _jconf: Optionally pass in an existing SparkConf handle
                to use its parameters
         """
         if _jconf:
@@ -139,7 +139,7 @@ class SparkConf(object):
         """
         Set multiple parameters, passed as a list of key-value pairs.
 
-        @param pairs: list of key-value pairs to set
+        :param pairs: list of key-value pairs to set
         """
         for (k, v) in pairs:
             self._jconf.set(k, v)

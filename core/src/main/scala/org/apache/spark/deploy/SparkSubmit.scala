@@ -18,7 +18,7 @@
 package org.apache.spark.deploy
 
 import java.io.{File, PrintStream}
-import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.{Modifier, InvocationTargetException}
 import java.net.URL
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
@@ -54,7 +54,7 @@ object SparkSubmit {
   private val SPARK_SHELL = "spark-shell"
   private val PYSPARK_SHELL = "pyspark-shell"
 
-  private val CLASS_NOT_FOUND_EXIT_STATUS = 1
+  private val CLASS_NOT_FOUND_EXIT_STATUS = 101
 
   // Exposed for testing
   private[spark] var exitFn: () => Unit = () => System.exit(-1)
@@ -142,6 +142,8 @@ object SparkSubmit {
         printErrorAndExit("Cluster deploy mode is currently not supported for python applications.")
       case (_, CLUSTER) if isShell(args.primaryResource) =>
         printErrorAndExit("Cluster deploy mode is not applicable to Spark shells.")
+      case (_, CLUSTER) if isSqlShell(args.mainClass) =>
+        printErrorAndExit("Cluster deploy mode is not applicable to Spark SQL shell.")
       case _ =>
     }
 
@@ -158,8 +160,9 @@ object SparkSubmit {
         args.files = mergeFileLists(args.files, args.primaryResource)
       }
       args.files = mergeFileLists(args.files, args.pyFiles)
-      // Format python file paths properly before adding them to the PYTHONPATH
-      sysProps("spark.submit.pyFiles") = PythonRunner.formatPaths(args.pyFiles).mkString(",")
+      if (args.pyFiles != null) {
+        sysProps("spark.submit.pyFiles") = args.pyFiles
+      }
     }
 
     // Special flag to avoid deprecation warnings at the client
@@ -172,7 +175,7 @@ object SparkSubmit {
       // All cluster managers
       OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.master"),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
-      OptionAssigner(args.jars, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.jars"),
+      OptionAssigner(args.jars, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
         sysProp = "spark.driver.memory"),
       OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
@@ -183,6 +186,7 @@ object SparkSubmit {
         sysProp = "spark.driver.extraLibraryPath"),
 
       // Standalone cluster only
+      OptionAssigner(args.jars, STANDALONE, CLUSTER, sysProp = "spark.jars"),
       OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, clOption = "--memory"),
       OptionAssigner(args.driverCores, STANDALONE, CLUSTER, clOption = "--cores"),
 
@@ -261,7 +265,7 @@ object SparkSubmit {
     }
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
-    if (clusterManager == YARN && deployMode == CLUSTER) {
+    if (isYarnCluster) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       if (args.primaryResource != SPARK_INTERNAL) {
         childArgs += ("--jar", args.primaryResource)
@@ -272,15 +276,37 @@ object SparkSubmit {
       }
     }
 
-    // Properties given with --conf are superceded by other options, but take precedence over
-    // properties in the defaults file.
+    // Load any properties specified through --conf and the default properties file
     for ((k, v) <- args.sparkProperties) {
       sysProps.getOrElseUpdate(k, v)
     }
 
-    // Read from default spark properties, if any
-    for ((k, v) <- args.getDefaultSparkProperties) {
-      sysProps.getOrElseUpdate(k, v)
+    // Ignore invalid spark.driver.host in cluster modes.
+    if (deployMode == CLUSTER) {
+      sysProps -= ("spark.driver.host")
+    }
+
+    // Resolve paths in certain spark properties
+    val pathConfigs = Seq(
+      "spark.jars",
+      "spark.files",
+      "spark.yarn.jar",
+      "spark.yarn.dist.files",
+      "spark.yarn.dist.archives")
+    pathConfigs.foreach { config =>
+      // Replace old URIs with resolved URIs, if they exist
+      sysProps.get(config).foreach { oldValue =>
+        sysProps(config) = Utils.resolveURIs(oldValue)
+      }
+    }
+
+    // Resolve and format python file paths properly before adding them to the PYTHONPATH.
+    // The resolving part is redundant in the case of --py-files, but necessary if the user
+    // explicitly sets `spark.submit.pyFiles` in his/her default properties file.
+    sysProps.get("spark.submit.pyFiles").foreach { pyFiles =>
+      val resolvedPyFiles = Utils.resolveURIs(pyFiles)
+      val formattedPyFiles = PythonRunner.formatPaths(resolvedPyFiles).mkString(",")
+      sysProps("spark.submit.pyFiles") = formattedPyFiles
     }
 
     (childArgs, childClasspath, sysProps, childMainClass)
@@ -319,11 +345,22 @@ object SparkSubmit {
     } catch {
       case e: ClassNotFoundException =>
         e.printStackTrace(printStream)
+        if (childMainClass.contains("thriftserver")) {
+          println(s"Failed to load main class $childMainClass.")
+          println("You need to build Spark with -Phive and -Phive-thriftserver.")
+        }
         System.exit(CLASS_NOT_FOUND_EXIT_STATUS)
     }
 
-    val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
+    // SPARK-4170
+    if (classOf[scala.App].isAssignableFrom(mainClass)) {
+      printWarning("Subclasses of scala.App may not work correctly. Use a main() method instead.")
+    }
 
+    val mainMethod = mainClass.getMethod("main", new Array[String](0).getClass)
+    if (!Modifier.isStatic(mainMethod.getModifiers)) {
+      throw new IllegalStateException("The main method in the given main class must be static")
+    }
     try {
       mainMethod.invoke(null, childArgs.toArray)
     } catch {
@@ -361,6 +398,13 @@ object SparkSubmit {
    */
   private[spark] def isShell(primaryResource: String): Boolean = {
     primaryResource == SPARK_SHELL || primaryResource == PYSPARK_SHELL
+  }
+
+  /**
+   * Return whether the given main class represents a sql shell.
+   */
+  private[spark] def isSqlShell(mainClass: String): Boolean = {
+    mainClass == "org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver"
   }
 
   /**

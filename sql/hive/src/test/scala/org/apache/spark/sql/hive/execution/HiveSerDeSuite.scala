@@ -37,4 +37,6 @@ class HiveSerDeSuite extends HiveComparisonTest with BeforeAndAfterAll {
   createQueryTest("Read with RegexSerDe", "SELECT * FROM sales")
 
   createQueryTest("Read with AvroSerDe", "SELECT * FROM episodes")
+
+  createQueryTest("Read Partitioned with AvroSerDe", "SELECT * FROM episodes_part")
 }

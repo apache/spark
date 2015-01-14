@@ -76,16 +76,12 @@ class IndexedRowMatrix(
   }
 
   /**
-   * Computes the singular value decomposition of this matrix.
+   * Computes the singular value decomposition of this IndexedRowMatrix.
    * Denote this matrix by A (m x n), this will compute matrices U, S, V such that A = U * S * V'.
    *
-   * There is no restriction on m, but we require `n^2` doubles to fit in memory.
-   * Further, n should be less than m.
-
-   * The decomposition is computed by first computing A'A = V S^2 V',
-   * computing svd locally on that (since n x n is small), from which we recover S and V.
-   * Then we compute U via easy matrix multiplication as U =  A * (V * S^-1).
-   * Note that this approach requires `O(n^3)` time on the master node.
+   * The cost and implementation of this method is identical to that in
+   * [[org.apache.spark.mllib.linalg.distributed.RowMatrix]]
+   * With the addition of indices.
    *
    * At most k largest non-zero singular values and associated vectors are returned.
    * If there are k such values, then the dimensions of the return will be:
@@ -106,6 +102,9 @@ class IndexedRowMatrix(
       k: Int,
       computeU: Boolean = false,
       rCond: Double = 1e-9): SingularValueDecomposition[IndexedRowMatrix, Matrix] = {
+
+    val n = numCols().toInt
+    require(k > 0 && k <= n, s"Requested k singular values but got k=$k and numCols=$n.")
     val indices = rows.map(_.index)
     val svd = toRowMatrix().computeSVD(k, computeU, rCond)
     val U = if (computeU) {
@@ -146,7 +145,7 @@ class IndexedRowMatrix(
     val mat = BDM.zeros[Double](m, n)
     rows.collect().foreach { case IndexedRow(rowIndex, vector) =>
       val i = rowIndex.toInt
-      vector.toBreeze.activeIterator.foreach { case (j, v) =>
+      vector.foreachActive { case (j, v) =>
         mat(i, j) = v
       }
     }

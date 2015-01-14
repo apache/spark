@@ -56,7 +56,7 @@ set hive.exec.mode.local.auto=true;
 create table nzhang_ctas5 row format delimited fields terminated by ',' lines terminated by '\012' stored as textfile as select key, value from src sort by key, value limit 10;
 
 create table nzhang_ctas6 (key string, `to` string);
-insert overwrite table nzhang_ctas6 select key, value from src limit 10;
+insert overwrite table nzhang_ctas6 select key, value from src tablesample (10 rows);
 create table nzhang_ctas7 as select key, `to` from nzhang_ctas6;
 
 

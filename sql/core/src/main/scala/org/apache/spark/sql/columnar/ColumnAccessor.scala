@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.columnar
 
-import java.nio.{ByteOrder, ByteBuffer}
+import java.nio.{ByteBuffer, ByteOrder}
 
-import org.apache.spark.sql.catalyst.types.{BinaryType, NativeType, DataType}
 import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.columnar.compression.CompressibleColumnAccessor
+import org.apache.spark.sql.types.{BinaryType, DataType, NativeType}
 
 /**
  * An `Iterator` like trait used to extract values from columnar byte buffer. When a value is
@@ -50,11 +50,13 @@ private[sql] abstract class BasicColumnAccessor[T <: DataType, JvmType](
 
   def hasNext = buffer.hasRemaining
 
-  def extractTo(row: MutableRow, ordinal: Int) {
-    columnType.setField(row, ordinal, extractSingle(buffer))
+  def extractTo(row: MutableRow, ordinal: Int): Unit = {
+    extractSingle(row, ordinal)
   }
 
-  def extractSingle(buffer: ByteBuffer): JvmType = columnType.extract(buffer)
+  def extractSingle(row: MutableRow, ordinal: Int): Unit = {
+    columnType.extract(buffer, row, ordinal)
+  }
 
   protected def underlyingBuffer = buffer
 }
@@ -90,6 +92,9 @@ private[sql] class FloatColumnAccessor(buffer: ByteBuffer)
 private[sql] class StringColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, STRING)
 
+private[sql] class DateColumnAccessor(buffer: ByteBuffer)
+  extends NativeColumnAccessor(buffer, DATE)
+
 private[sql] class TimestampColumnAccessor(buffer: ByteBuffer)
   extends NativeColumnAccessor(buffer, TIMESTAMP)
 
@@ -116,6 +121,7 @@ private[sql] object ColumnAccessor {
       case BYTE.typeId      => new ByteColumnAccessor(dup)
       case SHORT.typeId     => new ShortColumnAccessor(dup)
       case STRING.typeId    => new StringColumnAccessor(dup)
+      case DATE.typeId      => new DateColumnAccessor(dup)
       case TIMESTAMP.typeId => new TimestampColumnAccessor(dup)
       case BINARY.typeId    => new BinaryColumnAccessor(dup)
       case GENERIC.typeId   => new GenericColumnAccessor(dup)

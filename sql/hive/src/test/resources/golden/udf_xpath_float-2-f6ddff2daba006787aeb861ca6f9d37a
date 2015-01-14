@@ -1,0 +1,4 @@
+xpath_float(xml, xpath) - Returns a float value that matches the xpath expression
+Example:
+  > SELECT xpath_float('<a><b>1</b><b>2</b></a>','sum(a/b)') FROM src LIMIT 1;
+  3.0

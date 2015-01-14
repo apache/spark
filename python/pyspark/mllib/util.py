@@ -18,29 +18,24 @@
 import numpy as np
 import warnings
 
-from pyspark.mllib.linalg import Vectors, SparseVector
+from pyspark.mllib.common import callMLlibFunc
+from pyspark.mllib.linalg import Vectors, SparseVector, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.mllib._common import _convert_vector, _deserialize_labeled_point
-from pyspark.rdd import RDD
-from pyspark.serializers import NoOpSerializer
 
 
-class MLUtils:
+class MLUtils(object):
 
     """
     Helper methods to load, save and pre-process data used in MLlib.
     """
 
     @staticmethod
-    def _parse_libsvm_line(line, multiclass):
-        warnings.warn("deprecated", DeprecationWarning)
-        return _parse_libsvm_line(line)
-
-    @staticmethod
-    def _parse_libsvm_line(line):
+    def _parse_libsvm_line(line, multiclass=None):
         """
         Parses a line in LIBSVM format into (label, indices, values).
         """
+        if multiclass is not None:
+            warnings.warn("deprecated", DeprecationWarning)
         items = line.split(None)
         label = float(items[0])
         nnz = len(items) - 1
@@ -55,27 +50,20 @@ class MLUtils:
     @staticmethod
     def _convert_labeled_point_to_libsvm(p):
         """Converts a LabeledPoint to a string in LIBSVM format."""
+        assert isinstance(p, LabeledPoint)
         items = [str(p.label)]
-        v = _convert_vector(p.features)
-        if type(v) == np.ndarray:
-            for i in xrange(len(v)):
-                items.append(str(i + 1) + ":" + str(v[i]))
-        elif type(v) == SparseVector:
+        v = _convert_to_vector(p.features)
+        if isinstance(v, SparseVector):
             nnz = len(v.indices)
             for i in xrange(nnz):
                 items.append(str(v.indices[i] + 1) + ":" + str(v.values[i]))
         else:
-            raise TypeError("_convert_labeled_point_to_libsvm needs either ndarray or SparseVector"
-                            " but got " % type(v))
+            for i in xrange(len(v)):
+                items.append(str(i + 1) + ":" + str(v[i]))
         return " ".join(items)
 
     @staticmethod
-    def loadLibSVMFile(sc, path, multiclass=False, numFeatures=-1, minPartitions=None):
-        warnings.warn("deprecated", DeprecationWarning)
-        return loadLibSVMFile(sc, path, numFeatures, minPartitions)
-
-    @staticmethod
-    def loadLibSVMFile(sc, path, numFeatures=-1, minPartitions=None):
+    def loadLibSVMFile(sc, path, numFeatures=-1, minPartitions=None, multiclass=None):
         """
         Loads labeled data in the LIBSVM format into an RDD of
         LabeledPoint. The LIBSVM format is a text-based format used by
@@ -88,10 +76,10 @@ class MLUtils:
         method parses each line into a LabeledPoint, where the feature
         indices are converted to zero-based.
 
-        @param sc: Spark context
-        @param path: file or directory path in any Hadoop-supported file
+        :param sc: Spark context
+        :param path: file or directory path in any Hadoop-supported file
                      system URI
-        @param numFeatures: number of features, which will be determined
+        :param numFeatures: number of features, which will be determined
                             from the input data if a nonpositive value
                             is given. This is useful when the dataset is
                             already split into multiple files and you
@@ -99,7 +87,7 @@ class MLUtils:
                             features may not present in certain files,
                             which leads to inconsistent feature
                             dimensions.
-        @param minPartitions: min number of partitions
+        :param minPartitions: min number of partitions
         @return: labeled data stored as an RDD of LabeledPoint
 
         >>> from tempfile import NamedTemporaryFile
@@ -122,6 +110,8 @@ class MLUtils:
         >>> print examples[2]
         (-1.0,(6,[1,3,5],[4.0,5.0,6.0]))
         """
+        if multiclass is not None:
+            warnings.warn("deprecated", DeprecationWarning)
 
         lines = sc.textFile(path, minPartitions)
         parsed = lines.map(lambda l: MLUtils._parse_libsvm_line(l))
@@ -135,8 +125,8 @@ class MLUtils:
         """
         Save labeled data in LIBSVM format.
 
-        @param data: an RDD of LabeledPoint to be saved
-        @param dir: directory to save the data
+        :param data: an RDD of LabeledPoint to be saved
+        :param dir: directory to save the data
 
         >>> from tempfile import NamedTemporaryFile
         >>> from fileinput import input
@@ -158,10 +148,10 @@ class MLUtils:
         """
         Load labeled points saved using RDD.saveAsTextFile.
 
-        @param sc: Spark context
-        @param path: file or directory path in any Hadoop-supported file
+        :param sc: Spark context
+        :param path: file or directory path in any Hadoop-supported file
                      system URI
-        @param minPartitions: min number of partitions
+        :param minPartitions: min number of partitions
         @return: labeled data stored as an RDD of LabeledPoint
 
         >>> from tempfile import NamedTemporaryFile
@@ -171,20 +161,11 @@ class MLUtils:
         >>> tempFile = NamedTemporaryFile(delete=True)
         >>> tempFile.close()
         >>> sc.parallelize(examples, 1).saveAsTextFile(tempFile.name)
-        >>> loaded = MLUtils.loadLabeledPoints(sc, tempFile.name).collect()
-        >>> type(loaded[0]) == LabeledPoint
-        True
-        >>> print examples[0]
-        (1.1,(3,[0,2],[-1.23,4.56e-07]))
-        >>> type(examples[1]) == LabeledPoint
-        True
-        >>> print examples[1]
-        (0.0,[1.01,2.02,3.03])
+        >>> MLUtils.loadLabeledPoints(sc, tempFile.name).collect()
+        [LabeledPoint(1.1, (3,[0,2],[-1.23,4.56e-07])), LabeledPoint(0.0, [1.01,2.02,3.03])]
         """
         minPartitions = minPartitions or min(sc.defaultParallelism, 2)
-        jSerialized = sc._jvm.PythonMLLibAPI().loadLabeledPoints(sc._jsc, path, minPartitions)
-        serialized = RDD(jSerialized, sc, NoOpSerializer())
-        return serialized.map(lambda bytes: _deserialize_labeled_point(bytearray(bytes)))
+        return callMLlibFunc("loadLabeledPoints", sc, path, minPartitions)
 
 
 def _test():

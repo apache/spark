@@ -24,9 +24,9 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, LinearDataGenerator,
-  LocalSparkContext}
+  MLlibTestSparkContext}
 
-class RidgeRegressionSuite extends FunSuite with LocalSparkContext {
+class RidgeRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
   def predictionError(predictions: Seq[Double], input: Seq[LabeledPoint]) = {
     predictions.zip(input).map { case (prediction, expected) =>

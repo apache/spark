@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.types.{ArrayType, DataType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, StructField, StructType}
 
 abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
   self: PlanType with Product =>
@@ -30,6 +30,25 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
    * Returns the set of attributes that are output by this node.
    */
   def outputSet: AttributeSet = AttributeSet(output)
+
+  /**
+   * All Attributes that appear in expressions from this operator.  Note that this set does not
+   * include attributes that are implicitly referenced by being passed through to the output tuple.
+   */
+  def references: AttributeSet = AttributeSet(expressions.flatMap(_.references))
+
+  /**
+   * The set of all attributes that are input to this operator by its children.
+   */
+  def inputSet: AttributeSet =
+    AttributeSet(children.flatMap(_.asInstanceOf[QueryPlan[PlanType]].output))
+
+  /**
+   * Attributes that are referenced by expressions but not provided by this nodes children.
+   * Subclasses should override this method if they produce attributes internally as it is used by
+   * assertions designed to prevent the construction of invalid plans.
+   */
+  def missingInput: AttributeSet = references -- inputSet
 
   /**
    * Runs [[transform]] with `rule` on all expressions present in this query operator.
@@ -132,4 +151,8 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
   /** Prints out the schema in the tree format */
   def printSchema(): Unit = println(schemaString)
+
+  protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
+
+  override def simpleString = statePrefix + super.simpleString
 }

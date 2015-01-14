@@ -63,7 +63,7 @@ public final class JavaDecisionTree {
     HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<Integer, Integer>();
     String impurity = "gini";
     Integer maxDepth = 5;
-    Integer maxBins = 100;
+    Integer maxBins = 32;
 
     // Train a DecisionTree model for classification.
     final DecisionTreeModel model = DecisionTree.trainClassifier(data, numClasses,

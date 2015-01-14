@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.collection.Map
 
 import org.apache.spark.sql.catalyst.trees
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 /**
  * An expression that produces zero or more rows given a single input row.
@@ -43,7 +43,7 @@ abstract class Generator extends Expression {
   override type EvaluatedType = TraversableOnce[Row]
 
   override lazy val dataType =
-    ArrayType(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
+    ArrayType(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata))))
 
   override def nullable = false
 

@@ -31,10 +31,10 @@ import scala.util.Random
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.scheduler.TaskLocality.TaskLocality
 import org.apache.spark.util.Utils
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
-import akka.actor.Props
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -210,19 +210,52 @@ private[spark] class TaskSchedulerImpl(
       .format(manager.taskSet.id, manager.parent.name))
   }
 
+  private def resourceOfferSingleTaskSet(
+      taskSet: TaskSetManager,
+      maxLocality: TaskLocality,
+      shuffledOffers: Seq[WorkerOffer],
+      availableCpus: Array[Int],
+      tasks: Seq[ArrayBuffer[TaskDescription]]) : Boolean = {
+    var launchedTask = false
+    for (i <- 0 until shuffledOffers.size) {
+      val execId = shuffledOffers(i).executorId
+      val host = shuffledOffers(i).host
+      if (availableCpus(i) >= CPUS_PER_TASK) {
+        try {
+          for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
+            tasks(i) += task
+            val tid = task.taskId
+            taskIdToTaskSetId(tid) = taskSet.taskSet.id
+            taskIdToExecutorId(tid) = execId
+            executorsByHost(host) += execId
+            availableCpus(i) -= CPUS_PER_TASK
+            assert(availableCpus(i) >= 0)
+            launchedTask = true
+          }
+        } catch {
+          case e: TaskNotSerializableException =>
+            logError(s"Resource offer failed, task set ${taskSet.name} was not serializable")
+            // Do not offer resources for this task, but don't throw an error to allow other
+            // task sets to be submitted.
+            return launchedTask
+        }
+      }
+    }
+    return launchedTask
+  }
+
   /**
    * Called by cluster manager to offer resources on slaves. We respond by asking our active task
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
    * that tasks are balanced across the cluster.
    */
   def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
-    SparkEnv.set(sc.env)
-
     // Mark each slave as alive and remember its hostname
     // Also track if new executor is added
     var newExecAvail = false
     for (o <- offers) {
       executorIdToHost(o.executorId) = o.host
+      activeExecutorIds += o.executorId
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
         executorAdded(o.executorId, o.host)
@@ -253,24 +286,8 @@ private[spark] class TaskSchedulerImpl(
     var launchedTask = false
     for (taskSet <- sortedTaskSets; maxLocality <- taskSet.myLocalityLevels) {
       do {
-        launchedTask = false
-        for (i <- 0 until shuffledOffers.size) {
-          val execId = shuffledOffers(i).executorId
-          val host = shuffledOffers(i).host
-          if (availableCpus(i) >= CPUS_PER_TASK) {
-            for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
-              tasks(i) += task
-              val tid = task.taskId
-              taskIdToTaskSetId(tid) = taskSet.taskSet.id
-              taskIdToExecutorId(tid) = execId
-              activeExecutorIds += execId
-              executorsByHost(host) += execId
-              availableCpus(i) -= CPUS_PER_TASK
-              assert(availableCpus(i) >= 0)
-              launchedTask = true
-            }
-          }
-        }
+        launchedTask = resourceOfferSingleTaskSet(
+            taskSet, maxLocality, shuffledOffers, availableCpus, tasks)
       } while (launchedTask)
     }
 
@@ -397,9 +414,6 @@ private[spark] class TaskSchedulerImpl(
       taskResultGetter.stop()
     }
     starvationTimer.cancel()
-
-    // sleeping for an arbitrary 1 seconds to ensure that messages are sent out.
-    Thread.sleep(1000L)
   }
 
   override def defaultParallelism() = backend.defaultParallelism()
@@ -492,7 +506,7 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  override def applicationId(): Option[String] = backend.applicationId()
+  override def applicationId(): String = backend.applicationId()
 
 }
 
