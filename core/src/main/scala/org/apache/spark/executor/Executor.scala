@@ -110,8 +110,13 @@ private[spark] class Executor(
   startDriverHeartbeater()
 
   def launchTask(
-      context: ExecutorBackend, taskId: Long, taskName: String, serializedTask: ByteBuffer) {
-    val tr = new TaskRunner(context, taskId, taskName, serializedTask)
+      context: ExecutorBackend,
+      taskId: Long,
+      attemptNumber: Int,
+      taskName: String,
+      serializedTask: ByteBuffer) {
+    val tr = new TaskRunner(context, taskId = taskId, attemptNumber = attemptNumber, taskName,
+      serializedTask)
     runningTasks.put(taskId, tr)
     threadPool.execute(tr)
   }
@@ -136,7 +141,11 @@ private[spark] class Executor(
   private def gcTime = ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
 
   class TaskRunner(
-      execBackend: ExecutorBackend, val taskId: Long, taskName: String, serializedTask: ByteBuffer)
+      execBackend: ExecutorBackend,
+      val taskId: Long,
+      val attemptNumber: Int,
+      taskName: String,
+      serializedTask: ByteBuffer)
     extends Runnable {
 
     @volatile private var killed = false
@@ -182,7 +191,7 @@ private[spark] class Executor(
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
-        val value = task.run(taskId.toInt)
+        val value = task.run(taskAttemptId = taskId, attemptNumber = attemptNumber)
         val taskFinish = System.currentTimeMillis()
 
         // If the task has been killed, let's fail it.

@@ -21,6 +21,7 @@ import org.apache.spark.sql.QueryTest
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.util.Utils
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -201,5 +202,16 @@ class SQLQuerySuite extends QueryTest {
   test("SPARK-2554 SumDistinct partial aggregation") {
     checkAnswer(sql("SELECT sum( distinct key) FROM src group by key order by key"),
       sql("SELECT distinct key FROM src order by key").collect().toSeq)
+  }
+
+  test("SPARK-4963 SchemaRDD sample on mutable row return wrong result") {
+    sql("SELECT * FROM src WHERE key % 2 = 0")
+      .sample(withReplacement = false, fraction = 0.3)
+      .registerTempTable("sampled")
+    (1 to 10).foreach { i =>
+      checkAnswer(
+        sql("SELECT * FROM sampled WHERE key % 2 = 1"),
+        Seq.empty[Row])
+    }
   }
 }
