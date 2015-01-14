@@ -146,7 +146,7 @@ private[spark] object JsonProtocol {
     val jobResult = jobResultToJson(jobEnd.jobResult)
     ("Event" -> Utils.getFormattedClassName(jobEnd)) ~
     ("Job ID" -> jobEnd.jobId) ~
-    ("Completaion Time" -> jobEnd.time) ~
+    ("Completion Time" -> jobEnd.time) ~
     ("Job Result" -> jobResult)
   }
 
@@ -484,7 +484,7 @@ private[spark] object JsonProtocol {
 
   def jobEndFromJson(json: JValue): SparkListenerJobEnd = {
     val jobId = (json \ "Job ID").extract[Int]
-    val completionTime = (json \ "Completaion Time").extractOpt[Long]
+    val completionTime = (json \ "Completion Time").extractOpt[Long]
     val jobResult = jobResultFromJson(json \ "Job Result")
     SparkListenerJobEnd(jobId, completionTime, jobResult)
   }

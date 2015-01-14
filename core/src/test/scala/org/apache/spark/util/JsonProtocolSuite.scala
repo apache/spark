@@ -1057,6 +1057,7 @@ class JsonProtocolSuite extends FunSuite {
       |{
       |  "Event": "SparkListenerJobStart",
       |  "Job ID": 10,
+      |  "Submission Time": 1421191042750,
       |  "Stage Infos": [
       |    {
       |      "Stage ID": 1,
@@ -1331,6 +1332,7 @@ class JsonProtocolSuite extends FunSuite {
       |{
       |  "Event": "SparkListenerJobEnd",
       |  "Job ID": 20,
+      |  "Completion Time": 1421191296660,
       |  "Job Result": {
       |    "Result": "JobSucceeded"
       |  }
