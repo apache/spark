@@ -195,5 +195,13 @@ object EmptyCatalog extends Catalog {
     throw new UnsupportedOperationException
   }
 
+  def createDataSourceTable(
+      tableName: String,
+      userSpecifiedSchema: Option[StructType],
+      provider: String,
+      options: Map[String, String]): Unit  = {
+    throw new UnsupportedOperationException
+  }
+
   override def unregisterAllTables(): Unit = {}
 }
