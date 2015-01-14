@@ -33,6 +33,9 @@ import org.apache.spark.storage._
 
 class JsonProtocolSuite extends FunSuite {
 
+  val jobSubmissionTime = Option(1421191042750L)
+  val jobCompletionTime = Option(1421191296660L)
+
   test("SparkListenerEvent") {
     val stageSubmitted =
       SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties)
@@ -53,9 +56,9 @@ class JsonProtocolSuite extends FunSuite {
       val stageIds = Seq[Int](1, 2, 3, 4)
       val stageInfos = stageIds.map(x =>
         makeStageInfo(x, x * 200, x * 300, x * 400L, x * 500L))
-      SparkListenerJobStart(10, stageInfos, properties)
+      SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
     }
-    val jobEnd = SparkListenerJobEnd(20, JobSucceeded)
+    val jobEnd = SparkListenerJobEnd(20, jobCompletionTime, JobSucceeded)
     val environmentUpdate = SparkListenerEnvironmentUpdate(Map[String, Seq[(String, String)]](
       "JVM Information" -> Seq(("GC speed", "9999 objects/s"), ("Java home", "Land of coffee")),
       "Spark Properties" -> Seq(("Job throughput", "80000 jobs/s, regardless of job type")),
@@ -240,10 +243,10 @@ class JsonProtocolSuite extends FunSuite {
     val stageInfos = stageIds.map(x => makeStageInfo(x, x * 200, x * 300, x * 400, x * 500))
     val dummyStageInfos =
       stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, "unknown"))
-    val jobStart = SparkListenerJobStart(10, stageInfos, properties)
+    val jobStart = SparkListenerJobStart(10, jobSubmissionTime, stageInfos, properties)
     val oldEvent = JsonProtocol.jobStartToJson(jobStart).removeField({_._1 == "Stage Infos"})
     val expectedJobStart =
-      SparkListenerJobStart(10, dummyStageInfos, properties)
+      SparkListenerJobStart(10, jobSubmissionTime, dummyStageInfos, properties)
     assertEquals(expectedJobStart, JsonProtocol.jobStartFromJson(oldEvent))
   }
 

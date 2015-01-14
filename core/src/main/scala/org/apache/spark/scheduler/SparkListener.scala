@@ -58,6 +58,7 @@ case class SparkListenerTaskEnd(
 @DeveloperApi
 case class SparkListenerJobStart(
     jobId: Int,
+    time: Option[Long],
     stageInfos: Seq[StageInfo],
     properties: Properties = null)
   extends SparkListenerEvent {
@@ -67,7 +68,11 @@ case class SparkListenerJobStart(
 }
 
 @DeveloperApi
-case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkListenerEvent
+case class SparkListenerJobEnd(
+    jobId: Int,
+    time: Option[Long],
+    jobResult: JobResult)
+  extends SparkListenerEvent
 
 @DeveloperApi
 case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(String, String)]])

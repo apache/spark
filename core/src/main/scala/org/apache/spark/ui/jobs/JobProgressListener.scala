@@ -153,14 +153,14 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     val jobData: JobUIData =
       new JobUIData(
         jobId = jobStart.jobId,
-        startTime = Some(System.currentTimeMillis),
+        startTime = jobStart.time,
         endTime = None,
         stageIds = jobStart.stageIds,
         jobGroup = jobGroup,
         status = JobExecutionStatus.RUNNING)
     // Compute (a potential underestimate of) the number of tasks that will be run by this job.
     // This may be an underestimate because the job start event references all of the result
-    // stages's transitive stage dependencies, but some of these stages might be skipped if their
+    // stages' transitive stage dependencies, but some of these stages might be skipped if their
     // output is available from earlier runs.
     // See https://github.com/apache/spark/pull/3009 for a more extensive discussion.
     jobData.numTasks = {
@@ -186,7 +186,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       logWarning(s"Job completed for unknown job ${jobEnd.jobId}")
       new JobUIData(jobId = jobEnd.jobId)
     }
-    jobData.endTime = Some(System.currentTimeMillis())
+    jobData.endTime = jobEnd.time
     jobEnd.jobResult match {
       case JobSucceeded =>
         completedJobs += jobData
