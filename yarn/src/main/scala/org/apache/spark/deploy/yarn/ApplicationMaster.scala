@@ -231,6 +231,18 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     reporterThread = launchReporterThread()
   }
 
+  private def runAMActor(securityMgr: SecurityManager, host: String, port: String,
+                         isDriver: Boolean): Unit = {
+    actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
+      conf = sparkConf, securityManager = securityMgr)._1
+    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
+      SparkEnv.driverActorSystemName,
+      host,
+      port,
+      YarnSchedulerBackend.ACTOR_NAME)
+    actor = actorSystem.actorOf(Props(new AMActor(driverUrl, false)), name = "YarnAM")
+  }
+
   private def runDriver(securityMgr: SecurityManager): Unit = {
     addAmIpFilter()
     userClassThread = startUserClass()
@@ -245,23 +257,15 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         ApplicationMaster.EXIT_SC_NOT_INITED,
         "Timed out waiting for SparkContext.")
     } else {
-      actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
-        conf = sparkConf, securityManager = securityMgr)._1
-      val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
-        SparkEnv.driverActorSystemName,
-        sc.getConf.get("spark.driver.host"),
-        sc.getConf.get("spark.driver.port"),
-        YarnSchedulerBackend.ACTOR_NAME)
-      actor = actorSystem.actorOf(Props(new AMActor(driverUrl, true)), name = "YarnAM")
+      runAMActor(securityMgr, sc.getConf.get("spark.driver.host"),
+        sc.getConf.get("spark.driver.port"), true)
       registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       userClassThread.join()
     }
   }
 
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
-    actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
-      conf = sparkConf, securityManager = securityMgr)._1
-    actor = waitForSparkDriver()
+    waitForSparkDriver(securityMgr)
     addAmIpFilter()
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
 
@@ -375,7 +379,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     }
   }
 
-  private def waitForSparkDriver(): ActorRef = {
+  private def waitForSparkDriver(securityMgr: SecurityManager): ActorRef = {
     logInfo("Waiting for Spark driver to be reachable.")
     var driverUp = false
     val hostport = args.userArgs(0)
@@ -407,12 +411,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     sparkConf.set("spark.driver.host", driverHost)
     sparkConf.set("spark.driver.port", driverPort.toString)
 
-    val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
-      SparkEnv.driverActorSystemName,
-      driverHost,
-      driverPort.toString,
-      YarnSchedulerBackend.ACTOR_NAME)
-    actorSystem.actorOf(Props(new AMActor(driverUrl, false)), name = "YarnAM")
+    runAMActor(securityMgr, driverHost, driverPort.toString, false)
   }
 
   /** Add the Yarn IP filter that is required for properly securing the UI. */

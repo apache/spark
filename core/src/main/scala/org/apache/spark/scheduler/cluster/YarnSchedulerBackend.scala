@@ -91,12 +91,12 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * An actor that communicates with the ApplicationMaster.
    */
-  protected class YarnSchedulerActor(isDriver: Boolean)  extends Actor {
+  protected class YarnSchedulerActor(isClusterMode: Boolean)  extends Actor {
     private var amActor: Option[ActorRef] = None
 
     override def preStart(): Unit = {
       // Listen for disassociation events
-      if (!isDriver) {
+      if (!isClusterMode) {
         context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
       }
     }
