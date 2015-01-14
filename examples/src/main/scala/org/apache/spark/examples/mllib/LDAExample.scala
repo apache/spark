@@ -36,7 +36,7 @@ import org.apache.spark.rdd.RDD
 /**
  * An example Latent Dirichlet Allocation (LDA) app. Run with
  * {{{
- * ./bin/run-example mllib.DenseKMeans [options] <input>
+ * ./bin/run-example mllib.LDAExample [options] <input>
  * }}}
  * If you use it as a template to create your own app, please use `spark-submit` to submit your app.
  */
