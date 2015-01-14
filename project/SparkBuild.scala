@@ -128,6 +128,8 @@ object SparkBuild extends PomBuild {
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
+  lazy val testTask = TaskKey[Unit]("unit-test", "run all the unit tests")
+
   lazy val sharedSettings = graphSettings ++ genjavadocSettings ++ Seq (
     javaHome   := Properties.envOrNone("JAVA_HOME").map(file),
     incOptions := incOptions.value.withNameHashing(true),
@@ -135,6 +137,9 @@ object SparkBuild extends PomBuild {
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     publishMavenStyle := true,
     unidocGenjavadocVersion := "0.8",
+    (testTask in Test) := {
+      (testQuick in Test).toTask(" * -- -l org.apache.sparktest.tags.IntegrationTest").value
+    },
 
     resolvers += Resolver.mavenLocal,
     otherResolvers <<= SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))),
