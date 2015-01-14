@@ -175,63 +175,50 @@ class LogisticGradient extends Gradient {
             throw new IllegalArgumentException(
               s"cumGradient only supports dense vector but got type ${cumGradient.getClass}.")
         }
-        val margins = Array.ofDim[Double](n)
 
         // marginY is margins(label - 1) in the formula.
         var marginY = 0.0
         var maxMargin = Double.NegativeInfinity
         var maxMarginIndex = 0
         var sum = 0.0
-
-        var i = 0
-        while (i < n) {
+        
+        val margins = (0 until n).map { i =>
           var margin = 0.0
           data.foreachActive { (index, value) =>
             if (value != 0.0) margin += value * weightsArray((i * dataSize) + index)
           }
-          margins(i) = margin
           if (i == label.toInt - 1) marginY = margin
           if (margin > maxMargin) {
             maxMargin = margin
             maxMarginIndex = i
           }
-          i += 1
+          margin
         }
 
-        if (maxMargin > 0) {
-          /**
-           * When maxMargin > 0, the original formula will cause overflow as we discuss
-           * in the previous comment.
-           * We address this by subtracting maxMargin from all the margins, so it's guaranteed
-           * that all of the new margins will be smaller than zero to prevent arithmetic overflow.
-           */
-          i = 0
-          while (i < n) {
-            margins(i) -= maxMargin
-            if (i == maxMarginIndex) {
-              sum += math.exp(-maxMargin)
-            } else {
-              sum += math.exp(margins(i))
-            }
-            i += 1
-          }
-        } else {
-          i = 0
-          while (i < n) {
+        /**
+         * When maxMargin > 0, the original formula will cause overflow as we discuss
+         * in the previous comment.
+         * We address this by subtracting maxMargin from all the margins, so it's guaranteed
+         * that all of the new margins will be smaller than zero to prevent arithmetic overflow.
+         */
+        if (maxMargin > 0) for (i <- 0 until n) {
+          margins(i) -= maxMargin
+          if (i == maxMarginIndex) {
+            sum += math.exp(-maxMargin)
+          } else {
             sum += math.exp(margins(i))
-            i += 1
           }
+        } else for (i <- 0 until n) {
+          sum += math.exp(margins(i))
         }
 
-        i = 0
-        while (i < n) {
+        for (i <- 0 until n) {
           val multiplier = math.exp(margins(i)) / (sum + 1.0) - {
             if (label != 0.0 && label == i + 1) 1.0 else 0.0
           }
           data.foreachActive { (index, value) =>
             if (value != 0.0) cumGradientArray(i * dataSize + index) += multiplier * value
           }
-          i += 1
         }
 
         val loss = if (label > 0.0) math.log1p(sum) - marginY else math.log1p(sum)
