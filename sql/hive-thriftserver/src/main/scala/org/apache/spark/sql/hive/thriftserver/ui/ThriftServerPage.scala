@@ -61,7 +61,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
   private def generateSQLStatsTable(): Seq[Node] = {
     val numBatches = listener.executeList.size
     val table = if (numBatches > 0) {
-      val headerRow = Seq("User", "JobID", "Start Time", "Finish Time", "Duration",
+      val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Duration",
         "Statement", "State", "Detail")
       val dataRows = listener.executeList.values.toSeq.sortBy(_.startTimestamp).reverse
 
@@ -70,10 +70,11 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
           .format(UIUtils.prependBaseUri(parent.basePath), info.jobId)
         val detail = if(info.state == ExecutionState.FAILED) info.detail else info.executePlan
         <tr>
-          <td>{info.session.getUsername}</td>
+          <td>{info.userName}</td>
           <td>
             <a href={detailUrl}>{info.jobId}</a>
           </td>
+          <td>{info.groupId}</td>
           <td>{formatDate(info.startTimestamp)}</td>
           <td>{formatDate(info.finishTimestamp)}</td>
           <td>{formatDurationOption(Some(info.totalTime))}</td>
@@ -131,7 +132,8 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       val dataRows =
         listener.sessionList.values.toSeq.sortBy(_.startTimestamp).reverse.map(session =>{
         Seq(
-          session.session.getUsername,
+          session.userName,
+          session.ip,
           session.sessionID,
           formatDate(session.startTimestamp),
           formatDate(session.finishTimestamp),
@@ -139,7 +141,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
           session.totalExecute.toString
         )
       }).toSeq
-      val headerRow = Seq("User", "Session ID", "Start Time", "Finish Time", "Duration",
+      val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
         "Total Execute")
       Some(listingTable(headerRow, dataRows))
     } else {

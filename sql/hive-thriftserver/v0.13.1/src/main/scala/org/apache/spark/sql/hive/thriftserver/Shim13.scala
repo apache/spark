@@ -78,7 +78,8 @@ private[hive] class SparkSQLSessionManagerShim(
       delegationToken: java.lang.String): SessionHandle = {
     val ret = super.openSession(protocol, username, password,
       sessionConf, withImpersonation, delegationToken)
-    SparkSQLEnv.sqlEventListener.onSessionCreated(super.getSession(ret))
+    val session = super.getSession(ret)
+    SparkSQLEnv.sqlEventListener.onSessionCreated("UNKNOWN", session)
     ret
   }
 }
@@ -192,7 +193,7 @@ private[hive] class SparkExecuteStatementOperation(
       sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
         hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }
-      SparkSQLEnv.sqlEventListener.onStatementParse(sid, result.queryExecution.toString(), groupId)
+      SparkSQLEnv.sqlEventListener.onStatementParse(sid, result.queryExecution.toString())
       iter = {
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean

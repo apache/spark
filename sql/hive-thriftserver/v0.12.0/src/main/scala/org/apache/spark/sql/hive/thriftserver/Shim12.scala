@@ -20,8 +20,6 @@ package org.apache.spark.sql.hive.thriftserver
 import java.sql.{Date, Timestamp}
 import java.util.{ArrayList => JArrayList, Map => JMap, UUID}
 
-import org.apache.hive.service.cli.thrift.TProtocolVersion
-
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
 
@@ -76,7 +74,7 @@ private[hive] class SparkSQLSessionManagerShim(hiveContext: HiveContext) extends
       delegationToken: java.lang.String): SessionHandle = {
     val ret = super.openSession(username, password,
       sessionConf, withImpersonation, delegationToken)
-    SparkSQLEnv.sqlEventListener.onSessionCreated(super.getSession(ret))
+    SparkSQLEnv.sqlEventListener.onSessionCreated("UNKNOWN", super.getSession(ret))
     ret
   }
 }
@@ -218,7 +216,7 @@ private[hive] class SparkExecuteStatementOperation(
       sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
         hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }
-      SparkSQLEnv.sqlEventListener.onStatementParse(sid, result.queryExecution.toString(), groupId)
+      SparkSQLEnv.sqlEventListener.onStatementParse(sid, result.queryExecution.toString())
       iter = {
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
