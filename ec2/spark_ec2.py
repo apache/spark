@@ -614,20 +614,28 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
 
 def get_connection_address(instance):
     """
-    Return DNS name if possible, otherwise return IP.
-    It is common that VPC instances does not have either public DNS or public IP or private DNS.
+    Return some address that can be used to connect to instance.
+    It is common that VPC instance does not have either public DNS or public IP or private DNS.
+    Private DNS name might be problematic to use if you're VPN does not resolve private DNS.
     But private IP is always there.
 
+    TODO: maybe add static cache of instance-id to resolved address
+
     :type instance: :class:`ec2.instance.Instance`
-    :return: string first not None of: public_dns_name, public ip_address, private_dns_name, finally private_ip
+    :return: string
     """
+    import socket
+    addresses = [instance.public_dns_name, instance.ip_address, instance.private_dns_name]
+    for address in addresses:
+        if address:
+            try:
+                # try to resolve address
+                socket.gethostbyaddr(address)
+                return address
+            except (socket.gaierror, socket.herror):
+                pass
 
-    address = instance.public_dns_name or instance.ip_address or instance.private_dns_name or instance.private_ip_address
-
-    if address is None:
-        raise RuntimeError('Cannot get address from instance %s' % instance)
-
-    return address
+    return instance.private_ip_address
 
 
 # Deploy configuration files and run setup scripts on a newly launched
@@ -647,8 +655,9 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
         dot_ssh_tar = ssh_read(master, opts, ['tar', 'c', '.ssh'])
         print "Transferring cluster's SSH key to slaves..."
         for slave in slave_nodes:
-            print get_connection_address(slave)
-            ssh_write(get_connection_address(slave), opts, ['tar', 'x'], dot_ssh_tar)
+            slave_address = get_connection_address(slave)
+            print slave_address
+            ssh_write(slave_address, opts, ['tar', 'x'], dot_ssh_tar)
 
     modules = ['spark', 'ephemeral-hdfs', 'persistent-hdfs',
                'mapreduce', 'spark-standalone', 'tachyon']
