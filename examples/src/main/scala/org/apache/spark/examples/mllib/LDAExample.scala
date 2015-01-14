@@ -107,12 +107,21 @@ object LDAExample {
       .setMaxIterations(params.maxIterations)
       .setTopicSmoothing(params.topicSmoothing)
       .setTermSmoothing(params.termSmoothing)
+    val startTime = System.nanoTime()
     val ldaModel = lda.run(corpus)
+    val elapsed = (System.nanoTime() - startTime) / 1e9
+
+    println(s"Finished training LDA model.  Summary:")
+    println(s"\t Training time: $elapsed sec")
+    println(s"\t Training set size: ${corpus.count()} documents")
+    println(s"\t Vocabulary size: ${vocabArray.size} terms")
+    println(s"\t Training data average log likelihood: ${ldaModel.logLikelihood / corpus.count()}")
+    println()
 
     // Print the topics, showing the top-weighted terms for each topic.
-    val topicIndices = ldaModel.getTopics(maxTermsPerTopic = 10)
+    val topicIndices = ldaModel.describeTopics(maxTermsPerTopic = 10)
     val topics = topicIndices.map { topic =>
-      topic.map { case (weight, term) => (weight, vocabArray(term)) }
+      topic.map { case (weight, term) => (weight, vocabArray(term.toInt)) }
     }
     println(s"${params.k} topics:")
     topics.zipWithIndex.foreach { case (topic, i) =>
@@ -120,9 +129,8 @@ object LDAExample {
       topic.foreach { case (weight, term) =>
         println(s"$term\t$weight")
       }
+      println()
     }
-
-    // TODO: print log likelihood
 
   }
 

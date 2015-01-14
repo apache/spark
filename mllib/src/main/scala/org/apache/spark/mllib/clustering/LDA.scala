@@ -19,15 +19,18 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
-import breeze.linalg.{DenseVector => BDV, DenseMatrix => BDM, sum => brzSum, normalize}
+import breeze.linalg.{DenseVector => BDV, sum => brzSum, normalize}
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.graphx._
-import org.apache.spark.mllib.linalg.{SparseVector, Vector, Vectors, Matrix, Matrices}
+import org.apache.spark.mllib.linalg.SparseVector
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.{BoundedPriorityQueue, Utils}
+import org.apache.spark.util.Utils
 
 
 /**
+ * :: DeveloperApi ::
+ *
  * Latent Dirichlet Allocation (LDA), a topic model designed for text documents.
  *
  * Terminology:
@@ -40,11 +43,16 @@ import org.apache.spark.util.{BoundedPriorityQueue, Utils}
  *
  * References:
  *  - Original LDA paper (journal version):
- *     Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
+ *    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
+ *     - This class implements their "smoothed" LDA model.
  *  - Paper which clearly explains several algorithms, including EM:
- *     Asuncion, Welling, Smyth, and Teh.
- *     "On Smoothing and Inference for Topic Models."  UAI, 2009.
+ *    Asuncion, Welling, Smyth, and Teh.
+ *    "On Smoothing and Inference for Topic Models."  UAI, 2009.
+ *
+ * NOTE: This is currently marked DeveloperApi since it is under active development and may undergo
+ *       API changes.
  */
+@DeveloperApi
 class LDA private (
     private var k: Int,
     private var maxIterations: Int,
@@ -64,11 +72,10 @@ class LDA private (
   def getK: Int = k
 
   def setK(k: Int): this.type = {
+    require(k > 0, s"LDA k (number of clusters) must be > 0, but was set to $k")
     this.k = k
     this
   }
-
-  // TODO: UDPATE alpha, eta to be > 1 automatically for MAP
 
   /**
    * Topic smoothing parameter (commonly named "alpha").
@@ -77,7 +84,7 @@ class LDA private (
    * ("theta").  We use a symmetric Dirichlet prior.
    *
    * This value should be > 0.0, where larger values mean more smoothing (more regularization).
-   * If set <= 0, then topicSmoothing is set to equal 50 / k (where k is the number of topics).
+   * If set to -1, then topicSmoothing is set to equal 50 / k (where k is the number of topics).
    *  (default = 50 / k)
    *
    * Details on this parameter:
@@ -87,8 +94,10 @@ class LDA private (
    */
   def getTopicSmoothing: Double = topicSmoothing
 
-  def setTopicSmoothing(alpha: Double): this.type = {
-    topicSmoothing = alpha
+  def setTopicSmoothing(topicSmoothing: Double): this.type = {
+    require(topicSmoothing > 0.0 || topicSmoothing == -1.0,
+      s"LDA topicSmoothing must be > 0, but was set to $topicSmoothing")
+    this.topicSmoothing = topicSmoothing
     this
   }
 
@@ -109,8 +118,9 @@ class LDA private (
    */
   def getTermSmoothing: Double = termSmoothing
 
-  def setTermSmoothing(eta: Double): this.type = {
-    termSmoothing = eta
+  def setTermSmoothing(termSmoothing: Double): this.type = {
+    require(termSmoothing > 0.0, s"LDA termSmoothing must be > 0, but was set to $termSmoothing")
+    this.termSmoothing = termSmoothing
     this
   }
 
@@ -136,208 +146,29 @@ class LDA private (
   /**
    * Learn an LDA model using the given dataset.
    *
-   * @param docs  RDD of documents, where each document is represented as a vector of term counts.
-   *              Document IDs must be >= 0.
+   * @param documents  RDD of documents, where each document is represented as a vector of term
+   *                   counts plus an ID.  Document IDs must be >= 0.
    * @return  Inferred LDA model
    */
-  def run(docs: RDD[Document]): DistributedLDAModel = {
+  def run(documents: RDD[Document]): DistributedLDAModel = {
     val termSmoothing = this.termSmoothing + 1.0
-    val topicSmoothing = if (this.topicSmoothing > 0) {
+    val topicSmoothing = (if (this.topicSmoothing > 0) {
       this.topicSmoothing
     } else {
       50.0 / k
-    } + 1.0
-    var state =
-      LDA.initialState(docs, k, termSmoothing, topicSmoothing, seed)
+    }) + 1.0
+    var state = LDA.initialState(documents, k, topicSmoothing, termSmoothing, seed)
+    println(s"DEBUG: initial log likelihood = ${state.logLikelihood}")
     var iter = 0
     while (iter < maxIterations) {
       state = state.next()
+      println(s"DEBUG: iter=$iter.  log likelihood = ${state.logLikelihood}")
       iter += 1
     }
     new DistributedLDAModel(state)
   }
 }
 
-/**
- * Latent Dirichlet Allocation (LDA) model
- */
-abstract class LDAModel private[clustering] {
-
-  import LDA._
-
-  /** Number of topics */
-  def k: Int
-
-  /** Vocabulary size (number of terms or terms in the vocabulary) */
-  def vocabSize: Int
-
-  /**
-   * Inferred topics, where each topic is represented by a distribution over terms.
-   * This is a matrix of size vocabSize x k, where each column is a topic.
-   * No guarantees are given about the ordering of the topics.
-   */
-  def topicsMatrix: Matrix
-
-  /* TODO
-   * Computes the estimated log likelihood of data (a set of documents), given the model.
-   *
-   * Note that this is an estimate since it requires inference (and exact inference is intractable
-   * for the LDA model).
-   *
-   * @param documents  A set of documents, where each is represented as a vector of term counts.
-   *                   This must use the same vocabulary (ordering of term counts) as in training.
-   *                   Document IDs must be >= 0.
-   * @return  Estimated log likelihood of the data under this model
-   */
-  // TODO
-  //def logLikelihood(documents: RDD[Document]): Double
-
-  /* TODO
-   * Compute the estimated topic distribution for each document.
-   * This is often called “theta” in the literature.
-   *
-   * @param documents  A set of documents, where each is represented as a vector of term counts.
-   *                   This must use the same vocabulary (ordering of term counts) as in training.
-   *                   Document IDs must be >= 0.
-   * @return  Estimated topic distribution for each document.
-   *          The returned RDD may be zipped with the given RDD, where each returned vector
-   *          is a multinomial distribution over topics.
-   */
-  // def topicDistributions(documents: RDD[Document]): RDD[(Long, Vector)]
-}
-
-/**
- * Local LDA model.
- * This model stores only the inferred topics.
- * It may be used for computing topics for new documents, but it may give less accurate answers
- * than the [[DistributedLDAModel]].
- *
- * @param topics Inferred topics (vocabSize x k matrix).
- */
-class LocalLDAModel private[clustering] (
-    private val topics: Matrix) extends LDAModel with Serializable {
-
-  import LDA._
-
-  override def k: Int = topics.numCols
-
-  override def vocabSize: Int = topics.numRows
-
-  override def topicsMatrix: Matrix = topics
-
-  // TODO
-  //override def logLikelihood(documents: RDD[Document]): Double = ???
-
-  // TODO:
-  // override def topicDistributions(documents: RDD[Document]): RDD[(Long, Vector)] = ???
-
-}
-
-/**
- * Distributed LDA model.
- * This model stores the inferred topics, the full training dataset, and the topic distributions.
- * When computing topics for new documents, it may give more accurate answers
- * than the [[LocalLDAModel]].
- */
-class DistributedLDAModel private[clustering] (
-    private val state: LDA.LearningState) extends LDAModel {
-
-  import LDA._
-
-  override def k: Int = state.k
-
-  override def vocabSize: Int = state.vocabSize
-
-  /**
-   * Inferred topics, where each topic is represented by a distribution over terms.
-   * This is a matrix of size vocabSize x k, where each column is a topic.
-   * No guarantees are given about the ordering of the topics.
-   *
-   * WARNING: This matrix is collected from an RDD. Beware memory usage when vocabSize, k are large.
-   */
-  override lazy val topicsMatrix: Matrix = {
-    // Collect row-major topics
-    val termTopicCounts: Array[(Int, TopicCounts)] =
-      state.graph.vertices.filter(_._1 < 0).map { case (termIndex, cnts) =>
-        (index2term(termIndex), cnts)
-      }.collect()
-    // Convert to Matrix
-    val brzTopics = BDM.zeros[Double](vocabSize, k)
-    termTopicCounts.foreach { case (term, cnts) =>
-      var j = 0
-      while (j < k) {
-        brzTopics(term, j) = cnts(j)
-        j += 1
-      }
-    }
-    Matrices.fromBreeze(brzTopics)
-  }
-
-  // TODO
-  //override def logLikelihood(documents: RDD[Document]): Double = ???
-
-  /**
-   * For each document in the training set, return the distribution over topics for that document
-   * (i.e., "theta_doc").
-   *
-   * @return  RDD of (document ID, topic distribution) pairs
-   */
-  def topicDistributions: RDD[(Long, Vector)] = {
-    state.graph.vertices.filter(_._1 >= 0).map { case (docID, topicCounts) =>
-      (docID.toLong, Vectors.fromBreeze(topicCounts))
-    }
-  }
-
-  // TODO:
-  // override def topicDistributions(documents: RDD[Document]): RDD[(Long, Vector)] = ???
-
-  /*
-  // TODO: Do this properly
-  lazy val logLikelihood = {
-    graph.triplets.aggregate(0.0)({ (acc, triple) =>
-      val scores = triple.srcAttr :* triple.dstAttr
-      val logScores = breeze.numerics.log(scores)
-      scores /= brzSum(scores)
-      brzSum(scores :*= logScores) * triple.attr
-    }, _ + _)
-  }
-  */
-
-  /**
-   * Return the topics described by the top-weighted terms.
-   *
-   * Note: This is approximate; it may not return exactly the top-weighted terms for each topic.
-   *       To get a more precise set of top terms, increase maxTermsPerTopic.
-   *
-   * @param maxTermsPerTopic  Maximum number of terms to collect for each topic.
-   * @return  Array over topics, where each element is a set of top terms represented
-   *          as (term weight in topic, term index).
-   *          Each topic's terms are sorted in order of decreasing weight.
-   */
-  def getTopics(maxTermsPerTopic: Int): Array[Array[(Double, Int)]] = {
-    val numTopics = k
-    val N_k: TopicCounts = state.collectTopicTotals()
-    state.graph.vertices.filter(isTermVertex)
-      .mapPartitions { termVertices =>
-      // For this partition, collect the most common terms for each topic in queues:
-      //  queues(topic) = queue of (term weight, term index).
-      // Term weights are N_{wk} / N_k.
-      val queues = Array.fill(numTopics)(new BoundedPriorityQueue[(Double, Int)](maxTermsPerTopic))
-      for ((termId, n_wk) <- termVertices) {
-        var topic = 0
-        while (topic < numTopics) {
-          queues(topic) += (n_wk(topic) / N_k(topic) -> index2term(termId.toInt))
-          topic += 1
-        }
-      }
-      Iterator(queues)
-    }.reduce { (q1, q2) =>
-      q1.zip(q2).foreach { case (a, b) => a ++= b}
-      q1
-    }.map(_.toArray.sortBy(_._1))
-  }
-
-}
 
 object LDA {
 
@@ -356,7 +187,7 @@ object LDA {
         - Edges are partitioned by documents.
 
     Info on EM implementation.
-     - We follow Section 2.2 from Asuncion et al., 2009.
+     - We follow Section 2.2 from Asuncion et al., 2009.  We use some of their notation.
      - In this implementation, there is one edge for every unique term appearing in a document,
        i.e., for every unique (document, term) pair.
      - Notation:
@@ -387,7 +218,9 @@ object LDA {
    */
 
   /**
-   * Document
+   * :: DeveloperApi ::
+   *
+   * Document with an ID.
    *
    * @param counts  Vector of term (word) counts in the document.
    *                This is the "bag of words" representation.
@@ -395,8 +228,12 @@ object LDA {
    *            Documents should be indexed {0, 1, ..., numDocuments-1}.
    *
    * TODO: Can we remove the id and still be able to zip predicted topics with the Documents?
+   *
+   * NOTE: This is currently marked DeveloperApi since it is under active development and may
+   *       undergo API changes.
    */
-  case class Document(counts: SparseVector, id: VertexId)
+  @DeveloperApi
+  case class Document(counts: SparseVector, id: Long)
 
   /**
    * Vector over topics (length k) of token counts.
@@ -431,14 +268,13 @@ object LDA {
       termSmoothing: Double) {
 
     // TODO: Checkpoint periodically?
-    def next() = copy(graph = step(graph))
+    def next(): LearningState = copy(graph = step(graph))
 
     private def step(graph: Graph[TopicCounts, TokenCount]): Graph[TopicCounts, TokenCount] = {
       val eta = termSmoothing
       val W = vocabSize
       val alpha = topicSmoothing
 
-      // Collect N_k from term vertices.
       val N_k = collectTopicTotals()
       val sendMsg: EdgeContext[TopicCounts, TokenCount, TopicCounts] => Unit = (edgeContext) => {
         // Compute N_{wj} gamma_{wjk}
@@ -456,9 +292,73 @@ object LDA {
       graph.outerJoinVertices(docTopicDistributions){ (vid, oldDist, newDist) => newDist.get }
     }
 
-    private[clustering] def collectTopicTotals(): TopicCounts = {
+    def collectTopicTotals(): TopicCounts = {
       val numTopics = k
       graph.vertices.filter(isTermVertex).map(_._2).fold(BDV.zeros[Double](numTopics))(_ + _)
+    }
+
+    /**
+     * Compute the log likelihood of the observed tokens, given the current parameter estimates:
+     *  log P(docs | topics, topic distributions for docs, alpha, eta)
+     *
+     * Note:
+     *  - This excludes the prior; for that, use [[logPrior]].
+     *  - Even with [[logPrior]], this is NOT the same as the data log likelihood given the
+     *    hyperparameters.
+     */
+    lazy val logLikelihood: Double = {
+      val eta = termSmoothing
+      val alpha = topicSmoothing
+      assert(eta > 1.0)
+      assert(alpha > 1.0)
+      val N_k = collectTopicTotals()
+      val smoothed_N_k: TopicCounts = N_k + (vocabSize * (eta - 1.0))
+      // Edges: Compute token log probability from phi_{wk}, theta_{kj}.
+      val sendMsg: EdgeContext[TopicCounts, TokenCount, Double] => Unit = (edgeContext) => {
+        val N_wj = edgeContext.attr
+        val smoothed_N_wk: TopicCounts = edgeContext.dstAttr + (eta - 1.0)
+        val smoothed_N_kj: TopicCounts = edgeContext.srcAttr + (alpha - 1.0)
+        val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
+        val theta_kj: TopicCounts = normalize(smoothed_N_kj, 1.0)
+        val tokenLogLikelihood = N_wj * math.log(phi_wk.dot(theta_kj))
+        edgeContext.sendToDst(tokenLogLikelihood)
+      }
+      graph.aggregateMessages[Double](sendMsg, _ + _)
+        .map(_._2).fold(0.0)(_ + _)
+    }
+
+    /**
+     * Compute the log probability of the current parameter estimate:
+     *  log P(topics, topic distributions for docs | alpha, eta)
+     */
+    lazy val logPrior: Double = {
+      val eta = termSmoothing
+      val alpha = topicSmoothing
+      // Term vertices: Compute phi_{wk}.  Use to compute prior log probability.
+      // Doc vertex: Compute theta_{kj}.  Use to compute prior log probability.
+      val N_k = collectTopicTotals()
+      val smoothed_N_k: TopicCounts = N_k + (vocabSize * (eta - 1.0))
+      val seqOp: (Double, (VertexId, TopicCounts)) => Double = {
+        case (sumPrior: Double, vertex: (VertexId, TopicCounts)) =>
+          if (isTermVertex(vertex)) {
+            val N_wk = vertex._2
+            val smoothed_N_wk: TopicCounts = N_wk + (eta - 1.0)
+            val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
+            if (!phi_wk.forall(_ > 0)) {
+              println(s"ERROR: phi_wk = ${phi_wk.toArray.mkString(", ")}")
+            }
+            (eta - 1.0) * brzSum(phi_wk.map(math.log))
+          } else {
+            val N_kj = vertex._2
+            val smoothed_N_kj: TopicCounts = N_kj + (alpha - 1.0)
+            val theta_kj: TopicCounts = normalize(smoothed_N_kj, 1.0)
+            if (!theta_kj.forall(_ > 0)) {
+              println(s"ERROR: theta_kj = ${theta_kj.toArray.mkString(", ")}")
+            }
+            (alpha - 1.0) * brzSum(theta_kj.map(math.log))
+          }
+      }
+      graph.vertices.aggregate(0.0)(seqOp, _ + _)
     }
   }
 
