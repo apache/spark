@@ -19,7 +19,7 @@ package org.apache.spark.deploy.worker
 
 import java.io.{File, FileOutputStream, InputStream, IOException}
 import java.lang.System._
-import java.util.{ArrayList, List => JList, Map => JMap}
+import java.util.{List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
 import scala.collection.Map
@@ -112,7 +112,7 @@ object CommandUtils extends Logging {
   }
 }
 
-private class CommandLauncher(sparkHome: String, memory: Int, env: Map[String, String])
+private class CommandLauncher(sparkHome: String, memoryMb: Int, env: Map[String, String])
     extends AbstractLauncher[CommandLauncher](env) {
 
   setSparkHome(sparkHome)
@@ -121,8 +121,8 @@ private class CommandLauncher(sparkHome: String, memory: Int, env: Map[String, S
     val cmd = buildJavaCommand()
     cmd.add("-cp")
     cmd.add(buildClassPath(null).mkString(File.pathSeparator))
-    cmd.add(s"-Xms${memory}M")
-    cmd.add(s"-Xmx${memory}M")
+    cmd.add(s"-Xms${memoryMb}M")
+    cmd.add(s"-Xmx${memoryMb}M")
     addOptionString(cmd, getenv("SPARK_JAVA_OPTS"))
     cmd
   }

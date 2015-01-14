@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Configuration key definitions for Spark jobs, and some helper methods.
+ * Configuration key definitions for Spark apps, and some helper methods.
  */
 public class LauncherCommon {
 
@@ -128,7 +128,7 @@ public class LauncherCommon {
    * Updates the user environment to contain the merged value of "envKey" after appending
    * the given path list.
    */
-  protected void mergeEnvPathList(Map<String, String> userEnv, String envKey, String pathList) {
+  protected static void mergeEnvPathList(Map<String, String> userEnv, String envKey, String pathList) {
     if (!isEmpty(pathList)) {
       String current = firstNonEmpty(userEnv.get(envKey), System.getenv(envKey));
       userEnv.put(envKey, join(File.pathSeparator, current, pathList));

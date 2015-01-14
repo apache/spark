@@ -34,7 +34,9 @@ import java.util.jar.JarFile;
 import java.util.regex.Pattern;
 
 /**
- * Basic functionality for launchers.
+ * Basic functionality for launchers - objects that encapsulate knowledge about how to build the
+ * commands to run a Spark application or service. This class is not meant to be extended by user
+ * code.
  */
 public abstract class AbstractLauncher<T extends AbstractLauncher> extends LauncherCommon {
 
