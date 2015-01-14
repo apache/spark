@@ -37,7 +37,7 @@ class ANNClassifierSuite extends FunSuite with LocalSparkContext {
     val rddData = sc.parallelize(data, 2)
     val hiddenLayerTopology = Array[Int]{5}
     val initialWeights = ANNClassifier.randomWeights(rddData, hiddenLayerTopology, 0x01234567)
-    val model = ANNClassifier.train(rddData, hiddenLayerTopology, initialWeights, 200, 1.0, 1e-4)
+    val model = ANNClassifier.train(rddData, 1, hiddenLayerTopology, initialWeights, 200, 1.0, 1e-4)
     val predictionAndLabels = rddData.map(lp =>
       (model.predict(lp.features), lp.label)).collect()
     assert(predictionAndLabels.forall { case(p, l) =>

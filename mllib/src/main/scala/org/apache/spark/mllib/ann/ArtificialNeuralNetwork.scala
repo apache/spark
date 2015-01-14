@@ -173,6 +173,7 @@ class ArtificialNeuralNetwork private[mllib](
    */
   private def run(trainingRDD: RDD[(Vector, Vector)], initialWeights: Vector):
   ArtificialNeuralNetworkModel = {
+    val t = System.currentTimeMillis()
     val data = if (batchSize == 1) {
       trainingRDD.map(v =>
         (0.0,
@@ -208,15 +209,20 @@ object ArtificialNeuralNetwork {
   private val defaultTolerance: Double = 1e-4
 
 
-  def train(trainingRDD: RDD[(Vector, Vector)], batchSize: Int, hiddenLayersTopology: Array[Int],
-            initialWeights: Vector, maxNumIterations: Int,
+  def train(trainingRDD: RDD[(Vector, Vector)],
+            batchSize: Int,
+            hiddenLayersTopology: Array[Int],
+            initialWeights: Vector,
+            maxNumIterations: Int,
             convergenceTol: Double) : ArtificialNeuralNetworkModel = {
     val topology = convertTopology(trainingRDD, hiddenLayersTopology)
     new ArtificialNeuralNetwork(topology, maxNumIterations, convergenceTol, batchSize).
       run(trainingRDD, initialWeights)
   }
 
-  def train(trainingRDD: RDD[(Vector, Vector)], batchSize: Int, hiddenLayersTopology: Array[Int],
+  def train(trainingRDD: RDD[(Vector, Vector)],
+            batchSize: Int,
+            hiddenLayersTopology: Array[Int],
             maxNumIterations: Int) : ArtificialNeuralNetworkModel = {
     val topology = convertTopology(trainingRDD, hiddenLayersTopology)
     new ArtificialNeuralNetwork(topology, maxNumIterations, defaultTolerance, batchSize).
@@ -232,10 +238,9 @@ object ArtificialNeuralNetwork {
    * @param maxNumIterations specifies maximum number of training iterations.
    * @return ANN model.
    */
-  def train(
-             trainingRDD: RDD[(Vector, Vector)],
-             hiddenLayersTopology: Array[Int],
-             maxNumIterations: Int): ArtificialNeuralNetworkModel = {
+  def train(trainingRDD: RDD[(Vector, Vector)],
+            hiddenLayersTopology: Array[Int],
+            maxNumIterations: Int): ArtificialNeuralNetworkModel = {
     train(trainingRDD, hiddenLayersTopology, maxNumIterations, defaultTolerance)
   }
 
@@ -248,10 +253,9 @@ object ArtificialNeuralNetwork {
    * @param maxNumIterations maximum number of training iterations.
    * @return ANN model.
    */
-  def train(
-             trainingRDD: RDD[(Vector,Vector)],
-             model: ArtificialNeuralNetworkModel,
-             maxNumIterations: Int): ArtificialNeuralNetworkModel = {
+  def train(trainingRDD: RDD[(Vector,Vector)],
+            model: ArtificialNeuralNetworkModel,
+            maxNumIterations: Int): ArtificialNeuralNetworkModel = {
     train(trainingRDD, model, maxNumIterations, defaultTolerance)
   }
 
@@ -264,11 +268,10 @@ object ArtificialNeuralNetwork {
    * @param maxNumIterations maximum number of training iterations.
    * @return ANN model.
    */
-  def train(
-             trainingRDD: RDD[(Vector,Vector)],
-             hiddenLayersTopology: Array[Int],
-             initialWeights: Vector,
-             maxNumIterations: Int): ArtificialNeuralNetworkModel = {
+  def train(trainingRDD: RDD[(Vector,Vector)],
+            hiddenLayersTopology: Array[Int],
+            initialWeights: Vector,
+            maxNumIterations: Int): ArtificialNeuralNetworkModel = {
     train(trainingRDD, hiddenLayersTopology, initialWeights, maxNumIterations, defaultTolerance)
   }
 
@@ -281,11 +284,10 @@ object ArtificialNeuralNetwork {
    * @param convergenceTol convergence tolerance for LBFGS. Smaller value for closer convergence.
    * @return ANN model.
    */
-  def train(
-             trainingRDD: RDD[(Vector,Vector)],
-             model: ArtificialNeuralNetworkModel,
-             maxNumIterations: Int,
-             convergenceTol: Double): ArtificialNeuralNetworkModel = {
+  def train(trainingRDD: RDD[(Vector,Vector)],
+            model: ArtificialNeuralNetworkModel,
+            maxNumIterations: Int,
+            convergenceTol: Double): ArtificialNeuralNetworkModel = {
     new ArtificialNeuralNetwork(model.topology, maxNumIterations, convergenceTol).
       run(trainingRDD, model.weights)
   }
@@ -299,11 +301,10 @@ object ArtificialNeuralNetwork {
    * @param convergenceTol convergence tolerance for LBFGS. Smaller value for closer convergence.
    * @return ANN model.
    */
-  def train(
-             trainingRDD: RDD[(Vector, Vector)],
-             hiddenLayersTopology: Array[Int],
-             maxNumIterations: Int,
-             convergenceTol: Double): ArtificialNeuralNetworkModel = {
+  def train(trainingRDD: RDD[(Vector, Vector)],
+            hiddenLayersTopology: Array[Int],
+            maxNumIterations: Int,
+            convergenceTol: Double): ArtificialNeuralNetworkModel = {
     val topology = convertTopology(trainingRDD, hiddenLayersTopology)
     new ArtificialNeuralNetwork(topology, maxNumIterations, convergenceTol).
       run(trainingRDD, randomWeights(topology, false))
@@ -318,12 +319,11 @@ object ArtificialNeuralNetwork {
    * @param convergenceTol convergence tolerance for LBFGS. Smaller value for closer convergence.
    * @return ANN model.
    */
-  def train(
-             trainingRDD: RDD[(Vector,Vector)],
-             hiddenLayersTopology: Array[Int],
-             initialWeights: Vector,
-             maxNumIterations: Int,
-             convergenceTol: Double): ArtificialNeuralNetworkModel = {
+  def train(trainingRDD: RDD[(Vector,Vector)],
+            hiddenLayersTopology: Array[Int],
+            initialWeights: Vector,
+            maxNumIterations: Int,
+            convergenceTol: Double): ArtificialNeuralNetworkModel = {
     val topology = convertTopology(trainingRDD, hiddenLayersTopology)
     new ArtificialNeuralNetwork(topology, maxNumIterations, convergenceTol).
       run(trainingRDD, initialWeights)
@@ -336,9 +336,8 @@ object ArtificialNeuralNetwork {
    * @param hiddenLayersTopology number of nodes per hidden layer, excluding the bias nodes.
    * @return random weights vector.
    */
-  def randomWeights(
-                     trainingRDD: RDD[(Vector,Vector)],
-                     hiddenLayersTopology: Array[Int]): Vector = {
+  def randomWeights(trainingRDD: RDD[(Vector,Vector)],
+                    hiddenLayersTopology: Array[Int]): Vector = {
     val topology = convertTopology(trainingRDD, hiddenLayersTopology)
     return randomWeights(topology, false)
   }
@@ -351,10 +350,9 @@ object ArtificialNeuralNetwork {
    * @param seed random generator seed.
    * @return random weights vector.
    */
-  def randomWeights(
-                     trainingRDD: RDD[(Vector,Vector)],
-                     hiddenLayersTopology: Array[Int],
-                     seed: Int): Vector = {
+  def randomWeights(trainingRDD: RDD[(Vector,Vector)],
+                    hiddenLayersTopology: Array[Int],
+                    seed: Int): Vector = {
     val topology = convertTopology(trainingRDD, hiddenLayersTopology)
     return randomWeights(topology, true, seed)
   }
@@ -368,19 +366,16 @@ object ArtificialNeuralNetwork {
    * @param seed random generator seed.
    * @return random weights vector.
    */
-  def randomWeights(
-                     inputLayerSize: Int,
-                     outputLayerSize: Int,
-                     hiddenLayersTopology: Array[Int],
-                     seed: Int): Vector = {
-
+  def randomWeights(inputLayerSize: Int,
+                    outputLayerSize: Int,
+                    hiddenLayersTopology: Array[Int],
+                    seed: Int): Vector = {
     val topology = inputLayerSize +: hiddenLayersTopology :+ outputLayerSize
     return randomWeights(topology, true, seed)
   }
 
-  private def convertTopology(
-                               input: RDD[(Vector,Vector)],
-                               hiddenLayersTopology: Array[Int] ): Array[Int] = {
+  private def convertTopology(input: RDD[(Vector,Vector)],
+                              hiddenLayersTopology: Array[Int] ): Array[Int] = {
     val firstElt = input.first
     firstElt._1.size +: hiddenLayersTopology :+ firstElt._2.size
   }
@@ -499,7 +494,9 @@ private[ann] trait NeuralHelper {
     for(i <- (topology.size - 1) until (0, -1)) {
       /* TODO: GEMM? */
       gradientMatrices(i) = deltas(i) * outputs(i - 1).t
-      gradientMatrices(i) :*= outputs(i).cols.toDouble
+      /* NB! dividing by the number of instances in
+       * the batch to be transparent for the optimizer */
+      gradientMatrices(i) :/= outputs(i).cols.toDouble
     }
     (gradientMatrices, deltas)
   }
@@ -529,20 +526,20 @@ private class ANNLeastSquaresGradient(val topology: Array[Int],
     rollWeights(gradientMatrices, deltas, cumGradient)
     /* error */
     val diff = target :- outputs(topology.size - 1)
-    /* TODO: Check if it is OK in matrix mode */
     val outerError = Bsum(diff :* diff) / 2
-    outerError
+    /* NB! dividing by the number of instances in
+     * the batch to be transparent for the optimizer */
+    outerError / realBatchSize
   }
 }
 
 private class ANNUpdater extends Updater {
 
-  override def compute(
-                        weightsOld: Vector,
-                        gradient: Vector,
-                        stepSize: Double,
-                        iter: Int,
-                        regParam: Double): (Vector, Double) = {
+  override def compute(weightsOld: Vector,
+                       gradient: Vector,
+                       stepSize: Double,
+                       iter: Int,
+                       regParam: Double): (Vector, Double) = {
     val thisIterStepSize = stepSize
     val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
     brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
