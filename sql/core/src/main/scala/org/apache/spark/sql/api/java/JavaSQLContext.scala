@@ -23,15 +23,13 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
-import org.apache.spark.sql.{SQLContext, StructType => SStructType}
-import org.apache.spark.sql.catalyst.annotation.SQLUserDefinedType
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericRow, Row => ScalaRow}
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.sources.{LogicalRelation, BaseRelation}
-import org.apache.spark.sql.types.util.DataTypeConversions
-import org.apache.spark.sql.types.util.DataTypeConversions.asScalaDataType
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 /**
@@ -126,9 +124,8 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
   @DeveloperApi
   def applySchema(rowRDD: JavaRDD[Row], schema: StructType): JavaSchemaRDD = {
     val scalaRowRDD = rowRDD.rdd.map(r => r.row)
-    val scalaSchema = asScalaDataType(schema).asInstanceOf[SStructType]
     val logicalPlan =
-      LogicalRDD(scalaSchema.toAttributes, scalaRowRDD)(sqlContext)
+      LogicalRDD(schema.toAttributes, scalaRowRDD)(sqlContext)
     new JavaSchemaRDD(sqlContext, logicalPlan)
   }
 
@@ -184,10 +181,10 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
   def jsonRDD(json: JavaRDD[String], schema: StructType): JavaSchemaRDD = {
     val columnNameOfCorruptJsonRecord = sqlContext.conf.columnNameOfCorruptRecord
     val appliedScalaSchema =
-      Option(asScalaDataType(schema)).getOrElse(
+      Option(schema).getOrElse(
         JsonRDD.nullTypeToStringType(
           JsonRDD.inferSchema(
-            json.rdd, 1.0, columnNameOfCorruptJsonRecord))).asInstanceOf[SStructType]
+            json.rdd, 1.0, columnNameOfCorruptJsonRecord)))
     val scalaRowRDD = JsonRDD.jsonStringToRow(
       json.rdd, appliedScalaSchema, columnNameOfCorruptJsonRecord)
     val logicalPlan =
@@ -218,43 +215,25 @@ class JavaSQLContext(val sqlContext: SQLContext) extends UDFRegistration {
       val (dataType, nullable) = property.getPropertyType match {
         case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
           (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
-        case c: Class[_] if c == classOf[java.lang.String] =>
-          (org.apache.spark.sql.StringType, true)
-        case c: Class[_] if c == java.lang.Short.TYPE =>
-          (org.apache.spark.sql.ShortType, false)
-        case c: Class[_] if c == java.lang.Integer.TYPE =>
-          (org.apache.spark.sql.IntegerType, false)
-        case c: Class[_] if c == java.lang.Long.TYPE =>
-          (org.apache.spark.sql.LongType, false)
-        case c: Class[_] if c == java.lang.Double.TYPE =>
-          (org.apache.spark.sql.DoubleType, false)
-        case c: Class[_] if c == java.lang.Byte.TYPE =>
-          (org.apache.spark.sql.ByteType, false)
-        case c: Class[_] if c == java.lang.Float.TYPE =>
-          (org.apache.spark.sql.FloatType, false)
-        case c: Class[_] if c == java.lang.Boolean.TYPE =>
-          (org.apache.spark.sql.BooleanType, false)
+        case c: Class[_] if c == classOf[java.lang.String] => (StringType, true)
+        case c: Class[_] if c == java.lang.Short.TYPE => (ShortType, false)
+        case c: Class[_] if c == java.lang.Integer.TYPE => (IntegerType, false)
+        case c: Class[_] if c == java.lang.Long.TYPE => (LongType, false)
+        case c: Class[_] if c == java.lang.Double.TYPE => (DoubleType, false)
+        case c: Class[_] if c == java.lang.Byte.TYPE => (ByteType, false)
+        case c: Class[_] if c == java.lang.Float.TYPE => (FloatType, false)
+        case c: Class[_] if c == java.lang.Boolean.TYPE => (BooleanType, false)
 
-        case c: Class[_] if c == classOf[java.lang.Short] =>
-          (org.apache.spark.sql.ShortType, true)
-        case c: Class[_] if c == classOf[java.lang.Integer] =>
-          (org.apache.spark.sql.IntegerType, true)
-        case c: Class[_] if c == classOf[java.lang.Long] =>
-          (org.apache.spark.sql.LongType, true)
-        case c: Class[_] if c == classOf[java.lang.Double] =>
-          (org.apache.spark.sql.DoubleType, true)
-        case c: Class[_] if c == classOf[java.lang.Byte] =>
-          (org.apache.spark.sql.ByteType, true)
-        case c: Class[_] if c == classOf[java.lang.Float] =>
-          (org.apache.spark.sql.FloatType, true)
-        case c: Class[_] if c == classOf[java.lang.Boolean] =>
-          (org.apache.spark.sql.BooleanType, true)
-        case c: Class[_] if c == classOf[java.math.BigDecimal] =>
-          (org.apache.spark.sql.DecimalType(), true)
-        case c: Class[_] if c == classOf[java.sql.Date] =>
-          (org.apache.spark.sql.DateType, true)
-        case c: Class[_] if c == classOf[java.sql.Timestamp] =>
-          (org.apache.spark.sql.TimestampType, true)
+        case c: Class[_] if c == classOf[java.lang.Short] => (ShortType, true)
+        case c: Class[_] if c == classOf[java.lang.Integer] => (IntegerType, true)
+        case c: Class[_] if c == classOf[java.lang.Long] => (LongType, true)
+        case c: Class[_] if c == classOf[java.lang.Double] => (DoubleType, true)
+        case c: Class[_] if c == classOf[java.lang.Byte] => (ByteType, true)
+        case c: Class[_] if c == classOf[java.lang.Float] => (FloatType, true)
+        case c: Class[_] if c == classOf[java.lang.Boolean] => (BooleanType, true)
+        case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType(), true)
+        case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
+        case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
       }
       AttributeReference(property.getName, dataType, nullable)()
     }

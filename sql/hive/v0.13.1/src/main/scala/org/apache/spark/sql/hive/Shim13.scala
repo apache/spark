@@ -20,6 +20,9 @@ package org.apache.spark.sql.hive
 import java.util.{ArrayList => JArrayList}
 import java.util.Properties
 
+import scala.collection.JavaConversions._
+import scala.language.implicitConversions
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.NullWritable
@@ -37,12 +40,10 @@ import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, 
 import org.apache.hadoop.hive.serde2.{Deserializer, ColumnProjectionUtils}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.types.DecimalType
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
 
-import scala.collection.JavaConversions._
-import scala.language.implicitConversions
+import org.apache.spark.Logging
+import org.apache.spark.sql.types.DecimalType
+import org.apache.spark.sql.types.decimal.Decimal
 
 
 /**

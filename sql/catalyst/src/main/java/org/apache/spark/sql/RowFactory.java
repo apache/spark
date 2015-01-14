@@ -15,17 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java;
+package org.apache.spark.sql;
+
+import org.apache.spark.sql.catalyst.expressions.GenericRow;
 
 /**
- * Metadata is a wrapper over Map[String, Any] that limits the value type to simple ones: Boolean,
- * Long, Double, String, Metadata, Array[Boolean], Array[Long], Array[Double], Array[String], and
- * Array[Metadata]. JSON is used for serialization.
- *
- * The default constructor is private. User should use [[MetadataBuilder]].
+ * A factory class used to construct {@link Row} objects.
  */
-class Metadata extends org.apache.spark.sql.catalyst.util.Metadata {
-  Metadata(scala.collection.immutable.Map<String, Object> map) {
-    super(map);
+public class RowFactory {
+
+  /**
+   * Create a {@link Row} from an array of values. Position i in the array becomes position i
+   * in the created {@link Row} object.
+   */
+  public static Row create(Object[] values) {
+    return new GenericRow(values);
   }
 }

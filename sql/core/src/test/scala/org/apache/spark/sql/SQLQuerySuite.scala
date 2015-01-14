@@ -23,6 +23,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.types._
 
 /* Implicits */
 import org.apache.spark.sql.TestData._
@@ -748,7 +749,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     val metadata = new MetadataBuilder()
       .putString(docKey, docValue)
       .build()
-    val schemaWithMeta = new StructType(Seq(
+    val schemaWithMeta = new StructType(Array(
       schema("id"), schema("name").copy(metadata = metadata), schema("age")))
     val personWithMeta = applySchema(person, schemaWithMeta)
     def validateMetadata(rdd: SchemaRDD): Unit = {
