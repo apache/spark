@@ -76,6 +76,7 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
     assert(slices(0).mkString(",") === (0 to 32).mkString(","))
     assert(slices(1).mkString(",") === (33 to 66).mkString(","))
     assert(slices(2).mkString(",") === (67 to 100).mkString(","))
+    assert(slices(2).isInstanceOf[Range.Inclusive])
   }
 
   test("empty data") {
@@ -233,10 +234,12 @@ class ParallelCollectionSplitSuite extends FunSuite with Checkers {
     val slices1 = ParallelCollectionRDD.slice(data1, 3)
     assert(slices1.size === 3)
     assert(slices1.map(_.size).sum === Int.MaxValue)
+    assert(slices1(2).isInstanceOf[Range.Inclusive])
     val data2 = -2 to Int.MinValue by -1
     val slices2 = ParallelCollectionRDD.slice(data2, 3)
     assert(slices2.size == 3)
     assert(slices2.map(_.size).sum === Int.MaxValue)
+    assert(slices2(2).isInstanceOf[Range.Inclusive])
   }
 
   test("empty ranges with Int.MaxValue and Int.MinValue") {
