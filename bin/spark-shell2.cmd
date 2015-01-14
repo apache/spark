@@ -39,7 +39,6 @@ set SPARK_SUBMIT_OPTS="%SPARK_SUBMIT_OPTS% -Dscala.usejavacp=true"
 :run_shell
 call %SPARK_HOME%\bin\spark-submit2.cmd --class org.apache.spark.repl.Main %*
 set SPARK_ERROR_LEVEL=%ERRORLEVEL%
-echo AFTER SPARK SUBMIT: %SPARK_ERROR_LEVEL% - %SPARK_LAUNCHER_USAGE_ERROR%
 if "%SPARK_LAUNCHER_USAGE_ERROR%"=="1" (
   call :usage
   exit /b 1
