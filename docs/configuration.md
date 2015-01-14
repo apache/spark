@@ -1053,6 +1053,15 @@ Apart from these, the following properties are also available, and may be useful
     shipping a whole partition of data to the driver.
   </td>
 </tr>
+<tr>
+  <td><code>spark.scheduler.app.slowstart</code></td>
+  <td>false</td>
+  <td>
+    Whether to make application slow start, which postpones TaskScheduler's requesting resources
+    to cluster master until DAGScheduler submits job. Note that this is currently only available
+    on YARN mode.
+  </td>
+</tr>
 </table>
 
 #### Dynamic allocation
