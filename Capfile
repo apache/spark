@@ -54,6 +54,20 @@ namespace :deploy do
     run "rm -rf #{release_path}/conf && ln -nfs #{shared_conf_path} #{release_path}/conf"
   end
 
+  task :remind_us_to_update_starscream do
+    puts "****************************************************************"
+    puts "*" 
+    puts "*    Remember to update starscream/conf/config.yml"
+    puts "*"
+    puts "*    spark_production"
+    puts "*      conf_options:"
+    puts "*      <<: *spark_remote"
+    puts "*      spark.yarn.jar: \"hdfs://nn01.chi.shopify.com:8020/user/sparkles/spark-assembly-\033[31m#{`git rev-parse HEAD`.gsub(/\s/,"")}\033[0m.jar\""
+    puts "*"
+    puts "****************************************************************"
+  end
+ 
+
   task :restart do
   end
 
@@ -62,4 +76,5 @@ namespace :deploy do
   before 'deploy:upload_to_hdfs', 'deploy:clear_hdfs_executables'
   after  'deploy:download', 'deploy:upload_to_hdfs'
   after 'deploy:restart', 'deploy:cleanup'
+  after 'deploy:cleanup', 'deploy:remind_us_to_update_starscream'
 end
