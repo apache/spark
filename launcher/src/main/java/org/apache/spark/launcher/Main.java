@@ -36,9 +36,12 @@ public class Main extends LauncherCommon {
    *   <li>"spark-class": if another class is provided, an internal Spark class is run.</li>
    * </ul>
    *
-   * The ultimate command will not be run in the same process. Instead, the command to be executed
-   * will be printed to stdout. On Unix systems, this will be one argument per line. On Windows
-   * systems, this will be a single line containing the command to be executed.
+   * This class works in tandem with the "bin/spark-class" script on Unix-like systems, and
+   * "bin/spark-class2.cmd" batch script on Windows to execute the final command.
+   * <p/>
+   * On Unix-like systems, the output is a list of command arguments, separated by the NULL
+   * character. On Windows, the output is single command line suitable for direct execution
+   * form the script.
    */
   public static void main(String[] argsArray) throws Exception {
     checkArgument(argsArray.length > 0, "Not enough arguments: missing class name.");
@@ -66,8 +69,14 @@ public class Main extends LauncherCommon {
       System.err.println("========================================");
     }
 
-    for (String c : cmd) {
-      System.out.println(c);
+    if (isWindows()) {
+      String cmdLine = join(" ", cmd);
+      System.out.println(cmdLine);
+    } else {
+      for (String c : cmd) {
+        System.out.print(c);
+        System.out.print('\0');
+      }
     }
   }
 

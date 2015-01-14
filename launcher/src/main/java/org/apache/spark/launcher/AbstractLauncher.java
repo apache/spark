@@ -427,7 +427,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
       List<String> cmd,
       String libPath,
       Map<String, String> env) {
-    StringBuilder cmdline = new StringBuilder("cmd /c \"");
+    StringBuilder cmdline = new StringBuilder("\"");
     if (libPath != null) {
       cmdline.append("set PATH=%PATH%;").append(libPath).append(" &&");
     }
@@ -445,7 +445,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
       cmdline.append(quoteForBatchScript(arg));
     }
     cmdline.append("\"");
-    return Arrays.asList(cmdline.toString());
+    return Arrays.asList("cmd", "/c", cmdline.toString());
   }
 
   /**

@@ -67,11 +67,12 @@ fi
 
 SPARK_LAUNCHER_CP="${SPARK_LAUNCHER_CP}${LAUNCHER_DIR}/${LAUNCHER_JARS}"
 
-# The launcher library will print one argument per line of its output. The next line sets
-# the new line char as the only delimiter used when parsing that output into an array.
-IFS="
-"
-CMD=($($RUNNER -cp $SPARK_LAUNCHER_CP org.apache.spark.launcher.Main "$@"))
+# The launcher library will print arguments separated by a NULL character. Read that in a while
+# loop, populating an array that will be used to exec the final command.
+CMD=()
+while IFS= read -d '' -r ARG; do
+  CMD+=("$ARG")
+done < <($RUNNER -cp "$SPARK_LAUNCHER_CP" org.apache.spark.launcher.Main "$@")
 
 if [ "${CMD[0]}" = "usage" ]; then
   "${CMD[@]}"
