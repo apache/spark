@@ -21,9 +21,10 @@ import java.util.Random
 
 import breeze.linalg.{DenseVector => BDV, sum => brzSum, normalize}
 
+import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.graphx._
-import org.apache.spark.mllib.linalg.SparseVector
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
@@ -58,11 +59,11 @@ class LDA private (
     private var maxIterations: Int,
     private var topicSmoothing: Double,
     private var termSmoothing: Double,
-    private var seed: Long) {
+    private var seed: Long) extends Logging {
 
   import LDA._
 
-  def this() = this(k = 10, maxIterations = 10, topicSmoothing = -1, termSmoothing = 0.1,
+  def this() = this(k = 10, maxIterations = 20, topicSmoothing = -1, termSmoothing = -1,
     seed = Utils.random.nextLong())
 
   /**
@@ -84,19 +85,22 @@ class LDA private (
    * ("theta").  We use a symmetric Dirichlet prior.
    *
    * This value should be > 0.0, where larger values mean more smoothing (more regularization).
-   * If set to -1, then topicSmoothing is set to equal 50 / k (where k is the number of topics).
-   *  (default = 50 / k)
+   * If set to -1, then topicSmoothing is set automatically.
+   *  (default = -1 = automatic)
    *
-   * Details on this parameter:
-   * The above description tells how the base value of topicSmoothing is set.  However, following
-   * Asuncion et al. (2009), we adjust the base value based on the algorithm.
-   *  - For EM, we increase topicSmoothing by +1.0.
+   * Automatic setting of parameter:
+   *  - For EM: default = (50 / k) + 1.
+   *     - The 50/k is common in LDA libraries.
+   *     - The +1 follows Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    */
   def getTopicSmoothing: Double = topicSmoothing
 
   def setTopicSmoothing(topicSmoothing: Double): this.type = {
     require(topicSmoothing > 0.0 || topicSmoothing == -1.0,
-      s"LDA topicSmoothing must be > 0, but was set to $topicSmoothing")
+      s"LDA topicSmoothing must be > 0 (or -1 for auto), but was set to $topicSmoothing")
+    if (topicSmoothing > 0.0 && topicSmoothing <= 1.0) {
+      logWarning(s"LDA.topicSmoothing was set to $topicSmoothing, but for EM, we recommend > 1.0")
+    }
     this.topicSmoothing = topicSmoothing
     this
   }
@@ -109,24 +113,29 @@ class LDA private (
    *  later papers such as Asuncion et al., 2009.)
    *
    * This value should be > 0.0.
-   *  (default = 0.1)
+   * If set to -1, then termSmoothing is set automatically.
+   *  (default = -1 = automatic)
    *
-   * Details on this parameter:
-   * The above description tells how the base value of topicSmoothing is set.  However, following
-   * Asuncion et al. (2009), we adjust the base value based on the algorithm.
-   *  - For EM, we increase topicSmoothing by +1.0.
+   * Automatic setting of parameter:
+   *  - For EM: default = 0.1 + 1.
+   *     - The 0.1 gives a small amount of smoothing.
+   *     - The +1 follows Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    */
   def getTermSmoothing: Double = termSmoothing
 
   def setTermSmoothing(termSmoothing: Double): this.type = {
-    require(termSmoothing > 0.0, s"LDA termSmoothing must be > 0, but was set to $termSmoothing")
+    require(termSmoothing > 0.0 || termSmoothing == -1.0,
+      s"LDA termSmoothing must be > 0 (or -1 for auto), but was set to $termSmoothing")
+    if (termSmoothing > 0.0 && termSmoothing <= 1.0) {
+      logWarning(s"LDA.termSmoothing was set to $termSmoothing, but for EM, we recommend > 1.0")
+    }
     this.termSmoothing = termSmoothing
     this
   }
 
   /**
    * Maximum number of iterations for learning.
-   * (default = 10)
+   * (default = 20)
    */
   def getMaxIterations: Int = maxIterations
 
@@ -151,18 +160,20 @@ class LDA private (
    * @return  Inferred LDA model
    */
   def run(documents: RDD[Document]): DistributedLDAModel = {
-    val termSmoothing = this.termSmoothing + 1.0
-    val topicSmoothing = (if (this.topicSmoothing > 0) {
+    val topicSmoothing = if (this.topicSmoothing > 0) {
       this.topicSmoothing
     } else {
-      50.0 / k
-    }) + 1.0
+      (50.0 / k) + 1.0
+    }
+    val termSmoothing = if (this.termSmoothing > 0) {
+      this.termSmoothing
+    } else {
+      1.1
+    }
     var state = LDA.initialState(documents, k, topicSmoothing, termSmoothing, seed)
-    println(s"DEBUG: initial log likelihood = ${state.logLikelihood}")
     var iter = 0
     while (iter < maxIterations) {
       state = state.next()
-      println(s"DEBUG: iter=$iter.  log likelihood = ${state.logLikelihood}")
       iter += 1
     }
     new DistributedLDAModel(state)
@@ -233,7 +244,7 @@ object LDA {
    *       undergo API changes.
    */
   @DeveloperApi
-  case class Document(counts: SparseVector, id: Long)
+  case class Document(counts: Vector, id: Long)
 
   /**
    * Vector over topics (length k) of token counts.
@@ -247,6 +258,8 @@ object LDA {
   private[clustering] def term2index(term: Int): Long = -(1 + term.toLong)
 
   private[clustering] def index2term(termIndex: Long): Int = -(1 + termIndex).toInt
+
+  private[clustering] def isDocumentVertex(v: (VertexId, _)): Boolean = v._1 >= 0
 
   private[clustering] def isTermVertex(v: (VertexId, _)): Boolean = v._1 < 0
 
@@ -344,17 +357,11 @@ object LDA {
             val N_wk = vertex._2
             val smoothed_N_wk: TopicCounts = N_wk + (eta - 1.0)
             val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
-            if (!phi_wk.forall(_ > 0)) {
-              println(s"ERROR: phi_wk = ${phi_wk.toArray.mkString(", ")}")
-            }
             (eta - 1.0) * brzSum(phi_wk.map(math.log))
           } else {
             val N_kj = vertex._2
             val smoothed_N_kj: TopicCounts = N_kj + (alpha - 1.0)
             val theta_kj: TopicCounts = normalize(smoothed_N_kj, 1.0)
-            if (!theta_kj.forall(_ > 0)) {
-              println(s"ERROR: theta_kj = ${theta_kj.toArray.mkString(", ")}")
-            }
             (alpha - 1.0) * brzSum(theta_kj.map(math.log))
           }
       }

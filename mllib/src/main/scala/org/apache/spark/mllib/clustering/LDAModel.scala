@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM}
+import breeze.linalg.{DenseMatrix => BDM, normalize}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.linalg.{Vectors, Vector, Matrices, Matrix}
@@ -134,8 +134,8 @@ class LocalLDAModel private[clustering] (
   override def describeTopics(maxTermsPerTopic: Int): Array[Array[(Double, String)]] = {
     val brzTopics = topics.toBreeze.toDenseMatrix
     val topicSummary = Range(0, k).map { topicIndex =>
-      val topic: Array[Double] = brzTopics(::, topicIndex).toArray
-      topic.zipWithIndex.sortBy(-_._1).take(maxTermsPerTopic)
+      val topic = normalize(brzTopics(::, topicIndex), 1.0)
+      topic.toArray.zipWithIndex.sortBy(-_._1).take(maxTermsPerTopic)
     }.toArray
     topicSummary.map { topic =>
       topic.map { case (weight, term) => (weight, term.toString) }
@@ -254,8 +254,8 @@ class DistributedLDAModel private[clustering] (
    * @return  RDD of (document ID, topic distribution) pairs
    */
   def topicDistributions: RDD[(Long, Vector)] = {
-    state.graph.vertices.filter(_._1 >= 0).map { case (docID, topicCounts) =>
-      (docID.toLong, Vectors.fromBreeze(topicCounts))
+    state.graph.vertices.filter(LDA.isDocumentVertex).map { case (docID, topicCounts) =>
+      (docID.toLong, Vectors.fromBreeze(normalize(topicCounts, 1.0)))
     }
   }
 
