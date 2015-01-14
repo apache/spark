@@ -109,11 +109,8 @@ class NewHadoopRDD[K, V](
       logInfo("Input split: " + split.serializableHadoopSplit)
       val conf = confBroadcast.value.value
 
-      val readMethod = DataReadMethod.Hadoop
-      val inputMetrics = context.taskMetrics.inputMetrics
-          .filter(_.readMethod == readMethod)
-          .getOrElse(new InputMetrics(readMethod))
-      context.taskMetrics.inputMetrics = Some(inputMetrics)
+      val inputMetrics = context.taskMetrics
+        .getInputMetricsForReadMethod(DataReadMethod.Hadoop)
 
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
@@ -169,7 +166,7 @@ class NewHadoopRDD[K, V](
             // If we can't get the bytes read from the FS stats, fall back to the split size,
             // which may be inaccurate.
             try {
-              inputMetrics.bytesRead += split.serializableHadoopSplit.value.getLength
+              inputMetrics.addBytesRead(split.serializableHadoopSplit.value.getLength)
             } catch {
               case e: java.io.IOException =>
                 logWarning("Unable to get input size to set InputMetrics for task", e)

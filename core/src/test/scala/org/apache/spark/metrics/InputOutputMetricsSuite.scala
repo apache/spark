@@ -19,17 +19,19 @@ package org.apache.spark.metrics
 
 import java.io.{File, FileWriter, PrintWriter}
 
+import scala.collection.mutable.ArrayBuffer
+
+import org.scalatest.FunSuite
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
+
 import org.apache.spark.SharedSparkContext
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskEnd}
 import org.apache.spark.util.Utils
-import org.scalatest.FunSuite
-
-import scala.collection.mutable.ArrayBuffer
 
 class InputOutputMetricsSuite extends FunSuite with SharedSparkContext {
 
@@ -85,7 +87,42 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext {
     }
 
     // for count and coelesce, the same bytes should be read.
-    assert(bytesRead2 >= bytesRead)
+    assert(bytesRead != 0)
+    assert(bytesRead2 == bytesRead)
+  }
+
+  /**
+   * This checks the situation where we have interleaved reads from
+   * different sources. Currently, we only accumulate fron the first
+   * read method we find in the task. This test uses cartesian to create
+   * the interleaved reads.
+   *
+   * Once https://issues.apache.org/jira/browse/SPARK-5225 is fixed
+   * this test should break.
+   */
+  test("input metrics with mixed read method") {
+    // prime the cache manager
+    val numPartitions = 2
+    val rdd = sc.parallelize(1 to 100, numPartitions).cache()
+    rdd.collect()
+
+    val rdd2 = sc.textFile(tmpFilePath, numPartitions)
+
+    val bytesRead = runAndReturnBytesRead {
+      rdd.count()
+    }
+    val bytesRead2 = runAndReturnBytesRead {
+      rdd2.count()
+    }
+
+    val cartRead = runAndReturnBytesRead {
+      rdd.cartesian(rdd2).count()
+    }
+
+    assert(cartRead != 0)
+    assert(bytesRead != 0)
+    // We read from the first rdd of the cartesian once per partition.
+    assert(cartRead == bytesRead * numPartitions)
   }
 
   test("input metrics for new Hadoop API with coalesce") {
@@ -110,15 +147,16 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext {
   }
 
   test("input metrics with interleaved reads") {
+    val numPartitions = 2
     val cartVector = 0 to 9
     val cartFile = new File(tmpDir, getClass.getSimpleName + "_cart.txt")
     val cartFilePath = "file://" + cartFile.getAbsolutePath
 
     // write files to disk so we can read them later.
     sc.parallelize(cartVector).saveAsTextFile(cartFilePath)
-    val aRdd = sc.textFile(cartFilePath, 1)
+    val aRdd = sc.textFile(cartFilePath, numPartitions)
 
-    val tmpRdd = sc.textFile(tmpFilePath)
+    val tmpRdd = sc.textFile(tmpFilePath, numPartitions)
 
     val firstSize= runAndReturnBytesRead {
       aRdd.count()
@@ -143,7 +181,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext {
     // As a result we read from the second partition n times where n is the number of keys in
     // p1. Thus the math below for the test.
     assert(cartesianBytes != 0)
-    assert(cartesianBytes == firstSize + (cartVector.length  * secondSize))
+    assert(cartesianBytes == firstSize * numPartitions + (cartVector.length  * secondSize))
   }
 
   private def runAndReturnBytesRead(job : => Unit): Long = {
