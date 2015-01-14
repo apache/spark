@@ -88,11 +88,10 @@ class KafkaRDD[
         var requestOffset = part.fromOffset
         var iter: Iterator[MessageAndOffset] = null
 
-        // TODO broken until SPARK-4014 is resolved and attemptId / attemptNumber is meaningful.
         // The idea is to use the provided preferred host, except on task retry atttempts,
         // to minimize number of kafka metadata requests
         private def connectLeader: SimpleConsumer = {
-          if (context.attemptId > 0) {
+          if (context.attemptNumber > 0) {
             kc.connectLeader(part.topic, part.partition).fold(
               errs => throw new Exception(
                 s"Couldn't connect to leader for topic ${part.topic} ${part.partition}: " +
