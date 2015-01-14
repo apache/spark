@@ -80,6 +80,7 @@ class BytesUtilsSuite extends FunSuite with BeforeAndAfterAll with Logging {
 
     assert(BytesUtils.toString(BytesUtils.create(StringType).toBytes("abc"), 0, 3)
       === "abc")
+    assert(BytesUtils.toString(BytesUtils.create(StringType).toBytes(""), 0, 0) === "")
 
     assert(BytesUtils.toByte(BytesUtils.create(ByteType)
       .toBytes(5.asInstanceOf[Byte]), 0) === 5)
