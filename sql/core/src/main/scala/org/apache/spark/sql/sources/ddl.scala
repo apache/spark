@@ -102,11 +102,11 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
    */
   protected lazy val createTable: Parser[LogicalPlan] =
   (
-    (CREATE ~> TEMPORARY.? <~ TABLE) ~ ident
+    (CREATE ~> TEMPORARY.? <~ TABLE) ~ rep1sep(ident, ".")
       ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
-      case temp ~ tableName ~ columns ~ provider ~ opts =>
+      case temp ~ tableIdentifier ~ columns ~ provider ~ opts =>
         val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
-        CreateTableUsing(tableName, userSpecifiedSchema, provider, temp.isDefined, opts)
+        CreateTableUsing(tableIdentifier, userSpecifiedSchema, provider, temp.isDefined, opts)
     }
   )
 
@@ -220,14 +220,14 @@ object ResolvedDataSource {
 private[sql] case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
 
 private[sql] case class CreateTableUsing(
-    tableName: String,
+    tableIdentifier: Seq[String],
     userSpecifiedSchema: Option[StructType],
     provider: String,
     temporary: Boolean,
     options: Map[String, String]) extends Command
 
 private [sql] case class CreateTempTableUsing(
-    tableName: String,
+    tableIdentifier: Seq[String],
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String])  extends RunnableCommand {
@@ -235,7 +235,9 @@ private [sql] case class CreateTempTableUsing(
   def run(sqlContext: SQLContext) = {
     val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
 
-    sqlContext.baseRelationToSchemaRDD(resolved.relation).registerTempTable(tableName)
+    sqlContext
+      .baseRelationToSchemaRDD(resolved.relation)
+      .registerTempTable(tableIdentifier.mkString("."))
     Seq.empty
   }
 }

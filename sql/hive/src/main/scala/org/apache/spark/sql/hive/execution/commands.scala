@@ -94,7 +94,7 @@ case class AddFile(path: String) extends RunnableCommand {
 }
 
 case class CreateMetastoreDataSource(
-    tableName: String,
+    tableIdentifier: Seq[String],
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
@@ -102,7 +102,7 @@ case class CreateMetastoreDataSource(
   override def run(sqlContext: SQLContext) = {
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     hiveContext.catalog.createDataSourceTable(
-      Seq("default", tableName),
+      tableIdentifier,
       userSpecifiedSchema,
       provider,
       options)

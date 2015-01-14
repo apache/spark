@@ -212,9 +212,13 @@ private[hive] trait HiveStrategies {
 
   object HiveDDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, options) =>
+      case CreateTableUsing(tableIdentifier, userSpecifiedSchema, provider, false, options) =>
         ExecutedCommand(
-          CreateMetastoreDataSource(tableName, userSpecifiedSchema, provider, options)) :: Nil
+          CreateMetastoreDataSource(
+            tableIdentifier,
+            userSpecifiedSchema,
+            provider,
+            options)) :: Nil
 
       case _ => Nil
     }
