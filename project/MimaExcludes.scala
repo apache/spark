@@ -61,6 +61,14 @@ object MimaExcludes {
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.streaming.flume.sink.SparkAvroCallbackHandler." +
                 "removeAndGetProcessor")
+          ) ++ Seq(
+            // SPARK-5205
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.TaskContext.addTaskKilledListener"
+            ),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.TaskContext.addTaskKilledCallback"
+            )
           )
 
         case v if v.startsWith("1.2") =>
@@ -89,12 +97,6 @@ object MimaExcludes {
             // TaskContext was promoted to Abstract class
             ProblemFilters.exclude[AbstractClassProblem](
               "org.apache.spark.TaskContext"),
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.TaskContext.addTaskKilledListener"
-            ),
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.TaskContext.addTaskKilledCallback"
-            ),
             ProblemFilters.exclude[IncompatibleTemplateDefProblem](
               "org.apache.spark.util.collection.SortDataFormat")
           ) ++ Seq(
