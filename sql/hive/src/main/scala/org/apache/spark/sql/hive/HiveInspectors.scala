@@ -26,7 +26,6 @@ import org.apache.hadoop.{io => hadoopIo}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.decimal.Decimal
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -43,7 +42,7 @@ import scala.collection.JavaConversions._
  *     long / scala.Long
  *     short / scala.Short
  *     byte / scala.Byte
- *     org.apache.spark.sql.types.decimal.Decimal
+ *     org.apache.spark.sql.types.Decimal
  *     Array[Byte]
  *     java.sql.Date
  *     java.sql.Timestamp

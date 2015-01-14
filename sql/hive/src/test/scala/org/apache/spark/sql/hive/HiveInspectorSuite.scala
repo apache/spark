@@ -31,7 +31,6 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.{Literal, Row}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.decimal.Decimal
 
 class HiveInspectorSuite extends FunSuite with HiveInspectors {
   test("Test wrap SettableStructObjectInspector") {
