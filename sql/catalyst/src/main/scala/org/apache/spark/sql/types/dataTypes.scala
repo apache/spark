@@ -727,7 +727,7 @@ object StructType {
  * //   StructType(List(StructField(b,LongType,false), StructField(c,BooleanType,false)))
  * }}}
  *
- * A [[org.apache.spark.sql.catalyst.expressions.Row]] object is used as a value of the StructType.
+ * A [[org.apache.spark.sql.Row]] object is used as a value of the StructType.
  * Example:
  * {{{
  * import org.apache.spark.sql._

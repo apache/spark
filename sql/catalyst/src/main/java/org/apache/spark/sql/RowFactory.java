@@ -15,27 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.sql;
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.catalyst.expressions.GenericRow;
 
 /**
- * Allows the execution of relational queries, including those expressed in SQL using Spark.
- *
- *  @groupname dataType Data types
- *  @groupdesc Spark SQL data types.
- *  @groupprio dataType -3
- *  @groupname field Field
- *  @groupprio field -2
- *  @groupname row Row
- *  @groupprio row -1
+ * A factory class used to construct {@link Row} objects.
  */
-package object sql {
+public class RowFactory {
 
   /**
-   * Converts a logical plan into zero or more SparkPlans.
+   * Create a {@link Row} from an array of values. Position i in the array becomes position i
+   * in the created {@link Row} object.
    */
-  @DeveloperApi
-  type Strategy = org.apache.spark.sql.catalyst.planning.GenericStrategy[SparkPlan]
+  public static Row create(Object[] values) {
+    return new GenericRow(values);
+  }
 }
