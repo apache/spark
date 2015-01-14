@@ -179,7 +179,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
   class SparkILoopInterpreter extends SparkIMain(settings, out) {
     outer =>
 
-    override lazy val formatting = new Formatting {
+    override private[repl] lazy val formatting = new Formatting {
       def prompt = SparkILoop.this.prompt
     }
     override protected def parentClassLoader = SparkHelper.explicitParentLoader(settings).getOrElse(classOf[SparkILoop].getClassLoader)
@@ -979,7 +979,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       .setMaster(getMaster())
       .setAppName("Spark shell")
       .setJars(jars)
-      .set("spark.repl.class.uri", intp.classServer.uri)
+      .set("spark.repl.class.uri", intp.classServerUri)
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)
     }
