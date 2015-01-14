@@ -41,8 +41,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfo, TypeInfoFactory}
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.mapred.InputFormat
 
-import org.apache.spark.sql.types.DecimalType
-import org.apache.spark.sql.types.decimal.Decimal
+import org.apache.spark.sql.types.{Decimal, DecimalType}
 
 case class HiveFunctionWrapper(functionClassName: String) extends java.io.Serializable {
   // for Serialization

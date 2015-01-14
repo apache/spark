@@ -42,8 +42,7 @@ import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.types.DecimalType
-import org.apache.spark.sql.types.decimal.Decimal
+import org.apache.spark.sql.types.{Decimal, DecimalType}
 
 
 /**

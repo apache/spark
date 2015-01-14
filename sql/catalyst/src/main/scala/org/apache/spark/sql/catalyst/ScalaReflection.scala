@@ -23,7 +23,6 @@ import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference, Row}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.decimal.Decimal
 
 
 /**
