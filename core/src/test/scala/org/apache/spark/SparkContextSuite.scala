@@ -88,7 +88,7 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
       assert(alien2.createNewFile())
 
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
-      sc.addDirectory(neptune.getAbsolutePath)
+      sc.addFile(neptune.getAbsolutePath, true)
       sc.parallelize(Array(1), 1).map(x => {
         val sep = File.separator
         if (!new File(SparkFiles.get("neptune" + sep + "alien1")).exists()) {

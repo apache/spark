@@ -24,29 +24,37 @@ import java.net.URI
 import java.util.{Arrays, Properties, UUID}
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.UUID.randomUUID
+
 import scala.collection.{Map, Set}
 import scala.collection.JavaConversions._
 import scala.collection.generic.Growable
 import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
+
+import akka.actor.Props
+
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
-import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
+  FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
+import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat,
+  TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
+
 import org.apache.mesos.MesosNativeLibrary
-import akka.actor.Props
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.executor.TriggerThreadDump
-import org.apache.spark.input.{StreamInputFormat, PortableDataStream, WholeTextFileInputFormat, FixedLengthBinaryInputFormat}
+import org.apache.spark.input.{StreamInputFormat, PortableDataStream, WholeTextFileInputFormat,
+  FixedLengthBinaryInputFormat}
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SparkDeploySchedulerBackend, SimrSchedulerBackend}
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
+  SparkDeploySchedulerBackend, SimrSchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage._
@@ -246,7 +254,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // Used to store a URL for each static file/jar together with the file's local timestamp
   private[spark] val addedFiles = HashMap[String, Long]()
   private[spark] val addedJars = HashMap[String, Long]()
-  private[spark] val addedDirs = HashMap[String, Long]()
 
   // Keeps track of all persisted RDDs
   private[spark] val persistentRdds = new TimeStampedWeakValueHashMap[Int, RDD[_]]
@@ -997,12 +1004,46 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
    * use `SparkFiles.get(fileName)` to find its download location.
    */
-  def addFile(path: String) {
+  def addFile(path: String): Unit = {
+    addFile(path, false)
+  }
+
+    /**
+   * Add a file to be downloaded with this Spark job on every node.
+   * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
+   * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
+   * use `SparkFiles.get(fileName)` to find its download location.
+   *
+   * A directory can be given if the recursive option is set to true. Currently directories are only
+   * supported for Hadoop-supported filesystems.
+   */
+  def addFile(path: String, recursive: Boolean): Unit = {
     val uri = new URI(path)
-    val key = uri.getScheme match {
-      case null | "file" => env.httpFileServer.addFile(new File(uri.getPath))
-      case "local"       => "file:" + uri.getPath
-      case _             => path
+    val schemeCorrectedPath = uri.getScheme match {
+      case null | "local" => "file:" + uri.getPath
+      case _              => path
+    }
+
+    val hadoopPath = new Path(schemeCorrectedPath)
+    val scheme = new URI(schemeCorrectedPath).getScheme
+    if (!Array("http", "https", "ftp").contains(scheme)) {
+      val fs = hadoopPath.getFileSystem(hadoopConfiguration)
+      if (!fs.exists(hadoopPath)) {
+        throw new SparkException(s"Added file $hadoopPath does not exist.")
+      }
+      val isDir = fs.isDirectory(hadoopPath)
+      if (scheme == "file" && isDir) {
+        throw new SparkException(s"addFile does not support adding local directories.")
+      }
+      if (!recursive && isDir) {
+        throw new SparkException(s"Added file $hadoopPath is a directory and recursive is not " +
+          "turned on.")
+      }
+    }
+
+    val key = scheme match {
+      case "file" => env.httpFileServer.addFile(new File(uri.getPath))
+      case _      => path
     }
     val timestamp = System.currentTimeMillis
     addedFiles(key) = timestamp
@@ -1012,27 +1053,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       hadoopConfiguration, timestamp, useCache = false)
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
-    postEnvironmentUpdate()
-  }
-
-  /**
-   * Add a directory to be downloaded with this Spark job on every node.
-   * The `path` passed must be a directory in HDFS (or other Hadoop-supported
-   * filesystems).  To access the directory in Spark jobs, use
-   * `SparkFiles.get(directoryName)` to find its download location.
-   */
-  def addDirectory(path: String, fetchLocal: Boolean = true): Unit = {
-    val timestamp = System.currentTimeMillis
-    // TODO: check if addedDirs already contains path and throw an exception if so
-    addedDirs(path) = timestamp
-
-    if (fetchLocal) {
-      // Fetch the file locally in case a job is executed using DAGScheduler.runLocally().
-      Utils.fetchHcfsDir(path, new File(SparkFiles.getRootDirectory()), conf, env.securityManager,
-        hadoopConfiguration)
-    }
-
-    logInfo("Added dir " + path + " at " + path + " with timestamp " + addedDirs(path))
     postEnvironmentUpdate()
   }
 
@@ -1571,9 +1591,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       val schedulingMode = getSchedulingMode.toString
       val addedJarPaths = addedJars.keys.toSeq
       val addedFilePaths = addedFiles.keys.toSeq
-      val addedDirPaths = addedDirs.keys.toSeq
       val environmentDetails = SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths,
-        addedFilePaths, addedDirPaths)
+        addedFilePaths)
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
       listenerBus.post(environmentUpdate)
     }

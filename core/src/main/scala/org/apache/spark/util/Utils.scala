@@ -359,8 +359,10 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Download a file to target directory. Supports fetching the file in a variety of ways,
-   * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
+   * Download a file or directory to target directory. Supports fetching the file in a variety of
+   * ways, including HTTP, Hadoop-compatible filesystems, and files on a standard filesystem, based
+   * on the URL parameter. Fetching directories is only supported from Hadoop-compatible
+   * filesystems.
    *
    * If `useCache` is true, first attempts to fetch the file to a local cache that's shared
    * across executors running the same application. `useCache` is used mainly for
@@ -429,7 +431,6 @@ private[spark] object Utils extends Logging {
    *
    * @param url URL that `sourceFile` originated from, for logging purposes.
    * @param in InputStream to download.
-   * @param tempFile File path to download `in` to.
    * @param destFile File path to move `tempFile` to.
    * @param fileOverwrite Whether to delete/overwrite an existing `destFile` that does not match
    *                      `sourceFile`
@@ -437,9 +438,11 @@ private[spark] object Utils extends Logging {
   private def downloadFile(
       url: String,
       in: InputStream,
-      tempFile: File,
       destFile: File,
       fileOverwrite: Boolean): Unit = {
+    val tempFile = File.createTempFile("fetchFileTemp", null,
+      new File(destFile.getParentFile.getAbsolutePath))
+    logInfo("Fetching " + url + " to " + tempFile)
 
     try {
       val out = new FileOutputStream(tempFile)
@@ -518,8 +521,10 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Download a file to target directory. Supports fetching the file in a variety of ways,
-   * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
+   * Download a file or directory to target directory. Supports fetching the file in a variety of
+   * ways, including HTTP, Hadoop-compatible filesystems, and files on a standard filesystem, based
+   * on the URL parameter. Fetching directories is only supported from Hadoop-compatible
+   * filesystems.
    *
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
@@ -531,14 +536,11 @@ private[spark] object Utils extends Logging {
       conf: SparkConf,
       securityMgr: SecurityManager,
       hadoopConf: Configuration) {
-    val tempFile = File.createTempFile("fetchFileTemp", null, new File(targetDir.getAbsolutePath))
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
     val fileOverwrite = conf.getBoolean("spark.files.overwrite", defaultValue = false)
     Option(uri.getScheme).getOrElse("file") match {
       case "http" | "https" | "ftp" =>
-        logInfo("Fetching " + url + " to " + tempFile)
-
         var uc: URLConnection = null
         if (securityMgr.isAuthenticationEnabled()) {
           logDebug("fetchFile with security enabled")
@@ -555,50 +557,41 @@ private[spark] object Utils extends Logging {
         uc.setReadTimeout(timeout)
         uc.connect()
         val in = uc.getInputStream()
-        downloadFile(url, in, tempFile, targetFile, fileOverwrite)
+        downloadFile(url, in, targetFile, fileOverwrite)
       case "file" =>
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
         val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
         copyFile(url, sourceFile, targetFile, fileOverwrite)
       case _ =>
-        // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
         val fs = getHadoopFileSystem(uri, hadoopConf)
-        val in = fs.open(new Path(uri))
-        downloadFile(url, in, tempFile, targetFile, fileOverwrite)
+        val path = new Path(uri)
+        fetchHcfsFile(path, new File(targetDir, path.getName), fs, conf, securityMgr, hadoopConf,
+          fileOverwrite)
     }
   }
 
   /**
-   * Copies a remote directory from a Hadoop-compatible file system to local disk.
+   * Fetch a file or directory from a Hadoop-compatible filesystem.
    */
-  def fetchHcfsDir(
-      url: String,
-      targetDir: File,
-      conf: SparkConf,
-      securityMgr: SecurityManager,
-      hadoopConf: Configuration): Unit = {
-    val uri = new URI(url)
-    val fs = getHadoopFileSystem(uri, hadoopConf)
-    val path = new Path(uri)
-    doFetchHcfsDir(path, new File(targetDir, path.getName), fs, conf, securityMgr, hadoopConf)
-  }
-
-  def doFetchHcfsDir(
+  private def fetchHcfsFile(
       path: Path,
       targetDir: File,
       fs: FileSystem,
       conf: SparkConf,
       securityMgr: SecurityManager,
-      hadoopConf: Configuration): Unit = {
+      hadoopConf: Configuration,
+      fileOverwrite: Boolean): Unit = {
     targetDir.mkdir()
     fs.listStatus(path).foreach { fileStatus =>
       val innerPath = fileStatus.getPath
       if (fileStatus.isDirectory) {
-        doFetchHcfsDir(innerPath, new File(targetDir, innerPath.getName), fs, conf, securityMgr,
-          hadoopConf)
+        fetchHcfsFile(innerPath, new File(targetDir, innerPath.getName), fs, conf, securityMgr,
+          hadoopConf, fileOverwrite)
       } else {
-        doFetchFile(innerPath.toString, targetDir, innerPath.getName, conf, securityMgr, hadoopConf)
+        val in = fs.open(innerPath)
+        val targetFile = new File(targetDir, innerPath.getName)
+        downloadFile(innerPath.toString, in, targetFile, fileOverwrite)
       }
     }
   }
