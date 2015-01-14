@@ -22,6 +22,8 @@ import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, dot, scal}
 import org.apache.spark.mllib.util.MLUtils
 
+import scala.collection.immutable.IndexedSeq
+
 /**
  * :: DeveloperApi ::
  * Class used to compute the gradient for a loss function, given a single data point.
@@ -180,8 +182,7 @@ class LogisticGradient extends Gradient {
         var marginY = 0.0
         var maxMargin = Double.NegativeInfinity
         var maxMarginIndex = 0
-        var sum = 0.0
-        
+
         val margins = (0 until n).map { i =>
           var margin = 0.0
           data.foreachActive { (index, value) =>
@@ -193,7 +194,7 @@ class LogisticGradient extends Gradient {
             maxMarginIndex = i
           }
           margin
-        }
+        }.toArray
 
         /**
          * When maxMargin > 0, the original formula will cause overflow as we discuss
@@ -201,15 +202,19 @@ class LogisticGradient extends Gradient {
          * We address this by subtracting maxMargin from all the margins, so it's guaranteed
          * that all of the new margins will be smaller than zero to prevent arithmetic overflow.
          */
-        if (maxMargin > 0) for (i <- 0 until n) {
-          margins(i) -= maxMargin
-          if (i == maxMarginIndex) {
-            sum += math.exp(-maxMargin)
-          } else {
-            sum += math.exp(margins(i))
+        val sum = {
+          var temp = 0.0
+          if (maxMargin > 0) for (i <- 0 until n) {
+            margins(i) -= maxMargin
+            if (i == maxMarginIndex) {
+              temp += math.exp(-maxMargin)
+            } else {
+              temp += math.exp(margins(i))
+            }
+          } else for (i <- 0 until n) {
+            temp += math.exp(margins(i))
           }
-        } else for (i <- 0 until n) {
-          sum += math.exp(margins(i))
+          temp
         }
 
         for (i <- 0 until n) {
