@@ -165,7 +165,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         content ++= <h4 id ="failed">Failed Jobs ({failedJobs.size})</h4> ++
           failedJobsTable
       }
-      val helpText = """A job is triggered by a action, like "count()" or "saveAsTextFile()".""" +
+      val helpText = """A job is triggered by an action, like "count()" or "saveAsTextFile()".""" +
         " Click on a job's title to see information about the stages of tasks associated with" +
         " the job."
 
