@@ -312,7 +312,7 @@ object SparkEnv extends Logging {
     val httpFileServer =
       if (isDriver) {
         val fileServerPort = conf.getInt("spark.fileserver.port", 0)
-        val server = new HttpFileServer(securityManager, fileServerPort)
+        val server = new HttpFileServer(conf, securityManager, fileServerPort)
         server.initialize()
         conf.set("spark.fileserver.uri",  server.serverUri)
         server
@@ -395,7 +395,7 @@ object SparkEnv extends Logging {
     val sparkProperties = (conf.getAll ++ schedulerMode).sorted
 
     // System properties that are not java classpaths
-    val systemProperties = System.getProperties.iterator.toSeq
+    val systemProperties = Utils.getSystemProperties.toSeq
     val otherProperties = systemProperties.filter { case (k, _) =>
       k != "java.class.path" && !k.startsWith("spark.")
     }.sorted

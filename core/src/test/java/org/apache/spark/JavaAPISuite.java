@@ -184,6 +184,7 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(2));
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void repartitionAndSortWithinPartitions() {
     List<Tuple2<Integer, Integer>> pairs = new ArrayList<Tuple2<Integer, Integer>>();
@@ -491,6 +492,7 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(33, sum);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void aggregateByKey() {
     JavaPairRDD<Integer, Integer> pairs = sc.parallelizePairs(
@@ -818,7 +820,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
-    TaskContext context = new TaskContextImpl(0, 0, 0L, false, new TaskMetrics());
+    TaskContext context = new TaskContextImpl(0, 0, 0L, 0, false, new TaskMetrics());
     Assert.assertEquals(1, rdd.iterator(rdd.partitions().get(0), context).next().intValue());
   }
 
@@ -1556,7 +1558,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void testRegisterKryoClasses() {
     SparkConf conf = new SparkConf();
-    conf.registerKryoClasses(new Class[]{ Class1.class, Class2.class });
+    conf.registerKryoClasses(new Class<?>[]{ Class1.class, Class2.class });
     Assert.assertEquals(
         Class1.class.getName() + "," + Class2.class.getName(),
         conf.get("spark.kryo.classesToRegister"));

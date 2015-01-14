@@ -110,6 +110,28 @@ class VectorTests(PySparkTestCase):
         self.assertEquals(0.0, _squared_distance(dv, dv))
         self.assertEquals(0.0, _squared_distance(lst, lst))
 
+    def test_conversion(self):
+        # numpy arrays should be automatically upcast to float64
+        # tests for fix of [SPARK-5089]
+        v = array([1, 2, 3, 4], dtype='float64')
+        dv = DenseVector(v)
+        self.assertTrue(dv.array.dtype == 'float64')
+        v = array([1, 2, 3, 4], dtype='float32')
+        dv = DenseVector(v)
+        self.assertTrue(dv.array.dtype == 'float64')
+
+    def test_sparse_vector_indexing(self):
+        sv = SparseVector(4, {1: 1, 3: 2})
+        self.assertEquals(sv[0], 0.)
+        self.assertEquals(sv[3], 2.)
+        self.assertEquals(sv[1], 1.)
+        self.assertEquals(sv[2], 0.)
+        self.assertEquals(sv[-1], 2)
+        self.assertEquals(sv[-2], 0)
+        self.assertEquals(sv[-4], 0)
+        for ind in [4, -5, 7.8]:
+            self.assertRaises(ValueError, sv.__getitem__, ind)
+
 
 class ListTests(PySparkTestCase):
 

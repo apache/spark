@@ -22,7 +22,7 @@ import java.util.{ArrayList => JArrayList, List => JList}
 import java.util.Collections
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.mutable.{HashMap, HashSet}
 
 import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Scheduler => MScheduler}
@@ -296,7 +296,7 @@ private[spark] class MesosSchedulerBackend(
       .setExecutor(createExecutorInfo(slaveId))
       .setName(task.name)
       .addResources(cpuResource)
-      .setData(ByteString.copyFrom(task.serializedTask))
+      .setData(MesosTaskLaunchData(task.serializedTask, task.attemptNumber).toByteString)
       .build()
   }
 

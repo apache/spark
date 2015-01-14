@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.columnar
 
-import java.nio.{ByteOrder, ByteBuffer}
+import java.nio.{ByteBuffer, ByteOrder}
 
-import org.apache.spark.sql.catalyst.types.{BinaryType, NativeType, DataType}
 import org.apache.spark.sql.catalyst.expressions.MutableRow
 import org.apache.spark.sql.columnar.compression.CompressibleColumnAccessor
+import org.apache.spark.sql.types.{BinaryType, DataType, NativeType}
 
 /**
  * An `Iterator` like trait used to extract values from columnar byte buffer. When a value is

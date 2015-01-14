@@ -31,6 +31,7 @@ import org.junit.Test;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.sql.types.*;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
@@ -93,9 +94,9 @@ public class JavaApplySchemaSuite implements Serializable {
       });
 
     List<StructField> fields = new ArrayList<StructField>(2);
-    fields.add(DataType.createStructField("name", DataType.StringType, false));
-    fields.add(DataType.createStructField("age", DataType.IntegerType, false));
-    StructType schema = DataType.createStructType(fields);
+    fields.add(DataTypes.createStructField("name", DataTypes.StringType, false));
+    fields.add(DataTypes.createStructField("age", DataTypes.IntegerType, false));
+    StructType schema = DataTypes.createStructType(fields);
 
     JavaSchemaRDD schemaRDD = javaSqlCtx.applySchema(rowRDD, schema);
     schemaRDD.registerTempTable("people");
@@ -118,14 +119,14 @@ public class JavaApplySchemaSuite implements Serializable {
         "\"bigInteger\":92233720368547758069, \"double\":1.7976931348623157E305, " +
         "\"boolean\":false, \"null\":null}"));
     List<StructField> fields = new ArrayList<StructField>(7);
-    fields.add(DataType.createStructField("bigInteger", new DecimalType(), true));
-    fields.add(DataType.createStructField("boolean", DataType.BooleanType, true));
-    fields.add(DataType.createStructField("double", DataType.DoubleType, true));
-    fields.add(DataType.createStructField("integer", DataType.IntegerType, true));
-    fields.add(DataType.createStructField("long", DataType.LongType, true));
-    fields.add(DataType.createStructField("null", DataType.StringType, true));
-    fields.add(DataType.createStructField("string", DataType.StringType, true));
-    StructType expectedSchema = DataType.createStructType(fields);
+    fields.add(DataTypes.createStructField("bigInteger", DataTypes.createDecimalType(), true));
+    fields.add(DataTypes.createStructField("boolean", DataTypes.BooleanType, true));
+    fields.add(DataTypes.createStructField("double", DataTypes.DoubleType, true));
+    fields.add(DataTypes.createStructField("integer", DataTypes.IntegerType, true));
+    fields.add(DataTypes.createStructField("long", DataTypes.LongType, true));
+    fields.add(DataTypes.createStructField("null", DataTypes.StringType, true));
+    fields.add(DataTypes.createStructField("string", DataTypes.StringType, true));
+    StructType expectedSchema = DataTypes.createStructType(fields);
     List<Row> expectedResult = new ArrayList<Row>(2);
     expectedResult.add(
       Row.create(

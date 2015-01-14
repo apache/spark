@@ -27,6 +27,7 @@ import org.jblas.DoubleMatrix
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.recommendation.ALS.BlockStats
+import org.apache.spark.storage.StorageLevel
 
 object ALSSuite {
 
@@ -137,6 +138,32 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
     val u2 = model2.userFeatures.values.flatMap(_.toList).collect().toList
     assert(u11 == u12)
     assert(u11 != u2)
+  }
+
+  test("Storage Level for RDDs in model") {
+    val ratings = sc.parallelize(ALSSuite.generateRatings(10, 20, 5, 0.5, false, false)._1, 2)
+    var storageLevel = StorageLevel.MEMORY_ONLY
+    var model = new ALS()
+      .setRank(5)
+      .setIterations(1)
+      .setLambda(1.0)
+      .setBlocks(2)
+      .setSeed(1)
+      .setFinalRDDStorageLevel(storageLevel)
+      .run(ratings)
+    assert(model.productFeatures.getStorageLevel == storageLevel);
+    assert(model.userFeatures.getStorageLevel == storageLevel);
+    storageLevel = StorageLevel.DISK_ONLY
+    model = new ALS()
+      .setRank(5)
+      .setIterations(1)
+      .setLambda(1.0)
+      .setBlocks(2)
+      .setSeed(1)
+      .setFinalRDDStorageLevel(storageLevel)
+      .run(ratings)
+    assert(model.productFeatures.getStorageLevel == storageLevel);
+    assert(model.userFeatures.getStorageLevel == storageLevel);
   }
 
   test("negative ids") {

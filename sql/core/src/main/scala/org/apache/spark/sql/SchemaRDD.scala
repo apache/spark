@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.{Map => JMap, List => JList}
-
+import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
 
@@ -37,8 +36,9 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
+import org.apache.spark.sql.json.JsonRDD
+import org.apache.spark.sql.types.{BooleanType, StructType}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -214,7 +214,7 @@ class SchemaRDD(
    * @group Query
    */
   def orderBy(sortExprs: SortOrder*): SchemaRDD =
-    new SchemaRDD(sqlContext, Sort(sortExprs, logicalPlan))
+    new SchemaRDD(sqlContext, Sort(sortExprs, true, logicalPlan))
 
   /**
    * Sorts the results by the given expressions within partition.
@@ -227,7 +227,7 @@ class SchemaRDD(
    * @group Query
    */
   def sortBy(sortExprs: SortOrder*): SchemaRDD =
-    new SchemaRDD(sqlContext, SortPartitions(sortExprs, logicalPlan))
+    new SchemaRDD(sqlContext, Sort(sortExprs, false, logicalPlan))
 
   @deprecated("use limit with integer argument", "1.1.0")
   def limit(limitExpr: Expression): SchemaRDD =
@@ -238,7 +238,6 @@ class SchemaRDD(
    * {{{
    *   schemaRDD.limit(10)
    * }}}
-   * 
    * @group Query
    */
   def limit(limitNum: Int): SchemaRDD =
