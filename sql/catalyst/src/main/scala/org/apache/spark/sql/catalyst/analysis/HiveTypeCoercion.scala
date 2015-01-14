@@ -296,7 +296,7 @@ trait HiveTypeCoercion {
    *   e1 * e2      p1 + p2 + 1                             s1 + s2
    *   e1 / e2      p1 - s1 + s2 + max(6, s1 + p2 + 1)      max(6, s1 + p2 + 1)
    *   e1 % e2      min(p1-s1, p2-s2) + max(s1, s2)         max(s1, s2)
-   *   union        max(s1, s2) + max(p1-s1, p2-s2)         max(s1, s2)
+   *   e1 union e2  max(s1, s2) + max(p1-s1, p2-s2)         max(s1, s2)
    *   sum(e1)      p1 + 10                                 s1
    *   avg(e1)      p1 + 4                                  s1 + 4
    *
@@ -468,7 +468,7 @@ trait HiveTypeCoercion {
       case e: EqualNullSafe => e
       // Otherwise turn them to Byte types so that there exists and ordering.
       case p: BinaryComparison
-        if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
+          if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
         p.makeCopy(Array(Cast(p.left, ByteType), Cast(p.right, ByteType)))
     }
   }
@@ -609,7 +609,7 @@ trait HiveTypeCoercion {
           val commonType = valueTypes.reduce { (v1, v2) =>
             findTightestCommonType(v1, v2)
               .getOrElse(sys.error(
-              s"Types in CASE WHEN must be the same or coercible to a common type: $v1 != $v2"))
+                s"Types in CASE WHEN must be the same or coercible to a common type: $v1 != $v2"))
           }
           val transformedBranches = branches.sliding(2, 2).map {
             case Seq(cond, value) if value.dataType != commonType =>
