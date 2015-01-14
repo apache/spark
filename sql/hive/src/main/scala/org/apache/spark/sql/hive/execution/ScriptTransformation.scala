@@ -81,10 +81,12 @@ case class ScriptTransformation(
           // TODO: Use SerDe
           if (!schemaLess) {
             new GenericRow(
-              prevLine.split(outputFormatMap("TOK_TABLEROWFORMATFIELD")).asInstanceOf[Array[Any]])
+              prevLine.split(outputFormatMap("TOK_TABLEROWFORMATFIELD"))
+              .asInstanceOf[Array[Any]])
           } else {
             new GenericRow(
-              prevLine.split(outputFormatMap("TOK_TABLEROWFORMATFIELD"), 2).asInstanceOf[Array[Any]])
+              prevLine.split(outputFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
+              .asInstanceOf[Array[Any]])
           }
         }
       }
