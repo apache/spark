@@ -18,7 +18,7 @@
 package org.apache.spark.sql.columnar
 
 import java.nio.ByteBuffer
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import scala.reflect.runtime.universe.TypeTag
 
@@ -335,14 +335,14 @@ private[sql] object STRING extends NativeColumnType(StringType, 7, 8) {
   }
 }
 
-private[sql] object DATE extends NativeColumnType(DateType, 8, 8) {
+private[sql] object DATE extends NativeColumnType(DateType, 8, 4) {
   override def extract(buffer: ByteBuffer) = {
-    val date = new Date(buffer.getLong())
+    val date = new Date().set(buffer.getInt)
     date
   }
 
   override def append(v: Date, buffer: ByteBuffer): Unit = {
-    buffer.putLong(v.getTime)
+    buffer.putInt(v.toDays)
   }
 
   override def getField(row: Row, ordinal: Int) = {

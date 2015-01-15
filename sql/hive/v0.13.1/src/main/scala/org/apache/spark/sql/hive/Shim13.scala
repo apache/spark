@@ -42,7 +42,7 @@ import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.types.{Decimal, DecimalType}
+import org.apache.spark.sql.types.{Date, Decimal, DecimalType}
 
 
 /**
@@ -261,7 +261,7 @@ private[hive] object HiveShim {
     }
 
   def getDateWritable(value: Any): hiveIo.DateWritable =
-    if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[java.sql.Date])
+    if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[Date].toDays)
 
   def getTimestampWritable(value: Any): hiveIo.TimestampWritable =
     if (value == null) {

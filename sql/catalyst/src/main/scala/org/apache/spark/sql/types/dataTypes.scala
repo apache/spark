@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import scala.math.Numeric.{FloatAsIfIntegral, DoubleAsIfIntegral}
 import scala.reflect.ClassTag
@@ -391,9 +391,7 @@ case object DateType extends NativeType {
 
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
 
-  private[sql] val ordering = new Ordering[JvmType] {
-    def compare(x: Date, y: Date) = x.compareTo(y)
-  }
+  private[sql] val ordering = implicitly[Ordering[JvmType]]
 
   /**
    * The default size of a value of the DateType is 8 bytes.

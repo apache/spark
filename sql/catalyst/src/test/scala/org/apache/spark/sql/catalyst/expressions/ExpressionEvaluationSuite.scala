@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import scala.collection.immutable.HashSet
 
 import org.scalactic.TripleEqualsSupport.Spread
+
 import org.scalatest.FunSuite
 import org.scalatest.Matchers._
 
@@ -302,7 +303,8 @@ class ExpressionEvaluationSuite extends FunSuite {
   test("data type casting") {
 
     val sd = "1970-01-01"
-    val d = Date.valueOf(sd)
+    val d = Date(sd)
+    val zts = sd + " 00:00:00"
     val sts = sd + " 00:00:02"
     val nts = sts + ".1"
     val ts = Timestamp.valueOf(nts)
@@ -326,7 +328,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(
       Cast(Cast(Literal(nts) cast TimestampType, DateType), StringType), sd)
     checkEvaluation(
-      Cast(Cast(Literal(ts) cast DateType, TimestampType), StringType), sts)
+      Cast(Cast(Literal(ts) cast DateType, TimestampType), StringType), zts)
 
     checkEvaluation(Cast("abdef" cast BinaryType, StringType), "abdef")
 
@@ -377,8 +379,8 @@ class ExpressionEvaluationSuite extends FunSuite {
   }
 
   test("date") {
-    val d1 = Date.valueOf("1970-01-01")
-    val d2 = Date.valueOf("1970-01-02")
+    val d1 = Date("1970-01-01")
+    val d2 = Date("1970-01-02")
     checkEvaluation(Literal(d1) < Literal(d2), true)
   }
 
@@ -458,16 +460,16 @@ class ExpressionEvaluationSuite extends FunSuite {
   }
 
   test("date casting") {
-    val d = Date.valueOf("1970-01-01")
-    checkEvaluation(Cast(d, ShortType), null)
-    checkEvaluation(Cast(d, IntegerType), null)
-    checkEvaluation(Cast(d, LongType), null)
-    checkEvaluation(Cast(d, FloatType), null)
-    checkEvaluation(Cast(d, DoubleType), null)
-    checkEvaluation(Cast(d, DecimalType.Unlimited), null)
-    checkEvaluation(Cast(d, DecimalType(10, 2)), null)
-    checkEvaluation(Cast(d, StringType), "1970-01-01")
-    checkEvaluation(Cast(Cast(d, TimestampType), StringType), "1970-01-01 00:00:00")
+    val d = Date("1970-01-01")
+    checkEvaluation(Cast(Literal(d), ShortType), null)
+    checkEvaluation(Cast(Literal(d), IntegerType), null)
+    checkEvaluation(Cast(Literal(d), LongType), null)
+    checkEvaluation(Cast(Literal(d), FloatType), null)
+    checkEvaluation(Cast(Literal(d), DoubleType), null)
+    checkEvaluation(Cast(Literal(d), DecimalType.Unlimited), null)
+    checkEvaluation(Cast(Literal(d), DecimalType(10, 2)), null)
+    checkEvaluation(Cast(Literal(d), StringType), "1970-01-01")
+    checkEvaluation(Cast(Cast(Literal(d), TimestampType), StringType), "1970-01-01 00:00:00")
   }
 
   test("timestamp casting") {

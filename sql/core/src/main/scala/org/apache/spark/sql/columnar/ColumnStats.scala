@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.columnar
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, Attribute, AttributeReference}

@@ -17,13 +17,12 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, AttributeReference, Row}
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.types._
-
 
 /**
  * A default version of ScalaReflection that uses the runtime universe.
@@ -152,6 +151,7 @@ trait ScalaReflection {
           valueDataType, valueContainsNull = valueNullable), nullable = true)
       case t if t <:< typeOf[String] => Schema(StringType, nullable = true)
       case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
+      case t if t <:< typeOf[java.sql.Date] => Schema(DateType, nullable = true)
       case t if t <:< typeOf[Date] => Schema(DateType, nullable = true)
       case t if t <:< typeOf[BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
       case t if t <:< typeOf[java.math.BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)

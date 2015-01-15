@@ -135,6 +135,8 @@ object EvaluatePython {
 
     case (ud, udt: UserDefinedType[_]) => toJava(udt.serialize(ud), udt.sqlType)
 
+    case (date: Date, DateType) => date.toJavaDate
+
     // Pyrolite can handle Timestamp and Decimal
     case (other, _) => other
   }
@@ -171,7 +173,7 @@ object EvaluatePython {
       }): Row
 
     case (c: java.util.Calendar, DateType) =>
-      new java.sql.Date(c.getTime().getTime())
+      Date(c.getTime().getTime())
 
     case (c: java.util.Calendar, TimestampType) =>
       new java.sql.Timestamp(c.getTime().getTime())

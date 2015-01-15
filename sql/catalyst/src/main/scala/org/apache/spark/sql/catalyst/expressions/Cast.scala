@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.{Date, Timestamp}
+import java.sql.Timestamp
 import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.Logging
@@ -113,7 +113,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
   // UDFToString
   private[this] def castToString(from: DataType): Any => Any = from match {
     case BinaryType => buildCast[Array[Byte]](_, new String(_, "UTF-8"))
-    case DateType => buildCast[Date](_, dateToString)
+    case DateType => _.asInstanceOf[Date].toString
     case TimestampType => buildCast[Timestamp](_, timestampToString)
     case _ => buildCast[Any](_, _.toString)
   }
@@ -171,7 +171,7 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     case ByteType =>
       buildCast[Byte](_, b => new Timestamp(b))
     case DateType =>
-      buildCast[Date](_, d => new Timestamp(d.getTime))
+      buildCast[Date](_, d => new Timestamp(d.toMillisSinceEpoch))
     // TimestampWritable.decimalToTimestamp
     case DecimalType() =>
       buildCast[Decimal](_, d => decimalToTimestamp(d))
@@ -224,20 +224,16 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     }
   }
 
-  // Converts Timestamp to string according to Hive TimestampWritable convention
-  private[this] def timestampToDateString(ts: Timestamp): String = {
-    Cast.threadLocalDateFormat.get.format(ts)
-  }
-
   // DateConverter
   private[this] def castToDate(from: DataType): Any => Any = from match {
     case StringType =>
       buildCast[String](_, s =>
-        try Date.valueOf(s) catch { case _: java.lang.IllegalArgumentException => null })
+        try Date(s) catch { case _: java.lang.IllegalArgumentException => null }
+      )
     case TimestampType =>
       // throw valid precision more than seconds, according to Hive.
       // Timestamp.nanos is in 0 to 999,999,999, no more than a second.
-      buildCast[Timestamp](_, t => new Date(Math.floor(t.getTime / 1000.0).toLong * 1000))
+      buildCast[Timestamp](_, t => Date(Math.floor(t.getTime / 1000.0).toLong * 1000))
     // Hive throws this exception as a Semantic Exception
     // It is never possible to compare result when hive return with exception, so we can return null
     // NULL is more reasonable here, since the query itself obeys the grammar.
@@ -249,11 +245,6 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
   // Date cannot be cast to double, according to hive
   private[this] def dateToDouble(d: Date) = null
-
-  // Converts Date to string according to Hive DateWritable convention
-  private[this] def dateToString(d: Date): String = {
-    Cast.threadLocalDateFormat.get.format(d)
-  }
 
   // LongConverter
   private[this] def castToLong(from: DataType): Any => Any = from match {
@@ -442,16 +433,16 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
 
 object Cast {
   // `SimpleDateFormat` is not thread-safe.
-  private[sql] val threadLocalDateFormat = new ThreadLocal[DateFormat] {
+  private[sql] val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
     override def initialValue() = {
-      new SimpleDateFormat("yyyy-MM-dd")
+      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
     }
   }
 
   // `SimpleDateFormat` is not thread-safe.
-  private[sql] val threadLocalTimestampFormat = new ThreadLocal[DateFormat] {
+  private[sql] val threadLocalDateFormat = new ThreadLocal[DateFormat] {
     override def initialValue() = {
-      new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
+      new SimpleDateFormat("yyyy-MM-dd")
     }
   }
 }
