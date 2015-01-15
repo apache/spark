@@ -33,7 +33,8 @@ import com.google.common.annotations.VisibleForTesting
  * @tparam L type of listener
  * @tparam E type of event
  */
-abstract class ListenerBus[L <: AnyRef, E](name: String) extends ListenerHelper[L, E] {
+private[spark] abstract class ListenerBus[L <: AnyRef, E](name: String)
+  extends ListenerHelper[L, E] {
 
   self =>
 

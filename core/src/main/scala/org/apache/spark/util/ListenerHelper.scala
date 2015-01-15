@@ -26,7 +26,7 @@ import org.apache.spark.Logging
 /**
  * An event bus which posts events to its listeners.
  */
-trait ListenerHelper[L <: AnyRef, E] extends Logging {
+private[spark] trait ListenerHelper[L <: AnyRef, E] extends Logging {
 
   private val listeners = new CopyOnWriteArrayList[L]
 
