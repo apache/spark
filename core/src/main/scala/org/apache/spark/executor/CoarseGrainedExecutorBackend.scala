@@ -90,7 +90,8 @@ private[spark] class CoarseGrainedExecutorBackend(
       } else {
         val localAddress = x.localAddress
         val remoteAddress = x.remoteAddress
-        logWarning(s"Received DisassociatedEvent from $remoteAddress to $localAddress")
+        logWarning(s"Received DisassociatedEvent [$localAddress]" +
+          s"${if (x.inbound) " <- " else " -> "}[$remoteAddress]")
       }
 
     case StopExecutor =>
