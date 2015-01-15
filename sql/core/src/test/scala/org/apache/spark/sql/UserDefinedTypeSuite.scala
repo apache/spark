@@ -81,7 +81,7 @@ class UserDefinedTypeSuite extends QueryTest {
   }
 
   test("UDTs and UDFs") {
-    registerFunction("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
+    udf.register("testType", (d: MyDenseVector) => d.isInstanceOf[MyDenseVector])
     pointsRDD.registerTempTable("points")
     checkAnswer(
       sql("SELECT testType(features) from points"),
