@@ -315,6 +315,26 @@ class TableScanSuite extends DataSourceTest {
       (1 to 10).map(Row(_)).toSeq)
   }
 
+  test("create table exists") {
+    val tableName = "createdTable"
+    val ddl = s"""
+       |CREATE TEMPORARY TABLE $tableName (number int)
+       |USING org.apache.spark.sql.sources.SimpleScanSource
+       |OPTIONS (
+       |  from '1',
+       |  to '10'
+       |)
+       """.stripMargin
+      // frist create
+      sql(ddl)
+      // create the existed table again
+      val tableExists = intercept[Exception] {
+          sql(ddl)
+      }
+      assert(tableExists.getMessage.contains(s"Table $tableName already exists."))
+  }
+
+
   test("exceptions") {
     // Make sure we do throw correct exception when users use a relation provider that
     // only implements the RelationProvier or the SchemaRelationProvider.
