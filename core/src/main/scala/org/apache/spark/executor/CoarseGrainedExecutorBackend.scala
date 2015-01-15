@@ -84,8 +84,14 @@ private[spark] class CoarseGrainedExecutorBackend(
       }
 
     case x: DisassociatedEvent =>
-      logError(s"Driver $x disassociated! Shutting down.")
-      System.exit(1)
+      if (x.remoteAddress == driver.anchorPath.address) {
+        logError(s"Driver $x disassociated! Shutting down.")
+        System.exit(1)
+      } else {
+        val localAddress = x.localAddress
+        val remoteAddress = x.remoteAddress
+        logWarning(s"Received DisassociatedEvent from $remoteAddress to $localAddress")
+      }
 
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
