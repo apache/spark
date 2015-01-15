@@ -22,15 +22,12 @@ This example requires NumPy (http://www.numpy.org/).
 """
 
 import sys
-
 import numpy as np
 from pyspark import SparkContext
 from pyspark.mllib.clustering import GaussianMixtureEM
 
-
-# TODO change , to ' '
 def parseVector(line):
-    return np.array([float(x) for x in line.split(',')])
+    return np.array([float(x) for x in line.split(' ')])
 
 
 if __name__ == "__main__":
