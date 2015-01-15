@@ -150,7 +150,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           driverMemory = value
           args = tail
 
-        case ("--cores") :: IntParam(value) :: tail =>
+        case ("--driver-cores") :: IntParam(value) :: tail =>
           driverCores = value
           args = tail
 
@@ -212,7 +212,8 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
   private def getUsageMessage(unknownParam: List[String] = null): String = {
     val message = if (unknownParam != null) s"Unknown/unsupported param $unknownParam\n" else ""
-    message + """
+    message +
+      """
       |Usage: org.apache.spark.deploy.yarn.Client [options]
       |Options:
       |  --jar JAR_PATH           Path to your application's JAR file (required in yarn-cluster
@@ -223,7 +224,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       |  --num-executors NUM      Number of executors to start (Default: 2)
       |  --executor-cores NUM     Number of cores for the executors (Default: 1).
       |  --driver-memory MEM      Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)
-      |  --cores NUM              Number of cores used by the driver (Default: 1).
+      |  --driver-cores NUM       Number of cores used by the driver (Default: 1).
       |  --executor-memory MEM    Memory per executor (e.g. 1000M, 2G) (Default: 1G)
       |  --name NAME              The name of your application (Default: Spark)
       |  --queue QUEUE            The hadoop queue to use for allocation requests (Default:
@@ -232,6 +233,6 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       |                           to work with.
       |  --files files            Comma separated list of files to be distributed with the job.
       |  --archives archives      Comma separated list of archives to be distributed with the job.
-    """.stripMargin
+      """.stripMargin
   }
 }
