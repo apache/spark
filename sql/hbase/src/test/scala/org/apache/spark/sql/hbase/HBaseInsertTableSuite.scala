@@ -157,35 +157,55 @@ class HBaseInsertTableSuite extends QueriesSuiteBase {
     runQuery(insertQuery2)
     runQuery(insertQuery3)
 
-    val testQuery = "select * from insertNullValuesTest order by strcol"
-    val testResult = runQuery(testQuery)
+    val selectAllQuery = "select * from insertNullValuesTest order by strcol"
+    val selectAllResult = runQuery(selectAllQuery)
 
-    assert(testResult.size == 3, s"$testnm failed on size")
+    assert(selectAllResult.size == 3, s"$testnm failed on size")
 
     var currentResultRow : Int = 0
 
     // check 1st result row
-    assert(testResult(currentResultRow).length == 4, s"$testnm failed on row size (# of cols)")
-    assert(testResult(currentResultRow)(0) === s"Row0", s"$testnm failed on returned Row0, key value")
-    assert(testResult(currentResultRow)(1) == null, s"$testnm failed on returned Row0, null col1 value")
-    assert(testResult(currentResultRow)(2) == 12340, s"$testnm failed on returned Row0, col2 value")
-    assert(testResult(currentResultRow)(3) == 23456780, s"$testnm failed on returned Row0, col3 value")
+    assert(selectAllResult(currentResultRow).length == 4, s"$testnm failed on row size (# of cols)")
+    assert(selectAllResult(currentResultRow)(0) === s"Row0", s"$testnm failed on returned Row0, key value")
+    assert(selectAllResult(currentResultRow)(1) == null, s"$testnm failed on returned Row0, null col1 value")
+    assert(selectAllResult(currentResultRow)(2) == 12340, s"$testnm failed on returned Row0, col2 value")
+    assert(selectAllResult(currentResultRow)(3) == 23456780, s"$testnm failed on returned Row0, col3 value")
 
     currentResultRow += 1
 
     // check 2nd result row
-    assert(testResult(currentResultRow)(0) === s"Row1", s"$testnm failed on returned Row1, key value")
+    assert(selectAllResult(currentResultRow)(0) === s"Row1", s"$testnm failed on returned Row1, key value")
     // skip comparison of actual and expected bytecol value
-    assert(testResult(currentResultRow)(2) == null, s"$testnm failed on returned Row1, null col2 value")
-    assert(testResult(currentResultRow)(3) == 23456789, s"$testnm failed on returned Row1, col3 value")
+    assert(selectAllResult(currentResultRow)(2) == null, s"$testnm failed on returned Row1, null col2 value")
+    assert(selectAllResult(currentResultRow)(3) == 23456789, s"$testnm failed on returned Row1, col3 value")
 
     currentResultRow += 1
 
     // check 3rd result row
-    assert(testResult(currentResultRow)(0) === s"Row2", s"$testnm failed on returned Row2, key value")
+    assert(selectAllResult(currentResultRow)(0) === s"Row2", s"$testnm failed on returned Row2, key value")
     // skip comparison of actual and expected bytecol value
-    assert(testResult(currentResultRow)(2) == 12342, s"$testnm failed on returned Row2, col2 value")
-    assert(testResult(currentResultRow)(3) == null, s"$testnm failed on returned Row2, null col3 value")
+    assert(selectAllResult(currentResultRow)(2) == 12342, s"$testnm failed on returned Row2, col2 value")
+    assert(selectAllResult(currentResultRow)(3) == null, s"$testnm failed on returned Row2, null col3 value")
+
+    // test 'where col is not null'
+
+    val selectWhereIsNotNullQuery = "select * from insertNullValuesTest where intcol is not null order by strcol"
+    val selectWhereIsNotNullResult = runQuery(selectWhereIsNotNullQuery)
+    assert(selectWhereIsNotNullResult.size == 2, s"$testnm failed on size")
+
+    currentResultRow = 0
+    // check 1st result row
+    assert(selectWhereIsNotNullResult(currentResultRow)(0) === s"Row0", s"$testnm failed on returned Row0, key value")
+    assert(selectWhereIsNotNullResult(currentResultRow)(1) == null, s"$testnm failed on returned Row0, null col1 value")
+    assert(selectWhereIsNotNullResult(currentResultRow)(2) == 12340, s"$testnm failed on returned Row0, col2 value")
+    assert(selectWhereIsNotNullResult(currentResultRow)(3) == 23456780, s"$testnm failed on returned Row0, col3 value")
+
+    currentResultRow += 1
+    // check 2nd result row
+    assert(selectWhereIsNotNullResult(currentResultRow)(0) === s"Row1", s"$testnm failed on returned Row1, key value")
+    // skip comparison of actual and expected bytecol value
+    assert(selectWhereIsNotNullResult(currentResultRow)(2) == null, s"$testnm failed on returned Row1, null col2 value")
+    assert(selectWhereIsNotNullResult(currentResultRow)(3) == 23456789, s"$testnm failed on returned Row1, col3 value")
 
 
     runQuery("Drop Table insertNullValuesTest")
