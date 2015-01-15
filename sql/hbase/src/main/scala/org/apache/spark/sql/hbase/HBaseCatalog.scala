@@ -89,12 +89,10 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
   val caseSensitive = true
 
   private def createHBaseUserTable(tableName: String,
-                                   columns: Seq[NonKeyColumn],
+                                   families: Seq[String],
                                    splitKeys: Array[Array[Byte]]): Unit = {
     val tableDescriptor = new HTableDescriptor(TableName.valueOf(tableName))
-    for (column <- columns) {
-      tableDescriptor.addFamily(new HColumnDescriptor(column.family))
-    }
+    families.foreach(family => tableDescriptor.addFamily(new HColumnDescriptor(family)))
 
     admin.createTable(tableDescriptor, splitKeys)
   }
@@ -110,15 +108,16 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
     // create a new hbase table for the user if not exist
     val nonKeyColumns = allColumns.filter(_.isInstanceOf[NonKeyColumn])
       .asInstanceOf[Seq[NonKeyColumn]]
+    val families: Seq[String] = nonKeyColumns.groupBy(_.family).unzip._1.toSeq
     if (!checkHBaseTableExists(hbaseTableName)) {
-      createHBaseUserTable(hbaseTableName, nonKeyColumns, splitKeys)
-    }
-
-    nonKeyColumns.foreach {
-      case NonKeyColumn(_, _, family, _) =>
-        if (!checkFamilyExists(hbaseTableName, family)) {
-          throw new Exception(s"The HBase table doesn't contain the Column Family: $family")
-        }
+      createHBaseUserTable(hbaseTableName, families, splitKeys)
+    } else {
+      families.foreach {
+        case family =>
+          if (!checkFamilyExists(hbaseTableName, family)) {
+            throw new Exception(s"The HBase table doesn't contain the Column Family: $family")
+          }
+      }
     }
 
     table.setAutoFlushTo(false)
