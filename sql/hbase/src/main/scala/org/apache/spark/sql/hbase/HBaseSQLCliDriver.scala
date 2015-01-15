@@ -110,9 +110,7 @@ object HBaseSQLCliDriver extends Logging {
     val input = line.trim.substring(0, line.length - 1)
 
     try {
-      val start = System.currentTimeMillis()
       process(input)
-      val end = System.currentTimeMillis()
 
       val timeTaken: Double = (end - start) / 1000.0
       println(s"Time taken: $timeTaken seconds")
@@ -132,7 +130,10 @@ object HBaseSQLCliDriver extends Logging {
       case "!" => // TODO: add support for bash command start with !
       case _ =>
         logInfo(s"Processing $input")
-        hbaseCtx.sql(input).collect().foreach(println)
+        val start = System.currentTimeMillis()
+        val res = hbaseCtx.sql(input).collect()
+        val end = System.currentTimeMillis()
+        res.foreach(println)
     }
   }
 
