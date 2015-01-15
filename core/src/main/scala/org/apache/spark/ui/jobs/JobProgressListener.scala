@@ -406,11 +406,23 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
     stageData.inputBytes += inputBytesDelta
     execSummary.inputBytes += inputBytesDelta
 
+    val inputRecordsDelta =
+      (taskMetrics.inputMetrics.map(_.recordsRead).getOrElse(0L)
+      - oldMetrics.flatMap(_.inputMetrics).map(_.recordsRead).getOrElse(0L))
+    stageData.inputRecords += inputRecordsDelta
+    execSummary.inputRecords += inputRecordsDelta
+
     val outputBytesDelta =
       (taskMetrics.outputMetrics.map(_.bytesWritten).getOrElse(0L)
         - oldMetrics.flatMap(_.outputMetrics).map(_.bytesWritten).getOrElse(0L))
     stageData.outputBytes += outputBytesDelta
     execSummary.outputBytes += outputBytesDelta
+
+    val outputRecordsDelta =
+      (taskMetrics.outputMetrics.map(_.recordsWritten).getOrElse(0L)
+        - oldMetrics.flatMap(_.outputMetrics).map(_.recordsWritten).getOrElse(0L))
+    stageData.outputRecords += outputRecordsDelta
+    execSummary.outputRecords += outputRecordsDelta
 
     val diskSpillDelta =
       taskMetrics.diskBytesSpilled - oldMetrics.map(_.diskBytesSpilled).getOrElse(0L)

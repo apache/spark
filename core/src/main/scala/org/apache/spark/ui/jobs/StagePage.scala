@@ -74,11 +74,19 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                 <strong>Input: </strong>
                 {Utils.bytesToString(stageData.inputBytes)}
               </li>
+              <li>
+                <strong>Input Records: </strong>
+                {stageData.inputRecords}
+              </li>
             }}
             {if (hasOutput) {
               <li>
                 <strong>Output: </strong>
                 {Utils.bytesToString(stageData.outputBytes)}
+              </li>
+              <li>
+                <strong>Output Records: </strong>
+                {stageData.outputRecords}
               </li>
             }}
             {if (hasShuffleRead) {
@@ -174,15 +182,16 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
           ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
         {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
-        {if (hasInput) Seq(("Input", "")) else Nil} ++
-        {if (hasOutput) Seq(("Output", "")) else Nil} ++
+        {if (hasInput) Seq(("Input", ""), ("Input Records","")) else Nil} ++
+        {if (hasOutput) Seq(("Output", ""), ("Output Records", "")) else Nil} ++
         {if (hasShuffleRead) {
           Seq(("Shuffle Read Blocked Time", TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME),
-            ("Shuffle Read", ""))
-        } else {
+            ("Shuffle Read", ""), ("Shuffle Read Records", ""))
+        }  else {
           Nil
         }} ++
-        {if (hasShuffleWrite) Seq(("Write Time", ""), ("Shuffle Write", "")) else Nil} ++
+        {if (hasShuffleWrite) Seq(("Write Time", ""), ("Shuffle Write", ""),
+          ("Shuffle Write Records", "")) else Nil} ++
         {if (hasBytesSpilled) Seq(("Shuffle Spill (Memory)", ""), ("Shuffle Spill (Disk)", ""))
           else Nil} ++
         Seq(("Errors", ""))
@@ -397,26 +406,30 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val inputReadable = maybeInput
         .map(m => s"${Utils.bytesToString(m.bytesRead)} (${m.readMethod.toString.toLowerCase()})")
         .getOrElse("")
+      val inputRecords = maybeInput.map(_.recordsRead.toString).getOrElse("")
 
       val maybeOutput = metrics.flatMap(_.outputMetrics)
       val outputSortable = maybeOutput.map(_.bytesWritten.toString).getOrElse("")
       val outputReadable = maybeOutput
         .map(m => s"${Utils.bytesToString(m.bytesWritten)}")
         .getOrElse("")
+      val outputRecords = maybeOutput.map(_.recordsWritten.toString).getOrElse("")
 
-      val maybeShuffleReadBlockedTime = metrics.flatMap(_.shuffleReadMetrics).map(_.fetchWaitTime)
-      val shuffleReadBlockedTimeSortable = maybeShuffleReadBlockedTime.map(_.toString).getOrElse("")
+      val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics)
+      val shuffleReadBlockedTimeSortable = maybeShuffleRead.map(_.fetchWaitTime.toString).getOrElse("")
       val shuffleReadBlockedTimeReadable =
-        maybeShuffleReadBlockedTime.map(ms => UIUtils.formatDuration(ms)).getOrElse("")
+        maybeShuffleRead.map(ms => UIUtils.formatDuration(ms.fetchWaitTime)).getOrElse("")
 
-      val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead)
-      val shuffleReadSortable = maybeShuffleRead.map(_.toString).getOrElse("")
-      val shuffleReadReadable = maybeShuffleRead.map(Utils.bytesToString).getOrElse("")
+      val shuffleReadSortable = maybeShuffleRead.map(_.remoteBytesRead.toString).getOrElse("")
+      val shuffleReadReadable = maybeShuffleRead
+        .map(m => s"${Utils.bytesToString(m.remoteBytesRead)}").getOrElse("")
+      val shuffleReadRecords = maybeShuffleRead.map(_.recordsRead.toString).getOrElse("")
 
-      val maybeShuffleWrite =
-        metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleBytesWritten)
-      val shuffleWriteSortable = maybeShuffleWrite.map(_.toString).getOrElse("")
-      val shuffleWriteReadable = maybeShuffleWrite.map(Utils.bytesToString).getOrElse("")
+      val maybeShuffleWrite = metrics.flatMap(_.shuffleWriteMetrics)
+      val shuffleWriteSortable = maybeShuffleWrite.map(_.shuffleBytesWritten.toString).getOrElse("")
+      val shuffleWriteReadable = maybeShuffleWrite
+        .map(m => s"${Utils.bytesToString(m.shuffleBytesWritten)}").getOrElse("")
+      val shuffleWriteRecords = maybeShuffleWrite.map(_.recordsWritten.toString).getOrElse("")
 
       val maybeWriteTime = metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleWriteTime)
       val writeTimeSortable = maybeWriteTime.map(_.toString).getOrElse("")
@@ -474,10 +487,16 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           <td sorttable_customkey={inputSortable}>
             {inputReadable}
           </td>
+          <td sorttable_customkey={inputRecords}>
+            {inputRecords}
+          </td>
         }}
         {if (hasOutput) {
           <td sorttable_customkey={outputSortable}>
             {outputReadable}
+          </td>
+          <td sorttable_customkey={outputRecords}>
+            {outputRecords}
           </td>
         }}
         {if (hasShuffleRead) {
@@ -488,6 +507,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
            <td sorttable_customkey={shuffleReadSortable}>
              {shuffleReadReadable}
            </td>
+           <td sorttable_customkey={shuffleReadRecords}>
+             {shuffleReadRecords}
+           </td>
         }}
         {if (hasShuffleWrite) {
            <td sorttable_customkey={writeTimeSortable}>
@@ -495,6 +517,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
            </td>
            <td sorttable_customkey={shuffleWriteSortable}>
              {shuffleWriteReadable}
+           </td>
+           <td sorttable_customkey={shuffleWriteRecords}>
+             {shuffleWriteRecords}
            </td>
         }}
         {if (hasBytesSpilled) {

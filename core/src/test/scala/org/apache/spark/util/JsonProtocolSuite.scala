@@ -187,6 +187,34 @@ class JsonProtocolSuite extends FunSuite {
     assert(newMetrics.inputMetrics.isEmpty)
   }
 
+  test("Input/Output records backwards compatibility") {
+    // records read were added after 1.2
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+      hasHadoopInput = true, hasOutput = true, hasRecords = false)
+    assert(metrics.inputMetrics.nonEmpty)
+    assert(metrics.outputMetrics.nonEmpty)
+    val newJson = JsonProtocol.taskMetricsToJson(metrics)
+    val oldJson = newJson.removeField { case (field, _) => field == "Records Read" }
+                         .removeField { case (field, _) => field == "Records Written" }
+    val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.inputMetrics.get.recordsRead == -1)
+    assert(newMetrics.outputMetrics.get.recordsWritten == -1)
+  }
+
+  test("Shuffle Read/Write records backwards compatibility") {
+    // records read were added after 1.2
+    val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6,
+      hasHadoopInput = false, hasOutput = false, hasRecords = false)
+    assert(metrics.shuffleReadMetrics.nonEmpty)
+    assert(metrics.shuffleWriteMetrics.nonEmpty)
+    val newJson = JsonProtocol.taskMetricsToJson(metrics)
+    val oldJson = newJson.removeField { case (field, _) => field == "Records Read" }
+                         .removeField { case (field, _) => field == "Shuffle Records Written" }
+    val newMetrics = JsonProtocol.taskMetricsFromJson(oldJson)
+    assert(newMetrics.shuffleReadMetrics.get.recordsRead == -1)
+    assert(newMetrics.shuffleWriteMetrics.get.recordsWritten == -1)
+  }
+
   test("OutputMetrics backward compatibility") {
     // OutputMetrics were added after 1.1
     val metrics = makeTaskMetrics(1L, 2L, 3L, 4L, 5, 6, hasHadoopInput = false, hasOutput = true)
@@ -642,7 +670,8 @@ class JsonProtocolSuite extends FunSuite {
       e: Int,
       f: Int,
       hasHadoopInput: Boolean,
-      hasOutput: Boolean) = {
+      hasOutput: Boolean,
+      hasRecords: Boolean = true) = {
     val t = new TaskMetrics
     t.setHostname("localhost")
     t.setExecutorDeserializeTime(a)
@@ -655,6 +684,7 @@ class JsonProtocolSuite extends FunSuite {
     if (hasHadoopInput) {
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       inputMetrics.addBytesRead(d + e + f)
+      inputMetrics.addRecordsRead(if(hasRecords) (d + e + f) / 100 else -1)
       t.setInputMetrics(Some(inputMetrics))
     } else {
       val sr = new ShuffleReadMetrics
@@ -662,16 +692,19 @@ class JsonProtocolSuite extends FunSuite {
       sr.incLocalBlocksFetched(e)
       sr.incFetchWaitTime(a + d)
       sr.incRemoteBlocksFetched(f)
+      sr.recordsRead = if(hasRecords) (b + d) / 100 else -1
       t.setShuffleReadMetrics(Some(sr))
     }
     if (hasOutput) {
       val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
       outputMetrics.setBytesWritten(a + b + c)
+      outputMetrics.recordsWritten = if(hasRecords) (a + b + c)/100 else -1
       t.outputMetrics = Some(outputMetrics)
     } else {
       val sw = new ShuffleWriteMetrics
       sw.incShuffleBytesWritten(a + b + c)
       sw.incShuffleWriteTime(b + c + d)
+      sw.recordsWritten = if(hasRecords) (a + b + c) / 100 else -1
       t.shuffleWriteMetrics = Some(sw)
     }
     // Make at most 6 blocks
@@ -905,11 +938,13 @@ class JsonProtocolSuite extends FunSuite {
       |      "Remote Blocks Fetched": 800,
       |      "Local Blocks Fetched": 700,
       |      "Fetch Wait Time": 900,
-      |      "Remote Bytes Read": 1000
+      |      "Remote Bytes Read": 1000,
+      |      "Records Read" : 10
       |    },
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
-      |      "Shuffle Write Time": 1500
+      |      "Shuffle Write Time": 1500,
+      |      "Shuffle Records Written": 12
       |    },
       |    "Updated Blocks": [
       |      {
@@ -986,11 +1021,13 @@ class JsonProtocolSuite extends FunSuite {
       |    "Disk Bytes Spilled": 0,
       |    "Shuffle Write Metrics": {
       |      "Shuffle Bytes Written": 1200,
-      |      "Shuffle Write Time": 1500
+      |      "Shuffle Write Time": 1500,
+      |      "Shuffle Records Written": 12
       |    },
       |    "Input Metrics": {
       |      "Data Read Method": "Hadoop",
-      |      "Bytes Read": 2100
+      |      "Bytes Read": 2100,
+      |      "Records Read": 21
       |    },
       |    "Updated Blocks": [
       |      {
@@ -1067,11 +1104,13 @@ class JsonProtocolSuite extends FunSuite {
       |    "Disk Bytes Spilled": 0,
       |    "Input Metrics": {
       |      "Data Read Method": "Hadoop",
-      |      "Bytes Read": 2100
+      |      "Bytes Read": 2100,
+      |      "Records Read": 21
       |    },
       |    "Output Metrics": {
       |      "Data Write Method": "Hadoop",
-      |      "Bytes Written": 1200
+      |      "Bytes Written": 1200,
+      |      "Records Written": 12
       |    },
       |    "Updated Blocks": [
       |      {

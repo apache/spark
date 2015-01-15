@@ -30,8 +30,10 @@ private[spark] object ToolTips {
     "Time that the task spent blocked waiting for shuffle data to be read from remote machines."
 
   val INPUT = "Bytes read from Hadoop or from Spark storage."
+  val INPUT_RECORDS = "Number of records read from Hadoop or from Spark storage."
 
   val OUTPUT = "Bytes written to Hadoop."
+  val OUTPUT_RECORDS = "Number of records written to Hadoop."
 
   val SHUFFLE_WRITE = "Bytes written to disk in order to be read by a shuffle in a future stage."
 

@@ -117,7 +117,7 @@ private[spark] class DiskBlockObjectWriter(
 
   /** Calling channel.position() to update the write metrics can be a little bit expensive, so we
     * only call it every N writes */
-  private var writesSinceMetricsUpdate = 0
+  private var numRecordsWritten = 0
 
   override def open(): BlockObjectWriter = {
     fos = new FileOutputStream(file, true)
@@ -168,6 +168,7 @@ private[spark] class DiskBlockObjectWriter(
   override def revertPartialWritesAndClose() {
     try {
       writeMetrics.decShuffleBytesWritten(reportedPosition - initialPosition)
+      writeMetrics.recordsWritten -= numRecordsWritten
 
       if (initialized) {
         objOut.flush()
@@ -193,12 +194,11 @@ private[spark] class DiskBlockObjectWriter(
     }
 
     objOut.writeObject(value)
+    numRecordsWritten += 1
+    writeMetrics.recordsWritten += 1
 
-    if (writesSinceMetricsUpdate == 32) {
-      writesSinceMetricsUpdate = 0
+    if (numRecordsWritten % 32 == 0) {
       updateBytesWritten()
-    } else {
-      writesSinceMetricsUpdate += 1
     }
   }
 

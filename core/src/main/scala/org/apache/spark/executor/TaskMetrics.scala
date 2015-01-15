@@ -201,6 +201,7 @@ class TaskMetrics extends Serializable {
       merged.incLocalBlocksFetched(depMetrics.localBlocksFetched)
       merged.incRemoteBlocksFetched(depMetrics.remoteBlocksFetched)
       merged.incRemoteBytesRead(depMetrics.remoteBytesRead)
+      merged.recordsRead += depMetrics.recordsRead
     }
     _shuffleReadMetrics = Some(merged)
   }
@@ -243,11 +244,17 @@ object DataWriteMethod extends Enumeration with Serializable {
 case class InputMetrics(readMethod: DataReadMethod.Value) {
 
   private val _bytesRead: AtomicLong = new AtomicLong()
+  private val _recordsRead: AtomicLong = new AtomicLong()
 
   /**
    * Total bytes read.
    */
   def bytesRead: Long = _bytesRead.get()
+
+  /**
+   * Total records read.
+   */
+  def recordsRead: Long = _recordsRead.get()
   @volatile @transient var bytesReadCallback: Option[() => Long] = None
 
   /**
@@ -255,6 +262,10 @@ case class InputMetrics(readMethod: DataReadMethod.Value) {
    */
   def addBytesRead(bytes: Long) = {
     _bytesRead.addAndGet(bytes)
+  }
+
+  def addRecordsRead(records: Long) = {
+    _recordsRead.addAndGet(records)
   }
 
   /**
@@ -287,6 +298,11 @@ case class OutputMetrics(writeMethod: DataWriteMethod.Value) {
   private var _bytesWritten: Long = _
   def bytesWritten = _bytesWritten
   private[spark] def setBytesWritten(value : Long) = _bytesWritten = value
+
+  /**
+   * Total records written
+   */
+  var recordsWritten: Long = 0L
 }
 
 /**
@@ -334,6 +350,11 @@ class ShuffleReadMetrics extends Serializable {
    * Number of blocks fetched in this shuffle by this task (remote or local)
    */
   def totalBlocksFetched = _remoteBlocksFetched + _localBlocksFetched
+
+  /**
+   * Total number of records read from the shuffle by this task
+   */
+  var recordsRead: Long = _
 }
 
 /**
@@ -358,5 +379,8 @@ class ShuffleWriteMetrics extends Serializable {
   private[spark] def incShuffleWriteTime(value: Long) = _shuffleWriteTime += value
   private[spark] def decShuffleWriteTime(value: Long) = _shuffleWriteTime -= value
   
-
+  /**
+   * Total number of records written from the shuffle by this task
+   */
+  var recordsWritten: Long = _
 }
