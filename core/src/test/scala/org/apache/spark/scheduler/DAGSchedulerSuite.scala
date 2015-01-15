@@ -739,6 +739,52 @@ class DAGSchedulerSuite
     assertDataStructuresEmpty()
   }
 
+  test("Make sure mapStage.pendingtasks is set() " +
+    "while MapStage.isAvailable is true while stage was retry ") {
+    val firstRDD = new MyRDD(sc, 6, Nil)
+    val firstShuffleDep = new ShuffleDependency(firstRDD, null)
+    val firstShuyffleId = firstShuffleDep.shuffleId
+    val shuffleMapRdd = new MyRDD(sc, 6, List(firstShuffleDep))
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
+    val shuffleId = shuffleDep.shuffleId
+    val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
+    submit(reduceRdd, Array(0, 1))
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostB", 1)),
+      (Success, makeMapStatus("hostB", 2)),
+      (Success, makeMapStatus("hostC", 3)),
+      (Success, makeMapStatus("hostB", 4)),
+      (Success, makeMapStatus("hostB", 5)),
+      (Success, makeMapStatus("hostC", 6))
+    ))
+    complete(taskSets(1), Seq(
+      (Success, makeMapStatus("hostA", 1)),
+      (Success, makeMapStatus("hostB", 2)),
+      (Success, makeMapStatus("hostA", 1)),
+      (Success, makeMapStatus("hostB", 2)),
+      (Success, makeMapStatus("hostA", 1))
+    ))
+    runEvent(ExecutorLost("exec-hostA"))
+    runEvent(CompletionEvent(taskSets(1).tasks(0), Resubmitted, null, null, null, null))
+    runEvent(CompletionEvent(taskSets(1).tasks(2), Resubmitted, null, null, null, null))
+    runEvent(CompletionEvent(taskSets(1).tasks(0),
+      FetchFailed(null, firstShuyffleId, -1, 0, "Fetch Mata data failed"),
+      null, null, null, null))
+    scheduler.resubmitFailedStages()
+    runEvent(CompletionEvent(taskSets(1).tasks(0), Success,
+      makeMapStatus("hostC", 1), null, null, null))
+    runEvent(CompletionEvent(taskSets(1).tasks(2), Success,
+      makeMapStatus("hostC", 1), null, null, null))
+    runEvent(CompletionEvent(taskSets(1).tasks(4), Success,
+      makeMapStatus("hostC", 1), null, null, null))
+    runEvent(CompletionEvent(taskSets(1).tasks(5), Success,
+      makeMapStatus("hostB", 2), null, null, null))
+    val stage = scheduler.stageIdToStage(taskSets(1).stageId)
+    assert(stage.attemptId == 2)
+    assert(stage.isAvailable)
+    assert(stage.pendingTasks.size == 0)
+  }
+
   /**
    * Makes sure that failures of stage used by multiple jobs are correctly handled.
    *
