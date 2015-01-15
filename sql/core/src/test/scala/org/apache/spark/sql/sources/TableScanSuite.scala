@@ -323,13 +323,13 @@ class TableScanSuite extends DataSourceTest {
        |  to '10'
        |)
        """.stripMargin
-      // frist create
+    // frist create
+    sql(ddl)
+    // create the existed table again
+    val tableExists = intercept[Exception] {
       sql(ddl)
-      // create the existed table again
-      val tableExists = intercept[Exception] {
-          sql(ddl)
-      }
-      assert(tableExists.getMessage.contains(s"Table already exists: $tableName"))
+    }
+    assert(tableExists.getMessage.contains(s"Table already exists: $tableName"))
   }
 
 
