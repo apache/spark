@@ -15,7 +15,7 @@ class EmailOperator(BaseOperator):
     :type html_content: string
     '''
 
-    template_fields = ('to', 'subject', 'html_content')
+    template_fields = ('subject', 'html_content')
 
     __mapper_args__ = {
         'polymorphic_identity': 'EmailOperator'
