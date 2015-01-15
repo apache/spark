@@ -244,7 +244,7 @@ private[hbase] case class HBaseRelation(
     val byteKeys: Array[Array[Byte]] = htable.getStartKeys
     val ret = ArrayBuffer[ImmutableBytesWritableWrapper]()
 
-    //Since the byteKeys'size will be 1 if there is only one partition in the table,
+    // Since the byteKeys'size will be 1 if there is only one partition in the table,
     // we need to omit the that null element.
     if (!(byteKeys.length == 1 && byteKeys(0).length == 0)) {
       for (byteKey <- byteKeys) {
