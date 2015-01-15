@@ -253,25 +253,25 @@ def initdb(args):
         session.query(models.Connection).delete()
         session.add(
             models.Connection(
-                conn_id='local_mysql', db_type='mysql',
+                conn_id='local_mysql', conn_type='mysql',
                 host='localhost', login='airflow', password='airflow',
                 schema='airflow'))
         session.commit()
         session.add(
             models.Connection(
-                conn_id='mysql_default', db_type='mysql',
+                conn_id='mysql_default', conn_type='mysql',
                 host='localhost', login='airflow', password='airflow',
                 schema='airflow'))
         session.commit()
         session.add(
             models.Connection(
-                conn_id='presto_default', db_type='presto',
+                conn_id='presto_default', conn_type='presto',
                 host='localhost', 
                 schema='hive', port=10001))
         session.commit()
         session.add(
             models.Connection(
-                conn_id='hive_default', db_type='hive',
+                conn_id='hive_default', conn_type='hive',
                 host='localhost', 
                 schema='default', port=10000))
         session.commit()

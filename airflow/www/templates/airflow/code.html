@@ -1,8 +1,10 @@
-{% extends "airflow/dag.html" %}
-{% block title %}Airflow - DAGs{% endblock %}
+{% extends "airflow/master.html" %}
 
 {% block body %}
     {{ super() }}
     <h2>{{ title }}</h2>
-    {{ html_code|safe }}
+    {% if subtitle %}
+        <h5>{{ subtitle }}</h5>
+    {% endif %}
+    <pre><code>{{ code|safe }}</code></pre>
 {% endblock %}
