@@ -18,16 +18,13 @@
 
 package org.apache.spark.sql.hbase
 
-import java.util.{Date, Random}
+import java.util.Date
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hbase.client.HBaseAdmin
-import org.apache.hadoop.hbase.{HBaseConfiguration, HBaseTestingUtility, MiniHBaseCluster}
 import org.apache.spark.sql.SchemaRDD
 import org.apache.spark.sql.catalyst.plans
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.{Logging, SparkConf, SparkContext}
-import org.scalatest.{BeforeAndAfterAll, ConfigMap, FunSuite, Suite}
+import org.apache.spark.Logging
+import org.scalatest.{BeforeAndAfterAll, FunSuite, Suite}
 
 abstract class HBaseIntegrationTestBase
   extends FunSuite with BeforeAndAfterAll with Logging {
@@ -76,7 +73,7 @@ abstract class HBaseIntegrationTestBase
     }
   }
 
-  override protected def afterAll(configMap: ConfigMap): Unit = {
+  override protected def afterAll(): Unit = {
     val msg = s"Test ${getClass.getName} completed at ${(new java.util.Date).toString} duration=${((new java.util.Date).getTime - startTime) / 1000}"
     logInfo(msg)
   }

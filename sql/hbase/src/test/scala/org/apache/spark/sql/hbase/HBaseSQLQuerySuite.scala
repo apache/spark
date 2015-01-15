@@ -775,13 +775,13 @@ class HBaseSQLQuerySuite extends HBaseIntegrationTestBase {
     }
 
     checkAggregation("SELECT k, COUNT(*) FROM testData")
-    checkAggregation("SELECT COUNT(k), COUNT(*) FROM testData", false)
+    checkAggregation("SELECT COUNT(k), COUNT(*) FROM testData", isInvalidQuery = false)
 
     checkAggregation("SELECT v, COUNT(*) FROM testData GROUP BY k")
-    checkAggregation("SELECT COUNT(v), SUM(k) FROM testData GROUP BY k", false)
+    checkAggregation("SELECT COUNT(v), SUM(k) FROM testData GROUP BY k", isInvalidQuery = false)
 
     checkAggregation("SELECT k + 2, COUNT(*) FROM testData GROUP BY k + 1")
-    checkAggregation("SELECT k + 1 + 1, COUNT(*) FROM testData GROUP BY k + 1", false)
+    checkAggregation("SELECT k + 1 + 1, COUNT(*) FROM testData GROUP BY k + 1", isInvalidQuery = false)
   }
 
   test("Test to check we can use Long.MinValue") {

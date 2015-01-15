@@ -162,7 +162,7 @@ class HBaseInsertTableSuite extends QueriesSuiteBase {
 
     assert(testResult.size == 3, s"$testnm failed on size")
 
-    var currentResultRow : Int = 0;
+    var currentResultRow : Int = 0
 
     // check 1st result row
     assert(testResult(currentResultRow).length == 4, s"$testnm failed on row size (# of cols)")

@@ -51,13 +51,13 @@ trait CreateTableAndLoadData extends Logging {
   }
   private[hbase] val CsvPath = tpath(0)
 
-  def createTableAndLoadData = {
+  def createTableAndLoadData(): Unit = {
     createTables(DefaultStagingTableName, DefaultTableName,
       DefaultHbaseStagingTableName, DefaultHbaseTabName)
     loadData(DefaultStagingTableName, DefaultTableName, s"$CsvPath/$DefaultLoadFile")
   }
 
-  def createTables: Unit = {
+  def createTables(): Unit = {
     createTables(DefaultStagingTableName, DefaultTableName,
       DefaultHbaseStagingTableName, DefaultHbaseTabName)
   }

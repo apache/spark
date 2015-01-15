@@ -25,12 +25,15 @@ class QueriesSuiteBase() extends HBaseIntegrationTestBase
     with CreateTableAndLoadData with Logging {
   self: HBaseIntegrationTestBase =>
   val tabName = DefaultTableName
-  createTableAndLoadData
 
-  override protected def afterAll(configMap: ConfigMap): Unit = {
+  override protected def beforeAll() = {
+    createTableAndLoadData()
+  }
+
+  override protected def afterAll(): Unit = {
     TestHbase.sql("Drop Table " + DefaultStagingTableName)
     TestHbase.sql("Drop Table " + DefaultTableName)
-    cleanUp
+    cleanUp()
   }
 
   def runQuery(sql: String) = {

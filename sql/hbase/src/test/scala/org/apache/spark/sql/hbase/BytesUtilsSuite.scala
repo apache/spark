@@ -25,7 +25,7 @@ import org.apache.spark.sql.hbase.util.BytesUtils
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 class BytesUtilsSuite extends FunSuite with BeforeAndAfterAll with Logging {
-  test("byte test") {
+  test("Bytes Ordering Test") {
     val s = Seq(-257, -256, -255, -129, -128, -127, -64, -16, -4, -1,
       0, 1, 4, 16, 64, 127, 128, 129, 255, 256, 257)
     val result = s.map(i => (i, BytesUtils.create(IntegerType).toBytes(i)))
@@ -47,7 +47,7 @@ class BytesUtilsSuite extends FunSuite with BeforeAndAfterAll with Logging {
     result
   }
 
-  test("Bytes Utility") {
+  test("Bytes Utility Test") {
     assert(BytesUtils.toBoolean(BytesUtils.create(BooleanType)
       .toBytes(input = true), 0) === true)
     assert(BytesUtils.toBoolean(BytesUtils.create(BooleanType)
