@@ -13,7 +13,9 @@ markdown
 mysql-python
 pandas
 pygments
+pyhive
 python-dateutil
+requests
 setproctitle
 sphinx
 sphinx_rtd_theme
