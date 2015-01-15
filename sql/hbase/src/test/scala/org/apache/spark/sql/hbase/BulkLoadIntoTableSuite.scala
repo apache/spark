@@ -41,7 +41,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
   test("bulkload parser test, local file") {
 
     val parser = new HBaseSQLParser()
-    val sql = raw"LOAD DATA LOCAL INPATH './usr/file.txt' INTO TABLE tb1"
+    val sql = raw"LOAD PARALL DATA LOCAL INPATH './usr/file.txt' INTO TABLE tb1"
 
     val plan: LogicalPlan = parser(sql)
     assert(plan != null)
@@ -57,7 +57,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
   test("bulkload parser test, load hdfs file") {
 
     val parser = new HBaseSQLParser()
-    val sql = raw"LOAD DATA INPATH '/usr/hdfsfile.txt' INTO TABLE tb1"
+    val sql = raw"LOAD PARALL DATA INPATH '/usr/hdfsfile.txt' INTO TABLE tb1"
     //val sql = "select"
 
     val plan: LogicalPlan = parser(sql)
@@ -73,7 +73,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
   test("bulkload parser test, using delimiter") {
 
     val parser = new HBaseSQLParser()
-    val sql = raw"LOAD DATA INPATH '/usr/hdfsfile.txt' INTO TABLE tb1 FIELDS TERMINATED BY '|' "
+    val sql = raw"LOAD PARALL DATA INPATH '/usr/hdfsfile.txt' INTO TABLE tb1 FIELDS TERMINATED BY '|' "
 
     val plan: LogicalPlan = parser(sql)
     assert(plan != null)
