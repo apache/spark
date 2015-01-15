@@ -33,10 +33,10 @@ object BuildCommons {
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
   val allProjects@Seq(bagel, catalyst, core, graphx, hive, hiveThriftServer, mllib, repl,
-    sql, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingFlume, streamingKafka,
+    sql, hbase, networkCommon, networkShuffle, streaming, streamingFlumeSink, streamingFlume, streamingKafka,
     streamingMqtt, streamingTwitter, streamingZeromq) =
     Seq("bagel", "catalyst", "core", "graphx", "hive", "hive-thriftserver", "mllib", "repl",
-      "sql", "network-common", "network-shuffle", "streaming", "streaming-flume-sink",
+      "sql", "hbase", "network-common", "network-shuffle", "streaming", "streaming-flume-sink",
       "streaming-flume", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
       "streaming-zeromq").map(ProjectRef(buildLocation, _))
 
@@ -159,13 +159,13 @@ object SparkBuild extends PomBuild {
   // Note ordering of these settings matter.
   /* Enable shared settings on all projects */
   (allProjects ++ optionallyEnabledProjects ++ assemblyProjects ++ Seq(spark, tools))
-    .foreach(enable(sharedSettings ++ ExludedDependencies.settings))
+    .foreach(enable(sharedSettings ++ ExcludedDependencies.settings))
 
   /* Enable tests settings for all projects except examples, assembly and tools */
   (allProjects ++ optionallyEnabledProjects).foreach(enable(TestSettings.settings))
 
   // TODO: Add Sql to mima checks
-  allProjects.filterNot(x => Seq(spark, sql, hive, hiveThriftServer, catalyst, repl,
+  allProjects.filterNot(x => Seq(spark, sql, hbase, hive, hiveThriftServer, catalyst, repl,
     networkCommon, networkShuffle, networkYarn).contains(x)).foreach {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
@@ -205,7 +205,7 @@ object Flume {
   This excludes library dependencies in sbt, which are specified in maven but are
   not needed by sbt build.
   */
-object ExludedDependencies {
+object ExcludedDependencies {
   lazy val settings = Seq(
     libraryDependencies ~= { libs => libs.filterNot(_.name == "groovy-all") }
   )
