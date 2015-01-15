@@ -1,8 +1,11 @@
 from datetime import datetime, timedelta
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 from functools import wraps
 import inspect
 import logging
 import re
+import smtplib
 
 from sqlalchemy import event
 from sqlalchemy.pool import Pool
@@ -157,17 +160,19 @@ def ask_yesno(question):
 
 
 def send_email(to, subject, html_content):
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
     SMTP_HOST = conf.get('smtp', 'SMTP_HOST')
     SMTP_MAIL_FROM = conf.get('smtp', 'SMTP_MAIL_FROM')
     SMTP_PORT = conf.get('smtp', 'SMTP_PORT')
     SMTP_USER = conf.get('smtp', 'SMTP_USER')
     SMTP_PASSWORD = conf.get('smtp', 'SMTP_PASSWORD')
 
-    if type(to) is type(""):
-        to = re.split(r'[;,]\s*', to)
+    if isinstance(to, unicode) or isinstance(to, str):
+        if ',' in to:
+            to = to.split(',')
+        elif ';' in to:
+            to = to.split(';')
+        else:
+            to = [to]
 
     msg = MIMEMultipart('alternative')
     msg['Subject'] = subject

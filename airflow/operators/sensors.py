@@ -45,8 +45,8 @@ class BaseSensorOperator(BaseOperator):
 
 class SqlSensor(BaseSensorOperator):
     """
-    Will keep trying until sql returns no row, or if the first cell
-    in (0, '0', '')
+    Runs a sql statement until a criteria is met. It will keep trying until
+    sql returns no row, or if the first cell in (0, '0', '').
     """
     template_fields = ('sql',)
     template_ext = ('.hql', '.sql',)

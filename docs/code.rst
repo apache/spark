@@ -15,9 +15,8 @@ Operators
 Operators allows to generate a certain type of task on the graph.
 
 .. automodule:: operators
-    :members: MySqlOperator, BashOperator, MySqlSensorOperator, ExternalTaskSensor, HiveOperator
     :show-inheritance:
-    :members: MySqlOperator, BashOperator, MySqlSensorOperator, ExternalTaskSensor
+    :members: MySqlOperator, BashOperator, ExternalTaskSensor, HiveOperator, SqlSensor, HivePartitionSensor
 
 Hooks
 -----
