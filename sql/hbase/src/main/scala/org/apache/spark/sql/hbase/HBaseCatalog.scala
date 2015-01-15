@@ -89,7 +89,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
   val caseSensitive = true
 
   private def createHBaseUserTable(tableName: String,
-                                   families: Seq[String],
+                                   families: Set[String],
                                    splitKeys: Array[Array[Byte]]): Unit = {
     val tableDescriptor = new HTableDescriptor(TableName.valueOf(tableName))
     families.foreach(family => tableDescriptor.addFamily(new HColumnDescriptor(family)))
@@ -108,7 +108,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
     // create a new hbase table for the user if not exist
     val nonKeyColumns = allColumns.filter(_.isInstanceOf[NonKeyColumn])
       .asInstanceOf[Seq[NonKeyColumn]]
-    val families: Seq[String] = nonKeyColumns.groupBy(_.family).unzip._1.toSeq
+    val families = nonKeyColumns.map(_.family).toSet
     if (!checkHBaseTableExists(hbaseTableName)) {
       createHBaseUserTable(hbaseTableName, families, splitKeys)
     } else {
