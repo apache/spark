@@ -315,7 +315,7 @@ class TableScanSuite extends DataSourceTest {
       (1 to 10).map(Row(_)).toSeq)
   }
 
-  test("create table exists") {
+  test("create exists table test") {
     val tableName = "createdTable"
     val ddl = s"""
        |CREATE TEMPORARY TABLE $tableName (number int)
