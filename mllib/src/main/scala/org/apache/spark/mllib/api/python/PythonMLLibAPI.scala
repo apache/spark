@@ -280,6 +280,46 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
+   * Java stub for Python mllib GaussianMixtureEM.train()
+   */
+  def trainGaussianMixtureEM(
+      data: JavaRDD[Vector], 
+      k: Int, 
+      convergenceTol: Double, 
+      maxIterations: Int): JList[Object]  = {
+    val gmmAlg = new GaussianMixtureEM()
+      .setK(k)
+      .setConvergenceTol(convergenceTol)
+      .setMaxIterations(maxIterations)
+    try {
+      val model = gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
+      List(model.weight, model.mu, model.sigma).
+      map(_.asInstanceOf[Object]).asJava
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
+
+  /**
+   * Java stub for Python mllib GaussianMixtureModel.predictSoft()
+   */
+  def findPredict(
+      data: JavaRDD[Vector],
+      wt: Object,
+      mu: Array[Object],
+      si: Array[Object]):  RDD[Array[Double]]  = {
+    try {
+      val weight = wt.asInstanceOf[Array[Double]]
+      val mean = mu.map(_.asInstanceOf[Vector])
+      val sigma = si.map(_.asInstanceOf[Matrix])
+      val model = new GaussianMixtureModel(weight, mean, sigma)
+      model.predictSoft(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
+    } finally {
+      data.rdd.unpersist(blocking = false)
+    }
+  }
+
+  /**
    * A Wrapper of MatrixFactorizationModel to provide helpfer method for Python
    */
   private[python] class MatrixFactorizationModelWrapper(model: MatrixFactorizationModel)
