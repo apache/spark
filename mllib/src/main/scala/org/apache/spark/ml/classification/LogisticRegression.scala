@@ -20,7 +20,7 @@ package org.apache.spark.ml.classification
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
-import org.apache.spark.mllib.linalg.{BLAS, Vector, VectorUDT, Vectors}
+import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.sql._
 import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
@@ -52,13 +52,9 @@ class LogisticRegression
   def setMaxIter(value: Int): this.type = set(maxIter, value)
   def setThreshold(value: Double): this.type = set(threshold, value)
 
-  override def fit(dataset: SchemaRDD, paramMap: ParamMap): LogisticRegressionModel = {
-    // Check schema
-    transformSchema(dataset.schema, paramMap, logging = true)
-
+  override protected def train(dataset: SchemaRDD, paramMap: ParamMap): LogisticRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
     val oldDataset = extractLabeledPoints(dataset, paramMap)
-    val map = this.paramMap ++ paramMap
     val handlePersistence = dataset.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) {
       oldDataset.persist(StorageLevel.MEMORY_AND_DISK)
@@ -67,21 +63,16 @@ class LogisticRegression
     // Train model
     val lr = new LogisticRegressionWithLBFGS
     lr.optimizer
-      .setRegParam(map(regParam))
-      .setNumIterations(map(maxIter))
+      .setRegParam(paramMap(regParam))
+      .setNumIterations(paramMap(maxIter))
     val oldModel = lr.run(oldDataset)
-    val lrm = new LogisticRegressionModel(this, map, oldModel.weights, oldModel.intercept)
+    val lrm = new LogisticRegressionModel(this, paramMap, oldModel.weights, oldModel.intercept)
 
     if (handlePersistence) {
       oldDataset.unpersist()
     }
-
-    // copy model params
-    Params.inheritValues(map, this, lrm)
     lrm
   }
-
-  override protected def featuresDataType: DataType = new VectorUDT
 }
 
 
@@ -215,6 +206,4 @@ class LogisticRegressionModel private[ml] (
     Params.inheritValues(this.paramMap, this, m)
     m
   }
-
-  override protected def featuresDataType: DataType = new VectorUDT
 }

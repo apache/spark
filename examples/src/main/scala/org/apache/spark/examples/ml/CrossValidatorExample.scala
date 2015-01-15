@@ -104,7 +104,7 @@ object CrossValidatorExample {
       .select('id, 'text, 'probability, 'prediction)
       .collect()
       .foreach { case Row(id: Long, text: String, prob: Vector, prediction: Double) =>
-      println("(" + id + ", " + text + ") --> prob=" + prob + ", prediction=" + prediction)
+      println(s"($id, $text) --> prob=$prob, prediction=$prediction")
     }
 
     sc.stop()

@@ -19,7 +19,7 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param.{Params, ParamMap, HasMaxIter, HasRegParam}
-import org.apache.spark.mllib.linalg.{VectorUDT, BLAS, Vector}
+import org.apache.spark.mllib.linalg.{BLAS, Vector}
 import org.apache.spark.mllib.regression.LinearRegressionWithSGD
 import org.apache.spark.sql._
 import org.apache.spark.storage.StorageLevel
@@ -45,13 +45,9 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
   def setRegParam(value: Double): this.type = set(regParam, value)
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
-  override def fit(dataset: SchemaRDD, paramMap: ParamMap): LinearRegressionModel = {
-    // Check schema
-    transformSchema(dataset.schema, paramMap, logging = true)
-
+  override protected def train(dataset: SchemaRDD, paramMap: ParamMap): LinearRegressionModel = {
     // Extract columns from data.  If dataset is persisted, do not persist oldDataset.
     val oldDataset = extractLabeledPoints(dataset, paramMap)
-    val map = this.paramMap ++ paramMap
     val handlePersistence = dataset.getStorageLevel == StorageLevel.NONE
     if (handlePersistence) {
       oldDataset.persist(StorageLevel.MEMORY_AND_DISK)
@@ -60,21 +56,16 @@ class LinearRegression extends Regressor[Vector, LinearRegression, LinearRegress
     // Train model
     val lr = new LinearRegressionWithSGD()
     lr.optimizer
-      .setRegParam(map(regParam))
-      .setNumIterations(map(maxIter))
+      .setRegParam(paramMap(regParam))
+      .setNumIterations(paramMap(maxIter))
     val model = lr.run(oldDataset)
-    val lrm = new LinearRegressionModel(this, map, model.weights, model.intercept)
+    val lrm = new LinearRegressionModel(this, paramMap, model.weights, model.intercept)
 
     if (handlePersistence) {
       oldDataset.unpersist()
     }
-
-    // copy model params
-    Params.inheritValues(map, this, lrm)
     lrm
   }
-
-  override protected def featuresDataType: DataType = new VectorUDT
 }
 
 /**
@@ -100,6 +91,4 @@ class LinearRegressionModel private[ml] (
     Params.inheritValues(this.paramMap, this, m)
     m
   }
-
-  override protected def featuresDataType: DataType = new VectorUDT
 }

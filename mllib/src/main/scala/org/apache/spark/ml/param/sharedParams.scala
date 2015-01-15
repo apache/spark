@@ -18,7 +18,9 @@
 package org.apache.spark.ml.param
 
 /* NOTE TO DEVELOPERS:
- * If you add these parameter traits into your algorithm, you need to add a setter method as well.
+ * If you mix these parameter traits into your algorithm, please add a setter method as well
+ * so that users may use a builder pattern:
+ *  val myLearner = new MyLearner().setParam1(x).setParam2(y)...
  */
 
 private[ml] trait HasRegParam extends Params {

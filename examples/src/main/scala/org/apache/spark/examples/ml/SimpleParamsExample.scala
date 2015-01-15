@@ -94,7 +94,7 @@ object SimpleParamsExample {
       .select('features, 'label, 'myProbability, 'prediction)
       .collect()
       .foreach { case Row(features: Vector, label: Double, prob: Vector, prediction: Double) =>
-        println("(" + features + ", " + label + ") -> prob=" + prob + ", prediction=" + prediction)
+        println("($features, $label) -> prob=$prob, prediction=$prediction")
       }
 
     sc.stop()

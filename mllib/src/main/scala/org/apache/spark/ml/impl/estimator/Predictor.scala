@@ -20,7 +20,7 @@ package org.apache.spark.ml.impl.estimator
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{VectorUDT, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -84,6 +84,31 @@ abstract class Predictor[
   def setFeaturesCol(value: String): Learner = set(featuresCol, value).asInstanceOf[Learner]
   def setPredictionCol(value: String): Learner = set(predictionCol, value).asInstanceOf[Learner]
 
+  override def fit(dataset: SchemaRDD, paramMap: ParamMap): M = {
+    // This handles a few items such as schema validation.
+    // Developers only need to implement train().
+    transformSchema(dataset.schema, paramMap, logging = true)
+    val map = this.paramMap ++ paramMap
+    val model = train(dataset, map)
+    Params.inheritValues(map, this, model) // copy params to model
+    model
+  }
+
+  /**
+   * :: DeveloperApi ::
+   *
+   * Train a model using the given dataset and parameters.
+   * Developers can implement this instead of [[fit()]] to avoid dealing with schema validation
+   * and copying parameters into the model.
+   *
+   * @param dataset  Training dataset
+   * @param paramMap  Parameter map.  Unlike [[fit()]]'s paramMap, this paramMap has already
+   *                  been combined with the embedded ParamMap.
+   * @return  Fitted model
+   */
+  @DeveloperApi
+  protected def train(dataset: SchemaRDD, paramMap: ParamMap): M
+
   /**
    * :: DeveloperApi ::
    *
@@ -91,9 +116,11 @@ abstract class Predictor[
    *
    * This is used by [[validateAndTransformSchema()]].
    * This workaround is needed since SQL has different APIs for Scala and Java.
+   *
+   * The default value is VectorUDT, but it may be overridden if FeaturesType is not Vector.
    */
   @DeveloperApi
-  protected def featuresDataType: DataType
+  protected def featuresDataType: DataType = new VectorUDT
 
   private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     validateAndTransformSchema(schema, paramMap, fitting = true, featuresDataType)
@@ -138,9 +165,11 @@ abstract class PredictionModel[FeaturesType, M <: PredictionModel[FeaturesType, 
    *
    * This is used by [[validateAndTransformSchema()]].
    * This workaround is needed since SQL has different APIs for Scala and Java.
+   *
+   * The default value is VectorUDT, but it may be overridden if FeaturesType is not Vector.
    */
   @DeveloperApi
-  protected def featuresDataType: DataType
+  protected def featuresDataType: DataType = new VectorUDT
 
   private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
     validateAndTransformSchema(schema, paramMap, fitting = false, featuresDataType)
