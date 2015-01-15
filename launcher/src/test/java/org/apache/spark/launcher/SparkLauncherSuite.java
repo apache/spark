@@ -68,39 +68,6 @@ public class SparkLauncherSuite {
     assertEquals(0, app.waitFor());
   }
 
-  @Test
-  public void testThreadAppLauncher() throws Exception {
-    // Do this to avoid overwriting the main test log file.
-    System.setProperty("test.name", "-testThreadAppLauncher");
-
-    SparkLauncher launcher = new SparkLauncher()
-      .setSparkHome(System.getProperty("spark.test.home"))
-      .setMaster("local")
-      .setAppResource("spark-internal")
-      .setConf(SparkLauncher.DRIVER_EXTRA_CLASSPATH, System.getProperty("java.class.path"))
-      .setMainClass(SparkLauncherTestApp.class.getName())
-      .addAppArgs("thread");
-
-    printArgs(launcher.buildShellCommand());
-
-    Thread app = launcher.start(new Thread.UncaughtExceptionHandler() {
-      @Override
-      public void uncaughtException(Thread t, Throwable e) {
-        String msg = "Uncaught exception in app.";
-        LOG.error(msg, e);
-        fail(msg);
-      }
-    }, true);
-    app.join();
-  }
-
-  @Test
-  public void testInProcessDriverArgValidator() throws Exception {
-    testInvalidDriverConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS);
-    testInvalidDriverConf(SparkLauncher.DRIVER_MEMORY);
-    testInvalidDriverConf(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH);
-  }
-
   private void testCmdBuilder(boolean isDriver) throws Exception {
     String deployMode = isDriver ? "client" : "cluster";
 
@@ -182,22 +149,6 @@ public class SparkLauncherSuite {
     assertEquals("foo", conf.get("spark.foo"));
   }
 
-  private void testInvalidDriverConf(String key) throws Exception {
-    try {
-      new SparkLauncher()
-        .setSparkHome(System.getProperty("spark.test.home"))
-        .setAppResource("spark-internal")
-        .setMainClass(SparkLauncherTestApp.class.getName())
-        .addAppArgs("thread")
-        .setConf(key, "foo")
-        .start(null, true);
-      fail("Should have failed to start app.");
-    } catch (IllegalStateException e) {
-      assertTrue("Correct exception should be thrown.",
-        e.getMessage().indexOf("running in-process") > 0);
-    }
-  }
-
   private String findArgValue(List<String> cmd, String name) {
     for (int i = 0; i < cmd.size(); i++) {
       if (cmd.get(i).equals(name)) {
@@ -252,13 +203,9 @@ public class SparkLauncherSuite {
   public static class SparkLauncherTestApp {
 
     public static void main(String[] args) throws Exception {
-      if (args[0].equals("proc")) {
-        assertEquals("bar", System.getProperty("foo"));
-      } else if (args[0].equals("arg")) {
-        assertEquals("newline=", args[1]);
-      } else {
-        assertEquals("thread", args[0]);
-      }
+      assertEquals(1, args.length);
+      assertEquals("proc", args[0]);
+      assertEquals("bar", System.getProperty("foo"));
       assertEquals("local", System.getProperty(SparkLauncher.SPARK_MASTER));
     }
 

@@ -19,15 +19,11 @@ package org.apache.spark.launcher;
 
 import java.io.File;
 import java.io.IOException;
-import java.lang.reflect.Method;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Launcher for Spark applications.
@@ -42,8 +38,6 @@ import java.util.concurrent.atomic.AtomicLong;
  * variables from the "spark-env.sh" or "spark-env.cmd" scripts in the configuration directory.
  */
 public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
-
-  private static final AtomicLong THREAD_ID = new AtomicLong();
 
   protected boolean verbose;
   protected String appName;
@@ -137,78 +131,6 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
   public SparkLauncher setVerbose(boolean verbose) {
     this.verbose = verbose;
     return this;
-  }
-
-  /**
-   * Starts a new thread that will run the Spark application.
-   * <p/>
-   * The application will run on a separate thread and use a separate, isolated class loader.
-   * No classes or resources from the current thread's class loader will be visible to the app.
-   * <p/>
-   * This mode does not support certain configuration parameters, like configuring the amount of
-   * driver memory or custom driver command line options. If such configuration is detected, an
-   * exception will be thrown.
-   * <p/>
-   * This is extremely experimental and should not be used in production environments.
-   * <p/>
-   * NOTE: SparkSubmit uses system properties to propagate some configuration value to the app
-   * are run concurrently, they may affect each other's configurations.
-   * <p/>
-   * NOTE: for users running JDK versions older than 8, this option can add a lot of overhead
-   * to the VM's perm gen.
-   *
-   * @param exceptionHandler Optional handler for handling exceptions in the app thread.
-   * @param daemon Whether to start a daemon thread.
-   * @return A non-daemon thread that will run the application using SparkSubmit. The thread will
-   *         already be started.
-   */
-  public Thread start(Thread.UncaughtExceptionHandler handler, boolean daemon) throws IOException {
-    // Do some sanity checking that incompatible driver options are not used, because they
-    // cannot be set in this mode.
-    Properties props = loadPropertiesFile();
-    String extraClassPath = null;
-    if (isClientMode(props)) {
-      checkState(
-        find(DRIVER_EXTRA_JAVA_OPTIONS, conf, props) == null,
-        "Cannot set driver VM options when running in-process.");
-      checkState(
-        find(DRIVER_EXTRA_LIBRARY_PATH, conf, props) == null,
-        "Cannot set native library path when running in-process.");
-      checkState(
-        find(DRIVER_MEMORY, conf, props) == null,
-        "Cannot set driver memory when running in-process.");
-      extraClassPath = find(DRIVER_EXTRA_CLASSPATH, conf, props);
-    }
-
-    List<String> cp = buildClassPath(extraClassPath);
-    URL[] cpUrls = new URL[cp.size()];
-    int idx = 0;
-    for (String entry : cp) {
-      cpUrls[idx++] = new File(entry).toURI().toURL();
-    }
-
-    URLClassLoader cl = new URLClassLoader(cpUrls, null);
-
-    Thread appThread;
-    try {
-      Class<?> sparkSubmit = cl.loadClass("org.apache.spark.deploy.SparkSubmit");
-      Method main = sparkSubmit.getDeclaredMethod("main", String[].class);
-      List<String> args = buildSparkSubmitArgs();
-      appThread = new Thread(new SparkSubmitRunner(main, args));
-    } catch (ClassNotFoundException cnfe) {
-      throw new IOException(cnfe);
-    } catch (NoSuchMethodException nsme) {
-      throw new IOException(nsme);
-    }
-
-    appThread.setName("SparkLauncher-Submit-" + THREAD_ID.incrementAndGet());
-    appThread.setContextClassLoader(cl);
-    if (handler != null) {
-      appThread.setUncaughtExceptionHandler(handler);
-    }
-    appThread.setDaemon(daemon);
-    appThread.start();
-    return appThread;
   }
 
   /**
@@ -338,29 +260,6 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
       "client".equals(deployMode) ||
       "yarn-client".equals(userMaster) ||
       (deployMode == null && !userMaster.startsWith("yarn-"));
-  }
-
-  private static class SparkSubmitRunner implements Runnable {
-
-    private final Method main;
-    private final Object args;
-
-    SparkSubmitRunner(Method main, List<String> args) {
-      this.main = main;
-      this.args = args.toArray(new String[args.size()]);
-    }
-
-    @Override
-    public void run() {
-      try {
-        main.invoke(null, args);
-      } catch (RuntimeException re) {
-        throw re;
-      } catch (Exception e) {
-        throw new RuntimeException(e);
-      }
-    }
-
   }
 
 }
