@@ -3,7 +3,7 @@ layout: global
 title: Spark ML Programming Guide
 ---
 
-`spark.ml` is a new packaged introduced in Spark 1.2, which aims to provide a uniform set of
+`spark.ml` is a new package introduced in Spark 1.2, which aims to provide a uniform set of
 high-level APIs that help users create and tune practical machine learning pipelines.
 It is currently an alpha component, and we would like to hear back from the community about
 how it fits real-world use cases and how it could be improved.
