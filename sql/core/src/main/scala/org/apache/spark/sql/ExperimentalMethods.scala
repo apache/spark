@@ -15,29 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark.sql
 
-import java.nio.ByteBuffer
-
-import org.apache.spark.util.SerializableBuffer
+import org.apache.spark.annotation.Experimental
 
 /**
- * Description of a task that gets passed onto executors to be executed, usually created by
- * [[TaskSetManager.resourceOffer]].
+ * Holder for experimental methods for the bravest. We make NO guarantee about the stability
+ * regarding binary compatibility and source compatibility of methods here.
  */
-private[spark] class TaskDescription(
-    val taskId: Long,
-    val attemptNumber: Int,
-    val executorId: String,
-    val name: String,
-    val index: Int,    // Index within this task's TaskSet
-    _serializedTask: ByteBuffer)
-  extends Serializable {
+@Experimental
+class ExperimentalMethods protected[sql](sqlContext: SQLContext) {
 
-  // Because ByteBuffers are not serializable, wrap the task in a SerializableBuffer
-  private val buffer = new SerializableBuffer(_serializedTask)
+  /**
+   * Allows extra strategies to be injected into the query planner at runtime.  Note this API
+   * should be consider experimental and is not intended to be stable across releases.
+   */
+  @Experimental
+  var extraStrategies: Seq[Strategy] = Nil
 
-  def serializedTask: ByteBuffer = buffer.value
-
-  override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
 }

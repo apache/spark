@@ -20,7 +20,7 @@ package org.apache.spark.sql.types
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.decimal.Decimal
+import org.apache.spark.sql.types.Decimal
 
 
 protected[sql] object DataTypeConversions {

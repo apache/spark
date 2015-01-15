@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{SchemaRDD, SQLConf, SQLContext}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Row, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.{SQLConf, SQLContext}
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -137,14 +137,12 @@ case class CacheTableCommand(
     isLazy: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    import sqlContext._
-
-    plan.foreach(_.registerTempTable(tableName))
-    cacheTable(tableName)
+    plan.foreach(p => new SchemaRDD(sqlContext, p).registerTempTable(tableName))
+    sqlContext.cacheTable(tableName)
 
     if (!isLazy) {
       // Performs eager caching
-      table(tableName).count()
+      sqlContext.table(tableName).count()
     }
 
     Seq.empty[Row]

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.types.decimal
+package org.apache.spark.sql.types
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -28,7 +28,7 @@ import org.apache.spark.annotation.DeveloperApi
  * - Otherwise, the decimal value is longVal / (10 ** _scale)
  */
 final class Decimal extends Ordered[Decimal] with Serializable {
-  import Decimal.{MAX_LONG_DIGITS, POW_10, ROUNDING_MODE, BIG_DEC_ZERO}
+  import org.apache.spark.sql.types.Decimal.{BIG_DEC_ZERO, MAX_LONG_DIGITS, POW_10, ROUNDING_MODE}
 
   private var decimalVal: BigDecimal = null
   private var longVal: Long = 0L

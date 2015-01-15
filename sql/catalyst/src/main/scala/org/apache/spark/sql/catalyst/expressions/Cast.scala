@@ -23,7 +23,6 @@ import java.text.{DateFormat, SimpleDateFormat}
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.decimal.Decimal
 
 /** Cast the child expression to the target data type. */
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with Logging {

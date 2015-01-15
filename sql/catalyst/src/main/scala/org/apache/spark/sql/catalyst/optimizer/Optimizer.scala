@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.plans.LeftSemi
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.decimal.Decimal
 
 abstract class Optimizer extends RuleExecutor[LogicalPlan]
 

@@ -25,7 +25,6 @@ import org.apache.spark.sql.json.JsonRDD.{compatibleType, enforceCorrectType}
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.decimal.Decimal
 import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 
 class JsonSuite extends QueryTest {

@@ -22,7 +22,7 @@ import scala.util.parsing.combinator.syntactical.StandardTokenParsers
 import scala.util.parsing.combinator.PackratParsers
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{SchemaRDD, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.SqlLexical
 import org.apache.spark.sql.execution.RunnableCommand
@@ -234,9 +234,7 @@ private [sql] case class CreateTempTableUsing(
 
   def run(sqlContext: SQLContext) = {
     val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
-
-    sqlContext
-      .baseRelationToSchemaRDD(resolved.relation)
+    new SchemaRDD(sqlContext, LogicalRelation(resolved.relation))
       .registerTempTable(tableIdentifier.mkString("."))
     Seq.empty
   }
