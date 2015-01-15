@@ -332,7 +332,8 @@ private[spark] object Accumulators {
         // is valid. 
         originals(id).get match {
           case Some(accum) => accum.asInstanceOf[Accumulable[Any, Any]] ++= value
-          case None => // Do nothing   
+          case None => 
+            throw new IllegalAccessError("Attempted to access garbage collected Accumulator.")   
         }
       }
     }
