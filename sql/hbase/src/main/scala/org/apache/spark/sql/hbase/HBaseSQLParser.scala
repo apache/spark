@@ -58,6 +58,7 @@ class HBaseSQLParser extends SqlParser {
   protected val LONG = Keyword("LONG")
   protected val MAPPED = Keyword("MAPPED")
   protected val PRIMARY = Keyword("PRIMARY")
+  protected val PARALL = Keyword("PARALL")
   protected val SHORT = Keyword("SHORT")
   protected val SHOW = Keyword("SHOW")
   protected val TABLES = Keyword("TABLES")
@@ -232,13 +233,18 @@ class HBaseSQLParser extends SqlParser {
   // Load syntax:
   // LOAD DATA [LOCAL] INPATH filePath [OVERWRITE] INTO TABLE tableName [FIELDS TERMINATED BY char]
   protected lazy val load: Parser[LogicalPlan] =
-    (LOAD ~> DATA ~> LOCAL.?) ~
+    (LOAD ~> PARALL.?) ~ (DATA ~> LOCAL.?) ~
       (INPATH ~> stringLit) ~
       (opt(OVERWRITE) ~> INTO ~> TABLE ~> ident) ~
       (FIELDS ~> TERMINATED ~> BY ~> stringLit).? <~ opt(";") ^^ {
-      case isLocal ~ filePath ~ table ~ delimiter =>
-        ParallelizedBulkLoadIntoTableCommand(filePath,
-          table, isLocal.isDefined, delimiter)
+      case isparall ~ isLocal ~ filePath ~ table ~ delimiter =>
+        if(isparall.isDefined) {
+          ParallelizedBulkLoadIntoTableCommand(filePath,
+            table, isLocal.isDefined, delimiter)
+        } else {
+          BulkLoadIntoTableCommand(filePath,
+            table, isLocal.isDefined, delimiter)
+        }
     }
 
   // syntax:
