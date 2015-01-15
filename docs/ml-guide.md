@@ -3,13 +3,16 @@ layout: global
 title: Spark ML Programming Guide
 ---
 
-Spark ML is Spark's new machine learning package.  It is currently an alpha component but is potentially a successor to [MLlib](mllib-guide.html). The `spark.ml` package aims to replace the old APIs with a cleaner, more uniform set of APIs which will help users create full machine learning pipelines.
+`spark.ml` is a new package introduced in Spark 1.2, which aims to provide a uniform set of
+high-level APIs that help users create and tune practical machine learning pipelines.
+It is currently an alpha component, and we would like to hear back from the community about
+how it fits real-world use cases and how it could be improved.
 
-MLlib vs. Spark ML:
-
-* Users can use algorithms from either of the two packages, but APIs may differ.  Currently, `spark.ml` offers a subset of the algorithms from `spark.mllib`. Since Spark ML is an alpha component, its API may change in future releases.
-* Developers should contribute new algorithms to `spark.mllib` and can optionally contribute to `spark.ml`.  See below for more details.
-* Spark ML only has Scala and Java APIs, whereas MLlib also has a Python API.
+Note that we will keep supporting and adding features to `spark.mllib` along with the
+development of `spark.ml`.
+Users should be comfortable using `spark.mllib` features and expect more features coming.
+Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
+to `spark.ml`.
 
 **Table of Contents**
 
