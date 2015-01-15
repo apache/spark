@@ -112,48 +112,46 @@ class TableScanSuite extends DataSourceTest {
       Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(new Date((i + 2) * 8640000)))))
   }.toSeq
 
-  before {
-    sql(
-      """
-        |CREATE TEMPORARY TABLE oneToTen
-        |USING org.apache.spark.sql.sources.SimpleScanSource
-        |OPTIONS (
-        |  From '1',
-        |  To '10'
-        |)
-      """.stripMargin)
+  sql(
+    """
+      |CREATE TEMPORARY TABLE oneToTen
+      |USING org.apache.spark.sql.sources.SimpleScanSource
+      |OPTIONS (
+      |  From '1',
+      |  To '10'
+      |)
+    """.stripMargin)
 
-    sql(
-      """
-        |CREATE TEMPORARY TABLE tableWithSchema (
-        |`string$%Field` stRIng,
-        |binaryField binary,
-        |`booleanField` boolean,
-        |ByteField tinyint,
-        |shortField smaLlint,
-        |int_Field iNt,
-        |`longField_:,<>=+/~^` Bigint,
-        |floatField flOat,
-        |doubleField doubLE,
-        |decimalField1 decimal,
-        |decimalField2 decimal(9,2),
-        |dateField dAte,
-        |timestampField tiMestamp,
-        |varcharField varchaR(12),
-        |arrayFieldSimple Array<inT>,
-        |arrayFieldComplex Array<Map<String, Struct<key:bigInt>>>,
-        |mapFieldSimple MAP<iNt, StRing>,
-        |mapFieldComplex Map<Map<stRING, fLOAT>, Struct<key:bigInt>>,
-        |structFieldSimple StRuct<key:INt, Value:STrINg>,
-        |structFieldComplex StRuct<key:Array<String>, Value:struct<`value_(2)`:Array<date>>>
-        |)
-        |USING org.apache.spark.sql.sources.AllDataTypesScanSource
-        |OPTIONS (
-        |  From '1',
-        |  To '10'
-        |)
-      """.stripMargin)
-  }
+  sql(
+    """
+      |CREATE TEMPORARY TABLE tableWithSchema (
+      |`string$%Field` stRIng,
+      |binaryField binary,
+      |`booleanField` boolean,
+      |ByteField tinyint,
+      |shortField smaLlint,
+      |int_Field iNt,
+      |`longField_:,<>=+/~^` Bigint,
+      |floatField flOat,
+      |doubleField doubLE,
+      |decimalField1 decimal,
+      |decimalField2 decimal(9,2),
+      |dateField dAte,
+      |timestampField tiMestamp,
+      |varcharField varchaR(12),
+      |arrayFieldSimple Array<inT>,
+      |arrayFieldComplex Array<Map<String, Struct<key:bigInt>>>,
+      |mapFieldSimple MAP<iNt, StRing>,
+      |mapFieldComplex Map<Map<stRING, fLOAT>, Struct<key:bigInt>>,
+      |structFieldSimple StRuct<key:INt, Value:STrINg>,
+      |structFieldComplex StRuct<key:Array<String>, Value:struct<`value_(2)`:Array<date>>>
+      |)
+      |USING org.apache.spark.sql.sources.AllDataTypesScanSource
+      |OPTIONS (
+      |  From '1',
+      |  To '10'
+      |)
+    """.stripMargin)
 
   sqlTest(
     "SELECT * FROM oneToTen",
@@ -315,11 +313,11 @@ class TableScanSuite extends DataSourceTest {
       (1 to 10).map(Row(_)).toSeq)
   }
 
-  test("create exists table test") {
+  test("SPARK-5263 create exists table test") {
     val tableName = "createdTable"
     val ddl = s"""
-       |CREATE TEMPORARY TABLE $tableName (number int)
-       |USING org.apache.spark.sql.sources.SimpleScanSource
+       |CREATE TEMPORARY TABLE $tableName
+       |USING org.apache.spark.sql.sources
        |OPTIONS (
        |  from '1',
        |  to '10'
@@ -331,7 +329,7 @@ class TableScanSuite extends DataSourceTest {
       val tableExists = intercept[Exception] {
           sql(ddl)
       }
-      assert(tableExists.getMessage.contains(s"Table $tableName already exists."))
+      assert(tableExists.getMessage.contains(s"Table already exists: $tableName"))
   }
 
 

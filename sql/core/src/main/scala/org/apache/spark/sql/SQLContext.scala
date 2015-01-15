@@ -298,7 +298,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def registerRDDAsTable(rdd: SchemaRDD, tableName: String): Unit = {
-    if(catalog.tableExists(Seq(tableName))) sys.error(s"Table $tableName already exists.")
+    if(catalog.tableExists(Seq(tableName))) sys.error(s"Table already exists: $tableName")
     else catalog.registerTable(Seq(tableName), rdd.queryExecution.logical)
   }
 
