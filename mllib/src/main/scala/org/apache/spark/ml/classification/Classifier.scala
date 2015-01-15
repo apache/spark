@@ -23,6 +23,8 @@ import org.apache.spark.ml.param.{Params, ParamMap, HasRawPredictionCol}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Star
+import org.apache.spark.sql.types.{DataType, StructType}
+
 
 /**
  * :: DeveloperApi ::

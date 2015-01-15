@@ -24,7 +24,10 @@ import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.sql._
 import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
+import org.apache.spark.sql.catalyst.analysis.Star
+import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.storage.StorageLevel
+
 
 /**
  * Params for logistic regression.

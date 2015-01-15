@@ -25,6 +25,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.types.DoubleType
 
+
 /**
  * :: AlphaComponent ::
  *

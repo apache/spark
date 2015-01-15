@@ -18,12 +18,12 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.ml.classification.{Classifier, ClassifierParams, ClassificationModel}
 import org.apache.spark.ml.param.{Params, IntParam, ParamMap}
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.{SchemaRDD, Row, SQLContext}
+
 
 /**
  * A simple example demonstrating how to write your own learning algorithm using Estimator,

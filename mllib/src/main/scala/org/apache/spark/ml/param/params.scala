@@ -24,7 +24,8 @@ import java.lang.reflect.Modifier
 
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi}
 import org.apache.spark.ml.Identifiable
-import org.apache.spark.sql._
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
+
 
 /**
  * :: AlphaComponent ::

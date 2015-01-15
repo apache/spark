@@ -22,6 +22,8 @@ import org.apache.spark.ml.param.{HasProbabilityCol, ParamMap, Params}
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Star
+import org.apache.spark.sql.types.{DataType, StructType}
+
 
 /**
  * Params for probabilistic classification.
