@@ -71,7 +71,7 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
-  private[sql] override lazy val conf: SQLConf = new SQLConf {
+  protected[sql] override lazy val conf: SQLConf = new SQLConf {
     override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
   }
 
@@ -348,7 +348,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   val hivePlanner = new SparkPlanner with HiveStrategies {
     val hiveContext = self
 
-    override def strategies: Seq[Strategy] = extraStrategies ++ Seq(
+    override def strategies: Seq[Strategy] = experimental.extraStrategies ++ Seq(
       DataSourceStrategy,
       HiveCommandStrategy(self),
       HiveDDLStrategy,
