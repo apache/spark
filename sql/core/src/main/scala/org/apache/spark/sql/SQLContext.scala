@@ -17,15 +17,16 @@
 
 package org.apache.spark.sql
 
+import java.beans.Introspector
 import java.util.Properties
 
 import scala.collection.immutable
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
@@ -36,9 +37,9 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.json._
-import org.apache.spark.sql.parquet.ParquetRelation
 import org.apache.spark.sql.sources.{LogicalRelation, BaseRelation, DDLParser, DataSourceStrategy}
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 /**
  * :: AlphaComponent ::
@@ -176,6 +177,43 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * Applies a schema to an RDD of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
+   */
+  def applySchema(rdd: RDD[_], beanClass: Class[_]): SchemaRDD = {
+    val attributeSeq = getSchema(beanClass)
+    val className = beanClass.getName
+    val rowRdd = rdd.mapPartitions { iter =>
+      // BeanInfo is not serializable so we must rediscover it remotely for each partition.
+      val localBeanInfo = Introspector.getBeanInfo(
+        Class.forName(className, true, Utils.getContextOrSparkClassLoader))
+      val extractors =
+        localBeanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
+
+      iter.map { row =>
+        new GenericRow(
+          extractors.zip(attributeSeq).map { case (e, attr) =>
+            DataTypeConversions.convertJavaToCatalyst(e.invoke(row), attr.dataType)
+          }.toArray[Any]
+        ) : Row
+      }
+    }
+    new SchemaRDD(this, LogicalRDD(attributeSeq, rowRdd)(this))
+  }
+
+  /**
+   * Applies a schema to an RDD of Java Beans.
+   *
+   * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
+   *          SELECT * queries will return the columns in an undefined order.
+   */
+  def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): SchemaRDD = {
+    applySchema(rdd.rdd, beanClass)
+  }
+
+  /**
    * Loads a Parquet file, returning the result as a [[SchemaRDD]].
    *
    * @group userf
@@ -251,41 +289,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
         JsonRDD.inferSchema(json, samplingRatio, columnNameOfCorruptJsonRecord))
     val rowRDD = JsonRDD.jsonStringToRow(json, appliedSchema, columnNameOfCorruptJsonRecord)
     applySchema(rowRDD, appliedSchema)
-  }
-
-  /**
-   * :: Experimental ::
-   * Creates an empty parquet file with the schema of class `A`, which can be registered as a table.
-   * This registered table can be used as the target of future `insertInto` operations.
-   *
-   * {{{
-   *   val sqlContext = new SQLContext(...)
-   *   import sqlContext._
-   *
-   *   case class Person(name: String, age: Int)
-   *   createParquetFile[Person]("path/to/file.parquet").registerTempTable("people")
-   *   sql("INSERT INTO people SELECT 'michael', 29")
-   * }}}
-   *
-   * @tparam A A case class type that describes the desired schema of the parquet file to be
-   *           created.
-   * @param path The path where the directory containing parquet metadata should be created.
-   *             Data inserted into this table will also be stored at this location.
-   * @param allowExisting When false, an exception will be thrown if this directory already exists.
-   * @param conf A Hadoop configuration object that can be used to specify options to the parquet
-   *             output format.
-   *
-   * @group userf
-   */
-  @Experimental
-  def createParquetFile[A <: Product : TypeTag](
-      path: String,
-      allowExisting: Boolean = true,
-      conf: Configuration = new Configuration()): SchemaRDD = {
-    new SchemaRDD(
-      this,
-      ParquetRelation.createEmpty(
-        path, ScalaReflection.attributesFor[A], allowExisting, conf, this))
   }
 
   /**
@@ -518,5 +521,44 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
 
     new SchemaRDD(this, LogicalRDD(schema.toAttributes, rowRdd)(self))
+  }
+
+  /**
+   * Returns a Catalyst Schema for the given java bean class.
+   */
+  protected def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
+    // TODO: All of this could probably be moved to Catalyst as it is mostly not Spark specific.
+    val beanInfo = Introspector.getBeanInfo(beanClass)
+
+    // Note: The ordering of elements may differ from when the schema is inferred in Scala.
+    //       This is because beanInfo.getPropertyDescriptors gives no guarantees about
+    //       element ordering.
+    val fields = beanInfo.getPropertyDescriptors.filterNot(_.getName == "class")
+    fields.map { property =>
+      val (dataType, nullable) = property.getPropertyType match {
+        case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
+          (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
+        case c: Class[_] if c == classOf[java.lang.String] => (StringType, true)
+        case c: Class[_] if c == java.lang.Short.TYPE => (ShortType, false)
+        case c: Class[_] if c == java.lang.Integer.TYPE => (IntegerType, false)
+        case c: Class[_] if c == java.lang.Long.TYPE => (LongType, false)
+        case c: Class[_] if c == java.lang.Double.TYPE => (DoubleType, false)
+        case c: Class[_] if c == java.lang.Byte.TYPE => (ByteType, false)
+        case c: Class[_] if c == java.lang.Float.TYPE => (FloatType, false)
+        case c: Class[_] if c == java.lang.Boolean.TYPE => (BooleanType, false)
+
+        case c: Class[_] if c == classOf[java.lang.Short] => (ShortType, true)
+        case c: Class[_] if c == classOf[java.lang.Integer] => (IntegerType, true)
+        case c: Class[_] if c == classOf[java.lang.Long] => (LongType, true)
+        case c: Class[_] if c == classOf[java.lang.Double] => (DoubleType, true)
+        case c: Class[_] if c == classOf[java.lang.Byte] => (ByteType, true)
+        case c: Class[_] if c == classOf[java.lang.Float] => (FloatType, true)
+        case c: Class[_] if c == classOf[java.lang.Boolean] => (BooleanType, true)
+        case c: Class[_] if c == classOf[java.math.BigDecimal] => (DecimalType(), true)
+        case c: Class[_] if c == classOf[java.sql.Date] => (DateType, true)
+        case c: Class[_] if c == classOf[java.sql.Timestamp] => (TimestampType, true)
+      }
+      AttributeReference(property.getName, dataType, nullable)()
+    }
   }
 }
