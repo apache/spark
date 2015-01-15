@@ -111,9 +111,6 @@ object HBaseSQLCliDriver extends Logging {
 
     try {
       process(input)
-
-      val timeTaken: Double = (end - start) / 1000.0
-      println(s"Time taken: $timeTaken seconds")
     } catch {
       case e: Exception =>
         e.printStackTrace()
@@ -134,6 +131,8 @@ object HBaseSQLCliDriver extends Logging {
         val res = hbaseCtx.sql(input).collect()
         val end = System.currentTimeMillis()
         res.foreach(println)
+        val timeTaken: Double = (end - start) / 1000.0
+        println(s"Time taken: $timeTaken seconds")
     }
   }
 
