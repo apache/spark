@@ -145,6 +145,7 @@ private[yarn] class YarnAllocator(
       val container = executorIdToContainer.remove(executorId).get
       internalReleaseContainer(container)
       numExecutorsRunning.decrementAndGet()
+      numExecutorsFailed.decrementAndGet()
       maxExecutors -= 1
       assert(maxExecutors >= 0, "Allocator killed more executors than are allocated!")
     } else {
