@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.json._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.sources.{DDLParser, DataSourceStrategy}
+import org.apache.spark.sql.sources.{LogicalRelation, BaseRelation, DDLParser, DataSourceStrategy}
 import org.apache.spark.sql.types._
 
 /**
@@ -128,6 +128,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
     val schema = StructType.fromAttributes(attributeSeq)
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema)
     new SchemaRDD(this, LogicalRDD(attributeSeq, rowRDD)(self))
+  }
+
+  /**
+   * Convert a [[BaseRelation]] created for external data sources into a [[SchemaRDD]].
+   */
+  def baseRelationToSchemaRDD(baseRelation: BaseRelation): SchemaRDD = {
+    new SchemaRDD(this, LogicalRelation(baseRelation))
   }
 
   /**
