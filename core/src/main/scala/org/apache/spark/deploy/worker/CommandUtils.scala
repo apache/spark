@@ -59,8 +59,7 @@ object CommandUtils extends Logging {
   private def buildCommandSeq(command: Command, memory: Int, sparkHome: String): Seq[String] = {
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
-    val cmd = new CommandLauncher(sparkHome, memory, command.environment)
-      .buildLauncherCommand(command.environment)
+    val cmd = new CommandLauncher(sparkHome, memory, command.environment).buildCommand()
     cmd.toSeq ++ Seq(command.mainClass) ++ command.arguments
   }
 
@@ -117,10 +116,8 @@ private class CommandLauncher(sparkHome: String, memoryMb: Int, env: Map[String,
 
   setSparkHome(sparkHome)
 
-  override def buildLauncherCommand(env: JMap[String, String]): JList[String] = {
-    val cmd = buildJavaCommand()
-    cmd.add("-cp")
-    cmd.add(buildClassPath(null).mkString(File.pathSeparator))
+  def buildCommand(): JList[String] = {
+    val cmd = buildJavaCommand(null)
     cmd.add(s"-Xms${memoryMb}M")
     cmd.add(s"-Xmx${memoryMb}M")
     addOptionString(cmd, getenv("SPARK_JAVA_OPTS"))

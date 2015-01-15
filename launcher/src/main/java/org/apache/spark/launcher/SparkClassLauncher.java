@@ -41,7 +41,7 @@ class SparkClassLauncher extends AbstractLauncher<SparkClassLauncher> {
   }
 
   @Override
-  protected List<String> buildLauncherCommand(Map<String, String> env) throws IOException {
+  List<String> buildLauncherCommand(Map<String, String> env) throws IOException {
     List<String> javaOptsKeys = new ArrayList<String>();
     String memKey = null;
     String extraClassPath = null;
@@ -91,7 +91,7 @@ class SparkClassLauncher extends AbstractLauncher<SparkClassLauncher> {
       return buildSparkSubmitCommand(env);
     }
 
-    List<String> cmd = buildJavaCommand();
+    List<String> cmd = buildJavaCommand(extraClassPath);
     for (String key : javaOptsKeys) {
       addOptionString(cmd, System.getenv(key));
     }
@@ -99,8 +99,6 @@ class SparkClassLauncher extends AbstractLauncher<SparkClassLauncher> {
     String mem = firstNonEmpty(memKey != null ? System.getenv(memKey) : null, DEFAULT_MEM);
     cmd.add("-Xms" + mem);
     cmd.add("-Xmx" + mem);
-    cmd.add("-cp");
-    cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath)));
     cmd.add(className);
     cmd.addAll(classArgs);
     return cmd;

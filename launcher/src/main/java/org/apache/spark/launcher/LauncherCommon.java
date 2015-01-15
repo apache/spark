@@ -51,12 +51,12 @@ public class LauncherCommon {
   public static final String EXECUTOR_CORES = "spark.executor.cores";
 
   /** Returns whether the given string is null or empty. */
-  protected static boolean isEmpty(String s) {
+  static boolean isEmpty(String s) {
     return s == null || s.isEmpty();
   }
 
   /** Joins a list of strings using the given separator. */
-  protected static String join(String sep, String... elements) {
+  static String join(String sep, String... elements) {
     StringBuilder sb = new StringBuilder();
     for (String e : elements) {
       if (e != null) {
@@ -70,7 +70,7 @@ public class LauncherCommon {
   }
 
   /** Joins a list of strings using the given separator. */
-  protected static String join(String sep, Iterable<String> elements) {
+  static String join(String sep, Iterable<String> elements) {
     StringBuilder sb = new StringBuilder();
     for (String e : elements) {
       if (e != null) {
@@ -84,7 +84,7 @@ public class LauncherCommon {
   }
 
   /** Returns the first value mapped to the given key in the given maps. */
-  protected static String find(String key, Map<?, ?>... maps) {
+  static String find(String key, Map<?, ?>... maps) {
     for (Map<?, ?> map : maps) {
       String value = (String) map.get(key);
       if (!isEmpty(value)) {
@@ -95,7 +95,7 @@ public class LauncherCommon {
   }
 
   /** Returns the first non-empty, non-null string in the given list. */
-  protected static String firstNonEmpty(String... candidates) {
+  static String firstNonEmpty(String... candidates) {
     for (String s : candidates) {
       if (!isEmpty(s)) {
         return s;
@@ -105,7 +105,7 @@ public class LauncherCommon {
   }
 
   /** Returns the name of the env variable that holds the native library path. */
-  protected static String getLibPathEnvName() {
+  static String getLibPathEnvName() {
     if (isWindows()) {
       return "PATH";
     }
@@ -119,7 +119,7 @@ public class LauncherCommon {
   }
 
   /** Returns whether the OS is Windows. */
-  protected static boolean isWindows() {
+  static boolean isWindows() {
     String os = System.getProperty("os.name");
     return os.startsWith("Windows");
   }
@@ -128,7 +128,7 @@ public class LauncherCommon {
    * Updates the user environment to contain the merged value of "envKey" after appending
    * the given path list.
    */
-  protected static void mergeEnvPathList(Map<String, String> userEnv, String envKey, String pathList) {
+  static void mergeEnvPathList(Map<String, String> userEnv, String envKey, String pathList) {
     if (!isEmpty(pathList)) {
       String current = firstNonEmpty(userEnv.get(envKey), System.getenv(envKey));
       userEnv.put(envKey, join(File.pathSeparator, current, pathList));
@@ -142,7 +142,7 @@ public class LauncherCommon {
    * Input: "\"ab cd\" efgh 'i \" j'"
    * Output: [ "ab cd", "efgh", "i \" j" ]
    */
-  protected static List<String> parseOptionString(String s) {
+  static List<String> parseOptionString(String s) {
     List<String> opts = new ArrayList<String>();
     StringBuilder opt = new StringBuilder();
     boolean inOpt = false;
@@ -224,21 +224,21 @@ public class LauncherCommon {
   }
 
   /** Throws IllegalArgumentException if the given object is null. */
-  protected static void checkNotNull(Object o, String arg) {
+  static void checkNotNull(Object o, String arg) {
     if (o == null) {
       throw new IllegalArgumentException(String.format("'%s' must not be null.", arg));
     }
   }
 
   /** Throws IllegalArgumentException with the given message if the check is false. */
-  protected static void checkArgument(boolean check, String msg, Object... args) {
+  static void checkArgument(boolean check, String msg, Object... args) {
     if (!check) {
       throw new IllegalArgumentException(String.format(msg, args));
     }
   }
 
   /** Throws IllegalStateException with the given message if the check is false. */
-  protected static void checkState(boolean check, String msg, Object... args) {
+  static void checkState(boolean check, String msg, Object... args) {
     if (!check) {
       throw new IllegalStateException(String.format(msg, args));
     }

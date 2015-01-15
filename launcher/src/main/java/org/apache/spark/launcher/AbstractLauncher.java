@@ -42,15 +42,15 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
 
   private static final String ENV_SPARK_HOME = "SPARK_HOME";
   private static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
-  protected static final String DEFAULT_MEM = "512m";
+  static final String DEFAULT_MEM = "512m";
 
-  protected String javaHome;
-  protected String sparkHome;
-  protected String propertiesFile;
-  protected final Map<String, String> conf;
-  protected final Map<String, String> launcherEnv;
+  String javaHome;
+  String sparkHome;
+  String propertiesFile;
+  final Map<String, String> conf;
+  final Map<String, String> launcherEnv;
 
-  protected AbstractLauncher() {
+  AbstractLauncher() {
     this(Collections.<String, String>emptyMap());
   }
 
@@ -95,10 +95,16 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
   /**
    * Launchers should implement this to create the command to be executed. This method should
    * also update the environment map with any environment variables needed by the child process.
+   * <p/>
+   * Note that this method is a no-op in the base class, even though subclasses in this package
+   * really must implement it. This approach was taken to allow this method to be package private
+   * while still allowing CommandUtils.scala to extend this class for its use.
    *
    * @param env Map containing environment variables to set for the Spark job.
    */
-  protected abstract List<String> buildLauncherCommand(Map<String, String> env) throws IOException;
+  List<String> buildLauncherCommand(Map<String, String> env) throws IOException {
+    throw new UnsupportedOperationException("Subclasses must implement this method.");
+  }
 
   /**
    * Prepares the launcher command for execution from a shell script. This is used by the `Main`
@@ -115,7 +121,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
    * user-specified properties file, or the spark-defaults.conf file under the Spark configuration
    * directory.
    */
-  protected Properties loadPropertiesFile() throws IOException {
+  Properties loadPropertiesFile() throws IOException {
     Properties props = new Properties();
     File propsFile;
     if (propertiesFile != null) {
@@ -144,14 +150,14 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
     return props;
   }
 
-  protected String getSparkHome() {
+  String getSparkHome() {
     String path = getenv(ENV_SPARK_HOME);
     checkState(path != null,
       "Spark home not found; set it explicitly or use the SPARK_HOME environment variable.");
     return path;
   }
 
-  protected List<String> buildJavaCommand() throws IOException {
+  protected List<String> buildJavaCommand(String extraClassPath) throws IOException {
     List<String> cmd = new ArrayList<String>();
     if (javaHome == null) {
       cmd.add(join(File.separator, System.getProperty("java.home"), "bin", "java"));
@@ -180,6 +186,8 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
       }
     }
 
+    cmd.add("-cp");
+    cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath)));
     return cmd;
   }
 
@@ -196,7 +204,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
    * each entry is formatted in the way expected by <i>java.net.URLClassLoader</i> (more
    * specifically, with trailing slashes for directories).
    */
-  protected List<String> buildClassPath(String appClassPath) throws IOException {
+  List<String> buildClassPath(String appClassPath) throws IOException {
     String sparkHome = getSparkHome();
     String scala = getScalaVersion();
 
@@ -313,7 +321,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
     }
   }
 
-  protected String getScalaVersion() {
+  String getScalaVersion() {
     String scala = getenv("SPARK_SCALA_VERSION");
     if (scala != null) {
       return scala;

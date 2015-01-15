@@ -37,7 +37,7 @@ import java.util.regex.Pattern;
  * <p/>
  * This class has also some special features to aid PySparkLauncher.
  */
-public class SparkSubmitCliLauncher extends SparkLauncher {
+class SparkSubmitCliLauncher extends SparkLauncher {
 
   /**
    * Name of the app resource used to identify the PySpark shell. The command line parser expects
@@ -83,7 +83,7 @@ public class SparkSubmitCliLauncher extends SparkLauncher {
   }
 
   @Override
-  protected List<String> buildLauncherCommand(Map<String, String> env) throws IOException {
+  List<String> buildLauncherCommand(Map<String, String> env) throws IOException {
     if (PYSPARK_SHELL.equals(appResource)) {
       return buildPySparkShellCommand(env);
     } else {

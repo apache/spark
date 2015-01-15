@@ -31,25 +31,22 @@ import java.util.Properties;
  * Use this class to start Spark applications programmatically. The class uses a builder pattern
  * to allow clients to configure the Spark application and launch it as a child process.
  * <p/>
- * There's also support for running the application on a separate thread, although that is to
- * be considered experimental and avoided in production environments.
- * <p/>
  * Note that launching Spark applications using this class will not automatically load environment
  * variables from the "spark-env.sh" or "spark-env.cmd" scripts in the configuration directory.
  */
 public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
 
-  protected boolean verbose;
-  protected String appName;
-  protected String master;
-  protected String deployMode;
-  protected String mainClass;
-  protected String appResource;
-  protected final List<String> sparkArgs;
-  protected final List<String> appArgs;
-  protected final List<String> jars;
-  protected final List<String> files;
-  protected final List<String> pyFiles;
+  boolean verbose;
+  String appName;
+  String master;
+  String deployMode;
+  String mainClass;
+  String appResource;
+  final List<String> sparkArgs;
+  final List<String> appArgs;
+  final List<String> jars;
+  final List<String> files;
+  final List<String> pyFiles;
 
   public SparkLauncher() {
     this.sparkArgs = new ArrayList<String>();
@@ -218,20 +215,17 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
   }
 
   @Override
-  protected List<String> buildLauncherCommand(Map<String, String> env) throws IOException {
-    List<String> cmd = buildJavaCommand();
-    addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
-    addOptionString(cmd, System.getenv("SPARK_JAVA_OPTS"));
-
+  List<String> buildLauncherCommand(Map<String, String> env) throws IOException {
     // Load the properties file and check whether spark-submit will be running the app's driver
     // or just launching a cluster app. When running the driver, the JVM's argument will be
     // modified to cover the driver's configuration.
     Properties props = loadPropertiesFile();
     boolean isClientMode = isClientMode(props);
-
     String extraClassPath = isClientMode ? find(DRIVER_EXTRA_CLASSPATH, conf, props) : null;
-    cmd.add("-cp");
-    cmd.add(join(File.pathSeparator, buildClassPath(extraClassPath)));
+
+    List<String> cmd = buildJavaCommand(extraClassPath);
+    addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
+    addOptionString(cmd, System.getenv("SPARK_JAVA_OPTS"));
 
     if (isClientMode) {
       // Figuring out where the memory value come from is a little tricky due to precedence.

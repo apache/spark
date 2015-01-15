@@ -25,7 +25,7 @@ import java.util.Map;
 /**
  * Command line interface for the Spark launcher. Used internally by Spark scripts.
  */
-public class Main extends LauncherCommon {
+class Main extends LauncherCommon {
 
   /**
    * Usage: Main [class] [class args]
@@ -97,7 +97,7 @@ public class Main extends LauncherCommon {
   private static class UsageLauncher extends AbstractLauncher<UsageLauncher> {
 
     @Override
-    protected List<String> buildLauncherCommand(Map<String, String> env) {
+    List<String> buildLauncherCommand(Map<String, String> env) {
       if (isWindows()) {
         return Arrays.asList("set SPARK_LAUNCHER_USAGE_ERROR=1");
       } else {
