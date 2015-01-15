@@ -860,11 +860,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
     saveAsHadoopFile(path, keyClass, valueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
-  class RDDMultipleTextOutputFormat extends MultipleTextOutputFormat[Any, Any] {
-    def init() : Unit = {
-      println("Initializing multiple text output format saver")
-    }
-    
+  class RDDMultipleTextOutputFormat extends MultipleTextOutputFormat[Any, Any]() {
     override def generateActualKey(key: Any, value: Any): Any =
     {
       NullWritable.get()
