@@ -14,7 +14,7 @@ def limit_sql(sql, limit):
     SELECT * FROM (
     {sql}
     ) qry
-    LIMIT {limit};
+    LIMIT {limit}
     """.format(**locals())
 
 def gzipped(f):

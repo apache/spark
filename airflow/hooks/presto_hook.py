@@ -5,11 +5,7 @@ from airflow.hooks.base_hook import BaseHook
 from pyhive import presto
 
 
-class PrestoException(Exception):
-    pass
-
-
-class PyHiveHook(BaseHook):
+class PrestoHook(BaseHook):
     """
     Interact with Presto through PyHive!
     """
@@ -42,18 +38,22 @@ class PyHiveHook(BaseHook):
     def get_cursor(self):
         return self.cursor
 
+    @staticmethod
+    def _strip_sql(sql):
+        return sql.strip().rstrip(';')
+
     def get_records(self, hql, parameters=None):
-        self.cursor.execute(hql, parameters)
+        self.cursor.execute(self._strip_sql(hql), parameters)
         return self.cursor.fetchall()
 
     def get_first(self, hql, parameters=None):
-        self.cursor.execute(hql, parameters)
+        self.cursor.execute(self._strip_sql(hql), parameters)
         return self.cursor.fetchone()
 
     def get_pandas_df(self, hql, parameters=None):
         import pandas
         cursor = self.get_cursor()
-        cursor.execute(hql, parameters)
+        cursor.execute(self._strip_sql(hql), parameters)
         data = cursor.fetchall()
         column_descriptions = cursor.description
         if data:
@@ -64,4 +64,4 @@ class PyHiveHook(BaseHook):
         return df
 
     def run(self, hql, parameters=None):
-        self.cursor.execute(hql, parameters)
+        self.cursor.execute(self._strip_sql(hql), parameters)
