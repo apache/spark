@@ -21,7 +21,7 @@ import java.io.{DataOutputStream, FileOutputStream}
 import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import org.apache.spark.Accumulator
-import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.python.{PythonBroadcast, PythonRDD}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -69,6 +69,11 @@ private[graphx] class PythonVertexRDD(
       }
     }
   }
+
+  def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
+  JavaRDD[Array[Byte]] = {
+    readRDDFromFile(sc, filename, parallelism)
+  }
 }
 
 object PythonVertexRDD {
@@ -83,6 +88,7 @@ object PythonVertexRDD {
                      broadcastVars: JList[Broadcast[PythonBroadcast]],
                      accumulator: Accumulator[JList[Array[Byte]]],
                      targetStorageLevel : StorageLevel = StorageLevel.MEMORY_ONLY) = {
+    System.out.println("DEBUG: in PythonVertexRDD:apply")
     new PythonVertexRDD(JavaRDD.fromRDD(parent), command, envVars, pythonIncludes,
       preservePartitioning,
       pythonExec, broadcastVars, accumulator, targetStorageLevel)

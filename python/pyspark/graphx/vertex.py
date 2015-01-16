@@ -22,11 +22,11 @@ Python bindings for GraphX.
 import itertools
 import os
 from tempfile import NamedTemporaryFile
-
 from numpy.numarray.numerictypes import Long
 
 from py4j.java_collections import MapConverter, ListConverter
 from pyspark.accumulators import PStatsParam
+from pyspark.rdd import PipelinedRDD
 from pyspark.serializers import CloudPickleSerializer, NoOpSerializer, AutoBatchedSerializer
 from pyspark import RDD, PickleSerializer, StorageLevel, SparkContext
 from pyspark.traceback_utils import SCCallSiteSync
@@ -46,11 +46,11 @@ VertexId = Long
 
 class VertexRDD(object):
     """
-    VertexRDD class defines vertex operations/transformation and vertex properties
-    The schema of the vertex properties are specified as a tuple to the vertex
-    The vertex operations are mapValues, filter, diff, innerJoin, leftOuterJoin
-    and aggergateUsingIndex. These operations are mapped to Scala functions defined
-    in PythonVertexRDD class in [[org.apache.spark.graphx.api.python package]]
+    VertexRDD class defines the vertex operations/transformation. The list of
+    vertex transformations and actions are available at
+    `http://spark.apache.org/docs/latest/graphx-programming-guide.html`
+    These operations are mapped to Scala functions defined
+    in `org.apache.spark.graphx.api.python.PythonVertexRDD`
     """
 
     def __init__(self, jrdd, jrdd_deserializer=AutoBatchedSerializer(PickleSerializer())):
@@ -65,7 +65,6 @@ class VertexRDD(object):
         """
 
         self.name = "VertexRDD"
-        # self.jvertex_rdd = jrdd
         self.is_cached = False
         self.is_checkpointed = False
         self.ctx = SparkContext._active_spark_context
@@ -185,6 +184,7 @@ class VertexRDD(object):
             for (n, v) in seq:
                 if n == 1:
                     vbuf.append(v)
+                    vbuf.append(v)
                 elif n == 2:
                     wbuf.append(v)
             return [(v, w) for v in vbuf for w in wbuf]
@@ -202,10 +202,22 @@ class VertexRDD(object):
         """
         Return a list that contains all of the elements in this RDD.
         """
-        pyrdd = self.getJavaVertexRDD(self.jvertex_rdd, self.jvertex_rdd_deserializer)
-        pyrdd.collect()
+        with SCCallSiteSync(self.context) as css:
+            bytesInJava = self.jvertex_rdd.collect().iterator()
+        return list(self._collect_iterator_through_file(bytesInJava))
 
-
+    def _collect_iterator_through_file(self, iterator):
+        # Transferring lots of data through Py4J can be slow because
+        # socket.readline() is inefficient.  Instead, we'll dump the data to a
+        # file and read it back.
+        tempFile = NamedTemporaryFile(delete=False, dir=self.ctx._temp_dir)
+        tempFile.close()
+        self.ctx._writeToFile(iterator, tempFile.name)
+        # Read the data into Python and deserialize it:
+        with open(tempFile.name, 'rb') as tempFile:
+            for item in self.jvertex_rdd_deserializer.load_stream(tempFile):
+                yield item
+        os.unlink(tempFile.name)
 
     def getJavaVertexRDD(self, rdd, rdd_deserializer):
         if self.bypass_serializer:
@@ -257,13 +269,13 @@ class PipelinedVertexRDD(VertexRDD):
     """
 
     def __init__(self, prev, func, preservesPartitioning=False):
-        if not isinstance(prev, PipelinedVertexRDD) or not prev._is_pipelinable():
+        if isinstance(prev, PipelinedRDD) or not prev._is_pipelinable():
             # This transformation is the first in its stage:
             self.func = func
             self.preservesPartitioning = preservesPartitioning
-            self._prev_jrdd = prev._jrdd
-            self._prev_jrdd_deserializer = prev._jrdd_deserializer
-        else:
+            self.prev_jvertex_rdd = prev._prev_jrdd
+            self.prev_jvertex_rdd_deserializer = prev._prev_jrdd_deserializer
+        elif isinstance(prev, PipelinedVertexRDD) or isinstance(prev, RDD):
             prev_func = prev.func
 
             def pipeline_func(split, iterator):
@@ -271,8 +283,8 @@ class PipelinedVertexRDD(VertexRDD):
             self.func = pipeline_func
             self.preservesPartitioning = \
                 prev.preservesPartitioning and preservesPartitioning
-            self._prev_jrdd = prev._prev_jrdd  # maintain the pipeline
-            self._prev_jrdd_deserializer = prev._prev_jrdd_deserializer
+            self.prev_jvertex_rdd = prev.prev_jvertex_rdd
+            self.prev_jvertex_rdd_deserializer = prev.prev_jvertex_rdd_deserializer
         self.is_cached = False
         self.is_checkpointed = False
         self.ctx = prev.ctx
@@ -290,8 +302,10 @@ class PipelinedVertexRDD(VertexRDD):
             self._broadcast = None
 
     @property
-    def _jrdd(self):
-        print "in _jrdd of vertex.py"
+    def jvertex_rdd(self):
+        print "**********************************"
+        print "in jvertex_rdd of vertex.py"
+        print "**********************************"
         if self._jrdd_val:
             return self._jrdd_val
         if self._bypass_serializer:

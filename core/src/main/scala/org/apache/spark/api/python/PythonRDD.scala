@@ -19,25 +19,23 @@ package org.apache.spark.api.python
 
 import java.io._
 import java.net._
-import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, UUID, Collections}
+import java.util.{Collections, ArrayList => JArrayList, List => JList, Map => JMap}
 
+import com.google.common.base.Charsets.UTF_8
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.io.compress.CompressionCodec
+import org.apache.hadoop.mapred.{InputFormat, JobConf, OutputFormat}
+import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, OutputFormat => NewOutputFormat}
+import org.apache.spark._
+import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.input.PortableDataStream
+import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.language.existentials
-
-import com.google.common.base.Charsets.UTF_8
-
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.io.compress.CompressionCodec
-import org.apache.hadoop.mapred.{InputFormat, OutputFormat, JobConf}
-import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, OutputFormat => NewOutputFormat}
-import org.apache.spark._
-import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
-import org.apache.spark.util.Utils
 
 private[spark] class PythonRDD(
     @transient parent: RDD[_],
