@@ -630,8 +630,8 @@ class JsonProtocolSuite extends FunSuite {
 
     if (hasHadoopInput) {
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      inputMetrics.bytesRead = d + e + f
-      t.inputMetrics = Some(inputMetrics)
+      inputMetrics.addBytesRead(d + e + f)
+      t.setInputMetrics(Some(inputMetrics))
     } else {
       val sr = new ShuffleReadMetrics
       sr.remoteBytesRead = b + d
