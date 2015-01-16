@@ -294,13 +294,10 @@ object OptimizeIn extends Rule[LogicalPlan] {
 
 /**
  * Simplifies boolean expressions:
- *
  * 1. Simplifies expressions whose answer can be determined without evaluating both sides.
  * 2. Eliminates / extracts common factors.
- * 3. Removes `Not` operator.
- *
- * Note that this rule can eliminate expressions that might otherwise have been evaluated and thus
- * is only safe when evaluations of expressions does not result in side effects.
+ * 3. Merge same expressions
+ * 4. Removes `Not` operator.
  */
 object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -311,9 +308,26 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           case (l, Literal(true, BooleanType)) => l
           case (Literal(false, BooleanType), _) => Literal(false)
           case (_, Literal(false, BooleanType)) => Literal(false)
-          // a && a && a ... => a
-          case _ if splitConjunctivePredicates(and).distinct.size == 1 => left
-          case _ => and
+          // a && a => a
+          case (l, r) if l fastEquals r => l
+          case (_, _) =>
+            val lhsSet = splitDisjunctivePredicates(left).toSet
+            val rhsSet = splitDisjunctivePredicates(right).toSet
+            val common = lhsSet.intersect(rhsSet)
+            val ldiff = lhsSet.diff(common)
+            val rdiff = rhsSet.diff(common)
+            if (ldiff.size == 0 || rdiff.size == 0) {
+              // a && (a || b)
+              common.reduce(Or)
+            } else {
+              // (a || b || c || ...) && (a || b || d || ...) && (a || b || e || ...) ... =>
+              // (a || b) || ((c || ...) && (f || ...) && (e || ...) && ...)
+              (ldiff.reduceOption(Or) ++ rdiff.reduceOption(Or))
+                .reduceOption(And)
+                .map(_ :: common.toList)
+                .getOrElse(common.toList)
+                .reduce(Or)
+            }
         }
 
       case or @ Or(left, right) =>
@@ -322,19 +336,26 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           case (_, Literal(true, BooleanType)) => Literal(true)
           case (Literal(false, BooleanType), r) => r
           case (l, Literal(false, BooleanType)) => l
-          // a || a || a ... => a
-          case _ if splitDisjunctivePredicates(or).distinct.size == 1 => left
-          // (a && b && c && ...) || (a && b && d && ...) => a && b && (c || d || ...)
-          case _ =>
+          // a || a => a
+          case (l, r) if l fastEquals r => l
+          case (_, _) =>
             val lhsSet = splitConjunctivePredicates(left).toSet
             val rhsSet = splitConjunctivePredicates(right).toSet
             val common = lhsSet.intersect(rhsSet)
-
-            (lhsSet.diff(common).reduceOption(And) ++ rhsSet.diff(common).reduceOption(And))
-              .reduceOption(Or)
-              .map(_ :: common.toList)
-              .getOrElse(common.toList)
-              .reduce(And)
+            val ldiff = lhsSet.diff(common)
+            val rdiff = rhsSet.diff(common)
+            if ( ldiff.size == 0 || rdiff.size == 0) {
+              // a || (b && a)
+              common.reduce(And)
+            } else {
+              // (a && b && c && ...) || (a && b && d && ...) || (a && b && e && ...) ... =>
+              // a && b && ((c && ...) || (d && ...) || (e && ...) || ...)
+              (ldiff.reduceOption(And) ++ rdiff.reduceOption(And))
+                .reduceOption(Or)
+                .map(_ :: common.toList)
+                .getOrElse(common.toList)
+                .reduce(And)
+            }
         }
 
       case not @ Not(exp) =>
