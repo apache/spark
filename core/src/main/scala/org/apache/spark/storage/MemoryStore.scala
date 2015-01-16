@@ -284,8 +284,9 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       }
 
     } finally {
-      // If we return an array, the values returned do not depend on the underlying vector and
-      // we can immediately free up space for other threads. Otherwise, if we return an iterator,
+      // If we return an array, the values returned will be used in tryToPut()
+      // and finally put into memoryStore.entrys, so we pending unroll memory
+      // for this thread and release it in tryToPut(). Otherwise, if we return an iterator,
       // we release the memory claimed by this thread later on when the task finishes.
       if (keepUnrolling) {
         val amountToRelease = currentUnrollMemoryForThisThread - previousMemoryReserved
@@ -329,6 +330,7 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]
 
     accountingLock.synchronized {
+      releasePendingUnrollMemoryForThisThread()
       val freeSpaceResult = ensureFreeSpace(blockId, size)
       val enoughFreeSpace = freeSpaceResult.success
       droppedBlocks ++= freeSpaceResult.droppedBlocks
@@ -354,7 +356,6 @@ private[spark] class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         val droppedBlockStatus = blockManager.dropFromMemory(blockId, data)
         droppedBlockStatus.foreach { status => droppedBlocks += ((blockId, status)) }
       }
-      releasePendingUnrollMemoryForThisThread()
     }
     ResultWithDroppedBlocks(putSuccess, droppedBlocks)
   }
