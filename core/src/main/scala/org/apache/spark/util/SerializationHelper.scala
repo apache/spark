@@ -38,7 +38,9 @@ private[spark] object SerializationState extends Enumeration {
   val Success = "Success"
 }
 
-private[spark] case class RDDTrace (rdd : RDD[_], depth : Int, result : SerializationHelper.SerializedRef)
+private[spark] case class RDDTrace (rdd : RDD[_], 
+                                    depth : Int, 
+                                    result : SerializationHelper.SerializedRef)
 
 /**
  * This class is designed to encapsulate some utilities to facilitate debugging serialization 
