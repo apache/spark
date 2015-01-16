@@ -913,7 +913,7 @@ for details.
 </tr>
 <tr>
   <td> <b>cogroup</b>(<i>otherDataset</i>, [<i>numTasks</i>]) </td>
-  <td> When called on datasets of type (K, V) and (K, W), returns a dataset of (K, Iterable&lt;V&gt;, Iterable&lt;W&gt;) tuples. This operation is also called <code>groupWith</code>. </td>
+  <td> When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (Iterable&lt;V&gt;, Iterable&lt;W&gt;)) tuples. This operation is also called <code>groupWith</code>. </td>
 </tr>
 <tr>
   <td> <b>cartesian</b>(<i>otherDataset</i>) </td>
