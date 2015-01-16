@@ -19,6 +19,8 @@ package org.apache.spark.util
 
 import java.util.{Properties, UUID}
 
+import org.apache.spark.scheduler.cluster.ExecutorInfo
+
 import scala.collection.JavaConverters._
 import scala.collection.Map
 
@@ -83,7 +85,10 @@ private[spark] object JsonProtocol {
         applicationStartToJson(applicationStart)
       case applicationEnd: SparkListenerApplicationEnd =>
         applicationEndToJson(applicationEnd)
-
+      case executorAdded: SparkListenerExecutorAdded =>
+        executorAddedToJson(executorAdded)
+      case executorRemoved: SparkListenerExecutorRemoved =>
+        executorRemovedToJson(executorRemoved)
       // These aren't used, but keeps compiler happy
       case SparkListenerShutdown => JNothing
       case SparkListenerExecutorMetricsUpdate(_, _) => JNothing
@@ -194,6 +199,16 @@ private[spark] object JsonProtocol {
     ("Timestamp" -> applicationEnd.time)
   }
 
+  def executorAddedToJson(executorAdded: SparkListenerExecutorAdded): JValue = {
+    ("Event" -> Utils.getFormattedClassName(executorAdded)) ~
+    ("Executor ID" -> executorAdded.executorId) ~
+    ("Executor Info" -> executorInfoToJson(executorAdded.executorInfo))
+  }
+
+  def executorRemovedToJson(executorRemoved: SparkListenerExecutorRemoved): JValue = {
+    ("Event" -> Utils.getFormattedClassName(executorRemoved)) ~
+    ("Executor ID" -> executorRemoved.executorId)
+  }
 
   /** ------------------------------------------------------------------- *
    * JSON serialization methods for classes SparkListenerEvents depend on |
@@ -362,6 +377,10 @@ private[spark] object JsonProtocol {
     ("Disk Size" -> blockStatus.diskSize)
   }
 
+  def executorInfoToJson(executorInfo: ExecutorInfo): JValue = {
+    ("Host" -> executorInfo.executorHost) ~
+    ("Total Cores" -> executorInfo.totalCores)
+  }
 
   /** ------------------------------ *
    * Util JSON serialization methods |
@@ -416,6 +435,8 @@ private[spark] object JsonProtocol {
     val unpersistRDD = Utils.getFormattedClassName(SparkListenerUnpersistRDD)
     val applicationStart = Utils.getFormattedClassName(SparkListenerApplicationStart)
     val applicationEnd = Utils.getFormattedClassName(SparkListenerApplicationEnd)
+    val executorAdded = Utils.getFormattedClassName(SparkListenerExecutorAdded)
+    val executorRemoved = Utils.getFormattedClassName(SparkListenerExecutorRemoved)
 
     (json \ "Event").extract[String] match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
@@ -431,6 +452,8 @@ private[spark] object JsonProtocol {
       case `unpersistRDD` => unpersistRDDFromJson(json)
       case `applicationStart` => applicationStartFromJson(json)
       case `applicationEnd` => applicationEndFromJson(json)
+      case `executorAdded` => executorAddedFromJson(json)
+      case `executorRemoved` => executorRemovedFromJson(json)
     }
   }
 
@@ -523,6 +546,16 @@ private[spark] object JsonProtocol {
     SparkListenerApplicationEnd((json \ "Timestamp").extract[Long])
   }
 
+  def executorAddedFromJson(json: JValue): SparkListenerExecutorAdded = {
+    val executorId = (json \ "Executor ID").extract[String]
+    val executorInfo = executorInfoFromJson(json \ "Executor Info")
+    SparkListenerExecutorAdded(executorId, executorInfo)
+  }
+
+  def executorRemovedFromJson(json: JValue): SparkListenerExecutorRemoved = {
+    val executorId = (json \ "Executor ID").extract[String]
+    SparkListenerExecutorRemoved(executorId)
+  }
 
   /** --------------------------------------------------------------------- *
    * JSON deserialization methods for classes SparkListenerEvents depend on |
@@ -745,6 +778,11 @@ private[spark] object JsonProtocol {
     BlockStatus(storageLevel, memorySize, diskSize, tachyonSize)
   }
 
+  def executorInfoFromJson(json: JValue): ExecutorInfo = {
+    val executorHost = (json \ "Host").extract[String]
+    val totalCores = (json \ "Total Cores").extract[Int]
+    new ExecutorInfo(executorHost, totalCores)
+  }
 
   /** -------------------------------- *
    * Util JSON deserialization methods |

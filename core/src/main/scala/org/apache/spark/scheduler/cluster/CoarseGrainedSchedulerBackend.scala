@@ -28,7 +28,7 @@ import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
 import org.apache.spark.{ExecutorAllocationClient, Logging, SparkEnv, SparkException, TaskState}
-import org.apache.spark.scheduler.{SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
+import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{ActorLogReceive, SerializableBuffer, AkkaUtils, Utils}
 
@@ -65,6 +65,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
 
   // Number of executors requested from the cluster manager that have not registered yet
   private var numPendingExecutors = 0
+
+  private val listenerBus = scheduler.sc.listenerBus
 
   // Executors we have requested the cluster manager to kill that have not died yet
   private val executorsPendingToRemove = new HashSet[String]
@@ -106,6 +108,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
               logDebug(s"Decremented number of pending executors ($numPendingExecutors left)")
             }
           }
+          listenerBus.post(SparkListenerExecutorAdded(executorId, data))
           makeOffers()
         }
 
@@ -213,6 +216,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val actorSyste
           totalCoreCount.addAndGet(-executorInfo.totalCores)
           totalRegisteredExecutors.addAndGet(-1)
           scheduler.executorLost(executorId, SlaveLost(reason))
+          listenerBus.post(SparkListenerExecutorRemoved(executorId))
         case None => logError(s"Asked to remove non-existent executor $executorId")
       }
     }

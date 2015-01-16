@@ -14,24 +14,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.scheduler.cluster
 
-import akka.actor.{Address, ActorRef}
+import org.apache.spark.annotation.DeveloperApi
 
 /**
- * Grouping of data for an executor used by CoarseGrainedSchedulerBackend.
- *
- * @param executorActor The ActorRef representing this executor
- * @param executorAddress The network address of this executor
- * @param executorHost The hostname that this executor is running on
- * @param freeCores  The current number of cores available for work on the executor
- * @param totalCores The total number of cores available to the executor
+ * :: DeveloperApi ::
+ * Stores information about an executor to pass from the scheduler to SparkListeners.
  */
-private[cluster] class ExecutorData(
-   val executorActor: ActorRef,
-   val executorAddress: Address,
-   override val executorHost: String,
-   var freeCores: Int,
-   override val totalCores: Int
-) extends ExecutorInfo(executorHost, totalCores)
+@DeveloperApi
+class ExecutorInfo(
+   val executorHost: String,
+   val totalCores: Int
+) {
+
+  def canEqual(other: Any): Boolean = other.isInstanceOf[ExecutorInfo]
+
+  override def equals(other: Any): Boolean = other match {
+    case that: ExecutorInfo =>
+      (that canEqual this) &&
+        executorHost == that.executorHost &&
+        totalCores == that.totalCores
+    case _ => false
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(executorHost, totalCores)
+    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+  }
+}
