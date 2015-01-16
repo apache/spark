@@ -329,12 +329,12 @@ object LDA {
 
     /**
      * Compute the log likelihood of the observed tokens, given the current parameter estimates:
-     * log P(docs | topics, topic distributions for docs, alpha, eta)
+     *  log P(docs | topics, topic distributions for docs, alpha, eta)
      *
      * Note:
-     * - This excludes the prior; for that, use [[logPrior]].
-     * - Even with [[logPrior]], this is NOT the same as the data log likelihood given the
-     * hyperparameters.
+     *  - This excludes the prior; for that, use [[logPrior]].
+     *  - Even with [[logPrior]], this is NOT the same as the data log likelihood given the
+     *    hyperparameters.
      */
     lazy val logLikelihood: Double = {
       val eta = termSmoothing
@@ -359,7 +359,7 @@ object LDA {
 
     /**
      * Compute the log probability of the current parameter estimate:
-     * log P(topics, topic distributions for docs | alpha, eta)
+     *  log P(topics, topic distributions for docs | alpha, eta)
      */
     lazy val logPrior: Double = {
       val eta = termSmoothing
@@ -416,11 +416,11 @@ object LDA {
     BDV(gamma_wj) /= sum
   }
 
-    /**
-     * Compute bipartite term/doc graph.
-     * doc ids are shifted by vocabSize to maintain uniqueness
-     */
-    private def initialState(
+  /**
+   * Compute bipartite term/doc graph.
+   * doc ids are shifted by vocabSize to maintain uniqueness
+   */
+  private def initialState(
       docs: RDD[Document],
       k: Int,
       topicSmoothing: Double,
