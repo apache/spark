@@ -1316,7 +1316,35 @@ For accumulator updates performed inside <b>actions only</b>, Spark guarantees t
 will only be applied once, i.e. restarted tasks will not update the value. In transformations, users should be aware 
 of that each task's update may be applied more than once if tasks or job stages are re-executed.
 
+Accumulators do not change the lazy evaluation model of Spark. If they are being updated within an operation on an RDD, their value is only updated once that RDD is computed as part of an action. Consequently, accumulator updates are not guaranteed to be executed when made within a lazy transformation like `map()`. The below code fragment demonstrates this property:
 
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+val acc = sc.accumulator(0)
+data.map(x => acc += x; f(x))
+// Here, acc is still 0 because no actions have cause the `map` to be computed.
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+Accumulator<Integer> accum = sc.accumulator(0);
+data.map(x -> accum.add(x); f(x););
+// Here, accum is still 0 because no actions have cause the `map` to be computed.
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+accum = sc.accumulator(0)
+data.map(lambda x => acc.add(x); f(x))
+# Here, acc is still 0 because no actions have cause the `map` to be computed.
+{% endhighlight %}
+</div>
+
+</div>
 
 # Deploying to a Cluster
 
