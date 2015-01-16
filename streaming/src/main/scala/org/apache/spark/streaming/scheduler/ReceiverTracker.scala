@@ -27,16 +27,7 @@ import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver.{Receiver, ReceiverSupervisorImpl, StopReceiver}
-import org.apache.spark.streaming.scheduler.ReceivedBlockInfo
-import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStarted
-import org.apache.spark.streaming.scheduler.ReportError
-import org.apache.spark.streaming.scheduler.ReceiverInfo
-import org.apache.spark.streaming.scheduler.DeregisterReceiver
-import org.apache.spark.streaming.scheduler.AddBlock
 import scala.Some
-import org.apache.spark.streaming.scheduler.RegisterReceiver
-import org.apache.spark.streaming.scheduler.StreamingListenerReceiverStopped
-import org.apache.spark.streaming.scheduler.StreamingListenerReceiverError
 
 /**
  * Messages used by the NetworkReceiver and the ReceiverTracker to communicate
@@ -284,7 +275,9 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         val receiver = iterator.next()
         val supervisor = new ReceiverSupervisorImpl(
           receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
-        context.addTaskKilledCallback(context => supervisor.stop("Receiver was killed.", None))
+        /* Due to SPARK-5205, `Receiver` stage can not be stopped properly, we need to add a
+         * callback to do some more clean works.*/
+        context.addTaskKilledListener(context => supervisor.stop("Receiver was killed.", None))
         supervisor.start()
         supervisor.awaitTermination()
       }
