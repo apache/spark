@@ -178,7 +178,7 @@ abstract class RDD[T: ClassTag](
   // Our dependencies and partitions will be gotten by calling subclass's methods below, and will
   // be overwritten when we're checkpointed
   private var dependencies_ : Seq[Dependency[_]] = null
-  @transient private var partitions_ : Array[Partition] = null
+  @transient protected var partitions_ : Array[Partition] = null
 
   /** An Option holding our checkpoint RDD, if we are checkpointed */
   private def checkpointRDD: Option[RDD[T]] = checkpointData.flatMap(_.checkpointRDD)
@@ -207,6 +207,23 @@ abstract class RDD[T: ClassTag](
       }
       partitions_
     }
+  }
+
+  def getInputSize: Long = {
+    var totalSize:Long = 0L
+    dependencies.map {dep =>
+      totalSize += dep.rdd.getInputSize
+    }
+    totalSize
+  }
+
+  def resetPartitions(numPartitions: Int):  Array[Partition] = {
+    dependencies.map(dep =>
+      dep.rdd.resetPartitions(numPartitions)
+    )
+    this.partitions_ = getPartitions
+    logDebug("resetPartitions:" + this.partitions.size)
+    this.partitions_
   }
 
   /**
@@ -843,8 +860,12 @@ abstract class RDD[T: ClassTag](
       // Our partitioner knows how to handle T (which, since we have a partitioner, is
       // really (K, V)) so make a new Partitioner that will de-tuple our fake tuples
       val p2 = new Partitioner() {
-        override def numPartitions = p.numPartitions
+        var partitions: Int = p.numPartitions
+        override def numPartitions = partitions
         override def getPartition(k: Any) = p.getPartition(k.asInstanceOf[(Any, _)]._1)
+        override def setNumPartitions(numPartitions: Int) = {
+          partitions = numPartitions
+        }
       }
       // Unfortunately, since we're making a new p2, we'll get ShuffleDependencies
       // anyway, and when calling .keys, will not have a partitioner set, even though

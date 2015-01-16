@@ -32,9 +32,11 @@ import org.apache.spark.util.Utils
  */
 
 private[spark] class PythonPartitioner(
-  override val numPartitions: Int,
+  var partitions: Int,
   val pyPartitionFunctionId: Long)
   extends Partitioner {
+
+  override def numPartitions = partitions
 
   override def getPartition(key: Any): Int = key match {
     case null => 0
@@ -42,6 +44,10 @@ private[spark] class PythonPartitioner(
     // let's do a modulo numPartitions in any case
     case key: Long => Utils.nonNegativeMod(key.toInt, numPartitions)
     case _ => Utils.nonNegativeMod(key.hashCode(), numPartitions)
+  }
+
+  override def setNumPartitions(numPartitions: Int) = {
+    partitions = numPartitions
   }
 
   override def equals(other: Any): Boolean = other match {
