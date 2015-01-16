@@ -378,13 +378,24 @@ object LDA {
       vocabSize: Int,
       eta: Double,
       alpha: Double): TopicCounts = {
-    val smoothed_N_wk: TopicCounts = edgeContext.dstAttr + (eta - 1.0)
-    val smoothed_N_kj: TopicCounts = edgeContext.srcAttr + (alpha - 1.0)
-    val smoothed_N_k: TopicCounts = N_k + (vocabSize * (eta - 1.0))
-    // proportional to p(w|z) * p(z|d) / p(z)
-    val unnormalizedGamma = smoothed_N_wk :* smoothed_N_kj :/ smoothed_N_k
+    val N = N_k.data
+    val N_w = edgeContext.dstAttr.data
+    val N_j = edgeContext.srcAttr.data
+    val K = N_w.size
+    val eta1 = eta - 1.0
+    val alpha1 = alpha - 1.0
+    val Weta1 = vocabSize * eta1
+    var sum = 0.0
+    val gamma_wj = new Array[Double](K)
+    var k = 0
+    while (k < K) {
+      val gamma_wjk = (N_w(k) + eta1) * (N_j(k) + alpha1) / (N(k) + Weta1)
+      gamma_wj(k) = gamma_wjk
+      sum += gamma_wjk
+      k += 1
+    }
     // normalize
-    unnormalizedGamma /= brzSum(unnormalizedGamma)
+    BDV(gamma_wj) /= sum
   }
 
   /**
