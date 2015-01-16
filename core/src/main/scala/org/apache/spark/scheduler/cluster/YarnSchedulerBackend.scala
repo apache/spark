@@ -17,12 +17,15 @@
 
 package org.apache.spark.scheduler.cluster
 
+import scala.concurrent.{Future, ExecutionContext}
+import scala.util.control.NonFatal
+
 import org.apache.spark.SparkContext
 import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef, RpcEnv, NetworkRpcEndpoint}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.ui.JettyUtils
-import org.apache.spark.util.AkkaUtils
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Abstract Yarn scheduler backend that contains common logic
@@ -91,6 +94,9 @@ private[spark] abstract class YarnSchedulerBackend(
   private class YarnSchedulerActor(override val rpcEnv: RpcEnv) extends NetworkRpcEndpoint {
     private var amActor: Option[RpcEndpointRef] = None
 
+    implicit val askAmActorExecutor = ExecutionContext.fromExecutor(
+      Utils.newDaemonCachedThreadPool("yarn-scheduler-ask-am-executor"))
+
     override def receive(sender: RpcEndpointRef) = {
       case RegisterClusterManager =>
         logInfo(s"ApplicationMaster registered as $sender")
@@ -99,8 +105,11 @@ private[spark] abstract class YarnSchedulerBackend(
       case r: RequestExecutors =>
         amActor match {
           case Some(actor) =>
-            actor.askWithReply(r)
-            sender.send(actor.askWithReply[Boolean](r))
+            Future {
+              sender.send(actor.askWithReply[Boolean](r))
+            } onFailure {
+              case NonFatal(e) => logError(s"Sending $r to AM was unsuccessful", e)
+            }
           case None =>
             logWarning("Attempted to request executors before the AM has registered!")
             sender.send(false)
@@ -109,7 +118,11 @@ private[spark] abstract class YarnSchedulerBackend(
       case k: KillExecutors =>
         amActor match {
           case Some(actor) =>
-            sender.send(actor.askWithReply[Boolean](k))
+            Future {
+              sender.send(actor.askWithReply[Boolean](k))
+            } onFailure {
+              case NonFatal(e) => logError(s"Sending $k to AM was unsuccessful", e)
+            }
           case None =>
             logWarning("Attempted to kill executors before the AM has registered!")
             sender.send(false)

@@ -25,7 +25,7 @@ import org.json4s.JValue
 
 import org.apache.spark.deploy.{ExecutorState, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
-import org.apache.spark.deploy.master.ExecutorInfo
+import org.apache.spark.deploy.master.ExecutorDesc
 import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
@@ -104,7 +104,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app
     UIUtils.basicSparkPage(content, "Application: " + app.desc.name)
   }
 
-  private def executorRow(executor: ExecutorInfo): Seq[Node] = {
+  private def executorRow(executor: ExecutorDesc): Seq[Node] = {
     <tr>
       <td>{executor.id}</td>
       <td>

@@ -19,16 +19,21 @@ package org.apache.spark.streaming.mqtt
 
 import java.net.{URI, ServerSocket}
 
+import scala.concurrent.duration._
+import scala.language.postfixOps
+
 import org.apache.activemq.broker.{TransportConnector, BrokerService}
-import org.apache.spark.util.Utils
+import org.eclipse.paho.client.mqttv3._
+import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
+
 import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.concurrent.Eventually
-import scala.concurrent.duration._
+
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
-import org.eclipse.paho.client.mqttv3._
-import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
+import org.apache.spark.SparkConf
+import org.apache.spark.util.Utils
 
 class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
 
@@ -38,8 +43,9 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
   private val freePort = findFreePort()
   private val brokerUri = "//localhost:" + freePort
   private val topic = "def"
-  private var ssc: StreamingContext = _
   private val persistenceDir = Utils.createTempDir()
+
+  private var ssc: StreamingContext = _
   private var broker: BrokerService = _
   private var connector: TransportConnector = _
 
@@ -101,7 +107,7 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
       val socket = new ServerSocket(trialPort)
       socket.close()
       (null, trialPort)
-    })._2
+    }, new SparkConf())._2
   }
 
   def publishData(data: String): Unit = {
@@ -115,8 +121,9 @@ class MQTTStreamSuite extends FunSuite with Eventually with BeforeAndAfter {
         val message: MqttMessage = new MqttMessage(data.getBytes("utf-8"))
         message.setQos(1)
         message.setRetained(true)
-        for (i <- 0 to 100)
+        for (i <- 0 to 100) {
           msgTopic.publish(message)
+        }
       }
     } finally {
       client.disconnect()

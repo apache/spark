@@ -437,6 +437,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Note: This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
+   *
+   * Note: As currently implemented, groupByKey must be able to hold all the key-value pairs for any
+   * key in memory. If a key has too many values, it can result in an [[OutOfMemoryError]].
    */
   def groupByKey(partitioner: Partitioner): RDD[(K, Iterable[V])] = {
     // groupByKey shouldn't use map side combine because map side combine does not
@@ -458,6 +461,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Note: This operation may be very expensive. If you are grouping in order to perform an
    * aggregation (such as a sum or average) over each key, using [[PairRDDFunctions.aggregateByKey]]
    * or [[PairRDDFunctions.reduceByKey]] will provide much better performance.
+   *
+   * Note: As currently implemented, groupByKey must be able to hold all the key-value pairs for any
+   * key in memory. If a key has too many values, it can result in an [[OutOfMemoryError]].
    */
   def groupByKey(numPartitions: Int): RDD[(K, Iterable[V])] = {
     groupByKey(new HashPartitioner(numPartitions))
@@ -972,12 +978,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
     val writeShard = (context: TaskContext, iter: Iterator[(K,V)]) => {
       val config = wrappedConf.value
-      // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
-      // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
-        attemptNumber)
+        context.attemptNumber)
       val hadoopContext = newTaskAttemptContext(config, attemptId)
       val format = outfmt.newInstance
       format match {
@@ -1056,11 +1059,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val config = wrappedConf.value
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
+      val taskAttemptId = (context.taskAttemptId % Int.MaxValue).toInt
 
       val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context, config)
 
-      writer.setup(context.stageId, context.partitionId, attemptNumber)
+      writer.setup(context.stageId, context.partitionId, taskAttemptId)
       writer.open()
       try {
         var recordsWritten = 0L

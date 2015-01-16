@@ -31,7 +31,7 @@ import org.apache.spark.rpc.{RpcAddress, RpcEndpointRef}
 private[cluster] class ExecutorData(
    val executorActor: RpcEndpointRef,
    val executorAddress: RpcAddress,
-   val executorHost: String ,
+   override val executorHost: String,
    var freeCores: Int,
-   val totalCores: Int
-)
+   override val totalCores: Int
+) extends ExecutorInfo(executorHost, totalCores)

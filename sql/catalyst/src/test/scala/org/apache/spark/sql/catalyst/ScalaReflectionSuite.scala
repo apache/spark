@@ -23,7 +23,7 @@ import java.sql.{Date, Timestamp}
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 case class PrimitiveData(
     intField: Int,
