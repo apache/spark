@@ -1316,7 +1316,7 @@ For accumulator updates performed inside <b>actions only</b>, Spark guarantees t
 will only be applied once, i.e. restarted tasks will not update the value. In transformations, users should be aware 
 of that each task's update may be applied more than once if tasks or job stages are re-executed.
 
-In addition, accumulators do not maintain lineage for the operations that use them. Consequently, accumulator updates are not guaranteed to be executed when made within a lazy transformation like `map()`. Unless something has triggered the evaluation of the lazy transformation that updates the value of the accumlator, subsequent operations will not themselves trigger that evaluation and the value of the accumulator will remain unchanged. The below code fragment demonstrates this issue:
+Accumulators do not change the lazy evaluation model of Spark. If they are being updated within an operation on an RDD, their value is only updated once that RDD is computed as part of an action. Consequently, accumulator updates are not guaranteed to be executed when made within a lazy transformation like `map()`. The below code fragment demonstrates this property:
 
 <div class="codetabs">
 
