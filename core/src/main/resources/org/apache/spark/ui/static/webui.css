@@ -40,12 +40,12 @@
 
 .navbar .nav > li a {
   height: 30px;
-  line-height: 1;
+  line-height: 2;
 }
 
 .navbar-text {
   height: 50px;
-  line-height: 1;
+  line-height: 3.3;
 }
 
 table.sortable thead {
