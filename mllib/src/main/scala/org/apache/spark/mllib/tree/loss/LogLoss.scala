@@ -20,6 +20,7 @@ package org.apache.spark.mllib.tree.loss
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel
+import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 
 /**
@@ -61,13 +62,8 @@ object LogLoss extends Loss {
     data.map { case point =>
       val prediction = model.predict(point.features)
       val margin = 2.0 * point.label * prediction
-      // The following are equivalent to 2.0 * log(1 + exp(-margin)) but are more numerically
-      // stable.
-      if (margin >= 0) {
-        2.0 * math.log1p(math.exp(-margin))
-      } else {
-        2.0 * (-margin + math.log1p(math.exp(margin)))
-      }
+      // The following is equivalent to 2.0 * log(1 + exp(-margin)) but more numerically stable.
+      2.0 * MLUtils.log1pExp(-margin)
     }.mean()
   }
 }

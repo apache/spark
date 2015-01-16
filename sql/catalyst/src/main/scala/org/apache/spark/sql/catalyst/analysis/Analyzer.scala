@@ -22,8 +22,8 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.types.StructType
-import org.apache.spark.sql.catalyst.types.IntegerType
+import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -126,10 +126,10 @@ class Analyzer(catalog: Catalog,
     }
 
     /*
-     *  GROUP BY a, b, c, WITH ROLLUP
+     *  GROUP BY a, b, c WITH ROLLUP
      *  is equivalent to
-     *  GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (a), ( )).
-     *  Group Count: N + 1 (N is the number of group expression)
+     *  GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (a), ( ) ).
+     *  Group Count: N + 1 (N is the number of group expressions)
      *
      *  We need to get all of its subsets for the rule described above, the subset is
      *  represented as the bit masks.
@@ -139,12 +139,12 @@ class Analyzer(catalog: Catalog,
     }
 
     /*
-     *  GROUP BY a, b, c, WITH CUBE
+     *  GROUP BY a, b, c WITH CUBE
      *  is equivalent to
      *  GROUP BY a, b, c GROUPING SETS ( (a, b, c), (a, b), (b, c), (a, c), (a), (b), (c), ( ) ).
-     *  Group Count: 2^N (N is the number of group expression)
+     *  Group Count: 2 ^ N (N is the number of group expressions)
      *
-     *  We need to get all of its sub sets for a given GROUPBY expressions, the subset is
+     *  We need to get all of its subsets for a given GROUPBY expression, the subsets are
      *  represented as the bit masks.
      */
     def bitmasks(c: Cube): Seq[Int] = {
@@ -228,11 +228,11 @@ class Analyzer(catalog: Catalog,
    */
   object ResolveRelations extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case i @ InsertIntoTable(UnresolvedRelation(databaseName, name, alias), _, _, _) =>
+      case i @ InsertIntoTable(UnresolvedRelation(tableIdentifier, alias), _, _, _) =>
         i.copy(
-          table = EliminateAnalysisOperators(catalog.lookupRelation(databaseName, name, alias)))
-      case UnresolvedRelation(databaseName, name, alias) =>
-        catalog.lookupRelation(databaseName, name, alias)
+          table = EliminateAnalysisOperators(catalog.lookupRelation(tableIdentifier, alias)))
+      case UnresolvedRelation(tableIdentifier, alias) =>
+        catalog.lookupRelation(tableIdentifier, alias)
     }
   }
 

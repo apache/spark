@@ -28,7 +28,7 @@ import parquet.schema.MessageType
 
 import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{AttributeMap, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 
 /**
@@ -65,7 +65,9 @@ private[sql] case class ParquetRelation(
     ParquetTypesConverter.readSchemaFromFile(
       new Path(path.split(",").head),
       conf,
-      sqlContext.isParquetBinaryAsString)
+      sqlContext.conf.isParquetBinaryAsString)
+
+  lazy val attributeMap = AttributeMap(output.map(o => o -> o))
 
   override def newInstance() = ParquetRelation(path, conf, sqlContext).asInstanceOf[this.type]
 
@@ -78,7 +80,7 @@ private[sql] case class ParquetRelation(
   }
 
   // TODO: Use data from the footers.
-  override lazy val statistics = Statistics(sizeInBytes = sqlContext.defaultSizeInBytes)
+  override lazy val statistics = Statistics(sizeInBytes = sqlContext.conf.defaultSizeInBytes)
 }
 
 private[sql] object ParquetRelation {
@@ -161,7 +163,8 @@ private[sql] object ParquetRelation {
                   sqlContext: SQLContext): ParquetRelation = {
     val path = checkPath(pathString, allowExisting, conf)
     conf.set(ParquetOutputFormat.COMPRESSION, shortParquetCompressionCodecNames.getOrElse(
-      sqlContext.parquetCompressionCodec.toUpperCase, CompressionCodecName.UNCOMPRESSED).name())
+      sqlContext.conf.parquetCompressionCodec.toUpperCase, CompressionCodecName.UNCOMPRESSED)
+      .name())
     ParquetRelation.enableLogForwarding()
     ParquetTypesConverter.writeMetaData(attributes, path, conf)
     new ParquetRelation(path.toString, Some(conf), sqlContext) {

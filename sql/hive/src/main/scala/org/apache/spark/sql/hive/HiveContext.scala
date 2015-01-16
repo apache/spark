@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
+import java.io.{BufferedReader, InputStreamReader, PrintStream}
 import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConversions._
@@ -33,37 +33,15 @@ import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperators, OverrideCatalog, OverrideFunctionRegistry}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.types.DecimalType
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
-import org.apache.spark.sql.execution.{SparkPlan, ExecutedCommand, ExtractPythonUdfs, QueryExecutionException}
+import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand, QueryExecutionException}
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTableCommand}
 import org.apache.spark.sql.sources.DataSourceStrategy
-
-/**
- * DEPRECATED: Use HiveContext instead.
- */
-@deprecated("""
-  Use HiveContext instead.  It will still create a local metastore if one is not specified.
-  However, note that the default directory is ./metastore_db, not ./metastore
-  """, "1.1")
-class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
-
-  lazy val metastorePath = new File("metastore").getCanonicalPath
-  lazy val warehousePath: String = new File("warehouse").getCanonicalPath
-
-  /** Sets up the system initially or after a RESET command */
-  protected def configure() {
-    setConf("javax.jdo.option.ConnectionURL",
-      s"jdbc:derby:;databaseName=$metastorePath;create=true")
-    setConf("hive.metastore.warehouse.dir", warehousePath)
-  }
-
-  configure() // Must be called before initializing the catalog below.
-}
+import org.apache.spark.sql.types._
 
 /**
  * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
@@ -72,15 +50,16 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
-  // Change the default SQL dialect to HiveQL
-  override private[spark] def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+  protected[sql] override lazy val conf: SQLConf = new SQLConf {
+    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+  }
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
    * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
    * SerDe.
    */
-  private[spark] def convertMetastoreParquet: Boolean =
+  protected[sql] def convertMetastoreParquet: Boolean =
     getConf("spark.sql.hive.convertMetastoreParquet", "true") == "true"
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
@@ -88,22 +67,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
   override def sql(sqlText: String): SchemaRDD = {
     // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
-    if (dialect == "sql") {
+    if (conf.dialect == "sql") {
       super.sql(sqlText)
-    } else if (dialect == "hiveql") {
+    } else if (conf.dialect == "hiveql") {
       new SchemaRDD(this, ddlParser(sqlText).getOrElse(HiveQl.parseSql(sqlText)))
     }  else {
-      sys.error(s"Unsupported SQL dialect: $dialect.  Try 'sql' or 'hiveql'")
+      sys.error(s"Unsupported SQL dialect: ${conf.dialect}.  Try 'sql' or 'hiveql'")
     }
   }
-
-  @deprecated("hiveql() is deprecated as the sql function now parses using HiveQL by default. " +
-             s"The SQL dialect for parsing can be set using ${SQLConf.DIALECT}", "1.1")
-  def hiveql(hqlQuery: String): SchemaRDD = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
-
-  @deprecated("hql() is deprecated as the sql function now parses using HiveQL by default. " +
-             s"The SQL dialect for parsing can be set using ${SQLConf.DIALECT}", "1.1")
-  def hql(hqlQuery: String): SchemaRDD = hiveql(hqlQuery)
 
   /**
    * Creates a table using the schema of the given class.
@@ -117,14 +88,31 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   /**
+   * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
+   * Spark SQL or the external data source library it uses might cache certain metadata about a
+   * table, such as the location of blocks. When those change outside of Spark SQL, users should
+   * call this function to invalidate the cache.
+   */
+  def refreshTable(tableName: String): Unit = {
+    // TODO: Database support...
+    catalog.refreshTable("default", tableName)
+  }
+
+  protected[hive] def invalidateTable(tableName: String): Unit = {
+    // TODO: Database support...
+    catalog.invalidateTable("default", tableName)
+  }
+
+  /**
    * Analyzes the given table in the current database to generate statistics, which will be
    * used in query optimizations.
    *
    * Right now, it only supports Hive tables and it only updates the size of a Hive table
    * in the Hive metastore.
    */
+  @Experimental
   def analyze(tableName: String) {
-    val relation = EliminateAnalysisOperators(catalog.lookupRelation(None, tableName))
+    val relation = EliminateAnalysisOperators(catalog.lookupRelation(Seq(tableName)))
 
     relation match {
       case relation: MetastoreRelation =>
@@ -279,7 +267,6 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     results
   }
 
-
   /**
    * Execute the command using Hive and return the results as a sequence. Each element
    * in the sequence is one row.
@@ -335,13 +322,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   @transient
-  val hivePlanner = new SparkPlanner with HiveStrategies {
+  private val hivePlanner = new SparkPlanner with HiveStrategies {
     val hiveContext = self
 
-    override def strategies: Seq[Strategy] = extraStrategies ++ Seq(
+    override def strategies: Seq[Strategy] = experimental.extraStrategies ++ Seq(
       DataSourceStrategy,
-      CommandStrategy,
       HiveCommandStrategy(self),
+      HiveDDLStrategy,
+      DDLStrategy,
       TakeOrdered,
       ParquetOperations,
       InMemoryScans,
@@ -399,7 +387,8 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 }
 
-object HiveContext {
+
+private object HiveContext {
   protected val primitiveTypes =
     Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
       ShortType, DateType, TimestampType, BinaryType)

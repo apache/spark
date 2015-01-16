@@ -635,8 +635,8 @@ class DAGScheduler(
     try {
       val rdd = job.finalStage.rdd
       val split = rdd.partitions(job.partitions(0))
-      val taskContext =
-        new TaskContextImpl(job.finalStage.id, job.partitions(0), 0, true)
+      val taskContext = new TaskContextImpl(job.finalStage.id, job.partitions(0), taskAttemptId = 0,
+        attemptNumber = 0, runningLocally = true)
       TaskContextHelper.setTaskContext(taskContext)
       try {
         val result = job.func(taskContext, rdd.iterator(split, taskContext))
@@ -661,7 +661,7 @@ class DAGScheduler(
       // completion events or stage abort
       stageIdToStage -= s.id
       jobIdToStageIds -= job.jobId
-      listenerBus.post(SparkListenerJobEnd(job.jobId, jobResult))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTime(), jobResult))
     }
   }
 
@@ -710,7 +710,7 @@ class DAGScheduler(
         stage.latestInfo.stageFailed(stageFailedMessage)
         listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
       }
-      listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error)))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTime(), JobFailed(error)))
     }
   }
 
@@ -749,9 +749,11 @@ class DAGScheduler(
       logInfo("Missing parents: " + getMissingParentStages(finalStage))
       val shouldRunLocally =
         localExecutionEnabled && allowLocal && finalStage.parents.isEmpty && partitions.length == 1
+      val jobSubmissionTime = clock.getTime()
       if (shouldRunLocally) {
         // Compute very short actions like first() or take() with no parent stages locally.
-        listenerBus.post(SparkListenerJobStart(job.jobId, Seq.empty, properties))
+        listenerBus.post(
+          SparkListenerJobStart(job.jobId, jobSubmissionTime, Seq.empty, properties))
         runLocally(job)
       } else {
         jobIdToActiveJob(jobId) = job
@@ -759,7 +761,8 @@ class DAGScheduler(
         finalStage.resultOfJob = Some(job)
         val stageIds = jobIdToStageIds(jobId).toArray
         val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
-        listenerBus.post(SparkListenerJobStart(job.jobId, stageInfos, properties))
+        listenerBus.post(
+          SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
         submitStage(finalStage)
       }
     }
@@ -866,26 +869,6 @@ class DAGScheduler(
     }
 
     if (tasks.size > 0) {
-      // Preemptively serialize a task to make sure it can be serialized. We are catching this
-      // exception here because it would be fairly hard to catch the non-serializable exception
-      // down the road, where we have several different implementations for local scheduler and
-      // cluster schedulers.
-      //
-      // We've already serialized RDDs and closures in taskBinary, but here we check for all other
-      // objects such as Partition.
-      try {
-        closureSerializer.serialize(tasks.head)
-      } catch {
-        case e: NotSerializableException =>
-          abortStage(stage, "Task not serializable: " + e.toString)
-          runningStages -= stage
-          return
-        case NonFatal(e) => // Other exceptions, such as IllegalArgumentException from Kryo.
-          abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
-          runningStages -= stage
-          return
-      }
-
       logInfo("Submitting " + tasks.size + " missing tasks from " + stage + " (" + stage.rdd + ")")
       stage.pendingTasks ++= tasks
       logDebug("New pending tasks: " + stage.pendingTasks)
@@ -985,7 +968,8 @@ class DAGScheduler(
                   if (job.numFinished == job.numPartitions) {
                     markStageAsFinished(stage)
                     cleanupStateForJobAndIndependentStages(job)
-                    listenerBus.post(SparkListenerJobEnd(job.jobId, JobSucceeded))
+                    listenerBus.post(
+                      SparkListenerJobEnd(job.jobId, clock.getTime(), JobSucceeded))
                   }
 
                   // taskSucceeded runs some user code that might throw an exception. Make sure
@@ -1254,7 +1238,7 @@ class DAGScheduler(
     if (ableToCancelStages) {
       job.listener.jobFailed(error)
       cleanupStateForJobAndIndependentStages(job)
-      listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error)))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTime(), JobFailed(error)))
     }
   }
 

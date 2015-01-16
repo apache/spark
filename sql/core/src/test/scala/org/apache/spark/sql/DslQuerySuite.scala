@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types._
 
 /* Implicits */
 import org.apache.spark.sql.catalyst.dsl._
@@ -54,6 +55,18 @@ class DslQuerySuite extends QueryTest {
       testData2.aggregate(sum('b)),
       9
     )
+  }
+
+  test("convert $\"attribute name\" into unresolved attribute") {
+    checkAnswer(
+      testData.where($"key" === 1).select($"value"),
+      Seq(Seq("1")))
+  }
+
+  test("convert Scala Symbol 'attrname into unresolved attribute") {
+    checkAnswer(
+      testData.where('key === 1).select('value),
+      Seq(Seq("1")))
   }
 
   test("select *") {

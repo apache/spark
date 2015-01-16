@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 /**
  * A very simple SQL parser.  Based loosely on:
@@ -125,7 +125,7 @@ class SqlParser extends AbstractSparkSQLParser {
   }
 
   protected lazy val start: Parser[LogicalPlan] =
-    ( select *
+    ( (select | ("(" ~> select <~ ")")) *
       ( UNION ~ ALL        ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) }
       | INTERSECT          ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Intersect(q1, q2) }
       | EXCEPT             ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Except(q1, q2)}
@@ -178,10 +178,10 @@ class SqlParser extends AbstractSparkSQLParser {
     joinedRelation | relationFactor
 
   protected lazy val relationFactor: Parser[LogicalPlan] =
-    ( ident ~ (opt(AS) ~> opt(ident)) ^^ {
-        case tableName ~ alias => UnresolvedRelation(None, tableName, alias)
+    ( rep1sep(ident, ".") ~ (opt(AS) ~> opt(ident)) ^^ {
+        case tableIdent ~ alias => UnresolvedRelation(tableIdent, alias)
       }
-    | ("(" ~> start <~ ")") ~ (AS.? ~> ident) ^^ { case s ~ a => Subquery(a, s) }
+      | ("(" ~> start <~ ")") ~ (AS.? ~> ident) ^^ { case s ~ a => Subquery(a, s) }
     )
 
   protected lazy val joinedRelation: Parser[LogicalPlan] =

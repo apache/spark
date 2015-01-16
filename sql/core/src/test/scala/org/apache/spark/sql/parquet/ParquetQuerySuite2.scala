@@ -34,19 +34,6 @@ class ParquetQuerySuite2 extends QueryTest with ParquetTest {
     }
   }
 
-  test("insertion") {
-    withTempDir { dir =>
-      val data = (0 until 10).map(i => (i, i.toString))
-      withParquetTable(data, "t") {
-        createParquetFile[(Int, String)](dir.toString).registerTempTable("dest")
-        withTempTable("dest") {
-          sql("INSERT OVERWRITE INTO dest SELECT * FROM t")
-          checkAnswer(table("dest"), data)
-        }
-      }
-    }
-  }
-
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
     withParquetTable(data, "t") {
@@ -96,15 +83,6 @@ class ParquetQuerySuite2 extends QueryTest with ParquetTest {
   test("SPARK-1913 regression: columns only referenced by pushed down filters should remain") {
     withParquetTable((1 to 10).map(Tuple1.apply), "t") {
       checkAnswer(sql(s"SELECT _1 FROM t WHERE _1 < 10"), (1 to 9).map(Row.apply(_)))
-    }
-  }
-
-  test("SPARK-3536 regression: query empty Parquet file shouldn't throw") {
-    withTempDir { dir =>
-      createParquetFile[(Int, String)](dir.toString).registerTempTable("t")
-      withTempTable("t") {
-        checkAnswer(sql("SELECT * FROM t"), Seq.empty[Row])
-      }
     }
   }
 }
