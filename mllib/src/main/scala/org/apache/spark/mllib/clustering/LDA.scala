@@ -279,7 +279,6 @@ object LDA {
       vocabSize: Int,
       topicSmoothing: Double,
       termSmoothing: Double) {
-
     // TODO: Checkpoint periodically?
     def next(): LearningState = copy(graph = step(graph))
 
@@ -289,20 +288,38 @@ object LDA {
       val alpha = topicSmoothing
 
       val N_k = collectTopicTotals()
-      val sendMsg: EdgeContext[TopicCounts, TokenCount, TopicCounts] => Unit = (edgeContext) => {
-        // Compute N_{wj} gamma_{wjk}
-        val N_wj = edgeContext.attr
-        // E-STEP: Compute gamma_{wjk} (smoothed topic distributions), scaled by token count N_{wj}.
-        val scaledTopicDistribution: TopicCounts =
-          computePTopic(edgeContext, N_k, W, eta, alpha) *= N_wj
-        edgeContext.sendToDst(scaledTopicDistribution)
-        edgeContext.sendToSrc(scaledTopicDistribution)
-      }
+      val sendMsg: EdgeContext[TopicCounts, TokenCount, (Boolean, TopicCounts)] => Unit =
+        (edgeContext) => {
+          // Compute N_{wj} gamma_{wjk}
+          val N_wj = edgeContext.attr
+          // E-STEP: Compute gamma_{wjk} (smoothed topic distributions), scaled by token count
+          // N_{wj}.
+          val scaledTopicDistribution: TopicCounts =
+            computePTopic(edgeContext.srcAttr, edgeContext.dstAttr, N_k, W, eta, alpha) *= N_wj
+          edgeContext.sendToDst((false, scaledTopicDistribution))
+          edgeContext.sendToSrc((false, scaledTopicDistribution))
+        }
+      // This is a hack to detect whether we could modify the values in-place.
+      // TODO: Add zero/seqOp/combOp option to aggregateMessages.
+      val mergeMsg: ((Boolean, TopicCounts), (Boolean, TopicCounts)) => (Boolean, TopicCounts) =
+        (m0, m1) => {
+          val sum =
+            if (m0._1) {
+              m0._2 += m1._2
+            } else if (m1._1) {
+              m1._2 += m0._2
+            } else {
+              val k = m0._2.length
+              m0._2 + m1._2
+            }
+          (true, sum)
+        }
       // M-STEP: Aggregation computes new N_{kj}, N_{wk} counts.
       val docTopicDistributions: VertexRDD[TopicCounts] =
-        graph.aggregateMessages[TopicCounts](sendMsg, _ + _)
+        graph.aggregateMessages[(Boolean, TopicCounts)](sendMsg, mergeMsg)
+          .mapValues(_._2)
       // Update the vertex descriptors with the new counts.
-      graph.outerJoinVertices(docTopicDistributions){ (vid, oldDist, newDist) => newDist.get }
+      graph.outerJoinVertices(docTopicDistributions) { (vid, oldDist, newDist) => newDist.get}
     }
 
     def collectTopicTotals(): TopicCounts = {
@@ -312,12 +329,12 @@ object LDA {
 
     /**
      * Compute the log likelihood of the observed tokens, given the current parameter estimates:
-     *  log P(docs | topics, topic distributions for docs, alpha, eta)
+     * log P(docs | topics, topic distributions for docs, alpha, eta)
      *
      * Note:
-     *  - This excludes the prior; for that, use [[logPrior]].
-     *  - Even with [[logPrior]], this is NOT the same as the data log likelihood given the
-     *    hyperparameters.
+     * - This excludes the prior; for that, use [[logPrior]].
+     * - Even with [[logPrior]], this is NOT the same as the data log likelihood given the
+     * hyperparameters.
      */
     lazy val logLikelihood: Double = {
       val eta = termSmoothing
@@ -342,7 +359,7 @@ object LDA {
 
     /**
      * Compute the log probability of the current parameter estimate:
-     *  log P(topics, topic distributions for docs | alpha, eta)
+     * log P(topics, topic distributions for docs | alpha, eta)
      */
     lazy val logPrior: Double = {
       val eta = termSmoothing
@@ -373,15 +390,16 @@ object LDA {
    * Compute gamma_{wjk}, a distribution over topics k.
    */
   private def computePTopic(
-      edgeContext: EdgeContext[TopicCounts, TokenCount, TopicCounts],
-      N_k: TopicCounts,
+      docTopicCounts: TopicCounts,
+      wordTopicCounts: TopicCounts,
+      totalTopicCounts: TopicCounts,
       vocabSize: Int,
       eta: Double,
       alpha: Double): TopicCounts = {
-    val N = N_k.data
-    val N_w = edgeContext.dstAttr.data
-    val N_j = edgeContext.srcAttr.data
-    val K = N_w.size
+    val K = docTopicCounts.length
+    val N_j = docTopicCounts.data
+    val N_w = wordTopicCounts.data
+    val N = totalTopicCounts.data
     val eta1 = eta - 1.0
     val alpha1 = alpha - 1.0
     val Weta1 = vocabSize * eta1
@@ -398,11 +416,11 @@ object LDA {
     BDV(gamma_wj) /= sum
   }
 
-  /**
-   * Compute bipartite term/doc graph.
-   * doc ids are shifted by vocabSize to maintain uniqueness
-   */
-  private def initialState(
+    /**
+     * Compute bipartite term/doc graph.
+     * doc ids are shifted by vocabSize to maintain uniqueness
+     */
+    private def initialState(
       docs: RDD[Document],
       k: Int,
       topicSmoothing: Double,
