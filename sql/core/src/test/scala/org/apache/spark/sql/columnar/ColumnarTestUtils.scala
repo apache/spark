@@ -24,7 +24,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.types.{DataType, NativeType}
+import org.apache.spark.sql.types.{DataType, NativeType}
 
 object ColumnarTestUtils {
   def makeNullRow(length: Int) = {

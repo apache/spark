@@ -807,14 +807,14 @@ def _create_converter(dataType):
             return
 
         if isinstance(obj, tuple):
-            if hasattr(obj, "fields"):
-                d = dict(zip(obj.fields, obj))
-            if hasattr(obj, "__FIELDS__"):
+            if hasattr(obj, "_fields"):
+                d = dict(zip(obj._fields, obj))
+            elif hasattr(obj, "__FIELDS__"):
                 d = dict(zip(obj.__FIELDS__, obj))
             elif all(isinstance(x, tuple) and len(x) == 2 for x in obj):
                 d = dict(obj)
             else:
-                raise ValueError("unexpected tuple: %s" % obj)
+                raise ValueError("unexpected tuple: %s" % str(obj))
 
         elif isinstance(obj, dict):
             d = obj
@@ -1281,14 +1281,14 @@ class SQLContext(object):
                                      self._sc._gateway._gateway_client)
         includes = ListConverter().convert(self._sc._python_includes,
                                            self._sc._gateway._gateway_client)
-        self._ssql_ctx.registerPython(name,
-                                      bytearray(pickled_command),
-                                      env,
-                                      includes,
-                                      self._sc.pythonExec,
-                                      broadcast_vars,
-                                      self._sc._javaAccumulator,
-                                      returnType.json())
+        self._ssql_ctx.udf().registerPython(name,
+                                            bytearray(pickled_command),
+                                            env,
+                                            includes,
+                                            self._sc.pythonExec,
+                                            broadcast_vars,
+                                            self._sc._javaAccumulator,
+                                            returnType.json())
 
     def inferSchema(self, rdd, samplingRatio=None):
         """Infer and apply a schema to an RDD of L{Row}.
@@ -1327,6 +1327,16 @@ class SQLContext(object):
         >>> srdd = sqlCtx.inferSchema(nestedRdd2)
         >>> srdd.collect()
         [Row(f1=[[1, 2], [2, 3]], f2=[1, 2]), ..., f2=[2, 3])]
+
+        >>> from collections import namedtuple
+        >>> CustomRow = namedtuple('CustomRow', 'field1 field2')
+        >>> rdd = sc.parallelize(
+        ...     [CustomRow(field1=1, field2="row1"),
+        ...      CustomRow(field1=2, field2="row2"),
+        ...      CustomRow(field1=3, field2="row3")])
+        >>> srdd = sqlCtx.inferSchema(rdd)
+        >>> srdd.collect()[0]
+        Row(field1=1, field2=u'row1')
         """
 
         if isinstance(rdd, SchemaRDD):
