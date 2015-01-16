@@ -30,6 +30,7 @@ import scala.Predef._
  * @param settings The underlying settings to associate with this set of
  *                 command-line options
  */
+@DeveloperApi
 class SparkCommandLine(args: List[String], override val settings: Settings)
     extends CompilerCommand(args, settings) {
   def this(args: List[String], error: String => Unit) {

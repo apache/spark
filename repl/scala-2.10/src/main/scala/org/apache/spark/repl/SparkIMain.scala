@@ -85,6 +85,7 @@ import org.apache.spark.annotation.DeveloperApi
    *  @author Moez A. Abdel-Gawad
    *  @author Lex Spoon
    */
+  @DeveloperApi
   class SparkIMain(
       initialSettings: Settings,
       val out: JPrintWriter,

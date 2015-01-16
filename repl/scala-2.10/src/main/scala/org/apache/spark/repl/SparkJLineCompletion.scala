@@ -26,6 +26,7 @@ import org.apache.spark.Logging
  * @param intp The interpreter to use for information retrieval to do with
  *             auto completion
  */
+@DeveloperApi
 class SparkJLineCompletion(val intp: SparkIMain) extends Completion with CompletionOutput with Logging {
   // NOTE: Exposed in package as used in quite a few classes
   // NOTE: Must be public to override the global found in CompletionOutput

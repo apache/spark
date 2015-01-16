@@ -59,6 +59,7 @@ import org.apache.spark.util.Utils
  *  @author  Lex Spoon
  *  @version 1.2
  */
+@DeveloperApi
 class SparkILoop(
     private val in0: Option[BufferedReader],
     protected val out: JPrintWriter,
