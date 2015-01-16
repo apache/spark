@@ -307,7 +307,7 @@ object LDA {
 
     def collectTopicTotals(): TopicCounts = {
       val numTopics = k
-      graph.vertices.filter(isTermVertex).map(_._2).fold(BDV.zeros[Double](numTopics))(_ + _)
+      graph.vertices.filter(isTermVertex).values.fold(BDV.zeros[Double](numTopics))(_ += _)
     }
 
     /**
