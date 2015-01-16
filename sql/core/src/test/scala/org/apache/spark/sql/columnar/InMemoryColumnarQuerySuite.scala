@@ -39,7 +39,8 @@ class InMemoryColumnarQuerySuite extends QueryTest {
     sparkContext.parallelize(1 to 10).map(i => TestData(i, i.toString)).registerTempTable("sizeTst")
     cacheTable("sizeTst")
     assert(
-      table("sizeTst").queryExecution.logical.statistics.sizeInBytes > autoBroadcastJoinThreshold)
+      table("sizeTst").queryExecution.logical.statistics.sizeInBytes >
+        conf.autoBroadcastJoinThreshold)
   }
 
   test("projection") {

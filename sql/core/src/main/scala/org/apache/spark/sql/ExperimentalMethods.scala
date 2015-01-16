@@ -15,13 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.java;
+package org.apache.spark.sql
+
+import org.apache.spark.annotation.Experimental
 
 /**
- * The data type representing float and Float values.
- *
- * {@code FloatType} is represented by the singleton object {@link DataType#FloatType}.
+ * Holder for experimental methods for the bravest. We make NO guarantee about the stability
+ * regarding binary compatibility and source compatibility of methods here.
  */
-public class FloatType extends DataType {
-  protected FloatType() {}
+@Experimental
+class ExperimentalMethods protected[sql](sqlContext: SQLContext) {
+
+  /**
+   * Allows extra strategies to be injected into the query planner at runtime.  Note this API
+   * should be consider experimental and is not intended to be stable across releases.
+   */
+  @Experimental
+  var extraStrategies: Seq[Strategy] = Nil
+
 }

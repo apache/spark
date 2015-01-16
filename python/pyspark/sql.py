@@ -1281,14 +1281,14 @@ class SQLContext(object):
                                      self._sc._gateway._gateway_client)
         includes = ListConverter().convert(self._sc._python_includes,
                                            self._sc._gateway._gateway_client)
-        self._ssql_ctx.registerPython(name,
-                                      bytearray(pickled_command),
-                                      env,
-                                      includes,
-                                      self._sc.pythonExec,
-                                      broadcast_vars,
-                                      self._sc._javaAccumulator,
-                                      returnType.json())
+        self._ssql_ctx.udf().registerPython(name,
+                                            bytearray(pickled_command),
+                                            env,
+                                            includes,
+                                            self._sc.pythonExec,
+                                            broadcast_vars,
+                                            self._sc._javaAccumulator,
+                                            returnType.json())
 
     def inferSchema(self, rdd, samplingRatio=None):
         """Infer and apply a schema to an RDD of L{Row}.

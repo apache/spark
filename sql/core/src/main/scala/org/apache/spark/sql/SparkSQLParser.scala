@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql
 
+import scala.util.parsing.combinator.RegexParsers
+
 import org.apache.spark.sql.catalyst.{SqlLexical, AbstractSparkSQLParser}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{UncacheTableCommand, CacheTableCommand, SetCommand}
+import org.apache.spark.sql.types.StringType
 
-import scala.util.parsing.combinator.RegexParsers
 
 /**
  * The top level Spark SQL parser. This parser recognizes syntaxes that are available for all SQL
