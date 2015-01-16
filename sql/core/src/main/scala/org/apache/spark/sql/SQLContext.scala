@@ -54,7 +54,6 @@ class SQLContext(@transient val sparkContext: SparkContext)
   extends org.apache.spark.Logging
   with CacheManager
   with ExpressionConversions
-  with UDFRegistration
   with Serializable {
 
   self =>
@@ -337,6 +336,34 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * the query planner for advanced functionalities.
    */
   val experimental: ExperimentalMethods = new ExperimentalMethods(this)
+
+  /**
+   * A collection of methods for registering user-defined functions (UDF).
+   *
+   * The following example registers a Scala closure as UDF:
+   * {{{
+   *   sqlContext.udf.register("myUdf", (arg1: Int, arg2: String) => arg2 + arg1)
+   * }}}
+   *
+   * The following example registers a UDF in Java:
+   * {{{
+   *   sqlContext.udf().register("myUDF",
+   *     new UDF2<Integer, String, String>() {
+   *       @Override
+   *       public String call(Integer arg1, String arg2) {
+   *         return arg2 + arg1;
+   *       }
+   *     }, DataTypes.StringType);
+   * }}}
+   *
+   * Or, to use Java 8 lambda syntax:
+   * {{{
+   *   sqlContext.udf().register("myUDF",
+   *     (Integer arg1, String arg2) -> arg2 + arg1),
+   *     DataTypes.StringType);
+   * }}}
+   */
+  val udf: UDFRegistration = new UDFRegistration(this)
 
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext
