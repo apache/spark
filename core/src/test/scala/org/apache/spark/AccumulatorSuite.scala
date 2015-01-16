@@ -135,5 +135,30 @@ class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
       resetSparkContext()
     }
   }
+  
+  test ("garbage collection") {
+    // Create an accumulator and let it go out of scope to test that it's properly garbage collected
+    def testFunc() : Long = {
+      sc = new SparkContext("local", "test")
+      
+      // Use an accumulable instead of an accumulator since accumulables are registered
+      // automatically
+      val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
+      val accId = acc.id
+
+      // Ensure the accumulator is present
+      assert(Accumulators.values.get(accId).isDefined)
+      accId
+    }
+    
+    val maxI = 1000
+    val accId = testFunc()
+    System.gc()
+    assert(Accumulators.values.get(accId).isEmpty)
+    
+    // To test whether the accumulator is properly cleaned up, create it, then drop it from scope 
+    // and garbage collect. Lastly, see if it was properly cleared from the accumulators array
+    
+  }
 
 }
