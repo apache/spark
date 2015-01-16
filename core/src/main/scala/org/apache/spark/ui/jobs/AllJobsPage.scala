@@ -71,7 +71,8 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
         </td>
         <td>
-          <input class="description-input" title={lastStageDescription} type="text" name="StageDescription" disabled="false" value={lastStageDescription}/>
+          <input class="description-input" title={lastStageDescription} type="text"
+                 name="StageDescription" disabled="false" value={lastStageDescription}/>
           <a href={detailUrl}>{lastStageName}</a>
         </td>
         <td sorttable_customkey={job.startTime.getOrElse(-1).toString}>
