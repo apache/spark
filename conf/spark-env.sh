@@ -11,7 +11,7 @@
 SPARK_CLASSPATH=/root/spark1.3/assembly/protobuf-java-2.5.0.jar:$SPARK_CLASSPATH
 
 # Options read by executors and drivers running insidel the cluster
-SPARK_LOCAL_IP="10.153.22.150"
+# - SPARK_LOCAL_IP="10.153.22.150"
 # - SPARK_PUBLIC_DNS, to set the public DNS name of the driver program
 # - SPARK_CLASSPATH, default classpath entries to append
 # - SPARK_LOCAL_DIRS, storage directories to use on this node for shuffle and RDD data
@@ -29,7 +29,7 @@ SPARK_LOCAL_IP="10.153.22.150"
 # - SPARK_YARN_DIST_ARCHIVES, Comma separated list of archives to be distributed with the job.
 
 # Options for the daemons used in the standalone deploy mode
-SPARK_MASTER_IP="10.153.22.150"
+# - SPARK_MASTER_IP="10.153.22.150"
 # - SPARK_MASTER_PORT / SPARK_MASTER_WEBUI_PORT, to use non-default ports for the master
 # - SPARK_MASTER_OPTS, to set config properties only for the master (e.g. "-Dx=y")
 # - SPARK_WORKER_CORES, to set the number of cores to use on this machine
