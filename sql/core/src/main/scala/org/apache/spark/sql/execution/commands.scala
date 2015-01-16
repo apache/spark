@@ -94,7 +94,7 @@ case class SetCommand(
       logWarning(
         s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
           s"showing ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${sqlContext.numShufflePartitions}"))
+      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${sqlContext.conf.numShufflePartitions}"))
 
     // Queries a single property.
     case Some((key, None)) =>
@@ -113,7 +113,7 @@ case class SetCommand(
 @DeveloperApi
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
-    override val output: Seq[Attribute], extended: Boolean) extends RunnableCommand {
+    override val output: Seq[Attribute], extended: Boolean = false) extends RunnableCommand {
 
   // Run through the optimizer to generate the physical plan.
   override def run(sqlContext: SQLContext) = try {
@@ -177,7 +177,6 @@ case class DescribeCommand(
     override val output: Seq[Attribute]) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    Row("# Registered as a temporary table", null, null) +:
-      child.output.map(field => Row(field.name, field.dataType.toString, null))
+    child.output.map(field => Row(field.name, field.dataType.toString, null))
   }
 }
