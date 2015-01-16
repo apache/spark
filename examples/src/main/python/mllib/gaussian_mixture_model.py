@@ -26,6 +26,7 @@ import numpy as np
 from pyspark import SparkContext
 from pyspark.mllib.clustering import GaussianMixtureEM
 
+
 def parseVector(line):
     return np.array([float(x) for x in line.split(' ')])
 
