@@ -2039,14 +2039,14 @@ class SchemaRDD(RDD):
             return checkpointFile.get()
 
     def coalesce(self, numPartitions, shuffle=False):
-        rdd = self._jschema_rdd.coalesce(numPartitions, shuffle)
+        rdd = self._jschema_rdd.coalesce(numPartitions, shuffle, None)
         return SchemaRDD(rdd, self.sql_ctx)
 
     def distinct(self, numPartitions=None):
         if numPartitions is None:
             rdd = self._jschema_rdd.distinct()
         else:
-            rdd = self._jschema_rdd.distinct(numPartitions)
+            rdd = self._jschema_rdd.distinct(numPartitions, None)
         return SchemaRDD(rdd, self.sql_ctx)
 
     def intersection(self, other):
@@ -2057,7 +2057,7 @@ class SchemaRDD(RDD):
             raise ValueError("Can only intersect with another SchemaRDD")
 
     def repartition(self, numPartitions):
-        rdd = self._jschema_rdd.repartition(numPartitions)
+        rdd = self._jschema_rdd.repartition(numPartitions, None)
         return SchemaRDD(rdd, self.sql_ctx)
 
     def subtract(self, other, numPartitions=None):

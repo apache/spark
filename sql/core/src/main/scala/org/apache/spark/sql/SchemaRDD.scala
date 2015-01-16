@@ -476,9 +476,6 @@ class SchemaRDD(
                        (implicit ord: Ordering[Row] = null): SchemaRDD =
     applySchema(super.coalesce(numPartitions, shuffle)(ord))
 
-  def coalesce(numPartitions: Int, shuffle: Boolean): SchemaRDD =
-    applySchema(super.coalesce(numPartitions, shuffle)(null))
-
   override def distinct(): SchemaRDD = applySchema(super.distinct())
 
   override def distinct(numPartitions: Int)
@@ -504,9 +501,6 @@ class SchemaRDD(
   override def repartition(numPartitions: Int)
                           (implicit ord: Ordering[Row] = null): SchemaRDD =
     applySchema(super.repartition(numPartitions)(ord))
-
-  def repartition(numPartitions: Int): SchemaRDD =
-    applySchema(super.repartition(numPartitions)(null))
 
   override def subtract(other: RDD[Row]): SchemaRDD =
     applySchema(super.subtract(other))
