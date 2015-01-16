@@ -58,7 +58,6 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
 
     val parser = new HBaseSQLParser()
     val sql = raw"LOAD PARALL DATA INPATH '/usr/hdfsfile.txt' INTO TABLE tb1"
-    //val sql = "select"
 
     val plan: LogicalPlan = parser(sql)
     assert(plan != null)
@@ -129,18 +128,14 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
       val pathString = fs.pathToFile(new Path(bulkLoad.path)).getCanonicalPath
       new HadoopReader(TestHbase.sparkContext, pathString, bulkLoad.delimiter)(hbaseRelation)
     }
-    val tmpPath = Util.getTempFilePath(conf, hbaseRelation.tableName)
+
     val wrappedConf = new SerializableWritable(conf)
 
-    val result = bulkLoad.makeBulkLoadRDD(
+    bulkLoad.makeBulkLoadRDD(
       splitKeys.toArray,
       hadoopReader,
       wrappedConf,
       "./hfileoutput")(hbaseRelation)
-
-    for (i <- 0 to 7)
-      FileSystem.get(conf).delete(new Path("./hfileoutput" + i), true)
-    FileSystem.get(conf).delete(new Path("testtablename*"), true)
   }
 
   test("hfile output format, delete me when ready") {
