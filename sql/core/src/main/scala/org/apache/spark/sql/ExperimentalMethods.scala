@@ -15,23 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.sql
 
-import akka.actor.{Address, ActorRef}
+import org.apache.spark.annotation.Experimental
 
 /**
- * Grouping of data for an executor used by CoarseGrainedSchedulerBackend.
- *
- * @param executorActor The ActorRef representing this executor
- * @param executorAddress The network address of this executor
- * @param executorHost The hostname that this executor is running on
- * @param freeCores  The current number of cores available for work on the executor
- * @param totalCores The total number of cores available to the executor
+ * Holder for experimental methods for the bravest. We make NO guarantee about the stability
+ * regarding binary compatibility and source compatibility of methods here.
  */
-private[cluster] class ExecutorData(
-   val executorActor: ActorRef,
-   val executorAddress: Address,
-   override val executorHost: String,
-   var freeCores: Int,
-   override val totalCores: Int
-) extends ExecutorInfo(executorHost, totalCores)
+@Experimental
+class ExperimentalMethods protected[sql](sqlContext: SQLContext) {
+
+  /**
+   * Allows extra strategies to be injected into the query planner at runtime.  Note this API
+   * should be consider experimental and is not intended to be stable across releases.
+   */
+  @Experimental
+  var extraStrategies: Seq[Strategy] = Nil
+
+}

@@ -402,23 +402,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     Utils.deleteRecursively(file)
   }
 
-  test("Insert (overwrite) via Scala API") {
-    val dirname = Utils.createTempDir()
-    val source_rdd = TestSQLContext.sparkContext.parallelize((1 to 100))
-      .map(i => TestRDDEntry(i, s"val_$i"))
-    source_rdd.registerTempTable("source")
-    val dest_rdd = createParquetFile[TestRDDEntry](dirname.toString)
-    dest_rdd.registerTempTable("dest")
-    sql("INSERT OVERWRITE INTO dest SELECT * FROM source").collect()
-    val rdd_copy1 = sql("SELECT * FROM dest").collect()
-    assert(rdd_copy1.size === 100)
-
-    sql("INSERT INTO dest SELECT * FROM source")
-    val rdd_copy2 = sql("SELECT * FROM dest").collect().sortBy(_.getInt(0))
-    assert(rdd_copy2.size === 200)
-    Utils.deleteRecursively(dirname)
-  }
-
   test("Insert (appending) to same table via Scala API") {
     sql("INSERT INTO testsource SELECT * FROM testsource")
     val double_rdd = sql("SELECT * FROM testsource").collect()
@@ -899,15 +882,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result3.size === 1)
     assert(result3(0)(0) === 42.toLong)
     assert(result3(0)(1) === "the answer")
-    Utils.deleteRecursively(tmpdir)
-  }
-
-  test("Querying on empty parquet throws exception (SPARK-3536)") {
-    val tmpdir = Utils.createTempDir()
-    Utils.deleteRecursively(tmpdir)
-    createParquetFile[TestRDDEntry](tmpdir.toString()).registerTempTable("tmpemptytable")
-    val result1 = sql("SELECT * FROM tmpemptytable").collect()
-    assert(result1.size === 0)
     Utils.deleteRecursively(tmpdir)
   }
 
