@@ -27,7 +27,6 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.hbase.catalyst.NotPusher
-import org.apache.spark.sql.hbase.catalyst.expressions.PartialPredicateOperations._
 import org.apache.spark.sql.hbase.catalyst.types.PartitionRange
 import org.apache.spark.sql.hbase.util.{DataTypeUtils, HBaseKVHelper, BytesUtils, Util}
 import org.apache.spark.sql.sources.{BaseRelation, CatalystScan, LogicalRelation, RelationProvider}
@@ -244,7 +243,7 @@ private[hbase] case class HBaseRelation(
     val byteKeys: Array[Array[Byte]] = htable.getStartKeys
     val ret = ArrayBuffer[ImmutableBytesWritableWrapper]()
 
-    // Since the byteKeys'size will be 1 if there is only one partition in the table,
+    // Since the size of byteKeys will be 1 if there is only one partition in the table,
     // we need to omit the that null element.
     if (!(byteKeys.length == 1 && byteKeys(0).length == 0)) {
       for (byteKey <- byteKeys) {
@@ -535,7 +534,7 @@ private[hbase] case class HBaseRelation(
     if (filters.isDefined && !filters.get.getFilters.isEmpty) {
       scan.setFilter(filters.get)
     }
-    // TODO: add add Family to SCAN from projections
+    // TODO: add Family to SCAN from projections
     scan
   }
 

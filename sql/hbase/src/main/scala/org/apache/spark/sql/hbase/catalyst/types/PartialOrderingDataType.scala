@@ -18,7 +18,6 @@ package org.apache.spark.sql.hbase.catalyst.types
 
 import org.apache.spark.sql.catalyst.types._
 
-import scala.math.PartialOrdering
 import scala.reflect.runtime.universe.TypeTag
 
 abstract class PartialOrderingDataType extends DataType {

@@ -40,9 +40,17 @@ class Range[T](val start: Option[T], // None for open ends
     startInclusive && endInclusive && start.get.equals(end.get)
 }
 
-// HBase ranges:
-// @param
-// id: partition id to be used to map to a HBase physical partition
+/**
+ * HBase partition range
+ * @param start start position
+ * @param startInclusive whether the start position is inclusive or not
+ * @param end end position
+ * @param endInclusive whether the end position is inclusive or not
+ * @param id the partition id
+ * @param dt the data type
+ * @param pred the associated predicate
+ * @tparam T
+ */
 class PartitionRange[T](start: Option[T], startInclusive: Boolean,
                         end: Option[T], endInclusive: Boolean,
                         val id: Int, dt: NativeType, var pred: Expression)
