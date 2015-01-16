@@ -60,11 +60,6 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val formattedSubmissionTime = job.startTime.map(UIUtils.formatDate).getOrElse("Unknown")
       val detailUrl =
         "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), job.jobId)
-      val shortLastStageDescription = if (lastStageDescription.size > 100) {
-          lastStageDescription.substring(0, 100) + "..."
-      } else {
-        lastStageDescription
-      }
 
       <tr>
         <td sorttable_customkey={job.jobId.toString}>
