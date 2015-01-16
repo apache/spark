@@ -22,7 +22,7 @@ import scala.collection.mutable.HashSet
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.CallSite
+import org.apache.spark.util.{Utils, CallSite}
 
 /**
  * A stage is a set of independent tasks all computing the same function that need to run as part
