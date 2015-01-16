@@ -294,7 +294,7 @@ object LDA {
         val N_wj = edgeContext.attr
         // E-STEP: Compute gamma_{wjk} (smoothed topic distributions), scaled by token count N_{wj}.
         val scaledTopicDistribution: TopicCounts =
-          computePTopic(edgeContext, N_k, W, eta, alpha) * N_wj
+          computePTopic(edgeContext, N_k, W, eta, alpha) *= N_wj
         edgeContext.sendToDst(scaledTopicDistribution)
         edgeContext.sendToSrc(scaledTopicDistribution)
       }
