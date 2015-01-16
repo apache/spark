@@ -181,4 +181,17 @@ object Strategy {
       new Strategy(algo = Regression, impurity = Variance, maxDepth = 10,
         numClasses = 0)
   }
+
+  /**
+   * Construct a default set of parameters for [[org.apache.spark.mllib.tree.DecisionTree]]
+   * @param algo Algo.Classification or Algo.Regression
+   */
+  def defaultStategy(algo: Algo): Strategy = algo match {
+    case Algo.Classification =>
+      new Strategy(algo = Classification, impurity = Gini, maxDepth = 10,
+        numClasses = 2)
+    case Algo.Regression =>
+      new Strategy(algo = Regression, impurity = Variance, maxDepth = 10,
+        numClasses = 0)
+  }
 }
