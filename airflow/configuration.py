@@ -1,58 +1,81 @@
+from ConfigParser import ConfigParser
+import errno
 import logging
 import os
 
-from ConfigParser import ConfigParser, NoOptionError, NoSectionError
+DEFAULT_CONFIG = """\
+[core]
+airflow_home = {AIRFLOW_HOME}
+authenticate = False
+dags_folder = {AIRFLOW_HOME}/dags
+base_folder = {AIRFLOW_HOME}/airflow
+base_url = http://localhost:8080
+executor = LocalExecutor
+sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/airflow.db
 
-class AirflowConfigParser(ConfigParser):
-    NO_DEFAULT = object()
-    _instance = None
-    _config_paths = ['airflow.cfg']
-    if 'AIRFLOW_CONFIG_PATH' in os.environ:
-        _config_paths.append(os.environ['AIRFLOW_CONFIG_PATH'])
-        logging.info("Config paths is " + str(_config_paths))
+[server]
+web_server_host = 0.0.0.0
+web_server_port = 8080
 
-    @classmethod
-    def add_config_paths(cls, path):
-        cls._config_paths.append(path)
-        cls.reload()
+[smtp]
+smtp_host = localhost
+smtp_user = airflow
+smtp_port = 25
+smtp_password = airflow
+smtp_mail_from = airflow@airflow.com
 
-    @classmethod
-    def instance(cls, *args, **kwargs):
-        if cls._instance is None:
-            cls._instance = cls(*args, **kwargs)
-            cls._instance.reload()
+[celery]
+celery_app_name = airflow.executors.celery_executor
+celeryd_concurrency = 16
+worker_log_server_port = 8793
+broker_url = sqla+mysql://airflow:airflow@localhost:3306/airflow
+celery_result_backend = db+mysql://airflow:airflow@localhost:3306/airflow
 
-        return cls._instance
+[hooks]
+presto_default_conn_id = presto_default
+hive_default_conn_id = hive_default
 
-    @classmethod
-    def reload(cls):
-        loaded_obj = cls.instance().read(cls._config_paths)
-        logging.info("the config object after loading is " + str(loaded_obj))
-        return loaded_obj
+[misc]
+job_heartbeat_sec = 5
+id_len = 250
+"""
 
-    def get_with_default(self, method, section, option, default):
-        try:
-            return method(self, section, option)
-        except (NoOptionError, NoSectionError):
-            if default is AirflowConfigParser.NO_DEFAULT:
-                raise
-            return default
+def mkdir_p(path):
+    try:
+        os.makedirs(path)
+    except OSError as exc: # Python >2.5
+        if exc.errno == errno.EEXIST and os.path.isdir(path):
+            pass
+        else: raise
 
-    def get(self, section, option, default=NO_DEFAULT):
-        return self.get_with_default(ConfigParser.get, section, option, default)
+'''
+Setting AIRFLOW_HOME and AIRFLOW_CONFIG from environment variables, using
+"~/airflow" and "~/airflow/airflow.cfg" repectively as defaults.
+'''
 
-    def getint(self, section, option, default=NO_DEFAULT):
-        return self.get_with_default(ConfigParser.getint, section, option, default)
+if 'AIRFLOW_HOME' not in os.environ:
+    AIRFLOW_HOME = os.path.expanduser('~/airflow')
+else:
+    AIRFLOW_HOME = os.environ['AIRFLOW_HOME']
 
-    def getboolean(self, section, option, default=NO_DEFAULT):
-        return self.get_with_default(ConfigParser.getboolean, section, option, default)
+mkdir_p(AIRFLOW_HOME)
 
-    def set(self, section, option, value):
-        if not ConfigParser.has_section(self, section):
-            ConfigParser.add_section(self, section)
-        return ConfigParser.set(self, section, option, value)
+if 'AIRFLOW_CONFIG' not in os.environ:
+    AIRFLOW_CONFIG = AIRFLOW_HOME + '/airflow.cfg'
+else:
+    AIRFLOW_CONFIG = os.environ['AIRFLOW_CONFIG']
 
-def getconf():
-    return AirflowConfigParser.instance()
+conf = ConfigParser()
+if not os.path.isfile(AIRFLOW_CONFIG):
+    '''
+    These configuration are used to generate a default configuration when
+    it is missing. The right way to change your configuration is to alter your
+    configuration file, not this code.
+    '''
+    logging.info("Createing new config file in: " + AIRFLOW_CONFIG)
+    f = open(AIRFLOW_CONFIG, 'w')
+    f.write(DEFAULT_CONFIG.format(**locals()))
+    f.close()
 
-conf = getconf()
+logging.info("Reading the config from " + AIRFLOW_CONFIG)
+conf.read(AIRFLOW_CONFIG)

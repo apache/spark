@@ -3,7 +3,6 @@ import multiprocessing
 import subprocess
 import time
 
-from airflow.configuration import getconf
 from airflow.utils import State
 
 from airflow.executors.base_executor import BaseExecutor

@@ -1,15 +1,11 @@
 import logging
 import json
 import subprocess
-import sys
 from tempfile import NamedTemporaryFile
 
 from airflow.models import Connection
 from airflow.configuration import conf
 from airflow import settings
-
-# Adding the Hive python libs to python path
-sys.path.insert(0, conf.get('hooks', 'HIVE_HOME_PY'))
 
 from thrift.transport import TSocket
 from thrift.transport import TTransport

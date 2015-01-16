@@ -471,7 +471,19 @@ class Airflow(BaseView):
         html_code = highlight(
             code, PythonLexer(), HtmlFormatter(noclasses=True))
         return self.render(
-            'airflow/code.html', html_code=html_code, dag=dag, title=title)
+            'airflow/dag_code.html', html_code=html_code, dag=dag, title=title)
+
+    @expose('/conf')
+    @login_required
+    def conf(self):
+        from airflow import configuration
+        title = "Application Configuration"
+        subtitle = configuration.AIRFLOW_CONFIG
+        f = open(configuration.AIRFLOW_CONFIG, 'r')
+        code = f.read()
+        f.close()
+        return self.render(
+            'airflow/code.html', code=code, title=title, subtitle=subtitle)
 
     @expose('/noaccess')
     def noaccess(self):
@@ -568,7 +580,7 @@ class Airflow(BaseView):
         html_code = log
 
         return self.render(
-            'airflow/code.html', html_code=html_code, dag=dag, title=title)
+            'airflow/dag_code.html', html_code=html_code, dag=dag, title=title)
 
     @expose('/task')
     def task(self):
@@ -1005,6 +1017,21 @@ def duration_f(v, c, m, p):
         return timedelta(seconds=m.duration)
 
 
+class JobModelView(ModelViewOnly):
+    column_default_sort = ('start_date', True)
+mv = JobModelView(jobs.BaseJob, Session, name="Jobs", category="Browse")
+
+admin.add_view(mv)
+
+
+class LogModelView(ModelViewOnly):
+    column_default_sort = ('dttm', True)
+    column_filters = ('dag_id', 'task_id', 'execution_date')
+
+mv = LogModelView(
+    models.Log, Session, name="Logs", category="Browse")
+admin.add_view(mv)
+
 class TaskInstanceModelView(ModelView):
     column_filters = ('dag_id', 'task_id', 'state', 'execution_date')
     column_formatters = dict(
@@ -1015,19 +1042,7 @@ class TaskInstanceModelView(ModelView):
         'start_date', 'end_date', 'duration', 'state', 'log')
     can_delete = True
 mv = TaskInstanceModelView(
-    models.TaskInstance, Session, name="Task Instances", category="Admin")
-admin.add_view(mv)
-
-
-class JobModelView(ModelViewOnly):
-    column_default_sort = ('start_date', True)
-mv = JobModelView(jobs.BaseJob, Session, name="Jobs", category="Admin")
-admin.add_view(mv)
-
-
-class UserModelView(LoginMixin, ModelView):
-    pass
-mv = UserModelView(models.User, Session, name="Users", category="Admin")
+    models.TaskInstance, Session, name="Task Instances", category="Browse")
 admin.add_view(mv)
 
 
@@ -1049,12 +1064,9 @@ mv = ConnectionModelView(
 admin.add_view(mv)
 
 
-class LogModelView(ModelViewOnly):
-    column_default_sort = ('dttm', True)
-    column_filters = ('dag_id', 'task_id', 'execution_date')
-
-mv = LogModelView(
-    models.Log, Session, name="Logs", category="Admin")
+class UserModelView(LoginMixin, ModelView):
+    pass
+mv = UserModelView(models.User, Session, name="Users", category="Admin")
 admin.add_view(mv)
 
 

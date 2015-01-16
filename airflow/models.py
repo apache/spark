@@ -23,10 +23,12 @@ from airflow import settings
 from airflow import utils
 from airflow.utils import State
 from airflow.utils import apply_defaults
-from flask_login import current_user
 
 Base = declarative_base()
 ID_LEN = conf.getint('misc', 'ID_LEN')
+SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
+if 'mysql' in SQL_ALCHEMY_CONN:
+    Text = LONGTEXT
 
 class DagBag(object):
     """
@@ -41,7 +43,8 @@ class DagBag(object):
     def __init__(
             self,
             dag_folder=None,
-            executor=DEFAULT_EXECUTOR):
+            executor=DEFAULT_EXECUTOR,
+            include_examples=True):
         if not dag_folder:
             dag_folder = conf.get('core', 'DAGS_FOLDER')
         logging.info("Filling up the DagBag from " + dag_folder)
@@ -49,7 +52,13 @@ class DagBag(object):
         self.dags = {}
         self.file_last_changed = {}
         self.executor = executor
-        self.collect_dags()
+        self.collect_dags(dag_folder)
+        if include_examples:
+            example_dag_folder = os.path.join(
+                os.path.dirname(__file__),
+                'example_dags')
+            self.collect_dags(example_dag_folder)
+
 
     def process_file(self, filepath, only_if_updated=True):
         """
@@ -87,15 +96,15 @@ class DagBag(object):
 
             self.file_last_changed[filepath] = dttm
 
-    def collect_dags(self, only_if_updated=True):
+    def collect_dags(self, dag_folder, only_if_updated=True):
         """
         Given a file path or a folder, this file looks for python modules,
         imports them and adds them to the dagbag collection.
         """
-        if os.path.isfile(self.dag_folder):
-            self.process_file(self.dag_folder)
-        elif os.path.isdir(self.dag_folder):
-            for root, dirs, files in os.walk(self.dag_folder):
+        if os.path.isfile(dag_folder):
+            self.process_file(dag_folder)
+        elif os.path.isdir(dag_folder):
+            for root, dirs, files in os.walk(dag_folder):
                 for f in files:
                     filepath = root + '/' + f
                     self.process_file(filepath)
@@ -186,7 +195,7 @@ class DagPickle(Base):
     the database.
     """
     id = Column(Integer, primary_key=True)
-    pickle = Column(LONGTEXT())
+    pickle = Column(Text())
 
     __tablename__ = "dag_pickle"
 
