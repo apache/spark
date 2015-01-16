@@ -19,6 +19,7 @@ package org.apache.spark.repl
 
 import scala.tools.nsc.{Settings, CompilerCommand}
 import scala.Predef._
+import org.apache.spark.annotation.DeveloperApi
 
 /**
  * Command class enabling Spark-specific command line options (provided by
