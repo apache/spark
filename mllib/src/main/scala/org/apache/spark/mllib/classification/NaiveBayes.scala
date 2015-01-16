@@ -17,13 +17,23 @@
 
 package org.apache.spark.mllib.classification
 
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum}
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum, Axis}
+import org.apache.spark.mllib.classification.NaiveBayesModels.NaiveBayesModels
 
 import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
+
+
+/**
+ *
+ */
+object NaiveBayesModels extends Enumeration {
+  type NaiveBayesModels = Value
+  val Multinomial, Bernoulli = Value
+}
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -32,26 +42,40 @@ import org.apache.spark.rdd.RDD
  * @param pi log of class priors, whose dimension is C, number of labels
  * @param theta log of class conditional probabilities, whose dimension is C-by-D,
  *              where D is number of features
+ * @param model The type of NB model to fit from the enumeration NaiveBayesModels, can be
+ *              Multinomial or Bernoulli
  */
+
 class NaiveBayesModel private[mllib] (
     val labels: Array[Double],
     val pi: Array[Double],
-    val theta: Array[Array[Double]]) extends ClassificationModel with Serializable {
+    val theta: Array[Array[Double]],
+    val model: NaiveBayesModels) extends ClassificationModel with Serializable {
 
-  private val brzPi = new BDV[Double](pi)
-  private val brzTheta = new BDM[Double](theta.length, theta(0).length)
-
-  {
-    // Need to put an extra pair of braces to prevent Scala treating `i` as a member.
+  def populateMatrix(arrayIn: Array[Array[Double]],
+                     matrixIn: BDM[Double],
+                     transformation: (Double) => Double = (x) => x) = {
     var i = 0
-    while (i < theta.length) {
+    while (i < arrayIn.length) {
       var j = 0
-      while (j < theta(i).length) {
-        brzTheta(i, j) = theta(i)(j)
+      while (j < arrayIn(i).length) {
+        matrixIn(i, j) = transformation(theta(i)(j))
         j += 1
       }
       i += 1
     }
+  }
+
+  private val brzPi = new BDV[Double](pi)
+  private val brzTheta = new BDM[Double](theta.length, theta(0).length)
+  populateMatrix(theta, brzTheta)
+
+  private val brzNegTheta: Option[BDM[Double]] = model match {
+    case NaiveBayesModels.Multinomial => None
+    case NaiveBayesModels.Bernoulli =>
+      val negTheta = new BDM[Double](theta.length, theta(0).length)
+      populateMatrix(theta, negTheta, (x) => math.log(1.0 - math.exp(x)))
+      Option(negTheta)
   }
 
   override def predict(testData: RDD[Vector]): RDD[Double] = {
@@ -63,7 +87,14 @@ class NaiveBayesModel private[mllib] (
   }
 
   override def predict(testData: Vector): Double = {
-    labels(brzArgmax(brzPi + brzTheta * testData.toBreeze))
+    model match {
+      case NaiveBayesModels.Multinomial =>
+        labels (brzArgmax (brzPi + brzTheta * testData.toBreeze) )
+      case NaiveBayesModels.Bernoulli =>
+        labels (brzArgmax (brzPi +
+          (brzTheta - brzNegTheta.get) * testData.toBreeze +
+          brzSum(brzNegTheta.get, Axis._1)))
+    }
   }
 }
 
@@ -75,15 +106,25 @@ class NaiveBayesModel private[mllib] (
  * document classification.  By making every vector a 0-1 vector, it can also be used as
  * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]). The input feature values must be nonnegative.
  */
-class NaiveBayes private (private var lambda: Double) extends Serializable with Logging {
+class NaiveBayes private (private var lambda: Double,
+                          var model: NaiveBayesModels) extends Serializable with Logging {
 
-  def this() = this(1.0)
+  def this(lambda: Double) = this(lambda, NaiveBayesModels.Multinomial)
+
+  def this() = this(1.0, NaiveBayesModels.Multinomial)
 
   /** Set the smoothing parameter. Default: 1.0. */
   def setLambda(lambda: Double): NaiveBayes = {
     this.lambda = lambda
     this
   }
+
+  /** Set the model type. Default: Multinomial. */
+  def setModelType(model: NaiveBayesModels): NaiveBayes = {
+    this.model = model
+    this
+  }
+
 
   /**
    * Run the algorithm with the configured parameters on an input RDD of LabeledPoint entries.
@@ -118,21 +159,27 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
       mergeCombiners = (c1: (Long, BDV[Double]), c2: (Long, BDV[Double])) =>
         (c1._1 + c2._1, c1._2 += c2._2)
     ).collect()
+
     val numLabels = aggregated.length
     var numDocuments = 0L
     aggregated.foreach { case (_, (n, _)) =>
       numDocuments += n
     }
     val numFeatures = aggregated.head match { case (_, (_, v)) => v.size }
+
     val labels = new Array[Double](numLabels)
     val pi = new Array[Double](numLabels)
     val theta = Array.fill(numLabels)(new Array[Double](numFeatures))
+
     val piLogDenom = math.log(numDocuments + numLabels * lambda)
     var i = 0
     aggregated.foreach { case (label, (n, sumTermFreqs)) =>
       labels(i) = label
-      val thetaLogDenom = math.log(brzSum(sumTermFreqs) + numFeatures * lambda)
       pi(i) = math.log(n + lambda) - piLogDenom
+      val thetaLogDenom = model match {
+        case NaiveBayesModels.Multinomial => math.log(brzSum(sumTermFreqs) + numFeatures * lambda)
+        case NaiveBayesModels.Bernoulli => math.log(n + 2.0 * lambda)
+      }
       var j = 0
       while (j < numFeatures) {
         theta(i)(j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
@@ -141,7 +188,7 @@ class NaiveBayes private (private var lambda: Double) extends Serializable with 
       i += 1
     }
 
-    new NaiveBayesModel(labels, pi, theta)
+    new NaiveBayesModel(labels, pi, theta, model)
   }
 }
 
@@ -154,8 +201,7 @@ object NaiveBayes {
    *
    * This is the Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
    * discrete data.  For example, by converting documents into TF-IDF vectors, it can be used for
-   * document classification.  By making every vector a 0-1 vector, it can also be used as
-   * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]).
+   * document classification.
    *
    * This version of the method uses a default smoothing parameter of 1.0.
    *
@@ -171,8 +217,7 @@ object NaiveBayes {
    *
    * This is the Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
    * discrete data.  For example, by converting documents into TF-IDF vectors, it can be used for
-   * document classification.  By making every vector a 0-1 vector, it can also be used as
-   * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]).
+   * document classification.
    *
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
@@ -180,5 +225,26 @@ object NaiveBayes {
    */
   def train(input: RDD[LabeledPoint], lambda: Double): NaiveBayesModel = {
     new NaiveBayes(lambda).run(input)
+  }
+
+
+  /**
+   * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
+   *
+   * This is by default the Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle
+   * all kinds of discrete data.  For example, by converting documents into TF-IDF vectors,
+   * it can be used for document classification.  By making every vector a 0-1 vector and
+   * setting the model type to NaiveBayesModels.Bernoulli, it fits and predicts as
+   * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]).
+   *
+   * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
+   *              vector or a count vector.
+   * @param lambda The smoothing parameter
+   *
+   * @param model The type of NB model to fit from the enumeration NaiveBayesModels, can be
+   *              Multinomial or Bernoulli
+   */
+  def train(input: RDD[LabeledPoint], lambda: Double, model: NaiveBayesModels): NaiveBayesModel = {
+    new NaiveBayes(lambda, model).run(input)
   }
 }

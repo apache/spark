@@ -17,6 +17,10 @@
 
 package org.apache.spark.mllib.classification
 
+import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum, Axis}
+import breeze.stats.distributions.Multinomial
+import org.apache.spark.mllib.classification.NaiveBayesModels.NaiveBayesModels
+
 import scala.util.Random
 
 import org.scalatest.FunSuite
@@ -39,10 +43,12 @@ object NaiveBayesSuite {
 
   // Generate input of the form Y = (theta * x).argmax()
   def generateNaiveBayesInput(
-      pi: Array[Double],            // 1XC
-      theta: Array[Array[Double]],  // CXD
-      nPoints: Int,
-      seed: Int): Seq[LabeledPoint] = {
+    pi: Array[Double],            // 1XC
+    theta: Array[Array[Double]],  // CXD
+    nPoints: Int,
+    seed: Int,
+    dataModel: NaiveBayesModels = NaiveBayesModels.Multinomial,
+    sample: Int = 10): Seq[LabeledPoint] = {
     val D = theta(0).length
     val rnd = new Random(seed)
 
@@ -51,8 +57,17 @@ object NaiveBayesSuite {
 
     for (i <- 0 until nPoints) yield {
       val y = calcLabel(rnd.nextDouble(), _pi)
-      val xi = Array.tabulate[Double](D) { j =>
-        if (rnd.nextDouble() < _theta(y)(j)) 1 else 0
+      val xi = dataModel match {
+        case NaiveBayesModels.Bernoulli => Array.tabulate[Double] (D) {j =>
+            if (rnd.nextDouble () < _theta(y)(j) ) 1 else 0
+        }
+        case NaiveBayesModels.Multinomial =>
+          val mult = Multinomial(BDV(_theta(y)))
+          val emptyMap = (0 until D).map(x => (x, 0.0)).toMap
+          val counts = emptyMap ++ mult.sample(sample).groupBy(x => x).map {
+            case (index, reps) => (index, reps.size.toDouble)
+          }
+          counts.toArray.sortBy(_._1).map(_._2)
       }
 
       LabeledPoint(y, Vectors.dense(xi))
@@ -71,23 +86,68 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     assert(numOfPredictions < input.length / 5)
   }
 
-  test("Naive Bayes") {
+  def validateModelFit(piData: Array[Double], thetaData: Array[Array[Double]], model: NaiveBayesModel) = {
+    def closeFit(d1: Double, d2: Double, precision: Double): Boolean = {
+      (d1 - d2).abs <= precision
+    }
+    val modelIndex = (0 until piData.length).zip(model.labels.map(_.toInt))
+    for (i <- modelIndex) {
+      assert(closeFit(math.exp(piData(i._2)), math.exp(model.pi(i._1)), 0.05))
+    }
+    for (i <- modelIndex) {
+      val sortedData = thetaData(i._2).sorted
+      val sortedModel = model.theta(i._1).sorted
+      for (j <- 0 until sortedData.length) {
+        assert(closeFit(math.exp(sortedData(j)), math.exp(sortedModel(j)), 0.05))
+      }
+    }
+  }
+
+  test("Naive Bayes Multinomial") {
+    val nPoints = 1000
+
+    val pi = Array(0.5, 0.1, 0.4).map(math.log)
+    val theta = Array(
+      Array(0.70, 0.10, 0.10, 0.10), // label 0
+      Array(0.10, 0.70, 0.10, 0.10), // label 1
+      Array(0.10, 0.10, 0.70, 0.10)  // label 2
+    ).map(_.map(math.log))
+
+    val testData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 42, NaiveBayesModels.Multinomial)
+    val testRDD = sc.parallelize(testData, 2)
+    testRDD.cache()
+
+    val model = NaiveBayes.train(testRDD, 1.0, NaiveBayesModels.Multinomial)
+    validateModelFit(pi, theta, model)
+
+    val validationData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 17, NaiveBayesModels.Multinomial)
+    val validationRDD = sc.parallelize(validationData, 2)
+
+    // Test prediction on RDD.
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+
+    // Test prediction on Array.
+    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+  }
+
+  test("Naive Bayes Bernoulli") {
     val nPoints = 10000
 
     val pi = Array(0.5, 0.3, 0.2).map(math.log)
     val theta = Array(
-      Array(0.91, 0.03, 0.03, 0.03), // label 0
-      Array(0.03, 0.91, 0.03, 0.03), // label 1
-      Array(0.03, 0.03, 0.91, 0.03)  // label 2
+      Array(0.50, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.40), // label 0
+      Array(0.02, 0.70, 0.10, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02), // label 1
+      Array(0.02, 0.02, 0.60, 0.02,  0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.30)  // label 2
     ).map(_.map(math.log))
 
-    val testData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 42)
+    val testData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 45, NaiveBayesModels.Bernoulli)
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val model = NaiveBayes.train(testRDD)
+    val model = NaiveBayes.train(testRDD, 1.0, NaiveBayesModels.Bernoulli) ///!!! this gives same result on both models check the math
+    validateModelFit(pi, theta, model)
 
-    val validationData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 17)
+    val validationData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 20, NaiveBayesModels.Bernoulli)
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
