@@ -286,10 +286,12 @@ class PythonMLLibAPI extends Serializable {
       data: JavaRDD[Vector], 
       k: Int, 
       convergenceTol: Double, 
+      seed: Long, 
       maxIterations: Int): JList[Object]  = {
     val gmmAlg = new GaussianMixtureEM()
       .setK(k)
       .setConvergenceTol(convergenceTol)
+      .setSeed(seed)
       .setMaxIterations(maxIterations)
     try {
       val model = gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))

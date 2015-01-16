@@ -22,28 +22,43 @@ This example requires NumPy (http://www.numpy.org/).
 """
 
 import sys
-
+import random
+import argparse
 import numpy as np
-from pyspark import SparkContext
+from pyspark import SparkConf, SparkContext
 from pyspark.mllib.clustering import GaussianMixtureEM
 
 
-# TODO change , to ' '
 def parseVector(line):
-    return np.array([float(x) for x in line.split(',')])
+    return np.array([float(x) for x in line.split(' ')])
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
-        print >> sys.stderr, "Usage: gaussian_mixture_model <input_file> <k> <convergenceTol> "
-        exit(-1)
-    sc = SparkContext(appName="GMM")
-    lines = sc.textFile(sys.argv[1])
+    """
+    Parameters
+    ----------
+    input_file : path of the file which contains data points
+    k : Number of mixture components
+    convergenceTol : convergence_threshold.Default to 1e-3
+    seed : random seed
+    n_iter : Number of EM iterations to perform. Default to 100
+    """
+    conf = SparkConf().setAppName("GMM")
+    sc = SparkContext(conf=conf)
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('input_file', help='input file')
+    parser.add_argument('k', type=int, help='num_of_clusters')
+    parser.add_argument('--ct', default=1e-3, type=float, help='convergence_threshold')
+    parser.add_argument('--seed', default=random.getrandbits(19),
+                        type=long, help='num_of_iterations')
+    parser.add_argument('--n_iter', default=100, type=int, help='num_of_iterations')
+    args = parser.parse_args()
+
+    lines = sc.textFile(args.input_file)
     data = lines.map(parseVector)
-    k = int(sys.argv[2])
-    convergenceTol = float(sys.argv[3])
-    model = GaussianMixtureEM.train(data, k, convergenceTol)
-    for i in range(k):
+    model = GaussianMixtureEM.train(data, args.k, args.ct, args.seed, args.n_iter)
+    for i in range(args.k):
         print ("weight = ", model.weight[i], "mu = ", model.mu[i],
                "sigma = ", model.sigma[i].toArray())
     print model.predictLabels(data).collect()

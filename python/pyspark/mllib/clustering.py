@@ -91,17 +91,27 @@ class GaussianMixtureModel(object):
     """A clustering model derived from the Gaussian Mixture Model method.
 
     >>> from numpy import array
-    >>> clusterdata_1 =  sc.parallelize(array([6.0, 9.0,5.0, 10.0,4.0, 11.0]).reshape(3,2))
-    >>> model = GaussianMixtureEM.train(clusterdata_1, 1, 0.0001, maxIterations=10)
+    >>> clusterdata_1 =  sc.parallelize(array([-0.1,-0.05,-0.01,-0.1,
+    ...                                         0.9,0.8,0.75,0.935,
+    ...                                        -0.83,-0.68,-0.91,-0.76 ]).reshape(6,2))
+    >>> model = GaussianMixtureEM.train(clusterdata_1, 3, 0.0001, 3205, 10)
     >>> labels = model.predictLabels(clusterdata_1).collect()
-    >>> labels[0]==labels[1]==labels[2]
+    >>> labels[0]==labels[2]
     True
-    >>> clusterdata_2 =  sc.parallelize(array([-1,-5,-3,-9,-4,-6,9,5,4,3,11,4]).reshape(6,2))
-    >>> model = GaussianMixtureEM.train(clusterdata_2, 2, 0.0001, maxIterations=10)
+    >>> labels[3]==labels[4]
+    False
+    >>> labels[4]==labels[5]
+    True
+    >>> clusterdata_2 =  sc.parallelize(array([-5.1971, -2.5359, -3.8220,
+    ...                                        -5.2211, -5.0602,  4.7118,
+    ...                                         6.8989, 3.4592,  4.6322,
+    ...                                         5.7048,  4.6567, 5.5026,
+    ...                                         4.5605,  5.2043,  6.2734]).reshape(5,3))
+    >>> model = GaussianMixtureEM.train(clusterdata_2, 2, 0.0001, 150, 10)
     >>> labels = model.predictLabels(clusterdata_2).collect()
     >>> labels[0]==labels[1]==labels[2]
     True
-    >>> labels[3]==labels[4]==labels[5]
+    >>> labels[3]==labels[4]
     True
     """
 
@@ -130,11 +140,11 @@ class GaussianMixtureModel(object):
 class GaussianMixtureEM(object):
 
     @classmethod
-    def train(cls, rdd, k, convergenceTol, maxIterations=100):
+    def train(cls, rdd, k, convergenceTol, seed, maxIterations):
         """Train a Gaussian Mixture clustering model."""
         weight, mu, sigma = callMLlibFunc("trainGaussianMixtureEM",
                                           rdd.map(_convert_to_vector), k,
-                                          convergenceTol, maxIterations)
+                                          convergenceTol, seed, maxIterations)
         return GaussianMixtureModel(weight, mu, sigma)
 
 
