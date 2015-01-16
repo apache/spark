@@ -19,7 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import java.util.Random
 
-import breeze.linalg.{DenseVector => BDV, sum => brzSum, normalize}
+import breeze.linalg.{DenseVector => BDV, sum => brzSum, normalize, axpy => brzAxpy}
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
@@ -418,12 +418,19 @@ object LDA {
         }
       }
     def createVertices(sendToWhere: Edge[TokenCount] => VertexId): RDD[(VertexId, TopicCounts)] = {
-      val verticesTMP: RDD[(VertexId, TopicCounts)] =
+      val verticesTMP: RDD[(VertexId, (TokenCount, TopicCounts))] =
         edgesWithGamma.map { case (edge, gamma: TopicCounts) =>
-          val N_wj = edge.attr
-          (sendToWhere(edge), gamma * N_wj)
+          (sendToWhere(edge), (edge.attr, gamma))
         }
-      verticesTMP.foldByKey(BDV.zeros[Double](k))(_ + _)
+      verticesTMP.aggregateByKey(BDV.zeros[Double](k))(
+        (sum, t) => {
+          brzAxpy(t._1, t._2, sum)
+          sum
+        },
+        (sum0, sum1) => {
+          sum0 += sum1
+        }
+      )
     }
     val docVertices = createVertices(_.srcId)
     val termVertices = createVertices(_.dstId)
