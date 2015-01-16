@@ -41,7 +41,7 @@ class TaskMetrics extends Serializable {
    */
   private var _hostname: String = _
   def hostname = _hostname
-  def setHostname(value : String) = _hostname = value
+  private[spark] def setHostname(value : String) = _hostname = value
   
   /**
    * Time taken on the executor to deserialize this task
