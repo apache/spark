@@ -65,6 +65,7 @@ class VertexRDD(object):
         """
 
         self.name = "VertexRDD"
+        self.jrdd = jrdd
         self.is_cached = False
         self.is_checkpointed = False
         self.ctx = SparkContext._active_spark_context
@@ -111,7 +112,7 @@ class VertexRDD(object):
         # return self.jvertex_rdd.count()
 
     def take(self, num=10):
-        return self.jvertex_rdd.take(num)
+        return self.jrdd.take(num)
 
     def sum(self):
         self.jvertex_rdd.sum()
@@ -197,27 +198,13 @@ class VertexRDD(object):
     # def aggregateUsingIndex(self, other, reduceFunc):
     #     return self._jrdd._jvm.org.apache.spark.PythonVertexRDD.aggregateUsingIndex()
 
-
     def collect(self):
         """
         Return a list that contains all of the elements in this RDD.
         """
         with SCCallSiteSync(self.context) as css:
-            bytesInJava = self.jvertex_rdd.collect().iterator()
-        return list(self._collect_iterator_through_file(bytesInJava))
-
-    def _collect_iterator_through_file(self, iterator):
-        # Transferring lots of data through Py4J can be slow because
-        # socket.readline() is inefficient.  Instead, we'll dump the data to a
-        # file and read it back.
-        tempFile = NamedTemporaryFile(delete=False, dir=self.ctx._temp_dir)
-        tempFile.close()
-        self.ctx._writeToFile(iterator, tempFile.name)
-        # Read the data into Python and deserialize it:
-        with open(tempFile.name, 'rb') as tempFile:
-            for item in self.jvertex_rdd_deserializer.load_stream(tempFile):
-                yield item
-        os.unlink(tempFile.name)
+            bytesInJava = self.jrdd.collect()
+        return list(bytesInJava)
 
     def getJavaVertexRDD(self, rdd, rdd_deserializer):
         if self.bypass_serializer:
@@ -347,5 +334,5 @@ class PipelinedVertexRDD(VertexRDD):
             self._id = self._jrdd.id()
         return self._id
 
-    def _is_pipelinable(self):
+    def is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed)
