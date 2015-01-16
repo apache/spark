@@ -89,6 +89,29 @@ class VectorsSuite extends FunSuite {
     }
   }
 
+  test("sparse equals with explicit 0") {
+    val sv1 = Vectors.sparse(10, Array(1, 3, 4, 7), Array(0.9, 0.8, 0.7, 0.6))
+    val sv2 = Vectors.sparse(10, Array(0, 1, 3, 4, 7), Array(0.0, 0.9, 0.8, 0.7, 0.6))
+    val sv3 = Vectors.sparse(10, Array(1, 3, 4, 5, 6, 7), Array(0.9, 0.8, 0, 0, 0.7, 0.6))
+    val sv4 = Vectors.sparse(10, Array(1, 3, 4, 7, 9), Array(0.9, 0.8, 0.7, 0.6, 0))
+    val sv5 = Vectors.sparse(10, Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
+      Array(0, 0.9, 0, 0.8, 0.7, 0, 0, 0.6, 0, 0))
+
+    val vectors = Seq(sv1, sv2, sv3, sv4, sv5)
+
+    for (v <- vectors; u <- vectors) {
+      assert(v === u)
+      assert(v.## === u.##)
+    }
+
+    val another = Vectors.sparse(10, Array(1, 3, 4, 7), Array(0.9, 0.2, 0.7, 0.6))
+
+    for (v <- vectors) {
+      assert(v != another)
+      assert(v.## != another.##)
+    }
+  }
+
   test("indexing dense vectors") {
     val vec = Vectors.dense(1.0, 2.0, 3.0, 4.0)
     assert(vec(0) === 1.0)

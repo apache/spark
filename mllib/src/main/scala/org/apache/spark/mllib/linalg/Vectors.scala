@@ -451,10 +451,25 @@ class SparseVector(
 
   override def equals(other: Any): Boolean = {
     other match {
-      case v: SparseVector =>
-        this.size == v.size &&
-          util.Arrays.equals(this.indices, v.indices) &&
-          util.Arrays.equals(this.values, v.values)
+      case v: SparseVector => {
+        if (this.size != v.size) { return false }
+        var k1 = 0
+        var k2 = 0
+        while (true) {
+          while (k1 < this.values.size && this.values(k1) == 0) k1 += 1
+          while (k2 < v.values.size && v.values(k2) == 0) k2 += 1
+
+          if (k1 == this.values.size || k2 == v.values.size) {
+            return (k1 == this.values.size && k2 == v.values.size) //check end alignment
+          }
+          if (this.indices(k1) != v.indices(k2) || this.values(k1) != v.values(k2)) {
+            return false
+          }
+          k1 += 1
+          k2 += 1
+        }
+        throw new Exception("unreachable")
+      }
       case _ => super.equals(other)
     }
   }
