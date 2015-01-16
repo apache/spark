@@ -32,6 +32,7 @@ import org.apache.spark.executor._
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 import org.apache.spark._
+import org.apache.hadoop.hdfs.web.JsonUtil
 
 /**
  * Serializes SparkListener events to/from JSON.  This protocol provides strong backwards-
@@ -141,6 +142,7 @@ private[spark] object JsonProtocol {
     val properties = propertiesToJson(jobStart.properties)
     ("Event" -> Utils.getFormattedClassName(jobStart)) ~
     ("Job ID" -> jobStart.jobId) ~
+    ("Submission Time" -> jobStart.time) ~
     ("Stage Infos" -> jobStart.stageInfos.map(stageInfoToJson)) ~  // Added in Spark 1.2.0
     ("Stage IDs" -> jobStart.stageIds) ~
     ("Properties" -> properties)
@@ -150,6 +152,7 @@ private[spark] object JsonProtocol {
     val jobResult = jobResultToJson(jobEnd.jobResult)
     ("Event" -> Utils.getFormattedClassName(jobEnd)) ~
     ("Job ID" -> jobEnd.jobId) ~
+    ("Completion Time" -> jobEnd.time) ~
     ("Job Result" -> jobResult)
   }
 
@@ -492,6 +495,8 @@ private[spark] object JsonProtocol {
 
   def jobStartFromJson(json: JValue): SparkListenerJobStart = {
     val jobId = (json \ "Job ID").extract[Int]
+    val submissionTime =
+      Utils.jsonOption(json \ "Submission Time").map(_.extract[Long]).getOrElse(-1L)
     val stageIds = (json \ "Stage IDs").extract[List[JValue]].map(_.extract[Int])
     val properties = propertiesFromJson(json \ "Properties")
     // The "Stage Infos" field was added in Spark 1.2.0
@@ -499,13 +504,15 @@ private[spark] object JsonProtocol {
       .map(_.extract[Seq[JValue]].map(stageInfoFromJson)).getOrElse {
         stageIds.map(id => new StageInfo(id, 0, "unknown", 0, Seq.empty, "unknown"))
       }
-    SparkListenerJobStart(jobId, stageInfos, properties)
+    SparkListenerJobStart(jobId, submissionTime, stageInfos, properties)
   }
 
   def jobEndFromJson(json: JValue): SparkListenerJobEnd = {
     val jobId = (json \ "Job ID").extract[Int]
+    val completionTime =
+      Utils.jsonOption(json \ "Completion Time").map(_.extract[Long]).getOrElse(-1L)
     val jobResult = jobResultFromJson(json \ "Job Result")
-    SparkListenerJobEnd(jobId, jobResult)
+    SparkListenerJobEnd(jobId, completionTime, jobResult)
   }
 
   def environmentUpdateFromJson(json: JValue): SparkListenerEnvironmentUpdate = {

@@ -661,7 +661,7 @@ class DAGScheduler(
       // completion events or stage abort
       stageIdToStage -= s.id
       jobIdToStageIds -= job.jobId
-      listenerBus.post(SparkListenerJobEnd(job.jobId, jobResult))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTime(), jobResult))
     }
   }
 
@@ -710,7 +710,7 @@ class DAGScheduler(
         stage.latestInfo.stageFailed(stageFailedMessage)
         listenerBus.post(SparkListenerStageCompleted(stage.latestInfo))
       }
-      listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error)))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTime(), JobFailed(error)))
     }
   }
 
@@ -749,9 +749,11 @@ class DAGScheduler(
       logInfo("Missing parents: " + getMissingParentStages(finalStage))
       val shouldRunLocally =
         localExecutionEnabled && allowLocal && finalStage.parents.isEmpty && partitions.length == 1
+      val jobSubmissionTime = clock.getTime()
       if (shouldRunLocally) {
         // Compute very short actions like first() or take() with no parent stages locally.
-        listenerBus.post(SparkListenerJobStart(job.jobId, Seq.empty, properties))
+        listenerBus.post(
+          SparkListenerJobStart(job.jobId, jobSubmissionTime, Seq.empty, properties))
         runLocally(job)
       } else {
         jobIdToActiveJob(jobId) = job
@@ -759,7 +761,8 @@ class DAGScheduler(
         finalStage.resultOfJob = Some(job)
         val stageIds = jobIdToStageIds(jobId).toArray
         val stageInfos = stageIds.flatMap(id => stageIdToStage.get(id).map(_.latestInfo))
-        listenerBus.post(SparkListenerJobStart(job.jobId, stageInfos, properties))
+        listenerBus.post(
+          SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties))
         submitStage(finalStage)
       }
     }
@@ -965,7 +968,8 @@ class DAGScheduler(
                   if (job.numFinished == job.numPartitions) {
                     markStageAsFinished(stage)
                     cleanupStateForJobAndIndependentStages(job)
-                    listenerBus.post(SparkListenerJobEnd(job.jobId, JobSucceeded))
+                    listenerBus.post(
+                      SparkListenerJobEnd(job.jobId, clock.getTime(), JobSucceeded))
                   }
 
                   // taskSucceeded runs some user code that might throw an exception. Make sure
@@ -1234,7 +1238,7 @@ class DAGScheduler(
     if (ableToCancelStages) {
       job.listener.jobFailed(error)
       cleanupStateForJobAndIndependentStages(job)
-      listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error)))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTime(), JobFailed(error)))
     }
   }
 
