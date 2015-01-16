@@ -21,7 +21,6 @@ import scala.xml.{Node, NodeSeq}
 
 import javax.servlet.http.HttpServletRequest
 
-import org.apache.spark.JobExecutionStatus
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.ui.jobs.UIData.JobUIData
 
@@ -51,13 +50,13 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val lastStageName = lastStageInfo.map(_.name).getOrElse("(Unknown Stage Name)")
       val lastStageDescription = lastStageData.flatMap(_.description).getOrElse("")
       val duration: Option[Long] = {
-        job.startTime.map { start =>
-          val end = job.endTime.getOrElse(System.currentTimeMillis())
+        job.submissionTime.map { start =>
+          val end = job.completionTime.getOrElse(System.currentTimeMillis())
           end - start
         }
       }
       val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
-      val formattedSubmissionTime = job.startTime.map(UIUtils.formatDate).getOrElse("Unknown")
+      val formattedSubmissionTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
       val detailUrl =
         "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), job.jobId)
       <tr>
@@ -68,7 +67,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
           <div><em>{lastStageDescription}</em></div>
           <a href={detailUrl}>{lastStageName}</a>
         </td>
-        <td sorttable_customkey={job.startTime.getOrElse(-1).toString}>
+        <td sorttable_customkey={job.submissionTime.getOrElse(-1).toString}>
           {formattedSubmissionTime}
         </td>
         <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
@@ -101,11 +100,11 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val now = System.currentTimeMillis
 
       val activeJobsTable =
-        jobsTable(activeJobs.sortBy(_.startTime.getOrElse(-1L)).reverse)
+        jobsTable(activeJobs.sortBy(_.submissionTime.getOrElse(-1L)).reverse)
       val completedJobsTable =
-        jobsTable(completedJobs.sortBy(_.endTime.getOrElse(-1L)).reverse)
+        jobsTable(completedJobs.sortBy(_.completionTime.getOrElse(-1L)).reverse)
       val failedJobsTable =
-        jobsTable(failedJobs.sortBy(_.endTime.getOrElse(-1L)).reverse)
+        jobsTable(failedJobs.sortBy(_.completionTime.getOrElse(-1L)).reverse)
 
       val shouldShowActiveJobs = activeJobs.nonEmpty
       val shouldShowCompletedJobs = completedJobs.nonEmpty

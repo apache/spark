@@ -28,6 +28,8 @@ import org.apache.spark.util.Utils
 
 class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matchers {
 
+  val jobSubmissionTime = 1421191042750L
+  val jobCompletionTime = 1421191296660L
 
   private def createStageStartEvent(stageId: Int) = {
     val stageInfo = new StageInfo(stageId, 0, stageId.toString, 0, null, "")
@@ -46,12 +48,12 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
     val stageInfos = stageIds.map { stageId =>
       new StageInfo(stageId, 0, stageId.toString, 0, null, "")
     }
-    SparkListenerJobStart(jobId, stageInfos)
+    SparkListenerJobStart(jobId, jobSubmissionTime, stageInfos)
   }
 
   private def createJobEndEvent(jobId: Int, failed: Boolean = false) = {
     val result = if (failed) JobFailed(new Exception("dummy failure")) else JobSucceeded
-    SparkListenerJobEnd(jobId, result)
+    SparkListenerJobEnd(jobId, jobCompletionTime, result)
   }
 
   private def runJob(listener: SparkListener, jobId: Int, shouldFail: Boolean = false) {
@@ -227,15 +229,15 @@ class JobProgressListenerSuite extends FunSuite with LocalSparkContext with Matc
       shuffleReadMetrics.incRemoteBytesRead(base + 1)
       shuffleReadMetrics.incRemoteBlocksFetched(base + 2)
       shuffleWriteMetrics.incShuffleBytesWritten(base + 3)
-      taskMetrics.incExecutorRunTime(base + 4)
+      taskMetrics.setExecutorRunTime(base + 4)
       taskMetrics.incDiskBytesSpilled(base + 5)
       taskMetrics.incMemoryBytesSpilled(base + 6)
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
-      taskMetrics.inputMetrics = Some(inputMetrics)
-      inputMetrics.incBytesRead(base + 7)
+      taskMetrics.setInputMetrics(Some(inputMetrics))
+      inputMetrics.addBytesRead(base + 7)
       val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
       taskMetrics.outputMetrics = Some(outputMetrics)
-      outputMetrics.incBytesWritten(base + 8)
+      outputMetrics.setBytesWritten(base + 8)
       taskMetrics
     }
 
