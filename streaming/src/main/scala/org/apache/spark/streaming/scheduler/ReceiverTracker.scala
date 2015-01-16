@@ -27,6 +27,8 @@ import org.apache.spark.{Logging, SerializableWritable, SparkEnv, SparkException
 import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver.{Receiver, ReceiverSupervisorImpl, StopReceiver}
+import org.apache.spark.util.AkkaUtils
+import org.apache.spark.streaming.api.python.PythonReceiverWrapper
 
 /**
  * Messages used by the NetworkReceiver and the ReceiverTracker to communicate
@@ -212,7 +214,34 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       override def run() {
         try {
           SparkEnv.set(env)
-          startReceivers()
+          // initialize all the receivers
+          val receivers = receiverInputStreams.map(nis => {
+            val rcvr = nis.getReceiver()
+            rcvr.setReceiverId(nis.id)
+            rcvr
+          })
+
+          // start local receiver
+          val t1 = new Thread() {
+            override def run(): Unit = {
+              startLocalReceivers(receivers.filter(_.isInstanceOf[PythonReceiverWrapper]))
+            }
+          }
+          t1.start()
+
+          // start other receivers
+          val t2 = new Thread() {
+            override def run(): Unit = {
+              val rcs = receivers.filterNot(_.isInstanceOf[PythonReceiverWrapper])
+              if (!rcs.isEmpty) {
+                startReceivers(rcs)
+              }
+            }
+          }
+          t2.start()
+
+          t1.join()
+          t2.join()
         } catch {
           case ie: InterruptedException => logInfo("ReceiverLauncher interrupted")
         }
@@ -240,16 +269,34 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
 
     /**
+     * Start the receivers which can only run in the driver
+     */
+    private def startLocalReceivers(receivers: Seq[Receiver[_]]): Unit = {
+      val checkpointDirOption = Option(ssc.checkpointDir)
+      val serializableHadoopConf = new SerializableWritable(ssc.sparkContext.hadoopConfiguration)
+
+      // run each receiver in separated thread
+      val threads = receivers.map{ receiver =>
+        new Thread() {
+          override def run(): Unit = {
+            val supervisor = new ReceiverSupervisorImpl(
+              receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
+            supervisor.start()
+            supervisor.awaitTermination()
+          }
+        }
+      }
+      threads.foreach(_.setDaemon(true))
+      threads.foreach(_.start())
+      // waiting for all threads
+      threads.foreach(_.join())
+    }
+
+    /**
      * Get the receivers from the ReceiverInputDStreams, distributes them to the
      * worker nodes as a parallel collection, and runs them.
      */
-    private def startReceivers() {
-      val receivers = receiverInputStreams.map(nis => {
-        val rcvr = nis.getReceiver()
-        rcvr.setReceiverId(nis.id)
-        rcvr
-      })
-
+    private def startReceivers(receivers: Seq[Receiver[_]]) {
       // Right now, we only honor preferences if all receivers have them
       val hasLocationPreferences = receivers.map(_.preferredLocation.isDefined).reduce(_ && _)
 

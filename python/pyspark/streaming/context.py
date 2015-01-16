@@ -21,11 +21,13 @@ from py4j.java_collections import ListConverter
 from py4j.java_gateway import java_import, JavaObject
 
 from pyspark import RDD, SparkConf
-from pyspark.serializers import UTF8Deserializer, CloudPickleSerializer
+from pyspark.serializers import UTF8Deserializer, CloudPickleSerializer, BatchedSerializer,\
+    PickleSerializer
 from pyspark.context import SparkContext
 from pyspark.storagelevel import StorageLevel
 from pyspark.streaming.dstream import DStream
 from pyspark.streaming.util import TransformFunction, TransformFunctionSerializer
+from pyspark.streaming.receiver import Receiver
 
 __all__ = ["StreamingContext"]
 
@@ -323,3 +325,17 @@ class StreamingContext(object):
         jrest = ListConverter().convert([d._jdstream for d in dstreams[1:]],
                                         SparkContext._gateway._gateway_client)
         return DStream(self._jssc.union(first._jdstream, jrest), self, first._jrdd_deserializer)
+
+    def receiverStream(self, receiver):
+        """
+        Create an input stream with any arbitrary user implemented receiver.
+        Find more details at: http://spark.apache.org/docs/latest/streaming-custom-receivers.html
+
+        :param receiver: Custom implementation of Receiver
+        """
+        assert isinstance(receiver, Receiver), "receiver should be instance of Receiver"
+        storageLevel = self._sc._getJavaStorageLevel(receiver.storageLevel)
+        jreceiver = self._jvm.PythonReceiverWrapper(receiver, storageLevel)
+        receiver._jreceiver = jreceiver
+        jstream = self._jssc.receiverStream(jreceiver)
+        return DStream(jstream, self, BatchedSerializer(PickleSerializer()))

@@ -21,9 +21,11 @@ import time
 import operator
 import unittest
 import tempfile
+import threading
 
-from pyspark.context import SparkConf, SparkContext, RDD
+from pyspark.context import SparkConf, SparkContext, RDD, StorageLevel
 from pyspark.streaming.context import StreamingContext
+from pyspark.streaming.receiver import Receiver
 
 
 class PySparkStreamingTestCase(unittest.TestCase):
@@ -476,6 +478,39 @@ class StreamingContextTests(PySparkStreamingTestCase):
         dstream = self.ssc.transform([dstream1, dstream2, dstream3], func)
 
         self.assertEqual([2, 3, 1], self._take(dstream, 3))
+
+    def test_receiver_stream(self):
+
+        class MyReceiver(Receiver):
+
+            def onStart(self):
+                self.stopped = False
+                t = threading.Thread(target=self.run)
+                t.daemon = True
+                t.start()
+                self.thread = t
+
+            def run(self):
+                c = 0
+                while not self.stopped:
+                    self.store(c)
+                    c += 1
+                    time.sleep(0.05)
+
+            def onStop(self):
+                self.stopped = True
+                self.thread.join()
+
+        receiver = MyReceiver(StorageLevel.MEMORY_AND_DISK_SER)
+        dstream = self.ssc.receiverStream(receiver)
+        self.assertEqual(range(10), self._take(dstream, 10))
+        self.assertTrue(receiver.streamId >= 0)
+        self.assertTrue(receiver.isStarted())
+        receiver.restart("manually restart")
+        self.assertTrue(receiver.isStarted())
+        receiver.stop("manually stop")
+        self.assertTrue(receiver.stopped)
+        self.assertTrue(receiver.isStopped())
 
 
 class CheckpointTests(PySparkStreamingTestCase):

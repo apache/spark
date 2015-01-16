@@ -32,6 +32,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Interval, Duration, Time}
 import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.receiver.Receiver
 import org.apache.spark.streaming.api.java._
 import org.apache.spark.util.Utils
 
@@ -49,6 +50,15 @@ private[python] trait PythonTransformFunction {
 private[python] trait PythonTransformFunctionSerializer {
   def dumps(id: String): Array[Byte]
   def loads(bytes: Array[Byte]): PythonTransformFunction
+}
+
+/**
+ * Interface for Python receiver
+ */
+private[python] trait PythonReceiver {
+  def onStart(): Unit
+  def onStop(): Unit
+  def preferredLocation(): String
 }
 
 /**
@@ -312,6 +322,73 @@ private[python] class PythonReducedWindowedDStream(
       } else {
         None
       }
+    }
+  }
+}
+
+private[spark] class PythonReceiverWrapper(
+     receiver: PythonReceiver,
+     storageLevel: StorageLevel) extends Receiver[Array[Byte]](storageLevel) {
+
+  /**
+   * Call onStart() in Python
+   */
+  def onStart(): Unit = {
+    receiver.onStart()
+  }
+
+  /**
+   * Call onStop() in Python
+   */
+  def onStop(): Unit = {
+    receiver.onStop()
+  }
+
+  /**
+   * Call preferredLocation() in Python
+   */
+  override def preferredLocation(): Option[String] = {
+    Option(receiver.preferredLocation())
+  }
+
+  /**
+   * Create a Throwable based on string of exception in Python
+   */
+  def pythonException(error: String): Throwable = {
+    if (error == null || error.isEmpty) {
+      new Exception("No Exception")
+    }
+    new Exception("PythonException: " + error)
+  }
+
+  /**
+   * Wrapper to reportError, to handle Throwable
+   */
+  def reportError(message: String, error: String): Unit = {
+    reportError(message, pythonException(error))
+  }
+
+  /**
+   * Wrapper for restart, to handle Throwable
+   */
+  def restart(message: String, error: String, timeout: Int): Unit = {
+    if (timeout > 0) {
+      restart(message, pythonException(error), timeout)
+    } else if (error == null || error.isEmpty) {
+      restart(message)
+    } else {
+      restart(message, pythonException(error))
+    }
+  }
+
+  /**
+   * Wrapper for stop(),  to handle Throwable
+   */
+  def stop(message: String, error: String): Unit = {
+    if (error == null || error.isEmpty) {
+      stop(message)
+    } else {
+      stop(message, pythonException(error))
     }
   }
 }
