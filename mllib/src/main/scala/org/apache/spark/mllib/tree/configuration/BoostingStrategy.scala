@@ -88,4 +88,25 @@ object BoostingStrategy {
         throw new IllegalArgumentException(s"$algo is not supported by boosting.")
     }
   }
+
+  /**
+   * Returns default configuration for the boosting algorithm
+   * @param algo Learning goal.  Supported:
+   *             [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
+   *             [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
+   * @return Configuration for boosting algorithm
+   */
+  def defaultParams(algo: Algo): BoostingStrategy = {
+    val treeStragtegy = Strategy.defaultStategy(algo)
+    treeStragtegy.maxDepth = 3
+    algo match {
+      case Algo.Classification =>
+        treeStragtegy.numClasses = 2
+        new BoostingStrategy(treeStragtegy, LogLoss)
+      case Algo.Regression =>
+        new BoostingStrategy(treeStragtegy, SquaredError)
+      case _ =>
+        throw new IllegalArgumentException(s"$algo is not supported by boosting.")
+    }
+  }
 }
