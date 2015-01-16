@@ -26,7 +26,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{AlphaComponent, DeveloperApi, Experimental}
-import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
@@ -57,6 +57,8 @@ class SQLContext(@transient val sparkContext: SparkContext)
   with Serializable {
 
   self =>
+
+  def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
   // Note that this is a lazy val so we can override the default value in subclasses.
   protected[sql] lazy val conf: SQLConf = new SQLConf

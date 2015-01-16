@@ -31,6 +31,7 @@ import org.junit.Test;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.sql.*;
 import org.apache.spark.sql.types.*;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
@@ -38,12 +39,12 @@ import org.apache.spark.sql.types.*;
 // see http://stackoverflow.com/questions/758570/.
 public class JavaApplySchemaSuite implements Serializable {
   private transient JavaSparkContext javaCtx;
-  private transient JavaSQLContext javaSqlCtx;
+  private transient SQLContext javaSqlCtx;
 
   @Before
   public void setUp() {
     javaCtx = new JavaSparkContext("local", "JavaApplySchemaSuite");
-    javaSqlCtx = new JavaSQLContext(javaCtx);
+    javaSqlCtx = new SQLContext(javaCtx);
   }
 
   @After
@@ -89,7 +90,7 @@ public class JavaApplySchemaSuite implements Serializable {
     JavaRDD<Row> rowRDD = javaCtx.parallelize(personList).map(
       new Function<Person, Row>() {
         public Row call(Person person) throws Exception {
-          return Row.create(person.getName(), person.getAge());
+          return RowFactory.create(person.getName(), person.getAge());
         }
       });
 
@@ -98,15 +99,15 @@ public class JavaApplySchemaSuite implements Serializable {
     fields.add(DataTypes.createStructField("age", DataTypes.IntegerType, false));
     StructType schema = DataTypes.createStructType(fields);
 
-    JavaSchemaRDD schemaRDD = javaSqlCtx.applySchema(rowRDD, schema);
+    SchemaRDD schemaRDD = javaSqlCtx.applySchema(rowRDD.rdd(), schema);
     schemaRDD.registerTempTable("people");
-    List<Row> actual = javaSqlCtx.sql("SELECT * FROM people").collect();
+    Row[] actual = javaSqlCtx.sql("SELECT * FROM people").collect();
 
     List<Row> expected = new ArrayList<Row>(2);
-    expected.add(Row.create("Michael", 29));
-    expected.add(Row.create("Yin", 28));
+    expected.add(RowFactory.create("Michael", 29));
+    expected.add(RowFactory.create("Yin", 28));
 
-    Assert.assertEquals(expected, actual);
+    Assert.assertEquals(expected, Arrays.asList(actual));
   }
 
   @Test
@@ -129,7 +130,7 @@ public class JavaApplySchemaSuite implements Serializable {
     StructType expectedSchema = DataTypes.createStructType(fields);
     List<Row> expectedResult = new ArrayList<Row>(2);
     expectedResult.add(
-      Row.create(
+      RowFactory.create(
         new BigDecimal("92233720368547758070"),
         true,
         1.7976931348623157E308,
@@ -138,7 +139,7 @@ public class JavaApplySchemaSuite implements Serializable {
         null,
         "this is a simple string."));
     expectedResult.add(
-      Row.create(
+      RowFactory.create(
         new BigDecimal("92233720368547758069"),
         false,
         1.7976931348623157E305,
@@ -147,18 +148,18 @@ public class JavaApplySchemaSuite implements Serializable {
         null,
         "this is another simple string."));
 
-    JavaSchemaRDD schemaRDD1 = javaSqlCtx.jsonRDD(jsonRDD);
+    SchemaRDD schemaRDD1 = javaSqlCtx.jsonRDD(jsonRDD.rdd());
     StructType actualSchema1 = schemaRDD1.schema();
     Assert.assertEquals(expectedSchema, actualSchema1);
     schemaRDD1.registerTempTable("jsonTable1");
-    List<Row> actual1 = javaSqlCtx.sql("select * from jsonTable1").collect();
+    List<Row> actual1 = javaSqlCtx.sql("select * from jsonTable1").collectAsList();
     Assert.assertEquals(expectedResult, actual1);
 
-    JavaSchemaRDD schemaRDD2 = javaSqlCtx.jsonRDD(jsonRDD, expectedSchema);
+    SchemaRDD schemaRDD2 = javaSqlCtx.jsonRDD(jsonRDD.rdd(), expectedSchema);
     StructType actualSchema2 = schemaRDD2.schema();
     Assert.assertEquals(expectedSchema, actualSchema2);
     schemaRDD2.registerTempTable("jsonTable2");
-    List<Row> actual2 = javaSqlCtx.sql("select * from jsonTable2").collect();
+    List<Row> actual2 = javaSqlCtx.sql("select * from jsonTable2").collectAsList();
     Assert.assertEquals(expectedResult, actual2);
   }
 }

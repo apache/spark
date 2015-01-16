@@ -28,7 +28,7 @@ public class RowFactory {
    * Create a {@link Row} from an array of values. Position i in the array becomes position i
    * in the created {@link Row} object.
    */
-  public static Row create(Object[] values) {
+  public static Row create(Object ... values) {
     return new GenericRow(values);
   }
 }
