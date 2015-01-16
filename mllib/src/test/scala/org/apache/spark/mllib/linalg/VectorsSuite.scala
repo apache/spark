@@ -92,7 +92,7 @@ class VectorsSuite extends FunSuite {
   test("sparse equals with explicit 0") {
     val sv1 = Vectors.sparse(10, Array(1, 3, 4, 7), Array(0.9, 0.8, 0.7, 0.6))
     val sv2 = Vectors.sparse(10, Array(0, 1, 3, 4, 7), Array(0.0, 0.9, 0.8, 0.7, 0.6))
-    val sv3 = Vectors.sparse(10, Array(1, 3, 4, 5, 6, 7), Array(0.9, 0.8, 0, 0, 0.7, 0.6))
+    val sv3 = Vectors.sparse(10, Array(1, 3, 4, 5, 6, 7), Array(0.9, 0.8, 0.7, 0, 0, 0.6))
     val sv4 = Vectors.sparse(10, Array(1, 3, 4, 7, 9), Array(0.9, 0.8, 0.7, 0.6, 0))
     val sv5 = Vectors.sparse(10, Array(0, 1, 2, 3, 4, 5, 6, 7, 8, 9),
       Array(0, 0.9, 0, 0.8, 0.7, 0, 0, 0.6, 0, 0))
