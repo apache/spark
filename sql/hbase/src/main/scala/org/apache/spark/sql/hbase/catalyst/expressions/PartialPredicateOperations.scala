@@ -89,7 +89,7 @@ object PartialPredicateOperations {
             case (null, ec: Expression) => if (ec fastEquals child) {
               (null, unboundAttributeReference(e, schema))
             } else {
-              (null, ec)
+              (null, Not(ec))
             }
           }
         case In(value, list) =>

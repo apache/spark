@@ -94,7 +94,11 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
     val tableDescriptor = new HTableDescriptor(TableName.valueOf(tableName))
     families.foreach(family => tableDescriptor.addFamily(new HColumnDescriptor(family)))
 
-    admin.createTable(tableDescriptor, splitKeys)
+    if (splitKeys == null) {
+      admin.createTable(tableDescriptor)
+    } else {
+      admin.createTable(tableDescriptor, splitKeys)
+    }
   }
 
   def createTable(tableName: String, hbaseNamespace: String, hbaseTableName: String,
