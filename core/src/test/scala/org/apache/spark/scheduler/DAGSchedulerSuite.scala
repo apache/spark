@@ -43,7 +43,6 @@ class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
       case NonFatal(e) => onError(e)
     }
   }
-
 }
 
 /**
