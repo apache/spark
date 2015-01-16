@@ -398,12 +398,10 @@ object LDA {
       termSmoothing: Double,
       randomSeed: Long): LearningState = {
     // For each document, create an edge (Document -> Term) for each unique term in the document.
-    val edges: RDD[Edge[TokenCount]] = docs.mapPartitionsWithIndex { case (partIndex, partDocs) =>
-      partDocs.flatMap { doc: Document =>
-        // Add edges for terms with non-zero counts.
-        doc.counts.toBreeze.activeIterator.filter(_._2 != 0.0).map { case (term, cnt) =>
-          Edge(doc.id, term2index(term), cnt)
-        }
+    val edges: RDD[Edge[TokenCount]] = docs.flatMap { case doc =>
+      // Add edges for terms with non-zero counts.
+      doc.counts.toBreeze.activeIterator.filter(_._2 != 0.0).map { case (term, cnt) =>
+        Edge(doc.id, term2index(term), cnt)
       }
     }
 
@@ -436,5 +434,4 @@ object LDA {
 
     LearningState(graph, k, vocabSize, topicSmoothing, termSmoothing)
   }
-
 }
