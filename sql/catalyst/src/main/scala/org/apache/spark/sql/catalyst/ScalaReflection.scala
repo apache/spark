@@ -78,7 +78,7 @@ trait ScalaReflection {
       convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
     }
     case (r: Row, s: StructType) => convertRowToScala(r, s)
-    case (d: Decimal, _: DecimalType) => d.toJavaBigDecimal
+    case (d: Decimal, _: DecimalType) => d.toBigDecimal
     case (other, _) => other
   }
 
