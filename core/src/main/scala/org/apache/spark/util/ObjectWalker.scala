@@ -18,8 +18,6 @@ package org.apache.spark.util
 
 import java.lang.reflect.{Modifier, Field}
 
-import com.google.common.collect.Queues
-
 import scala.collection.mutable
 
 
@@ -30,7 +28,7 @@ import scala.collection.mutable
  * This code is based on code written by Josh Rosen found here:
  * https://gist.github.com/JoshRosen/d6a8972c99992e97d040
  */
-object ObjectWalker {
+private[spark] object ObjectWalker {
   def isTransient(field: Field): Boolean = Modifier.isTransient(field.getModifiers)
   def isStatic(field: Field): Boolean = Modifier.isStatic(field.getModifiers)
   def isPrimitive(field: Field): Boolean = field.getType.isPrimitive
@@ -50,13 +48,13 @@ object ObjectWalker {
    */
   def buildRefGraph(rootObj: AnyRef): mutable.LinkedList[AnyRef] = {
     val visitedRefs = mutable.Set[AnyRef]()
-    val toVisit = Queues.newArrayDeque[AnyRef]()
+    val toVisit = new mutable.Queue[AnyRef]()
     var results = mutable.LinkedList[AnyRef]()
     
-    toVisit.add(rootObj)
+    toVisit += rootObj
     
-    while (!toVisit.isEmpty) {
-      val obj : AnyRef = toVisit.pollFirst()
+    while (toVisit.nonEmpty) {
+      val obj : AnyRef = toVisit.dequeue()
       // Store the last parent reference to enable quick retrieval of the path to a broken node
       
       if (!visitedRefs.contains(obj)) {
@@ -66,11 +64,7 @@ object ObjectWalker {
         // Extract all the fields from the object that would be serialized. Transient and 
         // static references are not serialized and primitive variables will always be serializable
         // and will not contain further references.
-        
-        for (field <- getAllFields(obj.getClass)
-          .filterNot(isStatic)
-          .filterNot(isTransient)
-          .filterNot(isPrimitive)) {
+        for (field <- getFieldsToTest(obj)) {
           // Extract the field object and pass to the visitor
           val originalAccessibility = field.isAccessible
           field.setAccessible(true)
@@ -78,12 +72,24 @@ object ObjectWalker {
           field.setAccessible(originalAccessibility)
           
           if (fieldObj != null) {
-            toVisit.add(fieldObj)
+            toVisit += fieldObj
           }
         }  
       }
     }
     results
+  }
+
+  /**
+   * Get the serialiazble fields from an object reference
+   * @param obj - Reference to the object fo rwhich to generate a serialization trace 
+   * @return a new Set containing the serializable fields of the object
+   */
+  def getFieldsToTest(obj: AnyRef): mutable.Set[Field] = {
+    getAllFields(obj.getClass)
+      .filterNot(isStatic)
+      .filterNot(isTransient)
+      .filterNot(isPrimitive)
   }
 
   /**

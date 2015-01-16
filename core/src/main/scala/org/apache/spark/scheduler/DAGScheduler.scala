@@ -810,7 +810,7 @@ class DAGScheduler(
    *             Failure: String - The reason for the failure.
    *                                      
    */
-  def tryToSerializeRddDeps(rdd: RDD[_]): Array[RDDTrace] = {
+  private[spark] def tryToSerializeRddDeps(rdd: RDD[_]): Array[RDDTrace] = {
     SerializationHelper.tryToSerializeRddAndDeps(closureSerializer, rdd)
   }
 
@@ -869,20 +869,10 @@ class DAGScheduler(
     // where the JobConf/Configuration object is not thread-safe.
     var taskBinary: Broadcast[Array[Byte]] = null
 
-    // Check if RDD serialization debugging is enabled
-    val debugSerialization: Boolean = sc.getConf.getBoolean("spark.serializer.debug", false)
-    
     try {
       // For ShuffleMapTask, serialize and broadcast (rdd, shuffleDep). 
       // For ResultTask, serialize and broadcast (rdd, func).
       
-      // Before serialization print out the RDD and its references.
-      if (debugSerialization) {
-        SerializationHelper
-          .tryToSerializeRdd(closureSerializer, stage.rdd)
-          .fold(l => logDebug(l), r => {})
-      }
-       
       val taskBinaryBytes: Array[Byte] =
         if (stage.isShuffleMap) {
           closureSerializer.serialize((stage.rdd, stage.shuffleDep.get) : AnyRef).array()
@@ -893,10 +883,18 @@ class DAGScheduler(
     } catch {
       // In the case of a failure during serialization, abort the stage.
       case e: NotSerializableException =>
+        SerializationHelper
+          .tryToSerializeRdd(closureSerializer, stage.rdd)
+          .fold(l => logDebug(l), r => {})
+        
         abortStage(stage, "Task not serializable: " + e.toString)
         runningStages -= stage
         return
       case NonFatal(e) =>
+        SerializationHelper
+          .tryToSerializeRdd(closureSerializer, stage.rdd)
+          .fold(l => logDebug(l), r => {})
+        
         abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
         runningStages -= stage
         return

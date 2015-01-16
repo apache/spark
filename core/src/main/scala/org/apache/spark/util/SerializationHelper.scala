@@ -31,20 +31,20 @@ import org.apache.spark.serializer.SerializerInstance
 /**
  * This enumeration defines variables use to standardize debugging output
  */
-object SerializationState extends Enumeration {
+private[spark] object SerializationState extends Enumeration {
   type SerializationState = String
   val Failed = "Failed to serialize parent."
   val FailedDeps = "Failed to serialize dependencies."
   val Success = "Success"
 }
 
-case class RDDTrace (rdd : RDD[_], depth : Int, result : SerializationHelper.SerializedRef)
+private[spark] case class RDDTrace (rdd : RDD[_], depth : Int, result : SerializationHelper.SerializedRef)
 
 /**
  * This class is designed to encapsulate some utilities to facilitate debugging serialization 
  * problems in the DAGScheduler and the TaskSetManager. See SPARK-3694.
  */
-object SerializationHelper {
+private[spark] object SerializationHelper {
   type PathToRef = mutable.LinkedList[AnyRef]
   type BrokenRef = (AnyRef, PathToRef)
   type SerializedRef = Either[String, ByteBuffer]
@@ -249,7 +249,7 @@ object SerializationHelper {
 
   def refString(ref: AnyRef): String = {
     val refCode = System.identityHashCode(ref)
-    "Ref (" + ref.toString + ", Hash: " + refCode + ")"
+    "Ref (" + ref.toString + ")"
   }
 
   /**

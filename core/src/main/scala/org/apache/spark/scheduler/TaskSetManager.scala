@@ -464,23 +464,18 @@ private[spark] class TaskSetManager(
             // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
             // we assume the task can be serialized without exceptions.
 
-            // Check if serialization debugging is enabled
-            val debugSerialization: Boolean = sched.sc.getConf.
-              getBoolean("spark.serializer.debug", false)
-
-            if (debugSerialization) {
+            Task.serializeWithDependencies(task, sched.sc.addedFiles, sched.sc.addedJars, ser)
+          } catch {
+            // If the task cannot be serialized, then there's no point to re-attempt the task,
+            // as it will always fail. So just abort the whole task-set and print a serialization
+            // trace to help identify the failure point.
+            case NonFatal(e) =>
               SerializationHelper.tryToSerialize(ser, task).fold (
                 l => logDebug("Un-serializable reference trace for " +
                   task.toString + ":\n" + l),
                 r => {}
               )
-            }
-
-            Task.serializeWithDependencies(task, sched.sc.addedFiles, sched.sc.addedJars, ser)
-          } catch {
-            // If the task cannot be serialized, then there's no point to re-attempt the task,
-            // as it will always fail. So just abort the whole task-set.
-            case NonFatal(e) =>
+              
               val msg = s"Failed to serialize task $taskId, not attempting to retry it."
               logError(msg, e)
               abort(s"$msg Exception during serialization: $e")

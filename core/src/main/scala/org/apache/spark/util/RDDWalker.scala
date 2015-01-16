@@ -17,8 +17,6 @@
 
 package org.apache.spark.util
 
-import com.google.common.collect.Queues
-
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
@@ -30,7 +28,7 @@ import org.apache.spark.rdd.RDD
  * accomplished by walking the object graph linking these RDDs. This is useful for debugging 
  * internal RDD references. See SPARK-3694.
  */
-object RDDWalker {
+private[spark] object RDDWalker {
   /**
    * Traverse the dependencies of the RDD and store them within an Array along with their depths.
    * Return this data structure and subsequently process it. 
@@ -40,20 +38,20 @@ object RDDWalker {
    */
   def walk(rddToWalk : RDD[_]): Array[(RDD[_], Int)] = {
     
-    val walkQueue = Queues.newArrayDeque[(RDD[_], Int)]()
+    val walkQueue = new mutable.Queue[(RDD[_], Int)]()
     val visited = mutable.Set[RDD[_]]()
 
     // Keep track of both the RDD and its depth in the traversal graph.
     val results = new ArrayBuffer[(RDD[_], Int)]()
     // Implement as a queue to perform a BFS  
-    walkQueue.addFirst(rddToWalk,0)
+    walkQueue += ((rddToWalk,0))
 
     while (!walkQueue.isEmpty) {
       // Pop from the queue 
-      val (rddToProcess : RDD[_], depth:Int) = walkQueue.pollFirst()
+      val (rddToProcess : RDD[_], depth:Int) = walkQueue.dequeue()
       if (!visited.contains(rddToProcess)) {
         visited.add(rddToProcess)
-        rddToProcess.dependencies.foreach(s => walkQueue.addFirst(s.rdd, depth + 1))
+        rddToProcess.dependencies.foreach(s => walkQueue += ((s.rdd, depth + 1)))
         results.append((rddToProcess, depth))
       }
     }
