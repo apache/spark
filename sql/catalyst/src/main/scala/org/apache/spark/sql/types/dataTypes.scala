@@ -224,8 +224,9 @@ abstract class DataType {
   def json: String = compact(render(jsonValue))
 
   def prettyJson: String = pretty(render(jsonValue))
-}
 
+  def toSimpleString: String = typeName
+}
 
 /**
  * :: DeveloperApi ::
@@ -235,8 +236,9 @@ abstract class DataType {
  * @group dataType
  */
 @DeveloperApi
-case object NullType extends DataType
-
+case object NullType extends DataType {
+  override def toSimpleString = "null"
+}
 
 object NativeType {
   val all = Seq(
@@ -300,6 +302,7 @@ case object StringType extends NativeType with PrimitiveType {
   private[sql] type JvmType = String
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  override def toSimpleString = "string"
 }
 
 
@@ -324,6 +327,7 @@ case object BinaryType extends NativeType with PrimitiveType {
       x.length - y.length
     }
   }
+  override def toSimpleString = "binary"
 }
 
 
@@ -339,6 +343,7 @@ case object BooleanType extends NativeType with PrimitiveType {
   private[sql] type JvmType = Boolean
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  override def toSimpleString = "boolean"
 }
 
 
@@ -359,6 +364,7 @@ case object TimestampType extends NativeType {
   private[sql] val ordering = new Ordering[JvmType] {
     def compare(x: Timestamp, y: Timestamp) = x.compareTo(y)
   }
+  override def toSimpleString = "timestamp"
 }
 
 
@@ -379,6 +385,7 @@ case object DateType extends NativeType {
   private[sql] val ordering = new Ordering[JvmType] {
     def compare(x: Date, y: Date) = x.compareTo(y)
   }
+  override def toSimpleString = "date"
 }
 
 
@@ -425,6 +432,7 @@ case object LongType extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Long]]
   private[sql] val integral = implicitly[Integral[Long]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  override def toSimpleString = "bigint"
 }
 
 
@@ -442,6 +450,7 @@ case object IntegerType extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Int]]
   private[sql] val integral = implicitly[Integral[Int]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  override def toSimpleString = "int"
 }
 
 
@@ -459,6 +468,7 @@ case object ShortType extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Short]]
   private[sql] val integral = implicitly[Integral[Short]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  override def toSimpleString = "smallint"
 }
 
 
@@ -476,6 +486,7 @@ case object ByteType extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Byte]]
   private[sql] val integral = implicitly[Integral[Byte]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+  override def toSimpleString = "tinyint"
 }
 
 
@@ -530,6 +541,11 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
     case Some(PrecisionInfo(precision, scale)) => s"DecimalType($precision,$scale)"
     case None => "DecimalType()"
   }
+
+  override def toSimpleString = precisionInfo match {
+    case Some(PrecisionInfo(precision, scale)) => s"decimal($precision,$scale)"
+    case None => "decimal(10,0)"
+  }
 }
 
 
@@ -580,6 +596,7 @@ case object DoubleType extends FractionalType {
   private[sql] val fractional = implicitly[Fractional[Double]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
   private[sql] val asIntegral = DoubleAsIfIntegral
+  override def toSimpleString = "double"
 }
 
 
@@ -598,6 +615,7 @@ case object FloatType extends FractionalType {
   private[sql] val fractional = implicitly[Fractional[Float]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
   private[sql] val asIntegral = FloatAsIfIntegral
+  override def toSimpleString = "float"
 }
 
 
@@ -636,6 +654,8 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
     ("type" -> typeName) ~
       ("elementType" -> elementType.jsonValue) ~
       ("containsNull" -> containsNull)
+
+  override def toSimpleString = s"array<${elementType.toSimpleString}>"
 }
 
 
@@ -805,6 +825,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override def length: Int = fields.length
 
   override def iterator: Iterator[StructField] = fields.iterator
+
+  override def toSimpleString = {
+    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.toSimpleString}")
+    s"struct<${fieldTypes.mkString(",")}>"
+  }
 }
 
 
@@ -848,6 +873,8 @@ case class MapType(
       ("keyType" -> keyType.jsonValue) ~
       ("valueType" -> valueType.jsonValue) ~
       ("valueContainsNull" -> valueContainsNull)
+
+  override def toSimpleString = s"map<${keyType.toSimpleString},${valueType.toSimpleString}>"
 }
 
 
