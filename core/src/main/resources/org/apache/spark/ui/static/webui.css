@@ -120,6 +120,17 @@ pre {
   border: none;
 }
 
+.description-input {
+  background: #f9f9f9 !important;
+  border-style: none !important;
+  width: 95%;
+  display: block !important;
+  margin-bottom: 0px !important;
+  padding-left: 0px !important;
+  cursor: text !important;
+  box-shadow: none !important;
+}
+
 .stacktrace-details {
   max-height: 300px;
   overflow-y: auto;
