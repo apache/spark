@@ -2035,7 +2035,7 @@ class SchemaRDD(RDD):
 
     def getCheckpointFile(self):
         checkpointFile = self._jschema_rdd.getCheckpointFile()
-        if checkpointFile.isPresent():
+        if checkpointFile.isDefined():
             return checkpointFile.get()
 
     def coalesce(self, numPartitions, shuffle=False):
