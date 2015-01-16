@@ -143,7 +143,15 @@ class AccumulatorSuite extends FunSuite with Matchers with LocalSparkContext {
       
       // Use an accumulable instead of an accumulator since accumulables are registered
       // automatically
+      val maxI = 1000
       val acc: Accumulable[mutable.Set[Any], Any] = sc.accumulable(new mutable.HashSet[Any]())
+      val groupedInts = (1 to (maxI/20)).map {x => (20 * (x - 1) to 20 * x).toSet}
+      val d = sc.parallelize(groupedInts)
+      d.foreach {
+        x => acc.localValue ++= x
+      }
+      acc.value should be ( (0 to maxI).toSet)
+      
       val accId = acc.id
 
       // Ensure the accumulator is present
