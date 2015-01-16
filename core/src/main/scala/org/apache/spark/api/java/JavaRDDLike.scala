@@ -436,6 +436,12 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   def first(): T = rdd.first()
 
   /**
+   * @return true if and only if the RDD contains no elements at all. Note that an RDD
+   *         may be empty even when it has at least 1 partition.
+   */
+  def isEmpty(): Boolean = rdd.isEmpty()
+
+  /**
    * Save this RDD as a text file, using string representations of elements.
    */
   def saveAsTextFile(path: String): Unit = {
