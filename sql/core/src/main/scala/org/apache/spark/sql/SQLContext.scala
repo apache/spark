@@ -314,6 +314,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
+   * Returns the list of tables for this SQLContext
+   */
+  def showTables(): Array[String] = {
+    catalog.showTables(None)
+  }
+
+  /**
    * Executes a SQL query using Spark, returning the result as a SchemaRDD.  The dialect that is
    * used for SQL parsing can be configured with 'spark.sql.dialect'.
    *

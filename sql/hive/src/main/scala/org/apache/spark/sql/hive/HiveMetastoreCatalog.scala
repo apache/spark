@@ -456,6 +456,26 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   override def unregisterTable(tableIdentifier: Seq[String]): Unit = ???
 
   override def unregisterAllTables() = {}
+
+<<<<<<< HEAD
+=======
+  // Necessary helper method so showTables can return Array[String] vs List
+  private def convertToArray(tables: java.util.List[String]): Array[String] = {
+    new Array[String](tables.length)
+  }
+
+>>>>>>> 90cbd43... SPARK-3299  fixes for scala style check
+  override def showTables(databaseName: Option[String]): Array[String] = {
+    val (dbName, _) = processDatabaseAndTableName(databaseName, "")
+    dbName match {
+      case Some(dbName) => showTablesHelper(client.getAllTables(dbName))
+      case None => showTablesHelper(client.getAllTables)
+    }
+
+    def showTablesHelper(tables: java.util.List[String]): Array[String] = {
+           new Array[String](tables.length)
+    }
+  }
 }
 
 /**

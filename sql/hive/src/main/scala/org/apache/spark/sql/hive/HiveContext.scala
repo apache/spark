@@ -88,6 +88,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   /**
+<<<<<<< HEAD
    * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
    * Spark SQL or the external data source library it uses might cache certain metadata about a
    * table, such as the location of blocks. When those change outside of Spark SQL, users should
@@ -102,6 +103,20 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     // TODO: Database support...
     catalog.invalidateTable("default", tableName)
   }
+=======
+   *
+   * @return All tables for given catalog
+   */
+  override def showTables(): Array[String] = catalog.showTables(None)
+
+  /**
+   *
+   * @param databaseName the name of database to retrieve tables for
+   * @return the list of tables for given database
+   */
+  def showTables(databaseName: String): Array[String] = catalog.showTables(Some(databaseName))
+
+>>>>>>> 9eba381... SPARK-3299  Rebased out of date branch, implementing suggested changes from @rxin, @marmbrus, changed return type from base showTable to Array[String], simplified accessing database name, updated HiveContext to have showTables with no args or single arg of database name, renamed unit test, updated unit test for changes
 
   /**
    * Analyzes the given table in the current database to generate statistics, which will be

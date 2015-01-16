@@ -60,6 +60,9 @@ trait Catalog {
   protected def getDBTable(tableIdent: Seq[String]) : (Option[String], String) = {
     (tableIdent.lift(tableIdent.size - 2), tableIdent.last)
   }
+
+  def showTables(databaseName: Option[String]): Array[String]
+
 }
 
 class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
@@ -79,6 +82,10 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
 
   override def unregisterAllTables() = {
     tables.clear()
+  }
+
+  override def showTables(databaseName: Option[String]): Array[String] = {
+    tables.keys.toArray
   }
 
   override def tableExists(tableIdentifier: Seq[String]): Boolean = {
@@ -152,6 +159,14 @@ trait OverrideCatalog extends Catalog {
   override def unregisterAllTables(): Unit = {
     overrides.clear()
   }
+
+  override def showTables(databaseName: Option[String]): Array[String] = {
+    val dbName = if(!caseSensitive) databaseName.map(_.toLowerCase) else databaseName
+    dbName match {
+      case Some(dbName) => overrides.keys.filter(_._1.exists(_ == dbName)).map(t => t._2).toArray
+      case None => overrides.keys.map(t => t._2).toArray
+    }
+  }
 }
 
 /**
@@ -181,4 +196,8 @@ object EmptyCatalog extends Catalog {
   }
 
   override def unregisterAllTables(): Unit = {}
+
+  override def showTables(databaseName: Option[String]): Array[String] = {
+    throw new UnsupportedOperationException
+  }
 }
