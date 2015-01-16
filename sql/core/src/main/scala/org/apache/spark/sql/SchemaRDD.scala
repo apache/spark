@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.{Map => JMap, List => JList}
-
+import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
 
@@ -37,8 +36,9 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
+import org.apache.spark.sql.json.JsonRDD
+import org.apache.spark.sql.types.{BooleanType, StructType}
 import org.apache.spark.storage.StorageLevel
 
 /**

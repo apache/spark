@@ -19,15 +19,12 @@ package org.apache.spark.sql.api.java;
 
 import java.io.Serializable;
 
-import org.apache.spark.sql.api.java.UDF1;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runners.Suite;
-import org.junit.runner.RunWith;
 
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.types.DataTypes;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
@@ -60,7 +57,7 @@ public class JavaAPISuite implements Serializable {
       public Integer call(String str) throws Exception {
         return str.length();
       }
-    }, DataType.IntegerType);
+    }, DataTypes.IntegerType);
 
     // TODO: Why do we need this cast?
     Row result = (Row) sqlContext.sql("SELECT stringLengthTest('test')").first();
@@ -81,7 +78,7 @@ public class JavaAPISuite implements Serializable {
       public Integer call(String str1, String str2) throws Exception {
         return str1.length() + str2.length();
       }
-    }, DataType.IntegerType);
+    }, DataTypes.IntegerType);
 
     // TODO: Why do we need this cast?
     Row result = (Row) sqlContext.sql("SELECT stringLengthTest('test', 'test2')").first();

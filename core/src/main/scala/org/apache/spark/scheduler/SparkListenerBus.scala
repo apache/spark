@@ -54,6 +54,10 @@ private[spark] trait SparkListenerBus extends ListenerHelper[SparkListener, Spar
         listener.onApplicationEnd(applicationEnd)
       case metricsUpdate: SparkListenerExecutorMetricsUpdate =>
         listener.onExecutorMetricsUpdate(metricsUpdate)
+      case executorAdded: SparkListenerExecutorAdded =>
+        listener.onExecutorAdded(executorAdded)
+      case executorRemoved: SparkListenerExecutorRemoved =>
+        listener.onExecutorRemoved(executorRemoved)
     }
   }
 
