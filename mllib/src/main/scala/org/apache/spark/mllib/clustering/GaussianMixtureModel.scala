@@ -20,7 +20,7 @@ package org.apache.spark.mllib.clustering
 import breeze.linalg.{DenseVector => BreezeVector}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.{Matrix, Vector}
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLUtils
 
@@ -37,8 +37,9 @@ import org.apache.spark.mllib.util.MLUtils
  */
 class GaussianMixtureModel(
   val weight: Array[Double], 
-  val mu: Array[Vector], 
-  val sigma: Array[Matrix]) extends Serializable {
+  val gaussian: Array[MultivariateGaussian]) extends Serializable {
+  
+  require(weight.length == gaussian.length, "Length of weight and Gaussian arrays must match")
   
   /** Number of gaussians in mixture */
   def k: Int = weight.length
@@ -55,11 +56,7 @@ class GaussianMixtureModel(
    */
   def predictSoft(points: RDD[Vector]): RDD[Array[Double]] = {
     val sc = points.sparkContext
-    val dists = sc.broadcast {
-      (0 until k).map { i => 
-        new MultivariateGaussian(mu(i).toBreeze.toDenseVector, sigma(i).toBreeze.toDenseMatrix)
-      }.toArray
-    }
+    val dists = sc.broadcast(gaussian)
     val weights = sc.broadcast(weight)
     points.map { x => 
       computeSoftAssignments(x.toBreeze.toDenseVector, dists.value, weights.value, k)

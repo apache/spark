@@ -54,7 +54,7 @@ object DenseGmmEM {
     
     for (i <- 0 until clusters.k) {
       println("weight=%f\nmu=%s\nsigma=\n%s\n" format 
-        (clusters.weight(i), clusters.mu(i), clusters.sigma(i)))
+        (clusters.weight(i), clusters.gaussian(i).mu, clusters.gaussian(i).sigma))
     }
     
     println("Cluster labels (first <= 100):")
