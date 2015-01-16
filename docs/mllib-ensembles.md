@@ -456,7 +456,7 @@ val (trainingData, testData) = (splits(0), splits(1))
 
 // Train a GradientBoostedTrees model.
 //  The defaultParams for Classification use LogLoss by default.
-val boostingStrategy = BoostingStrategy.defaultParams("Classification")
+val boostingStrategy = BoostingStrategy.defaultParams(Algo.Classification)
 boostingStrategy.numIterations = 3 // Note: Use more iterations in practice.
 boostingStrategy.treeStrategy.numClassesForClassification = 2
 boostingStrategy.treeStrategy.maxDepth = 5
@@ -506,7 +506,7 @@ JavaRDD<LabeledPoint> testData = splits[1];
 
 // Train a GradientBoostedTrees model.
 //  The defaultParams for Classification use LogLoss by default.
-BoostingStrategy boostingStrategy = BoostingStrategy.defaultParams("Classification");
+BoostingStrategy boostingStrategy = BoostingStrategy.defaultParams(Algo.Classification);
 boostingStrategy.setNumIterations(3); // Note: Use more iterations in practice.
 boostingStrategy.getTreeStrategy().setNumClassesForClassification(2);
 boostingStrategy.getTreeStrategy().setMaxDepth(5);
@@ -564,7 +564,7 @@ val (trainingData, testData) = (splits(0), splits(1))
 
 // Train a GradientBoostedTrees model.
 //  The defaultParams for Regression use SquaredError by default.
-val boostingStrategy = BoostingStrategy.defaultParams("Regression")
+val boostingStrategy = BoostingStrategy.defaultParams(Algo.Regression)
 boostingStrategy.numIterations = 3 // Note: Use more iterations in practice.
 boostingStrategy.treeStrategy.maxDepth = 5
 //  Empty categoricalFeaturesInfo indicates all features are continuous.
@@ -614,7 +614,7 @@ JavaRDD<LabeledPoint> testData = splits[1];
 
 // Train a GradientBoostedTrees model.
 //  The defaultParams for Regression use SquaredError by default.
-BoostingStrategy boostingStrategy = BoostingStrategy.defaultParams("Regression");
+BoostingStrategy boostingStrategy = BoostingStrategy.defaultParams(Algo.Regression);
 boostingStrategy.setNumIterations(3); // Note: Use more iterations in practice.
 boostingStrategy.getTreeStrategy().setMaxDepth(5);
 //  Empty categoricalFeaturesInfo indicates all features are continuous.
