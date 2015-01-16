@@ -222,7 +222,6 @@ abstract class RDD[T: ClassTag](
       dep.rdd.resetPartitions(numPartitions)
     )
     this.partitions_ = getPartitions
-    logDebug("resetPartitions:" + this.partitions.size)
     this.partitions_
   }
 
