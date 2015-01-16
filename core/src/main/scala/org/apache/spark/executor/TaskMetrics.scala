@@ -17,6 +17,11 @@
 
 package org.apache.spark.executor
 
+import java.util.concurrent.atomic.AtomicLong
+
+import org.apache.spark.executor.DataReadMethod
+import org.apache.spark.executor.DataReadMethod.DataReadMethod
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.DeveloperApi
@@ -80,7 +85,17 @@ class TaskMetrics extends Serializable {
    * If this task reads from a HadoopRDD or from persisted data, metrics on how much data was read
    * are stored here.
    */
-  var inputMetrics: Option[InputMetrics] = None
+  private var _inputMetrics: Option[InputMetrics] = None
+
+  def inputMetrics = _inputMetrics
+
+  /**
+   * This should only be used when recreating TaskMetrics, not when updating input metrics in
+   * executors
+   */
+  private[spark] def setInputMetrics(inputMetrics: Option[InputMetrics]) {
+    _inputMetrics = inputMetrics
+  }
 
   /**
    * If this task writes data externally (e.g. to a distributed filesystem), metrics on how much
@@ -134,6 +149,30 @@ class TaskMetrics extends Serializable {
   }
 
   /**
+   * Returns the input metrics object that the task should use. Currently, if
+   * there exists an input metric with the same readMethod, we return that one
+   * so the caller can accumulate bytes read. If the readMethod is different
+   * than previously seen by this task, we return a new InputMetric but don't
+   * record it.
+   *
+   * Once https://issues.apache.org/jira/browse/SPARK-5225 is addressed,
+   * we can store all the different inputMetrics (one per readMethod).
+   */
+  private[spark] def getInputMetricsForReadMethod(readMethod: DataReadMethod):
+    InputMetrics =synchronized {
+    _inputMetrics match {
+      case None =>
+        val metrics = new InputMetrics(readMethod)
+        _inputMetrics = Some(metrics)
+        metrics
+      case Some(metrics @ InputMetrics(method)) if method == readMethod =>
+        metrics
+      case Some(InputMetrics(method)) =>
+       new InputMetrics(readMethod)
+    }
+  }
+
+  /**
    * Aggregates shuffle read metrics for all registered dependencies into shuffleReadMetrics.
    */
   private[spark] def updateShuffleReadMetrics() = synchronized {
@@ -145,6 +184,10 @@ class TaskMetrics extends Serializable {
       merged.remoteBytesRead += depMetrics.remoteBytesRead
     }
     _shuffleReadMetrics = Some(merged)
+  }
+
+  private[spark] def updateInputMetrics() = synchronized {
+    inputMetrics.foreach(_.updateBytesRead())
   }
 }
 
@@ -179,10 +222,38 @@ object DataWriteMethod extends Enumeration with Serializable {
  */
 @DeveloperApi
 case class InputMetrics(readMethod: DataReadMethod.Value) {
+
+  private val _bytesRead: AtomicLong = new AtomicLong()
+
   /**
    * Total bytes read.
    */
-  var bytesRead: Long = 0L
+  def bytesRead: Long = _bytesRead.get()
+  @volatile @transient var bytesReadCallback: Option[() => Long] = None
+
+  /**
+   * Adds additional bytes read for this read method.
+   */
+  def addBytesRead(bytes: Long) = {
+    _bytesRead.addAndGet(bytes)
+  }
+
+  /**
+   * Invoke the bytesReadCallback and mutate bytesRead.
+   */
+  def updateBytesRead() {
+    bytesReadCallback.foreach { c =>
+      _bytesRead.set(c())
+    }
+  }
+
+ /**
+  * Register a function that can be called to get up-to-date information on how many bytes the task
+  * has read from an input source.
+  */
+  def setBytesReadCallback(f: Option[() => Long]) {
+    bytesReadCallback = f
+  }
 }
 
 /**

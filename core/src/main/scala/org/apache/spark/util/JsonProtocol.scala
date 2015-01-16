@@ -637,8 +637,8 @@ private[spark] object JsonProtocol {
       Utils.jsonOption(json \ "Shuffle Read Metrics").map(shuffleReadMetricsFromJson))
     metrics.shuffleWriteMetrics =
       Utils.jsonOption(json \ "Shuffle Write Metrics").map(shuffleWriteMetricsFromJson)
-    metrics.inputMetrics =
-      Utils.jsonOption(json \ "Input Metrics").map(inputMetricsFromJson)
+    metrics.setInputMetrics(
+      Utils.jsonOption(json \ "Input Metrics").map(inputMetricsFromJson))
     metrics.outputMetrics =
       Utils.jsonOption(json \ "Output Metrics").map(outputMetricsFromJson)
     metrics.updatedBlocks =
@@ -671,7 +671,7 @@ private[spark] object JsonProtocol {
   def inputMetricsFromJson(json: JValue): InputMetrics = {
     val metrics = new InputMetrics(
       DataReadMethod.withName((json \ "Data Read Method").extract[String]))
-    metrics.bytesRead = (json \ "Bytes Read").extract[Long]
+    metrics.addBytesRead((json \ "Bytes Read").extract[Long])
     metrics
   }
 
