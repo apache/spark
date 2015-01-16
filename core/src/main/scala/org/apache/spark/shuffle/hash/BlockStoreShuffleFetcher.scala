@@ -25,7 +25,7 @@ import org.apache.spark._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.FetchFailedException
 import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockFetcherIterator, ShuffleBlockId}
-import org.apache.spark.util.{InterceptingIterator, CompletionIterator}
+import org.apache.spark.util.{AfterNextInterceptingIterator, CompletionIterator}
 
 private[hash] object BlockStoreShuffleFetcher extends Logging {
   def fetch[T](
@@ -82,7 +82,7 @@ private[hash] object BlockStoreShuffleFetcher extends Logging {
       SparkEnv.get.conf.getLong("spark.reducer.maxMbInFlight", 48) * 1024 * 1024)
     val itr = blockFetcherItr.flatMap(unpackBlock)
 
-    val itr2 = new InterceptingIterator[T](itr) {
+    val itr2 = new AfterNextInterceptingIterator[T](itr) {
       val readMetrics = context.taskMetrics().createShuffleReadMetricsForDependency()
       override def afterNext(next: T) : T = {
         readMetrics.recordsRead += 1
