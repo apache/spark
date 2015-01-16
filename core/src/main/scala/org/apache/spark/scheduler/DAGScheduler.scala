@@ -829,16 +829,16 @@ class DAGScheduler(
 
   private def estimateNumPartitionsOfStage(childStage: Stage): Int = {
     var inputSize:Long = 0L
-    //sum inputSize of childStage's parents stage
+    // sum inputSize of childStage's parents stage
     for (parentStage <- childStage.parents) {
-      //stage's inputSize is sum outputSize of his parents stage
+      // stage's inputSize is sum outputSize of his parents stage
       inputSize += estimateStageInputSize(parentStage)
     }
     val estimateNumPartitions = ((inputSize + bytesPerPartition - 1) / bytesPerPartition).toInt
     val numPartitions:Int = Math.min(Math.max(estimateNumPartitions, minNumPartitions),
       maxNumPartitions)
     logInfo("estimate " + childStage + " 's inputSize=" + Utils.bytesToString(inputSize) +
-      ",bytesPerPartition=" + Utils.bytesToString(bytesPerPartition) +",numPartitions=" +
+      ",bytesPerPartition=" + Utils.bytesToString(bytesPerPartition) + ",numPartitions=" +
       numPartitions)
     numPartitions
   }
@@ -871,7 +871,7 @@ class DAGScheduler(
         if (!childStage.get.isResetNumPartitions) {
           updateNumPartitionsOfStage(childStage.get, estimateNumPartitionsOfStage(childStage.get))
         } else {
-          logInfo(stage + "'s child " + childStage +" have been estimated, partitionNumber=" +
+          logInfo(stage + "'s child " + childStage + " have been estimated, partitionNumber=" +
             childStage.get.numPartitions)
         }
         stageIdToChildStage.remove(stage.id)
