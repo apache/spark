@@ -113,7 +113,18 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("addFile recursive can't add the same directory twice") {
+  test("addFile recursive can't add directories by default") {
+    val dir = new File("dir")
 
+    try {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      sc.addFile(dir.getAbsolutePath)
+      assert(false, "should have thrown exception")
+    } catch {
+      case _: SparkException =>
+    } finally {
+      sc.stop()
+      dir.delete()
+    }
   }
 }
