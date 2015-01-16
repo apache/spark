@@ -309,7 +309,6 @@ object LDA {
             } else if (m1._1) {
               m1._2 += m0._2
             } else {
-              val k = m0._2.length
               m0._2 + m1._2
             }
           (true, sum)
@@ -319,7 +318,7 @@ object LDA {
         graph.aggregateMessages[(Boolean, TopicCounts)](sendMsg, mergeMsg)
           .mapValues(_._2)
       // Update the vertex descriptors with the new counts.
-      graph.outerJoinVertices(docTopicDistributions) { (vid, oldDist, newDist) => newDist.get}
+      graph.outerJoinVertices(docTopicDistributions) { (vid, oldDist, newDist) => newDist.get }
     }
 
     def collectTopicTotals(): TopicCounts = {
@@ -427,7 +426,7 @@ object LDA {
       termSmoothing: Double,
       randomSeed: Long): LearningState = {
     // For each document, create an edge (Document -> Term) for each unique term in the document.
-    val edges: RDD[Edge[TokenCount]] = docs.flatMap { case doc =>
+    val edges: RDD[Edge[TokenCount]] = docs.flatMap { doc =>
       // Add edges for terms with non-zero counts.
       doc.counts.toBreeze.activeIterator.filter(_._2 != 0.0).map { case (term, cnt) =>
         Edge(doc.id, term2index(term), cnt)
