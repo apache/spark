@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import java.util.Properties
 
+import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.shuffle.MetadataFetchFailedException
 
 import scala.collection.Map
@@ -69,6 +70,9 @@ class JsonProtocolSuite extends FunSuite {
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
     val applicationStart = SparkListenerApplicationStart("The winner of all", None, 42L, "Garfield")
     val applicationEnd = SparkListenerApplicationEnd(42L)
+    val executorAdded = SparkListenerExecutorAdded("exec1",
+      new ExecutorInfo("Hostee.awesome.com", 11))
+    val executorRemoved = SparkListenerExecutorRemoved("exec2")
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -85,6 +89,8 @@ class JsonProtocolSuite extends FunSuite {
     testEvent(unpersistRdd, unpersistRDDJsonString)
     testEvent(applicationStart, applicationStartJsonString)
     testEvent(applicationEnd, applicationEndJsonString)
+    testEvent(executorAdded, executorAddedJsonString)
+    testEvent(executorRemoved, executorRemovedJsonString)
   }
 
   test("Dependent Classes") {
@@ -94,6 +100,7 @@ class JsonProtocolSuite extends FunSuite {
     testTaskMetrics(makeTaskMetrics(
       33333L, 44444L, 55555L, 66666L, 7, 8, hasHadoopInput = false, hasOutput = false))
     testBlockManagerId(BlockManagerId("Hong", "Kong", 500))
+    testExecutorInfo(new ExecutorInfo("host", 43))
 
     // StorageLevel
     testStorageLevel(StorageLevel.NONE)
@@ -303,6 +310,10 @@ class JsonProtocolSuite extends FunSuite {
     assert(blockId === newBlockId)
   }
 
+  private def testExecutorInfo(info: ExecutorInfo) {
+    val newInfo = JsonProtocol.executorInfoFromJson(JsonProtocol.executorInfoToJson(info))
+    assertEquals(info, newInfo)
+  }
 
   /** -------------------------------- *
    | Util methods for comparing events |
@@ -335,6 +346,11 @@ class JsonProtocolSuite extends FunSuite {
         assertEquals(e1.jobResult, e2.jobResult)
       case (e1: SparkListenerEnvironmentUpdate, e2: SparkListenerEnvironmentUpdate) =>
         assertEquals(e1.environmentDetails, e2.environmentDetails)
+      case (e1: SparkListenerExecutorAdded, e2: SparkListenerExecutorAdded) =>
+        assert(e1.executorId == e1.executorId)
+        assertEquals(e1.executorInfo, e2.executorInfo)
+      case (e1: SparkListenerExecutorRemoved, e2: SparkListenerExecutorRemoved) =>
+        assert(e1.executorId == e1.executorId)
       case (e1, e2) =>
         assert(e1 === e2)
       case _ => fail("Events don't match in types!")
@@ -385,6 +401,11 @@ class JsonProtocolSuite extends FunSuite {
     assert(info1.finishTime === info2.finishTime)
     assert(info1.failed === info2.failed)
     assert(info1.accumulables === info2.accumulables)
+  }
+
+  private def assertEquals(info1: ExecutorInfo, info2: ExecutorInfo) {
+    assert(info1.executorHost == info2.executorHost)
+    assert(info1.totalCores == info2.totalCores)
   }
 
   private def assertEquals(metrics1: TaskMetrics, metrics2: TaskMetrics) {
@@ -1405,6 +1426,26 @@ class JsonProtocolSuite extends FunSuite {
       |{
       |  "Event": "SparkListenerApplicationEnd",
       |  "Timestamp": 42
+      |}
+    """
+
+  private val executorAddedJsonString =
+    """
+      |{
+      |  "Event": "SparkListenerExecutorAdded",
+      |  "Executor ID": "exec1",
+      |  "Executor Info": {
+      |    "Host": "Hostee.awesome.com",
+      |    "Total Cores": 11
+      |  }
+      |}
+    """
+
+  private val executorRemovedJsonString =
+    """
+      |{
+      |  "Event": "SparkListenerExecutorRemoved",
+      |  "Executor ID": "exec2"
       |}
     """
 }
