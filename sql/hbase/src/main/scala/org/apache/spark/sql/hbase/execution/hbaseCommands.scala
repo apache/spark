@@ -26,7 +26,6 @@ import org.apache.hadoop.hbase.client.{HTable, Put}
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.mapreduce.{HFileOutputFormat2, LoadIncrementalHFiles}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter}
-import org.apache.log4j.Logger
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark.sql._
@@ -37,7 +36,7 @@ import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hbase._
 import org.apache.spark.sql.hbase.util.{HBaseKVHelper, Util}
 import org.apache.spark.sql.sources.LogicalRelation
-import org.apache.spark.{SerializableWritable, SparkEnv, TaskContext}
+import org.apache.spark.{Logging, SerializableWritable, SparkEnv, TaskContext}
 import org.apache.spark.sql.hbase.util.InsertWrappers._
 import org.apache.spark.sql.catalyst.types.StringType
 
@@ -160,7 +159,7 @@ case class BulkLoadIntoTableCommand(
     path: String,
     tableName: String,
     isLocal: Boolean,
-    delimiter: Option[String]) extends RunnableCommand {
+    delimiter: Option[String]) extends RunnableCommand with Logging {
 
   private[hbase] def makeBulkLoadRDD(
       splitKeys: Array[ImmutableBytesWritableWrapper],
@@ -232,10 +231,8 @@ case class BulkLoadIntoTableCommand(
       .child.asInstanceOf[LogicalRelation]
       .relation.asInstanceOf[HBaseRelation]
     val hbContext = sqlContext.asInstanceOf[HBaseSQLContext]
-    val logger = Logger.getLogger(getClass.getName)
 
-    val conf = hbContext.sparkContext.hadoopConfiguration
-
+    val conf = hbContext.configuration
     val job = Job.getInstance(conf)
 
     val hadoopReader = if (isLocal) {
@@ -249,11 +246,11 @@ case class BulkLoadIntoTableCommand(
     // tmp path for storing HFile
     val tmpPath = Util.getTempFilePath(conf, relation.tableName)
     val splitKeys = relation.getRegionStartKeys.toArray
-    logger.debug(s"Starting makeBulkLoad on table ${relation.htable.getName} ...")
+    logDebug(s"Starting makeBulkLoad on table ${relation.htable.getName} ...")
     makeBulkLoadRDD(splitKeys, hadoopReader, job, tmpPath, relation)
     val tablePath = new Path(tmpPath)
     val load = new LoadIncrementalHFiles(conf)
-    logger.debug(s"Starting doBulkLoad on table ${relation.htable.getName} ...")
+    logDebug(s"Starting doBulkLoad on table ${relation.htable.getName} ...")
     load.doBulkLoad(tablePath, relation.htable)
     Seq.empty[Row]
   }
@@ -387,7 +384,6 @@ case class ParallelizedBulkLoadIntoTableCommand(
       .child.asInstanceOf[LogicalRelation]
       .relation.asInstanceOf[HBaseRelation]
     val hbContext = sqlContext.asInstanceOf[HBaseSQLContext]
-    val logger = Logger.getLogger(getClass.getName)
     val conf = hbContext.configuration
 
     val hadoopReader = if (isLocal) {
@@ -403,7 +399,7 @@ case class ParallelizedBulkLoadIntoTableCommand(
     val splitKeys = relation.getRegionStartKeys.toArray
     val htableName = relation.htable.getName.getNameAsString
     val wrappedConf = new SerializableWritable(conf)
-    logger.debug(s"Starting makeBulkLoad on table ${relation.htable.getName} ...")
+    logDebug(s"Starting makeBulkLoad on table ${relation.htable.getName} ...")
     makeBulkLoadRDD(
       splitKeys,
       hadoopReader,
@@ -416,7 +412,7 @@ case class ParallelizedBulkLoadIntoTableCommand(
         load.doBulkLoad(new Path(iter.next()), htable)
       }
     }
-    logger.debug(s"Starting doBulkLoad on table ${relation.htable.getName} ...")
+    logDebug(s"Starting doBulkLoad on table ${relation.htable.getName} ...")
     Seq.empty[Row]
   }
 
