@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.collection.mutable.{HashMap, HashSet, ListBuffer, LinkedHashMap}
+import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
@@ -56,7 +56,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
   val jobIdToData = new HashMap[JobId, JobUIData]
 
   // Stages:
-  val pendingStages = new LinkedHashMap[StageId, StageInfo]
+  val pendingStages = new HashMap[StageId, StageInfo]
   val activeStages = new HashMap[StageId, StageInfo]
   val completedStages = ListBuffer[StageInfo]()
   val skippedStages = ListBuffer[StageInfo]()

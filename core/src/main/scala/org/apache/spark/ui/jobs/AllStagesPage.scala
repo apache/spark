@@ -33,12 +33,11 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val activeStages = listener.activeStages.values.toSeq
+      val pendingStages = listener.pendingStages.values.toSeq
       val completedStages = listener.completedStages.reverse.toSeq
       val numCompletedStages = listener.numCompletedStages
       val failedStages = listener.failedStages.reverse.toSeq
       val numFailedStages = listener.numFailedStages
-      val pendingStages = listener.pendingStages.values.toSeq
-      val numWaitingStages = pendingStages.size
       val now = System.currentTimeMillis
 
       val activeStagesTable =
@@ -46,7 +45,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
           parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
           killEnabled = parent.killEnabled)
       val pendingStagesTable =
-        new StageTableBase(pendingStages.sortBy(_.submissionTime),
+        new StageTableBase(pendingStages.sortBy(_.submissionTime).reverse,
           parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
           killEnabled = false)
       val completedStagesTable =
