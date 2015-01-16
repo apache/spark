@@ -460,7 +460,7 @@ class SparseVector(
           while (k2 < v.values.size && v.values(k2) == 0) k2 += 1
 
           if (k1 == this.values.size || k2 == v.values.size) {
-            return (k1 == this.values.size && k2 == v.values.size) //check end alignment
+            return (k1 == this.values.size && k2 == v.values.size) // check end alignment
           }
           if (this.indices(k1) != v.indices(k2) || this.values(k1) != v.values(k2)) {
             return false
