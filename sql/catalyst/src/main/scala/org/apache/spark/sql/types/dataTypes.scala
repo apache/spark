@@ -244,15 +244,20 @@ object NativeType {
 
   def unapply(dt: DataType): Boolean = all.contains(dt)
 
-  val defaultSizeOf: Map[NativeType, Int] = Map(
-    IntegerType -> 4,
-    BooleanType -> 1,
-    LongType -> 8,
-    DoubleType -> 8,
-    FloatType -> 4,
-    ShortType -> 2,
-    ByteType -> 1,
-    StringType -> 4096)
+  def defaultSizeOf(dataType: NativeType) = dataType match {
+    case IntegerType => 4
+    case BooleanType => 1
+    case LongType => 8
+    case DoubleType => 8
+    case FloatType => 4
+    case ShortType => 2
+    case ByteType => 1
+    case StringType => 4096
+    case decimal: DecimalType => 4096
+    case TimestampType => 8
+    case DateType => 8
+    case BinaryType => 8
+  }
 }
 
 

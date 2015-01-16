@@ -1030,4 +1030,38 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     rdd.registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), 2)
   }
+
+  test("SPARK-5287 Make sure defaultSizeOf contains all needed data types.") {
+    val types =
+      IntegerType ::
+      BooleanType ::
+      LongType ::
+      DoubleType ::
+      FloatType ::
+      ShortType ::
+      ByteType ::
+      StringType ::
+      DecimalType.Unlimited ::
+      DecimalType(10, 0) ::
+      TimestampType ::
+      DateType ::
+      BinaryType :: Nil
+
+    val fields = types.zipWithIndex.map {
+      case (dataType, index) => StructField(s"c${index}", dataType, true)
+    }
+    val schema = StructType(fields)
+    val row = Row.fromSeq(Seq.fill(types.size)(null))
+    applySchema(sparkContext.parallelize(row :: Nil), schema).registerTempTable("testLimit")
+
+    // Use a JOIN to trigger the evaluation of the lazy val statistics in LIMIT.
+    checkAnswer(
+      sql(
+        """
+          |SELECT l.a, l.b
+          |FROM testData2 l JOIN (SELECT * FROM testLimit LIMIT 1) r ON (l.a = r.c0)
+        """.stripMargin),
+      Seq()
+    )
+  }
 }
