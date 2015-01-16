@@ -66,7 +66,7 @@ class ScanPredClassifier(relation: HBaseRelation, keyIndex: Int) {
           case (_, None, None, None) => (ll, None)
           // two Nones
           case (None, None, _, _) => (rl, rr)
-          case (None, _, None, _) => (None, Some(Or(rl.get, rr.get)))
+          case (None, _, None, _) => (None, Some(Or(lr.get, rr.get)))
           case (None, _, _, None) => (None, Some(Or(lr.get, rl.get)))
           case (_, None, None, _) => (None, Some(Or(ll.get, rr.get)))
           case (_, None, _, None) => (Some(Or(ll.get, rl.get)), None)
