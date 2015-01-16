@@ -194,7 +194,7 @@ class TaskMetrics extends Serializable {
   /**
    * Aggregates shuffle read metrics for all registered dependencies into shuffleReadMetrics.
    */
-  private[spark] def updateShuffleReadMetrics() = synchronized {
+  private[spark] def updateShuffleReadMetrics(): Unit = synchronized {
     val merged = new ShuffleReadMetrics()
     for (depMetrics <- depsShuffleReadMetrics) {
       merged.incFetchWaitTime(depMetrics.fetchWaitTime)
@@ -206,7 +206,7 @@ class TaskMetrics extends Serializable {
     _shuffleReadMetrics = Some(merged)
   }
 
-  private[spark] def updateInputMetrics() = synchronized {
+  private[spark] def updateInputMetrics(): Unit = synchronized {
     inputMetrics.foreach(_.updateBytesRead())
   }
 }

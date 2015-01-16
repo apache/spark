@@ -684,7 +684,7 @@ class JsonProtocolSuite extends FunSuite {
     if (hasHadoopInput) {
       val inputMetrics = new InputMetrics(DataReadMethod.Hadoop)
       inputMetrics.addBytesRead(d + e + f)
-      inputMetrics.addRecordsRead(if(hasRecords) (d + e + f) / 100 else -1)
+      inputMetrics.addRecordsRead(if (hasRecords) (d + e + f) / 100 else -1)
       t.setInputMetrics(Some(inputMetrics))
     } else {
       val sr = new ShuffleReadMetrics
@@ -692,19 +692,19 @@ class JsonProtocolSuite extends FunSuite {
       sr.incLocalBlocksFetched(e)
       sr.incFetchWaitTime(a + d)
       sr.incRemoteBlocksFetched(f)
-      sr.recordsRead = if(hasRecords) (b + d) / 100 else -1
+      sr.recordsRead = if (hasRecords) (b + d) / 100 else -1
       t.setShuffleReadMetrics(Some(sr))
     }
     if (hasOutput) {
       val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
       outputMetrics.setBytesWritten(a + b + c)
-      outputMetrics.recordsWritten = if(hasRecords) (a + b + c)/100 else -1
+      outputMetrics.recordsWritten = if (hasRecords) (a + b + c)/100 else -1
       t.outputMetrics = Some(outputMetrics)
     } else {
       val sw = new ShuffleWriteMetrics
       sw.incShuffleBytesWritten(a + b + c)
       sw.incShuffleWriteTime(b + c + d)
-      sw.recordsWritten = if(hasRecords) (a + b + c) / 100 else -1
+      sw.recordsWritten = if (hasRecords) (a + b + c) / 100 else -1
       t.shuffleWriteMetrics = Some(sw)
     }
     // Make at most 6 blocks
