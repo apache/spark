@@ -37,8 +37,6 @@ import scala.collection.mutable.ArrayBuffer
 
 class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with EasyMockSugar {
 
-  val executorAddedTime = 1421458410000L
-
   test("mesos resource offers result in launching tasks") {
     def createOffer(id: Int, mem: Int, cpu: Int) = {
       val builder = Offer.newBuilder()
@@ -58,7 +56,7 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Ea
     val taskScheduler = EasyMock.createMock(classOf[TaskSchedulerImpl])
 
     val listenerBus = EasyMock.createMock(classOf[LiveListenerBus])
-    listenerBus.post(SparkListenerExecutorAdded(executorAddedTime, "s1", new ExecutorInfo("host1", 2)))
+    listenerBus.post(SparkListenerExecutorAdded(EasyMock.anyLong, "s1", new ExecutorInfo("host1", 2)))
     EasyMock.replay(listenerBus)
 
     val sc = EasyMock.createMock(classOf[SparkContext])
