@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.io.File
+import java.io.{File, PrintWriter}
 
 import org.scalatest.FunSuite
 
@@ -73,6 +73,36 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     bytesWritable.set(inputArray, 0, 0)
     val byteArray2 = converter.convert(bytesWritable)
     assert(byteArray2.length === 0)
+  }
+
+  test("addFile works") {
+    val file = new File("somefile")
+    val absolutePath = file.getAbsolutePath
+    try {
+      val pw = new PrintWriter(file)
+      pw.print("somewords")
+      pw.close()
+      val length = file.length()
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      sc.addFile(file.getAbsolutePath)
+      sc.parallelize(Array(1), 1).map(x => {
+        val gotten = new File(SparkFiles.get(file.getName))
+        if (!gotten.exists()) {
+          throw new SparkException("file doesn't exist")
+        }
+        if (length != gotten.length()) {
+          throw new SparkException(
+            s"file has different length $length than added file ${gotten.length()}")
+        }
+        if (absolutePath == gotten.getAbsolutePath) {
+          throw new SparkException("file should have been copied")
+        }
+        x
+      }).count()
+    } finally {
+      sc.stop()
+      file.delete()
+    }
   }
 
   test("addFile recursive works") {
