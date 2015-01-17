@@ -74,8 +74,7 @@ private[spark] class YarnClientSchedulerBackend(
         ("--executor-memory", "SPARK_EXECUTOR_MEMORY", "spark.executor.memory"),
         ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
         ("--executor-cores", "SPARK_EXECUTOR_CORES", "spark.executor.cores"),
-        ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
-        ("--name", "SPARK_YARN_APP_NAME", "spark.app.name")
+        ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue")
       )
     // Warn against the following deprecated environment variables: env var -> suggestion
     val deprecatedEnvVars = Map(
@@ -86,18 +85,22 @@ private[spark] class YarnClientSchedulerBackend(
     // Do the same for deprecated properties: property -> suggestion
     val deprecatedProps = Map("spark.master.memory" -> "--driver-memory through spark-submit")
     optionTuples.foreach { case (optionName, envVar, sparkProp) =>
-      if (System.getenv(envVar) != null) {
-        extraArgs += (optionName, System.getenv(envVar))
-        if (deprecatedEnvVars.contains(envVar)) {
-          logWarning(s"NOTE: $envVar is deprecated. Use ${deprecatedEnvVars(envVar)} instead.")
-        }
-      } else if (sc.getConf.contains(sparkProp)) {
+      if (sc.getConf.contains(sparkProp)) {
         extraArgs += (optionName, sc.getConf.get(sparkProp))
         if (deprecatedProps.contains(sparkProp)) {
           logWarning(s"NOTE: $sparkProp is deprecated. Use ${deprecatedProps(sparkProp)} instead.")
         }
+      } else if (System.getenv(envVar) != null) {
+        extraArgs += (optionName, System.getenv(envVar))
+        if (deprecatedEnvVars.contains(envVar)) {
+          logWarning(s"NOTE: $envVar is deprecated. Use ${deprecatedEnvVars(envVar)} instead.")
+        }
       }
     }
+    // The app name is a special case because "spark.app.name" is required of all applications.
+    // As a result, the corresponding "SPARK_YARN_APP_NAME" is already handled preemptively in
+    // SparkSubmitArguments if "spark.app.name" is not explicitly set by the user. (SPARK-5222)
+    sc.getConf.getOption("spark.app.name").foreach(v => extraArgs += ("--name", v))
     extraArgs
   }
 

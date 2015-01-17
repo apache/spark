@@ -120,6 +120,18 @@ class VectorTests(PySparkTestCase):
         dv = DenseVector(v)
         self.assertTrue(dv.array.dtype == 'float64')
 
+    def test_sparse_vector_indexing(self):
+        sv = SparseVector(4, {1: 1, 3: 2})
+        self.assertEquals(sv[0], 0.)
+        self.assertEquals(sv[3], 2.)
+        self.assertEquals(sv[1], 1.)
+        self.assertEquals(sv[2], 0.)
+        self.assertEquals(sv[-1], 2)
+        self.assertEquals(sv[-2], 0)
+        self.assertEquals(sv[-4], 0)
+        for ind in [4, -5, 7.8]:
+            self.assertRaises(ValueError, sv.__getitem__, ind)
+
 
 class ListTests(PySparkTestCase):
 

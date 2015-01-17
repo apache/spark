@@ -29,7 +29,7 @@ import org.apache.spark._
 import org.apache.spark.api.python.PythonBroadcast
 import org.apache.spark.broadcast.HttpBroadcast
 import org.apache.spark.network.nio.{PutBlock, GotBlock, GetBlock}
-import org.apache.spark.scheduler.MapStatus
+import org.apache.spark.scheduler.{CompressedMapStatus, HighlyCompressedMapStatus}
 import org.apache.spark.storage._
 import org.apache.spark.util.BoundedPriorityQueue
 import org.apache.spark.util.collection.CompactBuffer
@@ -207,7 +207,8 @@ private[serializer] object KryoSerializer {
     classOf[PutBlock],
     classOf[GotBlock],
     classOf[GetBlock],
-    classOf[MapStatus],
+    classOf[CompressedMapStatus],
+    classOf[HighlyCompressedMapStatus],
     classOf[CompactBuffer[_]],
     classOf[BlockManagerId],
     classOf[Array[Byte]],

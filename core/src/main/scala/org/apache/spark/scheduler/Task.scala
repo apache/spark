@@ -44,8 +44,16 @@ import org.apache.spark.util.Utils
  */
 private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) extends Serializable {
 
-  final def run(attemptId: Long): T = {
-    context = new TaskContextImpl(stageId, partitionId, attemptId, runningLocally = false)
+  /**
+   * Called by Executor to run this task.
+   *
+   * @param taskAttemptId an identifier for this task attempt that is unique within a SparkContext.
+   * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
+   * @return the result of the task
+   */
+  final def run(taskAttemptId: Long, attemptNumber: Int): T = {
+    context = new TaskContextImpl(stageId = stageId, partitionId = partitionId,
+      taskAttemptId = taskAttemptId, attemptNumber = attemptNumber, runningLocally = false)
     TaskContextHelper.setTaskContext(context)
     context.taskMetrics.hostname = Utils.localHostName()
     taskThread = Thread.currentThread()

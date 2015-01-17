@@ -18,8 +18,9 @@
 package org.apache.spark.sql.json
 
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.types.StructType
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.types.StructType
+
 
 private[sql] class DefaultSource extends RelationProvider with SchemaRelationProvider {
 
@@ -59,8 +60,8 @@ private[sql] case class JSONRelation(
       JsonRDD.inferSchema(
         baseRDD,
         samplingRatio,
-        sqlContext.columnNameOfCorruptRecord)))
+        sqlContext.conf.columnNameOfCorruptRecord)))
 
   override def buildScan() =
-    JsonRDD.jsonStringToRow(baseRDD, schema, sqlContext.columnNameOfCorruptRecord)
+    JsonRDD.jsonStringToRow(baseRDD, schema, sqlContext.conf.columnNameOfCorruptRecord)
 }
