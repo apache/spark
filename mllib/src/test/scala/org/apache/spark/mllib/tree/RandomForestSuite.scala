@@ -196,6 +196,24 @@ class RandomForestSuite extends FunSuite with MLlibTestSparkContext {
       featureSubsetStrategy = "sqrt", seed = 12345)
     EnsembleTestHelper.validateClassifier(model, arr, 1.0)
   }
+
+  test("subsampling rate in RandomForest"){
+    val arr = EnsembleTestHelper.generateOrderedLabeledPoints(5, 20)
+    val rdd = sc.parallelize(arr)
+    val strategy1 = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
+      numClasses = 2, categoricalFeaturesInfo = Map.empty[Int, Int],
+      useNodeIdCache = true, subsamplingRate=0.5)
+    val strategy2 = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
+      numClasses = 2, categoricalFeaturesInfo = Map.empty[Int, Int],
+      useNodeIdCache = true)
+
+    val rf1 = RandomForest.trainClassifier(rdd, strategy1, numTrees = 3,
+      featureSubsetStrategy = "auto", seed = 123)
+    val rf2 = RandomForest.trainClassifier(rdd, strategy2, numTrees = 3,
+      featureSubsetStrategy = "auto", seed = 123)
+    assert(rf1.totalNumNodes != rf2.totalNumNodes)
+  }
+
 }
 
 
