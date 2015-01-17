@@ -3,7 +3,6 @@ package org.apache.spark.sql.hbase
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.hbase.{TableExistsException, HColumnDescriptor, HTableDescriptor, TableName}
-import org.apache.log4j.Logger
 import org.apache.spark.Logging
 
 /*
@@ -63,7 +62,7 @@ trait CreateTableAndLoadData extends Logging {
   }
 
   def createNativeHbaseTable(tableName: String, families: Seq[String]) = {
-    val hbaseAdmin = TestHbase.catalog.admin
+    val hbaseAdmin = TestHbase.hbaseAdmin
     val hdesc = new HTableDescriptor(TableName.valueOf(tableName))
     families.foreach { f => hdesc.addFamily(new HColumnDescriptor(f))}
     try {
@@ -76,8 +75,7 @@ trait CreateTableAndLoadData extends Logging {
 
   def createTables(stagingTableName: String, tableName: String,
                    hbaseStagingTable: String, hbaseTable: String) = {
-
-    val hbaseAdmin = TestHbase.catalog.admin
+    val hbaseAdmin = TestHbase.hbaseAdmin
     if (!hbaseAdmin.tableExists(TableName.valueOf(hbaseStagingTable))) {
       createNativeHbaseTable(hbaseStagingTable, DefaultHbaseColFamilies)
     }

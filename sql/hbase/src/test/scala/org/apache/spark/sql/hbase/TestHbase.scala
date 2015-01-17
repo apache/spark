@@ -41,7 +41,7 @@ object TestHbase
   logInfo(s"Configuration zkPort="
     + s"${configuration.get("hbase.zookeeper.property.clientPort")}")
 
-  @transient lazy val hbaseAdmin: HBaseAdmin = catalog.admin
+  @transient lazy val hbaseAdmin: HBaseAdmin = new HBaseAdmin(configuration)
 }
 
 /**
