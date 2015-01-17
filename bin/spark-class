@@ -148,7 +148,7 @@ fi
 if [[ "$1" =~ org.apache.spark.tools.* ]]; then
   if test -z "$SPARK_TOOLS_JAR"; then
     echo "Failed to find Spark Tools Jar in $FWDIR/tools/target/scala-$SPARK_SCALA_VERSION/" 1>&2
-    echo "You need to build Spark before running $1." 1>&2
+    echo "You need to run \"build/sbt tools/package\" before running $1." 1>&2
     exit 1
   fi
   CLASSPATH="$CLASSPATH:$SPARK_TOOLS_JAR"

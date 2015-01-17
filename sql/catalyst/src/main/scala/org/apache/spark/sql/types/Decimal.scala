@@ -143,6 +143,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     }
   }
 
+  def toJavaBigDecimal: java.math.BigDecimal = toBigDecimal.bigDecimal
+
   def toUnscaledLong: Long = {
     if (decimalVal.ne(null)) {
       decimalVal.underlying().unscaledValue().longValue()
