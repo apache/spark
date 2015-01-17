@@ -462,27 +462,31 @@ class SparseVector(
     "(%s,%s,%s)".format(size, indices.mkString("[", ",", "]"), values.mkString("[", ",", "]"))
 
   override def equals(other: Any): Boolean = {
-    def nextNonzero(values: Array[Double], from: Int): Int = {
-      var index = from
-      while (index < values.size && values(index) == 0.0) index += 1
-      index
-    }
-
     other match {
       case v: SparseVector => {
         if (this.size != v.size) { return false }
-        var k1 = nextNonzero(this.values, 0)
-        var k2 = nextNonzero(v.values, 0)
+        val thisValues = this.values
+        val thisIndices = this.indices
+        val thisSize = thisValues.size
+        val otherValues = v.values
+        val otherIndices = v.indices
+        val otherSize = otherValues.size
 
-        while (k1 < this.values.size && k2 < v.values.size) {
-          if (this.indices(k1) != v.indices(k2) || this.values(k1) != v.values(k2)) {
-            return false
+        var k1 = 0
+        var k2 = 0
+        var allEqual = true
+        while (allEqual) {
+          while (k1 < thisSize && thisValues(k1) == 0) k1 += 1
+          while (k2 < otherSize && otherValues(k2) == 0) k2 += 1
+
+          if (k1 >= thisSize || k2 >= otherSize) {
+            return k1 >= thisSize && k2 >= otherSize // check end alignment
           }
-          k1 = nextNonzero(this.values, k1 + 1)
-          k2 = nextNonzero(v.values, k2 + 1)
+          allEqual = thisIndices(k1) == otherIndices(k2) && thisValues(k1) == otherValues(k2)
+          k1 += 1
+          k2 += 1
         }
-
-        return (k1 == this.values.size && k2 == v.values.size)
+        allEqual
       }
       case _ => super.equals(other)
     }
