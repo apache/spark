@@ -27,6 +27,7 @@ import com.google.common.base.Charsets
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion}
 import org.apache.spark.deploy.SparkSubmitArguments
+import org.apache.spark.util.Utils
 
 /**
  * A client that submits Spark applications using a stable REST protocol in standalone
@@ -63,6 +64,12 @@ private[spark] class StandaloneRestClient {
    */
   private def constructSubmitRequest(args: SparkSubmitArguments): SubmitDriverRequestMessage = {
     import SubmitDriverRequestField._
+    val driverMemory = Option(args.driverMemory)
+      .map { m => Utils.memoryStringToMb(m).toString }
+      .orNull
+    val executorMemory = Option(args.executorMemory)
+      .map { m => Utils.memoryStringToMb(m).toString }
+      .orNull
     val message = new SubmitDriverRequestMessage()
       .setField(SPARK_VERSION, sparkVersion)
       .setField(MASTER, args.master)
@@ -72,19 +79,21 @@ private[spark] class StandaloneRestClient {
       .setFieldIfNotNull(JARS, args.jars)
       .setFieldIfNotNull(FILES, args.files)
       .setFieldIfNotNull(PY_FILES, args.pyFiles)
-      .setFieldIfNotNull(DRIVER_MEMORY, args.driverMemory)
+      .setFieldIfNotNull(DRIVER_MEMORY, driverMemory)
       .setFieldIfNotNull(DRIVER_CORES, args.driverCores)
       .setFieldIfNotNull(DRIVER_EXTRA_JAVA_OPTIONS, args.driverExtraJavaOptions)
       .setFieldIfNotNull(DRIVER_EXTRA_CLASS_PATH, args.driverExtraClassPath)
       .setFieldIfNotNull(DRIVER_EXTRA_LIBRARY_PATH, args.driverExtraLibraryPath)
       .setFieldIfNotNull(SUPERVISE_DRIVER, args.supervise.toString)
-      .setFieldIfNotNull(EXECUTOR_MEMORY, args.executorMemory)
+      .setFieldIfNotNull(EXECUTOR_MEMORY, executorMemory)
       .setFieldIfNotNull(TOTAL_EXECUTOR_CORES, args.totalExecutorCores)
-    // Set each Spark property as its own field
-    // TODO: Include environment variables?
+    args.childArgs.zipWithIndex.foreach { case (arg, i) =>
+      message.setFieldIfNotNull(APP_ARG(i), arg)
+    }
     args.sparkProperties.foreach { case (k, v) =>
       message.setFieldIfNotNull(SPARK_PROPERTY(k), v)
     }
+    // TODO: set environment variables?
     message.validate()
   }
 
@@ -175,8 +184,8 @@ private[spark] class StandaloneRestClient {
 object StandaloneRestClient {
   def main(args: Array[String]): Unit = {
     assert(args.length > 0)
-    val client = new StandaloneRestClient
-    client.killDriver("spark://" + args(0), "abc_driver")
+    //val client = new StandaloneRestClient
+    //client.submitDriver("spark://" + args(0))
     println("Done.")
   }
 }

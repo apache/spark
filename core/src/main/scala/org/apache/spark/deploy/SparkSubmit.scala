@@ -25,6 +25,7 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.spark.executor.ExecutorURLClassLoader
 import org.apache.spark.util.Utils
+import org.apache.spark.deploy.rest.StandaloneRestClient
 
 /**
  * Main gateway of launching a Spark application.
@@ -72,6 +73,16 @@ object SparkSubmit {
     if (appArgs.verbose) {
       printStream.println(appArgs)
     }
+
+    // In standalone cluster mode, use the brand new REST client to submit the application
+    val doingRest = appArgs.master.startsWith("spark://") && appArgs.deployMode == "cluster"
+    if (doingRest) {
+      println("Submitting driver through the REST interface.")
+      new StandaloneRestClient().submitDriver(appArgs)
+      println("Done submitting driver.")
+      return
+    }
+
     val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
     launch(childArgs, classpath, sysProps, mainClass, appArgs.verbose)
   }

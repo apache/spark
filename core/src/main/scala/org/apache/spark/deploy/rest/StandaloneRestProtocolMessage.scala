@@ -63,18 +63,27 @@ private[spark] abstract class StandaloneRestProtocolMessage(
 
   import StandaloneRestProtocolField._
 
-  private val fields = new mutable.HashMap[StandaloneRestProtocolField, String]
   private val className = Utils.getFormattedClassName(this)
+  protected val fields = new mutable.HashMap[StandaloneRestProtocolField, String]
 
   // Set the action field
   fields(actionField) = action.toString
 
+  /** Return all fields currently set in this message. */
+  def getFields: Map[StandaloneRestProtocolField, String] = fields
+
+  /** Return the value of the given field. If the field is not present, return null. */
+  def getField(key: StandaloneRestProtocolField): String = getFieldOption(key).orNull
+
   /** Return the value of the given field. If the field is not present, throw an exception. */
-  def getField(key: StandaloneRestProtocolField): String = {
-    fields.get(key).getOrElse {
+  def getFieldNotNull(key: StandaloneRestProtocolField): String = {
+    getFieldOption(key).getOrElse {
       throw new IllegalArgumentException(s"Field $key is not set in message $className")
     }
   }
+
+  /** Return the value of the given field as an option. */
+  def getFieldOption(key: StandaloneRestProtocolField): Option[String] = fields.get(key)
 
   /** Assign the given value to the field, overriding any existing value. */
   def setField(key: StandaloneRestProtocolField, value: String): this.type = {

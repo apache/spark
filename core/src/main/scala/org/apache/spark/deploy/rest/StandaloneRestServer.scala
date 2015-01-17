@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.rest
 
 import java.io.DataOutputStream
+import java.net.InetSocketAddress
 import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
@@ -26,25 +27,37 @@ import com.google.common.base.Charsets
 import org.eclipse.jetty.server.{Request, Server}
 import org.eclipse.jetty.server.handler.AbstractHandler
 
-import org.apache.spark.{Logging, SPARK_VERSION => sparkVersion}
-import org.apache.spark.deploy.rest.StandaloneRestProtocolAction._
-import org.apache.spark.util.Utils
+import org.apache.spark.{SPARK_VERSION => sparkVersion, Logging}
+import org.apache.spark.deploy.master.Master
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * A server that responds to requests submitted by the StandaloneRestClient.
  */
-private[spark] class StandaloneRestServer(requestedPort: Int) {
-  val server = new Server(requestedPort)
-  server.setHandler(new StandaloneRestHandler)
+private[spark] class StandaloneRestServer(master: Master, host: String, requestedPort: Int) {
+  val server = new Server(new InetSocketAddress(host, requestedPort))
+  server.setHandler(new StandaloneRestServerHandler(master))
   server.start()
-  server.join()
 }
 
 /**
  * A Jetty handler that responds to requests submitted via the standalone REST protocol.
  */
-private[spark] class StandaloneRestHandler extends AbstractHandler with Logging {
+private[spark] abstract class StandaloneRestHandler(master: Master)
+  extends AbstractHandler with Logging {
 
+  private implicit val askTimeout = AkkaUtils.askTimeout(master.conf)
+
+  /** Handle a request to submit a driver. */
+  protected def handleSubmit(request: SubmitDriverRequestMessage): SubmitDriverResponseMessage
+  /** Handle a request to kill a driver. */
+  protected def handleKill(request: KillDriverRequestMessage): KillDriverResponseMessage
+  /** Handle a request for a driver's status. */
+  protected def handleStatus(request: DriverStatusRequestMessage): DriverStatusResponseMessage
+
+  /**
+   * Handle a request submitted by the StandaloneRestClient.
+   */
   override def handle(
       target: String,
       baseRequest: Request,
@@ -67,6 +80,10 @@ private[spark] class StandaloneRestHandler extends AbstractHandler with Logging 
     }
   }
 
+  /**
+   * Construct the appropriate response message based on the type of the request message.
+   * If an IllegalArgumentException is thrown in the process, construct an error message.
+   */
   private def constructResponseMessage(
       request: StandaloneRestProtocolMessage): StandaloneRestProtocolMessage = {
     // If the request is sent via the StandaloneRestClient, it should have already been
@@ -74,67 +91,21 @@ private[spark] class StandaloneRestHandler extends AbstractHandler with Logging 
     // against potential NPEs. If validation fails, return an ERROR message to the sender.
     try {
       request.validate()
+      request match {
+        case submit: SubmitDriverRequestMessage => handleSubmit(submit)
+        case kill: KillDriverRequestMessage => handleKill(kill)
+        case status: DriverStatusRequestMessage => handleStatus(status)
+        case unexpected => handleError(
+          s"Received message of unexpected type ${Utils.getFormattedClassName(unexpected)}.")
+      }
     } catch {
-      case e: IllegalArgumentException =>
-        return handleError(e.getMessage)
-    }
-    request match {
-      case submit: SubmitDriverRequestMessage => handleSubmitRequest(submit)
-      case kill: KillDriverRequestMessage => handleKillRequest(kill)
-      case status: DriverStatusRequestMessage => handleStatusRequest(status)
-      case unexpected => handleError(
-        s"Received message of unexpected type ${Utils.getFormattedClassName(unexpected)}.")
+      // Propagate exception to user in an ErrorMessage. If the construction of the
+      // ErrorMessage itself throws an exception, log the exception and ignore the request.
+      case e: IllegalArgumentException => handleError(e.getMessage)
     }
   }
 
-  private def handleSubmitRequest(
-      request: SubmitDriverRequestMessage): SubmitDriverResponseMessage = {
-    import SubmitDriverResponseField._
-    // TODO: Actually submit the driver
-    val message = "Driver is submitted successfully..."
-    val master = request.getField(SubmitDriverRequestField.MASTER)
-    val driverId = "new_driver_id"
-    val driverState = "SUBMITTED"
-    new SubmitDriverResponseMessage()
-      .setField(SPARK_VERSION, sparkVersion)
-      .setField(MESSAGE, message)
-      .setField(MASTER, master)
-      .setField(DRIVER_ID, driverId)
-      .setField(DRIVER_STATE, driverState)
-      .validate()
-  }
-
-  private def handleKillRequest(request: KillDriverRequestMessage): KillDriverResponseMessage = {
-    import KillDriverResponseField._
-    // TODO: Actually kill the driver
-    val message = "Driver is killed successfully..."
-    val master = request.getField(KillDriverRequestField.MASTER)
-    val driverId = request.getField(KillDriverRequestField.DRIVER_ID)
-    val driverState = "KILLED"
-    new KillDriverResponseMessage()
-      .setField(SPARK_VERSION, sparkVersion)
-      .setField(MESSAGE, message)
-      .setField(MASTER, master)
-      .setField(DRIVER_ID, driverId)
-      .setField(DRIVER_STATE, driverState)
-      .validate()
-  }
-
-  private def handleStatusRequest(
-      request: DriverStatusRequestMessage): DriverStatusResponseMessage = {
-    import DriverStatusResponseField._
-    // TODO: Actually look up the status of the driver
-    val master = request.getField(DriverStatusRequestField.MASTER)
-    val driverId = request.getField(DriverStatusRequestField.DRIVER_ID)
-    val driverState = "HEALTHY"
-    new DriverStatusResponseMessage()
-      .setField(SPARK_VERSION, sparkVersion)
-      .setField(MASTER, master)
-      .setField(DRIVER_ID, driverId)
-      .setField(DRIVER_STATE, driverState)
-      .validate()
-  }
-
+  /** Construct an error message to signal the fact that an exception has been thrown. */
   private def handleError(message: String): ErrorMessage = {
     import ErrorField._
     new ErrorMessage()
@@ -144,10 +115,10 @@ private[spark] class StandaloneRestHandler extends AbstractHandler with Logging 
   }
 }
 
-object StandaloneRestServer {
-  def main(args: Array[String]): Unit = {
-    println("Hey boy I'm starting a server.")
-    new StandaloneRestServer(6677)
-    readLine()
-  }
-}
+//object StandaloneRestServer {
+//  def main(args: Array[String]): Unit = {
+//    println("Hey boy I'm starting a server.")
+//    new StandaloneRestServer(6677)
+//    readLine()
+//  }
+//}
