@@ -57,7 +57,19 @@ sealed trait Vector extends Serializable {
     }
   }
 
-  override def hashCode(): Int = util.Arrays.hashCode(this.toArray)
+  override def hashCode(): Int = {
+    var result: Int = size + 31
+    this.foreachActive{case(index, value) =>
+      // ignore explict 0 for comparison between sparse and dense
+      if(value != 0){
+        result = 31 * result + index
+        val bits = java.lang.Double.doubleToLongBits(value)
+        result = 31 * result + (bits ^ (bits >>> 32)).toInt
+      }
+    }
+
+    return result
+  }
 
   /**
    * Converts the instance to a breeze vector.
@@ -450,25 +462,27 @@ class SparseVector(
     "(%s,%s,%s)".format(size, indices.mkString("[", ",", "]"), values.mkString("[", ",", "]"))
 
   override def equals(other: Any): Boolean = {
+    def nextNonzero(values: Array[Double], from: Int): Int = {
+      var index = from
+      while (index < values.size && values(index) == 0.0) index += 1
+      index
+    }
+
     other match {
       case v: SparseVector => {
         if (this.size != v.size) { return false }
-        var k1 = 0
-        var k2 = 0
-        while (true) {
-          while (k1 < this.values.size && this.values(k1) == 0) k1 += 1
-          while (k2 < v.values.size && v.values(k2) == 0) k2 += 1
+        var k1 = nextNonzero(this.values, 0)
+        var k2 = nextNonzero(v.values, 0)
 
-          if (k1 == this.values.size || k2 == v.values.size) {
-            return (k1 == this.values.size && k2 == v.values.size) // check end alignment
-          }
+        while (k1 < this.values.size && k2 < v.values.size) {
           if (this.indices(k1) != v.indices(k2) || this.values(k1) != v.values(k2)) {
             return false
           }
-          k1 += 1
-          k2 += 1
+          k1 = nextNonzero(this.values, k1 + 1)
+          k2 = nextNonzero(v.values, k2 + 1)
         }
-        throw new Exception("unreachable")
+
+        return (k1 == this.values.size && k2 == v.values.size)
       }
       case _ => super.equals(other)
     }
