@@ -20,6 +20,16 @@ mark_success_help = "Mark jobs as succeeded without running them"
 subdir_help = "File location or directory from which to look for the dag"
 
 
+def log_to_stdout():
+    log = logging.getLogger()
+    log.setLevel(logging.DEBUG)
+    logformat = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    ch = logging.StreamHandler(sys.stdout)
+    ch.setFormatter(logformat)
+    log.addHandler(ch)
+
+
 def backfill(args):
     logging.basicConfig(level=logging.INFO, format=settings.SIMPLE_LOG_FORMAT)
     dagbag = DagBag(args.subdir)
@@ -106,13 +116,7 @@ def list_tasks(args):
 
 
 def test(args):
-    log = logging.getLogger()
-    log.setLevel(logging.DEBUG)
-    logformat = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    ch = logging.StreamHandler(sys.stdout)
-    ch.setFormatter(logformat)
-    log.addHandler(ch)
+    log_to_stdout()
     args.execution_date = dateutil.parser.parse(args.execution_date)
     dagbag = DagBag(args.subdir)
     if args.dag_id not in dagbag.dags:
@@ -148,23 +152,16 @@ def clear(args):
 
 
 def webserver(args):
-    from airflow.www.app import app
+    log_to_stdout()
     print(settings.HEADER)
+    from airflow.www.app import app
     if args.debug:
-        log = logging.getLogger()
-        log.setLevel(logging.DEBUG)
-        logformat = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        ch = logging.StreamHandler(sys.stdout)
-        ch.setFormatter(logformat)
-        log.addHandler(ch)
-        logging.info(
+        print(
             "Starting the web server on port {0} and host {1}.".format(
                 args.port, args.hostname))
-        app.logger.addHandler(ch)
         app.run(debug=True, port=args.port, host=args.hostname)
     else:
-        logging.info(
+        print(
             'Running Tornado server on host {host} and port {port}...'.format(
                 host=args.hostname, port=args.port))
         from tornado.httpserver import HTTPServer
@@ -172,10 +169,6 @@ def webserver(args):
         from tornado import log
         from tornado.wsgi import WSGIContainer
 
-        logging.basicConfig(level=logging.DEBUG,
-          format=settings.LOG_FORMAT)
-
-        log.enable_pretty_logging()
         # simple multi-process server
         server = HTTPServer(WSGIContainer(app))
         server.bind(args.port)

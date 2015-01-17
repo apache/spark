@@ -23,13 +23,7 @@ class LocalWorker(multiprocessing.Process):
                 self.task_queue.task_done()
                 break
             logging.info("%s running %s", self.__class__.__name__, command)
-            command = (
-                "exec bash -c '"
-                "cd $AIRFLOW_HOME;\n" +
-                "source init.sh;\n" +
-                command +
-                "'"
-            ).format(**locals())
+            command = "exec bash -c '{0}'".format(command)
             try:
                 subprocess.Popen(command, shell=True).wait()
                 state = State.SUCCESS

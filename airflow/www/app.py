@@ -466,8 +466,7 @@ class Airflow(BaseView):
         dag_id = request.args.get('dag_id')
         dag = dagbag.dags[dag_id]
         code = "".join(open(dag.full_filepath, 'r').readlines())
-        title = dag.filepath.replace(
-            conf.get('core', 'BASE_FOLDER') + '/dags/', '')
+        title = dag.filepath
         html_code = highlight(
             code, PythonLexer(), HtmlFormatter(noclasses=True))
         return self.render(
@@ -545,9 +544,10 @@ class Airflow(BaseView):
         log = ""
         TI = models.TaskInstance
         session = Session()
+        dttm = dateutil.parser.parse(execution_date)
         ti = session.query(TI).filter(
             TI.dag_id == dag_id, TI.task_id == task_id,
-            TI.execution_date == execution_date).first()
+            TI.execution_date == dttm).first()
         if ti:
             host = ti.hostname
             if socket.gethostname() == host:
@@ -643,6 +643,7 @@ class Airflow(BaseView):
             task_id = request.args.get('task_id')
             task = dag.get_task(task_id)
             execution_date = request.args.get('execution_date')
+            execution_date = dateutil.parser.parse(execution_date)
             future = request.args.get('future') == "true"
             past = request.args.get('past') == "true"
             upstream = request.args.get('upstream') == "true"
@@ -1045,6 +1046,11 @@ mv = TaskInstanceModelView(
     models.TaskInstance, Session, name="Task Instances", category="Browse")
 admin.add_view(mv)
 
+admin.add_link(
+    base.MenuLink(
+        category='Admin',
+        name='Configuration',
+        url='/admin/airflow/conf'))
 
 class ConnectionModelView(LoginMixin, ModelView):
     column_list = ('conn_id', 'conn_type', 'host', 'port')

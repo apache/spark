@@ -8,9 +8,9 @@ DEFAULT_CONFIG = """\
 airflow_home = {AIRFLOW_HOME}
 authenticate = False
 dags_folder = {AIRFLOW_HOME}/dags
-base_folder = {AIRFLOW_HOME}/airflow
+base_log_folder = {AIRFLOW_HOME}/logs
 base_url = http://localhost:8080
-executor = LocalExecutor
+executor = SequentialExecutor
 sql_alchemy_conn = sqlite:///{AIRFLOW_HOME}/airflow.db
 
 [server]

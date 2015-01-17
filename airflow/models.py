@@ -96,7 +96,10 @@ class DagBag(object):
 
             self.file_last_changed[filepath] = dttm
 
-    def collect_dags(self, dag_folder, only_if_updated=True):
+    def collect_dags(
+            self,
+            dag_folder=conf.get('core', 'dags_folder'),
+            only_if_updated=True):
         """
         Given a file path or a folder, this file looks for python modules,
         imports them and adds them to the dagbag collection.
@@ -965,7 +968,9 @@ class DAG(Base):
     @property
     def filepath(self):
         base = conf.get('core', 'DAGS_FOLDER')
-        return self.full_filepath.replace(base + '/', '')
+        fn = self.full_filepath.replace(base + '/', '')
+        fn = fn.replace(os.path.dirname(__file__) + '/', '')
+        return fn
 
     @property
     def folder(self):

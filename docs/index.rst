@@ -7,7 +7,7 @@ Airflow is a system to programmaticaly author, schedule and monitor data pipelin
 
 Use the Airflow library to define workflows as directed acyclic graphs (DAGs) of data related tasks. Command line utilities make it easy to run parts of workflows interactively, and commiting pipelines into production is all it takes for the master scheduler to run the pipelines with the schedule and dependencies specified.
 
-The Airflow UI make it easy to visualize pipelines running in production, monitor progress and pinpoint and troubleshoot issues when needed.
+The Airflow UI make it easy to visualize pipelines running in production, monitor progress and troubleshoot issues when needed.
 
 Principles
 ----------

@@ -27,6 +27,7 @@ Operators allows to generate a certain type of task on the graph.
 Executors
 ---------
 Executors are the mechanism by which task instances get run. 
+
 .. automodule:: airflow.executors
     :show-inheritance: 
     :members: LocalExecutor, CeleryExecutor, SequentialExecutor
