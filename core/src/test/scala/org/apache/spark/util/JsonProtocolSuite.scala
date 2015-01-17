@@ -37,6 +37,9 @@ class JsonProtocolSuite extends FunSuite {
   val jobSubmissionTime = 1421191042750L
   val jobCompletionTime = 1421191296660L
 
+  val executorAddedTime = 1421458410000L
+  val executorRemovedTime = 1421458922000L
+
   test("SparkListenerEvent") {
     val stageSubmitted =
       SparkListenerStageSubmitted(makeStageInfo(100, 200, 300, 400L, 500L), properties)
@@ -73,9 +76,9 @@ class JsonProtocolSuite extends FunSuite {
     val unpersistRdd = SparkListenerUnpersistRDD(12345)
     val applicationStart = SparkListenerApplicationStart("The winner of all", None, 42L, "Garfield")
     val applicationEnd = SparkListenerApplicationEnd(42L)
-    val executorAdded = SparkListenerExecutorAdded("exec1",
+    val executorAdded = SparkListenerExecutorAdded(executorAddedTime, "exec1",
       new ExecutorInfo("Hostee.awesome.com", 11))
-    val executorRemoved = SparkListenerExecutorRemoved("exec2")
+    val executorRemoved = SparkListenerExecutorRemoved(executorRemovedTime, "exec2", "test reason")
 
     testEvent(stageSubmitted, stageSubmittedJsonString)
     testEvent(stageCompleted, stageCompletedJsonString)
@@ -1453,9 +1456,10 @@ class JsonProtocolSuite extends FunSuite {
     """
 
   private val executorAddedJsonString =
-    """
+    s"""
       |{
       |  "Event": "SparkListenerExecutorAdded",
+      |  "Timestamp": ${executorAddedTime},
       |  "Executor ID": "exec1",
       |  "Executor Info": {
       |    "Host": "Hostee.awesome.com",
@@ -1465,10 +1469,12 @@ class JsonProtocolSuite extends FunSuite {
     """
 
   private val executorRemovedJsonString =
-    """
+    s"""
       |{
       |  "Event": "SparkListenerExecutorRemoved",
-      |  "Executor ID": "exec2"
+      |  "Timestamp": ${executorRemovedTime},
+      |  "Executor ID": "exec2",
+      |  "Removed Reason": "test reason"
       |}
     """
 }

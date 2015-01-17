@@ -204,13 +204,16 @@ private[spark] object JsonProtocol {
 
   def executorAddedToJson(executorAdded: SparkListenerExecutorAdded): JValue = {
     ("Event" -> Utils.getFormattedClassName(executorAdded)) ~
+    ("Timestamp" -> executorAdded.time) ~
     ("Executor ID" -> executorAdded.executorId) ~
     ("Executor Info" -> executorInfoToJson(executorAdded.executorInfo))
   }
 
   def executorRemovedToJson(executorRemoved: SparkListenerExecutorRemoved): JValue = {
     ("Event" -> Utils.getFormattedClassName(executorRemoved)) ~
-    ("Executor ID" -> executorRemoved.executorId)
+    ("Timestamp" -> executorRemoved.time) ~
+    ("Executor ID" -> executorRemoved.executorId) ~
+    ("Removed Reason" -> executorRemoved.reason)
   }
 
   /** ------------------------------------------------------------------- *
@@ -554,14 +557,17 @@ private[spark] object JsonProtocol {
   }
 
   def executorAddedFromJson(json: JValue): SparkListenerExecutorAdded = {
+    val time = (json \ "Timestamp").extract[Long]
     val executorId = (json \ "Executor ID").extract[String]
     val executorInfo = executorInfoFromJson(json \ "Executor Info")
-    SparkListenerExecutorAdded(executorId, executorInfo)
+    SparkListenerExecutorAdded(time, executorId, executorInfo)
   }
 
   def executorRemovedFromJson(json: JValue): SparkListenerExecutorRemoved = {
+    val time = (json \ "Timestamp").extract[Long]
     val executorId = (json \ "Executor ID").extract[String]
-    SparkListenerExecutorRemoved(executorId)
+    val reason = (json \ "Removed Reason").extract[String]
+    SparkListenerExecutorRemoved(time, executorId, reason)
   }
 
   /** --------------------------------------------------------------------- *
