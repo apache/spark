@@ -140,7 +140,12 @@ private[hbase] case class HBaseRelation(
   logger.debug(s"HBaseRelation config has zkPort="
     + s"${getConf.get("hbase.zookeeper.property.clientPort")}")
 
-  @transient lazy val htable: HTable = new HTable(getConf, hbaseTableName)
+  @transient private var htable_ : HTable = _
+
+  def htable = {
+    if (htable_ == null) htable_ = new HTable(getConf, hbaseTableName)
+    htable_
+  }
 
   def isNonKey(attr: AttributeReference): Boolean = {
     keyIndex(attr) < 0
@@ -156,7 +161,10 @@ private[hbase] case class HBaseRelation(
     refs.indexWhere(_.exprId == partitionKeys(keyIndex).exprId)
   }
 
-  def closeHTable() = htable.close()
+  def closeHTable() = {
+    htable_.close()
+    htable_ = null
+  }
 
   // corresponding logical relation
   @transient lazy val logicalRelation = LogicalRelation(this)

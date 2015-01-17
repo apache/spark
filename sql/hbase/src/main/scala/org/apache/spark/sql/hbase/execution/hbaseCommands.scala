@@ -407,7 +407,7 @@ case class ParallelizedBulkLoadIntoTableCommand(
       tmpPath)(relation).foreachPartition { iter =>
       val conf = wrappedConf.value
       val load = new LoadIncrementalHFiles(conf)
-      val htable = new HTable(conf, htableName)
+      val htable = relation.htable
       if (iter.hasNext) {
         load.doBulkLoad(new Path(iter.next()), htable)
       }

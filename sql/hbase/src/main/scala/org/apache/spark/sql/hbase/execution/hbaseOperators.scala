@@ -110,6 +110,7 @@ case class InsertIntoHBaseTable(
       if (puts.nonEmpty) {
         htable.put(puts.toList)
       }
+      relation.closeHTable()
     }
   }
 }
