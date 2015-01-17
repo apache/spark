@@ -312,7 +312,8 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           case (l, r) if l fastEquals r => l
           case (_, _) =>
             /* Do optimize for predicates using formula (a || b) && (a || c) => a || (b && c)
-             * 1. Split left and right to get the disjunctive predicates, i.e. lhsSet = (a, b), rhsSet = (a, c)
+             * 1. Split left and right to get the disjunctive predicates,
+             *    i.e. lhsSet = (a, b), rhsSet = (a, c)
              * 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
              * 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
              * 4. Apply the formula, get the optimized predict: common || (ldiff && rdiff)
@@ -346,7 +347,8 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           case (l, r) if l fastEquals r => l
           case (_, _) =>
             /* Do optimize for predicates using formula (a && b) || (a && c) => a && (b || c)
-             * 1. Split left and right to get the conjunctive predicates, i.e. lhsSet = (a, b), rhsSet = (a, c)
+             * 1. Split left and right to get the conjunctive predicates,
+             *    i.e.  lhsSet = (a, b), rhsSet = (a, c)
              * 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
              * 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
              * 4. Apply the formula, get the optimized predict: common && (ldiff || rdiff)
