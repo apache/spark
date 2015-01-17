@@ -4,6 +4,9 @@ from airflow.models import Connection
 
 
 class MySqlHook(object):
+    '''
+    Interact with MySQL.
+    '''
 
     def __init__(
             self, host=None, login=None,
@@ -38,6 +41,9 @@ class MySqlHook(object):
         return conn
 
     def get_records(self, sql):
+        '''
+        Executes the sql and returns a set of records.
+        '''
         conn = self.get_conn()
         cur = conn.cursor()
         cur.execute(sql)
@@ -47,6 +53,9 @@ class MySqlHook(object):
         return rows
 
     def get_pandas_df(self, sql):
+        '''
+        Executes the sql and returns a pandas dataframe
+        '''
         import pandas.io.sql as psql
         conn = self.get_conn()
         df = psql.read_sql(sql, con=conn)

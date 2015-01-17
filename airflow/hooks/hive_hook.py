@@ -16,6 +16,10 @@ from airflow.hooks.base_hook import BaseHook
 
 
 class HiveHook(BaseHook):
+    '''
+    Interact with Hive. This class is both a wrapper around the Hive Thrift
+    client and the Hive CLI.
+    '''
     def __init__(self,
             hive_conn_id=conf.get('hooks', 'HIVE_DEFAULT_CONN_ID')):
         session = settings.Session()
@@ -53,6 +57,9 @@ class HiveHook(BaseHook):
         self.__dict__['hive'] = self.get_hive_client()
 
     def get_hive_client(self):
+        '''
+        Returns a Hive thrift client.
+        '''
         transport = TSocket.TSocket(self.host, self.port)
         transport = TTransport.TBufferedTransport(transport)
         protocol = TBinaryProtocol.TBinaryProtocol(transport)
@@ -72,6 +79,9 @@ class HiveHook(BaseHook):
             return False
 
     def get_records(self, hql, schema=None):
+        '''
+        Get a set of records from a Hive query.
+        '''
         self.hive._oprot.trans.open()
         if schema:
             self.hive.execute("USE " + schema)

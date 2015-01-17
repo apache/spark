@@ -43,8 +43,17 @@ class LocalWorker(multiprocessing.Process):
 
 
 class LocalExecutor(BaseExecutor):
+    '''
+    LocalExecutor executes tasks locally in parallel. It uses the
+    multiprocessing Python library and queues to parallelize the execution
+    of tasks.
+    '''
 
     def __init__(self, parallelism=16):
+        '''
+        :param parallelism: Number of processes running simultanously
+        :type parallelism: int
+        '''
         super(LocalExecutor, self).__init__()
         self.parallelism = parallelism
 

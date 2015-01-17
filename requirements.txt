@@ -19,5 +19,6 @@ requests
 setproctitle
 sphinx
 sphinx_rtd_theme
+Sphinx-PyPI-upload
 sqlalchemy
 thrift

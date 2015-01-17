@@ -8,7 +8,13 @@ persisted in the database.
 
 .. automodule:: airflow.models
     :show-inheritance:
-    :members: DAG, BaseOperator, TaskInstance, DagBag, DatabaseConnection
+    :members: DAG, BaseOperator, TaskInstance, DagBag, Connection
+
+Hooks
+-----
+.. automodule:: airflow.hooks
+    :show-inheritance:
+    :members: MySqlHook, PrestoHook, HiveHook
 
 Operators
 ---------
@@ -16,16 +22,11 @@ Operators allows to generate a certain type of task on the graph.
 
 .. automodule:: airflow.operators
     :show-inheritance:
-    :members: MySqlOperator, BashOperator, ExternalTaskSensor, HiveOperator, SqlSensor, HivePartitionSensor
-
-Hooks
------
-.. automodule:: airflow.hooks
-    :show-inheritance:
-    :members: MySqlHook
+    :members: MySqlOperator, BashOperator, ExternalTaskSensor, HiveOperator, SqlSensor, HivePartitionSensor, EmailOperator 
 
 Executors
 ---------
+Executors are the mechanism by which task instances get run. 
 .. automodule:: airflow.executors
-    :show-inheritance:
-    :members: LocalExecutor, SequentialExecutor
+    :show-inheritance: 
+    :members: LocalExecutor, CeleryExecutor, SequentialExecutor

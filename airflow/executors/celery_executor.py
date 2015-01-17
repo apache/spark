@@ -39,6 +39,14 @@ def execute_command(command):
 
 
 class CeleryExecutor(BaseExecutor):
+    '''
+    CeleryExecutor is recommended for production use of Airflow. It allows
+    distributing the exectuion of task instances to multiple worker nodes.
+
+    Celery is a simple, flexible and reliable distributed system to process
+    vast amounts of messages, while providing operations with the tools
+    required to maintain such a system.
+    '''
 
     def start(self):
         self.tasks = {}

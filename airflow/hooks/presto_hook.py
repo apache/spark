@@ -36,6 +36,9 @@ class PrestoHook(BaseHook):
             session.close()    # currently only a pass in pyhive
 
     def get_cursor(self):
+        '''
+        Returns a cursor.
+        '''
         return self.cursor
 
     @staticmethod
@@ -43,14 +46,24 @@ class PrestoHook(BaseHook):
         return sql.strip().rstrip(';')
 
     def get_records(self, hql, parameters=None):
+        '''
+        Get a set of records from Presto
+        '''
         self.cursor.execute(self._strip_sql(hql), parameters)
         return self.cursor.fetchall()
 
     def get_first(self, hql, parameters=None):
+        '''
+        Returns only the first row, regardless of how many rows the query
+        returns.
+        '''
         self.cursor.execute(self._strip_sql(hql), parameters)
         return self.cursor.fetchone()
 
     def get_pandas_df(self, hql, parameters=None):
+        '''
+        Get a pandas dataframe from a sql query.
+        '''
         import pandas
         cursor = self.get_cursor()
         cursor.execute(self._strip_sql(hql), parameters)
@@ -64,4 +77,7 @@ class PrestoHook(BaseHook):
         return df
 
     def run(self, hql, parameters=None):
+        '''
+        Execute the statement against Presto. Can be used to create views.
+        '''
         self.cursor.execute(self._strip_sql(hql), parameters)

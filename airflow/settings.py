@@ -18,9 +18,6 @@ AIRFLOW_HOME = conf.get('core', 'AIRFLOW_HOME')
 BASE_FOLDER = conf.get('core', 'BASE_FOLDER')
 BASE_LOG_URL = "/admin/airflow/log"
 SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
-print "-"* 100
-print(SQL_ALCHEMY_CONN)
-print "-"* 100
 if BASE_FOLDER not in sys.path:
     sys.path.append(BASE_FOLDER)
 

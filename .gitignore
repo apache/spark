@@ -8,7 +8,7 @@ env
 initdb.py
 dbinit.py
 logs
-*.cfg
+airflow.cfg
 MANIFEST
 secrets.py
 *.egg-info

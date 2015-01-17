@@ -13,7 +13,6 @@
 # serve to show the default.
 
 import sys
-import os
 from airflow import settings
 
 # If extensions (or modules to document with autodoc) are in another directory,
@@ -247,11 +246,12 @@ man_pages = [
 # Grouping the document tree into Texinfo files. List of tuples
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
-texinfo_documents = [
-  ('index', 'Airflow', u'Airflow Documentation',
-   u'Maxime Beauchemin', 'Airflow', 'One line description of project.',
-   'Miscellaneous'),
-]
+texinfo_documents = [(
+    'index', 'Airflow', u'Airflow Documentation',
+    u'Maxime Beauchemin', 'Airflow',
+    'Airflow is a system to programmaticaly author, schedule and monitor data pipelines.',
+    'Miscellaneous'
+),]
 
 # Documents to append as an appendix to all manuals.
 #texinfo_appendices = []
