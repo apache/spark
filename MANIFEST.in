@@ -1,2 +1,3 @@
 recursive-include airflow/www/templates *
 recursive-include airflow/www/static *
+include requirements.txt
