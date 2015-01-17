@@ -311,13 +311,20 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           // a && a => a
           case (l, r) if l fastEquals r => l
           case (_, _) =>
+            /* Do optimize for predicates using formula (a || b) && (a || c) => a || (b && c)
+             * 1. Split left and right to get the disjunctive predicates,
+             *    i.e. lhsSet = (a, b), rhsSet = (a, c)
+             * 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
+             * 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
+             * 4. Apply the formula, get the optimized predict: common || (ldiff && rdiff)
+             */
             val lhsSet = splitDisjunctivePredicates(left).toSet
             val rhsSet = splitDisjunctivePredicates(right).toSet
             val common = lhsSet.intersect(rhsSet)
             val ldiff = lhsSet.diff(common)
             val rdiff = rhsSet.diff(common)
             if (ldiff.size == 0 || rdiff.size == 0) {
-              // a && (a || b)
+              // a && (a || b) => a
               common.reduce(Or)
             } else {
               // (a || b || c || ...) && (a || b || d || ...) && (a || b || e || ...) ... =>
@@ -339,13 +346,20 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
           // a || a => a
           case (l, r) if l fastEquals r => l
           case (_, _) =>
+            /* Do optimize for predicates using formula (a && b) || (a && c) => a && (b || c)
+             * 1. Split left and right to get the conjunctive predicates,
+             *    i.e.  lhsSet = (a, b), rhsSet = (a, c)
+             * 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
+             * 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
+             * 4. Apply the formula, get the optimized predict: common && (ldiff || rdiff)
+             */
             val lhsSet = splitConjunctivePredicates(left).toSet
             val rhsSet = splitConjunctivePredicates(right).toSet
             val common = lhsSet.intersect(rhsSet)
             val ldiff = lhsSet.diff(common)
             val rdiff = rhsSet.diff(common)
             if ( ldiff.size == 0 || rdiff.size == 0) {
-              // a || (b && a)
+              // a || (b && a) => a
               common.reduce(And)
             } else {
               // (a && b && c && ...) || (a && b && d && ...) || (a && b && e && ...) ... =>
