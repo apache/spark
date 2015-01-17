@@ -24,6 +24,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.SingularValueDecomposition
 
+import scala.collection.mutable.ListBuffer
+
 /**
  * :: Experimental ::
  * Represents a row of [[org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix]].
@@ -73,6 +75,23 @@ class IndexedRowMatrix(
    */
   def toRowMatrix(): RowMatrix = {
     new RowMatrix(rows.map(_.vector), 0L, nCols)
+  }
+
+  /**
+   * Converts this matrix to a
+   * [[org.apache.spark.mllib.linalg.distributed.CoordinateMatrix]].
+   */
+  def toCoordinateMatrix(): CoordinateMatrix = {
+    val entries = rows.flatMap { row =>
+      val rowIndex = row.index
+      row.vector match {
+        case SparseVector(size, indices, values) =>
+          Array.tabulate(indices.size)(x => MatrixEntry(rowIndex, indices(x), values(x)))
+        case DenseVector(values) =>
+          Array.tabulate(values.size)(x => MatrixEntry(rowIndex, x, values(x)))
+      }
+    }
+    new CoordinateMatrix(entries, numRows(), numCols())
   }
 
   /**
