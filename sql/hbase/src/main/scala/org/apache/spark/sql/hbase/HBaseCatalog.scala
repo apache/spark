@@ -101,10 +101,9 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
         admin.createTable(tableDescriptor, splitKeys)
       }
     } catch {
-      case e => {
+      case e: Throwable =>
         admin = new HBaseAdmin(configuration)
         admin.createTable(tableDescriptor, splitKeys)
-      }
     }
   }
 
@@ -165,7 +164,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
 
       relationMapCache.put(processTableName(tableName), hbaseRelation)
     }
-    metadataTable.close
+    metadataTable.close()
   }
 
   def alterTableAddNonKey(tableName: String, column: NonKeyColumn) = {
@@ -182,7 +181,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
 
       relationMapCache.put(processTableName(tableName), hbaseRelation)
     }
-    metadataTable.close
+    metadataTable.close()
   }
 
   private def writeObjectToTable(hbaseRelation: HBaseRelation,
@@ -202,7 +201,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
     // write to the metadata table
     metadataTable.put(put)
     metadataTable.flushCommits()
-    metadataTable.close
+    metadataTable.close()
   }
 
   def getTable(tableName: String,
@@ -252,7 +251,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
       tables.append(relation.tableName)
       result = scanner.next()
     }
-    metadataTable.close
+    metadataTable.close()
     tables.toSeq
   }
 
@@ -282,7 +281,7 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
 
   def getMetadataTable: HTable = {
     // create the metadata table if it does not exist
-    def checkAndCreateMetadataTable = {
+    def checkAndCreateMetadataTable() = {
       if (!admin.tableExists(MetaData)) {
         val descriptor = new HTableDescriptor(TableName.valueOf(MetaData))
         val columnDescriptor = new HColumnDescriptor(ColumnFamily)
@@ -292,12 +291,11 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
     }
 
     try {
-      checkAndCreateMetadataTable
+      checkAndCreateMetadataTable()
     } catch {
-      case e => {
+      case e: Throwable =>
         admin = new HBaseAdmin(configuration)
-        checkAndCreateMetadataTable
-      }
+        checkAndCreateMetadataTable()
     }
 
     // return the metadata table
@@ -308,10 +306,9 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
     try {
       admin.tableExists(hbaseTableName)
     } catch {
-      case e => {
+      case e: Throwable =>
         admin = new HBaseAdmin(configuration)
         admin.tableExists(hbaseTableName)
-      }
     }
   }
 
@@ -337,11 +334,10 @@ private[hbase] class HBaseCatalog(@transient hbaseContext: HBaseSQLContext,
       val tableDescriptor = admin.getTableDescriptor(TableName.valueOf(hbaseTableName))
       tableDescriptor.hasFamily(Bytes.toBytes(family))
     } catch {
-      case e => {
+      case e: Throwable =>
         admin = new HBaseAdmin(configuration)
         val tableDescriptor = admin.getTableDescriptor(TableName.valueOf(hbaseTableName))
         tableDescriptor.hasFamily(Bytes.toBytes(family))
-      }
     }
   }
 

@@ -49,7 +49,7 @@ class Range[T](val start: Option[T], // None for open ends
  * @param id the partition id
  * @param dt the data type
  * @param pred the associated predicate
- * @tparam T
+ * @tparam T template of the type
  */
 class PartitionRange[T](start: Option[T], startInclusive: Boolean,
                         end: Option[T], endInclusive: Boolean,
