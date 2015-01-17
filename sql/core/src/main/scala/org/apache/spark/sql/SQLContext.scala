@@ -314,7 +314,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   }
 
   /**
-   * Returns the list of tables for this SQLContext
+   * Returns the tables for this SQLContext
    */
   def showTables(): Array[String] = {
     catalog.showTables(None)
