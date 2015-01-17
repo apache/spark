@@ -24,8 +24,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.SingularValueDecomposition
 
-import scala.collection.mutable.ListBuffer
-
 /**
  * :: Experimental ::
  * Represents a row of [[org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix]].
