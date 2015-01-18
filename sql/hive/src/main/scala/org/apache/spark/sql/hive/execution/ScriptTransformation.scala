@@ -21,7 +21,6 @@ import java.io.{BufferedReader, InputStreamReader, ByteArrayInputStream}
 import java.io.{DataInputStream, DataOutputStream}
 import java.util.Properties
 
-import org.apache.hadoop.io.{BytesWritable, Text}
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.Serializer
@@ -79,10 +78,10 @@ case class ScriptTransformation(
       val outputStream = proc.getOutputStream
       val reader = new BufferedReader(new InputStreamReader(inputStream))
  
-      val outputSerde: Deserializer = if (outputSerdeClass != "") {
+      val outputSerde: AbstractSerDe = if (outputSerdeClass != "") {
         val trimed_class = outputSerdeClass.split("'")(1) 
         Utils.classForName(trimed_class)
-          .newInstance.asInstanceOf[Deserializer]
+          .newInstance.asInstanceOf[AbstractSerDe]
       } else {
         null
       }
@@ -143,7 +142,7 @@ case class ScriptTransformation(
           } else {
             val dataInputStream = new DataInputStream(
               new ByteArrayInputStream(prevLine.getBytes("utf-8")))
-            val writable = new Text()
+            val writable = outputSerde.getSerializedClass().newInstance
             writable.readFields(dataInputStream)
             val raw = outputSerde.deserialize(writable)
             val dataList = outputSoi.getStructFieldsDataAsList(raw)
@@ -163,10 +162,10 @@ case class ScriptTransformation(
         }
       }
 
-      val inputSerde: Serializer = if (inputSerdeClass != "") {
+      val inputSerde: AbstractSerDe = if (inputSerdeClass != "") {
         val trimed_class = inputSerdeClass.split("'")(1)
         Utils.classForName(trimed_class)
-          .newInstance.asInstanceOf[Serializer]
+          .newInstance.asInstanceOf[AbstractSerDe]
       } else {
         null
       }
@@ -210,8 +209,8 @@ case class ScriptTransformation(
  
             outputStream.write(data)
           } else {
-            inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
-              .write(dataOutputStream)
+            val writable = inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
+            writable.write(dataOutputStream)
             outputStream.write(inputFormatMap("TOK_TABLEROWFORMATLINES").getBytes("utf-8"))
           }
         }
