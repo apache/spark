@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
-import org.apache.spark.sql.catalyst.expressions.{Literal, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Or, And, Literal, Expression}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.rules._
@@ -40,11 +40,22 @@ class BooleanSimplificationSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
 
-  def checkCondition(originCondition: Expression, optimizedCondition: Expression): Unit = {
-    val originQuery = testRelation.where(originCondition).analyze
-    val optimized = Optimize(originQuery)
-    val expected = testRelation.where(optimizedCondition).analyze
-    comparePlans(optimized, expected)
+  def compareConditions(e1: Expression, e2: Expression): Boolean = (e1, e2) match {
+    case (And(l1, l2), And(r1, r2)) =>
+      compareConditions(l1, r1) && compareConditions(l2, r2) ||
+        compareConditions(l1, r2) && compareConditions(l2, r1)
+
+    case (Or(l1, l2), Or(r1, r2)) =>
+      compareConditions(l1, r1) && compareConditions(l2, r2) ||
+        compareConditions(l1, r2) && compareConditions(l2, r1)
+
+    case (l, r) => l == r
+  }
+
+  def checkCondition(input: Expression, expected: Expression): Unit = {
+    val plan = testRelation.where(input).analyze
+    val actual = Optimize(plan).expressions.head
+    compareConditions(actual, expected)
   }
 
   test("a && a => a") {

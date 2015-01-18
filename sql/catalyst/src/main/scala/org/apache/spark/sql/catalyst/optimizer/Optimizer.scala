@@ -335,7 +335,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             } else {
               // (a || b || c || ...) && (a || b || d || ...) =>
               // ((c || ...) && (d || ...)) || a || b
-              (And(ldiff.reduce(Or), rdiff.reduce(Or)) :: common.toList).reduce(Or)
+              (common + And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
             }
           }
       }  // end of And(left, right)
@@ -373,7 +373,7 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
             } else {
               // (a && b && c && ...) || (a && b && d && ...) =>
               // ((c && ...) || (d && ...)) && a && b
-              (Or(ldiff.reduce(And), rdiff.reduce(And)) :: common.toList).reduce(And)
+              (common + Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
             }
           }
       }  // end of Or(left, right)
