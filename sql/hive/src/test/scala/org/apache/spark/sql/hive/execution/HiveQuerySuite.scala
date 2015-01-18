@@ -328,7 +328,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
  
-  test("Schema-Less transform") {
+  test("schema-less transform") {
     val expected = sql("SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src").collect().head
     val res = sql("SELECT TRANSFORM (key) USING 'cat' FROM src").collect().head
     
@@ -347,6 +347,17 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     val expected2 = sql("SELECT TRANSFORM (*) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\002' USING 'cat' AS (tKey, tValue) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\002' FROM src").collect().head
     val res2 = sql("SELECT TRANSFORM (*) ROW FORMAT DELIMITED FIELDS TERMINATED BY '\002' USING 'cat' ROW FORMAT DELIMITED FIELDS TERMINATED BY '\002' FROM src").collect().head
+
+    assert(expected2(0) === res2(0) && expected2(1) === res2(1))
+  }
+ 
+  test("transform with SerDe") {
+    val expected = sql("SELECT TRANSFORM (key, value) USING 'cat' AS (tKey, tValue) FROM src").collect().head
+    val res = sql("SELECT TRANSFORM (key, value) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' USING 'cat' AS (tKey, tValue) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' FROM src").collect().head
+    assert(expected(0) === res(0) && expected(1) === res(1))
+ 
+    val expected2 = sql("SELECT TRANSFORM (*) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES ('serialization.last.column.takes.rest'='true') USING 'cat' AS (tKey, tValue) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES ('serialization.last.column.takes.rest'='true') FROM src").collect().head
+    val res2 = sql("SELECT TRANSFORM (*) ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES ('serialization.last.column.takes.rest'='true') USING 'cat' ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' WITH SERDEPROPERTIES ('serialization.last.column.takes.rest'='true') FROM src").collect().head
 
     assert(expected2(0) === res2(0) && expected2(1) === res2(1))
   }

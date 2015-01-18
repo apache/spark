@@ -645,20 +645,38 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 Nil
             }
             
-            val inputFormat = inputSerdeClause match {
+            val (inputFormat, inputSerdeClass, inputSerdeProps) = inputSerdeClause match {
               case Token("TOK_SERDEPROPS", props) :: Nil =>
-                props.map { case Token(name, Token(value, Nil) :: Nil) => (name, value) }
-              case Nil =>
-                Nil
+                (props.map { case Token(name, Token(value, Nil) :: Nil) => (name, value) },
+                  "", Nil)
+              case Token("TOK_SERDENAME", Token(serde, Nil) :: Nil) :: Nil => (Nil, serde, Nil)
+              case Token("TOK_SERDENAME", Token(serde, Nil) ::
+                     Token("TOK_TABLEPROPERTIES",
+                     Token("TOK_TABLEPROPLIST", props) :: Nil) :: Nil) :: Nil =>
+                val tableprops = props.map {
+                  case Token("TOK_TABLEPROPERTY", Token(name, Nil) :: Token(value, Nil) :: Nil) =>
+                    (name, value)
+                } 
+                (Nil, serde, tableprops)
+              case Nil => (Nil, "", Nil)
             }
             
-            val outputFormat = outputSerdeClause match {
+            val (outputFormat, outputSerdeClass, outputSerdeProps) = outputSerdeClause match {
               case Token("TOK_SERDEPROPS", props) :: Nil =>
-                props.map { case Token(name, Token(value, Nil) :: Nil) => (name, value) }
-              case Nil =>
-                Nil
+                (props.map { case Token(name, Token(value, Nil) :: Nil) => (name, value) },
+                  "", Nil)
+              case Token("TOK_SERDENAME", Token(serde, Nil) :: Nil) :: Nil => (Nil, serde, Nil)
+              case Token("TOK_SERDENAME", Token(serde, Nil) ::
+                     Token("TOK_TABLEPROPERTIES",
+                     Token("TOK_TABLEPROPLIST", props) :: Nil) :: Nil) :: Nil =>
+                val tableprops = props.map {
+                  case Token("TOK_TABLEPROPERTY", Token(name, Nil) :: Token(value, Nil) :: Nil) =>
+                    (name, value)
+                } 
+                (Nil, serde, tableprops)
+              case Nil => (Nil, "", Nil)
             }
-
+ 
             val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
 
             Some(
@@ -666,7 +684,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 inputExprs.map(nodeToExpr),
                 unescapedScript,
                 output,
-                withWhere, inputFormat, outputFormat))
+                withWhere, inputFormat, outputFormat,
+                inputSerdeClass, outputSerdeClass,
+                inputSerdeProps, outputSerdeProps))
           case _ => None
         }
 
