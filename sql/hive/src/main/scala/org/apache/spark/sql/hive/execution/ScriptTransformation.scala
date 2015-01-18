@@ -210,7 +210,8 @@ case class ScriptTransformation(
  
             outputStream.write(data)
           } else {
-            inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi).write(dataOutputStream)
+            inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
+              .write(dataOutputStream)
             outputStream.write(inputFormatMap("TOK_TABLEROWFORMATLINES").getBytes("utf-8"))
           }
         }
