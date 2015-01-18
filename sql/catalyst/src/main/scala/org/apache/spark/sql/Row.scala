@@ -116,7 +116,7 @@ trait Row extends Seq[Any] with Serializable {
    *   FloatType -> java.lang.Float
    *   DoubleType -> java.lang.Double
    *   StringType -> String
-   *   DecimalType -> scala.math.BigDecimal
+   *   DecimalType -> java.math.BigDecimal
    *
    *   DateType -> java.sql.Date
    *   TimestampType -> java.sql.Timestamp
@@ -141,7 +141,7 @@ trait Row extends Seq[Any] with Serializable {
    *   FloatType -> java.lang.Float
    *   DoubleType -> java.lang.Double
    *   StringType -> String
-   *   DecimalType -> scala.math.BigDecimal
+   *   DecimalType -> java.math.BigDecimal
    *
    *   DateType -> java.sql.Date
    *   TimestampType -> java.sql.Timestamp
@@ -227,7 +227,7 @@ trait Row extends Seq[Any] with Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getDecimal(i: Int): BigDecimal = apply(i).asInstanceOf[BigDecimal]
+  def getDecimal(i: Int): java.math.BigDecimal = apply(i).asInstanceOf[java.math.BigDecimal]
 
   /**
    * Returns the value at position i of date type as java.sql.Date.

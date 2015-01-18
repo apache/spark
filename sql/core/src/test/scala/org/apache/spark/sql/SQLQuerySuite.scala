@@ -844,11 +844,11 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     )
 
     checkAnswer(
-      sql("SELECT 9223372036854775808"), BigDecimal("9223372036854775808")
+      sql("SELECT 9223372036854775808"), new java.math.BigDecimal("9223372036854775808")
     )
 
     checkAnswer(
-      sql("SELECT -9223372036854775809"), BigDecimal("-9223372036854775809")
+      sql("SELECT -9223372036854775809"), new java.math.BigDecimal("-9223372036854775809")
     )
   }
 

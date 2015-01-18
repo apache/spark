@@ -40,7 +40,7 @@ object TestJsonData {
           "num_bool":12, "num_str":null, "str_bool":true}""" ::
       """{"num_num_1":21474836470, "num_num_2":92233720368547758070, "num_num_3": 100,
           "num_bool":false, "num_str":"str1", "str_bool":false}""" ::
-      """{"num_num_1":21474836570, "num_num_2":1.1, "num_num_3": 21474836470,
+      """{"num_num_1":21474836570, "num_num_2":1.2, "num_num_3": 21474836470,
           "num_bool":null, "num_str":92233720368547758070, "str_bool":null}""" :: Nil)
 
   val jsonNullStruct =
