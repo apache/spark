@@ -31,6 +31,9 @@ object SerializationDebugger {
   /**
    * Write an object to the [[ObjectOutputStream]]. If a NotSerializableException is encountered,
    * use our debug stream to capture the serialization stack leading to the problematic object.
+   *
+   * The debug stream is more expensive to write to, so we only write to it when we encounter
+   * an exception. This ensures no performance impact.
    */
   def writeObject(out: ObjectOutputStream, obj: Any): Unit = {
     try {
