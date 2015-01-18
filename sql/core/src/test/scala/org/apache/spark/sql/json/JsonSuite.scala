@@ -375,7 +375,7 @@ class JsonSuite extends QueryTest {
       ("true", 11L, null, 1.1, "13.1", "str1") ::
       ("12", null, new java.math.BigDecimal("21474836470.9"), null, null, "true") ::
       ("false", 21474836470L, new java.math.BigDecimal("92233720368547758070"), 100, "str1", "false") ::
-      (null, 21474836570L, new java.math.BigDecimal(1.2), 21474836470L, "92233720368547758070", null) :: Nil
+      (null, 21474836570L, new java.math.BigDecimal("1.1"), 21474836470L, "92233720368547758070", null) :: Nil
     )
 
     // Number and Boolean conflict: resolve the type as number in this query.
@@ -903,7 +903,7 @@ class JsonSuite extends QueryTest {
     checkAnswer(
       sql("select struct, struct.field1, struct.field2 from complexTable"),
       Row(
-        Row(true, BigDecimal("92233720368547758070")),
+        Row(true, new java.math.BigDecimal("92233720368547758070")),
         true,
         new java.math.BigDecimal("92233720368547758070")) :: Nil
     )
