@@ -218,10 +218,19 @@ def serve_logs(args):
 
 def worker(args):
     import subprocess
-    sp = subprocess.Popen("airflow serve_logs", shell=True)
     # Worker to serve static log files through this simple flask app
+    sp = subprocess.Popen("airflow serve_logs", shell=True)
+
+    # Celery worker
     from airflow.executors.celery_executor import app as celery_app
-    celery_app.start()
+    from celery.bin import worker
+
+    worker = worker.worker(app=celery_app)
+    options = {
+        'optimization': 'fair',
+        'O': 'fair',
+    }
+    worker.run(**options)
     sp.kill()
 
 
