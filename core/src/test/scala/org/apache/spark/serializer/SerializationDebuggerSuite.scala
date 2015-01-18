@@ -43,6 +43,11 @@ class SerializationDebuggerSuite extends FunSuite {
     assert(e.getMessage.contains("SerializableClass1"))
     assert(e.getMessage.contains("SerializableClass2"))
     assert(e.getMessage.contains("NotSerializableClass"))
+
+    // 6 lines:
+    // the original message, "Serialization stack", 3 elements in the stack, and debugging tip.
+    // And then unfortunately 4 more lines because we enabled sun.io.serialization.extendedDebugInfo
+    assert(e.getMessage.split("\n").size === 6 + 4)
   }
 }
 
