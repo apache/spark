@@ -135,9 +135,7 @@ object EvaluatePython {
 
     case (ud, udt: UserDefinedType[_]) => toJava(udt.serialize(ud), udt.sqlType)
 
-    case (dec: BigDecimal, dt: DecimalType) => dec.underlying()  // Pyrolite can handle BigDecimal
-
-    // Pyrolite can handle Timestamp
+    // Pyrolite can handle Timestamp and Decimal
     case (other, _) => other
   }
 

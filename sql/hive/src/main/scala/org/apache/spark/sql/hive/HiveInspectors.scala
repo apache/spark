@@ -341,7 +341,7 @@ private[hive] trait HiveInspectors {
       (o: Any) => new HiveVarchar(o.asInstanceOf[String], o.asInstanceOf[String].size)
 
     case _: JavaHiveDecimalObjectInspector =>
-      (o: Any) => HiveShim.createDecimal(o.asInstanceOf[Decimal].toBigDecimal.underlying())
+      (o: Any) => HiveShim.createDecimal(o.asInstanceOf[Decimal].toJavaBigDecimal)
 
     case soi: StandardStructObjectInspector =>
       val wrappers = soi.getAllStructFieldRefs.map(ref => wrapperFor(ref.getFieldObjectInspector))
@@ -412,7 +412,7 @@ private[hive] trait HiveInspectors {
       case _: HiveDecimalObjectInspector if x.preferWritable() =>
         HiveShim.getDecimalWritable(a.asInstanceOf[Decimal])
       case _: HiveDecimalObjectInspector =>
-        HiveShim.createDecimal(a.asInstanceOf[Decimal].toBigDecimal.underlying())
+        HiveShim.createDecimal(a.asInstanceOf[Decimal].toJavaBigDecimal)
       case _: BinaryObjectInspector if x.preferWritable() => HiveShim.getBinaryWritable(a)
       case _: BinaryObjectInspector => a.asInstanceOf[Array[Byte]]
       case _: DateObjectInspector if x.preferWritable() => HiveShim.getDateWritable(a)

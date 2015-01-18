@@ -343,13 +343,13 @@ class SqlParser extends AbstractSparkSQLParser {
     | floatLit ^^ { f => Literal(f.toDouble) }
     )
 
-  private def toNarrowestIntegerType(value: String) = {
+  private def toNarrowestIntegerType(value: String): Any = {
     val bigIntValue = BigDecimal(value)
 
     bigIntValue match {
       case v if bigIntValue.isValidInt => v.toIntExact
       case v if bigIntValue.isValidLong => v.toLongExact
-      case v => v
+      case v => v.underlying()
     }
   }
 

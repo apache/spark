@@ -130,7 +130,7 @@ public class JavaApplySchemaSuite implements Serializable {
     List<Row> expectedResult = new ArrayList<Row>(2);
     expectedResult.add(
       RowFactory.create(
-        scala.math.BigDecimal$.MODULE$.apply("92233720368547758070"),
+        new java.math.BigDecimal("92233720368547758070"),
         true,
         1.7976931348623157E308,
         10,
@@ -139,7 +139,7 @@ public class JavaApplySchemaSuite implements Serializable {
         "this is a simple string."));
     expectedResult.add(
       RowFactory.create(
-        scala.math.BigDecimal$.MODULE$.apply("92233720368547758069"),
+        new java.math.BigDecimal("92233720368547758069"),
         false,
         1.7976931348623157E305,
         11,
