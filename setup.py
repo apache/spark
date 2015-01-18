@@ -6,6 +6,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='airflow',
+    description='programmaticaly author, schedule and monitor data pipelines',
     version='0.1',
     packages=find_packages(),
     include_package_data=True,
