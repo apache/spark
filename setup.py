@@ -16,6 +16,7 @@ setup(
         'celery', 'chartkick',
         'flask', 'flask-admin', 'flask-bootstrap', 'flask-cache',
         'flask-login', 'hive-thrift-py', 'jinja2',
+        'librabbitmq',
         'markdown', 'mysql-python',
         'pandas',
         'pygments', 'pyhive',

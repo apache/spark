@@ -9,6 +9,7 @@ flask-login
 hive-thrift-py
 ipython[all]
 jinja2
+librabbitmq
 markdown
 mysql-python
 pandas
