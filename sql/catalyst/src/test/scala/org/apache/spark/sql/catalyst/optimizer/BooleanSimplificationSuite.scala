@@ -72,8 +72,8 @@ class BooleanSimplificationSuite extends PlanTest {
       (((('b > 3) && ('c > 2)) ||
         (('c < 1) && ('a === 5))) ||
         (('b < 5) && ('a > 1))) && ('a === 'b)
-    checkCondition(input, expected)
 
+    checkCondition(input, expected)
   }
 
   test("(a || b || c || ...) && (a || b || d || ...) && (a || b || e || ...) ...") {
@@ -85,8 +85,8 @@ class BooleanSimplificationSuite extends PlanTest {
 
     checkCondition(('a < 2 || 'b > 3) && ('a < 2 || 'c > 5), ('b > 3 && 'c > 5) || 'a < 2)
 
-    var input: Expression = ('a === 'b || 'b > 3) && ('a === 'b || 'a > 3) && ('a === 'b || 'a < 5)
-    var expected: Expression = ('b > 3 && 'a > 3 && 'a < 5) || 'a === 'b
-    checkCondition(input, expected)
+    checkCondition(
+      ('a === 'b || 'b > 3) && ('a === 'b || 'a > 3) && ('a === 'b || 'a < 5),
+      ('b > 3 && 'a > 3 && 'a < 5) || 'a === 'b)
   }
 }
