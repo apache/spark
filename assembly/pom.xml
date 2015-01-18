@@ -43,12 +43,7 @@
   </properties>
 
   <dependencies>
-    <!-- Promote Guava to compile scope in this module so it's included while shading. -->
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <scope>compile</scope>
-    </dependency>
+    <!-- Note: place this first to ensure the proper MANIFEST.MF-->
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_${scala.binary.version}</artifactId>
@@ -83,6 +78,12 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-repl_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
+    </dependency>
+    <!-- Promote Guava to compile scope in this module so it's included while shading. -->
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <scope>compile</scope>
     </dependency>
   </dependencies>
 
@@ -148,6 +149,17 @@
                 </relocation>
               </relocations>
               <transformers>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+                  <manifestEntries>
+                    <Implementation-Vendor>org.apache.spark</Implementation-Vendor>
+                    <Implementation-Title>spark-assembly</Implementation-Title>
+                    <Implementation-Version>${project.version}</Implementation-Version>
+                    <Implementation-Vendor-Id>org.apache.spark</Implementation-Vendor-Id>
+                    <Specification-Vendor>org.apache.spark</Specification-Vendor>
+                    <Specification-Title>spark-assembly</Specification-Title>
+                    <Specification-Version>${project.version}</Specification-Version>
+                  </manifestEntries>
+                </transformer>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                   <resource>META-INF/services/org.apache.hadoop.fs.FileSystem</resource>
