@@ -858,7 +858,7 @@ class SparkContext(config: SparkConf) extends Logging {
   }
 
   /** The version of Spark on which this application is running. */
-  def version = SparkContext.SPARK_VERSION
+  def version = SPARK_VERSION
 
   /**
    * Return a map from the slave to the max memory available for caching and the remaining
@@ -1338,8 +1338,6 @@ class SparkContext(config: SparkConf) extends Logging {
  * various Spark features.
  */
 object SparkContext extends Logging {
-
-  private[spark] val SPARK_VERSION = "1.1.2-SNAPSHOT"
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
 

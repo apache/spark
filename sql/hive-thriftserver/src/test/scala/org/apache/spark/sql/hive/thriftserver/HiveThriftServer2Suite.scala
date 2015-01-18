@@ -37,7 +37,7 @@ import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSocket
 import org.scalatest.FunSuite
 
-import org.apache.spark.{SparkContext, Logging}
+import org.apache.spark.{SparkContext, Logging, SPARK_VERSION}
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 
 /**
@@ -228,7 +228,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
         client.getInfo(sessionHandle, GetInfoType.CLI_SERVER_NAME).getStringValue
       }
 
-      assertResult(SparkContext.SPARK_VERSION, "Spark version shouldn't be \"Unknown\"") {
+      assertResult(SPARK_VERSION, "Spark version shouldn't be \"Unknown\"") {
         client.getInfo(sessionHandle, GetInfoType.CLI_DBMS_VER).getStringValue
       }
     }
