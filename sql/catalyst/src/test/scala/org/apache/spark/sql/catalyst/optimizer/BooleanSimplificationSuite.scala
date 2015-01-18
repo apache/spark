@@ -18,14 +18,14 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
-import org.apache.spark.sql.catalyst.expressions.{Or, And, Literal, Expression}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
-class BooleanSimplificationSuite extends PlanTest {
+class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -40,14 +40,21 @@ class BooleanSimplificationSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
 
+  // The `foldLeft` is required to handle cases like comparing `a && (b && c)` and `(a && b) && c`
   def compareConditions(e1: Expression, e2: Expression): Boolean = (e1, e2) match {
-    case (And(l1, l2), And(r1, r2)) =>
-      compareConditions(l1, r1) && compareConditions(l2, r2) ||
-        compareConditions(l1, r2) && compareConditions(l2, r1)
+    case (lhs: And, rhs: And) =>
+      val lhsSet = splitConjunctivePredicates(lhs).toSet
+      val rhsSet = splitConjunctivePredicates(rhs).toSet
+      lhsSet.foldLeft(rhsSet) { (set, e) =>
+        set.find(compareConditions(_, e)).map(set - _).getOrElse(set)
+      }.isEmpty
 
-    case (Or(l1, l2), Or(r1, r2)) =>
-      compareConditions(l1, r1) && compareConditions(l2, r2) ||
-        compareConditions(l1, r2) && compareConditions(l2, r1)
+    case (lhs: Or, rhs: Or) =>
+      val lhsSet = splitDisjunctivePredicates(lhs).toSet
+      val rhsSet = splitDisjunctivePredicates(rhs).toSet
+      lhsSet.foldLeft(rhsSet) { (set, e) =>
+        set.find(compareConditions(_, e)).map(set - _).getOrElse(set)
+      }.isEmpty
 
     case (l, r) => l == r
   }
