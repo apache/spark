@@ -185,12 +185,11 @@ class PoolAdjacentViolators private [mllib]
       testData: RDD[(Double, Double, Double)],
       isotonic: Boolean): Seq[(Double, Double, Double)] = {
 
-    poolAdjacentViolators(
-      testData
-        .sortBy(_._2)
-        .cache()
-        .mapPartitions(it => poolAdjacentViolators(it.toArray, isotonic).toIterator)
-        .collect(), isotonic)
+    val parallelStepResult = testData
+      .sortBy(_._2)
+      .mapPartitions(it => poolAdjacentViolators(it.toArray, isotonic).toIterator)
+
+    poolAdjacentViolators(parallelStepResult.collect(), isotonic)
   }
 }
 
