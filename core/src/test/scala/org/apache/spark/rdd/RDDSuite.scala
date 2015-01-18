@@ -550,6 +550,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(sc.emptyRDD.isEmpty())
     assert(sc.parallelize(Seq[Int]()).isEmpty())
     assert(!sc.parallelize(Seq(1)).isEmpty())
+    assert(sc.parallelize(Seq(1,2,3), 3).filter(_ < 0).isEmpty())
+    assert(!sc.parallelize(Seq(1,2,3), 3).filter(_ > 1).isEmpty())
   }
 
   test("sample preserves partitioner") {
