@@ -2091,8 +2091,6 @@ class PipelinedRDD(RDD):
 
     @property
     def _jrdd(self):
-        import traceback
-        print traceback.print_stack()
         if self._jrdd_val:
             return self._jrdd_val
         if self._bypass_serializer:
