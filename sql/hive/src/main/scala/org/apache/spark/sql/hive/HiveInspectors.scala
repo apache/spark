@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
+import org.apache.hadoop.hive.ql.metadata.HiveUtils
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
@@ -428,7 +429,6 @@ private[hive] trait HiveInspectors {
       case _: ByteObjectInspector => a.asInstanceOf[java.lang.Byte]
       case _: HiveDecimalObjectInspector =>
         HiveCompat.newHiveDecimal(a.asInstanceOf[Decimal].toJavaBigDecimal)
-      case _: BinaryObjectInspector if x.preferWritable() => HiveShim.getBinaryWritable(a)
       case _: BinaryObjectInspector => a.asInstanceOf[Array[Byte]]
       case _: DateObjectInspector => a.asInstanceOf[java.sql.Date]
       case _: TimestampObjectInspector => a.asInstanceOf[java.sql.Timestamp]
