@@ -10,7 +10,7 @@ import re
 import socket
 
 from sqlalchemy import (
-        Column, Integer, String, DateTime, Text, Boolean, ForeignKey)
+    Column, Integer, String, DateTime, Text, Boolean, ForeignKey)
 from sqlalchemy import func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.serializer import loads, dumps
@@ -29,6 +29,7 @@ ID_LEN = conf.getint('misc', 'ID_LEN')
 SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
 if 'mysql' in SQL_ALCHEMY_CONN:
     Text = LONGTEXT
+
 
 class DagBag(object):
     """
@@ -59,7 +60,6 @@ class DagBag(object):
                 'example_dags')
             self.collect_dags(example_dag_folder)
 
-
     def process_file(self, filepath, only_if_updated=True):
         """
         Given a path to a python module, this method imports the module and
@@ -74,7 +74,8 @@ class DagBag(object):
         if file_ext != '.py':
             return
 
-        if (    not only_if_updated or
+        if (
+                not only_if_updated or
                 filepath not in self.file_last_changed or
                 dttm != self.file_last_changed[filepath]):
             try:
@@ -399,7 +400,6 @@ class TaskInstance(Base):
             session.close()
         return count == len(task._downstream_list)
 
-
     def are_dependencies_met(self, main_session=None):
         """
         Returns a boolean on whether the upstream tasks are in a SUCCESS state
@@ -417,8 +417,8 @@ class TaskInstance(Base):
             previous_ti = session.query(TI).filter(
                 TI.dag_id == self.dag_id,
                 TI.task_id == task.task_id,
-                TI.execution_date == \
-                    self.execution_date-task.schedule_interval,
+                TI.execution_date ==
+                self.execution_date-task.schedule_interval,
                 TI.state == State.SUCCESS,
             ).first()
             if not previous_ti:
@@ -540,9 +540,11 @@ class TaskInstance(Base):
                     tables = None
                     if 'tables' in task.params:
                         tables = task.params['tables']
+                    ds = self.execution_date.isoformat()[:10]
                     jinja_context = {
                         'dag': task.dag,
-                        'ds': self.execution_date.isoformat()[:10],
+                        'ds': ds,
+                        'ds_nodash': ds.replace('-', ''),
                         'execution_date': self.execution_date,
                         'macros': macros,
                         'params': task.params,
@@ -941,7 +943,6 @@ class DAG(Base):
     parallelism = Column(Integer)
     full_filepath = Column(String(2000))
 
-
     def __init__(
             self, dag_id,
             schedule_interval=timedelta(days=1),
@@ -1033,7 +1034,6 @@ class DAG(Base):
             TI.execution_date <= end_date,
         ).all()
         return tis
-
 
     @property
     def roots(self):
@@ -1153,7 +1153,7 @@ class DAG(Base):
     def db_merge(self):
         BO = BaseOperator
         session = settings.Session()
-        tasks = session.query(BO).filter(BO.dag_id==self.dag_id).all()
+        tasks = session.query(BO).filter(BO.dag_id == self.dag_id).all()
         for t in tasks:
             session.delete(t)
         session.commit()
