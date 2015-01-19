@@ -525,6 +525,8 @@ private[spark] class TaskSetManager(
         // we don't want to count it again on the next one
         lastLaunchTime += localityWaits(currentLocalityIndex)
         currentLocalityIndex += 1
+      } else {
+        return myLocalityLevels(currentLocalityIndex)
       }
     }
     myLocalityLevels(currentLocalityIndex)
