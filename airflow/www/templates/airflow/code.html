@@ -6,5 +6,11 @@
     {% if subtitle %}
         <h5>{{ subtitle }}</h5>
     {% endif %}
-    <pre><code>{{ code|safe }}</code></pre>
+
+    {% if code %}
+        <pre><code>{{ code|safe }}</code></pre>
+    {% endif %}
+    {% if code_html %}
+        {{ code_html|safe }}
+    {% endif %}
 {% endblock %}

@@ -17,7 +17,7 @@ from flask import request
 from wtforms import Form, DateTimeField, SelectField, TextAreaField
 
 from pygments import highlight
-from pygments.lexers import PythonLexer, SqlLexer, BashLexer
+from pygments.lexers import PythonLexer, SqlLexer, BashLexer, IniLexer
 from pygments.formatters import HtmlFormatter
 
 import jinja2
@@ -479,10 +479,15 @@ class Airflow(BaseView):
         title = "Application Configuration"
         subtitle = configuration.AIRFLOW_CONFIG
         f = open(configuration.AIRFLOW_CONFIG, 'r')
-        code = f.read()
+
+        code_html = Markup(highlight(
+            f.read(),
+            IniLexer(),  # Lexer call
+            HtmlFormatter(noclasses=True))
+        )
         f.close()
         return self.render(
-            'airflow/code.html', code=code, title=title, subtitle=subtitle)
+            'airflow/code.html', code_html=code_html, title=title, subtitle=subtitle)
 
     @expose('/noaccess')
     def noaccess(self):

@@ -2,6 +2,7 @@ TODO
 -----
 #### UI
 * User login / security
+* Pause button for dags (affect master scheduler)
 * Tree view: remove dummy root node
 * Backfill wizard
 
@@ -12,7 +13,8 @@ TODO
 * `airflow task_state dag_id task_id YYYY-MM-DD`
 
 #### More Operators!
-* HIVE
+* HdfsSensor
+* S3Sensor
 * BaseDataTransferOperator
 * File2MySqlOperator
 * PythonOperator
@@ -24,6 +26,7 @@ TODO
 * ...
 
 #### Backend
+* Pickle content of files along with the DAG
 * Add decorator to timeout imports on master process [lib](https://github.com/pnpnpn/timeout-decorator)
 * Clear should kill running jobs
 * Mysql port should carry through (using default now)
