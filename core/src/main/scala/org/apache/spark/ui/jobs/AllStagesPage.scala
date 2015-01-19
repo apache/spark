@@ -33,6 +33,7 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
       val activeStages = listener.activeStages.values.toSeq
+      val pendingStages = listener.pendingStages.values.toSeq
       val completedStages = listener.completedStages.reverse.toSeq
       val numCompletedStages = listener.numCompletedStages
       val failedStages = listener.failedStages.reverse.toSeq
@@ -43,6 +44,10 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         new StageTableBase(activeStages.sortBy(_.submissionTime).reverse,
           parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
           killEnabled = parent.killEnabled)
+      val pendingStagesTable =
+        new StageTableBase(pendingStages.sortBy(_.submissionTime).reverse,
+          parent.basePath, parent.listener, isFairScheduler = parent.isFairScheduler,
+          killEnabled = false)
       val completedStagesTable =
         new StageTableBase(completedStages.sortBy(_.submissionTime).reverse, parent.basePath,
           parent.listener, isFairScheduler = parent.isFairScheduler, killEnabled = false)
@@ -73,6 +78,10 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
               {activeStages.size}
             </li>
             <li>
+              <a href="#pending"><strong>Pending Stages:</strong></a>
+              {pendingStages.size}
+            </li>
+            <li>
               <a href="#completed"><strong>Completed Stages:</strong></a>
               {numCompletedStages}
             </li>
@@ -91,6 +100,8 @@ private[ui] class AllStagesPage(parent: StagesTab) extends WebUIPage("") {
         }} ++
         <h4 id="active">Active Stages ({activeStages.size})</h4> ++
         activeStagesTable.toNodeSeq ++
+        <h4 id="pending">Pending Stages ({pendingStages.size})</h4> ++
+        pendingStagesTable.toNodeSeq ++
         <h4 id="completed">Completed Stages ({numCompletedStages})</h4> ++
         completedStagesTable.toNodeSeq ++
         <h4 id ="failed">Failed Stages ({numFailedStages})</h4> ++
