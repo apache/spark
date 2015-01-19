@@ -10,7 +10,6 @@ object SerializeJavaR {
 
   def readObject(dis: DataInputStream, objMap: HashMap[String, Object]): Object = {
     val dataType = readString(dis)
-    println("reading object of type " + dataType)
     readObjectType(dis, objMap, dataType)
   }
 
@@ -20,7 +19,7 @@ object SerializeJavaR {
       dataType: String): Object = {
     dataType match {
       case "integer" => new java.lang.Integer(readInt(dis))
-      case "double" => new java.lang.Double(readDouble(dis))
+      case "numeric" | "double" => new java.lang.Double(readDouble(dis))
       case "logical" => new java.lang.Boolean(readBoolean(dis))
       case "character" => readString(dis)
       case "environment" => readMap(dis, objMap)

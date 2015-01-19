@@ -25,7 +25,21 @@ stopBackend <- function() {
   rm(".sparkRCon", envir=.sparkREnv)
 }
 
-# if isStatic is true, objId contains className
+callJMethod <- function(objId, methodName, ...) {
+  stopifnot(class(objId) == "jobj")
+  invokeJava(isStatic=FALSE, objId, methodName, ...)
+}
+
+callJStatic <- function(className, methodName, ...) {
+  invokeJava(isStatic=TRUE, className, methodName, ...)
+}
+
+newJava <- function(className, ...) {
+  invokeJava(isStatic=TRUE, className, methodName="new", ...)
+}
+
+# If isStatic is true, objId contains className otherwise
+# it should contain a jobj returned previously by the backend
 invokeJava <- function(isStatic, objId, methodName, ...) {
   if (!exists(".sparkRCon", .sparkREnv)) {
     stop("No connection to backend found")
@@ -39,7 +53,6 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
   if (isStatic) {
     writeString(rc, objId)
   } else {
-    stopifnot(class(objId) == "jobj")
     writeString(rc, objId$id)
   }
   writeString(rc, methodName)

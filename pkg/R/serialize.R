@@ -40,6 +40,7 @@ writeObject <- function(con, object, withType = TRUE) {
     character = writeString(con, object),
     logical = writeBoolean(con, object),
     double = writeDouble(con, object),
+    numeric = writeDouble(con, object),
     raw = writeRaw(con, object),
     list = writeList(con, object),
     jobj = writeString(con, object$id),
