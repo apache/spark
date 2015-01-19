@@ -51,12 +51,12 @@ import org.apache.spark.sql.types._
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
-  /* By default it should be case insensitive to match Hive */
-  setConf(CatalystConf.CASE_SENSITIVE, "false")
-
   protected[sql] override lazy val conf: SQLConf = new SQLConf {
     override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
   }
+
+  /* By default it should be case insensitive to match Hive */
+  conf.setConf(CatalystConf.CASE_SENSITIVE, "false")
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
