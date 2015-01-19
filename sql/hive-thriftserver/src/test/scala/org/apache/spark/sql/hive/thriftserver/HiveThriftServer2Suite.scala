@@ -143,6 +143,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
              |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=http
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_HTTP_PORT}=$port
              |  --driver-class-path ${sys.props("java.class.path")}
+             |  --conf spark.ui.enabled=false
            """.stripMargin.split("\\s+").toSeq
       } else {
           s"""$startScript
@@ -153,6 +154,7 @@ class HiveThriftServer2Suite extends FunSuite with Logging {
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
              |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_PORT}=$port
              |  --driver-class-path ${sys.props("java.class.path")}
+             |  --conf spark.ui.enabled=false
            """.stripMargin.split("\\s+").toSeq
       }
 

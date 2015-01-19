@@ -50,7 +50,7 @@ class HiveUdfSuite extends QueryTest {
   import TestHive._
 
   test("spark sql udf test that returns a struct") {
-    registerFunction("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))
+    udf.register("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))
     assert(sql(
       """
         |SELECT getStruct(1).f1,

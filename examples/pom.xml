@@ -393,29 +393,6 @@
       </dependencies>
     </profile>
     <profile>
-      <id>hbase-hadoop2</id>
-      <activation>
-        <property>
-          <name>hbase.profile</name>
-          <value>hadoop2</value>
-        </property>
-      </activation>
-      <properties>
-        <hbase.version>0.98.7-hadoop2</hbase.version>
-      </properties>
-    </profile>
-    <profile>
-      <id>hbase-hadoop1</id>
-      <activation>
-        <property>
-          <name>!hbase.profile</name>
-        </property>
-      </activation>
-      <properties>
-        <hbase.version>0.98.7-hadoop1</hbase.version>
-      </properties>
-    </profile>
-    <profile>
       <!-- We add a source directory specific to Scala 2.10 since Kafka
            only works with it -->
       <id>scala-2.10</id>
