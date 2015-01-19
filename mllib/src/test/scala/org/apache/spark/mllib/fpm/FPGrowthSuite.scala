@@ -17,9 +17,9 @@
 package org.apache.spark.mllib.fpm
 
 import org.scalatest.FunSuite
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class FPGrowthSuite  extends FunSuite with LocalSparkContext {
+class FPGrowthSuite  extends FunSuite with MLlibTestSparkContext {
 
   test("test FPGrowth algorithm")
   {
