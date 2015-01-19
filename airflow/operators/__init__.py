@@ -5,5 +5,6 @@ from presto_check_operator import PrestoCheckOperator
 from sensors import SqlSensor
 from sensors import ExternalTaskSensor
 from sensors import HivePartitionSensor
+from sensors import HdfsSensor
 from email_operator import EmailOperator
 from dummy_operator import DummyOperator

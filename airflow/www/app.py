@@ -1061,12 +1061,13 @@ class ConnectionModelView(LoginMixin, ModelView):
     column_list = ('conn_id', 'conn_type', 'host', 'port')
     form_choices = {
         'conn_type': [
+            ('ftp', 'FTP',),
+            ('hdfs', 'HDFS',),
             ('hive', 'Hive',),
-            ('presto', 'Presto',),
             ('mysql', 'MySQL',),
             ('oracle', 'Oracle',),
+            ('presto', 'Presto',),
             ('samba', 'Samba',),
-            ('ftp', 'FTP',),
         ]
     }
 mv = ConnectionModelView(

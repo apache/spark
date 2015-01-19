@@ -18,6 +18,7 @@ pyhive
 python-dateutil
 requests
 setproctitle
+snakebite
 sphinx
 sphinx_rtd_theme
 Sphinx-PyPI-upload
