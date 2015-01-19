@@ -19,14 +19,14 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
@@ -48,9 +48,9 @@ class KMeans private (
 
   /**
    * Constructs a KMeans instance with default parameters: {k: 2, maxIterations: 20, runs: 1,
-   * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4, System.nanoTime()}.
+   * initializationMode: "k-means||", initializationSteps: 5, epsilon: 1e-4, seed: random}.
    */
-  def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4, System.nanoTime())
+  def this() = this(2, 20, 1, KMeans.K_MEANS_PARALLEL, 5, 1e-4, Utils.random.nextLong())
 
   /** Set the number of clusters to create (k). Default: 2. */
   def setK(k: Int): this.type = {
@@ -345,28 +345,6 @@ object KMeans {
    * @param maxIterations max number of iterations
    * @param runs number of parallel runs, defaults to 1. The best model is returned.
    * @param initializationMode initialization model, either "random" or "k-means||" (default).
-   */
-  def train(
-      data: RDD[Vector],
-      k: Int,
-      maxIterations: Int,
-      runs: Int,
-      initializationMode: String): KMeansModel = {
-    new KMeans().setK(k)
-      .setMaxIterations(maxIterations)
-      .setRuns(runs)
-      .setInitializationMode(initializationMode)
-      .run(data)
-  }
-
-  /**
-   * Trains a k-means model using the given set of parameters.
-   *
-   * @param data training points stored as `RDD[Vector]`
-   * @param k number of clusters
-   * @param maxIterations max number of iterations
-   * @param runs number of parallel runs, defaults to 1. The best model is returned.
-   * @param initializationMode initialization model, either "random" or "k-means||" (default).
    * @param seed random seed value for cluster initialization
    */
   def train(
@@ -381,6 +359,28 @@ object KMeans {
       .setRuns(runs)
       .setInitializationMode(initializationMode)
       .setSeed(seed)
+      .run(data)
+  }
+
+  /**
+   * Trains a k-means model using the given set of parameters.
+   *
+   * @param data training points stored as `RDD[Vector]`
+   * @param k number of clusters
+   * @param maxIterations max number of iterations
+   * @param runs number of parallel runs, defaults to 1. The best model is returned.
+   * @param initializationMode initialization model, either "random" or "k-means||" (default).
+   */
+  def train(
+      data: RDD[Vector],
+      k: Int,
+      maxIterations: Int,
+      runs: Int,
+      initializationMode: String): KMeansModel = {
+    new KMeans().setK(k)
+      .setMaxIterations(maxIterations)
+      .setRuns(runs)
+      .setInitializationMode(initializationMode)
       .run(data)
   }
 
