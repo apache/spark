@@ -219,8 +219,8 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       .mkString
 
     def newWriter = {
-      // Used to workaround `FileSinkDesc` constructor incompatibility between Hive 0.12.0 and 0.13.1.
-      // The type of the `dirName` argument in 0.12.0 is `String`, but `Path` in 0.13.1.
+      // Used to workaround `FileSinkDesc` constructor incompatibility between Hive 0.12.0 and
+      // 0.13.1. The type of the `dirName` argument in 0.12.0 is `String`, but `Path` in 0.13.1.
       implicit def stringToPath(string: String): Path = new Path(string)
 
       val newFileSinkDesc = new FileSinkDesc(
