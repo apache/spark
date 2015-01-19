@@ -317,19 +317,23 @@ private[spark] object BLAS extends Serializable with Logging {
       B: DenseMatrix,
       beta: Double,
       C: DenseMatrix): Unit = {
+    val transModA = transA ^ A.isTransposed
+    val transModB = transB ^ B.isTransposed
     val mA: Int = if (!transA) A.numRows else A.numCols
     val nB: Int = if (!transB) B.numCols else B.numRows
     val kA: Int = if (!transA) A.numCols else A.numRows
     val kB: Int = if (!transB) B.numRows else B.numCols
-    val tAstr = if (!transA) "N" else "T"
-    val tBstr = if (!transB) "N" else "T"
+    val tAstr = if (!transModA) "N" else "T"
+    val tBstr = if (!transModB) "N" else "T"
+    val lda = if (!A.isTransposed) A.numRows else A.numCols
+    val ldb = if (!B.isTransposed) B.numRows else B.numCols
 
     require(kA == kB, s"The columns of A don't match the rows of B. A: $kA, B: $kB")
     require(mA == C.numRows, s"The rows of C don't match the rows of A. C: ${C.numRows}, A: $mA")
     require(nB == C.numCols,
       s"The columns of C don't match the columns of B. C: ${C.numCols}, A: $nB")
 
-    nativeBLAS.dgemm(tAstr, tBstr, mA, nB, kA, alpha, A.values, A.numRows, B.values, B.numRows,
+    nativeBLAS.dgemm(tAstr, tBstr, mA, nB, kA, alpha, A.values, lda, B.values, ldb,
       beta, C.values, C.numRows)
   }
 
@@ -345,6 +349,8 @@ private[spark] object BLAS extends Serializable with Logging {
       B: DenseMatrix,
       beta: Double,
       C: DenseMatrix): Unit = {
+    val transModA = transA ^ A.isTransposed
+    val transModB = transB ^ B.isTransposed
     val mA: Int = if (!transA) A.numRows else A.numCols
     val nB: Int = if (!transB) B.numCols else B.numRows
     val kA: Int = if (!transA) A.numCols else A.numRows
@@ -358,13 +364,13 @@ private[spark] object BLAS extends Serializable with Logging {
     val Avals = A.values
     val Bvals = B.values
     val Cvals = C.values
-    val Arows = if (!transA) A.rowIndices else A.colPtrs
-    val Acols = if (!transA) A.colPtrs else A.rowIndices
+    val Arows = if (!transModA) A.rowIndices else A.colPtrs
+    val Acols = if (!transModA) A.colPtrs else A.rowIndices
 
     // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
-    if (transA){
+    if (transModA){
       var colCounterForB = 0
-      if (!transB) { // Expensive to put the check inside the loop
+      if (!transModB) { // Expensive to put the check inside the loop
         while (colCounterForB < nB) {
           var rowCounterForA = 0
           val Cstart = colCounterForB * mA
@@ -410,7 +416,7 @@ private[spark] object BLAS extends Serializable with Logging {
       // Perform matrix multiplication and add to C. The rows of A are multiplied by the columns of
       // B, and added to C.
       var colCounterForB = 0 // the column to be updated in C
-      if (!transB) { // Expensive to put the check inside the loop
+      if (!transModB) { // Expensive to put the check inside the loop
         while (colCounterForB < nB) {
           var colCounterForA = 0 // The column of A to multiply with the row of B
           val Bstart = colCounterForB * kB
@@ -463,7 +469,6 @@ private[spark] object BLAS extends Serializable with Logging {
       x: DenseVector,
       beta: Double,
       y: DenseVector): Unit = {
-
     val mA: Int = if (!trans) A.numRows else A.numCols
     val nx: Int = x.size
     val nA: Int = if (!trans) A.numCols else A.numRows
@@ -514,8 +519,11 @@ private[spark] object BLAS extends Serializable with Logging {
       x: DenseVector,
       beta: Double,
       y: DenseVector): Unit =  {
-    val tStrA = if (!trans) "N" else "T"
-    nativeBLAS.dgemv(tStrA, A.numRows, A.numCols, alpha, A.values, A.numRows, x.values, 1, beta,
+    val transMod = trans ^ A.isTransposed
+    val tStrA = if (!transMod) "N" else "T"
+    val mA = if (!A.isTransposed) A.numRows else A.numCols
+    val nA = if (!A.isTransposed) A.numCols else A.numRows
+    nativeBLAS.dgemv(tStrA, mA, nA, alpha, A.values, mA, x.values, 1, beta,
       y.values, 1)
   }
 
@@ -530,18 +538,17 @@ private[spark] object BLAS extends Serializable with Logging {
       x: DenseVector,
       beta: Double,
       y: DenseVector): Unit =  {
-
     val xValues = x.values
     val yValues = y.values
-
+    val transMod = trans ^ A.isTransposed
     val mA: Int = if (!trans) A.numRows else A.numCols
     val nA: Int = if (!trans) A.numCols else A.numRows
 
     val Avals = A.values
-    val Arows = if (!trans) A.rowIndices else A.colPtrs
-    val Acols = if (!trans) A.colPtrs else A.rowIndices
+    val Arows = if (!transMod) A.rowIndices else A.colPtrs
+    val Acols = if (!transMod) A.colPtrs else A.rowIndices
     // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
-    if (trans) {
+    if (transMod) {
       var rowCounter = 0
       while (rowCounter < mA) {
         var i = Arows(rowCounter)
