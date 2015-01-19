@@ -36,36 +36,44 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
   var amQueue = sparkConf.get("spark.yarn.queue", "default")
   var amMemory: Int = 512 // MB
+  var amCores: Int = 1
   var appName: String = "Spark"
   var priority = 0
+  def isClusterMode: Boolean = userClass != null
+
+  private var driverMemory: Int = 512 // MB
+  private var driverCores: Int = 1
+  private val driverMemOverheadKey = "spark.yarn.driver.memoryOverhead"
+  private val amMemKey = "spark.yarn.am.memory"
+  private val amMemOverheadKey = "spark.yarn.am.memoryOverhead"
+  private val driverCoresKey = "spark.driver.cores"
+  private val amCoresKey = "spark.yarn.am.cores"
+  private val isDynamicAllocationEnabled =
+    sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
 
   parseArgs(args.toList)
+  loadEnvironmentArgs()
+  validateArgs()
 
   // Additional memory to allocate to containers
-  // For now, use driver's memory overhead as our AM container's memory overhead
-  val amMemoryOverhead = sparkConf.getInt("spark.yarn.driver.memoryOverhead",
+  val amMemoryOverheadConf = if (isClusterMode) driverMemOverheadKey else amMemOverheadKey
+  val amMemoryOverhead = sparkConf.getInt(amMemoryOverheadConf,
     math.max((MEMORY_OVERHEAD_FACTOR * amMemory).toInt, MEMORY_OVERHEAD_MIN))
 
   val executorMemoryOverhead = sparkConf.getInt("spark.yarn.executor.memoryOverhead",
     math.max((MEMORY_OVERHEAD_FACTOR * executorMemory).toInt, MEMORY_OVERHEAD_MIN))
-
-  private val isDynamicAllocationEnabled =
-    sparkConf.getBoolean("spark.dynamicAllocation.enabled", false)
-
-  loadEnvironmentArgs()
-  validateArgs()
 
   /** Load any default arguments provided through environment variables and Spark properties. */
   private def loadEnvironmentArgs(): Unit = {
     // For backward compatibility, SPARK_YARN_DIST_{ARCHIVES/FILES} should be resolved to hdfs://,
     // while spark.yarn.dist.{archives/files} should be resolved to file:// (SPARK-2051).
     files = Option(files)
-      .orElse(sys.env.get("SPARK_YARN_DIST_FILES"))
       .orElse(sparkConf.getOption("spark.yarn.dist.files").map(p => Utils.resolveURIs(p)))
+      .orElse(sys.env.get("SPARK_YARN_DIST_FILES"))
       .orNull
     archives = Option(archives)
-      .orElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES"))
       .orElse(sparkConf.getOption("spark.yarn.dist.archives").map(p => Utils.resolveURIs(p)))
+      .orElse(sys.env.get("SPARK_YARN_DIST_ARCHIVES"))
       .orNull
     // If dynamic allocation is enabled, start at the max number of executors
     if (isDynamicAllocationEnabled) {
@@ -86,6 +94,27 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
     if (numExecutors <= 0) {
       throw new IllegalArgumentException(
         "You must specify at least 1 executor!\n" + getUsageMessage())
+    }
+    if (isClusterMode) {
+      for (key <- Seq(amMemKey, amMemOverheadKey, amCoresKey)) {
+        if (sparkConf.contains(key)) {
+          println(s"$key is set but does not apply in cluster mode.")
+        }
+      }
+      amMemory = driverMemory
+      amCores = driverCores
+    } else {
+      for (key <- Seq(driverMemOverheadKey, driverCoresKey)) {
+        if (sparkConf.contains(key)) {
+          println(s"$key is set but does not apply in client mode.")
+        }
+      }
+      sparkConf.getOption(amMemKey)
+        .map(Utils.memoryStringToMb)
+        .foreach { mem => amMemory = mem }
+      sparkConf.getOption(amCoresKey)
+        .map(_.toInt)
+        .foreach { cores => amCores = cores }
     }
   }
 
@@ -118,7 +147,11 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
           if (args(0) == "--master-memory") {
             println("--master-memory is deprecated. Use --driver-memory instead.")
           }
-          amMemory = value
+          driverMemory = value
+          args = tail
+
+        case ("--driver-cores") :: IntParam(value) :: tail =>
+          driverCores = value
           args = tail
 
         case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>
@@ -179,7 +212,8 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
 
   private def getUsageMessage(unknownParam: List[String] = null): String = {
     val message = if (unknownParam != null) s"Unknown/unsupported param $unknownParam\n" else ""
-    message + """
+    message +
+      """
       |Usage: org.apache.spark.deploy.yarn.Client [options]
       |Options:
       |  --jar JAR_PATH           Path to your application's JAR file (required in yarn-cluster
@@ -190,6 +224,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       |  --num-executors NUM      Number of executors to start (Default: 2)
       |  --executor-cores NUM     Number of cores for the executors (Default: 1).
       |  --driver-memory MEM      Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)
+      |  --driver-cores NUM       Number of cores used by the driver (Default: 1).
       |  --executor-memory MEM    Memory per executor (e.g. 1000M, 2G) (Default: 1G)
       |  --name NAME              The name of your application (Default: Spark)
       |  --queue QUEUE            The hadoop queue to use for allocation requests (Default:

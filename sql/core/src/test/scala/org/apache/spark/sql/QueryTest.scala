@@ -57,7 +57,19 @@ class QueryTest extends PlanTest {
     }
 
     val isSorted = rdd.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
-    def prepareAnswer(answer: Seq[Any]) = if (!isSorted) answer.sortBy(_.toString) else answer
+    def prepareAnswer(answer: Seq[Any]): Seq[Any] = {
+      // Converts data to types that we can do equality comparison using Scala collections.
+      // For BigDecimal type, the Scala type has a better definition of equality test (similar to
+      // Java's java.math.BigDecimal.compareTo).
+      val converted = answer.map {
+        case s: Seq[_] => s.map {
+          case d: java.math.BigDecimal => BigDecimal(d)
+          case o => o
+        }
+        case o => o
+      }
+      if (!isSorted) converted.sortBy(_.toString) else converted
+    }
     val sparkAnswer = try rdd.collect().toSeq catch {
       case e: Exception =>
         fail(

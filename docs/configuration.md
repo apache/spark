@@ -102,11 +102,10 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.memory</code></td>
-  <td>512m</td>
+  <td><code>spark.driver.cores</code></td>
+  <td>1</td>
   <td>
-    Amount of memory to use per executor process, in the same format as JVM memory strings
-    (e.g. <code>512m</code>, <code>2g</code>).
+    Number of cores to use for the driver process, only in cluster mode.
   </td>
 </tr>
 <tr>
@@ -114,6 +113,14 @@ of the most common options to set are:
   <td>512m</td>
   <td>
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
+    (e.g. <code>512m</code>, <code>2g</code>).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.memory</code></td>
+  <td>512m</td>
+  <td>
+    Amount of memory to use per executor process, in the same format as JVM memory strings
     (e.g. <code>512m</code>, <code>2g</code>).
   </td>
 </tr>
@@ -678,7 +685,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.storage.memoryMapThreshold</code></td>
-  <td>8192</td>
+  <td>2097152</td>
   <td>
     Size of a block, in bytes, above which Spark memory maps when reading a block from disk.
     This prevents Spark from memory mapping very small blocks. In general, memory
@@ -709,7 +716,9 @@ Apart from these, the following properties are also available, and may be useful
     <td>If set to true, validates the output specification (e.g. checking if the output directory already exists)
     used in saveAsHadoopFile and other variants. This can be disabled to silence exceptions due to pre-existing
     output directories. We recommend that users do not disable this except if trying to achieve compatibility with
-    previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.</td>
+    previous versions of Spark. Simply use Hadoop's FileSystem API to delete output directories by hand.
+    This setting is ignored for jobs generated through Spark Streaming's StreamingContext, since
+    data may need to be rewritten to pre-existing output directories during checkpoint recovery.</td>
 </tr>
 <tr>
     <td><code>spark.hadoop.cloneConf</code></td>
@@ -814,6 +823,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>100</td>
   <td>
     Communication timeout between Spark nodes, in seconds.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.network.timeout</code></td>
+  <td>120</td>
+  <td>
+    Default timeout for all network interactions, in seconds. This config will be used in 
+    place of <code>spark.core.connection.ack.wait.timeout</code>, <code>spark.akka.timeout</code>, 
+    <code>spark.storage.blockManagerSlaveTimeoutMs</code> or
+    <code>spark.shuffle.io.connectionTimeout</code>, if they are not configured.
   </td>
 </tr>
 <tr>
@@ -1216,7 +1235,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.streaming.receiver.writeAheadLogs.enable</code></td>
+  <td><code>spark.streaming.receiver.writeAheadLog.enable</code></td>
   <td>false</td>
   <td>
     Enable write ahead logs for receivers. All the input data received through receivers
