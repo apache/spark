@@ -15,10 +15,11 @@
 # limitations under the License.
 #
 
-from pyspark.sql import SchemaRDD, ArrayType, StringType
+from pyspark.sql import SchemaRDD, ArrayType, StringType, inherit_doc
 from pyspark.ml import Transformer, _jvm
 from pyspark.ml.param import Param
 
+@inherit_doc
 class Tokenizer(Transformer):
 
     def __init__(self):
@@ -61,6 +62,7 @@ class Tokenizer(Transformer):
             raise ValueError("The input params must be either a dict or a list.")
 
 
+@inherit_doc
 class HashingTF(Transformer):
 
     def __init__(self):

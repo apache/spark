@@ -22,7 +22,7 @@ from pyspark.sql import inherit_doc # TODO: move inherit_doc to Spark Core
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import Identifiable
 
-__all__ = ["Pipeline", "Transformer", "Estimator"]
+__all__ = ["Pipeline", "Transformer", "Estimator", "param", "feature", "classification"]
 
 
 def _jvm():

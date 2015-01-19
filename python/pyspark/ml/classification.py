@@ -15,11 +15,12 @@
 # limitations under the License.
 #
 
-from pyspark.sql import SchemaRDD
+from pyspark.sql import SchemaRDD, inherit_doc
 from pyspark.ml import Estimator, Transformer, _jvm
 from pyspark.ml.param import Param
 
 
+@inherit_doc
 class LogisticRegression(Estimator):
     """
     Logistic regression.
