@@ -21,16 +21,13 @@ import java.sql.{Date, Timestamp}
 
 import scala.collection.immutable.HashSet
 
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.FunSuite
 import org.scalatest.Matchers._
-import org.scalactic.TripleEqualsSupport.Spread
 
-import org.apache.spark.sql.catalyst.types._
-
-
-/* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.types._
+
 
 class ExpressionEvaluationSuite extends FunSuite {
 
@@ -1037,6 +1034,8 @@ class ExpressionEvaluationSuite extends FunSuite {
     }
 
     checkEvaluation(Sqrt(Literal(null, DoubleType)), null, new GenericRow(Array[Any](null)))
+    checkEvaluation(Sqrt(-1), null, EmptyRow)
+    checkEvaluation(Sqrt(-1.5), null, EmptyRow)
   }
 
   test("Bitwise operations") {

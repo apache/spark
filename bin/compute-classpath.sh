@@ -25,7 +25,11 @@ FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 . "$FWDIR"/bin/load-spark-env.sh
 
-CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH"
+if [ -n "$SPARK_CLASSPATH" ]; then
+  CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH"
+else
+  CLASSPATH="$SPARK_SUBMIT_CLASSPATH"
+fi
 
 # Build up classpath
 if [ -n "$SPARK_CONF_DIR" ]; then
@@ -140,6 +144,13 @@ if [ -n "$HADOOP_CONF_DIR" ]; then
 fi
 if [ -n "$YARN_CONF_DIR" ]; then
   CLASSPATH="$CLASSPATH:$YARN_CONF_DIR"
+fi
+
+# To allow for distributions to append needed libraries to the classpath (e.g. when
+# using the "hadoop-provided" profile to build Spark), check SPARK_DIST_CLASSPATH and
+# append it to tbe final classpath.
+if [ -n "$SPARK_DIST_CLASSPATH" ]; then
+  CLASSPATH="$CLASSPATH:$SPARK_DIST_CLASSPATH"
 fi
 
 echo "$CLASSPATH"

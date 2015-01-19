@@ -24,8 +24,8 @@ import scala.util.Try
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
-import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
+import parquet.format.converter.ParquetMetadataConverter
 import parquet.hadoop.{ParquetFileReader, Footer, ParquetFileWriter}
 import parquet.hadoop.metadata.{ParquetMetadata, FileMetaData}
 import parquet.hadoop.util.ContextUtil
@@ -36,7 +36,7 @@ import parquet.schema.Type.Repetition
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 // Implicits
 import scala.collection.JavaConversions._
@@ -80,7 +80,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
 
   /**
    * Converts a given Parquet `Type` into the corresponding
-   * [[org.apache.spark.sql.catalyst.types.DataType]].
+   * [[org.apache.spark.sql.types.DataType]].
    *
    * We apply the following conversion rules:
    * <ul>
@@ -191,7 +191,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
   }
 
   /**
-   * For a given Catalyst [[org.apache.spark.sql.catalyst.types.DataType]] return
+   * For a given Catalyst [[org.apache.spark.sql.types.DataType]] return
    * the name of the corresponding Parquet primitive type or None if the given type
    * is not primitive.
    *
@@ -231,21 +231,21 @@ private[parquet] object ParquetTypesConverter extends Logging {
   }
 
   /**
-   * Converts a given Catalyst [[org.apache.spark.sql.catalyst.types.DataType]] into
+   * Converts a given Catalyst [[org.apache.spark.sql.types.DataType]] into
    * the corresponding Parquet `Type`.
    *
    * The conversion follows the rules below:
    * <ul>
    *   <li> Primitive types are converted into Parquet's primitive types.</li>
-   *   <li> [[org.apache.spark.sql.catalyst.types.StructType]]s are converted
+   *   <li> [[org.apache.spark.sql.types.StructType]]s are converted
    *        into Parquet's `GroupType` with the corresponding field types.</li>
-   *   <li> [[org.apache.spark.sql.catalyst.types.ArrayType]]s are converted
+   *   <li> [[org.apache.spark.sql.types.ArrayType]]s are converted
    *        into a 2-level nested group, where the outer group has the inner
    *        group as sole field. The inner group has name `values` and
    *        repetition level `REPEATED` and has the element type of
    *        the array as schema. We use Parquet's `ConversionPatterns` for this
    *        purpose.</li>
-   *   <li> [[org.apache.spark.sql.catalyst.types.MapType]]s are converted
+   *   <li> [[org.apache.spark.sql.types.MapType]]s are converted
    *        into a nested (2-level) Parquet `GroupType` with two fields: a key
    *        type and a value type. The nested group has repetition level
    *        `REPEATED` and name `map`. We use Parquet's `ConversionPatterns`
@@ -319,7 +319,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
           val fields = structFields.map {
             field => fromDataType(field.dataType, field.name, field.nullable, inArray = false)
           }
-          new ParquetGroupType(repetition, name, fields)
+          new ParquetGroupType(repetition, name, fields.toSeq)
         }
         case MapType(keyType, valueType, valueContainsNull) => {
           val parquetKeyType =
@@ -437,10 +437,14 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }
     val path = origPath.makeQualified(fs)
 
-    val children = fs.listStatus(path).filterNot { status =>
-      val name = status.getPath.getName
-      (name(0) == '.' || name(0) == '_') && name != ParquetFileWriter.PARQUET_METADATA_FILE
-    }
+    val children =
+      fs
+        .globStatus(path)
+        .flatMap { status => if(status.isDir) fs.listStatus(status.getPath) else List(status) }
+        .filterNot { status =>
+          val name = status.getPath.getName
+          (name(0) == '.' || name(0) == '_') && name != ParquetFileWriter.PARQUET_METADATA_FILE
+        }
 
     ParquetRelation.enableLogForwarding()
 
@@ -454,7 +458,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
       // ... and fallback to "_metadata" if no such file exists (which implies the Parquet file is
       // empty, thus normally the "_metadata" file is expected to be fairly small).
       .orElse(children.find(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE))
-      .map(ParquetFileReader.readFooter(conf, _))
+      .map(ParquetFileReader.readFooter(conf, _, ParquetMetadataConverter.NO_FILTER))
       .getOrElse(
         throw new IllegalArgumentException(s"Could not find Parquet metadata at path $path"))
   }

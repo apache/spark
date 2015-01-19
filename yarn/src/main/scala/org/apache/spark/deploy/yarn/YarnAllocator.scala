@@ -17,7 +17,6 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.util.{List => JList}
 import java.util.concurrent._
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.regex.Pattern
@@ -25,16 +24,19 @@ import java.util.regex.Pattern
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
+import org.apache.hadoop.yarn.client.api.AMRMClient
+import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
+import org.apache.hadoop.yarn.util.Records
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv}
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.scheduler.{SplitInfo, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
-
-import com.google.common.util.concurrent.ThreadFactoryBuilder
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 
 object AllocationType extends Enumeration {
   type AllocationType = Value
@@ -52,12 +54,12 @@ object AllocationType extends Enumeration {
 // more info on how we are requesting for containers.
 
 /**
- * Common code for the Yarn container allocator. Contains all the version-agnostic code to
- * manage container allocation for a running Spark application.
+ * Acquires resources for executors from a ResourceManager and launches executors in new containers.
  */
-private[yarn] abstract class YarnAllocator(
+private[yarn] class YarnAllocator(
     conf: Configuration,
     sparkConf: SparkConf,
+    amClient: AMRMClient[ContainerRequest],
     appAttemptId: ApplicationAttemptId,
     args: ApplicationMasterArguments,
     preferredNodes: collection.Map[String, collection.Set[SplitInfo]],
@@ -67,7 +69,7 @@ private[yarn] abstract class YarnAllocator(
   import YarnAllocator._
 
   // These three are locked on allocatedHostToContainersMap. Complementary data structures
-  // allocatedHostToContainersMap : containers which are running : host, Set<containerid>
+  // allocatedHostToContainersMap : containers which are running : host, Set<ContainerId>
   // allocatedContainerToHostMap: container to host mapping.
   private val allocatedHostToContainersMap =
     new HashMap[String, collection.mutable.Set[ContainerId]]()
@@ -161,8 +163,6 @@ private[yarn] abstract class YarnAllocator(
   def allocateResources(): Unit = synchronized {
     val missing = maxExecutors - numPendingAllocate.get() - numExecutorsRunning.get()
 
-    // this is needed by alpha, do it here since we add numPending right after this
-    val executorsPending = numPendingAllocate.get()
     if (missing > 0) {
       val totalExecutorMemory = executorMemory + memoryOverhead
       numPendingAllocate.addAndGet(missing)
@@ -172,7 +172,7 @@ private[yarn] abstract class YarnAllocator(
       logDebug("Empty allocation request ...")
     }
 
-    val allocateResponse = allocateContainers(missing, executorsPending)
+    val allocateResponse = allocateContainers(missing)
     val allocatedContainers = allocateResponse.getAllocatedContainers()
 
     if (allocatedContainers.size > 0) {
@@ -368,7 +368,7 @@ private[yarn] abstract class YarnAllocator(
         val containerId = completedContainer.getContainerId
 
         if (releasedContainers.containsKey(containerId)) {
-          // YarnAllocationHandler already marked the container for release, so remove it from
+          // Already marked the container for release, so remove it from
           // `releasedContainers`.
           releasedContainers.remove(containerId)
         } else {
@@ -441,20 +441,16 @@ private[yarn] abstract class YarnAllocator(
     }
   }
 
-  protected def allocatedContainersOnHost(host: String): Int = {
-    var retval = 0
+  private def allocatedContainersOnHost(host: String): Int = {
     allocatedHostToContainersMap.synchronized {
-      retval = allocatedHostToContainersMap.getOrElse(host, Set()).size
+     allocatedHostToContainersMap.getOrElse(host, Set()).size
     }
-    retval
   }
 
-  protected def allocatedContainersOnRack(rack: String): Int = {
-    var retval = 0
+  private def allocatedContainersOnRack(rack: String): Int = {
     allocatedHostToContainersMap.synchronized {
-      retval = allocatedRackCount.getOrElse(rack, 0)
+      allocatedRackCount.getOrElse(rack, 0)
     }
-    retval
   }
 
   private def isResourceConstraintSatisfied(container: Container): Boolean = {
@@ -464,9 +460,8 @@ private[yarn] abstract class YarnAllocator(
   // A simple method to copy the split info map.
   private def generateNodeToWeight(
       conf: Configuration,
-      input: collection.Map[String, collection.Set[SplitInfo]]
-    ): (Map[String, Int], Map[String, Int]) = {
-
+      input: collection.Map[String, collection.Set[SplitInfo]])
+    : (Map[String, Int], Map[String, Int]) = {
     if (input == null) {
       return (Map[String, Int](), Map[String, Int]())
     }
@@ -488,9 +483,9 @@ private[yarn] abstract class YarnAllocator(
     (hostToCount.toMap, rackToCount.toMap)
   }
 
-  private def internalReleaseContainer(container: Container) = {
+  private def internalReleaseContainer(container: Container): Unit = {
     releasedContainers.put(container.getId(), true)
-    releaseContainer(container)
+    amClient.releaseAssignedContainer(container.getId())
   }
 
   /**
@@ -498,26 +493,158 @@ private[yarn] abstract class YarnAllocator(
    *
    * @param count Number of containers to allocate.
    *              If zero, should still contact RM (as a heartbeat).
-   * @param pending Number of containers pending allocate. Only used on alpha.
    * @return Response to the allocation request.
    */
-  protected def allocateContainers(count: Int, pending: Int): YarnAllocateResponse
+  private def allocateContainers(count: Int): AllocateResponse = {
+    addResourceRequests(count)
 
-  /** Called to release a previously allocated container. */
-  protected def releaseContainer(container: Container): Unit
+    // We have already set the container request. Poll the ResourceManager for a response.
+    // This doubles as a heartbeat if there are no pending container requests.
+    val progressIndicator = 0.1f
+    amClient.allocate(progressIndicator)
+  }
 
-  /**
-   * Defines the interface for an allocate response from the RM. This is needed since the alpha
-   * and stable interfaces differ here in ways that cannot be fixed using other routes.
-   */
-  protected trait YarnAllocateResponse {
+  private def createRackResourceRequests(hostContainers: ArrayBuffer[ContainerRequest])
+    : ArrayBuffer[ContainerRequest] = {
+    // Generate modified racks and new set of hosts under it before issuing requests.
+    val rackToCounts = new HashMap[String, Int]()
 
-    def getAllocatedContainers(): JList[Container]
+    for (container <- hostContainers) {
+      val candidateHost = container.getNodes.last
+      assert(YarnSparkHadoopUtil.ANY_HOST != candidateHost)
 
-    def getAvailableResources(): Resource
+      val rack = YarnSparkHadoopUtil.lookupRack(conf, candidateHost)
+      if (rack != null) {
+        var count = rackToCounts.getOrElse(rack, 0)
+        count += 1
+        rackToCounts.put(rack, count)
+      }
+    }
 
-    def getCompletedContainersStatuses(): JList[ContainerStatus]
+    val requestedContainers = new ArrayBuffer[ContainerRequest](rackToCounts.size)
+    for ((rack, count) <- rackToCounts) {
+      requestedContainers ++= createResourceRequests(
+        AllocationType.RACK,
+        rack,
+        count,
+        RM_REQUEST_PRIORITY)
+    }
 
+    requestedContainers
+  }
+
+  private def addResourceRequests(numExecutors: Int): Unit = {
+    val containerRequests: List[ContainerRequest] =
+      if (numExecutors <= 0) {
+        logDebug("numExecutors: " + numExecutors)
+        List()
+      } else if (preferredHostToCount.isEmpty) {
+        logDebug("host preferences is empty")
+        createResourceRequests(
+          AllocationType.ANY,
+          resource = null,
+          numExecutors,
+          RM_REQUEST_PRIORITY).toList
+      } else {
+        // Request for all hosts in preferred nodes and for numExecutors -
+        // candidates.size, request by default allocation policy.
+        val hostContainerRequests = new ArrayBuffer[ContainerRequest](preferredHostToCount.size)
+        for ((candidateHost, candidateCount) <- preferredHostToCount) {
+          val requiredCount = candidateCount - allocatedContainersOnHost(candidateHost)
+
+          if (requiredCount > 0) {
+            hostContainerRequests ++= createResourceRequests(
+              AllocationType.HOST,
+              candidateHost,
+              requiredCount,
+              RM_REQUEST_PRIORITY)
+          }
+        }
+        val rackContainerRequests: List[ContainerRequest] = createRackResourceRequests(
+          hostContainerRequests).toList
+
+        val anyContainerRequests = createResourceRequests(
+          AllocationType.ANY,
+          resource = null,
+          numExecutors,
+          RM_REQUEST_PRIORITY)
+
+        val containerRequestBuffer = new ArrayBuffer[ContainerRequest](
+          hostContainerRequests.size + rackContainerRequests.size + anyContainerRequests.size)
+
+        containerRequestBuffer ++= hostContainerRequests
+        containerRequestBuffer ++= rackContainerRequests
+        containerRequestBuffer ++= anyContainerRequests
+        containerRequestBuffer.toList
+      }
+
+    for (request <- containerRequests) {
+      amClient.addContainerRequest(request)
+    }
+
+    for (request <- containerRequests) {
+      val nodes = request.getNodes
+      val hostStr = if (nodes == null || nodes.isEmpty) {
+        "Any"
+      } else {
+        nodes.last
+      }
+      logInfo("Container request (host: %s, priority: %s, capability: %s".format(
+        hostStr,
+        request.getPriority().getPriority,
+        request.getCapability))
+    }
+  }
+
+  private def createResourceRequests(
+      requestType: AllocationType.AllocationType,
+      resource: String,
+      numExecutors: Int,
+      priority: Int): ArrayBuffer[ContainerRequest] = {
+    // If hostname is specified, then we need at least two requests - node local and rack local.
+    // There must be a third request, which is ANY. That will be specially handled.
+    requestType match {
+      case AllocationType.HOST => {
+        assert(YarnSparkHadoopUtil.ANY_HOST != resource)
+        val hostname = resource
+        val nodeLocal = constructContainerRequests(
+          Array(hostname),
+          racks = null,
+          numExecutors,
+          priority)
+
+        // Add `hostname` to the global (singleton) host->rack mapping in YarnAllocationHandler.
+        YarnSparkHadoopUtil.populateRackInfo(conf, hostname)
+        nodeLocal
+      }
+      case AllocationType.RACK => {
+        val rack = resource
+        constructContainerRequests(hosts = null, Array(rack), numExecutors, priority)
+      }
+      case AllocationType.ANY => constructContainerRequests(
+        hosts = null, racks = null, numExecutors, priority)
+      case _ => throw new IllegalArgumentException(
+        "Unexpected/unsupported request type: " + requestType)
+    }
+  }
+
+  private def constructContainerRequests(
+      hosts: Array[String],
+      racks: Array[String],
+      numExecutors: Int,
+      priority: Int
+    ): ArrayBuffer[ContainerRequest] = {
+    val memoryRequest = executorMemory + memoryOverhead
+    val resource = Resource.newInstance(memoryRequest, executorCores)
+
+    val prioritySetting = Records.newRecord(classOf[Priority])
+    prioritySetting.setPriority(priority)
+
+    val requests = new ArrayBuffer[ContainerRequest]()
+    for (i <- 0 until numExecutors) {
+      requests += new ContainerRequest(resource, hosts, racks, prioritySetting)
+    }
+    requests
   }
 
 }

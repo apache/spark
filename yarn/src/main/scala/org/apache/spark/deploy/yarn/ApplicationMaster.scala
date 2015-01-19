@@ -60,7 +60,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   @volatile private var exitCode = 0
   @volatile private var unregistered = false
   @volatile private var finished = false
-  @volatile private var finalStatus = FinalApplicationStatus.SUCCEEDED
+  @volatile private var finalStatus = getDefaultFinalStatus
   @volatile private var finalMsg: String = ""
   @volatile private var userClassThread: Thread = _
 
@@ -102,7 +102,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
             logInfo("Invoking sc stop from shutdown hook")
             sc.stop()
           }
-          val maxAppAttempts = client.getMaxRegAttempts(yarnConf)
+          val maxAppAttempts = client.getMaxRegAttempts(sparkConf, yarnConf)
           val isLastAttempt = client.getAttemptId().getAttemptId() >= maxAppAttempts
 
           if (!finished) {
@@ -150,6 +150,20 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
           "Uncaught exception: " + e.getMessage())
     }
     exitCode
+  }
+
+  /**
+   * Set the default final application status for client mode to UNDEFINED to handle
+   * if YARN HA restarts the application so that it properly retries. Set the final
+   * status to SUCCEEDED in cluster mode to handle if the user calls System.exit
+   * from the application code.
+   */
+  final def getDefaultFinalStatus() = {
+    if (isDriver) {
+      FinalApplicationStatus.SUCCEEDED
+    } else {
+      FinalApplicationStatus.UNDEFINED
+    }
   }
 
   /**
@@ -311,7 +325,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   private def cleanupStagingDir(fs: FileSystem) {
     var stagingDirPath: Path = null
     try {
-      val preserveFiles = sparkConf.get("spark.yarn.preserve.staging.files", "false").toBoolean
+      val preserveFiles = sparkConf.getBoolean("spark.yarn.preserve.staging.files", false)
       if (!preserveFiles) {
         stagingDirPath = new Path(System.getenv("SPARK_YARN_STAGING_DIR"))
         if (stagingDirPath == null) {
@@ -329,43 +343,43 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
 
   private def waitForSparkContextInitialized(): SparkContext = {
     logInfo("Waiting for spark context initialization")
-    try {
-      sparkContextRef.synchronized {
-        var count = 0
-        val waitTime = 10000L
-        val numTries = sparkConf.getInt("spark.yarn.applicationMaster.waitTries", 10)
-        while (sparkContextRef.get() == null && count < numTries && !finished) {
-          logInfo("Waiting for spark context initialization ... " + count)
-          count = count + 1
-          sparkContextRef.wait(waitTime)
-        }
-
-        val sparkContext = sparkContextRef.get()
-        if (sparkContext == null) {
-          logError(("SparkContext did not initialize after waiting for %d ms. Please check earlier"
-            + " log output for errors. Failing the application.").format(numTries * waitTime))
-        }
-        sparkContext
+    sparkContextRef.synchronized {
+      val waitTries = sparkConf.getOption("spark.yarn.applicationMaster.waitTries")
+        .map(_.toLong * 10000L)
+      if (waitTries.isDefined) {
+        logWarning(
+          "spark.yarn.applicationMaster.waitTries is deprecated, use spark.yarn.am.waitTime")
       }
+      val totalWaitTime = sparkConf.getLong("spark.yarn.am.waitTime", waitTries.getOrElse(100000L))
+      val deadline = System.currentTimeMillis() + totalWaitTime
+
+      while (sparkContextRef.get() == null && System.currentTimeMillis < deadline && !finished) {
+        logInfo("Waiting for spark context initialization ... ")
+        sparkContextRef.wait(10000L)
+      }
+
+      val sparkContext = sparkContextRef.get()
+      if (sparkContext == null) {
+        logError(("SparkContext did not initialize after waiting for %d ms. Please check earlier"
+          + " log output for errors. Failing the application.").format(totalWaitTime))
+      }
+      sparkContext
     }
   }
 
   private def waitForSparkDriver(): ActorRef = {
     logInfo("Waiting for Spark driver to be reachable.")
     var driverUp = false
-    var count = 0
     val hostport = args.userArgs(0)
     val (driverHost, driverPort) = Utils.parseHostPort(hostport)
 
-    // spark driver should already be up since it launched us, but we don't want to
+    // Spark driver should already be up since it launched us, but we don't want to
     // wait forever, so wait 100 seconds max to match the cluster mode setting.
-    // Leave this config unpublished for now. SPARK-3779 to investigating changing
-    // this config to be time based.
-    val numTries = sparkConf.getInt("spark.yarn.applicationMaster.waitTries", 1000)
+    val totalWaitTime = sparkConf.getLong("spark.yarn.am.waitTime", 100000L)
+    val deadline = System.currentTimeMillis + totalWaitTime
 
-    while (!driverUp && !finished && count < numTries) {
+    while (!driverUp && !finished && System.currentTimeMillis < deadline) {
       try {
-        count = count + 1
         val socket = new Socket(driverHost, driverPort)
         socket.close()
         logInfo("Driver now available: %s:%s".format(driverHost, driverPort))
@@ -374,7 +388,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         case e: Exception =>
           logError("Failed to connect to driver at %s:%s, retrying ...".
             format(driverHost, driverPort))
-          Thread.sleep(100)
+          Thread.sleep(100L)
       }
     }
 
@@ -511,7 +525,7 @@ object ApplicationMaster extends Logging {
     SignalLogger.register(log)
     val amArgs = new ApplicationMasterArguments(args)
     SparkHadoopUtil.get.runAsSparkUser { () =>
-      master = new ApplicationMaster(amArgs, new YarnRMClientImpl(amArgs))
+      master = new ApplicationMaster(amArgs, new YarnRMClient(amArgs))
       System.exit(master.run())
     }
   }

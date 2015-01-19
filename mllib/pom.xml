@@ -29,7 +29,7 @@
   <artifactId>spark-mllib_2.10</artifactId>
   <properties>
     <sbt.project.name>mllib</sbt.project.name>
-  </properties>  
+  </properties>
   <packaging>jar</packaging>
   <name>Spark Project ML Library</name>
   <url>http://spark.apache.org/</url>
@@ -49,10 +49,6 @@
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sql_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.eclipse.jetty</groupId>
-      <artifactId>jetty-server</artifactId>
     </dependency>
     <dependency>
       <groupId>org.jblas</groupId>
@@ -79,11 +75,6 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-math3</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.binary.version}</artifactId>
-      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
@@ -129,12 +120,6 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
-    <plugins>
-      <plugin>
-        <groupId>org.scalatest</groupId>
-        <artifactId>scalatest-maven-plugin</artifactId>
-      </plugin>
-    </plugins>
     <resources>
       <resource>
         <directory>../python</directory>

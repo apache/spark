@@ -23,7 +23,7 @@ import java.text.SimpleDateFormat
 import java.util.{UUID, Date}
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.HashMap
+import scala.collection.mutable.{HashMap, HashSet}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
@@ -40,7 +40,7 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
 
 /**
-  * @param masterUrls Each url should look like spark://host:port.
+  * @param masterAkkaUrls Each url should be a valid akka url.
   */
 private[spark] class Worker(
     host: String,
@@ -48,7 +48,7 @@ private[spark] class Worker(
     webUiPort: Int,
     cores: Int,
     memory: Int,
-    masterUrls: Array[String],
+    masterAkkaUrls: Array[String],
     actorSystemName: String,
     actorName: String,
     workDirPath: String = null,
@@ -109,6 +109,8 @@ private[spark] class Worker(
   val finishedExecutors = new HashMap[String, ExecutorRunner]
   val drivers = new HashMap[String, DriverRunner]
   val finishedDrivers = new HashMap[String, DriverRunner]
+  val appDirectories = new HashMap[String, Seq[String]]
+  val finishedApps = new HashSet[String]
 
   // The shuffle service is not actually started unless configured.
   val shuffleService = new StandaloneWorkerShuffleService(conf, securityMgr)
@@ -153,6 +155,7 @@ private[spark] class Worker(
     assert(!registered)
     logInfo("Starting Spark worker %s:%d with %d cores, %s RAM".format(
       host, port, cores, Utils.megabytesToString(memory)))
+    logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
@@ -163,18 +166,16 @@ private[spark] class Worker(
 
     metricsSystem.registerSource(workerSource)
     metricsSystem.start()
+    // Attach the worker metrics servlet handler to the web ui after the metrics system is started.
+    metricsSystem.getServletHandlers.foreach(webUi.attachHandler)
   }
 
   def changeMaster(url: String, uiUrl: String) {
+    // activeMasterUrl it's a valid Spark url since we receive it from master.
     activeMasterUrl = url
     activeMasterWebUiUrl = uiUrl
     master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
-    masterAddress = activeMasterUrl match {
-      case Master.sparkUrlRegex(_host, _port) =>
-        Address("akka.tcp", Master.systemName, _host, _port.toInt)
-      case x =>
-        throw new SparkException("Invalid spark URL: " + x)
-    }
+    masterAddress = Master.toAkkaAddress(activeMasterUrl)
     connected = true
     // Cancel any outstanding re-registration attempts because we found a new master
     registrationRetryTimer.foreach(_.cancel())
@@ -182,9 +183,9 @@ private[spark] class Worker(
   }
 
   private def tryRegisterAllMasters() {
-    for (masterUrl <- masterUrls) {
-      logInfo("Connecting to master " + masterUrl + "...")
-      val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
+    for (masterAkkaUrl <- masterAkkaUrls) {
+      logInfo("Connecting to master " + masterAkkaUrl + "...")
+      val actor = context.actorSelection(masterAkkaUrl)
       actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
     }
   }
@@ -292,7 +293,7 @@ private[spark] class Worker(
           val isAppStillRunning = executors.values.map(_.appId).contains(appIdFromDir)
           dir.isDirectory && !isAppStillRunning &&
           !Utils.doesDirectoryContainAnyNewFiles(dir, APP_DATA_RETENTION_SECS)
-        }.foreach { dir => 
+        }.foreach { dir =>
           logInfo(s"Removing directory: ${dir.getPath}")
           Utils.deleteRecursively(dir)
         }
@@ -337,8 +338,19 @@ private[spark] class Worker(
             throw new IOException("Failed to create directory " + executorDir)
           }
 
+          // Create local dirs for the executor. These are passed to the executor via the
+          // SPARK_LOCAL_DIRS environment variable, and deleted by the Worker when the
+          // application finishes.
+          val appLocalDirs = appDirectories.get(appId).getOrElse {
+            Utils.getOrCreateLocalRootDirs(conf).map { dir =>
+              Utils.createDirectory(dir).getAbsolutePath()
+            }.toSeq
+          }
+          appDirectories(appId) = appLocalDirs
+
           val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
-            self, workerId, host, sparkHome, executorDir, akkaUrl, conf, ExecutorState.LOADING)
+            self, workerId, host, sparkHome, executorDir, akkaUrl, conf, appLocalDirs,
+            ExecutorState.LOADING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -375,6 +387,7 @@ private[spark] class Worker(
               message.map(" message " + _).getOrElse("") +
               exitStatus.map(" exitStatus " + _).getOrElse(""))
         }
+        maybeCleanupApplication(appId)
       }
 
     case KillExecutor(masterUrl, appId, execId) =>
@@ -444,12 +457,28 @@ private[spark] class Worker(
     case ReregisterWithMaster =>
       reregisterWithMaster()
 
+    case ApplicationFinished(id) =>
+      finishedApps += id
+      maybeCleanupApplication(id)
   }
 
   private def masterDisconnected() {
     logError("Connection to master failed! Waiting for master to reconnect...")
     connected = false
     registerWithMaster()
+  }
+
+  private def maybeCleanupApplication(id: String): Unit = {
+    val shouldCleanup = finishedApps.contains(id) && !executors.values.exists(_.appId == id)
+    if (shouldCleanup) {
+      finishedApps -= id
+      appDirectories.remove(id).foreach { dirList =>
+        logInfo(s"Cleaning up local directories for application $id")
+        dirList.foreach { dir =>
+          Utils.deleteRecursively(new File(dir))
+        }
+      }
+    }
   }
 
   def generateWorkerId(): String = {
@@ -494,8 +523,9 @@ private[spark] object Worker extends Logging {
     val securityMgr = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port,
       conf = conf, securityManager = securityMgr)
+    val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl)
     actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
-      masterUrls, systemName, actorName,  workDir, conf, securityMgr), name = actorName)
+      masterAkkaUrls, systemName, actorName,  workDir, conf, securityMgr), name = actorName)
     (actorSystem, boundPort)
   }
 
