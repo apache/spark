@@ -243,7 +243,7 @@ case object NullType extends DataType {
 }
 
 
-object NativeType {
+protected[sql] object NativeType {
   val all = Seq(
     IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
 
@@ -251,12 +251,12 @@ object NativeType {
 }
 
 
-trait PrimitiveType extends DataType {
+protected[sql] trait PrimitiveType extends DataType {
   override def isPrimitive = true
 }
 
 
-object PrimitiveType {
+protected[sql] object PrimitiveType {
   private val nonDecimals = Seq(NullType, DateType, TimestampType, BinaryType) ++ NativeType.all
   private val nonDecimalNameToType = nonDecimals.map(t => t.typeName -> t).toMap
 
@@ -271,7 +271,7 @@ object PrimitiveType {
   }
 }
 
-abstract class NativeType extends DataType {
+protected[sql] abstract class NativeType extends DataType {
   private[sql] type JvmType
   @transient private[sql] val tag: TypeTag[JvmType]
   private[sql] val ordering: Ordering[JvmType]
@@ -402,7 +402,7 @@ case object DateType extends NativeType {
 }
 
 
-abstract class NumericType extends NativeType with PrimitiveType {
+protected[sql] abstract class NumericType extends NativeType with PrimitiveType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a
   // type parameter and and add a numeric annotation (i.e., [JvmType : Numeric]). This gets
@@ -412,13 +412,13 @@ abstract class NumericType extends NativeType with PrimitiveType {
 }
 
 
-object NumericType {
+protected[sql] object NumericType {
   def unapply(e: Expression): Boolean = e.dataType.isInstanceOf[NumericType]
 }
 
 
 /** Matcher for any expressions that evaluate to [[IntegralType]]s */
-object IntegralType {
+protected[sql] object IntegralType {
   def unapply(a: Expression): Boolean = a match {
     case e: Expression if e.dataType.isInstanceOf[IntegralType] => true
     case _ => false
@@ -426,7 +426,7 @@ object IntegralType {
 }
 
 
-sealed abstract class IntegralType extends NumericType {
+protected[sql] sealed abstract class IntegralType extends NumericType {
   private[sql] val integral: Integral[JvmType]
 }
 
@@ -520,7 +520,7 @@ case object ByteType extends IntegralType {
 
 
 /** Matcher for any expressions that evaluate to [[FractionalType]]s */
-object FractionalType {
+protected[sql] object FractionalType {
   def unapply(a: Expression): Boolean = a match {
     case e: Expression if e.dataType.isInstanceOf[FractionalType] => true
     case _ => false
@@ -528,7 +528,7 @@ object FractionalType {
 }
 
 
-sealed abstract class FractionalType extends NumericType {
+protected[sql] sealed abstract class FractionalType extends NumericType {
   private[sql] val fractional: Fractional[JvmType]
   private[sql] val asIntegral: Integral[JvmType]
 }
