@@ -151,29 +151,27 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
             depsBin <- getDependencies(computeFunc)
 
             prev_jrdd <- rdd@prev_jrdd
-            rddRef <- callJMethod(prev_jrdd, "rdd")
-            classTag <- callJMethod(prev_jrdd, "classTag")
 
             if (dataSerialization) {
               rddRef <- newJObject("edu.berkeley.cs.amplab.sparkr.RRDD",
-                                   rddRef,
+                                   callJMethod(prev_jrdd, "rdd"),
                                    serializedFuncArr,
                                    rdd@env$serialized,
                                    depsBin,
                                    packageNamesArr,
                                    as.character(.sparkREnv[["libname"]]),
                                    broadcastArr,
-                                   classTag)
+                                   callJMethod(prev_jrdd, "classTag"))
             } else {
               rddRef <- newJObject("edu.berkeley.cs.amplab.sparkr.StringRRDD",
-                                   rddRef,
+                                   callJMethod(prev_jrdd, "rdd"),
                                    serializedFuncArr,
                                    rdd@env$serialized,
                                    depsBin,
                                    packageNamesArr,
                                    as.character(.sparkREnv[["libname"]]),
                                    broadcastArr,
-                                   classTag)
+                                   callJMethod(prev_jrdd, "classTag"))
             }
             # Save the serialization flag after we create a RRDD
             rdd@env$serialized <- dataSerialization
@@ -1325,14 +1323,12 @@ setMethod("partitionBy",
             broadcastArr <- lapply(ls(.broadcastNames), function(name) {
                                    get(name, .broadcastNames) })
             jrdd <- getJRDD(rdd)
-            rddRef <- callJMethod(jrdd, "rdd")
-            classTag <- callJMethod(jrdd, "classTag")
 
             # We create a PairwiseRRDD that extends RDD[(Array[Byte],
             # Array[Byte])], where the key is the hashed split, the value is
             # the content (key-val pairs).
             pairwiseRRDD <- newJObject("edu.berkeley.cs.amplab.sparkr.PairwiseRRDD",
-                                       rddRef,
+                                       callJMethod(jrdd, "rdd"),
                                        as.integer(numPartitions),
                                        serializedHashFuncBytes,
                                        rdd@env$serialized,
@@ -1340,7 +1336,7 @@ setMethod("partitionBy",
                                        packageNamesArr,
                                        as.character(.sparkREnv$libname),
                                        broadcastArr,
-                                       classTag)
+                                       callJMethod(jrdd, "classTag"))
 
             # Create a corresponding partitioner.
             rPartitioner <- newJObject("org.apache.spark.HashPartitioner",
