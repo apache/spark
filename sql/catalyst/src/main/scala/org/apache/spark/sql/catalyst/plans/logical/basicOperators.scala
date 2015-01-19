@@ -238,16 +238,11 @@ case class Rollup(
 case class Limit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
   override def output = child.output
 
-  override lazy val statistics: Statistics =
-    if (output.forall(_.dataType.isInstanceOf[NativeType])) {
-      val limit = limitExpr.eval(null).asInstanceOf[Int]
-      val sizeInBytes = (limit: Long) * output.map { a =>
-        NativeType.defaultSizeOf(a.dataType.asInstanceOf[NativeType])
-      }.sum
-      Statistics(sizeInBytes = sizeInBytes)
-    } else {
-      Statistics(sizeInBytes = children.map(_.statistics).map(_.sizeInBytes).product)
-    }
+  override lazy val statistics: Statistics = {
+    val limit = limitExpr.eval(null).asInstanceOf[Int]
+    val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
+    Statistics(sizeInBytes = sizeInBytes)
+  }
 }
 
 case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {

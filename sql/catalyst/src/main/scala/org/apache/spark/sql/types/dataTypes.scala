@@ -215,6 +215,9 @@ abstract class DataType {
     case _ => false
   }
 
+  /** The default size of a value of this data type. */
+  def defaultSize: Int
+
   def isPrimitive: Boolean = false
 
   def typeName: String = this.getClass.getSimpleName.stripSuffix("$").dropRight(4).toLowerCase
@@ -235,7 +238,9 @@ abstract class DataType {
  * @group dataType
  */
 @DeveloperApi
-case object NullType extends DataType
+case object NullType extends DataType {
+  override def defaultSize: Int = 1
+}
 
 
 object NativeType {
@@ -243,21 +248,6 @@ object NativeType {
     IntegerType, BooleanType, LongType, DoubleType, FloatType, ShortType, ByteType, StringType)
 
   def unapply(dt: DataType): Boolean = all.contains(dt)
-
-  def defaultSizeOf(dataType: NativeType) = dataType match {
-    case IntegerType => 4
-    case BooleanType => 1
-    case LongType => 8
-    case DoubleType => 8
-    case FloatType => 4
-    case ShortType => 2
-    case ByteType => 1
-    case StringType => 4096
-    case decimal: DecimalType => 4096
-    case TimestampType => 8
-    case DateType => 8
-    case BinaryType => 8
-  }
 }
 
 
@@ -305,6 +295,11 @@ case object StringType extends NativeType with PrimitiveType {
   private[sql] type JvmType = String
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+
+  /**
+   * The default size of a value of the StringType is 4096 bytes.
+   */
+  override def defaultSize: Int = 4096
 }
 
 
@@ -329,6 +324,11 @@ case object BinaryType extends NativeType with PrimitiveType {
       x.length - y.length
     }
   }
+
+  /**
+   * The default size of a value of the BinaryType is 4096 bytes.
+   */
+  override def defaultSize: Int = 4096
 }
 
 
@@ -344,6 +344,11 @@ case object BooleanType extends NativeType with PrimitiveType {
   private[sql] type JvmType = Boolean
   @transient private[sql] lazy val tag = ScalaReflectionLock.synchronized { typeTag[JvmType] }
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+
+  /**
+   * The default size of a value of the BooleanType is 1 byte.
+   */
+  override def defaultSize: Int = 1
 }
 
 
@@ -364,6 +369,11 @@ case object TimestampType extends NativeType {
   private[sql] val ordering = new Ordering[JvmType] {
     def compare(x: Timestamp, y: Timestamp) = x.compareTo(y)
   }
+
+  /**
+   * The default size of a value of the TimestampType is 8 bytes.
+   */
+  override def defaultSize: Int = 8
 }
 
 
@@ -384,6 +394,11 @@ case object DateType extends NativeType {
   private[sql] val ordering = new Ordering[JvmType] {
     def compare(x: Date, y: Date) = x.compareTo(y)
   }
+
+  /**
+   * The default size of a value of the DateType is 8 bytes.
+   */
+  override def defaultSize: Int = 8
 }
 
 
@@ -430,6 +445,11 @@ case object LongType extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Long]]
   private[sql] val integral = implicitly[Integral[Long]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+
+  /**
+   * The default size of a value of the LongType is 8 bytes.
+   */
+  override def defaultSize: Int = 8
 }
 
 
@@ -447,6 +467,11 @@ case object IntegerType extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Int]]
   private[sql] val integral = implicitly[Integral[Int]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+
+  /**
+   * The default size of a value of the IntegerType is 4 bytes.
+   */
+  override def defaultSize: Int = 4
 }
 
 
@@ -464,6 +489,11 @@ case object ShortType extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Short]]
   private[sql] val integral = implicitly[Integral[Short]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+
+  /**
+   * The default size of a value of the ShortType is 2 bytes.
+   */
+  override def defaultSize: Int = 2
 }
 
 
@@ -481,6 +511,11 @@ case object ByteType extends IntegralType {
   private[sql] val numeric = implicitly[Numeric[Byte]]
   private[sql] val integral = implicitly[Integral[Byte]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
+
+  /**
+   * The default size of a value of the ByteType is 1 byte.
+   */
+  override def defaultSize: Int = 1
 }
 
 
@@ -535,6 +570,11 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
     case Some(PrecisionInfo(precision, scale)) => s"DecimalType($precision,$scale)"
     case None => "DecimalType()"
   }
+
+  /**
+   * The default size of a value of the DecimalType is 4096 bytes.
+   */
+  override def defaultSize: Int = 4096
 }
 
 
@@ -585,6 +625,11 @@ case object DoubleType extends FractionalType {
   private[sql] val fractional = implicitly[Fractional[Double]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
   private[sql] val asIntegral = DoubleAsIfIntegral
+
+  /**
+   * The default size of a value of the DoubleType is 8 bytes.
+   */
+  override def defaultSize: Int = 8
 }
 
 
@@ -603,6 +648,11 @@ case object FloatType extends FractionalType {
   private[sql] val fractional = implicitly[Fractional[Float]]
   private[sql] val ordering = implicitly[Ordering[JvmType]]
   private[sql] val asIntegral = FloatAsIfIntegral
+
+  /**
+   * The default size of a value of the FloatType is 4 bytes.
+   */
+  override def defaultSize: Int = 4
 }
 
 
@@ -641,6 +691,12 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
     ("type" -> typeName) ~
       ("elementType" -> elementType.jsonValue) ~
       ("containsNull" -> containsNull)
+
+  /**
+   * The default size of a value of the ArrayType is 100 * the default size of the element type.
+   * (We assume that there are 100 elements).
+   */
+  override def defaultSize: Int = 100 * elementType.defaultSize
 }
 
 
@@ -810,6 +866,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   override def length: Int = fields.length
 
   override def iterator: Iterator[StructField] = fields.iterator
+
+  /**
+   * The default size of a value of the StructType is the total default sizes of all field types.
+   */
+  override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
 }
 
 
@@ -853,6 +914,13 @@ case class MapType(
       ("keyType" -> keyType.jsonValue) ~
       ("valueType" -> valueType.jsonValue) ~
       ("valueContainsNull" -> valueContainsNull)
+
+  /**
+   * The default size of a value of the MapType is
+   * 100 * (the default size of the key type + the default size of the value type).
+   * (We assume that there are 100 elements).
+   */
+  override def defaultSize: Int = 100 * (keyType.defaultSize + valueType.defaultSize)
 }
 
 
@@ -901,4 +969,9 @@ abstract class UserDefinedType[UserType] extends DataType with Serializable {
    * Class object for the UserType
    */
   def userClass: java.lang.Class[UserType]
+
+  /**
+   * The default size of a value of the UserDefinedType is 4096 bytes.
+   */
+  override def defaultSize: Int = 4096
 }
