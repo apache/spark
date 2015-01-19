@@ -735,77 +735,77 @@ object Matrices {
       new DenseMatrix(numRows, numCols, matrices.flatMap(_.toArray))
     } else {
       var startCol = 0
-      val entries: Array[(Int, Int, Double)] = matrices.flatMap {
-        case spMat: SparseMatrix =>
-          val colPtrs = spMat.colPtrs
-          val rowIndices = spMat.rowIndices
-          val values = spMat.values
-          val data = new Array[(Int, Int, Double)](values.length)
-          val nCols = spMat.numCols
-          if (!spMat.isTransposed) {
-            var j = 0
-            while (j < nCols) {
-              var idx = colPtrs(j)
-              while (idx < colPtrs(j + 1)) {
-                val i = rowIndices(idx)
-                val v = values(idx)
-                data(idx) = (i, j + startCol, v)
-                idx += 1
-              }
-              j += 1
-            }
-          } else {
-            var i = 0
-            val nRows = spMat.numRows
-            while (i < nRows) {
-              var idx = colPtrs(i)
-              while (idx < colPtrs(i + 1)) {
-                val j = rowIndices(idx)
-                val v = values(idx)
-                data(idx) = (i, j + startCol, v)
-                idx += 1
-              }
-              i += 1
-            }
-          }
-          startCol += nCols
-          data
-        case dnMat: DenseMatrix =>
-          val data = new ArrayBuffer[(Int, Int, Double)]()
-          val nCols = dnMat.numCols
-          val nRows = dnMat.numRows
-          val values = dnMat.values
-          if (!dnMat.isTransposed) {
-            var j = 0
-            while (j < nCols) {
-              var i = 0
-              val indStart = j * nRows
-              while (i < nRows) {
-                val v = values(indStart + i)
-                if (v != 0.0) {
-                  data.append((i, j + startCol, v))
-                }
-                i += 1
-              }
-              j += 1
-            }
-          } else {
-            var i = 0
-            while (i < nRows) {
+      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat =>
+        val nRows = mat.numRows
+        val nCols = mat.numCols
+        mat match {
+          case spMat: SparseMatrix =>
+            val colPtrs = spMat.colPtrs
+            val rowIndices = spMat.rowIndices
+            val values = spMat.values
+            val data = new Array[(Int, Int, Double)](values.length)
+            if (!spMat.isTransposed) {
               var j = 0
-              val indStart = i * nCols
               while (j < nCols) {
-                val v = values(indStart + j)
-                if (v != 0.0) {
-                  data.append((i, j + startCol, v))
+                var idx = colPtrs(j)
+                while (idx < colPtrs(j + 1)) {
+                  val i = rowIndices(idx)
+                  val v = values(idx)
+                  data(idx) = (i, j + startCol, v)
+                  idx += 1
                 }
                 j += 1
               }
-              i += 1
+            } else {
+              var i = 0
+              while (i < nRows) {
+                var idx = colPtrs(i)
+                while (idx < colPtrs(i + 1)) {
+                  val j = rowIndices(idx)
+                  val v = values(idx)
+                  data(idx) = (i, j + startCol, v)
+                  idx += 1
+                }
+                i += 1
+              }
             }
-          }
-          startCol += nCols
-          data
+            startCol += nCols
+            data
+          case dnMat: DenseMatrix =>
+            val data = new ArrayBuffer[(Int, Int, Double)]()
+            val values = dnMat.values
+            if (!dnMat.isTransposed) {
+              var j = 0
+              while (j < nCols) {
+                var i = 0
+                val indStart = j * nRows
+                while (i < nRows) {
+                  val v = values(indStart + i)
+                  if (v != 0.0) {
+                    data.append((i, j + startCol, v))
+                  }
+                  i += 1
+                }
+                j += 1
+              }
+            } else {
+              var i = 0
+              while (i < nRows) {
+                var j = 0
+                val indStart = i * nCols
+                while (j < nCols) {
+                  val v = values(indStart + j)
+                  if (v != 0.0) {
+                    data.append((i, j + startCol, v))
+                  }
+                  j += 1
+                }
+                i += 1
+              }
+            }
+            startCol += nCols
+            data
+        }
       }
       SparseMatrix.fromCOO(numRows, numCols, entries)
     }
@@ -860,76 +860,77 @@ object Matrices {
       new DenseMatrix(numRows, numCols, allValues)
     } else {
       var startRow = 0
-      val entries: Array[(Int, Int, Double)] = matrices.flatMap {
-        case spMat: SparseMatrix =>
-          val colPtrs = spMat.colPtrs
-          val rowIndices = spMat.rowIndices
-          val values = spMat.values
-          val data = new Array[(Int, Int, Double)](values.length)
-          val nRows = spMat.numRows
-          if (!spMat.isTransposed) {
-            var j = 0
-            while (j < numCols) {
-              var idx = colPtrs(j)
-              while (idx < colPtrs(j + 1)) {
-                val i = rowIndices(idx)
-                val v = values(idx)
-                data(idx) = (i + startRow, j, v)
-                idx += 1
-              }
-              j += 1
-            }
-          } else {
-            var i = 0
-            while (i < nRows) {
-              var idx = colPtrs(i)
-              while (idx < colPtrs(i + 1)) {
-                val j = rowIndices(idx)
-                val v = values(idx)
-                data(idx) = (i + startRow, j, v)
-                idx += 1
-              }
-              i += 1
-            }
-          }
-          startRow += nRows
-          data
-        case dnMat: DenseMatrix =>
-          val data = new ArrayBuffer[(Int, Int, Double)]()
-          val nCols = dnMat.numCols
-          val nRows = dnMat.numRows
-          val values = dnMat.values
-          if (!dnMat.isTransposed) {
-            var j = 0
-            while (j < nCols) {
-              var i = 0
-              val indStart = j * nRows
-              while (i < nRows) {
-                val v = values(indStart + i)
-                if (v != 0.0) {
-                  data.append((i + startRow, j, v))
-                }
-                i += 1
-              }
-              j += 1
-            }
-          } else {
-            var i = 0
-            while (i < nRows) {
+      val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat =>
+        val nRows = mat.numRows
+        val nCols = mat.numCols
+        mat match {
+          case spMat: SparseMatrix =>
+            val colPtrs = spMat.colPtrs
+            val rowIndices = spMat.rowIndices
+            val values = spMat.values
+            val data = new Array[(Int, Int, Double)](values.length)
+            if (!spMat.isTransposed) {
               var j = 0
-              val indStart = i * nCols
               while (j < nCols) {
-                val v = values(indStart + j)
-                if (v != 0.0) {
-                  data.append((i + startRow, j, v))
+                var idx = colPtrs(j)
+                while (idx < colPtrs(j + 1)) {
+                  val i = rowIndices(idx)
+                  val v = values(idx)
+                  data(idx) = (i + startRow, j, v)
+                  idx += 1
                 }
                 j += 1
               }
-              i += 1
+            } else {
+              var i = 0
+              while (i < nRows) {
+                var idx = colPtrs(i)
+                while (idx < colPtrs(i + 1)) {
+                  val j = rowIndices(idx)
+                  val v = values(idx)
+                  data(idx) = (i + startRow, j, v)
+                  idx += 1
+                }
+                i += 1
+              }
             }
-          }
-          startRow += nRows
-          data
+            startRow += nRows
+            data
+          case dnMat: DenseMatrix =>
+            val data = new ArrayBuffer[(Int, Int, Double)]()
+            val values = dnMat.values
+            if (!dnMat.isTransposed) {
+              var j = 0
+              while (j < nCols) {
+                var i = 0
+                val indStart = j * nRows
+                while (i < nRows) {
+                  val v = values(indStart + i)
+                  if (v != 0.0) {
+                    data.append((i + startRow, j, v))
+                  }
+                  i += 1
+                }
+                j += 1
+              }
+            } else {
+              var i = 0
+              while (i < nRows) {
+                var j = 0
+                val indStart = i * nCols
+                while (j < nCols) {
+                  val v = values(indStart + j)
+                  if (v != 0.0) {
+                    data.append((i + startRow, j, v))
+                  }
+                  j += 1
+                }
+                i += 1
+              }
+            }
+            startRow += nRows
+            data
+        }
       }
       SparseMatrix.fromCOO(numRows, numCols, entries)
     }
