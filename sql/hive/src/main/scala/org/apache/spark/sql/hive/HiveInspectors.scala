@@ -346,16 +346,20 @@ private[hive] trait HiveInspectors {
     case soi: StandardStructObjectInspector =>
       val wrappers = soi.getAllStructFieldRefs.map(ref => wrapperFor(ref.getFieldObjectInspector))
       (o: Any) => {
-        val struct = soi.create()
-        (soi.getAllStructFieldRefs, wrappers, o.asInstanceOf[Row]).zipped.foreach {
-          (field, wrapper, data) => soi.setStructFieldData(struct, field, wrapper(data))
+        if (o != null) {
+          val struct = soi.create()
+          (soi.getAllStructFieldRefs, wrappers, o.asInstanceOf[Row]).zipped.foreach {
+            (field, wrapper, data) => soi.setStructFieldData(struct, field, wrapper(data))
+          }
+          struct
+        } else {
+          null
         }
-        struct
       }
 
     case loi: ListObjectInspector =>
       val wrapper = wrapperFor(loi.getListElementObjectInspector)
-      (o: Any) => seqAsJavaList(o.asInstanceOf[Seq[_]].map(wrapper))
+      (o: Any) => if (o != null) seqAsJavaList(o.asInstanceOf[Seq[_]].map(wrapper)) else null
 
     case moi: MapObjectInspector =>
       // The Predef.Map is scala.collection.immutable.Map.
@@ -364,9 +368,15 @@ private[hive] trait HiveInspectors {
 
       val keyWrapper = wrapperFor(moi.getMapKeyObjectInspector)
       val valueWrapper = wrapperFor(moi.getMapValueObjectInspector)
-      (o: Any) => mapAsJavaMap(o.asInstanceOf[Map[_, _]].map { case (key, value) =>
-        keyWrapper(key) -> valueWrapper(value)
-      })
+      (o: Any) => {
+        if (o != null) {
+          mapAsJavaMap(o.asInstanceOf[Map[_, _]].map { case (key, value) =>
+            keyWrapper(key) -> valueWrapper(value)
+          })
+        } else {
+          null
+        }
+      }
 
     case _ =>
       identity[Any]
