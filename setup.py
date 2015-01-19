@@ -21,6 +21,7 @@ setup(
         'pandas',
         'pygments', 'pyhive',
         'python-dateutil', 'requests', 'setproctitle',
+        'snakebite',
         'sphinx', 'sphinx-rtd-theme', 'Sphinx-PyPI-upload',
         'sqlalchemy', 'thrift', 'tornado'
     ],

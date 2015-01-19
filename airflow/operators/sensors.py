@@ -11,6 +11,8 @@ from airflow.models import State
 from airflow.models import TaskInstance
 from airflow.utils import apply_defaults
 
+from snakebite.client import HAClient, Namenode
+
 
 class BaseSensorOperator(BaseOperator):
 
@@ -121,7 +123,7 @@ class ExternalTaskSensor(BaseSensorOperator):
 
 class HivePartitionSensor(BaseSensorOperator):
     """
-    Waits for the apparation of a partition in Hive
+    Waits for the apparition of a partition in Hive
     """
     template_fields = ('table', 'partition',)
     __mapper_args__ = {
@@ -150,3 +152,43 @@ class HivePartitionSensor(BaseSensorOperator):
             'partition {self.partition}'.format(**locals()))
         return self.hook.check_for_partition(
             self.schema, self.table, self.partition)
+
+
+class HdfsSensor(BaseSensorOperator):
+    """
+    Waits for a file or folder to land in HDFS
+    """
+    template_fields = ('filepath',)
+    __mapper_args__ = {
+        'polymorphic_identity': 'HdfsSensor'
+    }
+
+    @apply_defaults
+    def __init__(
+            self,
+            filepath,
+            hdfs_conn_id='hdfs_default',
+            *args, **kwargs):
+        super(HdfsSensor, self).__init__(*args, **kwargs)
+        self.filepath = filepath
+        session = settings.Session()
+        db = session.query(DB).filter(DB.conn_id==hdfs_conn_id).first()
+        if not db:
+            raise Exception("conn_id doesn't exist in the repository")
+        self.host = db.host
+        self.port = db.port
+        NAMENODES = [Namenode(self.host, self.port)]
+        self.sb = HAClient(NAMENODES)
+        session.commit()
+        session.close()
+
+    def poke(self):
+        logging.getLogger("snakebite").setLevel(logging.WARNING)
+        logging.info(
+            'Poking for file {self.filepath} '.format(**locals()))
+        try:
+            files = [f for f in self.sb.ls([self.filepath])]
+        except:
+            return False
+        print([i for i in f])
+        return True
