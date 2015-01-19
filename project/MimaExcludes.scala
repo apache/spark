@@ -90,6 +90,10 @@ object MimaExcludes {
             // SPARK-5297 Java FileStream do not work with custom key/values
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.api.java.JavaStreamingContext.fileStream")
+          ) ++ Seq(
+            // SPARK-5315 Spark Streaming Java API returns Scala DStream
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.api.java.JavaDStreamLike.reduceByWindow")
           )
 
         case v if v.startsWith("1.2") =>
