@@ -149,7 +149,7 @@
     <scala.binary.version>2.10</scala.binary.version>
     <jline.version>${scala.version}</jline.version>
     <jline.groupid>org.scala-lang</jline.groupid>
-    <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
+    <codehaus.jackson.version>1.8.8</codehaus.jackson.version>
     <snappy.version>1.1.1.6</snappy.version>
 
     <!--
@@ -1478,6 +1478,7 @@
         <protobuf.version>2.5.0</protobuf.version>
         <hbase.version>0.98.7-hadoop2</hbase.version>
         <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
       </properties>
     </profile>
 
@@ -1490,6 +1491,7 @@
         <hbase.version>0.98.7-hadoop2</hbase.version>
         <commons.math3.version>3.1.1</commons.math3.version>
         <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
       </properties>
     </profile>
 
@@ -1502,6 +1504,7 @@
         <hbase.version>0.98.7-hadoop2</hbase.version>
         <commons.math3.version>3.1.1</commons.math3.version>
         <avro.mapred.classifier>hadoop2</avro.mapred.classifier>
+        <codehaus.jackson.version>1.9.13</codehaus.jackson.version>
       </properties>
     </profile>
 
