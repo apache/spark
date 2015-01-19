@@ -22,6 +22,8 @@ import java.io.{DataInputStream, DataOutputStream, EOFException}
 import java.util.Properties
 import java.rmi.server.UID
 
+import scala.reflect.runtime.universe.{runtimeMirror, newTermName}
+
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable
 import org.apache.hadoop.hive.serde.serdeConstants
@@ -35,7 +37,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.Object
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
+import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveShim}
 import org.apache.spark.util.Utils
 
 
@@ -238,8 +240,12 @@ case class ScriptTransformation(
             outputStream.write(data)
           } else {
             val writable = inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
-            if (writable.isInstanceOf[AvroGenericRecordWritable]) {
-              writable.asInstanceOf[AvroGenericRecordWritable].setRecordReaderID(new UID())
+            if (writable.isInstanceOf[AvroGenericRecordWritable] && HiveShim.version == "0.13.1") {
+              // setRecordReaderID only in 0.13.1, so use reflection API to call it
+              val ref = runtimeMirror(getClass.getClassLoader).reflect(
+                writable.asInstanceOf[AvroGenericRecordWritable])
+              val method = ref.symbol.typeSignature.member(newTermName("setRecordReaderID"))
+              ref.reflectMethod(method.asMethod)(new UID())
             }
             writable.write(dataOutputStream)
           }
