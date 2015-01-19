@@ -242,4 +242,17 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     assert(expectedSchema == table("jsonTable").schema)
   }
+
+  test("SPARK-5286 Fail to drop an invalid table when using the data source API") {
+    sql(
+      s"""
+        |CREATE TABLE jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path 'it is not a path at all!'
+        |)
+      """.stripMargin)
+
+    sql("DROP TABLE jsonTable").collect.foreach(println)
+  }
 }
