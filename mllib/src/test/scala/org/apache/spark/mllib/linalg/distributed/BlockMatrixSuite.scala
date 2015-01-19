@@ -24,14 +24,24 @@ import breeze.linalg.{DenseMatrix => BDM}
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
-
+// Input values for the tests
+private object BlockMatrixSuite {
   val m = 5
   val n = 4
   val rowPerPart = 2
   val colPerPart = 2
   val numRowBlocks = 3
   val numColBlocks = 2
+}
+
+class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
+
+  val m = BlockMatrixSuite.m
+  val n = BlockMatrixSuite.n
+  val rowPerPart = BlockMatrixSuite.rowPerPart
+  val colPerPart = BlockMatrixSuite.colPerPart
+  val numRowBlocks = BlockMatrixSuite.numRowBlocks
+  val numColBlocks = BlockMatrixSuite.numColBlocks
   var gridBasedMat: BlockMatrix = _
   type SubMatrix = ((Int, Int), Matrix)
 
@@ -63,7 +73,7 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
       (0.0, 0.0, 1.0, 5.0))
 
     val dense = Matrices.fromBreeze(expected).asInstanceOf[DenseMatrix]
-    assert(gridBasedMat.toBreeze() === expected)
     assert(gridBasedMat.toLocalMatrix() === dense)
+    assert(gridBasedMat.toBreeze() === expected)
   }
 }
