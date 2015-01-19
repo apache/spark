@@ -24,9 +24,8 @@ import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.{io => hadoopIo}
 
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types
+import org.apache.spark.sql.types._
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -43,7 +42,7 @@ import scala.collection.JavaConversions._
  *     long / scala.Long
  *     short / scala.Short
  *     byte / scala.Byte
- *     org.apache.spark.sql.catalyst.types.decimal.Decimal
+ *     org.apache.spark.sql.types.Decimal
  *     Array[Byte]
  *     java.sql.Date
  *     java.sql.Timestamp
@@ -342,7 +341,7 @@ private[hive] trait HiveInspectors {
       (o: Any) => new HiveVarchar(o.asInstanceOf[String], o.asInstanceOf[String].size)
 
     case _: JavaHiveDecimalObjectInspector =>
-      (o: Any) => HiveShim.createDecimal(o.asInstanceOf[Decimal].toBigDecimal.underlying())
+      (o: Any) => HiveShim.createDecimal(o.asInstanceOf[Decimal].toJavaBigDecimal)
 
     case soi: StandardStructObjectInspector =>
       val wrappers = soi.getAllStructFieldRefs.map(ref => wrapperFor(ref.getFieldObjectInspector))
@@ -413,7 +412,7 @@ private[hive] trait HiveInspectors {
       case _: HiveDecimalObjectInspector if x.preferWritable() =>
         HiveShim.getDecimalWritable(a.asInstanceOf[Decimal])
       case _: HiveDecimalObjectInspector =>
-        HiveShim.createDecimal(a.asInstanceOf[Decimal].toBigDecimal.underlying())
+        HiveShim.createDecimal(a.asInstanceOf[Decimal].toJavaBigDecimal)
       case _: BinaryObjectInspector if x.preferWritable() => HiveShim.getBinaryWritable(a)
       case _: BinaryObjectInspector => a.asInstanceOf[Array[Byte]]
       case _: DateObjectInspector if x.preferWritable() => HiveShim.getDateWritable(a)
@@ -504,7 +503,8 @@ private[hive] trait HiveInspectors {
     case DecimalType() => PrimitiveObjectInspectorFactory.javaHiveDecimalObjectInspector
     case StructType(fields) =>
       ObjectInspectorFactory.getStandardStructObjectInspector(
-        fields.map(f => f.name), fields.map(f => toInspector(f.dataType)))
+        java.util.Arrays.asList(fields.map(f => f.name) :_*),
+        java.util.Arrays.asList(fields.map(f => toInspector(f.dataType)) :_*))
   }
 
   /**
@@ -618,7 +618,9 @@ private[hive] trait HiveInspectors {
       case ArrayType(elemType, _) =>
         getListTypeInfo(elemType.toTypeInfo)
       case StructType(fields) =>
-        getStructTypeInfo(fields.map(_.name), fields.map(_.dataType.toTypeInfo))
+        getStructTypeInfo(
+          java.util.Arrays.asList(fields.map(_.name) :_*),
+          java.util.Arrays.asList(fields.map(_.dataType.toTypeInfo) :_*))
       case MapType(keyType, valueType, _) =>
         getMapTypeInfo(keyType.toTypeInfo, valueType.toTypeInfo)
       case BinaryType => binaryTypeInfo

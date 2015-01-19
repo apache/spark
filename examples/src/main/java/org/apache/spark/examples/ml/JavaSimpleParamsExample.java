@@ -28,9 +28,9 @@ import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.api.java.JavaSQLContext;
-import org.apache.spark.sql.api.java.JavaSchemaRDD;
-import org.apache.spark.sql.api.java.Row;
+import org.apache.spark.sql.SchemaRDD;
+import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.Row;
 
 /**
  * A simple example demonstrating ways to specify parameters for Estimators and Transformers.
@@ -44,7 +44,7 @@ public class JavaSimpleParamsExample {
   public static void main(String[] args) {
     SparkConf conf = new SparkConf().setAppName("JavaSimpleParamsExample");
     JavaSparkContext jsc = new JavaSparkContext(conf);
-    JavaSQLContext jsql = new JavaSQLContext(jsc);
+    SQLContext jsql = new SQLContext(jsc);
 
     // Prepare training data.
     // We use LabeledPoint, which is a JavaBean.  Spark SQL can convert RDDs of JavaBeans
@@ -54,7 +54,7 @@ public class JavaSimpleParamsExample {
       new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
       new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
       new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5)));
-    JavaSchemaRDD training = jsql.applySchema(jsc.parallelize(localTraining), LabeledPoint.class);
+    SchemaRDD training = jsql.applySchema(jsc.parallelize(localTraining), LabeledPoint.class);
 
     // Create a LogisticRegression instance.  This instance is an Estimator.
     LogisticRegression lr = new LogisticRegression();
@@ -94,14 +94,14 @@ public class JavaSimpleParamsExample {
         new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
         new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
         new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5)));
-    JavaSchemaRDD test = jsql.applySchema(jsc.parallelize(localTest), LabeledPoint.class);
+    SchemaRDD test = jsql.applySchema(jsc.parallelize(localTest), LabeledPoint.class);
 
     // Make predictions on test documents using the Transformer.transform() method.
     // LogisticRegression.transform will only use the 'features' column.
     // Note that model2.transform() outputs a 'probability' column instead of the usual 'score'
     // column since we renamed the lr.scoreCol parameter previously.
     model2.transform(test).registerAsTable("results");
-    JavaSchemaRDD results =
+    SchemaRDD results =
         jsql.sql("SELECT features, label, probability, prediction FROM results");
     for (Row r: results.collect()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") -> prob=" + r.get(2)

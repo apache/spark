@@ -32,11 +32,11 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.{SQLConf, SchemaRDD, Row => SparkRow}
 import org.apache.spark.sql.execution.SetCommand
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
-import org.apache.spark.sql.{SQLConf, SchemaRDD, Row => SparkRow}
+import org.apache.spark.sql.types._
 
 /**
  * A compatibility layer for interacting with Hive version 0.12.0.
@@ -122,7 +122,7 @@ private[hive] class SparkExecuteStatementOperation(
       case FloatType =>
         to.addColumnValue(ColumnValue.floatValue(from.getFloat(ordinal)))
       case DecimalType() =>
-        val hiveDecimal = from.get(ordinal).asInstanceOf[BigDecimal].bigDecimal
+        val hiveDecimal = from.getDecimal(ordinal)
         to.addColumnValue(ColumnValue.stringValue(new HiveDecimal(hiveDecimal)))
       case LongType =>
         to.addColumnValue(ColumnValue.longValue(from.getLong(ordinal)))

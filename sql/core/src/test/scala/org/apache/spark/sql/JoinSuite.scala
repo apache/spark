@@ -387,7 +387,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   test("broadcasted left semi join operator selection") {
     clearCache()
     sql("CACHE TABLE testData")
-    val tmp = autoBroadcastJoinThreshold
+    val tmp = conf.autoBroadcastJoinThreshold
 
     sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD}=1000000000")
     Seq(
