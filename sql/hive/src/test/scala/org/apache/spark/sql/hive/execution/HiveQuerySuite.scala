@@ -56,6 +56,21 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
   }
 
+  test("SPARK-4908: concurent hive native commands") {
+    (1 to 100).par.map { _ =>
+      sql("USE default")
+      sql("SHOW TABLES")
+    }
+  }
+  
+  createQueryTest("! operator",
+    """
+      |SELECT a FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 2 AS a FROM src LIMIT 1) table
+      |WHERE !(a>1)
+    """.stripMargin)
+
   createQueryTest("constant object inspector for generic udf",
     """SELECT named_struct(
       lower("AA"), "10",
@@ -411,6 +426,15 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("select null from table",
     "SELECT null FROM src LIMIT 1")
 
+  test("predicates contains an empty AttributeSet() references") {
+    sql(
+      """
+        |SELECT a FROM (
+        |  SELECT 1 AS a FROM src LIMIT 1 ) table
+        |WHERE abs(20141202) is not null
+      """.stripMargin).collect()
+  }
+
   test("implement identity function using case statement") {
     val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")
       .map { case Row(i: Int) => i }
@@ -599,7 +623,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     assertResult(
       Array(
-        Array("# Registered as a temporary table", null, null),
         Array("a", "IntegerType", null),
         Array("b", "StringType", null))
     ) {
@@ -824,7 +847,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         case Row(key: String, value: String) => key -> value
         case Row(KV(key, value)) => key -> value
       }.toSet
-    clear()
+    conf.clear()
 
     // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
@@ -856,7 +879,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       collectResults(sql(s"SET $nonexistentKey"))
     }
 
-    clear()
+    conf.clear()
   }
 
   createQueryTest("select from thrift based table",

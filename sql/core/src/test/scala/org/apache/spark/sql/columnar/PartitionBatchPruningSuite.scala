@@ -23,8 +23,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.test.TestSQLContext._
 
 class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter {
-  val originalColumnBatchSize = columnBatchSize
-  val originalInMemoryPartitionPruning = inMemoryPartitionPruning
+  val originalColumnBatchSize = conf.columnBatchSize
+  val originalInMemoryPartitionPruning = conf.inMemoryPartitionPruning
 
   override protected def beforeAll(): Unit = {
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
@@ -105,7 +105,9 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
 
     test(query) {
       val schemaRdd = sql(query)
-      assertResult(expectedQueryResult.toArray, "Wrong query result") {
+      val queryExecution = schemaRdd.queryExecution
+
+      assertResult(expectedQueryResult.toArray, s"Wrong query result: $queryExecution") {
         schemaRdd.collect().map(_.head).toArray
       }
 
@@ -113,8 +115,10 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
         case in: InMemoryColumnarTableScan => (in.readPartitions.value, in.readBatches.value)
       }.head
 
-      assert(readBatches === expectedReadBatches, "Wrong number of read batches")
-      assert(readPartitions === expectedReadPartitions, "Wrong number of read partitions")
+      assert(readBatches === expectedReadBatches, s"Wrong number of read batches: $queryExecution")
+      assert(
+        readPartitions === expectedReadPartitions,
+        s"Wrong number of read partitions: $queryExecution")
     }
   }
 }

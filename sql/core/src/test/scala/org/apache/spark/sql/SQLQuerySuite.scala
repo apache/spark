@@ -23,6 +23,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.types._
 
 /* Implicits */
 import org.apache.spark.sql.TestData._
@@ -40,6 +41,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
 
   override protected def afterAll() {
     TimeZone.setDefault(origZone)
+  }
+
+  test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
+    checkAnswer(
+      sql("SELECT a FROM testData2 SORT BY a"),
+      Seq(1, 1, 2 ,2 ,3 ,3).map(Seq(_))
+    )
   }
 
   test("grouping on nested fields") {
@@ -72,7 +80,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("aggregation with codegen") {
-    val originalValue = codegenEnabled
+    val originalValue = conf.codegenEnabled
     setConf(SQLConf.CODEGEN_ENABLED, "true")
     sql("SELECT key FROM testData GROUP BY key").collect()
     setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
@@ -238,14 +246,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("sorting") {
-    val before = externalSortEnabled
+    val before = conf.externalSortEnabled
     setConf(SQLConf.EXTERNAL_SORT, "false")
     sortTest()
     setConf(SQLConf.EXTERNAL_SORT, before.toString)
   }
 
   test("external sorting") {
-    val before = externalSortEnabled
+    val before = conf.externalSortEnabled
     setConf(SQLConf.EXTERNAL_SORT, "true")
     sortTest()
     setConf(SQLConf.EXTERNAL_SORT, before.toString)
@@ -263,6 +271,23 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT * FROM mapData LIMIT 1"),
       mapData.collect().take(1).toSeq)
+  }
+
+  test("from follow multiple brackets") {
+    checkAnswer(sql(
+      "select key from ((select * from testData limit 1) union all (select * from testData limit 1)) x limit 1"),
+      1
+    )
+
+    checkAnswer(sql(
+      "select key from (select * from testData) x limit 1"),
+      1
+    )
+
+    checkAnswer(sql(
+      "select key from (select * from testData limit 1 union all select * from testData limit 1) x limit 1"),
+      1
+    )
   }
 
   test("average") {
@@ -576,7 +601,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SET commands semantics using sql()") {
-    clear()
+    conf.clear()
     val testKey = "test.key.0"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
@@ -608,7 +633,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       sql(s"SET $nonexistentKey"),
       Seq(Seq(s"$nonexistentKey=<undefined>"))
     )
-    clear()
+    conf.clear()
   }
 
   test("apply schema") {
@@ -724,7 +749,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     val metadata = new MetadataBuilder()
       .putString(docKey, docValue)
       .build()
-    val schemaWithMeta = new StructType(Seq(
+    val schemaWithMeta = new StructType(Array(
       schema("id"), schema("name").copy(metadata = metadata), schema("age")))
     val personWithMeta = applySchema(person, schemaWithMeta)
     def validateMetadata(rdd: SchemaRDD): Unit = {
@@ -741,7 +766,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-3371 Renaming a function expression with group by gives error") {
-    registerFunction("len", (s: String) => s.length)
+    udf.register("len", (s: String) => s.length)
     checkAnswer(
       sql("SELECT len(value) as temp FROM testData WHERE key = 1 group by len(value)"), 1)
   }
@@ -819,11 +844,11 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     )
 
     checkAnswer(
-      sql("SELECT 9223372036854775808"), BigDecimal("9223372036854775808")
+      sql("SELECT 9223372036854775808"), new java.math.BigDecimal("9223372036854775808")
     )
 
     checkAnswer(
-      sql("SELECT -9223372036854775809"), BigDecimal("-9223372036854775809")
+      sql("SELECT -9223372036854775809"), new java.math.BigDecimal("-9223372036854775809")
     )
   }
 
@@ -977,6 +1002,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(
       sql("SELECT a + b FROM testData2 ORDER BY a"),
       Seq(2, 3, 3 ,4 ,4 ,5).map(Seq(_))
+    )
+  }
+
+  test("oder by asc by default when not specify ascending and descending") {
+    checkAnswer(
+      sql("SELECT a, b FROM testData2 ORDER BY a desc, b"),
+      Seq((3, 1), (3, 2), (2, 1), (2,2), (1, 1), (1, 2))
     )
   }
 

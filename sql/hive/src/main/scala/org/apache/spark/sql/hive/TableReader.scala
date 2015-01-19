@@ -57,10 +57,15 @@ class HadoopTableReader(
     @transient hiveExtraConf: HiveConf)
   extends TableReader {
 
-  // Choose the minimum number of splits. If mapred.map.tasks is set, then use that unless
-  // it is smaller than what Spark suggests.
-  private val _minSplitsPerRDD = math.max(
-    sc.hiveconf.getInt("mapred.map.tasks", 1), sc.sparkContext.defaultMinPartitions)
+  // Hadoop honors "mapred.map.tasks" as hint, but will ignore when mapred.job.tracker is "local".
+  // https://hadoop.apache.org/docs/r1.0.4/mapred-default.html
+  //
+  // In order keep consistency with Hive, we will let it be 0 in local mode also.
+  private val _minSplitsPerRDD = if (sc.sparkContext.isLocal) {
+    0 // will splitted based on block by default.
+  } else {
+    math.max(sc.hiveconf.getInt("mapred.map.tasks", 1), sc.sparkContext.defaultMinPartitions)
+  }
 
   // TODO: set aws s3 credentials.
 

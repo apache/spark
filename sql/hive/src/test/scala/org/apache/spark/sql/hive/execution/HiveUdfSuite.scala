@@ -50,7 +50,7 @@ class HiveUdfSuite extends QueryTest {
   import TestHive._
 
   test("spark sql udf test that returns a struct") {
-    registerFunction("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))
+    udf.register("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))
     assert(sql(
       """
         |SELECT getStruct(1).f1,
@@ -92,10 +92,21 @@ class HiveUdfSuite extends QueryTest {
   }
 
   test("SPARK-2693 udaf aggregates test") {
-    checkAnswer(sql("SELECT percentile(key,1) FROM src LIMIT 1"),
+    checkAnswer(sql("SELECT percentile(key, 1) FROM src LIMIT 1"),
       sql("SELECT max(key) FROM src").collect().toSeq)
+      
+    checkAnswer(sql("SELECT percentile(key, array(1, 1)) FROM src LIMIT 1"),
+      sql("SELECT array(max(key), max(key)) FROM src").collect().toSeq)
   }
 
+  test("Generic UDAF aggregates") {
+    checkAnswer(sql("SELECT ceiling(percentile_approx(key, 0.99999)) FROM src LIMIT 1"),
+      sql("SELECT max(key) FROM src LIMIT 1").collect().toSeq)
+      
+    checkAnswer(sql("SELECT percentile_approx(100.0, array(0.9, 0.9)) FROM src LIMIT 1"),
+      sql("SELECT array(100, 100) FROM src LIMIT 1").collect().toSeq)
+   }
+  
   test("UDFIntegerToString") {
     val testData = TestHive.sparkContext.parallelize(
       IntegerCaseClass(1) :: IntegerCaseClass(2) :: Nil)

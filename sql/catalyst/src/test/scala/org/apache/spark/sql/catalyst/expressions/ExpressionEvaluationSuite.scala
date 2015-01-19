@@ -21,16 +21,13 @@ import java.sql.{Date, Timestamp}
 
 import scala.collection.immutable.HashSet
 
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.scalactic.TripleEqualsSupport.Spread
 import org.scalatest.FunSuite
 import org.scalatest.Matchers._
-import org.scalactic.TripleEqualsSupport.Spread
 
-import org.apache.spark.sql.catalyst.types._
-
-
-/* Implicit conversions */
 import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.types._
+
 
 class ExpressionEvaluationSuite extends FunSuite {
 
@@ -177,6 +174,21 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Divide(Literal(null, DoubleType), Literal(0.0)), null)
     checkEvaluation(Divide(Literal(null, IntegerType), Literal(1)), null)
     checkEvaluation(Divide(Literal(null, IntegerType), Literal(null, IntegerType)), null)
+  }
+
+  test("Remainder") {
+    checkEvaluation(Remainder(Literal(2), Literal(1)), 0)
+    checkEvaluation(Remainder(Literal(1.0), Literal(2.0)), 1.0)
+    checkEvaluation(Remainder(Literal(1), Literal(2)), 1)
+    checkEvaluation(Remainder(Literal(1), Literal(0)), null)
+    checkEvaluation(Remainder(Literal(1.0), Literal(0.0)), null)
+    checkEvaluation(Remainder(Literal(0.0), Literal(0.0)), null)
+    checkEvaluation(Remainder(Literal(0), Literal(null, IntegerType)), null)
+    checkEvaluation(Remainder(Literal(1), Literal(null, IntegerType)), null)
+    checkEvaluation(Remainder(Literal(null, IntegerType), Literal(0)), null)
+    checkEvaluation(Remainder(Literal(null, DoubleType), Literal(0.0)), null)
+    checkEvaluation(Remainder(Literal(null, IntegerType), Literal(1)), null)
+    checkEvaluation(Remainder(Literal(null, IntegerType), Literal(null, IntegerType)), null)
   }
 
   test("INSET") {
@@ -1022,6 +1034,8 @@ class ExpressionEvaluationSuite extends FunSuite {
     }
 
     checkEvaluation(Sqrt(Literal(null, DoubleType)), null, new GenericRow(Array[Any](null)))
+    checkEvaluation(Sqrt(-1), null, EmptyRow)
+    checkEvaluation(Sqrt(-1.5), null, EmptyRow)
   }
 
   test("Bitwise operations") {

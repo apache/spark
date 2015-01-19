@@ -82,7 +82,7 @@ private[sql] case class InMemoryRelation(
     if (batchStats.value.isEmpty) {
       // Underlying columnar RDD hasn't been materialized, no useful statistics information
       // available, return the default statistics.
-      Statistics(sizeInBytes = child.sqlContext.defaultSizeInBytes)
+      Statistics(sizeInBytes = child.sqlContext.conf.defaultSizeInBytes)
     } else {
       // Underlying columnar RDD has been materialized, required information has also been collected
       // via the `batchStats` accumulator, compute the final statistics, and update `_statistics`.
@@ -175,8 +175,6 @@ private[sql] case class InMemoryColumnarTableScan(
     relation: InMemoryRelation)
   extends LeafNode {
 
-  @transient override val sqlContext = relation.child.sqlContext
-
   override def output: Seq[Attribute] = attributes
 
   private def statsFor(a: Attribute) = relation.partitionStatistics.forAttribute(a)
@@ -235,7 +233,7 @@ private[sql] case class InMemoryColumnarTableScan(
   val readPartitions = sparkContext.accumulator(0)
   val readBatches = sparkContext.accumulator(0)
 
-  private val inMemoryPartitionPruningEnabled = sqlContext.inMemoryPartitionPruning
+  private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
   override def execute() = {
     readPartitions.setValue(0)

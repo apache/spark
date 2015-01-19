@@ -17,19 +17,22 @@
 
 package org.apache.spark.sql.parquet
 
-import _root_.parquet.filter2.predicate.{FilterPredicate, Operators}
+import scala.reflect.ClassTag
+
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
 import org.scalatest.{BeforeAndAfterAll, FunSuiteLike}
+import parquet.filter2.predicate.{FilterPredicate, Operators}
 import parquet.hadoop.ParquetFileWriter
 import parquet.hadoop.util.ContextUtil
+import parquet.io.api.Binary
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types.IntegerType
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class TestRDDEntry(key: Int, value: String)
@@ -84,7 +87,8 @@ case class NumericData(i: Int, d: Double)
 class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterAll {
   TestData // Load test data tables.
 
-  var testRDD: SchemaRDD = null
+  private var testRDD: SchemaRDD = null
+  private val originalParquetFilterPushdownEnabled = TestSQLContext.conf.parquetFilterPushDown
 
   override def beforeAll() {
     ParquetTestData.writeFile()
@@ -93,6 +97,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     ParquetTestData.writeNestedFile2()
     ParquetTestData.writeNestedFile3()
     ParquetTestData.writeNestedFile4()
+    ParquetTestData.writeGlobFiles()
     testRDD = parquetFile(ParquetTestData.testDir.toString)
     testRDD.registerTempTable("testsource")
     parquetFile(ParquetTestData.testFilterDir.toString)
@@ -108,14 +113,19 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     Utils.deleteRecursively(ParquetTestData.testNestedDir2)
     Utils.deleteRecursively(ParquetTestData.testNestedDir3)
     Utils.deleteRecursively(ParquetTestData.testNestedDir4)
+    Utils.deleteRecursively(ParquetTestData.testGlobDir)
     // here we should also unregister the table??
+
+    setConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED, originalParquetFilterPushdownEnabled.toString)
   }
 
   test("Read/Write All Types") {
     val tempDir = getTempFilePath("parquetTest").getCanonicalPath
     val range = (0 to 255)
-    val data = sparkContext.parallelize(range)
-      .map(x => AllDataTypes(s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0))
+    val data = sparkContext.parallelize(range).map { x =>
+      parquet.AllDataTypes(
+        s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0)
+    }
 
     data.saveAsParquetFile(tempDir)
 
@@ -134,7 +144,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   ignore("Treat binary as string") {
-    val oldIsParquetBinaryAsString = TestSQLContext.isParquetBinaryAsString
+    val oldIsParquetBinaryAsString = TestSQLContext.conf.isParquetBinaryAsString
 
     // Create the test file.
     val file = getTempFilePath("parquet")
@@ -164,7 +174,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("Compression options for writing to a Parquetfile") {
-    val defaultParquetCompressionCodec = TestSQLContext.parquetCompressionCodec
+    val defaultParquetCompressionCodec = TestSQLContext.conf.parquetCompressionCodec
     import scala.collection.JavaConversions._
 
     val file = getTempFilePath("parquet")
@@ -176,7 +186,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     rdd.saveAsParquetFile(path)
     var actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
       .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
-    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+    assert(actualCodec === TestSQLContext.conf.parquetCompressionCodec.toUpperCase :: Nil)
 
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
@@ -192,7 +202,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     rdd.saveAsParquetFile(path)
     actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
       .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
-    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+    assert(actualCodec === TestSQLContext.conf.parquetCompressionCodec.toUpperCase :: Nil)
 
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
@@ -224,7 +234,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     rdd.saveAsParquetFile(path)
     actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
       .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
-    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+    assert(actualCodec === TestSQLContext.conf.parquetCompressionCodec.toUpperCase :: Nil)
 
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
@@ -240,7 +250,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     rdd.saveAsParquetFile(path)
     actualCodec = ParquetTypesConverter.readMetaData(new Path(path), Some(TestSQLContext.sparkContext.hadoopConfiguration))
       .getBlocks.flatMap(block => block.getColumns).map(column => column.getCodec.name()).distinct
-    assert(actualCodec === TestSQLContext.parquetCompressionCodec.toUpperCase :: Nil)
+    assert(actualCodec === TestSQLContext.conf.parquetCompressionCodec.toUpperCase :: Nil)
 
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
@@ -260,14 +270,15 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   test("Read/Write All Types with non-primitive type") {
     val tempDir = getTempFilePath("parquetTest").getCanonicalPath
     val range = (0 to 255)
-    val data = sparkContext.parallelize(range)
-      .map(x => AllDataTypesWithNonPrimitiveType(
+    val data = sparkContext.parallelize(range).map { x =>
+      parquet.AllDataTypesWithNonPrimitiveType(
         s"$x", x, x.toLong, x.toFloat, x.toDouble, x.toShort, x.toByte, x % 2 == 0,
         (0 until x),
         (0 until x).map(Option(_).filter(_ % 3 == 0)),
         (0 until x).map(i => i -> i.toLong).toMap,
         (0 until x).map(i => i -> Option(i.toLong)).toMap + (x -> None),
-        Data((0 until x), Nested(x, s"$x"))))
+        parquet.Data((0 until x), parquet.Nested(x, s"$x")))
+    }
     data.saveAsParquetFile(tempDir)
 
     checkAnswer(
@@ -391,23 +402,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     Utils.deleteRecursively(file)
   }
 
-  test("Insert (overwrite) via Scala API") {
-    val dirname = Utils.createTempDir()
-    val source_rdd = TestSQLContext.sparkContext.parallelize((1 to 100))
-      .map(i => TestRDDEntry(i, s"val_$i"))
-    source_rdd.registerTempTable("source")
-    val dest_rdd = createParquetFile[TestRDDEntry](dirname.toString)
-    dest_rdd.registerTempTable("dest")
-    sql("INSERT OVERWRITE INTO dest SELECT * FROM source").collect()
-    val rdd_copy1 = sql("SELECT * FROM dest").collect()
-    assert(rdd_copy1.size === 100)
-
-    sql("INSERT INTO dest SELECT * FROM source")
-    val rdd_copy2 = sql("SELECT * FROM dest").collect().sortBy(_.getInt(0))
-    assert(rdd_copy2.size === 200)
-    Utils.deleteRecursively(dirname)
-  }
-
   test("Insert (appending) to same table via Scala API") {
     sql("INSERT INTO testsource SELECT * FROM testsource")
     val double_rdd = sql("SELECT * FROM testsource").collect()
@@ -420,7 +414,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("save and load case class RDD with nulls as parquet") {
-    val data = NullReflectData(null, null, null, null, null)
+    val data = parquet.NullReflectData(null, null, null, null, null)
     val rdd = sparkContext.parallelize(data :: Nil)
 
     val file = getTempFilePath("parquet")
@@ -435,7 +429,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("save and load case class RDD with Nones as parquet") {
-    val data = OptionalReflectData(None, None, None, None, None)
+    val data = parquet.OptionalReflectData(None, None, None, None, None)
     val rdd = sparkContext.parallelize(data :: Nil)
 
     val file = getTempFilePath("parquet")
@@ -450,11 +444,17 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
   }
 
   test("make RecordFilter for simple predicates") {
-    def checkFilter[T <: FilterPredicate](predicate: Expression, defined: Boolean = true): Unit = {
+    def checkFilter[T <: FilterPredicate : ClassTag](
+        predicate: Expression,
+        defined: Boolean = true): Unit = {
       val filter = ParquetFilters.createFilter(predicate)
       if (defined) {
         assert(filter.isDefined)
-        assert(filter.get.isInstanceOf[T])
+        val tClass = implicitly[ClassTag[T]].runtimeClass
+        val filterGet = filter.get
+        assert(
+          tClass.isInstance(filterGet),
+          s"$filterGet of type ${filterGet.getClass} is not an instance of $tClass")
       } else {
         assert(filter.isEmpty)
       }
@@ -475,7 +475,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
 
     checkFilter[Operators.And]('a.int === 1 && 'a.int < 4)
     checkFilter[Operators.Or]('a.int === 1 || 'a.int < 4)
-    checkFilter[Operators.Not](!('a.int === 1))
+    checkFilter[Operators.NotEq[Integer]](!('a.int === 1))
 
     checkFilter('a.int > 'b.int, defined = false)
     checkFilter(('a.int > 'b.int) && ('a.int > 'b.int), defined = false)
@@ -885,29 +885,6 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     Utils.deleteRecursively(tmpdir)
   }
 
-  test("Querying on empty parquet throws exception (SPARK-3536)") {
-    val tmpdir = Utils.createTempDir()
-    Utils.deleteRecursively(tmpdir)
-    createParquetFile[TestRDDEntry](tmpdir.toString()).registerTempTable("tmpemptytable")
-    val result1 = sql("SELECT * FROM tmpemptytable").collect()
-    assert(result1.size === 0)
-    Utils.deleteRecursively(tmpdir)
-  }
-
-  test("DataType string parser compatibility") {
-    val schema = StructType(List(
-      StructField("c1", IntegerType, false),
-      StructField("c2", BinaryType, false)))
-
-    val fromCaseClassString = ParquetTypesConverter.convertFromString(schema.toString)
-    val fromJson = ParquetTypesConverter.convertFromString(schema.json)
-
-    (fromCaseClassString, fromJson).zipped.foreach { (a, b) =>
-      assert(a.name == b.name)
-      assert(a.dataType === b.dataType)
-    }
-  }
-
   test("read/write fixed-length decimals") {
     for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
       val tempDir = getTempFilePath("parquetTest").getCanonicalPath
@@ -936,6 +913,134 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
         .select('i, 'd cast DecimalType.Unlimited)
       data.saveAsParquetFile(tempDir)
       checkAnswer(parquetFile(tempDir), data.toSchemaRDD.collect().toSeq)
+    }
+  }
+
+  def checkFilter(predicate: Predicate, filterClass: Class[_ <: FilterPredicate]): Unit = {
+    val filter = ParquetFilters.createFilter(predicate)
+    assert(filter.isDefined)
+    assert(filter.get.getClass == filterClass)
+  }
+
+  test("Pushdown IsNull predicate") {
+    checkFilter('a.int.isNull,    classOf[Operators.Eq[Integer]])
+    checkFilter('a.long.isNull,   classOf[Operators.Eq[java.lang.Long]])
+    checkFilter('a.float.isNull,  classOf[Operators.Eq[java.lang.Float]])
+    checkFilter('a.double.isNull, classOf[Operators.Eq[java.lang.Double]])
+    checkFilter('a.string.isNull, classOf[Operators.Eq[Binary]])
+    checkFilter('a.binary.isNull, classOf[Operators.Eq[Binary]])
+  }
+
+  test("Pushdown IsNotNull predicate") {
+    checkFilter('a.int.isNotNull,    classOf[Operators.NotEq[Integer]])
+    checkFilter('a.long.isNotNull,   classOf[Operators.NotEq[java.lang.Long]])
+    checkFilter('a.float.isNotNull,  classOf[Operators.NotEq[java.lang.Float]])
+    checkFilter('a.double.isNotNull, classOf[Operators.NotEq[java.lang.Double]])
+    checkFilter('a.string.isNotNull, classOf[Operators.NotEq[Binary]])
+    checkFilter('a.binary.isNotNull, classOf[Operators.NotEq[Binary]])
+  }
+
+  test("Pushdown EqualTo predicate") {
+    checkFilter('a.int === 0,                 classOf[Operators.Eq[Integer]])
+    checkFilter('a.long === 0.toLong,         classOf[Operators.Eq[java.lang.Long]])
+    checkFilter('a.float === 0.toFloat,       classOf[Operators.Eq[java.lang.Float]])
+    checkFilter('a.double === 0.toDouble,     classOf[Operators.Eq[java.lang.Double]])
+    checkFilter('a.string === "foo",          classOf[Operators.Eq[Binary]])
+    checkFilter('a.binary === "foo".getBytes, classOf[Operators.Eq[Binary]])
+  }
+
+  test("Pushdown Not(EqualTo) predicate") {
+    checkFilter(!('a.int === 0),                 classOf[Operators.NotEq[Integer]])
+    checkFilter(!('a.long === 0.toLong),         classOf[Operators.NotEq[java.lang.Long]])
+    checkFilter(!('a.float === 0.toFloat),       classOf[Operators.NotEq[java.lang.Float]])
+    checkFilter(!('a.double === 0.toDouble),     classOf[Operators.NotEq[java.lang.Double]])
+    checkFilter(!('a.string === "foo"),          classOf[Operators.NotEq[Binary]])
+    checkFilter(!('a.binary === "foo".getBytes), classOf[Operators.NotEq[Binary]])
+  }
+
+  test("Pushdown LessThan predicate") {
+    checkFilter('a.int < 0,                 classOf[Operators.Lt[Integer]])
+    checkFilter('a.long < 0.toLong,         classOf[Operators.Lt[java.lang.Long]])
+    checkFilter('a.float < 0.toFloat,       classOf[Operators.Lt[java.lang.Float]])
+    checkFilter('a.double < 0.toDouble,     classOf[Operators.Lt[java.lang.Double]])
+    checkFilter('a.string < "foo",          classOf[Operators.Lt[Binary]])
+    checkFilter('a.binary < "foo".getBytes, classOf[Operators.Lt[Binary]])
+  }
+
+  test("Pushdown LessThanOrEqual predicate") {
+    checkFilter('a.int <= 0,                 classOf[Operators.LtEq[Integer]])
+    checkFilter('a.long <= 0.toLong,         classOf[Operators.LtEq[java.lang.Long]])
+    checkFilter('a.float <= 0.toFloat,       classOf[Operators.LtEq[java.lang.Float]])
+    checkFilter('a.double <= 0.toDouble,     classOf[Operators.LtEq[java.lang.Double]])
+    checkFilter('a.string <= "foo",          classOf[Operators.LtEq[Binary]])
+    checkFilter('a.binary <= "foo".getBytes, classOf[Operators.LtEq[Binary]])
+  }
+
+  test("Pushdown GreaterThan predicate") {
+    checkFilter('a.int > 0,                 classOf[Operators.Gt[Integer]])
+    checkFilter('a.long > 0.toLong,         classOf[Operators.Gt[java.lang.Long]])
+    checkFilter('a.float > 0.toFloat,       classOf[Operators.Gt[java.lang.Float]])
+    checkFilter('a.double > 0.toDouble,     classOf[Operators.Gt[java.lang.Double]])
+    checkFilter('a.string > "foo",          classOf[Operators.Gt[Binary]])
+    checkFilter('a.binary > "foo".getBytes, classOf[Operators.Gt[Binary]])
+  }
+
+  test("Pushdown GreaterThanOrEqual predicate") {
+    checkFilter('a.int >= 0,                 classOf[Operators.GtEq[Integer]])
+    checkFilter('a.long >= 0.toLong,         classOf[Operators.GtEq[java.lang.Long]])
+    checkFilter('a.float >= 0.toFloat,       classOf[Operators.GtEq[java.lang.Float]])
+    checkFilter('a.double >= 0.toDouble,     classOf[Operators.GtEq[java.lang.Double]])
+    checkFilter('a.string >= "foo",          classOf[Operators.GtEq[Binary]])
+    checkFilter('a.binary >= "foo".getBytes, classOf[Operators.GtEq[Binary]])
+  }
+
+  test("Comparison with null should not be pushed down") {
+    val predicates = Seq(
+      'a.int === null,
+      !('a.int === null),
+
+      Literal(null) === 'a.int,
+      !(Literal(null) === 'a.int),
+
+      'a.int < null,
+      'a.int <= null,
+      'a.int > null,
+      'a.int >= null,
+
+      Literal(null) < 'a.int,
+      Literal(null) <= 'a.int,
+      Literal(null) > 'a.int,
+      Literal(null) >= 'a.int
+    )
+
+    predicates.foreach { p =>
+      assert(
+        ParquetFilters.createFilter(p).isEmpty,
+        "Comparison predicate with null shouldn't be pushed down")
+    }
+  }
+
+  test("Import of simple Parquet files using glob wildcard pattern") {
+    val testGlobDir = ParquetTestData.testGlobDir.toString
+    val globPatterns = Array(testGlobDir + "/*/*", testGlobDir + "/spark-*/*", testGlobDir + "/?pa?k-*/*")
+    globPatterns.foreach { path =>
+      val result = parquetFile(path).collect()
+      assert(result.size === 45)
+      result.zipWithIndex.foreach {
+        case (row, index) => {
+          val checkBoolean =
+            if ((index % 15) % 3 == 0)
+              row(0) == true
+            else
+              row(0) == false
+          assert(checkBoolean === true, s"boolean field value in line $index did not match")
+          if ((index % 15) % 5 == 0) assert(row(1) === 5, s"int field value in line $index did not match")
+          assert(row(2) === "abc", s"string field value in line $index did not match")
+          assert(row(3) === ((index.toLong % 15) << 33), s"long value in line $index did not match")
+          assert(row(4) === 2.5F, s"float field value in line $index did not match")
+          assert(row(5) === 4.5D, s"double field value in line $index did not match")
+        }
+      }
     }
   }
 }

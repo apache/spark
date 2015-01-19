@@ -26,7 +26,7 @@ package org.apache.spark
  * available only on DStreams
  * of key-value pairs, such as `groupByKey` and `reduceByKey`. These operations are automatically
  * available on any DStream of the right type (e.g. DStream[(Int, Int)] through implicit
- * conversions when you `import org.apache.spark.streaming.StreamingContext._`.
+ * conversions.
  *
  * For the Java API of Spark Streaming, take a look at the
  * [[org.apache.spark.streaming.api.java.JavaStreamingContext]] which serves as the entry point, and
