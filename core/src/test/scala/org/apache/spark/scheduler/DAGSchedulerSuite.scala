@@ -30,7 +30,8 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.CallSite
+import org.apache.spark.util.{CallSite, RDDTrace, SerializationState}
+
 import org.apache.spark.executor.TaskMetrics
 
 class BuggyDAGEventProcessActor extends Actor {
@@ -244,6 +245,111 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     runEvent(JobCancelled(jobId))
   }
 
+  test("Serialization trace for un-serializable task") {
+    val unserializableRdd = new MyRDD(sc, 1, Nil) {
+      class UnserializableClass
+      val unserializable = new UnserializableClass
+    }
+    
+    val trace : Array[RDDTrace] = scheduler.tryToSerializeRddDeps(unserializableRdd)
+    
+    assert(trace.length == 1)
+    assert(trace(0).result.isLeft) //Failed to serialize
+  }
+
+  test("Serialization trace for un-serializable task with serializable dependencies") {
+    // The trace should show which nested dependency is unserializable
+
+    val baseRdd = new MyRDD(sc, 1, Nil)
+    val midRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
+    val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(midRdd))) {
+      class UnserializableClass
+      val unserializable = new UnserializableClass
+    }
+    
+    // Generate results array as (Success/Failure (Boolean) , ResultString (String))
+    val results = Array((false, SerializationState.Failed),
+      (true, SerializationState.Success),
+      (true, SerializationState.Success))
+
+    val zipped : Array[(RDDTrace, Int)] = scheduler.tryToSerializeRddDeps(finalRdd).zipWithIndex
+    zipped.map {
+      case (trace : RDDTrace, idx : Int) =>
+        trace.result match {
+          case Right(r) => assert(results(idx)._1) //Success
+          case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
+        }
+    }
+  }
+
+  test("Serialization trace for serializable task and nested unserializable dependency") {
+    // The trace should show which nested dependency is unserializable
+
+    val baseRdd = new MyRDD(sc, 1, Nil) {
+      class UnserializableClass
+      val unserializable = new UnserializableClass
+    }
+
+    val midRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
+    val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(midRdd)))
+
+    // Generate results array as (Success/Failure (Boolean) , ResultString (String))
+    val results = Array((false, SerializationState.FailedDeps),
+      (false, SerializationState.FailedDeps),
+      (false, SerializationState.Failed))
+
+    val zipped : Array[(RDDTrace, Int)] = scheduler.tryToSerializeRddDeps(finalRdd).zipWithIndex
+    zipped.map {
+      case (trace : RDDTrace, idx : Int) =>
+        trace.result match {
+          case Right(r) => assert(results(idx)._1) //Success
+          case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
+        }
+    }
+
+  }
+
+  test("Serialization trace for serializable task with sandwiched unserializable dependency") {
+    // The trace should show which nested dependency is unserializable
+
+    val baseRdd = new MyRDD(sc, 1, Nil)
+    val midRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd))) {
+      class UnserializableClass
+      val unserializable = new UnserializableClass
+    }
+    val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(midRdd)))
+
+    // Generate results array as (Success/Failure (Boolean) , ResultString (String))
+    val results = Array((false, SerializationState.FailedDeps),
+      (false, SerializationState.Failed),
+      (true, SerializationState.Success))
+    
+    val zipped : Array[(RDDTrace, Int)] = scheduler.tryToSerializeRddDeps(finalRdd).zipWithIndex
+    zipped.map {
+      case (trace : RDDTrace, idx : Int) =>
+        trace.result match {
+          case Right(r) => assert(results(idx)._1) //Success
+          case Left(l) => assert(results(idx)._2.equals(l)) //Match failure strings
+        }
+    }
+  }
+
+  test("Serialization trace for serializable task and nested dependencies") {
+    // Because serialization also attempts to serialize dependencies, attempting to 
+    // serialize the serializable "finalRdd" should fail and the trace should show all its 
+    // dependencies as being unserializable.
+
+    val baseRdd = new MyRDD(sc, 1, Nil)
+    val midRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
+    val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(midRdd)))
+    
+    val zipped : Array[(RDDTrace, Int)] = scheduler.tryToSerializeRddDeps(finalRdd).zipWithIndex
+    
+    zipped.map {
+      case (trace : RDDTrace, idx : Int) => assert(trace.result.isRight)
+    }
+  }
+  
   test("[SPARK-3353] parent stage should have lower stage id") {
     sparkListener.stageByOrderOfExecution.clear()
     sc.parallelize(1 to 10).map(x => (x, x)).reduceByKey(_ + _, 4).count()
@@ -539,7 +645,6 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
 
     assertDataStructuresEmpty
   }
-
   /**
    * Makes sure that failures of stage used by multiple jobs are correctly handled.
    *

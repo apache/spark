@@ -30,7 +30,7 @@ import scala.util.control.NonFatal
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.{Clock, SerializationHelper, SystemClock, Utils}
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
@@ -459,17 +459,29 @@ private[spark] class TaskSetManager(
           }
           // Serialize and return the task
           val startTime = clock.getTime()
+
           val serializedTask: ByteBuffer = try {
+            // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
+            // we assume the task can be serialized without exceptions.
+
             Task.serializeWithDependencies(task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           } catch {
             // If the task cannot be serialized, then there's no point to re-attempt the task,
-            // as it will always fail. So just abort the whole task-set.
+            // as it will always fail. So just abort the whole task-set and print a serialization
+            // trace to help identify the failure point.
             case NonFatal(e) =>
+              SerializationHelper.tryToSerialize(ser, task).fold (
+                l => logDebug("Un-serializable reference trace for " +
+                  task.toString + ":\n" + l),
+                r => {}
+              )
+              
               val msg = s"Failed to serialize task $taskId, not attempting to retry it."
               logError(msg, e)
               abort(s"$msg Exception during serialization: $e")
               throw new TaskNotSerializableException(e)
           }
+
           if (serializedTask.limit > TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024 &&
               !emittedTaskSizeWarning) {
             emittedTaskSizeWarning = true

@@ -564,6 +564,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.serializer.debug</code></td>
+  <td>false</td>
+  <td>
+    To view the dependency graph for an RDD or the file dependencies for task set this option
+    to true. Doing so will display a text based graph of these dependencies along with a
+    serialization trace that identifies which components of an RDD failed to serialize.  
+  </td>
+</tr>
   <td><code>spark.kryo.referenceTracking</code></td>
   <td>true</td>
   <td>

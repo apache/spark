@@ -18,9 +18,12 @@
 package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
+import java.nio.ByteBuffer
+import java.util
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
+import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map, Stack}
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -39,7 +42,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage._
-import org.apache.spark.util.{CallSite, SystemClock, Clock, Utils}
+import org.apache.spark.util.{CallSite, Clock, RDDTrace, SerializationHelper, SystemClock, Utils}
 import org.apache.spark.storage.BlockManagerMessages.BlockManagerHeartbeat
 
 /**
@@ -792,6 +795,44 @@ class DAGScheduler(
     }
   }
 
+  /**
+   * Helper function to check whether an RDD and its dependencies are serializable. 
+   * 
+   * This hook is exposed here primarily for testing purposes. 
+   * 
+   * Note: This function is defined separately from the SerializationHelper.isSerializable()
+   * since DAGScheduler.isSerializable() is passed as a parameter to the RDDWalker class's graph
+   * traversal, which would otherwise require knowledge of the closureSerializer 
+   * (which was undesirable).
+   * 
+   * @param rdd - Rdd to attempt to serialize
+   * @return Array[SerializedRdd] - 
+   *           Return an array of Either objects indicating if serialization is successful.
+   *           Each object represents the RDD or a dependency of the RDD
+   *             Success: ByteBuffer - The serialized RDD
+   *             Failure: String - The reason for the failure.
+   *                                      
+   */
+  private[spark] def tryToSerializeRddDeps(rdd: RDD[_]): Array[RDDTrace] = {
+    SerializationHelper.tryToSerializeRddAndDeps(closureSerializer, rdd)
+  }
+
+
+  /**
+   * Returns nicely formatted text representing the trace of the failed serialization
+   *
+   * Note: This is defined here since it uses the closure serializer. Although the better place for 
+   * the serializer would be in the SerializationHelper, the Helper is not guaranteed to run in a 
+   * single thread unlike the DAGScheduler.
+   *
+   * @param rdd - The top-level reference that we are attempting to serialize 
+   * @return
+   */
+  def traceBrokenRdd(rdd: RDD[_]): String = {
+    SerializationHelper.tryToSerializeRdd(closureSerializer, rdd)
+      .fold(l => l, r => "Successfully serialized " + rdd.toString)
+  }
+
   /** Called when stage's parents are available and we can now do its task. */
   private def submitMissingTasks(stage: Stage, jobId: Int) {
     logDebug("submitMissingTasks(" + stage + ")")
@@ -830,9 +871,11 @@ class DAGScheduler(
     // might modify state of objects referenced in their closures. This is necessary in Hadoop
     // where the JobConf/Configuration object is not thread-safe.
     var taskBinary: Broadcast[Array[Byte]] = null
+
     try {
-      // For ShuffleMapTask, serialize and broadcast (rdd, shuffleDep).
+      // For ShuffleMapTask, serialize and broadcast (rdd, shuffleDep). 
       // For ResultTask, serialize and broadcast (rdd, func).
+      
       val taskBinaryBytes: Array[Byte] =
         if (stage.isShuffleMap) {
           closureSerializer.serialize((stage.rdd, stage.shuffleDep.get) : AnyRef).array()
@@ -843,10 +886,18 @@ class DAGScheduler(
     } catch {
       // In the case of a failure during serialization, abort the stage.
       case e: NotSerializableException =>
+        SerializationHelper
+          .tryToSerializeRdd(closureSerializer, stage.rdd)
+          .fold(l => logDebug(l), r => {})
+        
         abortStage(stage, "Task not serializable: " + e.toString)
         runningStages -= stage
         return
       case NonFatal(e) =>
+        SerializationHelper
+          .tryToSerializeRdd(closureSerializer, stage.rdd)
+          .fold(l => logDebug(l), r => {})
+        
         abortStage(stage, s"Task serialization failed: $e\n${e.getStackTraceString}")
         runningStages -= stage
         return
