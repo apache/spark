@@ -315,36 +315,6 @@ class DAGScheduler(
     parents.toList
   }
 
-  /**
-   * Get partitions of parent rdds for a given RDD.
-   * Traverses the lineage chain and calls partitions on each RDD.
-   */
-  private[scheduler] val shuffleToRDDParts = new HashSet[Int]
-  private def getParentPartitions(rdd: RDD[_]) = {
-    val visited = new HashSet[RDD[_]]
-    val waitingForVisit = new Stack[RDD[_]]
-    def visit(r: RDD[_]) {
-      if (!visited(r)) {
-       visited += r
-       for (dep <- r.dependencies) {
-         dep match {
-           case shuffleDep: ShuffleDependency[_, _, _] =>
-             if (!shuffleToRDDParts(shuffleDep.shuffleId)) {
-               shuffleDep.rdd.partitions
-               shuffleToRDDParts += shuffleDep.shuffleId
-             }
-           case _ =>
-             waitingForVisit.push(dep.rdd)
-         }
-       }
-      }
-    }
-    waitingForVisit.push(rdd)
-    while (!waitingForVisit.isEmpty) {
-      visit(waitingForVisit.pop())
-    }
-  }
-
   // Find ancestor missing shuffle dependencies and register into shuffleToMapStage
   private def registerShuffleDependencies(shuffleDep: ShuffleDependency[_, _, _], jobId: Int) = {
     val parentsWithNoMapStage = getAncestorShuffleDependencies(shuffleDep.rdd)
@@ -523,17 +493,21 @@ class DAGScheduler(
     }
 
     assert(partitions.size > 0)
-
-    /**
-     * Makes sure that getPartitions occurs before
-     * the job submitter sends a message into the DAGScheduler actor.
-     * Although getPartitions may be called in rdd.partitions.length before this.
-     */
-    val start = System.nanoTime
-    getParentPartitions(rdd)
-    logInfo("Get these partitions took %f s".format((System.nanoTime - start) / 1e9))
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
+
+    // Makes sure that getPartitions occurs before
+    // the job submitter sends a message into the DAGScheduler actor.
+    // Although getPartitions may be called in rdd.partitions.length before this.
+    try {
+      getParentStages(rdd, jobId)
+    } catch {
+      case e: Exception =>
+        logWarning("Get or create the list of parent stages failed due to exception - job: "
+                   + jobId, e)
+        waiter.jobFailed(e)
+        return waiter
+    }
     eventProcessActor ! JobSubmitted(
       jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter, properties)
     waiter
