@@ -207,17 +207,17 @@ class DslQuerySuite extends QueryTest {
 
     checkAnswer(
       decimalData.aggregate(avg('a)),
-      BigDecimal(2.0))
+      new java.math.BigDecimal(2.0))
     checkAnswer(
       decimalData.aggregate(avg('a), sumDistinct('a)), // non-partial
-      (BigDecimal(2.0), BigDecimal(6)) :: Nil)
+      (new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
 
     checkAnswer(
       decimalData.aggregate(avg('a cast DecimalType(10, 2))),
-      BigDecimal(2.0))
+      new java.math.BigDecimal(2.0))
     checkAnswer(
       decimalData.aggregate(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))), // non-partial
-      (BigDecimal(2.0), BigDecimal(6)) :: Nil)
+      (new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
   }
 
   test("null average") {

@@ -23,8 +23,7 @@ import scala.tools.nsc.Settings
  * <i>scala.tools.nsc.Settings</i> implementation adding Spark-specific REPL
  * command line options.
  */
-class SparkRunnerSettings(error: String => Unit) extends Settings(error){
-
+private[repl] class SparkRunnerSettings(error: String => Unit) extends Settings(error) {
   val loadfiles = MultiStringSetting(
       "-i",
       "file",

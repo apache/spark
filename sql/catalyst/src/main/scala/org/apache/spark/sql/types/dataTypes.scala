@@ -501,7 +501,7 @@ case class PrecisionInfo(precision: Int, scale: Int)
 /**
  * :: DeveloperApi ::
  *
- * The data type representing `scala.math.BigDecimal` values.
+ * The data type representing `java.math.BigDecimal` values.
  * A Decimal that might have fixed precision and scale, or unlimited values for these.
  *
  * Please use [[DataTypes.createDecimalType()]] to create a specific instance.

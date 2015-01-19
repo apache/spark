@@ -122,7 +122,7 @@ private[hive] class SparkExecuteStatementOperation(
       case FloatType =>
         to.addColumnValue(ColumnValue.floatValue(from.getFloat(ordinal)))
       case DecimalType() =>
-        val hiveDecimal = from.get(ordinal).asInstanceOf[BigDecimal].bigDecimal
+        val hiveDecimal = from.getDecimal(ordinal)
         to.addColumnValue(ColumnValue.stringValue(new HiveDecimal(hiveDecimal)))
       case LongType =>
         to.addColumnValue(ColumnValue.longValue(from.getLong(ordinal)))

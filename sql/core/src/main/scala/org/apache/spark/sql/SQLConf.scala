@@ -53,11 +53,11 @@ private[spark] object SQLConf {
 }
 
 /**
- * A trait that enables the setting and getting of mutable config parameters/hints.
+ * A class that enables the setting and getting of mutable config parameters/hints.
  *
  * In the presence of a SQLContext, these can be set and queried by passing SET commands
- * into Spark SQL's query functions (i.e. sql()). Otherwise, users of this trait can
- * modify the hints by programmatically calling the setters and getters of this trait.
+ * into Spark SQL's query functions (i.e. sql()). Otherwise, users of this class can
+ * modify the hints by programmatically calling the setters and getters of this class.
  *
  * SQLConf is thread-safe (internally synchronized, so safe to be used in multiple threads).
  */

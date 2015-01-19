@@ -30,6 +30,7 @@ import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState,
   ExecutorInfo => MesosExecutorInfo, _}
 
+import org.apache.spark.executor.MesosExecutorBackend
 import org.apache.spark.{Logging, SparkContext, SparkException, TaskState}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.scheduler._
@@ -123,14 +124,15 @@ private[spark] class MesosSchedulerBackend(
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
     val uri = sc.conf.get("spark.executor.uri", null)
+    val executorBackendName = classOf[MesosExecutorBackend].getName
     if (uri == null) {
-      val executorPath = new File(executorSparkHome, "/sbin/spark-executor").getCanonicalPath
-      command.setValue("%s %s".format(prefixEnv, executorPath))
+      val executorPath = new File(executorSparkHome, "/bin/spark-class").getCanonicalPath
+      command.setValue(s"$prefixEnv $executorPath $executorBackendName")
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
       val basename = uri.split('/').last.split('.').head
-      command.setValue("cd %s*; %s ./sbin/spark-executor".format(basename, prefixEnv))
+      command.setValue(s"cd ${basename}*; $prefixEnv ./bin/spark-class $executorBackendName")
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
     val cpus = Resource.newBuilder()
