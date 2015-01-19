@@ -39,7 +39,12 @@ private[spark] class JavaSerializationStream(out: OutputStream, counterReset: In
    * the stream 'resets' object class descriptions have to be re-written)
    */
   def writeObject[T: ClassTag](t: T): SerializationStream = {
-    objOut.writeObject(t)
+    try {
+      objOut.writeObject(t)
+    } catch {
+      case e: NotSerializableException =>
+        throw SerializationDebugger.improveException(t, e)
+    }
     counter += 1
     if (counterReset > 0 && counter >= counterReset) {
       objOut.reset()
