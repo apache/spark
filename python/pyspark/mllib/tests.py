@@ -132,6 +132,9 @@ class VectorTests(PySparkTestCase):
         for ind in [4, -5, 7.8]:
             self.assertRaises(ValueError, sv.__getitem__, ind)
 
+    def test_sparse_vector_neg_indices(self):
+        self.assertRaises(ValueError, SparseVector, 3, (-1, 3), (0, 3))
+
 
 class ListTests(PySparkTestCase):
 

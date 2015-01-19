@@ -335,6 +335,8 @@ class SparseVector(Vector):
                 self.indices = np.array(args[0], dtype=np.int32)
                 self.values = np.array(args[1], dtype=np.float64)
             assert len(self.indices) == len(self.values), "index and value arrays not same length"
+            if np.min(self.indices) < 0:
+                raise ValueError("indices must be non-negative.")
             for i in xrange(len(self.indices) - 1):
                 if self.indices[i] >= self.indices[i + 1]:
                     raise TypeError("indices array must be sorted")

@@ -250,4 +250,11 @@ class VectorsSuite extends FunSuite {
     assert(Vectors.norm(sv, 3.7) ~== math.pow(sv.toArray.foldLeft(0.0)((a, v) =>
       a + math.pow(math.abs(v), 3.7)), 1.0 / 3.7) relTol 1E-8)
   }
+
+  test("SparseVector negative indices error") {
+    intercept[IllegalArgumentException] {
+      val sv = Vectors.sparse(3, Array(0, -1), Array(2, 5))
+    }
+  }
+
 }
