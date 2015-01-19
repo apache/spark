@@ -19,66 +19,86 @@
 Python package for statistical functions in MLlib.
 """
 
-from functools import wraps
-
-from pyspark import PickleSerializer
-from pyspark.mllib.linalg import _to_java_object_rdd
-
-
-__all__ = ['MultivariateStatisticalSummary', 'Statistics']
+from pyspark import RDD
+from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
+from pyspark.mllib.linalg import Matrix, _convert_to_vector
+from pyspark.mllib.regression import LabeledPoint
 
 
-def serialize(f):
-    ser = PickleSerializer()
-
-    @wraps(f)
-    def func(self):
-        jvec = f(self)
-        bytes = self._sc._jvm.SerDe.dumps(jvec)
-        return ser.loads(str(bytes)).toArray()
-
-    return func
+__all__ = ['MultivariateStatisticalSummary', 'ChiSqTestResult', 'Statistics']
 
 
-class MultivariateStatisticalSummary(object):
+class MultivariateStatisticalSummary(JavaModelWrapper):
 
     """
     Trait for multivariate statistical summary of a data matrix.
     """
 
-    def __init__(self, sc, java_summary):
-        """
-        :param sc:  Spark context
-        :param java_summary:  Handle to Java summary object
-        """
-        self._sc = sc
-        self._java_summary = java_summary
-
-    def __del__(self):
-        self._sc._gateway.detach(self._java_summary)
-
-    @serialize
     def mean(self):
-        return self._java_summary.mean()
+        return self.call("mean").toArray()
 
-    @serialize
     def variance(self):
-        return self._java_summary.variance()
+        return self.call("variance").toArray()
 
     def count(self):
-        return self._java_summary.count()
+        return self.call("count")
 
-    @serialize
     def numNonzeros(self):
-        return self._java_summary.numNonzeros()
+        return self.call("numNonzeros").toArray()
 
-    @serialize
     def max(self):
-        return self._java_summary.max()
+        return self.call("max").toArray()
 
-    @serialize
     def min(self):
-        return self._java_summary.min()
+        return self.call("min").toArray()
+
+
+class ChiSqTestResult(JavaModelWrapper):
+    """
+    .. note:: Experimental
+
+    Object containing the test results for the chi-squared hypothesis test.
+    """
+    @property
+    def method(self):
+        """
+        Name of the test method
+        """
+        return self._java_model.method()
+
+    @property
+    def pValue(self):
+        """
+        The probability of obtaining a test statistic result at least as
+        extreme as the one that was actually observed, assuming that the
+        null hypothesis is true.
+        """
+        return self._java_model.pValue()
+
+    @property
+    def degreesOfFreedom(self):
+        """
+        Returns the degree(s) of freedom of the hypothesis test.
+        Return type should be Number(e.g. Int, Double) or tuples of Numbers.
+        """
+        return self._java_model.degreesOfFreedom()
+
+    @property
+    def statistic(self):
+        """
+        Test statistic.
+        """
+        return self._java_model.statistic()
+
+    @property
+    def nullHypothesis(self):
+        """
+        Null hypothesis of the test.
+        """
+        return self._java_model.nullHypothesis()
+
+    def __str__(self):
+        return self._java_model.toString()
 
 
 class Statistics(object):
@@ -87,6 +107,11 @@ class Statistics(object):
     def colStats(rdd):
         """
         Computes column-wise summary statistics for the input RDD[Vector].
+
+        :param rdd: an RDD[Vector] for which column-wise summary statistics
+                    are to be computed.
+        :return: :class:`MultivariateStatisticalSummary` object containing
+                 column-wise summary statistics.
 
         >>> from pyspark.mllib.linalg import Vectors
         >>> rdd = sc.parallelize([Vectors.dense([2, 0, 0, -2]),
@@ -106,10 +131,8 @@ class Statistics(object):
         >>> cStats.min()
         array([ 2.,  0.,  0., -2.])
         """
-        sc = rdd.ctx
-        jrdd = _to_java_object_rdd(rdd)
-        cStats = sc._jvm.PythonMLLibAPI().colStats(jrdd)
-        return MultivariateStatisticalSummary(sc, cStats)
+        cStats = callMLlibFunc("colStats", rdd.map(_convert_to_vector))
+        return MultivariateStatisticalSummary(cStats)
 
     @staticmethod
     def corr(x, y=None, method=None):
@@ -122,6 +145,13 @@ class Statistics(object):
         comparing the columns in the input RDD is returned. Use C{method=}
         to specify the method to be used for single RDD inout.
         If two RDDs of floats are passed in, a single float is returned.
+
+        :param x: an RDD of vector for which the correlation matrix is to be computed,
+                  or an RDD of float of the same cardinality as y when y is specified.
+        :param y: an RDD of float of the same cardinality as x.
+        :param method: String specifying the method to use for computing correlation.
+                       Supported: `pearson` (default), `spearman`
+        :return: Correlation matrix comparing columns in x.
 
         >>> x = sc.parallelize([1.0, 0.0, -2.0], 2)
         >>> y = sc.parallelize([4.0, 5.0, 3.0], 2)
@@ -156,22 +186,101 @@ class Statistics(object):
         ... except TypeError:
         ...     pass
         """
-        sc = x.ctx
         # Check inputs to determine whether a single value or a matrix is needed for output.
         # Since it's legal for users to use the method name as the second argument, we need to
         # check if y is used to specify the method name instead.
         if type(y) == str:
             raise TypeError("Use 'method=' to specify method name.")
 
-        jx = _to_java_object_rdd(x)
         if not y:
-            resultMat = sc._jvm.PythonMLLibAPI().corr(jx, method)
-            bytes = sc._jvm.SerDe.dumps(resultMat)
-            ser = PickleSerializer()
-            return ser.loads(str(bytes)).toArray()
+            return callMLlibFunc("corr", x.map(_convert_to_vector), method).toArray()
         else:
-            jy = _to_java_object_rdd(y)
-            return sc._jvm.PythonMLLibAPI().corr(jx, jy, method)
+            return callMLlibFunc("corr", x.map(float), y.map(float), method)
+
+    @staticmethod
+    def chiSqTest(observed, expected=None):
+        """
+        .. note:: Experimental
+
+        If `observed` is Vector, conduct Pearson's chi-squared goodness
+        of fit test of the observed data against the expected distribution,
+        or againt the uniform distribution (by default), with each category
+        having an expected frequency of `1 / len(observed)`.
+        (Note: `observed` cannot contain negative values)
+
+        If `observed` is matrix, conduct Pearson's independence test on the
+        input contingency matrix, which cannot contain negative entries or
+        columns or rows that sum up to 0.
+
+        If `observed` is an RDD of LabeledPoint, conduct Pearson's independence
+        test for every feature against the label across the input RDD.
+        For each feature, the (feature, label) pairs are converted into a
+        contingency matrix for which the chi-squared statistic is computed.
+        All label and feature values must be categorical.
+
+        :param observed: it could be a vector containing the observed categorical
+                         counts/relative frequencies, or the contingency matrix
+                         (containing either counts or relative frequencies),
+                         or an RDD of LabeledPoint containing the labeled dataset
+                         with categorical features. Real-valued features will be
+                         treated as categorical for each distinct value.
+        :param expected: Vector containing the expected categorical counts/relative
+                         frequencies. `expected` is rescaled if the `expected` sum
+                         differs from the `observed` sum.
+        :return: ChiSquaredTest object containing the test statistic, degrees
+                 of freedom, p-value, the method used, and the null hypothesis.
+
+        >>> from pyspark.mllib.linalg import Vectors, Matrices
+        >>> observed = Vectors.dense([4, 6, 5])
+        >>> pearson = Statistics.chiSqTest(observed)
+        >>> print pearson.statistic
+        0.4
+        >>> pearson.degreesOfFreedom
+        2
+        >>> print round(pearson.pValue, 4)
+        0.8187
+        >>> pearson.method
+        u'pearson'
+        >>> pearson.nullHypothesis
+        u'observed follows the same distribution as expected.'
+
+        >>> observed = Vectors.dense([21, 38, 43, 80])
+        >>> expected = Vectors.dense([3, 5, 7, 20])
+        >>> pearson = Statistics.chiSqTest(observed, expected)
+        >>> print round(pearson.pValue, 4)
+        0.0027
+
+        >>> data = [40.0, 24.0, 29.0, 56.0, 32.0, 42.0, 31.0, 10.0, 0.0, 30.0, 15.0, 12.0]
+        >>> chi = Statistics.chiSqTest(Matrices.dense(3, 4, data))
+        >>> print round(chi.statistic, 4)
+        21.9958
+
+        >>> data = [LabeledPoint(0.0, Vectors.dense([0.5, 10.0])),
+        ...         LabeledPoint(0.0, Vectors.dense([1.5, 20.0])),
+        ...         LabeledPoint(1.0, Vectors.dense([1.5, 30.0])),
+        ...         LabeledPoint(0.0, Vectors.dense([3.5, 30.0])),
+        ...         LabeledPoint(0.0, Vectors.dense([3.5, 40.0])),
+        ...         LabeledPoint(1.0, Vectors.dense([3.5, 40.0])),]
+        >>> rdd = sc.parallelize(data, 4)
+        >>> chi = Statistics.chiSqTest(rdd)
+        >>> print chi[0].statistic
+        0.75
+        >>> print chi[1].statistic
+        1.5
+        """
+        if isinstance(observed, RDD):
+            if not isinstance(observed.first(), LabeledPoint):
+                raise ValueError("observed should be an RDD of LabeledPoint")
+            jmodels = callMLlibFunc("chiSqTest", observed)
+            return [ChiSqTestResult(m) for m in jmodels]
+
+        if isinstance(observed, Matrix):
+            jmodel = callMLlibFunc("chiSqTest", observed)
+        else:
+            if expected and len(expected) != len(observed):
+                raise ValueError("`expected` should have same length with `observed`")
+            jmodel = callMLlibFunc("chiSqTest", _convert_to_vector(observed), expected)
+        return ChiSqTestResult(jmodel)
 
 
 def _test():

@@ -62,7 +62,7 @@ public abstract class TaskContext implements Serializable {
    */
   public abstract boolean isInterrupted();
 
-  /** @deprecated: use isRunningLocally() */
+  /** @deprecated use {@link #isRunningLocally()} */
   @Deprecated
   public abstract boolean runningLocally();
 
@@ -71,7 +71,6 @@ public abstract class TaskContext implements Serializable {
   /**
    * Add a (Java friendly) listener to be executed on task completion.
    * This will be called in all situation - success, failure, or cancellation.
-   * <p/>
    * An example use is for HadoopRDD to register a callback to close the input stream.
    */
   public abstract TaskContext addTaskCompletionListener(TaskCompletionListener listener);
@@ -79,7 +78,6 @@ public abstract class TaskContext implements Serializable {
   /**
    * Add a listener in the form of a Scala closure to be executed on task completion.
    * This will be called in all situations - success, failure, or cancellation.
-   * <p/>
    * An example use is for HadoopRDD to register a callback to close the input stream.
    */
   public abstract TaskContext addTaskCompletionListener(final Function1<TaskContext, Unit> f);
@@ -89,18 +87,38 @@ public abstract class TaskContext implements Serializable {
    * is for HadoopRDD to register a callback to close the input stream.
    * Will be called in any situation - success, failure, or cancellation.
    *
-   * @deprecated: use addTaskCompletionListener
+   * @deprecated use {@link #addTaskCompletionListener(scala.Function1)}
    *
    * @param f Callback function.
    */
   @Deprecated
   public abstract void addOnCompleteCallback(final Function0<Unit> f);
 
+  /**
+   * The ID of the stage that this task belong to.
+   */
   public abstract int stageId();
 
+  /**
+   * The ID of the RDD partition that is computed by this task.
+   */
   public abstract int partitionId();
 
+  /**
+   * How many times this task has been attempted.  The first task attempt will be assigned
+   * attemptNumber = 0, and subsequent attempts will have increasing attempt numbers.
+   */
+  public abstract int attemptNumber();
+
+  /** @deprecated use {@link #taskAttemptId()}; it was renamed to avoid ambiguity. */
+  @Deprecated
   public abstract long attemptId();
+
+  /**
+   * An ID that is unique to this task attempt (within the same SparkContext, no two task attempts
+   * will share the same attempt ID).  This is roughly equivalent to Hadoop's TaskAttemptID.
+   */
+  public abstract long taskAttemptId();
 
   /** ::DeveloperApi:: */
   @DeveloperApi

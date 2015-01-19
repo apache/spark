@@ -1,1 +1,0 @@
-translate(input, from, to) - translates the input string by replacing the characters present in the from string with the corresponding characters in the to string

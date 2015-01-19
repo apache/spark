@@ -43,7 +43,7 @@ private[evaluation] object AreaUnderCurve {
    */
   def of(curve: RDD[(Double, Double)]): Double = {
     curve.sliding(2).aggregate(0.0)(
-      seqOp = (auc: Double, points: Seq[(Double, Double)]) => auc + trapezoid(points),
+      seqOp = (auc: Double, points: Array[(Double, Double)]) => auc + trapezoid(points),
       combOp = _ + _
     )
   }

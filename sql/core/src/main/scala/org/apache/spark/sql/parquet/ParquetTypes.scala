@@ -24,22 +24,29 @@ import scala.util.Try
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.Job
-import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 
+import parquet.format.converter.ParquetMetadataConverter
 import parquet.hadoop.{ParquetFileReader, Footer, ParquetFileWriter}
 import parquet.hadoop.metadata.{ParquetMetadata, FileMetaData}
 import parquet.hadoop.util.ContextUtil
-import parquet.schema.{Type => ParquetType, PrimitiveType => ParquetPrimitiveType, MessageType}
-import parquet.schema.{GroupType => ParquetGroupType, OriginalType => ParquetOriginalType, ConversionPatterns}
+import parquet.schema.{Type => ParquetType, Types => ParquetTypes, PrimitiveType => ParquetPrimitiveType, MessageType}
+import parquet.schema.{GroupType => ParquetGroupType, OriginalType => ParquetOriginalType, ConversionPatterns, DecimalMetadata}
 import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
 import parquet.schema.Type.Repetition
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 // Implicits
 import scala.collection.JavaConversions._
+
+/** A class representing Parquet info fields we care about, for passing back to Parquet */
+private[parquet] case class ParquetTypeInfo(
+  primitiveType: ParquetPrimitiveTypeName,
+  originalType: Option[ParquetOriginalType] = None,
+  decimalMetadata: Option[DecimalMetadata] = None,
+  length: Option[Int] = None)
 
 private[parquet] object ParquetTypesConverter extends Logging {
   def isPrimitiveType(ctype: DataType): Boolean =
@@ -47,11 +54,12 @@ private[parquet] object ParquetTypesConverter extends Logging {
 
   def toPrimitiveDataType(
       parquetType: ParquetPrimitiveType,
-      binayAsString: Boolean): DataType =
+      binaryAsString: Boolean): DataType = {
+    val originalType = parquetType.getOriginalType
+    val decimalInfo = parquetType.getDecimalMetadata
     parquetType.getPrimitiveTypeName match {
       case ParquetPrimitiveTypeName.BINARY
-        if (parquetType.getOriginalType == ParquetOriginalType.UTF8 ||
-          binayAsString) => StringType
+        if (originalType == ParquetOriginalType.UTF8 || binaryAsString) => StringType
       case ParquetPrimitiveTypeName.BINARY => BinaryType
       case ParquetPrimitiveTypeName.BOOLEAN => BooleanType
       case ParquetPrimitiveTypeName.DOUBLE => DoubleType
@@ -61,13 +69,18 @@ private[parquet] object ParquetTypesConverter extends Logging {
       case ParquetPrimitiveTypeName.INT96 =>
         // TODO: add BigInteger type? TODO(andre) use DecimalType instead????
         sys.error("Potential loss of precision: cannot convert INT96")
+      case ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY
+        if (originalType == ParquetOriginalType.DECIMAL && decimalInfo.getPrecision <= 18) =>
+          // TODO: for now, our reader only supports decimals that fit in a Long
+          DecimalType(decimalInfo.getPrecision, decimalInfo.getScale)
       case _ => sys.error(
         s"Unsupported parquet datatype $parquetType")
     }
+  }
 
   /**
    * Converts a given Parquet `Type` into the corresponding
-   * [[org.apache.spark.sql.catalyst.types.DataType]].
+   * [[org.apache.spark.sql.types.DataType]].
    *
    * We apply the following conversion rules:
    * <ul>
@@ -178,44 +191,61 @@ private[parquet] object ParquetTypesConverter extends Logging {
   }
 
   /**
-   * For a given Catalyst [[org.apache.spark.sql.catalyst.types.DataType]] return
+   * For a given Catalyst [[org.apache.spark.sql.types.DataType]] return
    * the name of the corresponding Parquet primitive type or None if the given type
    * is not primitive.
    *
    * @param ctype The type to convert
-   * @return The name of the corresponding Parquet primitive type
+   * @return The name of the corresponding Parquet type properties
    */
-  def fromPrimitiveDataType(ctype: DataType):
-      Option[(ParquetPrimitiveTypeName, Option[ParquetOriginalType])] = ctype match {
-    case StringType => Some(ParquetPrimitiveTypeName.BINARY, Some(ParquetOriginalType.UTF8))
-    case BinaryType => Some(ParquetPrimitiveTypeName.BINARY, None)
-    case BooleanType => Some(ParquetPrimitiveTypeName.BOOLEAN, None)
-    case DoubleType => Some(ParquetPrimitiveTypeName.DOUBLE, None)
-    case FloatType => Some(ParquetPrimitiveTypeName.FLOAT, None)
-    case IntegerType => Some(ParquetPrimitiveTypeName.INT32, None)
+  def fromPrimitiveDataType(ctype: DataType): Option[ParquetTypeInfo] = ctype match {
+    case StringType => Some(ParquetTypeInfo(
+      ParquetPrimitiveTypeName.BINARY, Some(ParquetOriginalType.UTF8)))
+    case BinaryType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.BINARY))
+    case BooleanType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.BOOLEAN))
+    case DoubleType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.DOUBLE))
+    case FloatType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.FLOAT))
+    case IntegerType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT32))
     // There is no type for Byte or Short so we promote them to INT32.
-    case ShortType => Some(ParquetPrimitiveTypeName.INT32, None)
-    case ByteType => Some(ParquetPrimitiveTypeName.INT32, None)
-    case LongType => Some(ParquetPrimitiveTypeName.INT64, None)
+    case ShortType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT32))
+    case ByteType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT32))
+    case LongType => Some(ParquetTypeInfo(ParquetPrimitiveTypeName.INT64))
+    case DecimalType.Fixed(precision, scale) if precision <= 18 =>
+      // TODO: for now, our writer only supports decimals that fit in a Long
+      Some(ParquetTypeInfo(ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY,
+        Some(ParquetOriginalType.DECIMAL),
+        Some(new DecimalMetadata(precision, scale)),
+        Some(BYTES_FOR_PRECISION(precision))))
     case _ => None
   }
 
   /**
-   * Converts a given Catalyst [[org.apache.spark.sql.catalyst.types.DataType]] into
+   * Compute the FIXED_LEN_BYTE_ARRAY length needed to represent a given DECIMAL precision.
+   */
+  private[parquet] val BYTES_FOR_PRECISION = Array.tabulate[Int](38) { precision =>
+    var length = 1
+    while (math.pow(2.0, 8 * length - 1) < math.pow(10.0, precision)) {
+      length += 1
+    }
+    length
+  }
+
+  /**
+   * Converts a given Catalyst [[org.apache.spark.sql.types.DataType]] into
    * the corresponding Parquet `Type`.
    *
    * The conversion follows the rules below:
    * <ul>
    *   <li> Primitive types are converted into Parquet's primitive types.</li>
-   *   <li> [[org.apache.spark.sql.catalyst.types.StructType]]s are converted
+   *   <li> [[org.apache.spark.sql.types.StructType]]s are converted
    *        into Parquet's `GroupType` with the corresponding field types.</li>
-   *   <li> [[org.apache.spark.sql.catalyst.types.ArrayType]]s are converted
+   *   <li> [[org.apache.spark.sql.types.ArrayType]]s are converted
    *        into a 2-level nested group, where the outer group has the inner
    *        group as sole field. The inner group has name `values` and
    *        repetition level `REPEATED` and has the element type of
    *        the array as schema. We use Parquet's `ConversionPatterns` for this
    *        purpose.</li>
-   *   <li> [[org.apache.spark.sql.catalyst.types.MapType]]s are converted
+   *   <li> [[org.apache.spark.sql.types.MapType]]s are converted
    *        into a nested (2-level) Parquet `GroupType` with two fields: a key
    *        type and a value type. The nested group has repetition level
    *        `REPEATED` and name `map`. We use Parquet's `ConversionPatterns`
@@ -247,12 +277,22 @@ private[parquet] object ParquetTypesConverter extends Logging {
       } else {
         if (nullable) Repetition.OPTIONAL else Repetition.REQUIRED
       }
-    val primitiveType = fromPrimitiveDataType(ctype)
-    primitiveType.map {
-      case (primitiveType, originalType) =>
-        new ParquetPrimitiveType(repetition, primitiveType, name, originalType.orNull)
+    val typeInfo = fromPrimitiveDataType(ctype)
+    typeInfo.map {
+      case ParquetTypeInfo(primitiveType, originalType, decimalMetadata, length) =>
+        val builder = ParquetTypes.primitive(primitiveType, repetition).as(originalType.orNull)
+        for (len <- length) {
+          builder.length(len)
+        }
+        for (metadata <- decimalMetadata) {
+          builder.precision(metadata.getPrecision).scale(metadata.getScale)
+        }
+        builder.named(name)
     }.getOrElse {
       ctype match {
+        case udt: UserDefinedType[_] => {
+          fromDataType(udt.sqlType, name, nullable, inArray)
+        }
         case ArrayType(elementType, false) => {
           val parquetElementType = fromDataType(
             elementType,
@@ -279,7 +319,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
           val fields = structFields.map {
             field => fromDataType(field.dataType, field.name, field.nullable, inArray = false)
           }
-          new ParquetGroupType(repetition, name, fields)
+          new ParquetGroupType(repetition, name, fields.toSeq)
         }
         case MapType(keyType, valueType, valueContainsNull) => {
           val parquetKeyType =
@@ -397,10 +437,14 @@ private[parquet] object ParquetTypesConverter extends Logging {
     }
     val path = origPath.makeQualified(fs)
 
-    val children = fs.listStatus(path).filterNot { status =>
-      val name = status.getPath.getName
-      (name(0) == '.' || name(0) == '_') && name != ParquetFileWriter.PARQUET_METADATA_FILE
-    }
+    val children =
+      fs
+        .globStatus(path)
+        .flatMap { status => if(status.isDir) fs.listStatus(status.getPath) else List(status) }
+        .filterNot { status =>
+          val name = status.getPath.getName
+          (name(0) == '.' || name(0) == '_') && name != ParquetFileWriter.PARQUET_METADATA_FILE
+        }
 
     ParquetRelation.enableLogForwarding()
 
@@ -414,7 +458,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
       // ... and fallback to "_metadata" if no such file exists (which implies the Parquet file is
       // empty, thus normally the "_metadata" file is expected to be fairly small).
       .orElse(children.find(_.getPath.getName == ParquetFileWriter.PARQUET_METADATA_FILE))
-      .map(ParquetFileReader.readFooter(conf, _))
+      .map(ParquetFileReader.readFooter(conf, _, ParquetMetadataConverter.NO_FILTER))
       .getOrElse(
         throw new IllegalArgumentException(s"Could not find Parquet metadata at path $path"))
   }

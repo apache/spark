@@ -1,9 +1,9 @@
-CREATE EXTERNAL TABLE tmp_showcrt1(
-  key string, 
-  newvalue boolean COMMENT 'a new value')
+CREATE EXTERNAL TABLE `tmp_showcrt1`(
+  `key` string, 
+  `newvalue` boolean COMMENT 'a new value')
 COMMENT 'temporary table'
 PARTITIONED BY ( 
-  value bigint COMMENT 'some value')
+  `value` bigint COMMENT 'some value')
 ROW FORMAT SERDE 
   'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' 
 STORED AS INPUTFORMAT 
@@ -11,6 +11,6 @@ STORED AS INPUTFORMAT
 OUTPUTFORMAT 
   'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
 LOCATION
-  'file:/tmp/sparkHiveWarehouse1280221975983654134/tmp_showcrt1'
+  'file:/private/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/sparkHiveWarehouse1201055597819413730/tmp_showcrt1'
 TBLPROPERTIES (
-  'transient_lastDdlTime'='1407132112')
+  'transient_lastDdlTime'='1413891331')

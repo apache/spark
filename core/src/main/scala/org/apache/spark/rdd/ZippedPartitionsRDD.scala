@@ -22,6 +22,7 @@ import java.io.{IOException, ObjectOutputStream}
 import scala.reflect.ClassTag
 
 import org.apache.spark.{OneToOneDependency, Partition, SparkContext, TaskContext}
+import org.apache.spark.util.Utils
 
 private[spark] class ZippedPartitionsPartition(
     idx: Int,
@@ -34,7 +35,7 @@ private[spark] class ZippedPartitionsPartition(
   def partitions = partitionValues
 
   @throws(classOf[IOException])
-  private def writeObject(oos: ObjectOutputStream) {
+  private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     // Update the reference to parent split at the time of task serialization
     partitionValues = rdds.map(rdd => rdd.partitions(idx))
     oos.defaultWriteObject()
@@ -76,7 +77,7 @@ private[spark] abstract class ZippedPartitionsBaseRDD[V: ClassTag](
 
 private[spark] class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag](
     sc: SparkContext,
-    f: (Iterator[A], Iterator[B]) => Iterator[V],
+    var f: (Iterator[A], Iterator[B]) => Iterator[V],
     var rdd1: RDD[A],
     var rdd2: RDD[B],
     preservesPartitioning: Boolean = false)
@@ -91,13 +92,14 @@ private[spark] class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag]
     super.clearDependencies()
     rdd1 = null
     rdd2 = null
+    f = null
   }
 }
 
 private[spark] class ZippedPartitionsRDD3
   [A: ClassTag, B: ClassTag, C: ClassTag, V: ClassTag](
     sc: SparkContext,
-    f: (Iterator[A], Iterator[B], Iterator[C]) => Iterator[V],
+    var f: (Iterator[A], Iterator[B], Iterator[C]) => Iterator[V],
     var rdd1: RDD[A],
     var rdd2: RDD[B],
     var rdd3: RDD[C],
@@ -116,13 +118,14 @@ private[spark] class ZippedPartitionsRDD3
     rdd1 = null
     rdd2 = null
     rdd3 = null
+    f = null
   }
 }
 
 private[spark] class ZippedPartitionsRDD4
   [A: ClassTag, B: ClassTag, C: ClassTag, D:ClassTag, V: ClassTag](
     sc: SparkContext,
-    f: (Iterator[A], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V],
+    var f: (Iterator[A], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V],
     var rdd1: RDD[A],
     var rdd2: RDD[B],
     var rdd3: RDD[C],
@@ -144,5 +147,6 @@ private[spark] class ZippedPartitionsRDD4
     rdd2 = null
     rdd3 = null
     rdd4 = null
+    f = null
   }
 }

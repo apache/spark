@@ -17,14 +17,12 @@
 
 package org.apache.spark.storage
 
-import java.io.{File, InputStream, OutputStream, BufferedOutputStream, ByteArrayOutputStream}
+import java.io.{BufferedOutputStream, ByteArrayOutputStream, File, InputStream, OutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-
-import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{Await, Future}
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.util.Random
 
@@ -35,10 +33,14 @@ import org.apache.spark._
 import org.apache.spark.executor._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
+import org.apache.spark.network.buffer.{ManagedBuffer, NioManagedBuffer}
+import org.apache.spark.network.netty.SparkTransportConf
+import org.apache.spark.network.shuffle.ExternalShuffleClient
+import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.ShuffleManager
+import org.apache.spark.shuffle.hash.HashShuffleManager
 import org.apache.spark.util._
-
 
 private[spark] sealed trait BlockValues
 private[spark] case class ByteBufferValues(buffer: ByteBuffer) extends BlockValues
@@ -51,9 +53,15 @@ private[spark] class BlockResult(
     readMethod: DataReadMethod.Value,
     bytes: Long) {
   val inputMetrics = new InputMetrics(readMethod)
-  inputMetrics.bytesRead = bytes
+  inputMetrics.addBytesRead(bytes)
 }
 
+/**
+ * Manager running on every node (driver and executors) which provides interfaces for putting and
+ * retrieving blocks both locally and remotely into various stores (memory, disk, and off-heap).
+ *
+ * Note that #initialize() must be called before the BlockManager is usable.
+ */
 private[spark] class BlockManager(
     executorId: String,
     actorSystem: ActorSystem,
@@ -63,10 +71,10 @@ private[spark] class BlockManager(
     val conf: SparkConf,
     mapOutputTracker: MapOutputTracker,
     shuffleManager: ShuffleManager,
-    blockTransferService: BlockTransferService)
+    blockTransferService: BlockTransferService,
+    securityManager: SecurityManager,
+    numUsableCores: Int)
   extends BlockDataManager with Logging {
-
-  blockTransferService.init(this)
 
   val diskBlockManager = new DiskBlockManager(this, conf)
 
@@ -87,8 +95,37 @@ private[spark] class BlockManager(
     new TachyonStore(this, tachyonBlockManager)
   }
 
-  val blockManagerId = BlockManagerId(
-    executorId, blockTransferService.hostName, blockTransferService.port)
+  private[spark]
+  val externalShuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false)
+
+  // Port used by the external shuffle service. In Yarn mode, this may be already be
+  // set through the Hadoop configuration as the server is launched in the Yarn NM.
+  private val externalShuffleServicePort =
+    Utils.getSparkOrYarnConfig(conf, "spark.shuffle.service.port", "7337").toInt
+
+  // Check that we're not using external shuffle service with consolidated shuffle files.
+  if (externalShuffleServiceEnabled
+      && conf.getBoolean("spark.shuffle.consolidateFiles", false)
+      && shuffleManager.isInstanceOf[HashShuffleManager]) {
+    throw new UnsupportedOperationException("Cannot use external shuffle service with consolidated"
+      + " shuffle files in hash-based shuffle. Please disable spark.shuffle.consolidateFiles or "
+      + " switch to sort-based shuffle.")
+  }
+
+  var blockManagerId: BlockManagerId = _
+
+  // Address of the server that serves this executor's shuffle files. This is either an external
+  // service, or just our own Executor's BlockManager.
+  private[spark] var shuffleServerId: BlockManagerId = _
+
+  // Client to read other executors' shuffle files. This is either an external service, or just the
+  // standard BlockTransferService to directly connect to other Executors.
+  private[spark] val shuffleClient = if (externalShuffleServiceEnabled) {
+    val transConf = SparkTransportConf.fromSparkConf(conf, numUsableCores)
+    new ExternalShuffleClient(transConf, securityManager, securityManager.isAuthenticationEnabled())
+  } else {
+    blockTransferService
+  }
 
   // Whether to compress broadcast variables that are stored
   private val compressBroadcast = conf.getBoolean("spark.broadcast.compress", true)
@@ -118,8 +155,6 @@ private[spark] class BlockManager(
   private val peerFetchLock = new Object
   private var lastPeerFetchTime = 0L
 
-  initialize()
-
   /* The compression codec to use. Note that the "lazy" val is necessary because we want to delay
    * the initialization of the compression codec until it is first used. The reason is that a Spark
    * program could be using a user-defined codec in a third party jar, which is loaded in
@@ -138,17 +173,66 @@ private[spark] class BlockManager(
       conf: SparkConf,
       mapOutputTracker: MapOutputTracker,
       shuffleManager: ShuffleManager,
-      blockTransferService: BlockTransferService) = {
+      blockTransferService: BlockTransferService,
+      securityManager: SecurityManager,
+      numUsableCores: Int) = {
     this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf),
-      conf, mapOutputTracker, shuffleManager, blockTransferService)
+      conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager, numUsableCores)
   }
 
   /**
-   * Initialize the BlockManager. Register to the BlockManagerMaster, and start the
-   * BlockManagerWorker actor.
+   * Initializes the BlockManager with the given appId. This is not performed in the constructor as
+   * the appId may not be known at BlockManager instantiation time (in particular for the driver,
+   * where it is only learned after registration with the TaskScheduler).
+   *
+   * This method initializes the BlockTransferService and ShuffleClient, registers with the
+   * BlockManagerMaster, starts the BlockManagerWorker actor, and registers with a local shuffle
+   * service if configured.
    */
-  private def initialize(): Unit = {
+  def initialize(appId: String): Unit = {
+    blockTransferService.init(this)
+    shuffleClient.init(appId)
+
+    blockManagerId = BlockManagerId(
+      executorId, blockTransferService.hostName, blockTransferService.port)
+
+    shuffleServerId = if (externalShuffleServiceEnabled) {
+      BlockManagerId(executorId, blockTransferService.hostName, externalShuffleServicePort)
+    } else {
+      blockManagerId
+    }
+
     master.registerBlockManager(blockManagerId, maxMemory, slaveActor)
+
+    // Register Executors' configuration with the local shuffle service, if one should exist.
+    if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
+      registerWithExternalShuffleServer()
+    }
+  }
+
+  private def registerWithExternalShuffleServer() {
+    logInfo("Registering executor with local external shuffle service.")
+    val shuffleConfig = new ExecutorShuffleInfo(
+      diskBlockManager.localDirs.map(_.toString),
+      diskBlockManager.subDirsPerLocalDir,
+      shuffleManager.getClass.getName)
+
+    val MAX_ATTEMPTS = 3
+    val SLEEP_TIME_SECS = 5
+
+    for (i <- 1 to MAX_ATTEMPTS) {
+      try {
+        // Synchronous and will throw an exception if we cannot connect.
+        shuffleClient.asInstanceOf[ExternalShuffleClient].registerWithShuffleServer(
+          shuffleServerId.host, shuffleServerId.port, shuffleServerId.executorId, shuffleConfig)
+        return
+      } catch {
+        case e: Exception if i < MAX_ATTEMPTS =>
+          logError(s"Failed to connect to external shuffle server, will retry ${MAX_ATTEMPTS - i}}"
+            + s" more times after waiting $SLEEP_TIME_SECS seconds...", e)
+          Thread.sleep(SLEEP_TIME_SECS * 1000)
+      }
+    }
   }
 
   /**
@@ -212,21 +296,20 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Interface to get local block data.
-   *
-   * @return Some(buffer) if the block exists locally, and None if it doesn't.
+   * Interface to get local block data. Throws an exception if the block cannot be found or
+   * cannot be read successfully.
    */
-  override def getBlockData(blockId: String): Option[ManagedBuffer] = {
-    val bid = BlockId(blockId)
-    if (bid.isShuffle) {
-      Some(shuffleManager.shuffleBlockManager.getBlockData(bid.asInstanceOf[ShuffleBlockId]))
+  override def getBlockData(blockId: BlockId): ManagedBuffer = {
+    if (blockId.isShuffle) {
+      shuffleManager.shuffleBlockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
     } else {
-      val blockBytesOpt = doGetLocal(bid, asBlockResult = false).asInstanceOf[Option[ByteBuffer]]
+      val blockBytesOpt = doGetLocal(blockId, asBlockResult = false)
+        .asInstanceOf[Option[ByteBuffer]]
       if (blockBytesOpt.isDefined) {
         val buffer = blockBytesOpt.get
-        Some(new NioByteBufferManagedBuffer(buffer))
+        new NioManagedBuffer(buffer)
       } else {
-        None
+        throw new BlockNotFoundException(blockId.toString)
       }
     }
   }
@@ -234,8 +317,8 @@ private[spark] class BlockManager(
   /**
    * Put the block locally, using the given storage level.
    */
-  override def putBlockData(blockId: String, data: ManagedBuffer, level: StorageLevel): Unit = {
-    putBytes(BlockId(blockId), data.nioByteBuffer(), level)
+  override def putBlockData(blockId: BlockId, data: ManagedBuffer, level: StorageLevel): Unit = {
+    putBytes(blockId, data.nioByteBuffer(), level)
   }
 
   /**
@@ -338,17 +421,6 @@ private[spark] class BlockManager(
     val locations = master.getLocations(blockIds).toArray
     logDebug("Got multiple block location in %s".format(Utils.getUsedTimeMs(startTimeMs)))
     locations
-  }
-
-  /**
-   * A short-circuited method to get blocks directly from disk. This is used for getting
-   * shuffle blocks. It is safe to do so without a lock on block info since disk store
-   * never deletes (recent) items.
-   */
-  def getLocalShuffleFromDisk(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
-    val buf = shuffleManager.shuffleBlockManager.getBlockData(blockId.asInstanceOf[ShuffleBlockId])
-    val is = wrapForCompression(blockId, buf.inputStream())
-    Some(serializer.newInstance().deserializeStream(is).asIterator)
   }
 
   /**
@@ -520,7 +592,7 @@ private[spark] class BlockManager(
     for (loc <- locations) {
       logDebug(s"Getting remote block $blockId from $loc")
       val data = blockTransferService.fetchBlockSync(
-        loc.host, loc.port, blockId.toString).nioByteBuffer()
+        loc.host, loc.port, loc.executorId, blockId.toString).nioByteBuffer()
 
       if (data != null) {
         if (asBlockResult) {
@@ -869,9 +941,9 @@ private[spark] class BlockManager(
             data.rewind()
             logTrace(s"Trying to replicate $blockId of ${data.limit()} bytes to $peer")
             blockTransferService.uploadBlockSync(
-              peer.host, peer.port, blockId.toString, new NioByteBufferManagedBuffer(data), tLevel)
-            logTrace(s"Replicated $blockId of ${data.limit()} bytes to $peer in %f ms"
-              .format((System.currentTimeMillis - onePeerStartTime)))
+              peer.host, peer.port, peer.executorId, blockId, new NioManagedBuffer(data), tLevel)
+            logTrace(s"Replicated $blockId of ${data.limit()} bytes to $peer in %s ms"
+              .format(System.currentTimeMillis - onePeerStartTime))
             peersReplicatedTo += peer
             peersForReplication -= peer
             replicationFailed = false
@@ -941,8 +1013,10 @@ private[spark] class BlockManager(
           // If we get here, the block write failed.
           logWarning(s"Block $blockId was marked as failure. Nothing to drop")
           return None
+        } else if (blockInfo.get(blockId).isEmpty) {
+          logWarning(s"Block $blockId was already dropped.")
+          return None
         }
-
         var blockIsUpdated = false
         val level = info.level
 
@@ -1071,7 +1145,8 @@ private[spark] class BlockManager(
       case _: ShuffleBlockId => compressShuffle
       case _: BroadcastBlockId => compressBroadcast
       case _: RDDBlockId => compressRdds
-      case _: TempBlockId => compressShuffleSpill
+      case _: TempLocalBlockId => compressShuffleSpill
+      case _: TempShuffleBlockId => compressShuffle
       case _ => false
     }
   }
@@ -1125,7 +1200,11 @@ private[spark] class BlockManager(
   }
 
   def stop(): Unit = {
-    blockTransferService.stop()
+    blockTransferService.close()
+    if (shuffleClient ne blockTransferService) {
+      // Closing should be idempotent, but maybe not for the NioBlockTransferService.
+      shuffleClient.close()
+    }
     diskBlockManager.stop()
     actorSystem.stop(slaveActor)
     blockInfo.clear()

@@ -112,7 +112,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       // Wait until all the received blocks in the network input tracker has
       // been consumed by network input DStreams, and jobs have been generated with them
       logInfo("Waiting for all received blocks to be consumed for job generation")
-      while(!hasTimedOut && jobScheduler.receiverTracker.hasMoreReceivedBlockIds) {
+      while(!hasTimedOut && jobScheduler.receiverTracker.hasUnallocatedBlocks) {
         Thread.sleep(pollTime)
       }
       logInfo("Waited for all received blocks to be consumed for job generation")
@@ -217,14 +217,18 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
   /** Generate jobs and perform checkpoint for the given `time`.  */
   private def generateJobs(time: Time) {
-    Try(graph.generateJobs(time)) match {
+    // Set the SparkEnv in this thread, so that job generation code can access the environment
+    // Example: BlockRDDs are created in this thread, and it needs to access BlockManager
+    // Update: This is probably redundant after threadlocal stuff in SparkEnv has been removed.
+    SparkEnv.set(ssc.env)
+    Try {
+      jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
+      graph.generateJobs(time) // generate jobs using allocated block
+    } match {
       case Success(jobs) =>
-        val receivedBlockInfo = graph.getReceiverInputStreams.map { stream =>
-          val streamId = stream.id
-          val receivedBlockInfo = stream.getReceivedBlockInfo(time)
-          (streamId, receivedBlockInfo)
-        }.toMap
-        jobScheduler.submitJobSet(JobSet(time, jobs, receivedBlockInfo))
+        val receivedBlockInfos =
+          jobScheduler.receiverTracker.getBlocksOfBatch(time).mapValues { _.toArray }
+        jobScheduler.submitJobSet(JobSet(time, jobs, receivedBlockInfos))
       case Failure(e) =>
         jobScheduler.reportError("Error generating jobs for time " + time, e)
     }
@@ -234,6 +238,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   /** Clear DStream metadata for the given `time`. */
   private def clearMetadata(time: Time) {
     ssc.graph.clearMetadata(time)
+    jobScheduler.receiverTracker.cleanupOldMetadata(time - graph.batchDuration)
 
     // If checkpointing is enabled, then checkpoint,
     // else mark batch to be fully processed

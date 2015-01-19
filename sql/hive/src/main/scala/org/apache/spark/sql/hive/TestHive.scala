@@ -26,6 +26,7 @@ import scala.language.implicitConversions
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerInputFormat, AvroContainerOutputFormat}
 import org.apache.hadoop.hive.ql.metadata.Table
+import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.RegexSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe
@@ -33,10 +34,12 @@ import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.plans.logical.{CacheTableCommand, LogicalPlan, NativeCommand}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.SQLConf
+import org.apache.spark.sql.hive.execution.HiveNativeCommand
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -63,6 +66,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
+  CommandProcessorFactory.clean(hiveconf)
 
   lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
   lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
@@ -98,8 +102,10 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     new this.QueryExecution { val logical = plan }
 
   /** Fewer partitions to speed up testing. */
-  override private[spark] def numShufflePartitions: Int =
-    getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+  protected[sql] override lazy val conf: SQLConf = new SQLConf {
+    override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+  }
 
   /**
    * Returns the value of specified environmental variable as a [[java.io.File]] after checking
@@ -117,7 +123,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     if (cmd.toUpperCase contains "LOAD DATA") {
       val testDataLocation =
         hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)
-      cmd.replaceAll("\\.\\.", testDataLocation)
+      cmd.replaceAll("\\.\\./\\.\\./", testDataLocation + "/")
     } else {
       cmd
     }
@@ -156,7 +162,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   abstract class QueryExecution extends super.QueryExecution {
     override lazy val analyzed = {
       val describedTables = logical match {
-        case NativeCommand(describedTable(tbl)) => tbl :: Nil
+        case HiveNativeCommand(describedTable(tbl)) => tbl :: Nil
         case CacheTableCommand(tbl, _, _) => tbl :: Nil
         case _ => Nil
       }
@@ -164,7 +170,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       // Make sure any test tables referenced are loaded.
       val referencedTables =
         describedTables ++
-        logical.collect { case UnresolvedRelation(databaseName, name, _) => name }
+        logical.collect { case UnresolvedRelation(tableIdent, _) => tableIdent.last }
       val referencedTestTables = referencedTables.filter(testTables.contains)
       logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)
@@ -375,6 +381,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
    */
   protected val originalUdfs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
+  // Database default may not exist in 0.13.1, create it if not exist
+  HiveShim.createDefaultDBIfNeeded(this)
+
   /**
    * Resets the test instance by deleting any tables that have been created.
    * TODO: also clear out UDFs, views, etc.
@@ -388,6 +397,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
       clearCache()
       loadedTables.clear()
+      catalog.cachedDataSourceTables.invalidateAll()
       catalog.client.getAllTables("default").foreach { t =>
         logDebug(s"Deleting table $t")
         val table = catalog.client.getTable("default", t)
@@ -412,10 +422,14 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         FunctionRegistry.unregisterTemporaryUDF(udfName)
       }
 
+      // Some tests corrupt this value on purpose, which breaks the RESET call below.
+      hiveconf.set("fs.default.name", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
       runSqlHive("RESET")
       // For some reason, RESET does not reset the following variables...
+      // https://issues.apache.org/jira/browse/HIVE-9004
+      runSqlHive("set hive.table.parameters.default=")
       runSqlHive("set datanucleus.cache.collections=true")
       runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
@@ -433,10 +447,6 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
     } catch {
       case e: Exception =>
         logError("FATAL ERROR: Failed to reset TestDB state.", e)
-        // At this point there is really no reason to continue, but the test framework traps exits.
-        // So instead we just pause forever so that at least the developer can see where things
-        // started to go wrong.
-        Thread.sleep(100000)
     }
   }
 }

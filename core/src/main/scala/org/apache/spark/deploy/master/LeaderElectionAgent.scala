@@ -17,30 +17,27 @@
 
 package org.apache.spark.deploy.master
 
-import akka.actor.{Actor, ActorRef}
-
-import org.apache.spark.deploy.master.MasterMessages.ElectedLeader
+import org.apache.spark.annotation.DeveloperApi
 
 /**
- * A LeaderElectionAgent keeps track of whether the current Master is the leader, meaning it
- * is the only Master serving requests.
- * In addition to the API provided, the LeaderElectionAgent will use of the following messages
- * to inform the Master of leader changes:
- * [[org.apache.spark.deploy.master.MasterMessages.ElectedLeader ElectedLeader]]
- * [[org.apache.spark.deploy.master.MasterMessages.RevokedLeadership RevokedLeadership]]
+ * :: DeveloperApi ::
+ *
+ * A LeaderElectionAgent tracks current master and is a common interface for all election Agents.
  */
-private[spark] trait LeaderElectionAgent extends Actor {
-  // TODO: LeaderElectionAgent does not necessary to be an Actor anymore, need refactoring.
-  val masterActor: ActorRef
+@DeveloperApi
+trait LeaderElectionAgent {
+  val masterActor: LeaderElectable
+  def stop() {} // to avoid noops in implementations.
+}
+
+@DeveloperApi
+trait LeaderElectable {
+  def electedLeader()
+  def revokedLeadership()
 }
 
 /** Single-node implementation of LeaderElectionAgent -- we're initially and always the leader. */
-private[spark] class MonarchyLeaderAgent(val masterActor: ActorRef) extends LeaderElectionAgent {
-  override def preStart() {
-    masterActor ! ElectedLeader
-  }
-
-  override def receive = {
-    case _ =>
-  }
+private[spark] class MonarchyLeaderAgent(val masterActor: LeaderElectable)
+  extends LeaderElectionAgent {
+  masterActor.electedLeader()
 }

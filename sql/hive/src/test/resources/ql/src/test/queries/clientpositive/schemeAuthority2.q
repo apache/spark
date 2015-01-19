@@ -1,5 +1,5 @@
-dfs -mkdir file:///tmp/test;
-dfs -mkdir hdfs:///tmp/test;
+dfs ${system:test.dfs.mkdir} file:///tmp/test;
+dfs ${system:test.dfs.mkdir} hdfs:///tmp/test;
 
 create external table dynPart (key string) partitioned by (value string, value2 string) row format delimited fields terminated by '\\t' stored as textfile;
 insert overwrite local directory "/tmp/test" select key from src where (key = 10) order by key;

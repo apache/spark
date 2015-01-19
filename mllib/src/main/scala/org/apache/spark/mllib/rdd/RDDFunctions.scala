@@ -20,6 +20,7 @@ package org.apache.spark.mllib.rdd
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.HashPartitioner
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
@@ -28,8 +29,8 @@ import org.apache.spark.util.Utils
 /**
  * Machine learning specific RDD functions.
  */
-private[mllib]
-class RDDFunctions[T: ClassTag](self: RDD[T]) {
+@DeveloperApi
+class RDDFunctions[T: ClassTag](self: RDD[T]) extends Serializable {
 
   /**
    * Returns a RDD from grouping items of its parent RDD in fixed size blocks by passing a sliding
@@ -39,10 +40,10 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) {
    * trigger a Spark job if the parent RDD has more than one partitions and the window size is
    * greater than 1.
    */
-  def sliding(windowSize: Int): RDD[Seq[T]] = {
+  def sliding(windowSize: Int): RDD[Array[T]] = {
     require(windowSize > 0, s"Sliding window size must be positive, but got $windowSize.")
     if (windowSize == 1) {
-      self.map(Seq(_))
+      self.map(Array(_))
     } else {
       new SlidingRDD[T](self, windowSize)
     }
@@ -112,7 +113,7 @@ class RDDFunctions[T: ClassTag](self: RDD[T]) {
   }
 }
 
-private[mllib]
+@DeveloperApi
 object RDDFunctions {
 
   /** Implicit conversion from an RDD to RDDFunctions. */

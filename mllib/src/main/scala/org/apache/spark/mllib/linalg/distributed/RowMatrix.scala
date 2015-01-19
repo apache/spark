@@ -152,7 +152,7 @@ class RowMatrix(
    * storing the right singular vectors, is computed via matrix multiplication as
    * U = A * (V * S^-1^), if requested by user. The actual method to use is determined
    * automatically based on the cost:
-   *  - If n is small (n < 100) or k is large compared with n (k > n / 2), we compute the Gramian
+   *  - If n is small (n &lt; 100) or k is large compared with n (k > n / 2), we compute the Gramian
    *    matrix first and then compute its top eigenvalues and eigenvectors locally on the driver.
    *    This requires a single pass with O(n^2^) storage on each executor and on the driver, and
    *    O(n^2^ k) time on the driver.
@@ -169,7 +169,8 @@ class RowMatrix(
    * @note The conditions that decide which method to use internally and the default parameters are
    *       subject to change.
    *
-   * @param k number of leading singular values to keep (0 < k <= n). It might return less than k if
+   * @param k number of leading singular values to keep (0 &lt; k &lt;= n).
+   *          It might return less than k if
    *          there are numerically zero singular values or there are not enough Ritz values
    *          converged before the maximum number of Arnoldi update iterations is reached (in case
    *          that matrix A is ill-conditioned).
@@ -192,7 +193,7 @@ class RowMatrix(
   /**
    * The actual SVD implementation, visible for testing.
    *
-   * @param k number of leading singular values to keep (0 < k <= n)
+   * @param k number of leading singular values to keep (0 &lt; k &lt;= n)
    * @param computeU whether to compute U
    * @param rCond the reciprocal condition number
    * @param maxIter max number of iterations (if ARPACK is used)
@@ -211,7 +212,7 @@ class RowMatrix(
       tol: Double,
       mode: String): SingularValueDecomposition[RowMatrix, Matrix] = {
     val n = numCols().toInt
-    require(k > 0 && k <= n, s"Request up to n singular values but got k=$k and n=$n.")
+    require(k > 0 && k <= n, s"Requested k singular values but got k=$k and numCols=$n.")
 
     object SVDMode extends Enumeration {
       val LocalARPACK, LocalLAPACK, DistARPACK = Value
@@ -527,21 +528,21 @@ class RowMatrix(
       iter.flatMap { row =>
         val buf = new ListBuffer[((Int, Int), Double)]()
         row match {
-          case sv: SparseVector =>
-            val nnz = sv.indices.size
+          case SparseVector(size, indices, values) =>
+            val nnz = indices.size
             var k = 0
             while (k < nnz) {
-              scaled(k) = sv.values(k) / q(sv.indices(k))
+              scaled(k) = values(k) / q(indices(k))
               k += 1
             }
             k = 0
             while (k < nnz) {
-              val i = sv.indices(k)
+              val i = indices(k)
               val iVal = scaled(k)
               if (iVal != 0 && rand.nextDouble() < p(i)) {
                 var l = k + 1
                 while (l < nnz) {
-                  val j = sv.indices(l)
+                  val j = indices(l)
                   val jVal = scaled(l)
                   if (jVal != 0 && rand.nextDouble() < p(j)) {
                     buf += (((i, j), iVal * jVal))
@@ -551,11 +552,11 @@ class RowMatrix(
               }
               k += 1
             }
-          case dv: DenseVector =>
-            val n = dv.values.size
+          case DenseVector(values) =>
+            val n = values.size
             var i = 0
             while (i < n) {
-              scaled(i) = dv.values(i) / q(i)
+              scaled(i) = values(i) / q(i)
               i += 1
             }
             i = 0
@@ -587,8 +588,8 @@ class RowMatrix(
     val n = numCols().toInt
     val mat = BDM.zeros[Double](m, n)
     var i = 0
-    rows.collect().foreach { v =>
-      v.toBreeze.activeIterator.foreach { case (j, v) =>
+    rows.collect().foreach { vector =>
+      vector.foreachActive { case (j, v) =>
         mat(i, j) = v
       }
       i += 1
@@ -619,11 +620,9 @@ object RowMatrix {
     // TODO: Find a better home (breeze?) for this method.
     val n = v.size
     v match {
-      case dv: DenseVector =>
-        blas.dspr("U", n, alpha, dv.values, 1, U)
-      case sv: SparseVector =>
-        val indices = sv.indices
-        val values = sv.values
+      case DenseVector(values) =>
+        blas.dspr("U", n, alpha, values, 1, U)
+      case SparseVector(size, indices, values) =>
         val nnz = indices.length
         var colStartIdx = 0
         var prevCol = 0

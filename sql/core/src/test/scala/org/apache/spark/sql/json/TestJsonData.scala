@@ -32,22 +32,6 @@ object TestJsonData {
           "null":null
       }"""  :: Nil)
 
-  val complexFieldAndType =
-    TestSQLContext.sparkContext.parallelize(
-      """{"struct":{"field1": true, "field2": 92233720368547758070},
-          "structWithArrayFields":{"field1":[4, 5, 6], "field2":["str1", "str2"]},
-          "arrayOfString":["str1", "str2"],
-          "arrayOfInteger":[1, 2147483647, -2147483648],
-          "arrayOfLong":[21474836470, 9223372036854775807, -9223372036854775808],
-          "arrayOfBigInteger":[922337203685477580700, -922337203685477580800],
-          "arrayOfDouble":[1.2, 1.7976931348623157E308, 4.9E-324, 2.2250738585072014E-308],
-          "arrayOfBoolean":[true, false, true],
-          "arrayOfNull":[null, null, null, null],
-          "arrayOfStruct":[{"field1": true, "field2": "str1"}, {"field1": false}, {"field3": null}],
-          "arrayOfArray1":[[1, 2, 3], ["str1", "str2"]],
-          "arrayOfArray2":[[1, 2, 3], [1.1, 2.1, 3.1]]
-         }"""  :: Nil)
-
   val primitiveFieldValueTypeConflict =
     TestSQLContext.sparkContext.parallelize(
       """{"num_num_1":11, "num_num_2":null, "num_num_3": 1.1,
@@ -58,6 +42,13 @@ object TestJsonData {
           "num_bool":false, "num_str":"str1", "str_bool":false}""" ::
       """{"num_num_1":21474836570, "num_num_2":1.1, "num_num_3": 21474836470,
           "num_bool":null, "num_str":92233720368547758070, "str_bool":null}""" :: Nil)
+
+  val jsonNullStruct =
+    TestSQLContext.sparkContext.parallelize(
+      """{"nullstr":"","ip":"27.31.100.29","headers":{"Host":"1.abc.com","Charset":"UTF-8"}}""" ::
+        """{"nullstr":"","ip":"27.31.100.29","headers":{}}""" ::
+        """{"nullstr":"","ip":"27.31.100.29","headers":""}""" ::
+        """{"nullstr":null,"ip":"27.31.100.29","headers":null}""" :: Nil)
 
   val complexFieldValueTypeConflict =
     TestSQLContext.sparkContext.parallelize(
@@ -73,7 +64,9 @@ object TestJsonData {
   val arrayElementTypeConflict =
     TestSQLContext.sparkContext.parallelize(
       """{"array1": [1, 1.1, true, null, [], {}, [2,3,4], {"field":"str"}],
-          "array2": [{"field":214748364700}, {"field":1}]}""" :: Nil)
+          "array2": [{"field":214748364700}, {"field":1}]}""" ::
+      """{"array3": [{"field":"str"}, {"field":1}]}""" ::
+      """{"array3": [1, 2, 3]}""" :: Nil)
 
   val missingFields =
     TestSQLContext.sparkContext.parallelize(
@@ -82,6 +75,22 @@ object TestJsonData {
       """{"c":[33, 44]}""" ::
       """{"d":{"field":true}}""" ::
       """{"e":"str"}""" :: Nil)
+
+  val complexFieldAndType1 =
+    TestSQLContext.sparkContext.parallelize(
+      """{"struct":{"field1": true, "field2": 92233720368547758070},
+          "structWithArrayFields":{"field1":[4, 5, 6], "field2":["str1", "str2"]},
+          "arrayOfString":["str1", "str2"],
+          "arrayOfInteger":[1, 2147483647, -2147483648],
+          "arrayOfLong":[21474836470, 9223372036854775807, -9223372036854775808],
+          "arrayOfBigInteger":[922337203685477580700, -922337203685477580800],
+          "arrayOfDouble":[1.2, 1.7976931348623157E308, 4.9E-324, 2.2250738585072014E-308],
+          "arrayOfBoolean":[true, false, true],
+          "arrayOfNull":[null, null, null, null],
+          "arrayOfStruct":[{"field1": true, "field2": "str1"}, {"field1": false}, {"field3": null}],
+          "arrayOfArray1":[[1, 2, 3], ["str1", "str2"]],
+          "arrayOfArray2":[[1, 2, 3], [1.1, 2.1, 3.1]]
+         }"""  :: Nil)
 
   val complexFieldAndType2 =
     TestSQLContext.sparkContext.parallelize(
@@ -136,6 +145,13 @@ object TestJsonData {
             ]
           ]]
       }""" :: Nil)
+
+  val nullsInArrays =
+    TestSQLContext.sparkContext.parallelize(
+      """{"field1":[[null], [[["Test"]]]]}""" ::
+      """{"field2":[null, [{"Test":1}]]}""" ::
+      """{"field3":[[null], [{"Test":"2"}]]}""" ::
+      """{"field4":[[null, [1,2,3]]]}""" :: Nil)
 
   val jsonArray =
     TestSQLContext.sparkContext.parallelize(

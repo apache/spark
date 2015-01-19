@@ -29,7 +29,6 @@ import org.apache.hadoop.mapreduce.{JobContext => NewJobContext, OutputCommitter
 OutputFormat => NewOutputFormat, RecordWriter => NewRecordWriter,
 TaskAttemptContext => NewTaskAttempContext}
 import org.apache.spark.{Partitioner, SharedSparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.util.Utils
 
 import org.scalatest.FunSuite

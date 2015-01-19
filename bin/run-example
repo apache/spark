@@ -17,11 +17,11 @@
 # limitations under the License.
 #
 
-SCALA_VERSION=2.10
-
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 export SPARK_HOME="$FWDIR"
 EXAMPLES_DIR="$FWDIR"/examples
+
+. "$FWDIR"/bin/load-spark-env.sh
 
 if [ -n "$1" ]; then
   EXAMPLE_CLASS="$1"
@@ -36,8 +36,8 @@ fi
 
 if [ -f "$FWDIR/RELEASE" ]; then
   export SPARK_EXAMPLES_JAR="`ls "$FWDIR"/lib/spark-examples-*hadoop*.jar`"
-elif [ -e "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/spark-examples-*hadoop*.jar ]; then
-  export SPARK_EXAMPLES_JAR="`ls "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/spark-examples-*hadoop*.jar`"
+elif [ -e "$EXAMPLES_DIR"/target/scala-$SPARK_SCALA_VERSION/spark-examples-*hadoop*.jar ]; then
+  export SPARK_EXAMPLES_JAR="`ls "$EXAMPLES_DIR"/target/scala-$SPARK_SCALA_VERSION/spark-examples-*hadoop*.jar`"
 fi
 
 if [[ -z "$SPARK_EXAMPLES_JAR" ]]; then

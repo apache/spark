@@ -53,6 +53,8 @@ case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
   def name = "rdd_" + rddId + "_" + splitIndex
 }
 
+// Format of the shuffle block ids (including data and index) should be kept in sync with
+// org.apache.spark.network.shuffle.StandaloneShuffleBlockManager#getBlockData().
 @DeveloperApi
 case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   def name = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
@@ -83,9 +85,14 @@ case class StreamBlockId(streamId: Int, uniqueId: Long) extends BlockId {
   def name = "input-" + streamId + "-" + uniqueId
 }
 
-/** Id associated with temporary data managed as blocks. Not serializable. */
-private[spark] case class TempBlockId(id: UUID) extends BlockId {
-  def name = "temp_" + id
+/** Id associated with temporary local data managed as blocks. Not serializable. */
+private[spark] case class TempLocalBlockId(id: UUID) extends BlockId {
+  def name = "temp_local_" + id
+}
+
+/** Id associated with temporary shuffle data managed as blocks. Not serializable. */
+private[spark] case class TempShuffleBlockId(id: UUID) extends BlockId {
+  def name = "temp_shuffle_" + id
 }
 
 // Intended only for testing purposes

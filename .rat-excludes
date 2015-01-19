@@ -1,5 +1,6 @@
 target
 .gitignore
+.gitattributes
 .project
 .classpath
 .mima-excludes
@@ -43,11 +44,13 @@ SparkImports.scala
 SparkJLineCompletion.scala
 SparkJLineReader.scala
 SparkMemberHandlers.scala
+SparkReplReporter.scala
 sbt
 sbt-launch-lib.bash
 plugins.sbt
 work
 .*\.q
+.*\.qv
 golden
 test.out/*
 .*iml
@@ -61,3 +64,4 @@ dist/*
 logs
 .*scalastyle-output.xml
 .*dependency-reduced-pom.xml
+known_translations

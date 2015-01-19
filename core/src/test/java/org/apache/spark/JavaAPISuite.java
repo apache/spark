@@ -18,9 +18,13 @@
 package org.apache.spark;
 
 import java.io.*;
+import java.nio.channels.FileChannel;
+import java.nio.ByteBuffer;
 import java.net.URI;
 import java.util.*;
+import java.util.concurrent.*;
 
+import org.apache.spark.input.PortableDataStream;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
@@ -29,6 +33,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.base.Throwables;
 import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
 import com.google.common.io.Files;
@@ -43,10 +48,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaDoubleRDD;
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.*;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.partial.BoundedDouble;
@@ -141,11 +143,10 @@ public class JavaAPISuite implements Serializable {
   public void sample() {
     List<Integer> ints = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10);
     JavaRDD<Integer> rdd = sc.parallelize(ints);
-    JavaRDD<Integer> sample20 = rdd.sample(true, 0.2, 11);
-    // expected 2 but of course result varies randomly a bit
-    Assert.assertEquals(3, sample20.count());
-    JavaRDD<Integer> sample20NoReplacement = rdd.sample(false, 0.2, 11);
-    Assert.assertEquals(2, sample20NoReplacement.count());
+    JavaRDD<Integer> sample20 = rdd.sample(true, 0.2, 3);
+    Assert.assertEquals(2, sample20.count());
+    JavaRDD<Integer> sample20WithoutReplacement = rdd.sample(false, 0.2, 5);
+    Assert.assertEquals(2, sample20WithoutReplacement.count());
   }
 
   @Test
@@ -183,6 +184,7 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(new Tuple2<Integer, Integer>(3, 2), sortedPairs.get(2));
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void repartitionAndSortWithinPartitions() {
     List<Tuple2<Integer, Integer>> pairs = new ArrayList<Tuple2<Integer, Integer>>();
@@ -322,6 +324,47 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
   }
 
+  @Test
+  public void groupByOnPairRDD() {
+    // Regression test for SPARK-4459
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 1, 2, 3, 5, 8, 13));
+    Function<Tuple2<Integer, Integer>, Boolean> areOdd =
+      new Function<Tuple2<Integer, Integer>, Boolean>() {
+        @Override
+        public Boolean call(Tuple2<Integer, Integer> x) {
+          return (x._1() % 2 == 0) && (x._2() % 2 == 0);
+        }
+      };
+    JavaPairRDD<Integer, Integer> pairRDD = rdd.zip(rdd);
+    JavaPairRDD<Boolean, Iterable<Tuple2<Integer, Integer>>> oddsAndEvens = pairRDD.groupBy(areOdd);
+    Assert.assertEquals(2, oddsAndEvens.count());
+    Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
+
+    oddsAndEvens = pairRDD.groupBy(areOdd, 1);
+    Assert.assertEquals(2, oddsAndEvens.count());
+    Assert.assertEquals(2, Iterables.size(oddsAndEvens.lookup(true).get(0)));  // Evens
+    Assert.assertEquals(5, Iterables.size(oddsAndEvens.lookup(false).get(0))); // Odds
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void keyByOnPairRDD() {
+    // Regression test for SPARK-4459
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 1, 2, 3, 5, 8, 13));
+    Function<Tuple2<Integer, Integer>, String> sumToString =
+      new Function<Tuple2<Integer, Integer>, String>() {
+        @Override
+        public String call(Tuple2<Integer, Integer> x) {
+          return String.valueOf(x._1() + x._2());
+        }
+      };
+    JavaPairRDD<Integer, Integer> pairRDD = rdd.zip(rdd);
+    JavaPairRDD<String, Tuple2<Integer, Integer>> keyed = pairRDD.keyBy(sumToString);
+    Assert.assertEquals(7, keyed.count());
+    Assert.assertEquals(1, (long) keyed.lookup("2").get(0)._1());
+  }
+
   @SuppressWarnings("unchecked")
   @Test
   public void cogroup() {
@@ -449,6 +492,7 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(33, sum);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void aggregateByKey() {
     JavaPairRDD<Integer, Integer> pairs = sc.parallelizePairs(
@@ -776,7 +820,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
-    TaskContext context = new TaskContextImpl(0, 0, 0L, false, new TaskMetrics());
+    TaskContext context = new TaskContextImpl(0, 0, 0L, 0, false, new TaskMetrics());
     Assert.assertEquals(1, rdd.iterator(rdd.partitions().get(0), context).next().intValue());
   }
 
@@ -863,6 +907,82 @@ public class JavaAPISuite implements Serializable {
       }
     });
     Assert.assertEquals(pairs, readRDD.collect());
+  }
+
+  @Test
+  public void binaryFiles() throws Exception {
+    // Reusing the wholeText files example
+    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+
+    String tempDirName = tempDir.getAbsolutePath();
+    File file1 = new File(tempDirName + "/part-00000");
+
+    FileOutputStream fos1 = new FileOutputStream(file1);
+
+    FileChannel channel1 = fos1.getChannel();
+    ByteBuffer bbuf = java.nio.ByteBuffer.wrap(content1);
+    channel1.write(bbuf);
+    channel1.close();
+    JavaPairRDD<String, PortableDataStream> readRDD = sc.binaryFiles(tempDirName, 3);
+    List<Tuple2<String, PortableDataStream>> result = readRDD.collect();
+    for (Tuple2<String, PortableDataStream> res : result) {
+      Assert.assertArrayEquals(content1, res._2().toArray());
+    }
+  }
+
+  @Test
+  public void binaryFilesCaching() throws Exception {
+    // Reusing the wholeText files example
+    byte[] content1 = "spark is easy to use.\n".getBytes("utf-8");
+
+    String tempDirName = tempDir.getAbsolutePath();
+    File file1 = new File(tempDirName + "/part-00000");
+
+    FileOutputStream fos1 = new FileOutputStream(file1);
+
+    FileChannel channel1 = fos1.getChannel();
+    ByteBuffer bbuf = java.nio.ByteBuffer.wrap(content1);
+    channel1.write(bbuf);
+    channel1.close();
+
+    JavaPairRDD<String, PortableDataStream> readRDD = sc.binaryFiles(tempDirName).cache();
+    readRDD.foreach(new VoidFunction<Tuple2<String,PortableDataStream>>() {
+      @Override
+      public void call(Tuple2<String, PortableDataStream> pair) throws Exception {
+        pair._2().toArray(); // force the file to read
+      }
+    });
+
+    List<Tuple2<String, PortableDataStream>> result = readRDD.collect();
+    for (Tuple2<String, PortableDataStream> res : result) {
+      Assert.assertArrayEquals(content1, res._2().toArray());
+    }
+  }
+
+  @Test
+  public void binaryRecords() throws Exception {
+    // Reusing the wholeText files example
+    byte[] content1 = "spark isn't always easy to use.\n".getBytes("utf-8");
+    int numOfCopies = 10;
+    String tempDirName = tempDir.getAbsolutePath();
+    File file1 = new File(tempDirName + "/part-00000");
+
+    FileOutputStream fos1 = new FileOutputStream(file1);
+
+    FileChannel channel1 = fos1.getChannel();
+
+    for (int i = 0; i < numOfCopies; i++) {
+      ByteBuffer bbuf = java.nio.ByteBuffer.wrap(content1);
+      channel1.write(bbuf);
+    }
+    channel1.close();
+
+    JavaRDD<byte[]> readRDD = sc.binaryRecords(tempDirName, content1.length);
+    Assert.assertEquals(numOfCopies,readRDD.count());
+    List<byte[]> result = readRDD.collect();
+    for (byte[] res : result) {
+      Assert.assertArrayEquals(content1, res);
+    }
   }
 
   @SuppressWarnings("unchecked")
@@ -1239,6 +1359,19 @@ public class JavaAPISuite implements Serializable {
     pairRDD.collectAsMap();  // Used to crash with ClassCastException
   }
 
+  @SuppressWarnings("unchecked")
+  @Test
+  public void collectAsMapAndSerialize() throws Exception {
+    JavaPairRDD<String,Integer> rdd =
+        sc.parallelizePairs(Arrays.asList(new Tuple2<String,Integer>("foo", 1)));
+    Map<String,Integer> map = rdd.collectAsMap();
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    new ObjectOutputStream(bytes).writeObject(map);
+    Map<String,Integer> deserializedMap = (Map<String,Integer>)
+        new ObjectInputStream(new ByteArrayInputStream(bytes.toByteArray())).readObject();
+    Assert.assertEquals(1, deserializedMap.get("foo").intValue());
+  }
+
   @Test
   @SuppressWarnings("unchecked")
   public void sampleByKey() {
@@ -1308,6 +1441,92 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(data.size(), collected.length);
   }
 
+  private static final class BuggyMapFunction<T> implements Function<T, T> {
+
+    @Override
+    public T call(T x) throws Exception {
+      throw new IllegalStateException("Custom exception!");
+    }
+  }
+
+  @Test
+  public void collectAsync() throws Exception {
+    List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
+    JavaRDD<Integer> rdd = sc.parallelize(data, 1);
+    JavaFutureAction<List<Integer>> future = rdd.collectAsync();
+    List<Integer> result = future.get();
+    Assert.assertEquals(data, result);
+    Assert.assertFalse(future.isCancelled());
+    Assert.assertTrue(future.isDone());
+    Assert.assertEquals(1, future.jobIds().size());
+  }
+
+  @Test
+  public void foreachAsync() throws Exception {
+    List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
+    JavaRDD<Integer> rdd = sc.parallelize(data, 1);
+    JavaFutureAction<Void> future = rdd.foreachAsync(
+        new VoidFunction<Integer>() {
+          @Override
+          public void call(Integer integer) throws Exception {
+            // intentionally left blank.
+          }
+        }
+    );
+    future.get();
+    Assert.assertFalse(future.isCancelled());
+    Assert.assertTrue(future.isDone());
+    Assert.assertEquals(1, future.jobIds().size());
+  }
+
+  @Test
+  public void countAsync() throws Exception {
+    List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
+    JavaRDD<Integer> rdd = sc.parallelize(data, 1);
+    JavaFutureAction<Long> future = rdd.countAsync();
+    long count = future.get();
+    Assert.assertEquals(data.size(), count);
+    Assert.assertFalse(future.isCancelled());
+    Assert.assertTrue(future.isDone());
+    Assert.assertEquals(1, future.jobIds().size());
+  }
+
+  @Test
+  public void testAsyncActionCancellation() throws Exception {
+    List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
+    JavaRDD<Integer> rdd = sc.parallelize(data, 1);
+    JavaFutureAction<Void> future = rdd.foreachAsync(new VoidFunction<Integer>() {
+      @Override
+      public void call(Integer integer) throws Exception {
+        Thread.sleep(10000);  // To ensure that the job won't finish before it's cancelled.
+      }
+    });
+    future.cancel(true);
+    Assert.assertTrue(future.isCancelled());
+    Assert.assertTrue(future.isDone());
+    try {
+      future.get(2000, TimeUnit.MILLISECONDS);
+      Assert.fail("Expected future.get() for cancelled job to throw CancellationException");
+    } catch (CancellationException ignored) {
+      // pass
+    }
+  }
+
+  @Test
+  public void testAsyncActionErrorWrapping() throws Exception {
+    List<Integer> data = Arrays.asList(1, 2, 3, 4, 5);
+    JavaRDD<Integer> rdd = sc.parallelize(data, 1);
+    JavaFutureAction<Long> future = rdd.map(new BuggyMapFunction<Integer>()).countAsync();
+    try {
+      future.get(2, TimeUnit.SECONDS);
+      Assert.fail("Expected future.get() for failed job to throw ExcecutionException");
+    } catch (ExecutionException ee) {
+      Assert.assertTrue(Throwables.getStackTraceAsString(ee).contains("Custom exception!"));
+    }
+    Assert.assertTrue(future.isDone());
+  }
+
+
   /**
    * Test for SPARK-3647. This test needs to use the maven-built assembly to trigger the issue,
    * since that's the only artifact where Guava classes have been relocated.
@@ -1331,6 +1550,18 @@ public class JavaAPISuite implements Serializable {
     } finally {
       localCluster.stop();
     }
+  }
+
+  static class Class1 {}
+  static class Class2 {}
+
+  @Test
+  public void testRegisterKryoClasses() {
+    SparkConf conf = new SparkConf();
+    conf.registerKryoClasses(new Class<?>[]{ Class1.class, Class2.class });
+    Assert.assertEquals(
+        Class1.class.getName() + "," + Class2.class.getName(),
+        conf.get("spark.kryo.classesToRegister"));
   }
 
 }

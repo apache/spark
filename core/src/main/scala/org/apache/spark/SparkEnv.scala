@@ -32,6 +32,7 @@ import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.BlockTransferService
+import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
@@ -68,6 +69,7 @@ class SparkEnv (
     val shuffleMemoryManager: ShuffleMemoryManager,
     val conf: SparkConf) extends Logging {
 
+  private[spark] var isStopped = false
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
@@ -75,6 +77,7 @@ class SparkEnv (
   private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
 
   private[spark] def stop() {
+    isStopped = true
     pythonWorkers.foreach { case(key, worker) => worker.stop() }
     Option(httpFileServer).foreach(_.stop())
     mapOutputTracker.stop()
@@ -142,14 +145,64 @@ object SparkEnv extends Logging {
     env
   }
 
-  private[spark] def create(
+  /**
+   * Create a SparkEnv for the driver.
+   */
+  private[spark] def createDriverEnv(
+      conf: SparkConf,
+      isLocal: Boolean,
+      listenerBus: LiveListenerBus): SparkEnv = {
+    assert(conf.contains("spark.driver.host"), "spark.driver.host is not set on the driver!")
+    assert(conf.contains("spark.driver.port"), "spark.driver.port is not set on the driver!")
+    val hostname = conf.get("spark.driver.host")
+    val port = conf.get("spark.driver.port").toInt
+    create(
+      conf,
+      SparkContext.DRIVER_IDENTIFIER,
+      hostname,
+      port,
+      isDriver = true,
+      isLocal = isLocal,
+      listenerBus = listenerBus
+    )
+  }
+
+  /**
+   * Create a SparkEnv for an executor.
+   * In coarse-grained mode, the executor provides an actor system that is already instantiated.
+   */
+  private[spark] def createExecutorEnv(
+      conf: SparkConf,
+      executorId: String,
+      hostname: String,
+      port: Int,
+      numCores: Int,
+      isLocal: Boolean): SparkEnv = {
+    val env = create(
+      conf,
+      executorId,
+      hostname,
+      port,
+      isDriver = false,
+      isLocal = isLocal,
+      numUsableCores = numCores
+    )
+    SparkEnv.set(env)
+    env
+  }
+
+  /**
+   * Helper method to create a SparkEnv for a driver or an executor.
+   */
+  private def create(
       conf: SparkConf,
       executorId: String,
       hostname: String,
       port: Int,
       isDriver: Boolean,
       isLocal: Boolean,
-      listenerBus: LiveListenerBus = null): SparkEnv = {
+      listenerBus: LiveListenerBus = null,
+      numUsableCores: Int = 0): SparkEnv = {
 
     // Listener bus is only used on the driver
     if (isDriver) {
@@ -157,14 +210,18 @@ object SparkEnv extends Logging {
     }
 
     val securityManager = new SecurityManager(conf)
-    val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
-      actorSystemName, hostname, port, conf, securityManager)
+
+    // Create the ActorSystem for Akka and get the port it binds to.
+    val (actorSystem, boundPort) = {
+      val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
+      AkkaUtils.createActorSystem(actorSystemName, hostname, port, conf, securityManager)
+    }
 
     // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
-    // This is so that we tell the executors the correct port to connect to.
     if (isDriver) {
       conf.set("spark.driver.port", boundPort.toString)
+    } else {
+      conf.set("spark.executor.port", boundPort.toString)
     }
 
     // Create an instance of the class with the given name, possibly initializing it with our conf
@@ -231,14 +288,22 @@ object SparkEnv extends Logging {
 
     val shuffleMemoryManager = new ShuffleMemoryManager(conf)
 
-    val blockTransferService = new NioBlockTransferService(conf, securityManager)
+    val blockTransferService =
+      conf.get("spark.shuffle.blockTransferService", "netty").toLowerCase match {
+        case "netty" =>
+          new NettyBlockTransferService(conf, securityManager, numUsableCores)
+        case "nio" =>
+          new NioBlockTransferService(conf, securityManager)
+      }
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
       new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf, isDriver)
 
+    // NB: blockManager is not valid until initialize() is called later.
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
-      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService)
+      serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
+      numUsableCores)
 
     val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
@@ -247,7 +312,7 @@ object SparkEnv extends Logging {
     val httpFileServer =
       if (isDriver) {
         val fileServerPort = conf.getInt("spark.fileserver.port", 0)
-        val server = new HttpFileServer(securityManager, fileServerPort)
+        val server = new HttpFileServer(conf, securityManager, fileServerPort)
         server.initialize()
         conf.set("spark.fileserver.uri",  server.serverUri)
         server
@@ -330,7 +395,7 @@ object SparkEnv extends Logging {
     val sparkProperties = (conf.getAll ++ schedulerMode).sorted
 
     // System properties that are not java classpaths
-    val systemProperties = System.getProperties.iterator.toSeq
+    val systemProperties = Utils.getSystemProperties.toSeq
     val otherProperties = systemProperties.filter { case (k, _) =>
       k != "java.class.path" && !k.startsWith("spark.")
     }.sorted

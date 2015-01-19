@@ -8,10 +8,10 @@ into 2 BUCKETS stored as textfile;
 create table table2(key string, value string) clustered by (value, key)
 into 2 BUCKETS stored as textfile;
 
-load data local inpath '../data/files/T1.txt' overwrite into table table1;
+load data local inpath '../../data/files/T1.txt' overwrite into table table1;
 
-load data local inpath '../data/files/T1.txt' overwrite into table table2;
-load data local inpath '../data/files/T2.txt' overwrite into table table2;
+load data local inpath '../../data/files/T1.txt' overwrite into table table2;
+load data local inpath '../../data/files/T2.txt' overwrite into table table2;
 
 set hive.optimize.bucketmapjoin = true;
 set hive.input.format = org.apache.hadoop.hive.ql.io.BucketizedHiveInputFormat;

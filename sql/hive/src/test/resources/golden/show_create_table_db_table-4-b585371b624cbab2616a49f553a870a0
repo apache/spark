@@ -1,6 +1,6 @@
-CREATE  TABLE tmp_feng.tmp_showcrt(
-  key string, 
-  value int)
+CREATE  TABLE `tmp_feng.tmp_showcrt`(
+  `key` string, 
+  `value` int)
 ROW FORMAT SERDE 
   'org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe' 
 STORED AS INPUTFORMAT 
@@ -8,6 +8,6 @@ STORED AS INPUTFORMAT
 OUTPUTFORMAT 
   'org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat'
 LOCATION
-  'file:/tmp/sparkHiveWarehouse1280221975983654134/tmp_feng.db/tmp_showcrt'
+  'file:/private/var/folders/36/cjkbrr953xg2p_krwrmn8h_r0000gn/T/sparkHiveWarehouse1201055597819413730/tmp_feng.db/tmp_showcrt'
 TBLPROPERTIES (
-  'transient_lastDdlTime'='1407132107')
+  'transient_lastDdlTime'='1413891330')

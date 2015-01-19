@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.collection.Map
 
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 /**
  * Returns the item at `ordinal` in the Array `child` or the Key `ordinal` in Map `child`.
@@ -92,7 +92,13 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
 
   lazy val ordinal = structType.fields.indexOf(field)
 
-  override lazy val resolved = childrenResolved && child.dataType.isInstanceOf[StructType]
+  override lazy val resolved = childrenResolved && fieldResolved
+
+  /** Returns true only if the fieldName is found in the child struct. */
+  private def fieldResolved = child.dataType match {
+    case StructType(fields) => fields.map(_.name).contains(fieldName)
+    case _ => false
+  }
 
   override def eval(input: Row): Any = {
     val baseValue = child.eval(input).asInstanceOf[Row]
@@ -100,4 +106,33 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
   }
 
   override def toString = s"$child.$fieldName"
+}
+
+/**
+ * Returns an Array containing the evaluation of all children expressions.
+ */
+case class CreateArray(children: Seq[Expression]) extends Expression {
+  override type EvaluatedType = Any
+  
+  override def foldable = !children.exists(!_.foldable)
+  
+  lazy val childTypes = children.map(_.dataType).distinct
+
+  override lazy val resolved =
+    childrenResolved && childTypes.size <= 1
+
+  override def dataType: DataType = {
+    assert(resolved, s"Invalid dataType of mixed ArrayType ${childTypes.mkString(",")}")
+    ArrayType(
+      childTypes.headOption.getOrElse(NullType),
+      containsNull = children.exists(_.nullable))
+  }
+
+  override def nullable: Boolean = false
+
+  override def eval(input: Row): Any = {
+    children.map(_.eval(input))
+  }
+
+  override def toString = s"Array(${children.mkString(",")})"
 }

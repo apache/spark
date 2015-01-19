@@ -46,7 +46,7 @@ private[sql] trait CacheManager {
   def isCached(tableName: String): Boolean = lookupCachedData(table(tableName)).nonEmpty
 
   /** Caches the specified table in-memory. */
-  def cacheTable(tableName: String): Unit = cacheQuery(table(tableName))
+  def cacheTable(tableName: String): Unit = cacheQuery(table(tableName), Some(tableName))
 
   /** Removes the specified table from the in-memory cache. */
   def uncacheTable(tableName: String): Unit = uncacheQuery(table(tableName))
@@ -81,8 +81,9 @@ private[sql] trait CacheManager {
    */
   private[sql] def cacheQuery(
       query: SchemaRDD,
+      tableName: Option[String] = None,
       storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = writeLock {
-    val planToCache = query.queryExecution.optimizedPlan
+    val planToCache = query.queryExecution.analyzed
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
@@ -90,28 +91,45 @@ private[sql] trait CacheManager {
         CachedData(
           planToCache,
           InMemoryRelation(
-            useCompression, columnBatchSize, storageLevel, query.queryExecution.executedPlan))
+            conf.useCompression,
+            conf.columnBatchSize,
+            storageLevel,
+            query.queryExecution.executedPlan,
+            tableName))
     }
   }
 
   /** Removes the data for the given SchemaRDD from the cache */
   private[sql] def uncacheQuery(query: SchemaRDD, blocking: Boolean = true): Unit = writeLock {
-    val planToCache = query.queryExecution.optimizedPlan
-    val dataIndex = cachedData.indexWhere(_.plan.sameResult(planToCache))
+    val planToCache = query.queryExecution.analyzed
+    val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
     require(dataIndex >= 0, s"Table $query is not cached.")
     cachedData(dataIndex).cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
     cachedData.remove(dataIndex)
   }
 
+  /** Tries to remove the data for the given SchemaRDD from the cache if it's cached */
+  private[sql] def tryUncacheQuery(
+      query: SchemaRDD,
+      blocking: Boolean = true): Boolean = writeLock {
+    val planToCache = query.queryExecution.analyzed
+    val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
+    val found = dataIndex >= 0
+    if (found) {
+      cachedData(dataIndex).cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
+      cachedData.remove(dataIndex)
+    }
+    found
+  }
 
   /** Optionally returns cached data for the given SchemaRDD */
   private[sql] def lookupCachedData(query: SchemaRDD): Option[CachedData] = readLock {
-    lookupCachedData(query.queryExecution.optimizedPlan)
+    lookupCachedData(query.queryExecution.analyzed)
   }
 
   /** Optionally returns cached data for the given LogicalPlan. */
   private[sql] def lookupCachedData(plan: LogicalPlan): Option[CachedData] = readLock {
-    cachedData.find(_.plan.sameResult(plan))
+    cachedData.find(cd => plan.sameResult(cd.plan))
   }
 
   /** Replaces segments of the given logical plan with cached versions where possible. */

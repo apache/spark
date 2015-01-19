@@ -29,7 +29,7 @@ import parquet.schema.MessageType
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 /**
  * A `parquet.io.api.RecordMaterializer` for Rows.
@@ -129,7 +129,7 @@ private[parquet] object RowReadSupport {
 private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
 
   private[parquet] var writer: RecordConsumer = null
-  private[parquet] var attributes: Seq[Attribute] = null
+  private[parquet] var attributes: Array[Attribute] = null
 
   override def init(configuration: Configuration): WriteSupport.WriteContext = {
     val origAttributesStr: String = configuration.get(RowWriteSupport.SPARK_ROW_SCHEMA)
@@ -137,7 +137,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     metadata.put(RowReadSupport.SPARK_METADATA_KEY, origAttributesStr)
 
     if (attributes == null) {
-      attributes = ParquetTypesConverter.convertFromString(origAttributesStr)
+      attributes = ParquetTypesConverter.convertFromString(origAttributesStr).toArray
     }
 
     log.debug(s"write support initialized for requested schema $attributes")
@@ -151,14 +151,15 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   }
 
   override def write(record: Row): Unit = {
-    if (attributes.size > record.size) {
+    val attributesSize = attributes.size
+    if (attributesSize > record.size) {
       throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row (${attributes.size}>${record.size})")
+        s"Trying to write more fields than contained in row (${attributesSize}>${record.size})")
     }
 
     var index = 0
     writer.startMessage()
-    while(index < attributes.size) {
+    while(index < attributesSize) {
       // null values indicate optional fields but we do not check currently
       if (record(index) != null) {
         writer.startField(attributes(index).name, index)
@@ -173,6 +174,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
   private[parquet] def writeValue(schema: DataType, value: Any): Unit = {
     if (value != null) {
       schema match {
+        case t: UserDefinedType[_] => writeValue(t.sqlType, value)
         case t @ ArrayType(_, _) => writeArray(
           t,
           value.asInstanceOf[CatalystConverter.ArrayScalaType[_]])
@@ -204,6 +206,11 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
         case DoubleType => writer.addDouble(value.asInstanceOf[Double])
         case FloatType => writer.addFloat(value.asInstanceOf[Float])
         case BooleanType => writer.addBoolean(value.asInstanceOf[Boolean])
+        case d: DecimalType =>
+          if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
+            sys.error(s"Unsupported datatype $d, cannot write to consumer")
+          }
+          writeDecimal(value.asInstanceOf[Decimal], d.precisionInfo.get.precision)
         case _ => sys.error(s"Do not know how to writer $schema to consumer")
       }
     }
@@ -283,19 +290,37 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     }
     writer.endGroup()
   }
+
+  // Scratch array used to write decimals as fixed-length binary
+  private val scratchBytes = new Array[Byte](8)
+
+  private[parquet] def writeDecimal(decimal: Decimal, precision: Int): Unit = {
+    val numBytes = ParquetTypesConverter.BYTES_FOR_PRECISION(precision)
+    val unscaledLong = decimal.toUnscaledLong
+    var i = 0
+    var shift = 8 * (numBytes - 1)
+    while (i < numBytes) {
+      scratchBytes(i) = (unscaledLong >> shift).toByte
+      i += 1
+      shift -= 8
+    }
+    writer.addBinary(Binary.fromByteArray(scratchBytes, 0, numBytes))
+  }
+
 }
 
 // Optimized for non-nested rows
 private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
   override def write(record: Row): Unit = {
-    if (attributes.size > record.size) {
+    val attributesSize = attributes.size
+    if (attributesSize > record.size) {
       throw new IndexOutOfBoundsException(
-        s"Trying to write more fields than contained in row (${attributes.size}>${record.size})")
+        s"Trying to write more fields than contained in row (${attributesSize}>${record.size})")
     }
 
     var index = 0
     writer.startMessage()
-    while(index < attributes.size) {
+    while(index < attributesSize) {
       // null values indicate optional fields but we do not check currently
       if (record(index) != null && record(index) != Nil) {
         writer.startField(attributes(index).name, index)
@@ -326,6 +351,11 @@ private[parquet] class MutableRowWriteSupport extends RowWriteSupport {
       case DoubleType => writer.addDouble(record.getDouble(index))
       case FloatType => writer.addFloat(record.getFloat(index))
       case BooleanType => writer.addBoolean(record.getBoolean(index))
+      case d: DecimalType =>
+        if (d.precisionInfo == None || d.precisionInfo.get.precision > 18) {
+          sys.error(s"Unsupported datatype $d, cannot write to consumer")
+        }
+        writeDecimal(record(index).asInstanceOf[Decimal], d.precisionInfo.get.precision)
       case _ => sys.error(s"Unsupported datatype $ctype, cannot write to consumer")
     }
   }

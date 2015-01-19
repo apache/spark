@@ -60,12 +60,32 @@ class PlannerSuite extends FunSuite {
   }
 
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
-    val origThreshold = autoBroadcastJoinThreshold
+    val origThreshold = conf.autoBroadcastJoinThreshold
     setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 81920.toString)
 
     // Using a threshold that is definitely larger than the small testing table (b) below
     val a = testData.as('a)
     val b = testData.limit(3).as('b)
+    val planned = a.join(b, Inner, Some("a.key".attr === "b.key".attr)).queryExecution.executedPlan
+
+    val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
+    val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }
+
+    assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
+    assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
+
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold.toString)
+  }
+
+  test("InMemoryRelation statistics propagation") {
+    val origThreshold = conf.autoBroadcastJoinThreshold
+    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 81920.toString)
+
+    testData.limit(3).registerTempTable("tiny")
+    sql("CACHE TABLE tiny")
+
+    val a = testData.as('a)
+    val b = table("tiny").as('b)
     val planned = a.join(b, Inner, Some("a.key".attr === "b.key".attr)).queryExecution.executedPlan
 
     val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }

@@ -20,7 +20,7 @@ package org.apache.spark.sql.columnar
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 class ColumnStatsSuite extends FunSuite {
   testColumnStats(classOf[ByteColumnStats], BYTE, Row(Byte.MaxValue, Byte.MinValue, 0))
@@ -61,6 +61,12 @@ class ColumnStatsSuite extends FunSuite {
       assertResult(values.min(ordering), "Wrong lower bound")(stats(0))
       assertResult(values.max(ordering), "Wrong upper bound")(stats(1))
       assertResult(10, "Wrong null count")(stats(2))
+      assertResult(20, "Wrong row count")(stats(3))
+      assertResult(stats(4), "Wrong size in bytes") {
+        rows.map { row =>
+          if (row.isNullAt(0)) 4 else columnType.actualSize(row, 0)
+        }.sum
+      }
     }
   }
 }

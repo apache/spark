@@ -17,16 +17,18 @@
 
 package org.apache.spark.examples.mllib
 
+import scala.language.reflectiveCalls
+
 import scopt.OptionParser
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.{RandomForest, DecisionTree, impurity}
+import org.apache.spark.mllib.tree.{DecisionTree, RandomForest, impurity}
 import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
 import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.model.{RandomForestModel, DecisionTreeModel}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -62,7 +64,10 @@ object DecisionTreeRunner {
       minInfoGain: Double = 0.0,
       numTrees: Int = 1,
       featureSubsetStrategy: String = "auto",
-      fracTest: Double = 0.2) extends AbstractParams[Params]
+      fracTest: Double = 0.2,
+      useNodeIdCache: Boolean = false,
+      checkpointDir: Option[String] = None,
+      checkpointInterval: Int = 10) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -102,6 +107,21 @@ object DecisionTreeRunner {
         .text(s"fraction of data to hold out for testing.  If given option testInput, " +
           s"this option is ignored. default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
+      opt[Boolean]("useNodeIdCache")
+        .text(s"whether to use node Id cache during training, " +
+          s"default: ${defaultParams.useNodeIdCache}")
+        .action((x, c) => c.copy(useNodeIdCache = x))
+      opt[String]("checkpointDir")
+        .text(s"checkpoint directory where intermediate node Id caches will be stored, " +
+         s"default: ${defaultParams.checkpointDir match {
+           case Some(strVal) => strVal
+           case None => "None"
+         }}")
+        .action((x, c) => c.copy(checkpointDir = Some(x)))
+      opt[Int]("checkpointInterval")
+        .text(s"how often to checkpoint the node Id cache, " +
+         s"default: ${defaultParams.checkpointInterval}")
+        .action((x, c) => c.copy(checkpointInterval = x))
       opt[String]("testInput")
         .text(s"input path to test dataset.  If given, option fracTest is ignored." +
           s" default: ${defaultParams.testInput}")
@@ -136,20 +156,30 @@ object DecisionTreeRunner {
     }
   }
 
-  def run(params: Params) {
-
-    val conf = new SparkConf().setAppName(s"DecisionTreeRunner with $params")
-    val sc = new SparkContext(conf)
-
-    println(s"DecisionTreeRunner with parameters:\n$params")
-
+  /**
+   * Load training and test data from files.
+   * @param input  Path to input dataset.
+   * @param dataFormat  "libsvm" or "dense"
+   * @param testInput  Path to test dataset.
+   * @param algo  Classification or Regression
+   * @param fracTest  Fraction of input data to hold out for testing.  Ignored if testInput given.
+   * @return  (training dataset, test dataset, number of classes),
+   *          where the number of classes is inferred from data (and set to 0 for Regression)
+   */
+  private[mllib] def loadDatasets(
+      sc: SparkContext,
+      input: String,
+      dataFormat: String,
+      testInput: String,
+      algo: Algo,
+      fracTest: Double): (RDD[LabeledPoint], RDD[LabeledPoint], Int) = {
     // Load training data and cache it.
-    val origExamples = params.dataFormat match {
-      case "dense" => MLUtils.loadLabeledPoints(sc, params.input).cache()
-      case "libsvm" => MLUtils.loadLibSVMFile(sc, params.input).cache()
+    val origExamples = dataFormat match {
+      case "dense" => MLUtils.loadLabeledPoints(sc, input).cache()
+      case "libsvm" => MLUtils.loadLibSVMFile(sc, input).cache()
     }
     // For classification, re-index classes if needed.
-    val (examples, classIndexMap, numClasses) = params.algo match {
+    val (examples, classIndexMap, numClasses) = algo match {
       case Classification => {
         // classCounts: class --> # examples in class
         val classCounts = origExamples.map(_.label).countByValue()
@@ -187,14 +217,14 @@ object DecisionTreeRunner {
     }
 
     // Create training, test sets.
-    val splits = if (params.testInput != "") {
+    val splits = if (testInput != "") {
       // Load testInput.
       val numFeatures = examples.take(1)(0).features.size
-      val origTestExamples = params.dataFormat match {
-        case "dense" => MLUtils.loadLabeledPoints(sc, params.testInput)
-        case "libsvm" => MLUtils.loadLibSVMFile(sc, params.testInput, numFeatures)
+      val origTestExamples = dataFormat match {
+        case "dense" => MLUtils.loadLabeledPoints(sc, testInput)
+        case "libsvm" => MLUtils.loadLibSVMFile(sc, testInput, numFeatures)
       }
-      params.algo match {
+      algo match {
         case Classification => {
           // classCounts: class --> # examples in class
           val testExamples = {
@@ -211,16 +241,30 @@ object DecisionTreeRunner {
       }
     } else {
       // Split input into training, test.
-      examples.randomSplit(Array(1.0 - params.fracTest, params.fracTest))
+      examples.randomSplit(Array(1.0 - fracTest, fracTest))
     }
     val training = splits(0).cache()
     val test = splits(1).cache()
+
     val numTraining = training.count()
     val numTest = test.count()
-
     println(s"numTraining = $numTraining, numTest = $numTest.")
 
     examples.unpersist(blocking = false)
+
+    (training, test, numClasses)
+  }
+
+  def run(params: Params) {
+
+    val conf = new SparkConf().setAppName(s"DecisionTreeRunner with $params")
+    val sc = new SparkContext(conf)
+
+    println(s"DecisionTreeRunner with parameters:\n$params")
+
+    // Load training and test data and cache it.
+    val (training, test, numClasses) = loadDatasets(sc, params.input, params.dataFormat,
+      params.testInput, params.algo, params.fracTest)
 
     val impurityCalculator = params.impurity match {
       case Gini => impurity.Gini
@@ -234,9 +278,12 @@ object DecisionTreeRunner {
           impurity = impurityCalculator,
           maxDepth = params.maxDepth,
           maxBins = params.maxBins,
-          numClassesForClassification = numClasses,
+          numClasses = numClasses,
           minInstancesPerNode = params.minInstancesPerNode,
-          minInfoGain = params.minInfoGain)
+          minInfoGain = params.minInfoGain,
+          useNodeIdCache = params.useNodeIdCache,
+          checkpointDir = params.checkpointDir,
+          checkpointInterval = params.checkpointInterval)
     if (params.numTrees == 1) {
       val startTime = System.nanoTime()
       val model = DecisionTree.train(training, strategy)
@@ -307,19 +354,11 @@ object DecisionTreeRunner {
   /**
    * Calculates the mean squared error for regression.
    */
-  private def meanSquaredError(tree: DecisionTreeModel, data: RDD[LabeledPoint]): Double = {
+  private[mllib] def meanSquaredError(
+      model: { def predict(features: Vector): Double },
+      data: RDD[LabeledPoint]): Double = {
     data.map { y =>
-      val err = tree.predict(y.features) - y.label
-      err * err
-    }.mean()
-  }
-
-  /**
-   * Calculates the mean squared error for regression.
-   */
-  private def meanSquaredError(tree: RandomForestModel, data: RDD[LabeledPoint]): Double = {
-    data.map { y =>
-      val err = tree.predict(y.features) - y.label
+      val err = model.predict(y.features) - y.label
       err * err
     }.mean()
   }

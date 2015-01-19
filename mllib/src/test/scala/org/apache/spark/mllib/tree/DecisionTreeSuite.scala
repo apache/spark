@@ -26,13 +26,13 @@ import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
-import org.apache.spark.mllib.tree.configuration.Strategy
+import org.apache.spark.mllib.tree.configuration.{QuantileStrategy, Strategy}
 import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata, TreePoint}
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Variance}
 import org.apache.spark.mllib.tree.model.{InformationGainStats, DecisionTreeModel, Node}
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class DecisionTreeSuite extends FunSuite with LocalSparkContext {
+class DecisionTreeSuite extends FunSuite with MLlibTestSparkContext {
 
   test("Binary classification with continuous features: split and bin calculation") {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
@@ -57,7 +57,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       Classification,
       Gini,
       maxDepth = 2,
-      numClassesForClassification = 2,
+      numClasses = 2,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 2, 1-> 2))
 
@@ -81,7 +81,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       Classification,
       Gini,
       maxDepth = 2,
-      numClassesForClassification = 2,
+      numClasses = 2,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
 
@@ -102,6 +102,72 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(List(3.0, 2.0, 0.0).toSeq === l.toSeq)
   }
 
+  test("find splits for a continuous feature") {
+    // find splits for normal case
+    {
+      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+        Map(), Set(),
+        Array(6), Gini, QuantileStrategy.Sort,
+        0, 0, 0.0, 0, 0
+      )
+      val featureSamples = Array.fill(200000)(math.random)
+      val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+      assert(splits.length === 5)
+      assert(fakeMetadata.numSplits(0) === 5)
+      assert(fakeMetadata.numBins(0) === 6)
+      // check returned splits are distinct
+      assert(splits.distinct.length === splits.length)
+    }
+
+    // find splits should not return identical splits
+    // when there are not enough split candidates, reduce the number of splits in metadata
+    {
+      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+        Map(), Set(),
+        Array(5), Gini, QuantileStrategy.Sort,
+        0, 0, 0.0, 0, 0
+      )
+      val featureSamples = Array(1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 3).map(_.toDouble)
+      val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+      assert(splits.length === 3)
+      assert(fakeMetadata.numSplits(0) === 3)
+      assert(fakeMetadata.numBins(0) === 4)
+      // check returned splits are distinct
+      assert(splits.distinct.length === splits.length)
+    }
+
+    // find splits when most samples close to the minimum
+    {
+      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+        Map(), Set(),
+        Array(3), Gini, QuantileStrategy.Sort,
+        0, 0, 0.0, 0, 0
+      )
+      val featureSamples = Array(2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 4, 5).map(_.toDouble)
+      val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+      assert(splits.length === 2)
+      assert(fakeMetadata.numSplits(0) === 2)
+      assert(fakeMetadata.numBins(0) === 3)
+      assert(splits(0) === 2.0)
+      assert(splits(1) === 3.0)
+    }
+
+    // find splits when most samples close to the maximum
+    {
+      val fakeMetadata = new DecisionTreeMetadata(1, 0, 0, 0,
+        Map(), Set(),
+        Array(3), Gini, QuantileStrategy.Sort,
+        0, 0, 0.0, 0, 0
+      )
+      val featureSamples = Array(0, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2).map(_.toDouble)
+      val splits = DecisionTree.findSplitsForContinuousFeature(featureSamples, fakeMetadata, 0)
+      assert(splits.length === 1)
+      assert(fakeMetadata.numSplits(0) === 1)
+      assert(fakeMetadata.numBins(0) === 2)
+      assert(splits(0) === 1.0)
+    }
+  }
+
   test("Multiclass classification with unordered categorical features:" +
       " split and bin calculations") {
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
@@ -111,7 +177,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       Classification,
       Gini,
       maxDepth = 2,
-      numClassesForClassification = 100,
+      numClasses = 100,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
 
@@ -205,7 +271,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
       Classification,
       Gini,
       maxDepth = 2,
-      numClassesForClassification = 100,
+      numClasses = 100,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 10, 1-> 10))
     // 2^(10-1) - 1 > 100, so categorical features will be ordered
@@ -229,7 +295,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val strategy = new Strategy(
       Classification,
       Gini,
-      numClassesForClassification = 2,
+      numClasses = 2,
       maxDepth = 2,
       maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
@@ -311,7 +377,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(Classification, Gini, maxDepth = 3,
-      numClassesForClassification = 2, maxBins = 100)
+      numClasses = 2, maxBins = 100)
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
     assert(!metadata.isUnordered(featureIndex = 1))
@@ -335,7 +401,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(Classification, Gini, maxDepth = 3,
-      numClassesForClassification = 2, maxBins = 100)
+      numClasses = 2, maxBins = 100)
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
     assert(!metadata.isUnordered(featureIndex = 1))
@@ -360,7 +426,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(Classification, Entropy, maxDepth = 3,
-      numClassesForClassification = 2, maxBins = 100)
+      numClasses = 2, maxBins = 100)
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
     assert(!metadata.isUnordered(featureIndex = 1))
@@ -385,7 +451,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(arr.length === 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(Classification, Entropy, maxDepth = 3,
-      numClassesForClassification = 2, maxBins = 100)
+      numClasses = 2, maxBins = 100)
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(!metadata.isUnordered(featureIndex = 0))
     assert(!metadata.isUnordered(featureIndex = 1))
@@ -419,7 +485,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     // Train a 1-node model
     val strategyOneNode = new Strategy(Classification, Entropy, maxDepth = 1,
-      numClassesForClassification = 2, maxBins = 100)
+      numClasses = 2, maxBins = 100)
     val modelOneNode = DecisionTree.train(rdd, strategyOneNode)
     val rootNode1 = modelOneNode.topNode.deepCopy()
     val rootNode2 = modelOneNode.topNode.deepCopy()
@@ -427,7 +493,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     assert(rootNode1.rightNode.nonEmpty)
 
     val treeInput = TreePoint.convertToTreeRDD(rdd, bins, metadata)
-    val baggedInput = BaggedPoint.convertToBaggedRDDWithoutSampling(treeInput)
+    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
 
     // Single group second level tree construction.
     val nodesForGroup = Map((0, Array(rootNode1.leftNode.get, rootNode1.rightNode.get)))
@@ -479,7 +545,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlass()
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
-      numClassesForClassification = 3, categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
+      numClasses = 3, categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(strategy.isMulticlassClassification)
     assert(metadata.isUnordered(featureIndex = 0))
@@ -502,7 +568,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     arr(3) = new LabeledPoint(1.0, Vectors.dense(3.0))
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
-      numClassesForClassification = 2)
+      numClasses = 2)
 
     val model = DecisionTree.train(rdd, strategy)
     DecisionTreeSuite.validateClassifier(model, arr, 1.0)
@@ -519,7 +585,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
-      numClassesForClassification = 2)
+      numClasses = 2)
 
     val model = DecisionTree.train(rdd, strategy)
     DecisionTreeSuite.validateClassifier(model, arr, 1.0)
@@ -534,7 +600,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlass()
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
-      numClassesForClassification = 3, maxBins = maxBins,
+      numClasses = 3, maxBins = maxBins,
       categoricalFeaturesInfo = Map(0 -> 3, 1 -> 3))
     assert(strategy.isMulticlassClassification)
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
@@ -563,7 +629,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateContinuousDataPointsForMulticlass()
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
-      numClassesForClassification = 3, maxBins = 100)
+      numClasses = 3, maxBins = 100)
     assert(strategy.isMulticlassClassification)
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
 
@@ -584,7 +650,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateContinuousDataPointsForMulticlass()
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
-      numClassesForClassification = 3, maxBins = 100, categoricalFeaturesInfo = Map(0 -> 3))
+      numClasses = 3, maxBins = 100, categoricalFeaturesInfo = Map(0 -> 3))
     assert(strategy.isMulticlassClassification)
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
     assert(metadata.isUnordered(featureIndex = 0))
@@ -605,7 +671,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
-      numClassesForClassification = 3, maxBins = 100,
+      numClasses = 3, maxBins = 100,
       categoricalFeaturesInfo = Map(0 -> 10, 1 -> 10))
     assert(strategy.isMulticlassClassification)
     val metadata = DecisionTreeMetadata.buildMetadata(rdd, strategy)
@@ -626,7 +692,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val arr = DecisionTreeSuite.generateCategoricalDataPointsForMulticlassForOrderedFeatures()
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 4,
-      numClassesForClassification = 3, maxBins = 10,
+      numClasses = 3, maxBins = 10,
       categoricalFeaturesInfo = Map(0 -> 10, 1 -> 10))
     assert(strategy.isMulticlassClassification)
 
@@ -642,7 +708,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini,
-      maxDepth = 2, numClassesForClassification = 2, minInstancesPerNode = 2)
+      maxDepth = 2, numClasses = 2, minInstancesPerNode = 2)
 
     val model = DecisionTree.train(rdd, strategy)
     assert(model.topNode.isLeaf)
@@ -671,7 +737,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini,
       maxBins = 2, maxDepth = 2, categoricalFeaturesInfo = Map(0 -> 2, 1-> 2),
-      numClassesForClassification = 2, minInstancesPerNode = 2)
+      numClasses = 2, minInstancesPerNode = 2)
 
     val rootNode = DecisionTree.train(rdd, strategy).topNode
 
@@ -689,7 +755,7 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
 
     val input = sc.parallelize(arr)
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 2,
-      numClassesForClassification = 2, minInfoGain = 1.0)
+      numClasses = 2, minInfoGain = 1.0)
 
     val model = DecisionTree.train(input, strategy)
     assert(model.topNode.isLeaf)
@@ -715,12 +781,12 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val input = sc.parallelize(arr)
 
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 1,
-      numClassesForClassification = 2, categoricalFeaturesInfo = Map(0 -> 3))
+      numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
     val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
     val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
 
     val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
-    val baggedInput = BaggedPoint.convertToBaggedRDDWithoutSampling(treeInput)
+    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
 
     val topNode = Node.emptyNode(nodeIndex = 1)
     assert(topNode.predict.predict === Double.MinValue)
@@ -758,12 +824,12 @@ class DecisionTreeSuite extends FunSuite with LocalSparkContext {
     val input = sc.parallelize(arr)
 
     val strategy = new Strategy(algo = Classification, impurity = Gini, maxDepth = 5,
-      numClassesForClassification = 2, categoricalFeaturesInfo = Map(0 -> 3))
+      numClasses = 2, categoricalFeaturesInfo = Map(0 -> 3))
     val metadata = DecisionTreeMetadata.buildMetadata(input, strategy)
     val (splits, bins) = DecisionTree.findSplitsBins(input, metadata)
 
     val treeInput = TreePoint.convertToTreeRDD(input, bins, metadata)
-    val baggedInput = BaggedPoint.convertToBaggedRDDWithoutSampling(treeInput)
+    val baggedInput = BaggedPoint.convertToBaggedRDD(treeInput, 1.0, 1, false)
 
     val topNode = Node.emptyNode(nodeIndex = 1)
     assert(topNode.predict.predict === Double.MinValue)

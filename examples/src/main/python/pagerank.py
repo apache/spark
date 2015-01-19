@@ -15,6 +15,11 @@
 # limitations under the License.
 #
 
+"""
+This is an example implementation of PageRank. For more conventional use,
+Please refer to PageRank implementation provided by graphx
+"""
+
 import re
 import sys
 from operator import add
@@ -39,6 +44,9 @@ if __name__ == "__main__":
     if len(sys.argv) != 3:
         print >> sys.stderr, "Usage: pagerank <file> <iterations>"
         exit(-1)
+
+    print >> sys.stderr,  """WARN: This is a naive implementation of PageRank and is
+          given as an example! Please refer to PageRank implementation provided by graphx"""
 
     # Initialize the spark context.
     sc = SparkContext(appName="PythonPageRank")

@@ -2,6 +2,8 @@
 layout: global
 title: Running Spark on Mesos
 ---
+* This will become a table of contents (this text will be scraped).
+{:toc}
 
 Spark can run on hardware clusters managed by [Apache Mesos](http://mesos.apache.org/).
 
@@ -182,6 +184,49 @@ node. Please refer to [Hadoop on Mesos](https://github.com/mesos/hadoop).
 
 In either case, HDFS runs separately from Hadoop MapReduce, without being scheduled through Mesos.
 
+
+# Configuration
+
+See the [configuration page](configuration.html) for information on Spark configurations.  The following configs are specific for Spark on Mesos.
+
+#### Spark Properties
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.mesos.coarse</code></td>
+  <td>false</td>
+  <td>
+    Set the run mode for Spark on Mesos. For more information about the run mode, refer to #Mesos Run Mode section above.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.extra.cores</code></td>
+  <td>0</td>
+  <td>
+    Set the extra amount of cpus to request per task. This setting is only used for Mesos coarse grain mode.
+    The total amount of cores requested per task is the number of cores in the offer plus the extra cores configured.
+    Note that total amount of cores the executor will request in total will not exceed the spark.cores.max setting.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.home</code></td>
+  <td>SPARK_HOME</td>
+  <td>
+    The location where the mesos executor will look for Spark binaries to execute, and uses the SPARK_HOME setting on default.
+    This variable is only used when no spark.executor.uri is provided, and assumes Spark is installed on the specified location
+    on each slave.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.executor.memoryOverhead</code></td>
+  <td>384</td>
+  <td>
+    The amount of memory that Mesos executor will request for the task to account for the overhead of running the executor itself.
+    The final total amount of memory allocated is the maximum value between executor memory plus memoryOverhead, and overhead fraction (1.07) plus the executor memory.
+  </td>
+</tr>
+</table>
 
 # Troubleshooting and Debugging
 

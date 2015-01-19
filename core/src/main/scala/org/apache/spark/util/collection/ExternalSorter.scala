@@ -38,6 +38,11 @@ import org.apache.spark.storage.{BlockObjectWriter, BlockId}
  *
  * If combining is disabled, the type C must equal V -- we'll cast the objects at the end.
  *
+ * Note: Although ExternalSorter is a fairly generic sorter, some of its configuration is tied
+ * to its use in sort-based shuffle (for example, its block compression is controlled by
+ * `spark.shuffle.compress`).  We may need to revisit this if ExternalSorter is used in other
+ * non-shuffle contexts where we might want to use different configuration settings.
+ *
  * @param aggregator optional Aggregator with combine functions to use for merging data
  * @param partitioner optional Partitioner; if given, sort by partition ID and then key
  * @param ordering optional Ordering to sort keys within each partition; should be a total ordering
@@ -93,6 +98,7 @@ private[spark] class ExternalSorter[K, V, C](
   private val conf = SparkEnv.get.conf
   private val spillingEnabled = conf.getBoolean("spark.shuffle.spill", true)
   private val fileBufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 32) * 1024
+  private val transferToEnabled = conf.getBoolean("spark.file.transferTo", true)
 
   // Size of object batches when reading/writing from serializers.
   //
@@ -112,10 +118,6 @@ private[spark] class ExternalSorter[K, V, C](
   // store them in an array buffer.
   private var map = new SizeTrackingAppendOnlyMap[(Int, K), C]
   private var buffer = new SizeTrackingPairBuffer[(Int, K), C]
-
-  // Number of pairs read from input since last spill; note that we count them even if a value is
-  // merged with a previous key in case we're doing something like groupBy where the result grows
-  protected[this] var elementsRead = 0L
 
   // Total spilling statistics
   private var _diskBytesSpilled = 0L
@@ -198,15 +200,22 @@ private[spark] class ExternalSorter[K, V, C](
         if (hadValue) mergeValue(oldValue, kv._2) else createCombiner(kv._2)
       }
       while (records.hasNext) {
-        elementsRead += 1
+        addElementsRead()
         kv = records.next()
         map.changeValue((getPartition(kv._1), kv._1), update)
         maybeSpillCollection(usingMap = true)
       }
+    } else if (bypassMergeSort) {
+      // SPARK-4479: Also bypass buffering if merge sort is bypassed to avoid defensive copies
+      if (records.hasNext) {
+        spillToPartitionFiles(records.map { kv =>
+          ((getPartition(kv._1), kv._1), kv._2.asInstanceOf[C])
+        })
+      }
     } else {
       // Stick values into our buffer
       while (records.hasNext) {
-        elementsRead += 1
+        addElementsRead()
         val kv = records.next()
         buffer.insert((getPartition(kv._1), kv._1), kv._2.asInstanceOf[C])
         maybeSpillCollection(usingMap = false)
@@ -258,7 +267,10 @@ private[spark] class ExternalSorter[K, V, C](
   private def spillToMergeableFile(collection: SizeTrackingPairCollection[(Int, K), C]): Unit = {
     assert(!bypassMergeSort)
 
-    val (blockId, file) = diskBlockManager.createTempBlock()
+    // Because these files may be read during shuffle, their compression must be controlled by
+    // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
+    // createTempShuffleBlock here; see SPARK-3426 for more context.
+    val (blockId, file) = diskBlockManager.createTempShuffleBlock()
     curWriteMetrics = new ShuffleWriteMetrics()
     var writer = blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics)
     var objectsWritten = 0   // Objects written since the last flush
@@ -331,20 +343,27 @@ private[spark] class ExternalSorter[K, V, C](
    * @param collection whichever collection we're using (map or buffer)
    */
   private def spillToPartitionFiles(collection: SizeTrackingPairCollection[(Int, K), C]): Unit = {
+    spillToPartitionFiles(collection.iterator)
+  }
+
+  private def spillToPartitionFiles(iterator: Iterator[((Int, K), C)]): Unit = {
     assert(bypassMergeSort)
 
     // Create our file writers if we haven't done so yet
     if (partitionWriters == null) {
       curWriteMetrics = new ShuffleWriteMetrics()
       partitionWriters = Array.fill(numPartitions) {
-        val (blockId, file) = diskBlockManager.createTempBlock()
+        // Because these files may be read during shuffle, their compression must be controlled by
+        // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
+        // createTempShuffleBlock here; see SPARK-3426 for more context.
+        val (blockId, file) = diskBlockManager.createTempShuffleBlock()
         blockManager.getDiskWriter(blockId, file, ser, fileBufferSize, curWriteMetrics).open()
       }
     }
 
-    val it = collection.iterator  // No need to sort stuff, just write each element out
-    while (it.hasNext) {
-      val elem = it.next()
+    // No need to sort stuff, just write each element out
+    while (iterator.hasNext) {
+      val elem = iterator.next()
       val partitionId = elem._1._1
       val key = elem._1._2
       val value = elem._2
@@ -705,10 +724,10 @@ private[spark] class ExternalSorter[K, V, C](
       var out: FileOutputStream = null
       var in: FileInputStream = null
       try {
-        out = new FileOutputStream(outputFile)
+        out = new FileOutputStream(outputFile, true)
         for (i <- 0 until numPartitions) {
           in = new FileInputStream(partitionWriters(i).fileSegment().file)
-          val size = org.apache.spark.util.Utils.copyStream(in, out, false)
+          val size = org.apache.spark.util.Utils.copyStream(in, out, false, transferToEnabled)
           in.close()
           in = null
           lengths(i) = size
@@ -740,6 +759,12 @@ private[spark] class ExternalSorter[K, V, C](
 
     context.taskMetrics.memoryBytesSpilled += memoryBytesSpilled
     context.taskMetrics.diskBytesSpilled += diskBytesSpilled
+    context.taskMetrics.shuffleWriteMetrics.filter(_ => bypassMergeSort).foreach { m =>
+      if (curWriteMetrics != null) {
+        m.shuffleBytesWritten += curWriteMetrics.shuffleBytesWritten
+        m.shuffleWriteTime += curWriteMetrics.shuffleWriteTime
+      }
+    }
 
     lengths
   }

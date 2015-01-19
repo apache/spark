@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 
 /**
- * Provides helper methods for comparing plans.
+ * Tests for the sameResult function of [[LogicalPlan]].
  */
 class SameResultSuite extends FunSuite {
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -52,11 +52,15 @@ class SameResultSuite extends FunSuite {
     assertSameResult(testRelation.select('a, 'b), testRelation2.select('a, 'b))
     assertSameResult(testRelation.select('b, 'a), testRelation2.select('b, 'a))
 
-    assertSameResult(testRelation, testRelation2.select('a), false)
-    assertSameResult(testRelation.select('b, 'a), testRelation2.select('a, 'b), false)
+    assertSameResult(testRelation, testRelation2.select('a), result = false)
+    assertSameResult(testRelation.select('b, 'a), testRelation2.select('a, 'b), result = false)
   }
 
   test("filters") {
     assertSameResult(testRelation.where('a === 'b), testRelation2.where('a === 'b))
+  }
+
+  test("sorts") {
+    assertSameResult(testRelation.orderBy('a.asc), testRelation2.orderBy('a.asc))
   }
 }

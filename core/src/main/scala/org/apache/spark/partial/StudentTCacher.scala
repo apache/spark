@@ -17,7 +17,7 @@
 
 package org.apache.spark.partial
 
-import cern.jet.stat.Probability
+import org.apache.commons.math3.distribution.{TDistribution, NormalDistribution}
 
 /**
  * A utility class for caching Student's T distribution values for a given confidence level
@@ -25,8 +25,10 @@ import cern.jet.stat.Probability
  * confidence intervals for many keys.
  */
 private[spark] class StudentTCacher(confidence: Double) {
+
   val NORMAL_APPROX_SAMPLE_SIZE = 100  // For samples bigger than this, use Gaussian approximation
-  val normalApprox = Probability.normalInverse(1 - (1 - confidence) / 2)
+
+  val normalApprox = new NormalDistribution().inverseCumulativeProbability(1 - (1 - confidence) / 2)
   val cache = Array.fill[Double](NORMAL_APPROX_SAMPLE_SIZE)(-1.0)
 
   def get(sampleSize: Long): Double = {
@@ -35,7 +37,8 @@ private[spark] class StudentTCacher(confidence: Double) {
     } else {
       val size = sampleSize.toInt
       if (cache(size) < 0) {
-        cache(size) = Probability.studentTInverse(1 - confidence, size - 1)
+        val tDist = new TDistribution(size - 1)
+        cache(size) = tDist.inverseCumulativeProbability(1 - (1 - confidence) / 2)
       }
       cache(size)
     }

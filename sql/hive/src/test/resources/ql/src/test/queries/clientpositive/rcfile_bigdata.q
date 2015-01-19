@@ -1,7 +1,7 @@
 set hive.map.aggr.hash.percentmemory = 0.3;
 set hive.mapred.local.mem = 256;
 
-add file ../data/scripts/dumpdata_script.py;
+add file ../../data/scripts/dumpdata_script.py;
 
 CREATE table columnTable_Bigdata (key STRING, value STRING)
 ROW FORMAT SERDE

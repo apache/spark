@@ -20,7 +20,6 @@ package org.apache.spark.ui
 import scala.util.Random
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.scheduler.SchedulingMode
 
 /**

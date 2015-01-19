@@ -5,12 +5,12 @@ set hive.optimize.skewjoin.compiletime = true;
 CREATE TABLE T1(key STRING, val STRING)
 SKEWED BY (key, val) ON ((2, 12), (8, 18)) STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../data/files/T1.txt' INTO TABLE T1;
+LOAD DATA LOCAL INPATH '../../data/files/T1.txt' INTO TABLE T1;
 
 CREATE TABLE T2(key STRING, val STRING)
 SKEWED BY (key, val) ON ((3, 13), (8, 18)) STORED AS TEXTFILE;
 
-LOAD DATA LOCAL INPATH '../data/files/T2.txt' INTO TABLE T2;
+LOAD DATA LOCAL INPATH '../../data/files/T2.txt' INTO TABLE T2;
 
 -- Both the join tables are skewed by 2 keys, and one of the skewed values
 -- is common to both the tables. The join key matches the skewed key set.

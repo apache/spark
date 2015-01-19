@@ -4,9 +4,9 @@ CREATE DATABASE db2;
 
 CREATE TABLE db1.sourceTable (one string,two string) PARTITIONED BY (ds string);
 
-load data local inpath '../data/files/kv1.txt' INTO TABLE db1.sourceTable partition(ds='2011-11-11');
+load data local inpath '../../data/files/kv1.txt' INTO TABLE db1.sourceTable partition(ds='2011-11-11');
 
-load data local inpath '../data/files/kv3.txt' INTO TABLE db1.sourceTable partition(ds='2011-11-11');
+load data local inpath '../../data/files/kv3.txt' INTO TABLE db1.sourceTable partition(ds='2011-11-11');
 
 CREATE TABLE db2.destinTable (one string,two string) PARTITIONED BY (ds string);
 

@@ -1,3 +1,4 @@
+set hive.stats.dbclass=fs;
 -- test cases where the index should not be used automatically
 
 CREATE INDEX src_index ON TABLE src(key) as 'COMPACT' WITH DEFERRED REBUILD;
