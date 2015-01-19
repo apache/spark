@@ -361,37 +361,6 @@ class DAGScheduler(
     parents
   }
 
-  private def getMissingParentStages(stage: Stage): List[Stage] = {
-    val missing = new HashSet[Stage]
-    val visited = new HashSet[RDD[_]]
-    // We are manually maintaining a stack here to prevent StackOverflowError
-    // caused by recursively visiting
-    val waitingForVisit = new Stack[RDD[_]]
-    def visit(rdd: RDD[_]) {
-      if (!visited(rdd)) {
-        visited += rdd
-        if (getCacheLocs(rdd).contains(Nil)) {
-          for (dep <- rdd.dependencies) {
-            dep match {
-              case shufDep: ShuffleDependency[_, _, _] =>
-                val mapStage = getShuffleMapStage(shufDep, stage.jobId)
-                if (!mapStage.isAvailable) {
-                  missing += mapStage
-                }
-              case narrowDep: NarrowDependency[_] =>
-                waitingForVisit.push(narrowDep.rdd)
-            }
-          }
-        }
-      }
-    }
-    waitingForVisit.push(stage.rdd)
-    while (!waitingForVisit.isEmpty) {
-      visit(waitingForVisit.pop())
-    }
-    missing.toList
-  }
-
   /**
    * Registers the given jobId among the jobs that need the given stage and
    * all of that stage's ancestors.
@@ -402,8 +371,7 @@ class DAGScheduler(
         val s = stages.head
         s.jobIds += jobId
         jobIdToStageIds.getOrElseUpdate(jobId, new HashSet[Int]()) += s.id
-        val parents: List[Stage] = getParentStages(s.rdd, jobId)
-        val parentsWithoutThisJobId = parents.filter { ! _.jobIds.contains(jobId) }
+        val parentsWithoutThisJobId = stage.parents.filter { ! _.jobIds.contains(jobId) }
         updateJobIdStageIdMapsList(parentsWithoutThisJobId ++ stages.tail)
       }
     }
@@ -746,7 +714,7 @@ class DAGScheduler(
         job.jobId, callSite.shortForm, partitions.length, allowLocal))
       logInfo("Final stage: " + finalStage + "(" + finalStage.name + ")")
       logInfo("Parents of final stage: " + finalStage.parents)
-      logInfo("Missing parents: " + getMissingParentStages(finalStage))
+      logInfo("Missing parents: " + finalStage.missingParents)
       val shouldRunLocally =
         localExecutionEnabled && allowLocal && finalStage.parents.isEmpty && partitions.length == 1
       val jobSubmissionTime = clock.getTime()
@@ -775,7 +743,7 @@ class DAGScheduler(
     if (jobId.isDefined) {
       logDebug("submitStage(" + stage + ")")
       if (!waitingStages(stage) && !runningStages(stage) && !failedStages(stage)) {
-        val missing = getMissingParentStages(stage).sortBy(_.id)
+        val missing = stage.missingParents.sortBy(_.id)
         logDebug("missing: " + missing)
         if (missing == Nil) {
           logInfo("Submitting " + stage + " (" + stage.rdd + "), which has no missing parents")
@@ -1025,9 +993,9 @@ class DAGScheduler(
               } else {
                 val newlyRunnable = new ArrayBuffer[Stage]
                 for (stage <- waitingStages) {
-                  logInfo("Missing parents for " + stage + ": " + getMissingParentStages(stage))
+                  logInfo(s"Missing parents for $stage: ${stage.missingParents}")
                 }
-                for (stage <- waitingStages if getMissingParentStages(stage) == Nil) {
+                for (stage <- waitingStages if stage.missingParents == Nil) {
                   newlyRunnable += stage
                 }
                 waitingStages --= newlyRunnable
@@ -1182,7 +1150,7 @@ class DAGScheduler(
       return
     }
     val dependentJobs: Seq[ActiveJob] =
-      activeJobs.filter(job => stageDependsOn(job.finalStage, failedStage)).toSeq
+      activeJobs.filter(job => job.finalStage.dependsOn(failedStage)).toSeq
     failedStage.latestInfo.completionTime = Some(clock.getTime())
     for (job <- dependentJobs) {
       failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason")
@@ -1240,42 +1208,6 @@ class DAGScheduler(
       cleanupStateForJobAndIndependentStages(job)
       listenerBus.post(SparkListenerJobEnd(job.jobId, clock.getTime(), JobFailed(error)))
     }
-  }
-
-  /**
-   * Return true if one of stage's ancestors is target.
-   */
-  private def stageDependsOn(stage: Stage, target: Stage): Boolean = {
-    if (stage == target) {
-      return true
-    }
-    val visitedRdds = new HashSet[RDD[_]]
-    val visitedStages = new HashSet[Stage]
-    // We are manually maintaining a stack here to prevent StackOverflowError
-    // caused by recursively visiting
-    val waitingForVisit = new Stack[RDD[_]]
-    def visit(rdd: RDD[_]) {
-      if (!visitedRdds(rdd)) {
-        visitedRdds += rdd
-        for (dep <- rdd.dependencies) {
-          dep match {
-            case shufDep: ShuffleDependency[_, _, _] =>
-              val mapStage = getShuffleMapStage(shufDep, stage.jobId)
-              if (!mapStage.isAvailable) {
-                visitedStages += mapStage
-                waitingForVisit.push(mapStage.rdd)
-              }  // Otherwise there's no need to follow the dependency back
-            case narrowDep: NarrowDependency[_] =>
-              waitingForVisit.push(narrowDep.rdd)
-          }
-        }
-      }
-    }
-    waitingForVisit.push(stage.rdd)
-    while (!waitingForVisit.isEmpty) {
-      visit(waitingForVisit.pop())
-    }
-    visitedRdds.contains(target.rdd)
   }
 
   /**
