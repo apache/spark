@@ -143,6 +143,11 @@ object MimaExcludes {
               "org.apache.spark.graphx.Graph.getCheckpointFiles"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.graphx.Graph.isCheckpointed")
+          ) ++ Seq(
+            // SPARK-4789 Standardize ML Prediction APIs
+            ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.mllib.linalg.VectorUDT"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.linalg.VectorUDT.serialize"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.linalg.VectorUDT.sqlType")
           )
 
         case v if v.startsWith("1.2") =>
