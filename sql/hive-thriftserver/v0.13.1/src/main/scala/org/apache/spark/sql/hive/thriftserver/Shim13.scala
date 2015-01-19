@@ -32,7 +32,7 @@ import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session._
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.sql.{Row => SparkRow, SQLConf, SchemaRDD}
 import org.apache.spark.sql.execution.SetCommand
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
@@ -179,7 +179,14 @@ private[hive] class SparkExecuteStatementOperation(
     val sid = UUID.randomUUID().toString 
     logInfo(s"Running query '$statement'")
     setState(OperationState.RUNNING)
-    SparkSQLEnv.sqlEventListener.onStatementStart(sid, parentSession, statement)
+    val group = hiveContext.sparkContext.getLocalProperty(SparkContext.SPARK_JOB_GROUP_ID) match {
+      case groupId: String =>
+        hiveContext.sparkContext.setJobDescription(statement)
+        groupId
+      case _ => hiveContext.sparkContext.setJobGroup(sid, statement)
+        sid
+    }
+    SparkSQLEnv.sqlEventListener.onStatementStart(sid, parentSession, statement, group)
     try {
       result = hiveContext.sql(statement)
       logDebug(result.queryExecution.toString())
@@ -189,7 +196,6 @@ private[hive] class SparkExecuteStatementOperation(
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
       }
-      hiveContext.sparkContext.setJobDescription(statement)
       sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
         hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }

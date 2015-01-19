@@ -22,13 +22,11 @@ import java.util.concurrent.Executors
 import org.apache.commons.logging.Log
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.session.SessionManager
-import org.apache.hive.service.cli.thrift.TProtocolVersion
 
 import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
-import org.apache.hive.service.cli.{HiveSQLException, SessionHandle}
+import org.apache.hive.service.cli.SessionHandle
 
 private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
   extends SparkSQLSessionManagerShim(hiveContext)

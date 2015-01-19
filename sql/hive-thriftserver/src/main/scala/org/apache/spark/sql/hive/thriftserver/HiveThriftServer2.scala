@@ -96,7 +96,7 @@ private[hive] class HiveThriftServer2(hiveContext: HiveContext)
 
   private[hive] val uiTab: Option[ThriftServerTab] =
     if (hiveContext.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
-      Some(new ThriftServerTab())
+      Some(new ThriftServerTab(hiveContext.sparkContext))
     } else {
       None
     }

@@ -38,15 +38,18 @@ private[thriftserver] trait ThriftServerEventListener {
   /**
    * Called when a statement started to run.
    */
-  def onStatementStart(id: String, session: HiveSession, statement: String) { }
+  def onStatementStart(id: String, session: HiveSession, statement: String, groupId: String) { }
+
   /**
    * Called when a statement completed compilation.
    */
   def onStatementParse(id: String, executePlan: String) { }
+
   /**
    * Called when a statement got a error during running.
    */
   def onStatementError(id: String, errorMessage: String, errorTrace: String) { }
+
   /**
    * Called when a statement ran success.
    */
@@ -58,7 +61,7 @@ private[thriftserver] class SessionInfo(
     val startTimestamp: Long,
     val ip: String) {
   val sessionID = session.getSessionHandle.getSessionId.toString
-  val userName = if(session.getUserName == null) "UNKNOWN" else session.getUserName
+  val userName = if (session.getUserName == null) "UNKNOWN" else session.getUserName
   var finishTimestamp = 0L
   var totalExecute = 0
 
@@ -112,19 +115,19 @@ private[sql] class ThriftServerUIEventListener(val conf: SparkConf)
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
     val jobGroup = for (
       props <- Option(jobStart.properties);
-      statement <- Option(props.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))
+      statement <- Option(props.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
     ) yield statement
 
     jobGroup match {
-      case Some(statement: String) => {
+      case Some(groupId: String) => {
         val ret = executeList.find( _ match {
           case (id: String, info: ExecutionInfo) => {
-            info.statement == statement
+            info.jobId == "" && info.groupId == groupId
           }
         })
         if(ret.isDefined) {
           ret.get._2.jobId = jobStart.jobId.toString
-          ret.get._2.groupId = jobStart.properties.getProperty(SparkContext.SPARK_JOB_GROUP_ID,"")
+          ret.get._2.groupId = groupId
         }
       }
     }
@@ -140,12 +143,14 @@ private[sql] class ThriftServerUIEventListener(val conf: SparkConf)
     sessionList(session.getSessionHandle).finishTimestamp = System.currentTimeMillis()
   }
 
-  override def onStatementStart(id: String, session: HiveSession, statement: String): Unit = {
+  override def onStatementStart(id: String, session: HiveSession,
+      statement: String, groupId:String): Unit = {
     val info = new ExecutionInfo(statement, session, System.currentTimeMillis())
     info.state = ExecutionState.STARTED
     executeList(id) = info
     trimExecutionIfNecessary()
     sessionList(session.getSessionHandle).totalExecute += 1
+    executeList(id).groupId = groupId
     totalRunning += 1
   }
 
@@ -170,28 +175,16 @@ private[sql] class ThriftServerUIEventListener(val conf: SparkConf)
   private def trimExecutionIfNecessary() = synchronized {
     if (executeList.size > retainedStatements) {
       val toRemove = math.max(retainedStatements / 10, 1)
-      executeList.toList.sortWith(compareExecutionDesc).take(toRemove).foreach { s =>
+      executeList.toList.sortBy(_._2.startTimestamp).take(toRemove).foreach { s =>
         executeList.remove(s._1)
       }
     }
   }
 
-  private def compareExecutionDesc(
-      l: (String, ExecutionInfo),
-      r: (String, ExecutionInfo)): Boolean = {
-    l._2.startTimestamp < r._2.startTimestamp
-  }
-
-  private def compareSessionDesc(
-      l: (SessionHandle, SessionInfo),
-      r: (SessionHandle, SessionInfo)): Boolean = {
-    l._2.startTimestamp < r._2.startTimestamp
-  }
-
   private def trimSessionIfNecessary() = synchronized {
     if (sessionList.size > retainedSessions) {
       val toRemove = math.max(retainedSessions / 10, 1)
-      sessionList.toList.sortWith(compareSessionDesc).take(toRemove).foreach { s =>
+      sessionList.toList.sortBy(_._2.startTimestamp).take(toRemove).foreach { s =>
         sessionList.remove(s._1)
       }
     }

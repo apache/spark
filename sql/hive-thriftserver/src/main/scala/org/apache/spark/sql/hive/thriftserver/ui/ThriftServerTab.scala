@@ -20,16 +20,16 @@ package org.apache.spark.sql.hive.thriftserver.ui
 import org.apache.spark.sql.hive.thriftserver.SparkSQLEnv
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab._
 import org.apache.spark.ui.{SparkUI, SparkUITab}
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.{SparkContext, Logging, SparkException}
 
 /**
  * Spark Web UI tab that shows statistics of a streaming job.
  * This assumes the given SparkContext has enabled its SparkUI.
  */
-private[thriftserver] class ThriftServerTab()
-  extends SparkUITab(getSparkUI(), "ThriftServer") with Logging {
+private[thriftserver] class ThriftServerTab(sparkContext: SparkContext)
+  extends SparkUITab(getSparkUI(sparkContext), "ThriftServer") with Logging {
 
-  val parent = getSparkUI()
+  val parent = getSparkUI(sparkContext)
   val listener = SparkSQLEnv.sqlEventListener
 
   attachPage(new ThriftServerPage(this))
@@ -37,8 +37,8 @@ private[thriftserver] class ThriftServerTab()
 }
 
 private[thriftserver] object ThriftServerTab {
-  def getSparkUI(): SparkUI = {
-    SparkSQLEnv.sparkContext.ui.getOrElse {
+  def getSparkUI(sparkContext: SparkContext): SparkUI = {
+    sparkContext.ui.getOrElse {
       throw new SparkException("Parent SparkUI to attach this tab to not found!")
     }
   }

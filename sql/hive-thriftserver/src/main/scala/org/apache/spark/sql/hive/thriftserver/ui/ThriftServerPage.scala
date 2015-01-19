@@ -37,10 +37,14 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
   /** Render the page */
   def render(request: HttpServletRequest): Seq[Node] = {
     val content =
-      generateBasicStats() ++ <br></br> ++
-      <h4>Total {listener.sessionList.size} session online,
-        Total {listener.totalRunning} sql running</h4> ++
-       generateSessionStatsTable() ++ generateSQLStatsTable()
+      generateBasicStats() ++
+      <br/> ++
+      <h4>
+        Total {listener.sessionList.size} session online,
+        Total {listener.totalRunning} sql running
+      </h4> ++
+      generateSessionStatsTable() ++
+      generateSQLStatsTable()
     UIUtils.headerSparkPage("ThriftServer", content, parent, Some(5000))
   }
 
@@ -59,8 +63,8 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
   /** Generate stats of batch statements of the thrift server program */
   private def generateSQLStatsTable(): Seq[Node] = {
-    val numBatches = listener.executeList.size
-    val table = if (numBatches > 0) {
+    val numStatement = listener.executeList.size
+    val table = if (numStatement > 0) {
       val headerRow = Seq("User", "JobID", "GroupID", "Start Time", "Finish Time", "Duration",
         "Statement", "State", "Detail")
       val dataRows = listener.executeList.values.toSeq.sortBy(_.startTimestamp).reverse
@@ -113,11 +117,11 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       // scalastyle:off
       <span onclick="this.parentNode.querySelector('.stacktrace-details').classList.toggle('collapsed')"
             class="expand-details">
-        +details
+        + details
       </span> ++
-        <div class="stacktrace-details collapsed">
-          <pre>{errorMessage}</pre>
-        </div>
+      <div class="stacktrace-details collapsed">
+        <pre>{errorMessage}</pre>
+      </div>
       // scalastyle:on
     } else {
       ""
@@ -130,7 +134,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
     val numBatches = listener.sessionList.size
     val table = if (numBatches > 0) {
       val dataRows =
-        listener.sessionList.values.toSeq.sortBy(_.startTimestamp).reverse.map(session =>{
+        listener.sessionList.values.toSeq.sortBy(_.startTimestamp).reverse.map ( session =>
         Seq(
           session.userName,
           session.ip,
@@ -140,7 +144,7 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
           formatDurationOption(Some(session.totalTime)),
           session.totalExecute.toString
         )
-      }).toSeq
+      ).toSeq
       val headerRow = Seq("User", "IP", "Session ID", "Start Time", "Finish Time", "Duration",
         "Total Execute")
       Some(listingTable(headerRow, dataRows))
@@ -150,11 +154,11 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
 
     val content =
       <h5>Session Statistics</h5> ++
-        <div>
-          <ul class="unstyled">
-            {table.getOrElse("No statistics have been generated yet.")}
-          </ul>
-        </div>
+      <div>
+        <ul class="unstyled">
+          {table.getOrElse("No statistics have been generated yet.")}
+        </ul>
+      </div>
 
     content
   }
