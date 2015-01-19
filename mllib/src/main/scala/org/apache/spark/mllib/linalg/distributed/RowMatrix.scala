@@ -131,8 +131,8 @@ class RowMatrix(
       throw new IllegalArgumentException(s"Argument with more than 65535 cols: $cols")
     }
     if (cols > 10000) {
-      val mem = cols * cols * 8
-      logWarning(s"$cols columns will require at least $mem bytes of memory!")
+      val memMB = (cols.toLong * cols) / 125000
+      logWarning(s"$cols columns will require at least $memMB megabytes of memory!")
     }
   }
 
