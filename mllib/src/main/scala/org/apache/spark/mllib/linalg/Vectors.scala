@@ -51,23 +51,33 @@ sealed trait Vector extends Serializable {
 
   override def equals(other: Any): Boolean = {
     other match {
-      case v: Vector =>
-        util.Arrays.equals(this.toArray, v.toArray)
+      case v2: Vector => {
+        if (this.size != v2.size) return false
+        (this, v2) match {
+          case (s1: SparseVector, s2: SparseVector) =>
+            Vectors.getEquality(s1.indices, s1.values, s2.indices, s2.values)
+          case (s1: SparseVector, d1: DenseVector) =>
+            Vectors.getEquality(s1.indices, s1.values, 0 until d1.size, d1.values)
+          case (d1: DenseVector, s1: SparseVector) =>
+            Vectors.getEquality(0 until d1.size, d1.values, s1.indices, s1.values)
+          case (_, _) => util.Arrays.equals(this.toArray, v2.toArray)
+        }
+      }
       case _ => false
     }
   }
 
   override def hashCode(): Int = {
     var result: Int = size + 31
-    this.foreachActive{case(index, value) =>
+    this.foreachActive { case (index, value) =>
       // ignore explict 0 for comparison between sparse and dense
-      if(value != 0){
+      if (value != 0) {
         result = 31 * result + index
+        // refer to {@link java.util.Arrays.equals} for hash algorithm
         val bits = java.lang.Double.doubleToLongBits(value)
         result = 31 * result + (bits ^ (bits >>> 32)).toInt
       }
     }
-
     return result
   }
 
@@ -405,6 +415,33 @@ object Vectors {
     }
     squaredDistance
   }
+
+  /**
+   * Check equality between sparse/dense vectors
+   */
+  private[mllib] def getEquality(
+      v1Indices: IndexedSeq[Int],
+      v1Values: Array[Double],
+      v2Indices: IndexedSeq[Int],
+      v2Values: Array[Double]): Boolean = {
+    val v1Size = v1Values.size
+    val v2Size = v2Values.size
+    var k1 = 0
+    var k2 = 0
+    var allEqual = true
+    while (allEqual) {
+      while (k1 < v1Size && v1Values(k1) == 0) k1 += 1
+      while (k2 < v2Size && v2Values(k2) == 0) k2 += 1
+
+      if (k1 >= v1Size || k2 >= v2Size) {
+        return k1 >= v1Size && k2 >= v2Size // check end alignment
+      }
+      allEqual = v1Indices(k1) == v2Indices(k2) && v1Values(k1) == v2Values(k2)
+      k1 += 1
+      k2 += 1
+    }
+    allEqual
+  }
 }
 
 /**
@@ -460,37 +497,6 @@ class SparseVector(
 
   override def toString: String =
     "(%s,%s,%s)".format(size, indices.mkString("[", ",", "]"), values.mkString("[", ",", "]"))
-
-  override def equals(other: Any): Boolean = {
-    other match {
-      case v: SparseVector => {
-        if (this.size != v.size) { return false }
-        val thisValues = this.values
-        val thisIndices = this.indices
-        val thisSize = thisValues.size
-        val otherValues = v.values
-        val otherIndices = v.indices
-        val otherSize = otherValues.size
-
-        var k1 = 0
-        var k2 = 0
-        var allEqual = true
-        while (allEqual) {
-          while (k1 < thisSize && thisValues(k1) == 0) k1 += 1
-          while (k2 < otherSize && otherValues(k2) == 0) k2 += 1
-
-          if (k1 >= thisSize || k2 >= otherSize) {
-            return k1 >= thisSize && k2 >= otherSize // check end alignment
-          }
-          allEqual = thisIndices(k1) == otherIndices(k2) && thisValues(k1) == otherValues(k2)
-          k1 += 1
-          k2 += 1
-        }
-        allEqual
-      }
-      case _ => super.equals(other)
-    }
-  }
 
   override def toArray: Array[Double] = {
     val data = new Array[Double](size)
