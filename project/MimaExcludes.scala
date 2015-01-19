@@ -89,6 +89,10 @@ object MimaExcludes {
             // SPARK-4062
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.streaming.kafka.KafkaReceiver#MessageHandler.this")
+          ) ++ Seq(
+            // SPARK-5297 Java FileStream do not work with custom key/values
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.streaming.api.java.JavaStreamingContext.fileStream")
           )
 
         case v if v.startsWith("1.1") =>
