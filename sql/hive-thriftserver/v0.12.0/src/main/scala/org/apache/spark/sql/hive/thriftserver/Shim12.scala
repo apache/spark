@@ -33,7 +33,6 @@ import org.apache.hive.service.cli.session.{SessionManager, HiveSession}
 
 import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.sql.{SQLConf, SchemaRDD, Row => SparkRow}
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.SetCommand
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
@@ -207,7 +206,8 @@ private[hive] class SparkExecuteStatementOperation(
       case groupId: String =>
         hiveContext.sparkContext.setJobDescription(statement)
         groupId
-      case _ => hiveContext.sparkContext.setJobGroup(sid, statement)
+      case _ => hiveContext.sparkContext
+        .setJobGroup(parentSession.getSessionHandle.getSessionId.toString, statement)
         sid
     }
     SparkSQLEnv.sqlEventListener.onStatementStart(sid, parentSession, statement, group)

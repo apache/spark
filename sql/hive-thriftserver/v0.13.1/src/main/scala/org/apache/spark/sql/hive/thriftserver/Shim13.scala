@@ -183,7 +183,8 @@ private[hive] class SparkExecuteStatementOperation(
       case groupId: String =>
         hiveContext.sparkContext.setJobDescription(statement)
         groupId
-      case _ => hiveContext.sparkContext.setJobGroup(sid, statement)
+      case _ => hiveContext.sparkContext
+        .setJobGroup(parentSession.getSessionHandle.getSessionId.toString, statement)
         sid
     }
     SparkSQLEnv.sqlEventListener.onStatementStart(sid, parentSession, statement, group)
