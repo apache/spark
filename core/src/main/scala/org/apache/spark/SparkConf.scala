@@ -56,14 +56,14 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   /** Set a configuration variable. */
-  def set(key: String, value: String): SparkConf = {
+  def set(key: String, value: Any): SparkConf = {
     if (key == null) {
       throw new NullPointerException("null key")
     }
     if (value == null) {
       throw new NullPointerException("null value for " + key)
     }
-    settings(key) = value
+    settings(key) = value.toString
     this
   }
 
@@ -134,9 +134,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   /** Set a parameter if it isn't already configured */
-  def setIfMissing(key: String, value: String): SparkConf = {
+  def setIfMissing(key: String, value: Any): SparkConf = {
     if (!settings.contains(key)) {
-      settings(key) = value
+      settings(key) = value.toString
     }
     this
   }
