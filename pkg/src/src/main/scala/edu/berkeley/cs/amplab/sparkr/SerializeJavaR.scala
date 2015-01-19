@@ -182,11 +182,8 @@ object SerializeJavaR {
             dos.writeInt(objArr.length)
             objArr.foreach(o => writeJObj(dos, o, objMap)) 
           } else {
-            val objId = value.getClass().getName() + "@" +
-              Integer.toHexString(System.identityHashCode(value))
-            objMap.put(objId, value)
             writeString(dos, "jobj")
-            writeString(dos, objId)
+            writeJObj(dos, value, objMap)
           }
         }
       }

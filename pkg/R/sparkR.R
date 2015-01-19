@@ -6,13 +6,9 @@ sparkR.onLoad <- function(libname, pkgname) {
   assemblyJarPath <- paste(libname, "/SparkR/", assemblyJarName, sep="")
   assemblyJarPath <- gsub(" ", "\\ ", assemblyJarPath, fixed=T)
   packageStartupMessage("[SparkR] Initializing with classpath ", assemblyJarPath, "\n")
-
-  yarn_conf_dir <- Sys.getenv("YARN_CONF_DIR", "")
-  
+ 
   .sparkREnv$libname <- libname
   .sparkREnv$assemblyJarPath <- assemblyJarPath
-  # TODO: need to add this to backend's classpath
-  #.jaddClassPath(yarn_conf_dir)
 }
 
 #' Stop this Spark context
@@ -60,7 +56,12 @@ sparkR.init <- function(
   }
 
   sparkMem <- Sys.getenv("SPARK_MEM", "512m")
-  launchBackend(jar=.sparkREnv$assemblyJarPath, mainClass="edu.berkeley.cs.amplab.sparkr.SparkRBackend",
+  cp = .sparkREnv$assemblyJarPath
+  yarn_conf_dir <- Sys.getenv("YARN_CONF_DIR", "")
+  if (yarn_conf_dir != "") {
+    cp = paste(cp, yarn_conf_dir, sep=":")
+  }
+  launchBackend(classPath=cp, mainClass="edu.berkeley.cs.amplab.sparkr.SparkRBackend",
                 args="12345", javaOpts=paste("-Xmx", sparkMem, sep=""))
   Sys.sleep(2) # Wait for backend to come up
   init("localhost", 12345) # Connect to it

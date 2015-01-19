@@ -16,7 +16,7 @@ init <- function(hostname, port, timeout=60) {
 }
 
 launchBackend <- function(
-    jar, 
+    classPath, 
     mainClass, 
     args, 
     javaOpts="-Xms2g -Xmx2g",
@@ -26,7 +26,7 @@ launchBackend <- function(
   } else {
     java_bin <- "java"
   }
-  command <- paste(java_bin, javaOpts, "-cp", jar, mainClass, args, sep=" ")
+  command <- paste(java_bin, javaOpts, "-cp", classPath, mainClass, args, sep=" ")
   cat("Launching java with command ", command, "\n")
   invisible(system(command, intern=FALSE, ignore.stdout=F, ignore.stderr=F, wait=F))
 }
