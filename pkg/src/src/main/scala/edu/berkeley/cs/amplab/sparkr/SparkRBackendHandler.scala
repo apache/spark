@@ -32,8 +32,6 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
     val methodName = readString(dis)
     val numArgs = readInt(dis)
 
-    // System.err.println(s"Handling $methodName on $objId")
-
     if (objId == "SparkRHandler") {
       methodName match {
         case "stopBackend" => {
@@ -42,6 +40,22 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
           writeString(dos, "character")
           writeString(dos, "void")
           server.close()
+        }
+        case "rm" => {
+          try {
+            val t = readString(dis)
+            assert(t == "character")
+            val objToRemove = readString(dis)
+            objMap.remove(objToRemove)
+            writeInt(dos, 0)
+            writeObject(dos, null, objMap)
+          } catch {
+            case e: Exception => {
+              System.err.println(s"Removing $objId failed with " + e)
+              e.printStackTrace()
+              writeInt(dos, -1)
+            }
+          }
         }
         case _ => dos.writeInt(-1)
       }

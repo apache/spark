@@ -1,10 +1,44 @@
 # RDD in R implemented in S4 OO system.
 
+# Maintain a reference count of Java object references
+# This allows us to GC the java object when it is safe
+.validJobjs <- new.env(parent = emptyenv())
+
+# List of object ids to be removed
+.toRemoveJobjs <- new.env(parent = emptyenv())
+
+getJobj <- function(objId) {
+  newObj <- jobj(objId)
+  if (exists(objId, .validJobjs)) {
+    .validJobjs[[objId]] <- .validJobjs[[objId]] + 1
+  } else {
+    .validJobjs[[objId]] <- 1
+  }
+  newObj
+}
 
 # Handler for a java object that exists on the backend.
 jobj <- function(objId) {
   if (!is.character(objId)) stop("object id must be a character")
-  structure(list(id=objId), class = "jobj")
+  obj <- structure(new.env(parent = emptyenv()), class = "jobj")
+  obj$id <- objId
+  # Register a finalizer to remove the Java object when this reference
+  # is garbage collected in R
+  reg.finalizer(obj, cleanup.jobj)
+  obj
+}
+
+cleanup.jobj <- function(e) {
+  objId <- e$id
+  .validJobjs[[objId]] <- .validJobjs[[objId]] - 1
+
+  if (.validJobjs[[objId]] == 0) {
+    rm(list=objId, envir = .validJobjs)
+    # NOTE: We cannot call removeJObject here as the finalizer may be run
+    # in the middle of another RPC. Thus we queue up this object Id to be removed
+    # and then run all the removeJObject when the next RPC is called.
+    .toRemoveJobjs[[objId]] <- 1
+  }
 }
 setOldClass("jobj")
 
@@ -117,27 +151,29 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
             depsBin <- getDependencies(computeFunc)
 
             prev_jrdd <- rdd@prev_jrdd
+            rddRef <- callJMethod(prev_jrdd, "rdd")
+            classTag <- callJMethod(prev_jrdd, "classTag")
 
             if (dataSerialization) {
-              rddRef <- newJava("edu.berkeley.cs.amplab.sparkr.RRDD",
-                                callJMethod(prev_jrdd, "rdd"),
-                                serializedFuncArr,
-                                rdd@env$serialized,
-                                depsBin,
-                                packageNamesArr,
-                                as.character(.sparkREnv[["libname"]]),
-                                broadcastArr,
-                                callJMethod(prev_jrdd, "classTag"))
+              rddRef <- newJObject("edu.berkeley.cs.amplab.sparkr.RRDD",
+                                   rddRef,
+                                   serializedFuncArr,
+                                   rdd@env$serialized,
+                                   depsBin,
+                                   packageNamesArr,
+                                   as.character(.sparkREnv[["libname"]]),
+                                   broadcastArr,
+                                   classTag)
             } else {
-              rddRef <- newJava("edu.berkeley.cs.amplab.sparkr.StringRRDD",
-                                callJMethod(prev_jrdd, "rdd"),
-                                serializedFuncArr,
-                                rdd@env$serialized,
-                                depsBin,
-                                packageNamesArr,
-                                as.character(.sparkREnv[["libname"]]),
-                                broadcastArr,
-                                callJMethod(prev_jrdd, "classTag"))
+              rddRef <- newJObject("edu.berkeley.cs.amplab.sparkr.StringRRDD",
+                                   rddRef,
+                                   serializedFuncArr,
+                                   rdd@env$serialized,
+                                   depsBin,
+                                   packageNamesArr,
+                                   as.character(.sparkREnv[["libname"]]),
+                                   broadcastArr,
+                                   classTag)
             }
             # Save the serialization flag after we create a RRDD
             rdd@env$serialized <- dataSerialization
@@ -1289,24 +1325,26 @@ setMethod("partitionBy",
             broadcastArr <- lapply(ls(.broadcastNames), function(name) {
                                    get(name, .broadcastNames) })
             jrdd <- getJRDD(rdd)
+            rddRef <- callJMethod(jrdd, "rdd")
+            classTag <- callJMethod(jrdd, "classTag")
 
             # We create a PairwiseRRDD that extends RDD[(Array[Byte],
             # Array[Byte])], where the key is the hashed split, the value is
             # the content (key-val pairs).
-            pairwiseRRDD <- newJava("edu.berkeley.cs.amplab.sparkr.PairwiseRRDD",
-                                    callJMethod(jrdd, "rdd"),
-                                    as.integer(numPartitions),
-                                    serializedHashFuncBytes,
-                                    rdd@env$serialized,
-                                    depsBinArr,
-                                    packageNamesArr,
-                                    as.character(.sparkREnv$libname),
-                                    broadcastArr,
-                                    callJMethod(jrdd, "classTag"))
+            pairwiseRRDD <- newJObject("edu.berkeley.cs.amplab.sparkr.PairwiseRRDD",
+                                       rddRef,
+                                       as.integer(numPartitions),
+                                       serializedHashFuncBytes,
+                                       rdd@env$serialized,
+                                       depsBinArr,
+                                       packageNamesArr,
+                                       as.character(.sparkREnv$libname),
+                                       broadcastArr,
+                                       classTag)
 
             # Create a corresponding partitioner.
-            rPartitioner <- newJava("org.apache.spark.HashPartitioner",
-                                    as.integer(numPartitions))
+            rPartitioner <- newJObject("org.apache.spark.HashPartitioner",
+                                       as.integer(numPartitions))
 
             # Call partitionBy on the obtained PairwiseRDD.
             javaPairRDD <- callJMethod(pairwiseRRDD, "asJavaPairRDD")

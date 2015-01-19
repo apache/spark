@@ -34,7 +34,7 @@ readObjectType <- function(con, type) {
     vector = readVector(con),
     list = readList(con),
     void = NULL,
-    jobj = jobj(readString(con)),
+    jobj = getJobj(readString(con)),
     stop("Unsupported type for deserialization"))
 }
 

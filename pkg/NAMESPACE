@@ -64,5 +64,4 @@ export(
        "setCheckpointDir"
       )
 export("sparkR.init")
-export("jobj")
 useDynLib(SparkR, stringHashCode)

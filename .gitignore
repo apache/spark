@@ -16,3 +16,5 @@ work/
 *~
 .Rproj.user
 SparkR-pkg.Rproj
+*.o
+*.so

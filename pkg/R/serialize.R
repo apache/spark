@@ -18,9 +18,9 @@ writeBoolean <- function(con, value) {
   writeInt(con, as.integer(value))
 }
 
-writeRawSerialize <- function(con, batch) {
+writeRawSerialize <- function(outputCon, batch) {
   outputSer <- serialize(batch, ascii = FALSE, conn = NULL)
-  writeRaw(con, outputSer)
+  writeRaw(outputCon, outputSer)
 }
 
 writeRaw <- function(con, batch) {

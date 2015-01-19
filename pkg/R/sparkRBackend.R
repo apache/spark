@@ -34,8 +34,16 @@ callJStatic <- function(className, methodName, ...) {
   invokeJava(isStatic=TRUE, className, methodName, ...)
 }
 
-newJava <- function(className, ...) {
+newJObject <- function(className, ...) {
   invokeJava(isStatic=TRUE, className, methodName="new", ...)
+}
+
+removeJObject <- function(objId) {
+  invokeJava(isStatic=TRUE, "SparkRHandler", "rm", objId)
+}
+
+isRemoveMethod <- function(isStatic, objId, methodName) {
+  isStatic == TRUE && objId == "SparkRHandler" && methodName == "rm"
 }
 
 # If isStatic is true, objId contains className otherwise
@@ -43,6 +51,19 @@ newJava <- function(className, ...) {
 invokeJava <- function(isStatic, objId, methodName, ...) {
   if (!exists(".sparkRCon", .sparkREnv)) {
     stop("No connection to backend found")
+  }
+
+  # If this is already isn't a removeJObject call
+  if (!isRemoveMethod(isStatic, objId, methodName)) {
+    objsToRemove <- ls(.toRemoveJobjs)
+    if (length(objsToRemove) > 0) {
+      #cat("Clearing up objsToRemove\n")
+      sapply(objsToRemove,
+            function(e) {
+              removeJObject(e)
+            })
+      rm(list=objsToRemove, envir=.toRemoveJobjs)
+    }
   }
 
   rc <- rawConnection(raw(0), "r+")
@@ -62,6 +83,7 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
   writeArgs(rc, args)
 
   bytesToSend <- rawConnectionValue(rc)
+
   conn <- get(".sparkRCon", .sparkREnv)
   writeInt(conn, length(bytesToSend))
   writeBin(bytesToSend, conn)
@@ -72,5 +94,6 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
   ret <- readObject(conn)
 
   close(rc) # TODO: Can we close this before ?
+
   ret
 }
