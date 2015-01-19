@@ -24,17 +24,18 @@ import java.security.AccessController
 import scala.annotation.tailrec
 import scala.collection.mutable
 
+import org.apache.spark.Logging
 
-private[serializer] object SerializationDebugger {
+private[serializer] object SerializationDebugger extends Logging {
 
   /**
    * Improve the given NotSerializableException with the serialization path leading from the given
    * object to the problematic object.
    */
   def improveException(obj: Any, e: NotSerializableException): NotSerializableException = {
-    if (enableDebugging) {
+    if (enableDebugging && reflect != null) {
       new NotSerializableException(
-        e.getMessage + "\nSerialization stack:\n" + find(obj).map("\t-" + _).mkString("\n"))
+        e.getMessage + "\nSerialization stack:\n" + find(obj).map("\t- " + _).mkString("\n"))
     } else {
       e
     }
@@ -213,79 +214,93 @@ private[serializer] object SerializationDebugger {
   /** An implicit class that allows us to call private methods of ObjectStreamClass. */
   implicit class ObjectStreamClassMethods(val desc: ObjectStreamClass) extends AnyVal {
     def getSlotDescs: Array[ObjectStreamClass] = {
-      objectStreamClassGetClassDataLayout.invoke(desc).asInstanceOf[Array[Object]].map {
-        classDataSlot => classDataSlotDesc.get(classDataSlot).asInstanceOf[ObjectStreamClass]
+      reflect.GetClassDataLayout.invoke(desc).asInstanceOf[Array[Object]].map {
+        classDataSlot => reflect.DescField.get(classDataSlot).asInstanceOf[ObjectStreamClass]
       }
     }
 
     def hasWriteObjectMethod: Boolean = {
-      objectStreamClassHasWriteObjectMethod.invoke(desc).asInstanceOf[Boolean]
+      reflect.HasWriteObjectMethod.invoke(desc).asInstanceOf[Boolean]
     }
 
     def hasWriteReplaceMethod: Boolean = {
-      objectStreamClassHasWriteReplaceMethod.invoke(desc).asInstanceOf[Boolean]
+      reflect.HasWriteReplaceMethod.invoke(desc).asInstanceOf[Boolean]
     }
 
     def invokeWriteReplace(obj: Object): Object = {
-      objectStreamClassInvokeWriteReplace.invoke(desc, obj)
+      reflect.InvokeWriteReplace.invoke(desc, obj)
     }
 
     def getNumObjFields: Int = {
-      objectStreamClassGetNumObjFields.invoke(desc).asInstanceOf[Int]
+      reflect.GetNumObjFields.invoke(desc).asInstanceOf[Int]
     }
 
     def getObjFieldValues(obj: Object, out: Array[Object]): Unit = {
-      objectStreamClassGetObjFieldValues.invoke(desc, obj, out)
+      reflect.GetObjFieldValues.invoke(desc, obj, out)
     }
   }
 
-  /** ObjectStreamClass.getClassDataLayout */
-  private val objectStreamClassGetClassDataLayout: Method = {
-    val f = classOf[ObjectStreamClass].getDeclaredMethod("getClassDataLayout")
-    f.setAccessible(true)
-    f
+  /**
+   * Object to hold all the reflection objects. If we run on a JVM that we cannot understand,
+   * this field will be null and this the debug helper should be disabled.
+   */
+  private val reflect: ObjectStreamClassReflection = try {
+    new ObjectStreamClassReflection
+  } catch {
+    case e: Exception =>
+      logWarning("Cannot find private methods using reflection", e)
+      null
   }
 
-  /** ObjectStreamClass.hasWriteObjectMethod */
-  private val objectStreamClassHasWriteObjectMethod: Method = {
-    val f = classOf[ObjectStreamClass].getDeclaredMethod("hasWriteObjectMethod")
-    f.setAccessible(true)
-    f
-  }
+  private class ObjectStreamClassReflection {
+    /** ObjectStreamClass.getClassDataLayout */
+    val GetClassDataLayout: Method = {
+      val f = classOf[ObjectStreamClass].getDeclaredMethod("getClassDataLayout")
+      f.setAccessible(true)
+      f
+    }
 
-  /** ObjectStreamClass.hasWriteReplaceMethod */
-  private val objectStreamClassHasWriteReplaceMethod: Method = {
-    val f = classOf[ObjectStreamClass].getDeclaredMethod("hasWriteReplaceMethod")
-    f.setAccessible(true)
-    f
-  }
+    /** ObjectStreamClass.hasWriteObjectMethod */
+    val HasWriteObjectMethod: Method = {
+      val f = classOf[ObjectStreamClass].getDeclaredMethod("hasWriteObjectMethod")
+      f.setAccessible(true)
+      f
+    }
 
-  /** ObjectStreamClass.invokeWriteReplace */
-  private val objectStreamClassInvokeWriteReplace: Method = {
-    val f = classOf[ObjectStreamClass].getDeclaredMethod("invokeWriteReplace", classOf[Object])
-    f.setAccessible(true)
-    f
-  }
+    /** ObjectStreamClass.hasWriteReplaceMethod */
+    val HasWriteReplaceMethod: Method = {
+      val f = classOf[ObjectStreamClass].getDeclaredMethod("hasWriteReplaceMethod")
+      f.setAccessible(true)
+      f
+    }
 
-  /** ObjectStreamClass.getNumObjFields */
-  private val objectStreamClassGetNumObjFields: Method = {
-    val f = classOf[ObjectStreamClass].getDeclaredMethod("getNumObjFields")
-    f.setAccessible(true)
-    f
-  }
+    /** ObjectStreamClass.invokeWriteReplace */
+    val InvokeWriteReplace: Method = {
+      val f = classOf[ObjectStreamClass].getDeclaredMethod("invokeWriteReplace", classOf[Object])
+      f.setAccessible(true)
+      f
+    }
 
-  /** ObjectStreamClass.getObjFieldValues */
-  private val objectStreamClassGetObjFieldValues: Method = {
-    val f = classOf[ObjectStreamClass].getDeclaredMethod(
-      "getObjFieldValues", classOf[Object], classOf[Array[Object]])
-    f.setAccessible(true)
-    f
-  }
+    /** ObjectStreamClass.getNumObjFields */
+    val GetNumObjFields: Method = {
+      val f = classOf[ObjectStreamClass].getDeclaredMethod("getNumObjFields")
+      f.setAccessible(true)
+      f
+    }
 
-  /** ObjectStreamClass$ClassDataSlot.desc field */
-  private val classDataSlotDesc: Field = {
-    val f = Class.forName("java.io.ObjectStreamClass$ClassDataSlot").getDeclaredField("desc")
-    f.setAccessible(true)
-    f
+    /** ObjectStreamClass.getObjFieldValues */
+    val GetObjFieldValues: Method = {
+      val f = classOf[ObjectStreamClass].getDeclaredMethod(
+        "getObjFieldValues", classOf[Object], classOf[Array[Object]])
+      f.setAccessible(true)
+      f
+    }
+
+    /** ObjectStreamClass$ClassDataSlot.desc field */
+    val DescField: Field = {
+      val f = Class.forName("java.io.ObjectStreamClass$ClassDataSlot").getDeclaredField("desc")
+      f.setAccessible(true)
+      f
+    }
   }
 }
