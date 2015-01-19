@@ -82,13 +82,13 @@ object HiveUtils {
       classOf[Table] -> tbl)
   )
 
-  def createDecimal(bd: JBigDecimal) = callWithAlternatives(
+  def newHiveDecimal(bd: JBigDecimal) = callWithAlternatives(
     // For Hive 0.13.1
-    Construct(classOf[HiveDecimal],
+    InvokeStatic[HiveDecimal](classOf[HiveDecimal], "create",
       classOf[JBigDecimal] -> bd),
 
     // For Hive 0.12.0
-    InvokeStatic[HiveDecimal](classOf[HiveDecimal], "create",
+    Construct(classOf[HiveDecimal],
       classOf[JBigDecimal] -> bd))
 
   // Hive 0.13.1: org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE

@@ -64,7 +64,7 @@ object HiveShim {
       null
     } else {
       new hiveIo.HiveDecimalWritable(
-        HiveUtils.createDecimal(value.asInstanceOf[Decimal].toJavaBigDecimal))
+        HiveUtils.newHiveDecimal(value.asInstanceOf[Decimal].toJavaBigDecimal))
     }
 
   def createDriverResultsArray = new JArrayList[String]
