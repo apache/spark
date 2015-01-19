@@ -93,7 +93,7 @@ if (isEmpty != 0) {
     }
     output <- do.call(execFunctionName, list(splitIndex, data))
     if (isOutputSerialized) {
-      writeRaw(outputCon, output)
+      writeRawSerialize(outputCon, output)
     } else {
       writeStrings(outputCon, output)
     }
@@ -128,7 +128,7 @@ if (isEmpty != 0) {
       writeInt(outputCon, as.integer(name))
       # Truncate the accumulator list to the number of elements we have
       length(res[[name]]$data) <- res[[name]]$counter
-      writeRaw(outputCon, res[[name]]$data)
+      writeRawSerialize(outputCon, res[[name]]$data)
     }
   }
 }

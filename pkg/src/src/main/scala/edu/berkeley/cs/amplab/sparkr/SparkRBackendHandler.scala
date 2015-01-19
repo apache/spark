@@ -1,5 +1,6 @@
 package edu.berkeley.cs.amplab.sparkr
 
+import scala.collection.mutable.HashMap
 import java.io._
 
 import io.netty.channel.ChannelHandler.Sharable
@@ -10,9 +11,13 @@ import edu.berkeley.cs.amplab.sparkr.SerializeJavaR._
 
 /**
  * Handler for SparkRBackend
+ * TODO: This is marked as sharable to get a handle to SparkRBackend. Is it safe to re-use
+ * this across connections ?
  */
-class SparkRBackendHandler(backend: SparkRBackendInterface, server: SparkRBackend)
-    extends SimpleChannelInboundHandler[Array[Byte]] {
+@Sharable
+class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHandler[Array[Byte]] {
+
+  val objMap = new HashMap[String, Object]
 
   override def channelRead0(ctx: ChannelHandlerContext, msg: Array[Byte]) {
     val bis = new ByteArrayInputStream(msg)
@@ -21,20 +26,27 @@ class SparkRBackendHandler(backend: SparkRBackendInterface, server: SparkRBacken
     val bos = new ByteArrayOutputStream()
     val dos = new DataOutputStream(bos)
 
-    // Read the RPC name first and then pass on the DataInputStream to
-    // each handle function
-    val rpcName = readString(dis)
+    // First bit is isStatic
+    val isStatic = readBoolean(dis)
+    val objId = readString(dis)
+    val methodName = readString(dis)
 
-    System.err.println(s"Handling $rpcName")
+    System.err.println(s"Handling $methodName on $objId")
 
-    rpcName match {
-      case "createSparkContext" => handleCreateSparkContext(dis, dos)
-      case "stopBackend" => {
-        dos.write(0)
-        server.close()
+    if (objId == "SparkRHandler") {
+      methodName match {
+        case "stopBackend" => {
+          // dos.write(0)
+          writeInt(dos, 0)
+          writeString(dos, "character")
+          writeString(dos, "void")
+          server.close()
+        }
+        case _ => dos.writeInt(-1)
       }
-      case _ => dos.writeInt(-1)
-     }
+    } else {
+      handleMethodCall(isStatic, objId, methodName, dis, dos)
+    }
 
     val reply = bos.toByteArray
     ctx.write(reply)
@@ -50,27 +62,63 @@ class SparkRBackendHandler(backend: SparkRBackendInterface, server: SparkRBacken
     ctx.close()
   }
 
-  // Handler functions read arguments off the DataInputStream and
-  // call the backend. 
-  def handleCreateSparkContext(dis: DataInputStream, dos: DataOutputStream) = {
-    try {
-      val master = readString(dis)
-      val appName = readString(dis)
-      val sparkHome = readString(dis)
-      val jars = readStringArr(dis)
-      val sparkEnvirMap = readStringMap(dis)
-      val sparkExecutorEnvMap = readStringMap(dis)
-      val appId = backend.createSparkContext(master, appName, sparkHome, jars, sparkEnvirMap,
-        sparkExecutorEnvMap)
+  def handleMethodCall(isStatic: Boolean, objId: String, methodName: String,
+    dis: DataInputStream, dos: DataOutputStream) {
 
-      writeInt(dos, 0)
-      writeString(dos, appId)
+    var obj: Object = null
+    var cls: Option[Class[_]] = None
+    try {
+      if (isStatic) {
+        cls = Some(Class.forName(objId))
+      } else {
+        objMap.get(objId) match {
+          case None => throw new IllegalArgumentException("Object not found " + objId)
+          case Some(o) => {
+            cls = Some(o.getClass)
+            obj = o
+          }
+        }
+      }
+
+      val methods = cls.get.getMethods()
+      // TODO: We only use first method with the same name
+      val selectedMethods = methods.filter(m => m.getName() == methodName)
+      if (selectedMethods.length > 0) {
+        val selectedMethod = selectedMethods.head
+        val argTypes = selectedMethod.getParameterTypes()
+        val args = parseArgs(argTypes, dis)
+        val ret = selectedMethod.invoke(obj, args:_*)
+
+        // Write status bit
+        writeInt(dos, 0)
+        writeObject(dos, ret.asInstanceOf[AnyRef], objMap)
+      } else if (methodName == "new") {
+        // methodName should be "new" for constructor
+        // TODO: We only use the first constructor ?
+        val ctor = cls.get.getConstructors().head
+        val argTypes = ctor.getParameterTypes()
+        val params = parseArgs(argTypes, dis)
+        val obj = ctor.newInstance(params:_*)
+
+        writeInt(dos, 0)
+        writeObject(dos, obj.asInstanceOf[AnyRef], objMap)
+      } else {
+        throw new IllegalArgumentException("invalid method " + methodName + " for object " + objId)
+      }
     } catch {
       case e: Exception => {
-        System.err.println("handleCreateSparkContext failed with " + e)
+        System.err.println(s"$methodName on $objId failed with " + e)
+        e.printStackTrace()
         writeInt(dos, -1)
       }
     }
+  }
+
+  def parseArgs(argTypes: Array[Class[_]], dis: DataInputStream): Array[java.lang.Object] =  {
+    // TODO: Check each parameter type to the R provided type
+    argTypes.map { arg =>
+      readObject(dis, objMap)
+    }.toArray
   }
 
 }

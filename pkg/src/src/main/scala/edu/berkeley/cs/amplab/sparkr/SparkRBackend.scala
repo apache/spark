@@ -28,8 +28,7 @@ class SparkRBackend() {
   def init(port: Int) {
     bossGroup = new NioEventLoopGroup(SparkRConf.numServerThreads)
     val workerGroup = bossGroup
-    val backendImpl = new SparkRBackendInterfaceImpl
-    val handler = new SparkRBackendHandler(backendImpl, this)
+    val handler = new SparkRBackendHandler(this)
   
     bootstrap = new ServerBootstrap()
       .group(bossGroup, workerGroup)

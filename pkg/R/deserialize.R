@@ -1,77 +1,64 @@
 # Utility functions to serialize, deserialize etc.
 
-readString <- function(con, num = 1) {
-  readSingleString <- function() {
-    stringLen <- readInt(con)
-    string <- readBin(con, raw(), stringLen, endian="big")
-    rawToChar(string)  
-  }
-  if (num == 1) {
-    readSingleString
-  } else {
-    sapply(1:num, readSingleString)    
-  }
+readString <- function(con) {
+  stringLen <- readInt(con)
+  string <- readBin(con, raw(), stringLen, endian="big")
+  rawToChar(string)
 }
 
-readInt <- function(con, num = 1) {
-  readBin(con, integer(), n = num, endian="big")
+readInt <- function(con) {
+  readBin(con, integer(), n = 1, endian="big")
 }
 
-readDouble <- function(con, num = 1) {
-  readBin(con, double(), n = num, endian="big")
+readDouble <- function(con) {
+  readBin(con, double(), n = 1, endian="big")
 }
 
-readBoolean <- function(con, num = 1) {
-  as.logical(readInt(con, num))
+readBoolean <- function(con) {
+  as.logical(readInt(con))
 }
 
-readObject <- function(con, num = 1) {
+readObject <- function(con) {
   # Read type first
   type <- readString(con)
+  readObjectType(con, type)
+}
+
+readObjectType <- function(con, type) {
   switch (type,
-    integer = readInt(con, num),
-    character = readString(con, num),
-    logical = readBoolean(con, num),
-    double = readDouble(con, num),
-    raw = readRawLen(con, num),
+    integer = readInt(con),
+    character = readString(con),
+    logical = readBoolean(con),
+    double = readDouble(con),
+    raw = readRaw(con),
     vector = readVector(con),
     list = readList(con),
     void = NULL,
+    jobj = jobj(readString(con)),
     stop("Unsupported type for deserialization"))
 }
 
+# TODO: We don't use readVector as it is tricky
+# to assembly array of raw objects. Delete this ?
 readVector <- function(con) {
+  type <- readString(con)
   len <- readInt(con)
   if (length > 0) {
-    readObject(con, len)
+    sapply(1:len, readObjectType(con, type))
   } else {
     vector(mode=type)
   }
 }
 
+# We only support lists where all elements are of same type
 readList <- function(con) {
+  type <- readString(con)
   len <- readInt(con)
   if (length > 0) {
     l <- vector("list", len)
     for (i in 1:len) {
-      l[[i]] <- readObject(con)
+      l[[i]] <- readObjectType(con, type)
     }
-  } else {
-    list()
-  }
-}
-
-readNamedList <- function(con) {
-  len <- readInt(con)
-  if (len > 0) {
-    # TODO: This is not used ?
-    elemType <- readString(con)
-    names <- readVector(con)
-    vals <- readVector(con)
-
-    out <- as.list(vals)
-    names(out) <- names
-    out
   } else {
     list()
   }

@@ -1,9 +1,52 @@
 package edu.berkeley.cs.amplab.sparkr
 
+import scala.collection.mutable.HashMap
+import scala.collection.JavaConversions._
+
 import java.io.DataInputStream
 import java.io.DataOutputStream
 
 object SerializeJavaR {
+
+  def readObject(dis: DataInputStream, objMap: HashMap[String, Object]): Object = {
+    val dataType = readString(dis)
+    println("reading object of type " + dataType)
+    readObjectType(dis, objMap, dataType)
+  }
+
+  def readObjectType(
+      dis: DataInputStream,
+      objMap: HashMap[String, Object],
+      dataType: String): Object = {
+    dataType match {
+      case "integer" => new java.lang.Integer(readInt(dis))
+      case "double" => new java.lang.Double(readDouble(dis))
+      case "logical" => new java.lang.Boolean(readBoolean(dis))
+      case "character" => readString(dis)
+      case "environment" => readMap(dis, objMap)
+      case "raw" => readBytes(dis)
+      case "list" => {
+        val arrType = readString(dis)
+        arrType match {
+          case "integer" => readIntArr(dis)
+          case "character" => readStringArr(dis)
+          case "double" => readDoubleArr(dis)
+          case "logical" => readBooleanArr(dis)
+          case "jobj" => readStringArr(dis).map(x => objMap(x))
+          case "raw" => readBytesArr(dis)
+        }
+      }
+      case "jobj" => objMap(readString(dis))
+    }
+  }
+
+  def readBytes(in: DataInputStream) = {
+    val len = readInt(in)
+    val out = new Array[Byte](len)
+    val bytesRead = in.read(out, 0, len)
+    assert(len == bytesRead)
+    out
+  }
 
   def readInt(in: DataInputStream) = {
     in.readInt()
@@ -25,43 +68,113 @@ object SerializeJavaR {
     if (intVal == 0) false else true
   }
 
+  def readBytesArr(in: DataInputStream) = {
+    val len = readInt(in)
+    (0 until len).map(_ => readBytes(in)).toArray
+  }
+
   def readIntArr(in: DataInputStream) = {
     val len = readInt(in)
-    val typeStr = readString(in)
-    assert(typeStr == "integer")
     (0 until len).map(_ => readInt(in)).toArray
   }
 
   def readDoubleArr(in: DataInputStream) = {
     val len = readInt(in)
-    val typeStr = readString(in)
-    assert(typeStr == "double")
     (0 until len).map(_ => readDouble(in)).toArray
   }
 
   def readBooleanArr(in: DataInputStream) = {
     val len = readInt(in)
-    val typeStr = readString(in)
-    assert(typeStr == "logical")
     (0 until len).map(_ => readBoolean(in)).toArray
   }
 
   def readStringArr(in: DataInputStream) = {
     val len = readInt(in)
-    val typeStr = readString(in)
-    assert(typeStr == "character")
     (0 until len).map(_ => readString(in)).toArray
   }
 
-  def readStringMap(in: DataInputStream) = {
+  def readMap(
+      in: DataInputStream,
+      objMap: HashMap[String, Object]): java.util.Map[Object, Object] = {
     val len = readInt(in)
     if (len > 0) {
       val typeStr = readString(in)
-      assert(typeStr == "character")
+      val keys = (0 until len).map(_ => readObjectType(in, objMap, typeStr))
+      val valuesType = readString(in)
+      val values = (0 until len).map(_ => readObjectType(in, objMap, typeStr))
+      mapAsJavaMap(keys.zip(values).toMap)
+    } else {
+      new java.util.HashMap[Object, Object]()
     }
-    val keys = (0 until len).map(_ => readString(in))
-    val values = (0 until len).map(_ => readString(in))
-    keys.zip(values).toMap
+  }
+
+  /// Methods to write out data from Java to R
+
+  def writeObject(dos: DataOutputStream, value: Object, objMap: HashMap[String, Object]) {
+    value.getClass.getName match {
+      case "void" => {
+        writeString(dos, "void")
+      }
+      case "java.lang.String" => {
+        writeString(dos, "character")
+        writeString(dos, value.asInstanceOf[String])
+      }
+      case "long" | "java.lang.Long" => {
+        writeString(dos, "double")
+        writeDouble(dos, value.asInstanceOf[Long].toDouble)
+      }
+      case "double" | "java.lang.Double" => {
+        writeString(dos, "double")
+        writeDouble(dos, value.asInstanceOf[Double])
+      }
+      case "int" | "java.lang.Integer" => {
+        writeString(dos, "integer")
+        writeInt(dos, value.asInstanceOf[Int])
+      }
+      case "boolean" | "java.lang.Boolean" => {
+        writeString(dos, "logical")
+        writeBoolean(dos, value.asInstanceOf[Boolean])
+      }
+      case "[B" => {
+        writeString(dos, "raw")
+        writeBytes(dos, value.asInstanceOf[Array[Byte]])
+      }
+      // TODO: Types not handled right now include
+      // byte, char, short, float
+
+      // Handle arrays
+      case "[Ljava.lang.String;" => {
+        writeString(dos, "list")
+        writeStringArr(dos, value.asInstanceOf[Array[String]])
+      }
+      case "[I" => {
+        writeString(dos, "list")
+        writeIntArr(dos, value.asInstanceOf[Array[Int]])
+      }
+      case "[L" => {
+        writeString(dos, "list")
+        writeDoubleArr(dos, value.asInstanceOf[Array[Long]].map(_.toDouble))
+      }
+      case "[D" => {
+        writeString(dos, "list")
+        writeDoubleArr(dos, value.asInstanceOf[Array[Double]])
+      }
+      case "[Z" => {
+        writeString(dos, "list")
+        writeBooleanArr(dos, value.asInstanceOf[Array[Boolean]])
+      }
+      case "[[B" => {
+        writeString(dos, "list")
+        writeBytesArr(dos, value.asInstanceOf[Array[Array[Byte]]])
+      }
+      case _ => {
+        val objId = value.getClass().getName() + "@" +
+          Integer.toHexString(System.identityHashCode(value))
+        objMap.put(objId, value)
+        writeString(dos, "jobj")
+        writeString(dos, objId)
+      }
+    }
   }
 
   def writeInt(out: DataOutputStream, value: Int) {
@@ -85,37 +198,38 @@ object SerializeJavaR {
     out.writeByte(0)
   }
 
-  def writeIntArr(out: DataOutputStream, value: Array[Int]) {
+  def writeBytes(out: DataOutputStream, value: Array[Byte]) {
     out.writeInt(value.length)
+    out.write(value)
+  }
+
+  def writeIntArr(out: DataOutputStream, value: Array[Int]) {
     writeString(out, "integer")
+    out.writeInt(value.length)
     value.foreach(v => out.writeInt(v))
   }
 
   def writeDoubleArr(out: DataOutputStream, value: Array[Double]) {
-    out.writeInt(value.length)
     writeString(out, "double")
+    out.writeInt(value.length)
     value.foreach(v => out.writeDouble(v))
   }
 
   def writeBooleanArr(out: DataOutputStream, value: Array[Boolean]) {
-    out.writeInt(value.length)
     writeString(out, "logical")
+    out.writeInt(value.length)
     value.foreach(v => writeBoolean(out, v))
   }
 
   def writeStringArr(out: DataOutputStream, value: Array[String]) {
-    out.writeInt(value.length)
     writeString(out, "character")
+    out.writeInt(value.length)
     value.foreach(v => writeString(out, v))
   }
 
-  def writeStringMap(out: DataOutputStream, value: Map[String, String]) {
-    out.writeInt(value.size)
-    if (value.size > 0) {
-      writeString(out, "character")
-      // TODO: Make writeStringArr work on Iterable ?
-      writeStringArr(out, value.keys.toArray) 
-      writeStringArr(out, value.values.toArray)
-    }
+  def writeBytesArr(out: DataOutputStream, value: Array[Array[Byte]]) {
+    writeString(out, "raw")
+    out.writeInt(value.length)
+    value.foreach(v => writeBytes(out, v))
   }
 }

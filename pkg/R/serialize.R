@@ -1,114 +1,87 @@
 # Utility functions to serialize, deserialize etc.
 
-writeString <- function(con, value, withType = FALSE) {
-  if (withType) {
-    writeString(con, typeof(value))
-  }
+writeString <- function(con, value) {
   writeInt(con, as.integer(nchar(value) + 1))
   writeBin(value, con, endian="big")
 }
 
-writeInt <- function(con, value, withType = FALSE) {
-  if (withType) {
-    writeString(con, typeof(value))
-  }
+writeInt <- function(con, value) {
   writeBin(as.integer(value), con, endian="big")
 }
 
-writeDouble <- function(con, value, withType = FALSE) {
-  if (withType) {
-    writeString(con, typeof(value))
-  }
+writeDouble <- function(con, value) {
   writeBin(value, con, endian="big")
 }
 
-writeBoolean <- function(con, value, withType = FALSE) {
-  if (withType) {
-    writeString(con, typeof(value))
-  }
+writeBoolean <- function(con, value) {
   # TRUE becomes 1, FALSE becomes 0
   writeInt(con, as.integer(value))
 }
 
-writeRaw <- function(con, batch, serialized = FALSE, withType = FALSE) {
-  if (serialized) {
-    outputSer <- batch
-  } else {
-    outputSer <- serialize(batch, ascii = FALSE, conn = NULL)
-  }
-  if (withType) {
-    writeString(con, typeof(outputSer))
-  }
-  writeInt(con, length(outputSer))
-  writeBin(outputSer, con, endian="big")
+writeRawSerialize <- function(con, batch) {
+  outputSer <- serialize(batch, ascii = FALSE, conn = NULL)
+  writeRaw(con, outputSer)
 }
 
-writeObject <- function(con, object, withType = FALSE) {
-  switch(typeof(object),
-    integer = writeInt(con, object, withType),
-    character = writeString(con, object, withType),
-    logical = writeBoolean(con, object, withType),
-    double = writeDouble(con, object, withType),
-    raw = writeRaw(con, object, withType),
+writeRaw <- function(con, batch) {
+  writeInt(con, length(batch))
+  writeBin(batch, con, endian="big")
+}
+
+writeObject <- function(con, object, withType = TRUE) {
+  # In R vectors have same type as objects. So check if this is a vector
+  # and if so just call writeVector
+  # TODO: Should we just throw an exception here instead ?
+  if (withType) {
+    writeString(con, class(object))
+  }
+  switch(class(object),
+    integer = writeInt(con, object),
+    character = writeString(con, object),
+    logical = writeBoolean(con, object),
+    double = writeDouble(con, object),
+    raw = writeRaw(con, object),
+    list = writeList(con, object),
+    jobj = writeString(con, object$id),
+    environment = writeEnv(con, object),
     stop("Unsupported type for serialization"))
 }
 
 # Used to pass arrays
-writeVector <- function(con, arr, withType = FALSE) {
-  if (!is.vector(arr) || typeof(arr) == "list") {
-    stop("writeVector cannot be used for non-vectors or lists")
-  }
-  if (withType) {
-    writeString(con, "vector")
-  }
+writeList <- function(con, arr) {
+  # All elements should be of same type
+  elemType <- unique(sapply(arr, function(elem) { class(elem) }))
+  stopifnot(length(elemType) <= 1)
+
+  writeString(con, elemType)
   writeInt(con, length(arr))
-  writeString(con, typeof(arr))
-  if (length(arr) > 0) { 
+
+  if (length(arr) > 0) {
     for (a in arr) {
-      writeObject(con, a)
+      writeObject(con, a, FALSE)
     }
   }
 }
 
-writeList <- function(con, list, withType = FALSE) {
-  if (withType) {
-    writeString(con, "list")
-  }
-  writeInt(con, length(list))
-  if (length(list) > 0) { 
-    for (a in list) {
-      writeObject(con, a, TRUE)
-    }
-  }
-}
-
-# Used to pass named lists as hash maps
+# Used to pass named lists as hash maps and lists as vectors
+#
+# We don't support pass in heterogenous lists.
 # Note that all the elements of the list should be of same type 
-writeNamedList <- function(con, namedlist) {
-  len <- length(namedlist)
+writeEnv <- function(con, env) {
+  len <- length(env)
+
   writeInt(con, len)
   if (len > 0) {
-    # All elements should be of same type
-    elemType <- unique(sapply(namedlist, function(elem) { typeof(elem) }))
-    stopifnot(length(elemType) == 1)
- 
-    writeString(con, elemType)
-    names <- names(namedlist)
- 
-    writeVector(con, names)
-    writeVector(con, unlist(namedlist, use.names=F, recursive=F))
+    writeList(con, as.list(ls(env)))
+    vals <- lapply(ls(env), function(x) { env[[x]] })
+    writeList(con, as.list(vals))
   }
 }
 
-# Used for writing out a hashed-by-key pairwise RDD.
-writeEnvironment <- function(con, e, keyValPairsSerialized = TRUE) {
-  writeInt(con, length(e))
-  for (bucketNum in ls(e)) {
-    writeInt(con, bucketNum)
-    writeInt(con, length(e[[bucketNum]]))
-    for (tuple in e[[bucketNum]]) {
-      writeRaw(con, tuple[[1]], keyValPairsSerialized)
-      writeRaw(con, tuple[[2]], keyValPairsSerialized)
+writeArgs <- function(con, args) {
+  if (length(args) > 0) {
+    for (a in args) {
+      writeObject(con, a)
     }
   }
 }
