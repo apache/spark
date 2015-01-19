@@ -213,10 +213,10 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    *                       DStream's batching interval
    */
   def reduceByWindow(
-      reduceFunc: (T, T) => T,
+      reduceFunc: JFunction2[T, T, T],
       windowDuration: Duration,
       slideDuration: Duration
-    ): DStream[T] = {
+    ): JavaDStream[T] = {
     dstream.reduceByWindow(reduceFunc, windowDuration, slideDuration)
   }
 
