@@ -206,6 +206,8 @@ class DagPickle(Base):
     def __init__(self, dag, job):
         self.dag_id = dag.dag_id
         self.job = job
+        for t in dag.tasks:
+            t.materialize_files()
         self.pickle = dumps(dag)
 
     def get_object(self):
@@ -766,6 +768,18 @@ class BaseOperator(Base):
             return self.dag.schedule_interval
         else:
             return self._schedule_interval
+
+    def materialize_files(self):
+        # Getting the content of files for template_field / template_ext
+        for field in self.template_fields:
+            content = getattr(self, field)
+            for ext in self.template_ext:
+                if content.endswith(ext):
+                    fp = os.path.join(
+                        os.path.dirname(self.dag.full_filepath), content)
+                    f = open(fp, 'r')
+                    setattr(self, field, f.read())
+                    f.close()
 
     @property
     def upstream_list(self):
