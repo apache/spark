@@ -7,13 +7,20 @@ sparkR.onLoad <- function(libname, pkgname) {
   assemblyJarPath <- gsub(" ", "\\ ", assemblyJarPath, fixed=T)
   packageStartupMessage("[SparkR] Initializing with classpath ", assemblyJarPath, "\n")
 
-  sparkMem <- Sys.getenv("SPARK_MEM", "512m")
   yarn_conf_dir <- Sys.getenv("YARN_CONF_DIR", "")
   
   .sparkREnv$libname <- libname
   .sparkREnv$assemblyJarPath <- assemblyJarPath
-  .jinit(classpath=assemblyJarPath, parameters=paste("-Xmx", sparkMem, sep=""))
-  .jaddClassPath(yarn_conf_dir)
+  # TODO: need to add this to backend's classpath
+  #.jaddClassPath(yarn_conf_dir)
+}
+
+#' Stop this Spark context
+#' Also terminates the backend this R session is connected to
+sparkR.stop <- function(sparkREnv) {
+  sc <- get(".sparkRjsc", envir=.sparkREnv)
+  callJMethod(sc, "stop")
+  stopBackend()
 }
 
 #' Initialize a new Spark Context.
@@ -52,6 +59,12 @@ sparkR.init <- function(
     return(get(".sparkRjsc", envir=.sparkREnv))
   }
 
+  sparkMem <- Sys.getenv("SPARK_MEM", "512m")
+  launchBackend(jar=.sparkREnv$assemblyJarPath, mainClass="edu.berkeley.cs.amplab.sparkr.SparkRBackend",
+                args="12345", javaOpts=paste("-Xmx", sparkMem, sep=""))
+  Sys.sleep(2) # Wait for backend to come up
+  init("localhost", 12345) # Connect to it
+
   if (nchar(sparkHome) != 0) {
     sparkHome <- normalizePath(sparkHome)
   }
@@ -60,20 +73,20 @@ sparkR.init <- function(
     .sparkREnv$libname <- sparkRLibDir
   }
 
-  sparkEnvirMap <- .jnew("java/util/HashMap")
+  sparkEnvirMap <- new.env()
   for (varname in names(sparkEnvir)) {
-    sparkEnvirMap$put(varname, sparkEnvir[[varname]])
+    sparkEnvirMap[[varname]] <- sparkEnvir[[varname]]
   }
   
-  sparkExecutorEnvMap <- .jnew("java/util/HashMap")
+  sparkExecutorEnvMap <- new.env()
   if (!any(names(sparkExecutorEnv) == "LD_LIBRARY_PATH")) {
-    sparkExecutorEnvMap$put("LD_LIBRARY_PATH", paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH")))
+    sparkExecutorEnvMap[["LD_LIBRARY_PATH"]] <- paste0("$LD_LIBRARY_PATH:",Sys.getenv("LD_LIBRARY_PATH"))
   }
   for (varname in names(sparkExecutorEnv)) {
-    sparkExecutorEnvMap$put(varname, sparkExecutorEnv[[varname]])
+    sparkExecutorEnvMap[[varname]] <- sparkExecutorEnv[[varname]]
   }
   
-  .jaddClassPath(sparkJars)
+  #.jaddClassPath(sparkJars)
   jars <- c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))
 
   nonEmptyJars <- Filter(function(x) { x != "" }, jars)
@@ -81,16 +94,20 @@ sparkR.init <- function(
 
   assign(
     ".sparkRjsc",
-    J("edu.berkeley.cs.amplab.sparkr.RRDD",
-      "createSparkContext",
+    createSparkContext(
       master,
       appName,
       as.character(sparkHome),
-      .jarray(localJarPaths, "java/lang/String"),
+      as.list(localJarPaths),
       sparkEnvirMap,
       sparkExecutorEnvMap),
     envir=.sparkREnv
   )
 
-  get(".sparkRjsc", envir=.sparkREnv)
+  sc <- get(".sparkRjsc", envir=.sparkREnv)
+
+  # Register a finalizer to stop backend on R exit
+  reg.finalizer(.sparkREnv, sparkR.stop, onexit=TRUE)
+
+  sc
 }

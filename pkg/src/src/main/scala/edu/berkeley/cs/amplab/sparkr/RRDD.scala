@@ -198,10 +198,10 @@ private class PairwiseRRDD[T: ClassTag](
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
-    broadcastVars: Array[Broadcast[Object]])
+    broadcastVars: Array[Object])
   extends BaseRRDD[T, (Int, Array[Byte])](parent, numPartitions, hashFunc, parentSerialized,
                                           true, functionDependencies, packageNames, rLibDir,
-                                          broadcastVars) {
+                                          broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   private var dataStream: DataInputStream = _
   
@@ -243,10 +243,10 @@ private class RRDD[T: ClassTag](
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
-    broadcastVars: Array[Broadcast[Object]])
+    broadcastVars: Array[Object])
   extends BaseRRDD[T, Array[Byte]](parent, -1, func, parentSerialized,
                                 true, functionDependencies, packageNames, rLibDir,
-                                broadcastVars) {
+                                broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   private var dataStream: DataInputStream = _
   
@@ -286,10 +286,10 @@ private class StringRRDD[T: ClassTag](
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
     rLibDir: String,
-    broadcastVars: Array[Broadcast[Object]])
+    broadcastVars: Array[Object])
   extends BaseRRDD[T, String](parent, -1, func, parentSerialized,
                            false, functionDependencies, packageNames, rLibDir,
-                           broadcastVars) {
+                           broadcastVars.map(x => x.asInstanceOf[Broadcast[Object]])) {
 
   private var dataStream: BufferedReader = _
 

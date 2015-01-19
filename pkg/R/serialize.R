@@ -54,6 +54,11 @@ writeList <- function(con, arr) {
   elemType <- unique(sapply(arr, function(elem) { class(elem) }))
   stopifnot(length(elemType) <= 1)
 
+  # Write empty lists as strings ?
+  if (length(elemType) == 0) {
+    elemType <- "character"
+  }
+
   writeString(con, elemType)
   writeInt(con, length(arr))
 
@@ -85,4 +90,8 @@ writeArgs <- function(con, args) {
       writeObject(con, a)
     }
   }
+}
+
+writeStrings <- function(con, stringList) {
+  writeLines(unlist(stringList), con)
 }

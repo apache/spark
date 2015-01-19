@@ -1,6 +1,12 @@
 # RDD in R implemented in S4 OO system.
 
-#setOldClass("jobjRef")
+
+# Handler for a java object that exists on the backend.
+jobj <- function(objId) {
+  if (!is.character(objId)) stop("object id must be a character")
+  structure(list(id=objId), class = "jobj")
+}
+setOldClass("jobj")
 
 #' @title S4 class that represents an RDD
 #' @description RDD can be created using functions like
@@ -13,12 +19,12 @@
 #' @export
 setClass("RDD",
          slots = list(env = "environment",
-                      jrdd = "jobjRef"))
+                      jrdd = "jobj"))
 
 setClass("PipelinedRDD",
          slots = list(prev = "RDD",
                       func = "function",
-                      prev_jrdd = "jobjRef"),
+                      prev_jrdd = "jobj"),
          contains = "RDD")
 
 
@@ -98,48 +104,44 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
             computeFunc <- function(split, part) {
               rdd@func(split, part)
             }
-            serializedFunc <- serialize("computeFunc", connection = NULL,
+            serializedFuncArr <- serialize("computeFunc", connection = NULL,
                                         ascii = TRUE)
-            serializedFuncArr <- .jarray(serializedFunc)
 
-            packageNamesArr <- .jarray(serialize(.sparkREnv[[".packages"]],
-                                                 connection = NULL,
-                                                 ascii = TRUE))
+            packageNamesArr <- serialize(.sparkREnv[[".packages"]],
+                                         connection = NULL,
+                                         ascii = TRUE)
 
-            refs <- lapply(ls(.broadcastNames),
-                           function(name) { get(name, .broadcastNames) })
-            broadcastArr <- .jarray(refs,
-                                    "org/apache/spark/broadcast/Broadcast")
+            broadcastArr <- lapply(ls(.broadcastNames),
+                                   function(name) { get(name, .broadcastNames) })
 
             depsBin <- getDependencies(computeFunc)
-            depsBinArr <- .jarray(depsBin)
 
             prev_jrdd <- rdd@prev_jrdd
 
             if (dataSerialization) {
-              rddRef <- new(J("edu.berkeley.cs.amplab.sparkr.RRDD"),
-                             prev_jrdd$rdd(),
-                             serializedFuncArr,
-                             rdd@env$serialized,
-                             depsBinArr,
-                             packageNamesArr,
-                             as.character(.sparkREnv[["libname"]]),
-                             broadcastArr,
-                             prev_jrdd$classTag())
+              rddRef <- newJava("edu.berkeley.cs.amplab.sparkr.RRDD",
+                                callJMethod(prev_jrdd, "rdd"),
+                                serializedFuncArr,
+                                rdd@env$serialized,
+                                depsBin,
+                                packageNamesArr,
+                                as.character(.sparkREnv[["libname"]]),
+                                broadcastArr,
+                                callJMethod(prev_jrdd, "classTag"))
             } else {
-              rddRef <- new(J("edu.berkeley.cs.amplab.sparkr.StringRRDD"),
-                             prev_jrdd$rdd(),
-                             serializedFuncArr,
-                             rdd@env$serialized,
-                             depsBinArr,
-                             packageNamesArr,
-                             as.character(.sparkREnv[["libname"]]),
-                             broadcastArr,
-                             prev_jrdd$classTag())
+              rddRef <- newJava("edu.berkeley.cs.amplab.sparkr.StringRRDD",
+                                callJMethod(prev_jrdd, "rdd"),
+                                serializedFuncArr,
+                                rdd@env$serialized,
+                                depsBin,
+                                packageNamesArr,
+                                as.character(.sparkREnv[["libname"]]),
+                                broadcastArr,
+                                callJMethod(prev_jrdd, "classTag"))
             }
             # Save the serialization flag after we create a RRDD
             rdd@env$serialized <- dataSerialization
-            rdd@env$jrdd_val <- rddRef$asJavaRDD()
+            rdd@env$jrdd_val <- callJMethod(rddRef, "asJavaRDD") # rddRef$asJavaRDD()
             rdd@env$jrdd_val
           })
 
@@ -147,8 +149,8 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
 setValidity("RDD",
             function(object) {
               jrdd <- getJRDD(object)
-              cls <- jrdd$getClass()
-              className <- cls$getName()
+              cls <- callJMethod(jrdd, "getClass")
+              className <- callJMethod(cls, "getName")
               if (grep("spark.api.java.*RDD*", className) == 1) {
                 TRUE
               } else {
@@ -180,7 +182,7 @@ setGeneric("cache", function(rdd) { standardGeneric("cache") })
 setMethod("cache",
           signature(rdd = "RDD"),
           function(rdd) {
-            .jcall(getJRDD(rdd), "Lorg/apache/spark/api/java/JavaRDD;", "cache")
+            callJMethod(getJRDD(rdd), "cache")
             rdd@env$isCached <- TRUE
             rdd
           })
@@ -220,19 +222,19 @@ setMethod("persist",
                                      "OFF_HEAP")) {
             match.arg(newLevel)
             storageLevel <- switch(newLevel,
-              "DISK_ONLY" = J("org.apache.spark.storage.StorageLevel")$DISK_ONLY(),
-              "DISK_ONLY_2" = J("org.apache.spark.storage.StorageLevel")$DISK_ONLY_2(),
-              "MEMORY_AND_DISK" = J("org.apache.spark.storage.StorageLevel")$MEMORY_AND_DISK(),
-              "MEMORY_AND_DISK_2" = J("org.apache.spark.storage.StorageLevel")$MEMORY_AND_DISK_2(),
-              "MEMORY_AND_DISK_SER" = J("org.apache.spark.storage.StorageLevel")$MEMORY_AND_DISK_SER(),
-              "MEMORY_AND_DISK_SER_2" = J("org.apache.spark.storage.StorageLevel")$MEMORY_AND_DISK_SER_2(),
-              "MEMORY_ONLY" = J("org.apache.spark.storage.StorageLevel")$MEMORY_ONLY(),
-              "MEMORY_ONLY_2" = J("org.apache.spark.storage.StorageLevel")$MEMORY_ONLY_2(),
-              "MEMORY_ONLY_SER" = J("org.apache.spark.storage.StorageLevel")$MEMORY_ONLY_SER(),
-              "MEMORY_ONLY_SER_2" = J("org.apache.spark.storage.StorageLevel")$MEMORY_ONLY_SER_2(),
-              "OFF_HEAP" = J("org.apache.spark.storage.StorageLevel")$OFF_HEAP())
+              "DISK_ONLY" = callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY"),
+              "DISK_ONLY_2" = callJStatic("org.apache.spark.storage.StorageLevel", "DISK_ONLY_2"),
+              "MEMORY_AND_DISK" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK"),
+              "MEMORY_AND_DISK_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_2"),
+              "MEMORY_AND_DISK_SER" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER"),
+              "MEMORY_AND_DISK_SER_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_AND_DISK_SER_2"),
+              "MEMORY_ONLY" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY"),
+              "MEMORY_ONLY_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_2"),
+              "MEMORY_ONLY_SER" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER"),
+              "MEMORY_ONLY_SER_2" = callJStatic("org.apache.spark.storage.StorageLevel", "MEMORY_ONLY_SER_2"),
+              "OFF_HEAP" = callJStatic("org.apache.spark.storage.StorageLevel", "OFF_HEAP"))
             
-            .jcall(getJRDD(rdd), "Lorg/apache/spark/api/java/JavaRDD;", "persist", storageLevel)
+            callJMethod(getJRDD(rdd), "persist", storageLevel)
             rdd@env$isCached <- TRUE
             rdd
           })
@@ -259,8 +261,7 @@ setGeneric("unpersist", function(rdd) { standardGeneric("unpersist") })
 setMethod("unpersist",
           signature(rdd = "RDD"),
           function(rdd) {
-            .jcall(getJRDD(rdd), "Lorg/apache/spark/api/java/JavaRDD;",
-                   "unpersist")
+            callJMethod(getJRDD(rdd), "unpersist")
             rdd@env$isCached <- FALSE
             rdd
           })
@@ -292,9 +293,7 @@ setMethod("checkpoint",
           signature(rdd = "RDD"),
           function(rdd) {
             jrdd <- getJRDD(rdd)
-            .jcall(jrdd$rdd(), "V", "checkpoint")
-            # NOTE: rJava doesn't check for exceptions if the return type is void
-            .jcheck()
+            callJMethod(jrdd, "checkpoint")
             rdd@env$isCheckpointed <- TRUE
             rdd
           })
@@ -319,8 +318,8 @@ setMethod("numPartitions",
           signature(rdd = "RDD"),
           function(rdd) {
             jrdd <- getJRDD(rdd)
-            partitions <- .jcall(jrdd, "Ljava/util/List;", "splits")
-            .jcall(partitions, "I", "size")
+            partitions <- callJMethod(jrdd, "splits")
+            callJMethod(partitions, "size")
           })
 
 #' Collect elements of an RDD
@@ -349,7 +348,7 @@ setMethod("collect",
           signature(rdd = "RDD"),
           function(rdd, flatten = TRUE) {
             # Assumes a pairwise RDD is backed by a JavaPairRDD.
-            collected <- .jcall(getJRDD(rdd), "Ljava/util/List;", "collect")
+            collected <- callJMethod(getJRDD(rdd), "collect")
             convertJListToRList(collected, flatten)
           })
 
@@ -369,10 +368,9 @@ setGeneric("collectPartition",
 setMethod("collectPartition",
           signature(rdd = "RDD", partitionId = "integer"),
           function(rdd, partitionId) {
-            jPartitionsList <- .jcall(getJRDD(rdd),
-                                      "[Ljava/util/List;",
-                                      "collectPartitions",
-                                      .jarray(as.integer(partitionId)))
+            jPartitionsList <- callJMethod(getJRDD(rdd),
+                                           "collectPartitions",
+                                           as.list(as.integer(partitionId)))
 
             jList <- jPartitionsList[[1]]
             convertJListToRList(jList, flatten = TRUE)
@@ -859,10 +857,7 @@ setMethod("take",
                 break
 
               # a JList of byte arrays
-              partitionArr <- .jcall(jrdd,
-                                     "[Ljava/util/List;",
-                                     "collectPartitions",
-                                     .jarray(as.integer(index)))
+              partitionArr <- callJMethod(jrdd, "collectPartitions", as.list(as.integer(index)))
               partition <- partitionArr[[1]]
 
               size <- num - length(resList)
@@ -1100,9 +1095,7 @@ setMethod("saveAsObjectFile",
             if (!rdd@env$serialized) {
               rdd <- reserialize(rdd)
             }
-            .jcall(getJRDD(rdd), "V", "saveAsObjectFile", path)
-            # NOTE: rJava doesn't check for exceptions if the return type is void
-            .jcheck()
+            callJMethod(getJRDD(rdd), "saveAsObjectFile", path)
             # Return nothing
             invisible(NULL)
           })
@@ -1130,9 +1123,7 @@ setMethod("saveAsTextFile",
               toString(x)
             }
             stringRdd <- lapply(rdd, func)
-            .jcall(getJRDD(stringRdd, dataSerialization = FALSE), "V", "saveAsTextFile", path)
-            # NOTE: rJava doesn't check for exceptions if the return type is void
-            .jcheck()
+            callJMethod(getJRDD(stringRdd, dataSerialization = FALSE), "saveAsTextFile", path)
             # Return nothing
             invisible(NULL)
           })
@@ -1286,48 +1277,44 @@ setMethod("partitionBy",
             #  partitionFunc <- hashCode
             #}
 
-            depsBin <- getDependencies(partitionFunc)
-            depsBinArr <- .jarray(depsBin)
+            depsBinArr <- getDependencies(partitionFunc)
 
-            serializedHashFunc <- serialize(as.character(substitute(partitionFunc)),
-                                            connection = NULL,
-                                            ascii = TRUE)
-            serializedHashFuncBytes <- .jarray(serializedHashFunc)
-
-            packageNamesArr <- .jarray(serialize(.sparkREnv$.packages,
+            serializedHashFuncBytes <- serialize(as.character(substitute(partitionFunc)),
                                                  connection = NULL,
-                                                 ascii = TRUE))
-            refs <- lapply(ls(.broadcastNames), function(name) {
-                           get(name, .broadcastNames) })
-            broadcastArr <- .jarray(refs,
-                                    "org/apache/spark/broadcast/Broadcast")
-            jrdd <- getJRDD(rdd)
+                                                 ascii = TRUE)
 
+            packageNamesArr <- serialize(.sparkREnv$.packages,
+                                         connection = NULL,
+                                         ascii = TRUE)
+            broadcastArr <- lapply(ls(.broadcastNames), function(name) {
+                                   get(name, .broadcastNames) })
+            jrdd <- getJRDD(rdd)
 
             # We create a PairwiseRRDD that extends RDD[(Array[Byte],
             # Array[Byte])], where the key is the hashed split, the value is
             # the content (key-val pairs).
-            pairwiseRRDD <- new(J("edu.berkeley.cs.amplab.sparkr.PairwiseRRDD"),
-                                jrdd$rdd(),
-                                as.integer(numPartitions),
-                                serializedHashFuncBytes,
-                                rdd@env$serialized,
-                                depsBinArr,
-                                packageNamesArr,
-                                as.character(.sparkREnv$libname),
-                                broadcastArr,
-                                jrdd$classTag())
+            pairwiseRRDD <- newJava("edu.berkeley.cs.amplab.sparkr.PairwiseRRDD",
+                                    callJMethod(jrdd, "rdd"),
+                                    as.integer(numPartitions),
+                                    serializedHashFuncBytes,
+                                    rdd@env$serialized,
+                                    depsBinArr,
+                                    packageNamesArr,
+                                    as.character(.sparkREnv$libname),
+                                    broadcastArr,
+                                    callJMethod(jrdd, "classTag"))
 
             # Create a corresponding partitioner.
-            rPartitioner <- new(J("org.apache.spark.HashPartitioner"),
-                                as.integer(numPartitions))
+            rPartitioner <- newJava("org.apache.spark.HashPartitioner",
+                                    as.integer(numPartitions))
 
             # Call partitionBy on the obtained PairwiseRDD.
-            javaPairRDD <- pairwiseRRDD$asJavaPairRDD()$partitionBy(rPartitioner)
+            javaPairRDD <- callJMethod(pairwiseRRDD, "asJavaPairRDD")
+            javaPairRDD <- callJMethod(javaPairRDD, "partitionBy", rPartitioner)
 
             # Call .values() on the result to get back the final result, the
             # shuffled acutal content key-val pairs.
-            r <- javaPairRDD$values()
+            r <- callJMethod(javaPairRDD, "values")
 
             RDD(r, serialized=TRUE)
           })
@@ -1565,8 +1552,7 @@ setMethod("unionRDD",
           signature(x = "RDD", y = "RDD"),
           function(x, y) {
             if (x@env$serialized == y@env$serialized) {
-              jrdd <- .jcall(getJRDD(x), "Lorg/apache/spark/api/java/JavaRDD;",
-                             "union", getJRDD(y))
+              jrdd <- callJMethod(getJRDD(x), "union", getJRDD(y))
               union.rdd <- RDD(jrdd, x@env$serialized)
             } else {
               # One of the RDDs is not serialized, we need to serialize it first.
@@ -1575,8 +1561,7 @@ setMethod("unionRDD",
               } else {
                 y <- reserialize(y)
               }
-              jrdd <- .jcall(getJRDD(x), "Lorg/apache/spark/api/java/JavaRDD;",
-                             "union", getJRDD(y))
+              jrdd <- callJMethod(getJRDD(x), "union", getJRDD(y))
               union.rdd <- RDD(jrdd, TRUE)
             }
             union.rdd

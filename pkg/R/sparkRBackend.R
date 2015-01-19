@@ -57,8 +57,9 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
   }
   writeString(rc, methodName)
 
-  #writeString(rpcName)
-  writeArgs(rc, list(...))
+  args <- list(...)
+  writeInt(rc, length(args))
+  writeArgs(rc, args)
 
   bytesToSend <- rawConnectionValue(rc)
   conn <- get(".sparkRCon", .sparkREnv)
@@ -68,5 +69,8 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
   # TODO: check the status code to output error information
   returnStatus <- readInt(conn)
   stopifnot(returnStatus == 0)
-  readObject(conn)
+  ret <- readObject(conn)
+
+  close(rc) # TODO: Can we close this before ?
+  ret
 }

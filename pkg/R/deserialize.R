@@ -54,11 +54,12 @@ readVector <- function(con) {
 readList <- function(con) {
   type <- readString(con)
   len <- readInt(con)
-  if (length > 0) {
+  if (len > 0) {
     l <- vector("list", len)
     for (i in 1:len) {
       l[[i]] <- readObjectType(con, type)
     }
+    l
   } else {
     list()
   }

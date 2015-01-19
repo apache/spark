@@ -24,17 +24,7 @@ object SerializeJavaR {
       case "character" => readString(dis)
       case "environment" => readMap(dis, objMap)
       case "raw" => readBytes(dis)
-      case "list" => {
-        val arrType = readString(dis)
-        arrType match {
-          case "integer" => readIntArr(dis)
-          case "character" => readStringArr(dis)
-          case "double" => readDoubleArr(dis)
-          case "logical" => readBooleanArr(dis)
-          case "jobj" => readStringArr(dis).map(x => objMap(x))
-          case "raw" => readBytesArr(dis)
-        }
-      }
+      case "list" => readList(dis, objMap)
       case "jobj" => objMap(readString(dis))
     }
   }
@@ -59,7 +49,8 @@ object SerializeJavaR {
     val len = in.readInt()
     val asciiBytes = new Array[Byte](len)
     in.read(asciiBytes, 0, len)
-    new String(asciiBytes.dropRight(1).map(_.toChar))
+    val str = new String(asciiBytes.dropRight(1).map(_.toChar))
+    str
   }
 
   def readBoolean(in: DataInputStream) = {
@@ -92,14 +83,30 @@ object SerializeJavaR {
     (0 until len).map(_ => readString(in)).toArray
   }
 
+  def readList(dis: DataInputStream, objMap: HashMap[String, Object]) = {
+    val arrType = readString(dis)
+    arrType match {
+      case "integer" => readIntArr(dis)
+      case "character" => readStringArr(dis)
+      case "double" => readDoubleArr(dis)
+      case "logical" => readBooleanArr(dis)
+      case "jobj" => readStringArr(dis).map(x => objMap(x))
+      case "raw" => readBytesArr(dis)
+      case _ => throw new IllegalArgumentException(s"Invalid array type $arrType")
+    }
+  }
+
   def readMap(
       in: DataInputStream,
       objMap: HashMap[String, Object]): java.util.Map[Object, Object] = {
     val len = readInt(in)
     if (len > 0) {
       val typeStr = readString(in)
-      val keys = (0 until len).map(_ => readObjectType(in, objMap, typeStr))
+      val keysLen = readInt(in)
+      val keys = (0 until keysLen).map(_ => readObjectType(in, objMap, typeStr))
+
       val valuesType = readString(in)
+      val valuesLen = readInt(in)
       val values = (0 until len).map(_ => readObjectType(in, objMap, typeStr))
       mapAsJavaMap(keys.zip(values).toMap)
     } else {
@@ -110,68 +117,78 @@ object SerializeJavaR {
   /// Methods to write out data from Java to R
 
   def writeObject(dos: DataOutputStream, value: Object, objMap: HashMap[String, Object]) {
-    value.getClass.getName match {
-      case "void" => {
-        writeString(dos, "void")
-      }
-      case "java.lang.String" => {
-        writeString(dos, "character")
-        writeString(dos, value.asInstanceOf[String])
-      }
-      case "long" | "java.lang.Long" => {
-        writeString(dos, "double")
-        writeDouble(dos, value.asInstanceOf[Long].toDouble)
-      }
-      case "double" | "java.lang.Double" => {
-        writeString(dos, "double")
-        writeDouble(dos, value.asInstanceOf[Double])
-      }
-      case "int" | "java.lang.Integer" => {
-        writeString(dos, "integer")
-        writeInt(dos, value.asInstanceOf[Int])
-      }
-      case "boolean" | "java.lang.Boolean" => {
-        writeString(dos, "logical")
-        writeBoolean(dos, value.asInstanceOf[Boolean])
-      }
-      case "[B" => {
-        writeString(dos, "raw")
-        writeBytes(dos, value.asInstanceOf[Array[Byte]])
-      }
-      // TODO: Types not handled right now include
-      // byte, char, short, float
+    if (value == null) {
+      writeString(dos, "void")
+    } else {
+      value.getClass.getName match {
+        case "java.lang.String" => {
+          writeString(dos, "character")
+          writeString(dos, value.asInstanceOf[String])
+        }
+        case "long" | "java.lang.Long" => {
+          writeString(dos, "double")
+          writeDouble(dos, value.asInstanceOf[Long].toDouble)
+        }
+        case "double" | "java.lang.Double" => {
+          writeString(dos, "double")
+          writeDouble(dos, value.asInstanceOf[Double])
+        }
+        case "int" | "java.lang.Integer" => {
+          writeString(dos, "integer")
+          writeInt(dos, value.asInstanceOf[Int])
+        }
+        case "boolean" | "java.lang.Boolean" => {
+          writeString(dos, "logical")
+          writeBoolean(dos, value.asInstanceOf[Boolean])
+        }
+        case "[B" => {
+          writeString(dos, "raw")
+          writeBytes(dos, value.asInstanceOf[Array[Byte]])
+        }
+        // TODO: Types not handled right now include
+        // byte, char, short, float
 
-      // Handle arrays
-      case "[Ljava.lang.String;" => {
-        writeString(dos, "list")
-        writeStringArr(dos, value.asInstanceOf[Array[String]])
-      }
-      case "[I" => {
-        writeString(dos, "list")
-        writeIntArr(dos, value.asInstanceOf[Array[Int]])
-      }
-      case "[L" => {
-        writeString(dos, "list")
-        writeDoubleArr(dos, value.asInstanceOf[Array[Long]].map(_.toDouble))
-      }
-      case "[D" => {
-        writeString(dos, "list")
-        writeDoubleArr(dos, value.asInstanceOf[Array[Double]])
-      }
-      case "[Z" => {
-        writeString(dos, "list")
-        writeBooleanArr(dos, value.asInstanceOf[Array[Boolean]])
-      }
-      case "[[B" => {
-        writeString(dos, "list")
-        writeBytesArr(dos, value.asInstanceOf[Array[Array[Byte]]])
-      }
-      case _ => {
-        val objId = value.getClass().getName() + "@" +
-          Integer.toHexString(System.identityHashCode(value))
-        objMap.put(objId, value)
-        writeString(dos, "jobj")
-        writeString(dos, objId)
+        // Handle arrays
+        case "[Ljava.lang.String;" => {
+          writeString(dos, "list")
+          writeStringArr(dos, value.asInstanceOf[Array[String]])
+        }
+        case "[I" => {
+          writeString(dos, "list")
+          writeIntArr(dos, value.asInstanceOf[Array[Int]])
+        }
+        case "[J" => {
+          writeString(dos, "list")
+          writeDoubleArr(dos, value.asInstanceOf[Array[Long]].map(_.toDouble))
+        }
+        case "[D" => {
+          writeString(dos, "list")
+          writeDoubleArr(dos, value.asInstanceOf[Array[Double]])
+        }
+        case "[Z" => {
+          writeString(dos, "list")
+          writeBooleanArr(dos, value.asInstanceOf[Array[Boolean]])
+        }
+        case "[[B" => {
+          writeString(dos, "list")
+          writeBytesArr(dos, value.asInstanceOf[Array[Array[Byte]]])
+        }
+        case _ => {
+          // Handle array of objects
+          if (value.getClass().getName().startsWith("[L")) {
+            val objArr = value.asInstanceOf[Array[Object]]
+            writeString(dos, "list")
+            writeString(dos, "jobj")
+            dos.writeInt(objArr.length)
+            objArr.foreach(o => writeJObj(dos, o, objMap)) 
+          } else {
+            val objId = value.getClass().getName() + "@" +
+              Integer.toHexString(System.identityHashCode(value))
+            objMap.put(objId, value)
+            writeString(dos, "jobj")
+            writeString(dos, objId)
+          }
+        }
       }
     }
   }
@@ -200,6 +217,13 @@ object SerializeJavaR {
   def writeBytes(out: DataOutputStream, value: Array[Byte]) {
     out.writeInt(value.length)
     out.write(value)
+  }
+
+  def writeJObj(out: DataOutputStream, value: Object, objMap: HashMap[String, Object]) {
+    val objId = value.getClass().getName() + "@" +
+      Integer.toHexString(System.identityHashCode(value))
+    objMap.put(objId, value)
+    writeString(out, objId)
   }
 
   def writeIntArr(out: DataOutputStream, value: Array[Int]) {

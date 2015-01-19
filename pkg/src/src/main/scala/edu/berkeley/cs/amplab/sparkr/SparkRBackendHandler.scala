@@ -30,8 +30,9 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
     val isStatic = readBoolean(dis)
     val objId = readString(dis)
     val methodName = readString(dis)
+    val numArgs = readInt(dis)
 
-    System.err.println(s"Handling $methodName on $objId")
+    // System.err.println(s"Handling $methodName on $objId")
 
     if (objId == "SparkRHandler") {
       methodName match {
@@ -45,7 +46,7 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
         case _ => dos.writeInt(-1)
       }
     } else {
-      handleMethodCall(isStatic, objId, methodName, dis, dos)
+      handleMethodCall(isStatic, objId, methodName, numArgs, dis, dos)
     }
 
     val reply = bos.toByteArray
@@ -63,7 +64,7 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
   }
 
   def handleMethodCall(isStatic: Boolean, objId: String, methodName: String,
-    dis: DataInputStream, dos: DataOutputStream) {
+    numArgs: Int, dis: DataInputStream, dos: DataOutputStream) {
 
     var obj: Object = null
     var cls: Option[Class[_]] = None
@@ -84,9 +85,12 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
       // TODO: We only use first method with the same name
       val selectedMethods = methods.filter(m => m.getName() == methodName)
       if (selectedMethods.length > 0) {
-        val selectedMethod = selectedMethods.head
+        val selectedMethod = selectedMethods.filter { x => 
+          x.getParameterTypes().length == numArgs
+        }.head
         val argTypes = selectedMethod.getParameterTypes()
         val args = parseArgs(argTypes, dis)
+
         val ret = selectedMethod.invoke(obj, args:_*)
 
         // Write status bit
@@ -95,7 +99,10 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
       } else if (methodName == "new") {
         // methodName should be "new" for constructor
         // TODO: We only use the first constructor ?
-        val ctor = cls.get.getConstructors().head
+        val ctor = cls.get.getConstructors().filter { x =>
+          x.getParameterTypes().length == numArgs
+        }.head
+
         val argTypes = ctor.getParameterTypes()
         val params = parseArgs(argTypes, dis)
         val obj = ctor.newInstance(params:_*)
