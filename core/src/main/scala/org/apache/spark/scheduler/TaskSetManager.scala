@@ -370,11 +370,6 @@ private[spark] class TaskSetManager(
     : Option[(Int, TaskLocality.Value, Boolean)] =
   {
     for (index <- dequeueTaskFromList(execId, getPendingTasksForExecutor(execId))) {
-      // Remove the execId from pendingTasksForExecutor when no more tasks for it to enable fast
-      // checking of whether pendingTasksForExecutor is empty or not
-      if (getPendingTasksForExecutor(execId).isEmpty) {
-        pendingTasksForExecutor -= execId
-      }
       return Some((index, TaskLocality.PROCESS_LOCAL, false))
     }
 
@@ -500,19 +495,37 @@ private[spark] class TaskSetManager(
    * Get the level we can launch tasks according to delay scheduling, based on current wait time.
    */
   private def getAllowedLocalityLevel(curTime: Long): TaskLocality.TaskLocality = {
-    // Move to next locality level if there is no process-local tasks
-    if (myLocalityLevels(currentLocalityIndex) == TaskLocality.PROCESS_LOCAL &&
-        pendingTasksForExecutor.isEmpty && currentLocalityIndex < myLocalityLevels.length - 1) {
-      lastLaunchTime = curTime
-      currentLocalityIndex += 1
+    // remove the emptyList from pendingTasks lazily
+    def hasNonEmptyList(pendingTasks: HashMap[String, ArrayBuffer[Int]]): Boolean = {
+      val emptyKeys = new ArrayBuffer[String]
+      val nonEmpty = pendingTasks.exists{
+        case (key: String, list: ArrayBuffer[Int]) =>
+          if (list.isEmpty) {
+            emptyKeys += key
+          }
+          list.nonEmpty
+      }
+      emptyKeys.foreach(x => pendingTasks.remove(x))
+      nonEmpty
     }
-    while (curTime - lastLaunchTime >= localityWaits(currentLocalityIndex) &&
-        currentLocalityIndex < myLocalityLevels.length - 1)
-    {
-      // Jump to the next locality level, and remove our waiting time for the current one since
-      // we don't want to count it again on the next one
-      lastLaunchTime += localityWaits(currentLocalityIndex)
-      currentLocalityIndex += 1
+
+    while (currentLocalityIndex < myLocalityLevels.length - 1) {
+      val moreTasks = myLocalityLevels(currentLocalityIndex) match {
+        case TaskLocality.PROCESS_LOCAL => hasNonEmptyList(pendingTasksForExecutor)
+        case TaskLocality.NODE_LOCAL => hasNonEmptyList(pendingTasksForHost)
+        case TaskLocality.NO_PREF => pendingTasksWithNoPrefs.isEmpty
+        case TaskLocality.RACK_LOCAL => hasNonEmptyList(pendingTasksForRack)
+      }
+      if (!moreTasks) {
+        // Move to next locality level if there is no task for current level
+        lastLaunchTime = curTime
+        currentLocalityIndex += 1
+      } else if (curTime - lastLaunchTime >= localityWaits(currentLocalityIndex)) {
+        // Jump to the next locality level, and remove our waiting time for the current one since
+        // we don't want to count it again on the next one
+        lastLaunchTime += localityWaits(currentLocalityIndex)
+        currentLocalityIndex += 1
+      }
     }
     myLocalityLevels(currentLocalityIndex)
   }
