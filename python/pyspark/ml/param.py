@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta
 
 from pyspark.ml.util import Identifiable
 
@@ -50,11 +50,10 @@ class Params(Identifiable):
     __metaclass__ = ABCMeta
 
     def __init__(self):
-        super.__init__(self)
+        super(Params, self).__init__()
         #: Internal param map.
         self.paramMap = {}
 
-    @abstractmethod
     def params(self):
         """
         Returns all params. The default implementation uses

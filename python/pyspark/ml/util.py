@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import uuid
+
 
 class Identifiable(object):
     """

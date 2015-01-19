@@ -18,7 +18,7 @@
 from abc import ABCMeta, abstractmethod
 
 from pyspark import SparkContext
-from pyspark.sql import inherit_doc
+from pyspark.sql import inherit_doc # TODO: move inherit_doc to Spark Core
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import Identifiable
 
@@ -37,7 +37,7 @@ class PipelineStage(Params):
     """
 
     def __init__(self):
-        super.__init__(self)
+        super(PipelineStage, self).__init__()
 
 
 @inherit_doc
@@ -49,7 +49,7 @@ class Estimator(PipelineStage):
     __metaclass__ = ABCMeta
 
     def __init__(self):
-        super.__init__(self)
+        super(Estimator, self).__init__()
 
     @abstractmethod
     def fit(self, dataset, params={}):
@@ -73,6 +73,9 @@ class Transformer(PipelineStage):
     """
 
     __metaclass__ = ABCMeta
+
+    def __init__(self):
+        super(Transformer, self).__init__()
 
     @abstractmethod
     def transform(self, dataset, params={}):
@@ -109,7 +112,7 @@ class Pipeline(Estimator):
     """
 
     def __init__(self):
-        super.__init__(self)
+        super(Pipeline, self).__init__()
         #: Param for pipeline stages.
         self.stages = Param(self, "stages", "pipeline stages")
 
@@ -139,6 +142,9 @@ class Pipeline(Estimator):
                 model = stage.fit(dataset)
                 transformers.append(model)
                 dataset = model.transform(dataset)
+            else:
+                raise ValueError(
+                    "Cannot recognize a pipeline stage of type %s." % type(stage).__name__)
         return PipelineModel(transformers)
 
 
@@ -146,6 +152,7 @@ class Pipeline(Estimator):
 class PipelineModel(Transformer):
 
     def __init__(self, transformers):
+        super(PipelineModel, self).__init__()
         self.transformers = transformers
 
     def transform(self, dataset):

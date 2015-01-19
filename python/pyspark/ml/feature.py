@@ -16,13 +16,13 @@
 #
 
 from pyspark.sql import SchemaRDD, ArrayType, StringType
-from pyspark.ml import _jvm
+from pyspark.ml import Transformer, _jvm
 from pyspark.ml.param import Param
 
-
-class Tokenizer(object):
+class Tokenizer(Transformer):
 
     def __init__(self):
+        super(Tokenizer, self).__init__()
         self.inputCol = Param(self, "inputCol", "input column name", None)
         self.outputCol = Param(self, "outputCol", "output column name", None)
         self.paramMap = {}
@@ -61,9 +61,10 @@ class Tokenizer(object):
             raise ValueError("The input params must be either a dict or a list.")
 
 
-class HashingTF(object):
+class HashingTF(Transformer):
 
     def __init__(self):
+        super(HashingTF, self).__init__()
         self._java_obj = _jvm().org.apache.spark.ml.feature.HashingTF()
         self.numFeatures = Param(self, "numFeatures", "number of features", 1 << 18)
         self.inputCol = Param(self, "inputCol", "input column name")

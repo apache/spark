@@ -1,3 +1,20 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 from pyspark import SparkContext
 from pyspark.sql import SQLContext, Row
 from pyspark.ml import Pipeline
@@ -8,7 +25,10 @@ if __name__ == "__main__":
     sc = SparkContext(appName="SimpleTextClassificationPipeline")
     sqlCtx = SQLContext(sc)
     training = sqlCtx.inferSchema(
-        sc.parallelize([(0L, "a b c d e spark", 1.0), (1L, "b d", 0.0), (2L, "spark f g h", 1.0), (3L, "hadoop mapreduce", 0.0)]) \
+        sc.parallelize([(0L, "a b c d e spark", 1.0),
+                        (1L, "b d", 0.0),
+                        (2L, "spark f g h", 1.0),
+                        (3L, "hadoop mapreduce", 0.0)]) \
           .map(lambda x: Row(id=x[0], text=x[1], label=x[2])))
 
     tokenizer = Tokenizer() \
@@ -26,7 +46,10 @@ if __name__ == "__main__":
     model = pipeline.fit(training)
 
     test = sqlCtx.inferSchema(
-        sc.parallelize([(4L, "spark i j k"), (5L, "l m n"), (6L, "mapreduce spark"), (7L, "apache hadoop")]) \
+        sc.parallelize([(4L, "spark i j k"),
+                        (5L, "l m n"),
+                        (6L, "mapreduce spark"),
+                        (7L, "apache hadoop")]) \
           .map(lambda x: Row(id=x[0], text=x[1])))
 
     for row in model.transform(test).collect():
