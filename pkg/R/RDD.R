@@ -1783,6 +1783,86 @@ setMethod("rightOuterJoin",
             joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
           })
 
+#' Full outer join two RDDs
+#'
+#' This function full-outer-joins two RDDs where every element is of the form 
+#' list(K, V). 
+#' The key types of the two RDDs should be the same.
+#'
+#' @param rdd1 An RDD to be joined. Should be an RDD where each element is
+#'             list(K, V).
+#' @param rdd2 An RDD to be joined. Should be an RDD where each element is
+#'             list(K, V).
+#' @param numPartitions Number of partitions to create.
+#' @return For each element (k, v) in rdd1 and (k, w) in rdd2, the resulting RDD
+#'         will contain all pairs (k, (v, w)) for both (k, v) in rdd1 and and
+#'         (k, w) in rdd2, or the pair (k, (NULL, w))/(k, (v, NULL)) if no elements 
+#'         in rdd1/rdd2 have key k.
+#' @rdname fullOuterJoin
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd1 <- parallelize(sc, list(list(1, 2), list(1, 3), list(3, 3)))
+#' rdd2 <- parallelize(sc, list(list(1, 1), list(2, 4)))
+#' fullOuterJoin(rdd1, rdd2, 2L) # list(list(1, list(2, 1)),
+#'                               #      list(1, list(3, 1)),
+#'                               #      list(3, list(3, NULL)),
+#'                               #      list(2, list(NULL, 4)))
+#'}
+setGeneric("fullOuterJoin", function(rdd1, rdd2, numPartitions) { standardGeneric("fullOuterJoin") })
+
+#' @rdname fullOuterJoin
+#' @aliases fullOuterJoin,RDD,RDD-method
+setMethod("fullOuterJoin",
+          signature(rdd1 = "RDD", rdd2 = "RDD", numPartitions = "integer"),
+          function(rdd1, rdd2, numPartitions) {
+            rdd1Tagged <- lapply(rdd1, function(x) { list(x[[1]], list(1L, x[[2]])) })
+            rdd2Tagged <- lapply(rdd2, function(x) { list(x[[1]], list(2L, x[[2]])) })
+
+            doJoin <- function(v) {
+              t1 <- vector("list", length(v))
+              t2 <- vector("list", length(v))
+              index1 <- 1
+              index2 <- 1
+              for (x in v) {
+                if (x[[1]] == 1L) {
+                  t1[[index1]] <- x[[2]]
+                  index1 <- index1 + 1
+                } else {
+                  t2[[index2]] <- x[[2]]
+                  index2 <- index2 + 1
+                }
+              }
+              len1 <- index1 - 1
+              len2 <- index2 - 1
+
+              if (len1 == 0) {
+                t1 <- list(NULL)
+              } else {
+                length(t1) <- len1
+              }
+
+              if (len2 == 0) {
+                t2 <- list(NULL)
+              } else {
+                length(t2) <- len2
+              }
+
+              result <- list()
+              length(result) <- length(t1) * length(t2)
+              index <- 1
+              for(i in t1) {
+                for(j in t2) {
+                  result[[index]] <- list(i, j)
+                  index <- index + 1
+                }
+              }
+              result
+            }
+            joined <- flatMapValues(groupByKey(unionRDD(rdd1Tagged, rdd2Tagged), numPartitions), doJoin)
+          })
+
 #' For each key k in several RDDs, return a resulting RDD that
 #' whose values are a list of values for the key in all RDDs.
 #'
