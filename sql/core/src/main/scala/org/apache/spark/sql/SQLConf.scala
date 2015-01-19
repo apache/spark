@@ -53,7 +53,7 @@ private[spark] object SQLConf {
 }
 
 /**
- * A private class that enables the setting and getting of mutable config parameters/hints.
+ * A class that enables the setting and getting of mutable config parameters/hints.
  *
  * In the presence of a SQLContext, these can be set and queried by passing SET commands
  * into Spark SQL's query functions (i.e. sql()). Otherwise, users of this class can
