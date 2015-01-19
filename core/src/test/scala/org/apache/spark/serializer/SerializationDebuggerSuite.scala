@@ -136,5 +136,4 @@ class Foo(
     var g: Foo) extends Serializable
 
 
-// Bar is not serializable
 class NotSerializable
