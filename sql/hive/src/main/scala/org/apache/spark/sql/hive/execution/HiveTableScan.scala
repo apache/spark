@@ -84,7 +84,7 @@ case class HiveTableScan(
     // Specifies needed column IDs for those non-partitioning columns.
     val neededColumnIDs = attributes.flatMap(relation.columnOrdinals.get).map(o => o: Integer)
 
-    HiveUtils.appendReadColumns(hiveConf, neededColumnIDs, attributes.map(_.name))
+    HiveCompat.appendReadColumns(hiveConf, neededColumnIDs, attributes.map(_.name))
 
     val tableDesc = relation.tableDesc
     val deserializer = tableDesc.getDeserializerClass.newInstance

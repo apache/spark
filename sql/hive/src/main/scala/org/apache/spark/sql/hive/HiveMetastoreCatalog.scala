@@ -152,7 +152,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
     } else {
       val partitions: Seq[Partition] =
         if (table.isPartitioned) {
-          HiveUtils.getAllPartitionsOf(client, table).toSeq
+          HiveCompat.getAllPartitionsOf(client, table).toSeq
         } else {
           Nil
         }
@@ -501,8 +501,8 @@ private[hive] case class MetastoreRelation
 
   @transient override lazy val statistics = Statistics(
     sizeInBytes = {
-      val totalSize = hiveQlTable.getParameters.get(HiveUtils.getStatsSetupConstTotalSize)
-      val rawDataSize = hiveQlTable.getParameters.get(HiveUtils.getStatsSetupConstRawDataSize)
+      val totalSize = hiveQlTable.getParameters.get(HiveCompat.getStatsSetupConstTotalSize)
+      val rawDataSize = hiveQlTable.getParameters.get(HiveCompat.getStatsSetupConstRawDataSize)
       // TODO: check if this estimate is valid for tables after partition pruning.
       // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
       // relatively cheap if parameters for the table are populated into the metastore.  An
@@ -519,7 +519,7 @@ private[hive] case class MetastoreRelation
     }
   )
 
-  val tableDesc = HiveUtils.newTableDesc(
+  val tableDesc = HiveCompat.newTableDesc(
     Class.forName(
       hiveQlTable.getSerializationLib,
       true,

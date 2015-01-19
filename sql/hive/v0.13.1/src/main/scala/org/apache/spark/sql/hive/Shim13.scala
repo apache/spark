@@ -156,7 +156,7 @@ object HiveShim {
     } else {
       // TODO precise, scale?
       new hiveIo.HiveDecimalWritable(
-        HiveUtils.newHiveDecimal(value.asInstanceOf[Decimal].toJavaBigDecimal))
+        HiveCompat.newHiveDecimal(value.asInstanceOf[Decimal].toJavaBigDecimal))
     }
 
   def createDriverResultsArray = new JArrayList[Object]

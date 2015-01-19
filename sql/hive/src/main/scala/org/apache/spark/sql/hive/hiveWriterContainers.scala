@@ -34,7 +34,7 @@ import org.apache.hadoop.mapred._
 
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.hive.HiveUtils.FileSinkDescWrapper
+import org.apache.spark.sql.hive.HiveCompat.FileSinkDescWrapper
 import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
 
 /**

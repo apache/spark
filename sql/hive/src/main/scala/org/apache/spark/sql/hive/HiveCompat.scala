@@ -35,7 +35,10 @@ import org.apache.hadoop.mapred.InputFormat
 
 import org.apache.spark.Logging
 
-object HiveUtils {
+/**
+ * A utility object used to cope with Hive compatibility issues.
+ */
+object HiveCompat {
   def createDefaultDBIfNeeded(context: HiveContext) = {
     context.runSqlHive("CREATE DATABASE IF NOT EXISTS default")
     context.runSqlHive("USE default")

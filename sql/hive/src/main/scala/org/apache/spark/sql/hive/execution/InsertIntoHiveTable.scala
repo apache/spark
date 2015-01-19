@@ -36,7 +36,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
-import org.apache.spark.sql.hive.HiveUtils.FileSinkDescWrapper
+import org.apache.spark.sql.hive.HiveCompat.FileSinkDescWrapper
 import org.apache.spark.sql.hive._
 import org.apache.spark.{SerializableWritable, SparkException, TaskContext}
 
