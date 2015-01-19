@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.hive.execution
 
-import java.io.{BufferedReader, InputStreamReader, ByteArrayInputStream}
-import java.io.{DataInputStream, DataOutputStream}
+import java.io.{BufferedReader, InputStreamReader}
+import java.io.{DataInputStream, DataOutputStream, EOFException}
 import java.util.Properties
+import java.rmi.server.UID
 
+import org.apache.hadoop.io.Writable
+import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.Serializer
@@ -111,25 +114,62 @@ case class ScriptTransformation(
       }
 
       val iterator: Iterator[Row] = new Iterator[Row] with HiveInspectors {
-        val mutableRow = new SpecificMutableRow(output.map(_.dataType))
+        var cacheRow: Row = null
         var curLine: String = null
+        var eof: Boolean = false
 
         override def hasNext: Boolean = {
-          if (curLine == null) {
-            curLine = reader.readLine()
-            curLine != null
+          if (outputSerde == null) {
+            if (curLine == null) {
+              curLine = reader.readLine()
+              curLine != null
+            } else {
+              true
+            }
           } else {
-            true
+            !eof
           }
         }
+
+        def deserialize(): Row = {
+          if (cacheRow != null) return cacheRow
+
+          val mutableRow = new SpecificMutableRow(output.map(_.dataType))
+          try {
+            val dataInputStream = new DataInputStream(inputStream)
+            val writable = outputSerde.getSerializedClass().newInstance
+            writable.readFields(dataInputStream)
+
+            val raw = outputSerde.deserialize(writable)
+            val dataList = outputSoi.getStructFieldsDataAsList(raw)
+            val fieldList = outputSoi.getAllStructFieldRefs()
+            
+            var i = 0
+            dataList.foreach( element => {
+              if (element == null) {
+                mutableRow.setNullAt(i)
+              } else {
+                mutableRow(i) = unwrap(element, fieldList(i).getFieldObjectInspector)
+              }
+              i += 1
+            })
+            return mutableRow
+          } catch {
+            case e: EOFException =>
+              eof = true
+              return null
+          }
+        }
+
         override def next(): Row = {
           if (!hasNext) {
             throw new NoSuchElementException
           }
-          val prevLine = curLine
-          curLine = reader.readLine()
  
           if (outputSerde == null) {
+            val prevLine = curLine
+            curLine = reader.readLine()
+ 
             if (!schemaLess) {
               new GenericRow(
                 prevLine.split(outputFormatMap("TOK_TABLEROWFORMATFIELD"))
@@ -140,24 +180,12 @@ case class ScriptTransformation(
                 .asInstanceOf[Array[Any]])
             }
           } else {
-            val dataInputStream = new DataInputStream(
-              new ByteArrayInputStream(prevLine.getBytes("utf-8")))
-            val writable = outputSerde.getSerializedClass().newInstance
-            writable.readFields(dataInputStream)
-            val raw = outputSerde.deserialize(writable)
-            val dataList = outputSoi.getStructFieldsDataAsList(raw)
-            val fieldList = outputSoi.getAllStructFieldRefs()
-
-            var i = 0
-            dataList.foreach( element => {
-              if (element == null) {
-                mutableRow.setNullAt(i)
-              } else {
-                mutableRow(i) = unwrap(element, fieldList(i).getFieldObjectInspector)
-              }
-              i += 1
-            })
-            mutableRow
+            val ret = deserialize()
+            if (!eof) {
+              cacheRow = null
+              cacheRow = deserialize()
+            }
+            ret
           }
         }
       }
@@ -210,8 +238,10 @@ case class ScriptTransformation(
             outputStream.write(data)
           } else {
             val writable = inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
+            if (writable.isInstanceOf[AvroGenericRecordWritable]) {
+              writable.asInstanceOf[AvroGenericRecordWritable].setRecordReaderID(new UID())
+            }
             writable.write(dataOutputStream)
-            outputStream.write(inputFormatMap("TOK_TABLEROWFORMATLINES").getBytes("utf-8"))
           }
         }
       outputStream.close()
