@@ -35,10 +35,9 @@ import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.execution.{UnaryNode, SparkPlan}
+import org.apache.spark.sql.execution.{SparkPlan, UnaryNode}
+import org.apache.spark.sql.hive.HiveUtils.FileSinkDescWrapper
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.{ ShimFileSinkDesc => FileSinkDesc}
-import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.{SerializableWritable, SparkException, TaskContext}
 
 /**
@@ -67,20 +66,21 @@ case class InsertIntoHiveTable(
   def saveAsHiveFile(
       rdd: RDD[Row],
       valueClass: Class[_],
-      fileSinkConf: FileSinkDesc,
+      fileSinkConf: FileSinkDescWrapper,
       conf: SerializableWritable[JobConf],
       writerContainer: SparkHiveWriterContainer): Unit = {
     assert(valueClass != null, "Output value class not set")
     conf.value.setOutputValueClass(valueClass)
 
-    val outputFileFormatClassName = fileSinkConf.getTableInfo.getOutputFileFormatClassName
+    val outputFileFormatClassName =
+      fileSinkConf.value.getTableInfo.getOutputFileFormatClassName
     assert(outputFileFormatClassName != null, "Output format class not set")
     conf.value.set("mapred.output.format.class", outputFileFormatClassName)
     conf.value.setOutputCommitter(classOf[FileOutputCommitter])
 
     FileOutputFormat.setOutputPath(
       conf.value,
-      SparkHiveWriterContainer.createPathFromString(fileSinkConf.getDirName, conf.value))
+      SparkHiveWriterContainer.createPathFromString(fileSinkConf.dirName, conf.value))
     log.debug("Saving as hadoop file of type " + valueClass.getSimpleName)
 
     writerContainer.driverSideSetup()
@@ -89,10 +89,11 @@ case class InsertIntoHiveTable(
 
     // Note that this function is executed on executor side
     def writeToFile(context: TaskContext, iterator: Iterator[Row]): Unit = {
-      val serializer = newSerializer(fileSinkConf.getTableInfo)
+      val fileSinkDesc = fileSinkConf.value
+      val serializer = newSerializer(fileSinkDesc.getTableInfo)
       val standardOI = ObjectInspectorUtils
         .getStandardObjectInspector(
-          fileSinkConf.getTableInfo.getDeserializer.getObjectInspector,
+          fileSinkDesc.getTableInfo.getDeserializer.getObjectInspector,
           ObjectInspectorCopyOption.JAVA)
         .asInstanceOf[StructObjectInspector]
 
@@ -131,7 +132,8 @@ case class InsertIntoHiveTable(
     val tableDesc = table.tableDesc
     val tableLocation = table.hiveQlTable.getDataLocation
     val tmpLocation = HiveShim.getExternalTmpPath(hiveContext, tableLocation)
-    val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
+    val fileSinkConf = new FileSinkDescWrapper(tmpLocation.toString, tableDesc, false)
+    val fileSinkDesc = fileSinkConf.value
     val isCompressed = sc.hiveconf.getBoolean(
       ConfVars.COMPRESSRESULT.varname, ConfVars.COMPRESSRESULT.defaultBoolVal)
 
@@ -140,9 +142,9 @@ case class InsertIntoHiveTable(
       // and "mapred.output.compression.type" have no impact on ORC because it uses table properties
       // to store compression information.
       sc.hiveconf.set("mapred.output.compress", "true")
-      fileSinkConf.setCompressed(true)
-      fileSinkConf.setCompressCodec(sc.hiveconf.get("mapred.output.compression.codec"))
-      fileSinkConf.setCompressType(sc.hiveconf.get("mapred.output.compression.type"))
+      fileSinkConf.compressed = true
+      fileSinkConf.compressCodec = sc.hiveconf.get("mapred.output.compression.codec")
+      fileSinkConf.compressType = sc.hiveconf.get("mapred.output.compression.type")
     }
 
     val numDynamicPartitions = partition.values.count(_.isEmpty)
@@ -153,7 +155,7 @@ case class InsertIntoHiveTable(
     }
 
     // All partition column names in the format of "<column name 1>/<column name 2>/..."
-    val partitionColumns = fileSinkConf.getTableInfo.getProperties.getProperty("partition_columns")
+    val partitionColumns = fileSinkDesc.getTableInfo.getProperties.getProperty("partition_columns")
     val partitionColumnNames = Option(partitionColumns).map(_.split("/")).orNull
 
     // Validate partition spec if there exist any dynamic partitions

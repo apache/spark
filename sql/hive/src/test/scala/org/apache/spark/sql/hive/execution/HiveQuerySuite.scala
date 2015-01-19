@@ -62,7 +62,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("SHOW TABLES")
     }
   }
-  
+
   createQueryTest("! operator",
     """
       |SELECT a FROM (
@@ -79,8 +79,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       printf("Bb%d", 12), "13",
       repeat(printf("s%d", 14), 2), "14") FROM src LIMIT 1""")
 
-  createQueryTest("NaN to Decimal",
-    "SELECT CAST(CAST('NaN' AS DOUBLE) AS DECIMAL(1,1)) FROM src LIMIT 1")
+//  createQueryTest("NaN to Decimal",
+//    "SELECT CAST(CAST('NaN' AS DOUBLE) AS DECIMAL(1,1)) FROM src LIMIT 1")
 
   createQueryTest("constant null testing",
     """SELECT

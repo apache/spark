@@ -154,7 +154,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
         val tableParameters = relation.hiveQlTable.getParameters
         val oldTotalSize =
-          Option(tableParameters.get(HiveShim.getStatsSetupConstTotalSize))
+          Option(tableParameters.get(HiveUtils.getStatsSetupConstTotalSize))
             .map(_.toLong)
             .getOrElse(0L)
         val newTotalSize = getFileSizeForTable(hiveconf, relation.hiveQlTable)
@@ -162,7 +162,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
         // recorded in the Hive metastore.
         // This logic is based on org.apache.hadoop.hive.ql.exec.StatsTask.aggregateStats().
         if (newTotalSize > 0 && newTotalSize != oldTotalSize) {
-          tableParameters.put(HiveShim.getStatsSetupConstTotalSize, newTotalSize.toString)
+          tableParameters.put(HiveUtils.getStatsSetupConstTotalSize, newTotalSize.toString)
           val hiveTTable = relation.hiveQlTable.getTTable
           hiveTTable.setParameters(tableParameters)
           val tableFullName =
@@ -276,7 +276,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
       val cmd_1: String = cmd_trimmed.substring(tokens(0).length()).trim()
-      val proc: CommandProcessor = HiveShim.getCommandProcessor(Array(tokens(0)), hiveconf)
+      val proc: CommandProcessor = HiveUtils.getCommandProcessor(tokens.take(1), hiveconf)
 
       // Makes sure the session represented by the `sessionState` field is activated. This implies
       // Spark SQL Hive support uses a single `SessionState` for all Hive operations and breaks
@@ -411,7 +411,7 @@ private object HiveContext {
     case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
     case (decimal: java.math.BigDecimal, DecimalType()) =>
       // Hive strips trailing zeros so use its toString
-      HiveShim.createDecimal(decimal).toString
+      HiveUtils.createDecimal(decimal).toString
     case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
 

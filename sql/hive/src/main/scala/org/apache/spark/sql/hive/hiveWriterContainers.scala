@@ -22,20 +22,20 @@ import java.text.NumberFormat
 import java.util.Date
 
 import scala.collection.mutable
+import scala.language.implicitConversions
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.{FileSinkOperator, Utilities}
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
-import org.apache.hadoop.hive.ql.plan.{PlanUtils, TableDesc}
+import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, PlanUtils, TableDesc}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred._
 
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.hive.HiveUtils.FileSinkDescWrapper
 import org.apache.spark.{Logging, SerializableWritable, SparkHadoopWriter}
-import org.apache.spark.sql.hive.{ShimFileSinkDesc => FileSinkDesc}
-import org.apache.spark.sql.hive.HiveShim._
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.
@@ -43,13 +43,13 @@ import org.apache.spark.sql.hive.HiveShim._
  */
 private[hive] class SparkHiveWriterContainer(
     @transient jobConf: JobConf,
-    fileSinkConf: FileSinkDesc)
+    fileSinkConf: FileSinkDescWrapper)
   extends Logging
   with SparkHadoopMapRedUtil
   with Serializable {
 
   private val now = new Date()
-  private val tableDesc: TableDesc = fileSinkConf.getTableInfo
+  private val tableDesc: TableDesc = fileSinkConf.tableInfo
   // Add table properties from storage handler to jobConf, so any custom storage
   // handler settings can be set to jobConf
   if (tableDesc != null) {
@@ -88,7 +88,8 @@ private[hive] class SparkHiveWriterContainer(
     val numberFormat = NumberFormat.getInstance()
     numberFormat.setMinimumIntegerDigits(5)
     numberFormat.setGroupingUsed(false)
-    val extension = Utilities.getFileExtension(conf.value, fileSinkConf.getCompressed, outputFormat)
+    val extension = Utilities.getFileExtension(
+      conf.value, fileSinkConf.value.getCompressed, outputFormat)
     "part-" + numberFormat.format(splitID) + extension
   }
 
@@ -107,11 +108,12 @@ private[hive] class SparkHiveWriterContainer(
   protected def initWriters() {
     // NOTE this method is executed at the executor side.
     // For Hive tables without partitions or with only static partitions, only 1 writer is needed.
+    val fileSinkDesc = fileSinkConf.value
     writer = HiveFileFormatUtils.getHiveRecordWriter(
       conf.value,
-      fileSinkConf.getTableInfo,
+      fileSinkDesc.getTableInfo,
       conf.value.getOutputValueClass.asInstanceOf[Class[Writable]],
-      fileSinkConf,
+      fileSinkDesc,
       FileOutputFormat.getTaskOutputPath(conf.value, getOutputName),
       Reporter.NULL)
   }
@@ -171,11 +173,11 @@ private[spark] object SparkHiveDynamicPartitionWriterContainer {
 
 private[spark] class SparkHiveDynamicPartitionWriterContainer(
     @transient jobConf: JobConf,
-    fileSinkConf: FileSinkDesc,
+    fileSinkConf: FileSinkDescWrapper,
     dynamicPartColNames: Array[String])
   extends SparkHiveWriterContainer(jobConf, fileSinkConf) {
 
-  import SparkHiveDynamicPartitionWriterContainer._
+  import org.apache.spark.sql.hive.SparkHiveDynamicPartitionWriterContainer._
 
   private val defaultPartName = jobConf.get(
     ConfVars.DEFAULTPARTITIONNAME.varname, ConfVars.DEFAULTPARTITIONNAME.defaultVal)
@@ -217,12 +219,16 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
       .mkString
 
     def newWriter = {
+      // Used to workaround `FileSinkDesc` constructor incompatibility between Hive 0.12.0 and 0.13.1.
+      // The type of the `dirName` argument in 0.12.0 is `String`, but `Path` in 0.13.1.
+      implicit def stringToPath(string: String): Path = new Path(string)
+
       val newFileSinkDesc = new FileSinkDesc(
-        fileSinkConf.getDirName + dynamicPartPath,
-        fileSinkConf.getTableInfo,
-        fileSinkConf.getCompressed)
-      newFileSinkDesc.setCompressCodec(fileSinkConf.getCompressCodec)
-      newFileSinkDesc.setCompressType(fileSinkConf.getCompressType)
+        fileSinkConf.dirName + dynamicPartPath,
+        fileSinkConf.tableInfo,
+        fileSinkConf.compressed)
+      newFileSinkDesc.setCompressCodec(fileSinkConf.compressCodec)
+      newFileSinkDesc.setCompressType(fileSinkConf.compressType)
 
       val path = {
         val outputPath = FileOutputFormat.getOutputPath(conf.value)
@@ -233,7 +239,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
 
       HiveFileFormatUtils.getHiveRecordWriter(
         conf.value,
-        fileSinkConf.getTableInfo,
+        fileSinkConf.tableInfo,
         conf.value.getOutputValueClass.asInstanceOf[Class[Writable]],
         newFileSinkDesc,
         path,
