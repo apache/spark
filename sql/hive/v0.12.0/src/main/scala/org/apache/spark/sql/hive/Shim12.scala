@@ -85,7 +85,8 @@ object HiveShim {
     "serde_regex",
     "udf_to_date",
     "udaf_collect_set",
-    "udf_concat"
+    "udf_concat",
+    "udf_to_double"
   )
 
   def setLocation(tbl: Table, crtTbl: CreateTableDesc): Unit = {
