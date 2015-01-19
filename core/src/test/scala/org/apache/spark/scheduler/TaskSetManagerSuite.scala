@@ -635,8 +635,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.resourceOffer("execA", "host3", NO_PREF).get.index === 2)
   }
 
-  // regression test for SPARK-4939
-  test("node-local tasks should be scheduled right after process-local tasks finished") {
+  test("SPARK-4939: node-local tasks should be scheduled right after process-local tasks finished") {
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc, ("execA", "host1"), ("execB", "host2"))
     val taskSet = FakeTask.createTaskSet(4,
