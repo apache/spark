@@ -122,7 +122,10 @@ private[spark] class Master(
     throw new SparkException("spark.deploy.defaultCores must be positive")
   }
 
-  val restServer = new StandaloneRestServer(this, host, 6677)
+  // Alternative application submission gateway that is stable across Spark versions
+  private val restServerPort = conf.getInt("spark.master.rest.port", 17077)
+  private val restServer = new StandaloneRestServer(this, host, restServerPort)
+  restServer.start()
 
   override def preStart() {
     logInfo("Starting Spark master at " + masterUrl)

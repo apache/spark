@@ -27,11 +27,11 @@ import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.util.Utils
 
 /**
- * A field used in a StandaloneRestProtocolMessage.
+ * A field used in a SubmitRestProtocolMessage.
  * Three special fields ACTION, SPARK_VERSION, and MESSAGE are common across all messages.
  */
-private[spark] abstract class StandaloneRestProtocolField
-private[spark] object StandaloneRestProtocolField {
+private[spark] abstract class SubmitRestProtocolField
+private[spark] object SubmitRestProtocolField {
   /** Return whether the provided field name refers to the ACTION field. */
   def isActionField(field: String): Boolean = field == "ACTION"
 }
@@ -39,54 +39,54 @@ private[spark] object StandaloneRestProtocolField {
 /**
  * All possible values of the ACTION field.
  */
-private[spark] object StandaloneRestProtocolAction extends Enumeration {
-  type StandaloneRestProtocolAction = Value
+private[spark] object SubmitRestProtocolAction extends Enumeration {
+  type SubmitRestProtocolAction = Value
   val SUBMIT_DRIVER_REQUEST, SUBMIT_DRIVER_RESPONSE = Value
   val KILL_DRIVER_REQUEST, KILL_DRIVER_RESPONSE = Value
   val DRIVER_STATUS_REQUEST, DRIVER_STATUS_RESPONSE = Value
   val ERROR = Value
 }
-import StandaloneRestProtocolAction.StandaloneRestProtocolAction
+import SubmitRestProtocolAction.SubmitRestProtocolAction
 
 /**
- * A general message exchanged in the standalone REST protocol.
+ * A general message exchanged in the stable application submission REST protocol.
  *
  * The message is represented by a set of fields in the form of key value pairs.
  * Each message must contain an ACTION field, which should have only one possible value
  * for each type of message. For compatibility with older versions of Spark, existing
  * fields must not be removed or modified, though new fields can be added as necessary.
  */
-private[spark] abstract class StandaloneRestProtocolMessage(
-    action: StandaloneRestProtocolAction,
-    actionField: StandaloneRestProtocolField,
-    requiredFields: Seq[StandaloneRestProtocolField]) {
+private[spark] abstract class SubmitRestProtocolMessage(
+    action: SubmitRestProtocolAction,
+    actionField: SubmitRestProtocolField,
+    requiredFields: Seq[SubmitRestProtocolField]) {
 
-  import StandaloneRestProtocolField._
+  import SubmitRestProtocolField._
 
   private val className = Utils.getFormattedClassName(this)
-  protected val fields = new mutable.HashMap[StandaloneRestProtocolField, String]
+  protected val fields = new mutable.HashMap[SubmitRestProtocolField, String]
 
   // Set the action field
   fields(actionField) = action.toString
 
   /** Return all fields currently set in this message. */
-  def getFields: Map[StandaloneRestProtocolField, String] = fields
+  def getFields: Map[SubmitRestProtocolField, String] = fields
 
   /** Return the value of the given field. If the field is not present, return null. */
-  def getField(key: StandaloneRestProtocolField): String = getFieldOption(key).orNull
+  def getField(key: SubmitRestProtocolField): String = getFieldOption(key).orNull
 
   /** Return the value of the given field. If the field is not present, throw an exception. */
-  def getFieldNotNull(key: StandaloneRestProtocolField): String = {
+  def getFieldNotNull(key: SubmitRestProtocolField): String = {
     getFieldOption(key).getOrElse {
       throw new IllegalArgumentException(s"Field $key is not set in message $className")
     }
   }
 
   /** Return the value of the given field as an option. */
-  def getFieldOption(key: StandaloneRestProtocolField): Option[String] = fields.get(key)
+  def getFieldOption(key: SubmitRestProtocolField): Option[String] = fields.get(key)
 
   /** Assign the given value to the field, overriding any existing value. */
-  def setField(key: StandaloneRestProtocolField, value: String): this.type = {
+  def setField(key: SubmitRestProtocolField, value: String): this.type = {
     if (key == actionField) {
       throw new SparkException("Setting the ACTION field is only allowed during instantiation.")
     }
@@ -95,7 +95,7 @@ private[spark] abstract class StandaloneRestProtocolMessage(
   }
 
   /** Assign the given value to the field only if the value is not null. */
-  def setFieldIfNotNull(key: StandaloneRestProtocolField, value: String): this.type = {
+  def setFieldIfNotNull(key: SubmitRestProtocolField, value: String): this.type = {
     if (value != null) {
       setField(key, value)
     }
@@ -145,22 +145,22 @@ private[spark] abstract class StandaloneRestProtocolMessage(
   }
 }
 
-private[spark] object StandaloneRestProtocolMessage {
-  import StandaloneRestProtocolField._
-  import StandaloneRestProtocolAction._
+private[spark] object SubmitRestProtocolMessage {
+  import SubmitRestProtocolField._
+  import SubmitRestProtocolAction._
 
   /**
-   * Construct a StandaloneRestProtocolMessage from JSON.
+   * Construct a SubmitRestProtocolMessage from JSON.
    * This uses the ACTION field to determine the type of the message to reconstruct.
    * If such a field does not exist in the JSON, throw an exception.
    */
-  def fromJson(json: String): StandaloneRestProtocolMessage = {
+  def fromJson(json: String): SubmitRestProtocolMessage = {
     val fields = org.apache.spark.util.JsonProtocol.mapFromJson(parse(json))
     val action = fields
       .flatMap { case (k, v) => if (isActionField(k)) Some(v) else None }
       .headOption
       .getOrElse { throw new IllegalArgumentException(s"ACTION not found in message:\n$json") }
-    StandaloneRestProtocolAction.withName(action) match {
+    SubmitRestProtocolAction.withName(action) match {
       case SUBMIT_DRIVER_REQUEST => SubmitDriverRequestMessage.fromFields(fields)
       case SUBMIT_DRIVER_RESPONSE => SubmitDriverResponseMessage.fromFields(fields)
       case KILL_DRIVER_REQUEST => KillDriverRequestMessage.fromFields(fields)
@@ -173,22 +173,22 @@ private[spark] object StandaloneRestProtocolMessage {
 }
 
 /**
- * A trait that holds common methods for StandaloneRestProtocolField companion objects.
+ * A trait that holds common methods for SubmitRestProtocolField companion objects.
  *
  * It is necessary to keep track of all fields that belong to this object in order to
  * reconstruct the fields from their names.
  */
-private[spark] trait StandaloneRestProtocolFieldCompanion {
-  val requiredFields: Seq[StandaloneRestProtocolField]
-  val optionalFields: Seq[StandaloneRestProtocolField]
+private[spark] trait SubmitRestProtocolFieldCompanion {
+  val requiredFields: Seq[SubmitRestProtocolField]
+  val optionalFields: Seq[SubmitRestProtocolField]
 
   /** Listing of all fields indexed by the field's string representation. */
-  private lazy val allFieldsMap: Map[String, StandaloneRestProtocolField] = {
+  private lazy val allFieldsMap: Map[String, SubmitRestProtocolField] = {
     (requiredFields ++ optionalFields).map { f => (f.toString, f) }.toMap
   }
 
-  /** Return a StandaloneRestProtocolField from its string representation. */
-  def withName(field: String): StandaloneRestProtocolField = {
+  /** Return a SubmitRestProtocolField from its string representation. */
+  def withName(field: String): SubmitRestProtocolField = {
     allFieldsMap.get(field).getOrElse {
       throw new IllegalArgumentException(s"Unknown field $field")
     }
@@ -196,19 +196,19 @@ private[spark] trait StandaloneRestProtocolFieldCompanion {
 }
 
 /**
- * A trait that holds common methods for StandaloneRestProtocolMessage companion objects.
+ * A trait that holds common methods for SubmitRestProtocolMessage companion objects.
  */
-private[spark] trait StandaloneRestProtocolMessageCompanion extends Logging {
-  import StandaloneRestProtocolField._
+private[spark] trait SubmitRestProtocolMessageCompanion extends Logging {
+  import SubmitRestProtocolField._
 
   /** Construct a new message of the relevant type. */
-  protected def newMessage(): StandaloneRestProtocolMessage
+  protected def newMessage(): SubmitRestProtocolMessage
 
   /** Return a field of the relevant type from the field's string representation. */
-  protected def fieldWithName(field: String): StandaloneRestProtocolField
+  protected def fieldWithName(field: String): SubmitRestProtocolField
 
-  /** Construct a StandaloneRestProtocolMessage from the set of fields provided. */
-  def fromFields(fields: Map[String, String]): StandaloneRestProtocolMessage = {
+  /** Construct a SubmitRestProtocolMessage from the set of fields provided. */
+  def fromFields(fields: Map[String, String]): SubmitRestProtocolMessage = {
     val message = newMessage()
     fields.foreach { case (k, v) =>
       try {

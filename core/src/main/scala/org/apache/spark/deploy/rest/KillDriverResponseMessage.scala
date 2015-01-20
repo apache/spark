@@ -20,8 +20,8 @@ package org.apache.spark.deploy.rest
 /**
  * A field used in a KillDriverResponseMessage.
  */
-private[spark] abstract class KillDriverResponseField extends StandaloneRestProtocolField
-private[spark] object KillDriverResponseField extends StandaloneRestProtocolFieldCompanion {
+private[spark] abstract class KillDriverResponseField extends SubmitRestProtocolField
+private[spark] object KillDriverResponseField extends SubmitRestProtocolFieldCompanion {
   case object ACTION extends KillDriverResponseField
   case object SPARK_VERSION extends KillDriverResponseField
   case object MESSAGE extends KillDriverResponseField
@@ -33,16 +33,16 @@ private[spark] object KillDriverResponseField extends StandaloneRestProtocolFiel
 }
 
 /**
- * A message sent from the standalone Master in response to a KillDriverResponseMessage.
+ * A message sent from the cluster manager in response to a KillDriverResponseMessage.
  */
-private[spark] class KillDriverResponseMessage extends StandaloneRestProtocolMessage(
-  StandaloneRestProtocolAction.KILL_DRIVER_RESPONSE,
+private[spark] class KillDriverResponseMessage extends SubmitRestProtocolMessage(
+  SubmitRestProtocolAction.KILL_DRIVER_RESPONSE,
   KillDriverResponseField.ACTION,
   KillDriverResponseField.requiredFields)
 
-private[spark] object KillDriverResponseMessage extends StandaloneRestProtocolMessageCompanion {
-  protected override def newMessage(): StandaloneRestProtocolMessage =
+private[spark] object KillDriverResponseMessage extends SubmitRestProtocolMessageCompanion {
+  protected override def newMessage(): SubmitRestProtocolMessage =
     new KillDriverResponseMessage
-  protected override def fieldWithName(field: String): StandaloneRestProtocolField =
+  protected override def fieldWithName(field: String): SubmitRestProtocolField =
     KillDriverResponseField.withName(field)
 }

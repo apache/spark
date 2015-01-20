@@ -75,11 +75,10 @@ object SparkSubmit {
     }
 
     // In standalone cluster mode, use the brand new REST client to submit the application
-    val doingRest = appArgs.master.startsWith("spark://") && appArgs.deployMode == "cluster"
-    if (doingRest) {
-      println("Submitting driver through the REST interface.")
+    val isStandaloneCluster =
+      appArgs.master.startsWith("spark://") && appArgs.deployMode == "cluster"
+    if (isStandaloneCluster) {
       new StandaloneRestClient().submitDriver(appArgs)
-      println("Done submitting driver.")
       return
     }
 

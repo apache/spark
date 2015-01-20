@@ -20,8 +20,8 @@ package org.apache.spark.deploy.rest
 /**
  * A field used in a SubmitDriverResponseMessage.
  */
-private[spark] abstract class SubmitDriverResponseField extends StandaloneRestProtocolField
-private[spark] object SubmitDriverResponseField extends StandaloneRestProtocolFieldCompanion {
+private[spark] abstract class SubmitDriverResponseField extends SubmitRestProtocolField
+private[spark] object SubmitDriverResponseField extends SubmitRestProtocolFieldCompanion {
   case object ACTION extends SubmitDriverResponseField
   case object SPARK_VERSION extends SubmitDriverResponseField
   case object MESSAGE extends SubmitDriverResponseField
@@ -33,16 +33,16 @@ private[spark] object SubmitDriverResponseField extends StandaloneRestProtocolFi
 }
 
 /**
- * A message sent from the standalone Master in response to a SubmitDriverRequestMessage.
+ * A message sent from the cluster manager in response to a SubmitDriverRequestMessage.
  */
-private[spark] class SubmitDriverResponseMessage extends StandaloneRestProtocolMessage(
-  StandaloneRestProtocolAction.SUBMIT_DRIVER_RESPONSE,
+private[spark] class SubmitDriverResponseMessage extends SubmitRestProtocolMessage(
+  SubmitRestProtocolAction.SUBMIT_DRIVER_RESPONSE,
   SubmitDriverResponseField.ACTION,
   SubmitDriverResponseField.requiredFields)
 
-private[spark] object SubmitDriverResponseMessage extends StandaloneRestProtocolMessageCompanion {
-  protected override def newMessage(): StandaloneRestProtocolMessage =
+private[spark] object SubmitDriverResponseMessage extends SubmitRestProtocolMessageCompanion {
+  protected override def newMessage(): SubmitRestProtocolMessage =
     new SubmitDriverResponseMessage
-  protected override def fieldWithName(field: String): StandaloneRestProtocolField =
+  protected override def fieldWithName(field: String): SubmitRestProtocolField =
     SubmitDriverResponseField.withName(field)
 }

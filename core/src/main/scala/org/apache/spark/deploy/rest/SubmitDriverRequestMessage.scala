@@ -24,8 +24,8 @@ import org.apache.spark.util.Utils
 /**
  * A field used in a SubmitDriverRequestMessage.
  */
-private[spark] abstract class SubmitDriverRequestField extends StandaloneRestProtocolField
-private[spark] object SubmitDriverRequestField extends StandaloneRestProtocolFieldCompanion {
+private[spark] abstract class SubmitDriverRequestField extends SubmitRestProtocolField
+private[spark] object SubmitDriverRequestField extends SubmitRestProtocolFieldCompanion {
   case object ACTION extends SubmitDriverRequestField
   case object SPARK_VERSION extends SubmitDriverRequestField
   case object MESSAGE extends SubmitDriverRequestField
@@ -61,7 +61,7 @@ private[spark] object SubmitDriverRequestField extends StandaloneRestProtocolFie
   // Because certain fields taken in arguments, we cannot simply rely on the
   // list of all fields to reconstruct a field from its String representation.
   // Instead, we must treat these fields as special cases and match on their prefixes.
-  override def withName(field: String): StandaloneRestProtocolField = {
+  override def withName(field: String): SubmitRestProtocolField = {
     def buildRegex(obj: AnyRef): Regex = s"${Utils.getFormattedClassName(obj)}_(.*)".r
     val appArg = buildRegex(APP_ARG)
     val sparkProperty = buildRegex(SPARK_PROPERTY)
@@ -76,10 +76,10 @@ private[spark] object SubmitDriverRequestField extends StandaloneRestProtocolFie
 }
 
 /**
- * A request sent to the standalone Master to submit a driver.
+ * A request sent to the cluster manager to submit a driver.
  */
-private[spark] class SubmitDriverRequestMessage extends StandaloneRestProtocolMessage(
-  StandaloneRestProtocolAction.SUBMIT_DRIVER_REQUEST,
+private[spark] class SubmitDriverRequestMessage extends SubmitRestProtocolMessage(
+  SubmitRestProtocolAction.SUBMIT_DRIVER_REQUEST,
   SubmitDriverRequestField.ACTION,
   SubmitDriverRequestField.requiredFields) {
 
@@ -95,9 +95,9 @@ private[spark] class SubmitDriverRequestMessage extends StandaloneRestProtocolMe
   }
 }
 
-private[spark] object SubmitDriverRequestMessage extends StandaloneRestProtocolMessageCompanion {
-  protected override def newMessage(): StandaloneRestProtocolMessage =
+private[spark] object SubmitDriverRequestMessage extends SubmitRestProtocolMessageCompanion {
+  protected override def newMessage(): SubmitRestProtocolMessage =
     new SubmitDriverRequestMessage
-  protected override def fieldWithName(field: String): StandaloneRestProtocolField =
+  protected override def fieldWithName(field: String): SubmitRestProtocolField =
     SubmitDriverRequestField.withName(field)
 }

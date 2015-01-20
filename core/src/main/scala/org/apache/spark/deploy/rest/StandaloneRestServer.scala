@@ -17,108 +17,164 @@
 
 package org.apache.spark.deploy.rest
 
-import java.io.DataOutputStream
-import java.net.InetSocketAddress
-import javax.servlet.http.{HttpServletRequest, HttpServletResponse}
+import java.io.File
 
-import scala.io.Source
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
-import com.google.common.base.Charsets
-import org.eclipse.jetty.server.{Request, Server}
-import org.eclipse.jetty.server.handler.AbstractHandler
-
-import org.apache.spark.{SPARK_VERSION => sparkVersion, Logging}
-import org.apache.spark.deploy.master.Master
+import org.apache.spark.{SPARK_VERSION => sparkVersion}
+import org.apache.spark.SparkConf
 import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.deploy.{Command, DriverDescription}
+import org.apache.spark.deploy.ClientArguments._
+import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.deploy.master.Master
+import akka.actor.ActorRef
 
 /**
  * A server that responds to requests submitted by the StandaloneRestClient.
+ * This is intended to be embedded in the standalone Master.
  */
-private[spark] class StandaloneRestServer(master: Master, host: String, requestedPort: Int) {
-  val server = new Server(new InetSocketAddress(host, requestedPort))
-  server.setHandler(new StandaloneRestServerHandler(master))
-  server.start()
+private[spark] class StandaloneRestServer(
+    master: Master,
+    host: String,
+    requestedPort: Int)
+  extends SubmitRestServer(host, requestedPort) {
+  override protected val handler = new StandaloneRestServerHandler(master)
 }
 
 /**
- * A Jetty handler that responds to requests submitted via the standalone REST protocol.
+ * A handler that responds to requests submitted to the standalone Master
+ * through the REST protocol.
  */
-private[spark] abstract class StandaloneRestHandler(master: Master)
-  extends AbstractHandler with Logging {
+private[spark] class StandaloneRestServerHandler(
+    conf: SparkConf,
+    masterActor: ActorRef,
+    masterUrl: String)
+  extends SubmitRestServerHandler {
 
-  private implicit val askTimeout = AkkaUtils.askTimeout(master.conf)
+  private implicit val askTimeout = AkkaUtils.askTimeout(conf)
+
+  def this(master: Master) = {
+    this(master.conf, master.self, master.masterUrl)
+  }
 
   /** Handle a request to submit a driver. */
-  protected def handleSubmit(request: SubmitDriverRequestMessage): SubmitDriverResponseMessage
-  /** Handle a request to kill a driver. */
-  protected def handleKill(request: KillDriverRequestMessage): KillDriverResponseMessage
-  /** Handle a request for a driver's status. */
-  protected def handleStatus(request: DriverStatusRequestMessage): DriverStatusResponseMessage
-
-  /**
-   * Handle a request submitted by the StandaloneRestClient.
-   */
-  override def handle(
-      target: String,
-      baseRequest: Request,
-      request: HttpServletRequest,
-      response: HttpServletResponse): Unit = {
-    try {
-      val requestMessageJson = Source.fromInputStream(request.getInputStream).mkString
-      val requestMessage = StandaloneRestProtocolMessage.fromJson(requestMessageJson)
-      val responseMessage = constructResponseMessage(requestMessage)
-      response.setContentType("application/json")
-      response.setCharacterEncoding("utf-8")
-      response.setStatus(HttpServletResponse.SC_OK)
-      val content = responseMessage.toJson.getBytes(Charsets.UTF_8)
-      val out = new DataOutputStream(response.getOutputStream)
-      out.write(content)
-      out.close()
-      baseRequest.setHandled(true)
-    } catch {
-      case e: Exception => logError("Exception while handling request", e)
-    }
-  }
-
-  /**
-   * Construct the appropriate response message based on the type of the request message.
-   * If an IllegalArgumentException is thrown in the process, construct an error message.
-   */
-  private def constructResponseMessage(
-      request: StandaloneRestProtocolMessage): StandaloneRestProtocolMessage = {
-    // If the request is sent via the StandaloneRestClient, it should have already been
-    // validated remotely. In case this is not true, validate the request here to guard
-    // against potential NPEs. If validation fails, return an ERROR message to the sender.
-    try {
-      request.validate()
-      request match {
-        case submit: SubmitDriverRequestMessage => handleSubmit(submit)
-        case kill: KillDriverRequestMessage => handleKill(kill)
-        case status: DriverStatusRequestMessage => handleStatus(status)
-        case unexpected => handleError(
-          s"Received message of unexpected type ${Utils.getFormattedClassName(unexpected)}.")
-      }
-    } catch {
-      // Propagate exception to user in an ErrorMessage. If the construction of the
-      // ErrorMessage itself throws an exception, log the exception and ignore the request.
-      case e: IllegalArgumentException => handleError(e.getMessage)
-    }
-  }
-
-  /** Construct an error message to signal the fact that an exception has been thrown. */
-  private def handleError(message: String): ErrorMessage = {
-    import ErrorField._
-    new ErrorMessage()
+  override protected def handleSubmit(
+      request: SubmitDriverRequestMessage): SubmitDriverResponseMessage = {
+    import SubmitDriverResponseField._
+    val driverDescription = buildDriverDescription(request)
+    val response = AkkaUtils.askWithReply[SubmitDriverResponse](
+      RequestSubmitDriver(driverDescription), masterActor, askTimeout)
+    new SubmitDriverResponseMessage()
       .setField(SPARK_VERSION, sparkVersion)
-      .setField(MESSAGE, message)
+      .setField(MESSAGE, response.message)
+      .setField(MASTER, masterUrl)
+      .setField(SUCCESS, response.success.toString)
+      .setFieldIfNotNull(DRIVER_ID, response.driverId.orNull)
       .validate()
   }
-}
 
-//object StandaloneRestServer {
-//  def main(args: Array[String]): Unit = {
-//    println("Hey boy I'm starting a server.")
-//    new StandaloneRestServer(6677)
-//    readLine()
-//  }
-//}
+  /** Handle a request to kill a driver. */
+  override protected def handleKill(
+      request: KillDriverRequestMessage): KillDriverResponseMessage = {
+    import KillDriverResponseField._
+    val driverId = request.getFieldNotNull(KillDriverRequestField.DRIVER_ID)
+    val response = AkkaUtils.askWithReply[KillDriverResponse](
+      RequestKillDriver(driverId), masterActor, askTimeout)
+    new KillDriverResponseMessage()
+      .setField(SPARK_VERSION, sparkVersion)
+      .setField(MESSAGE, response.message)
+      .setField(MASTER, masterUrl)
+      .setField(DRIVER_ID, driverId)
+      .setField(SUCCESS, response.success.toString)
+      .validate()
+  }
+
+  /** Handle a request for a driver's status. */
+  override protected def handleStatus(
+      request: DriverStatusRequestMessage): DriverStatusResponseMessage = {
+    import DriverStatusResponseField._
+    // TODO: Actually look up the status of the driver
+    val master = request.getField(DriverStatusRequestField.MASTER)
+    val driverId = request.getField(DriverStatusRequestField.DRIVER_ID)
+    val driverState = "HEALTHY"
+    new DriverStatusResponseMessage()
+      .setField(SPARK_VERSION, sparkVersion)
+      .setField(MASTER, master)
+      .setField(DRIVER_ID, driverId)
+      .setField(DRIVER_STATE, driverState)
+      .validate()
+  }
+
+  /**
+   * Build a driver description from the fields specified in the submit request.
+   * This currently does not consider fields used by python applications since
+   * python is not supported in standalone cluster mode yet.
+   */
+  private def buildDriverDescription(request: SubmitDriverRequestMessage): DriverDescription = {
+    import SubmitDriverRequestField._
+
+    // Required fields
+    val appName = request.getFieldNotNull(APP_NAME)
+    val appResource = request.getFieldNotNull(APP_RESOURCE)
+
+    // Since standalone cluster mode does not yet support python,
+    // we treat the main class as required
+    val mainClass = request.getFieldNotNull(MAIN_CLASS)
+
+    // Optional fields
+    val jars = request.getFieldOption(JARS)
+    val files = request.getFieldOption(FILES)
+    val driverMemory = request.getFieldOption(DRIVER_MEMORY)
+    val driverCores = request.getFieldOption(DRIVER_CORES)
+    val driverExtraJavaOptions = request.getFieldOption(DRIVER_EXTRA_JAVA_OPTIONS)
+    val driverExtraClassPath = request.getFieldOption(DRIVER_EXTRA_CLASS_PATH)
+    val driverExtraLibraryPath = request.getFieldOption(DRIVER_EXTRA_LIBRARY_PATH)
+    val superviseDriver = request.getFieldOption(SUPERVISE_DRIVER)
+    val executorMemory = request.getFieldOption(EXECUTOR_MEMORY)
+    val totalExecutorCores = request.getFieldOption(TOTAL_EXECUTOR_CORES)
+
+    // Parse special fields that take in parameters
+    val conf = new SparkConf(false)
+    val env = new mutable.HashMap[String, String]
+    val appArgs = new ArrayBuffer[(Int, String)]
+    request.getFields.foreach { case (k, v) =>
+      k match {
+        case APP_ARG(index) => appArgs += ((index, v))
+        case SPARK_PROPERTY(propKey) => conf.set(propKey, v)
+        case ENVIRONMENT_VARIABLE(envKey) => env(envKey) = v
+        case _ =>
+      }
+    }
+
+    // Use the actual master URL instead of the one that refers to this REST server
+    // Otherwise, once the driver is launched it will contact with the wrong server
+    conf.set("spark.master", masterUrl)
+    conf.set("spark.app.name", appName)
+    conf.set("spark.jars", jars.map(_ + ",").getOrElse("") + appResource) // include app resource
+    files.foreach { f => conf.set("spark.files", f) }
+    driverExtraJavaOptions.foreach { j => conf.set("spark.driver.extraJavaOptions", j) }
+    driverExtraClassPath.foreach { cp => conf.set("spark.driver.extraClassPath", cp) }
+    driverExtraLibraryPath.foreach { lp => conf.set("spark.driver.extraLibraryPath", lp) }
+    executorMemory.foreach { m => conf.set("spark.executor.memory", m) }
+    totalExecutorCores.foreach { c => conf.set("spark.cores.max", c) }
+
+    // Construct driver description and submit it
+    val actualDriverMemory = driverMemory.map(_.toInt).getOrElse(DEFAULT_MEMORY)
+    val actualDriverCores = driverCores.map(_.toInt).getOrElse(DEFAULT_CORES)
+    val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
+    val actualAppArgs = appArgs.sortBy(_._1).map(_._2) // sort by index, map to value
+    val extraClassPath = driverExtraClassPath.toSeq.flatMap(_.split(File.pathSeparator))
+    val extraLibraryPath = driverExtraLibraryPath.toSeq.flatMap(_.split(File.pathSeparator))
+    val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
+    val sparkJavaOpts = Utils.sparkJavaOpts(conf)
+    val javaOpts = sparkJavaOpts ++ extraJavaOpts
+    val command = new Command(
+      "org.apache.spark.deploy.worker.DriverWrapper",
+      Seq("{{WORKER_URL}}", mainClass) ++ actualAppArgs,
+      env, extraClassPath, extraLibraryPath, javaOpts)
+    new DriverDescription(
+      appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command)
+  }
+}
