@@ -343,7 +343,7 @@ private[hive] trait HiveInspectors {
       (o: Any) => new HiveVarchar(o.asInstanceOf[String], o.asInstanceOf[String].size)
 
     case _: JavaHiveDecimalObjectInspector =>
-      (o: Any) => HiveCompat.newHiveDecimal(o.asInstanceOf[Decimal].toJavaBigDecimal)
+      (o: Any) => HiveShim.newHiveDecimal(o.asInstanceOf[Decimal].toJavaBigDecimal)
 
     case soi: StandardStructObjectInspector =>
       val wrappers = soi.getAllStructFieldRefs.map(ref => wrapperFor(ref.getFieldObjectInspector))
@@ -428,7 +428,7 @@ private[hive] trait HiveInspectors {
       case _: ShortObjectInspector => a.asInstanceOf[java.lang.Short]
       case _: ByteObjectInspector => a.asInstanceOf[java.lang.Byte]
       case _: HiveDecimalObjectInspector =>
-        HiveCompat.newHiveDecimal(a.asInstanceOf[Decimal].toJavaBigDecimal)
+        HiveShim.newHiveDecimal(a.asInstanceOf[Decimal].toJavaBigDecimal)
       case _: BinaryObjectInspector => a.asInstanceOf[Array[Byte]]
       case _: DateObjectInspector => a.asInstanceOf[java.sql.Date]
       case _: TimestampObjectInspector => a.asInstanceOf[java.sql.Timestamp]

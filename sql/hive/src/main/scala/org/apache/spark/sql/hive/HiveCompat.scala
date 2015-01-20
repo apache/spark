@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import java.math.{BigDecimal => JBigDecimal}
 import java.util.{Properties, Set => JSet}
 
 import scala.collection.JavaConversions._
@@ -25,7 +24,6 @@ import scala.language.{existentials, implicitConversions}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.common.`type`.HiveDecimal
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
@@ -84,15 +82,6 @@ object HiveCompat {
     Invoke[JSet[Partition]](classOf[Hive], client, "getAllPartitionsForPruner",
       classOf[Table] -> tbl)
   )
-
-  def newHiveDecimal(bd: JBigDecimal) = callWithAlternatives(
-    // For Hive 0.13.1
-    InvokeStatic[HiveDecimal](classOf[HiveDecimal], "create",
-      classOf[JBigDecimal] -> bd),
-
-    // For Hive 0.12.0
-    Construct(classOf[HiveDecimal],
-      classOf[JBigDecimal] -> bd))
 
   // Hive 0.13.1: org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE
   // Hive 0.12.0: org.apache.hadoop.hive.ql.stats.StatsSetupConst.TOTAL_SIZE

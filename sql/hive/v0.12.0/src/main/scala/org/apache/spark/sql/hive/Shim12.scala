@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.hive
 
+import java.math.{BigDecimal => JBigDecimal}
 import java.net.URI
 import java.util.{ArrayList => JArrayList}
 
@@ -24,11 +25,9 @@ import scala.language.implicitConversions
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
-import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
+import org.apache.hadoop.hive.ql.metadata.{Hive, Table}
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc
-import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector.PrimitiveCategory
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.{HiveDecimalObjectInspector, PrimitiveObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, PrimitiveObjectInspector}
@@ -64,8 +63,10 @@ object HiveShim {
       null
     } else {
       new hiveIo.HiveDecimalWritable(
-        HiveCompat.newHiveDecimal(value.asInstanceOf[Decimal].toJavaBigDecimal))
+        HiveShim.newHiveDecimal(value.asInstanceOf[Decimal].toJavaBigDecimal))
     }
+
+  def newHiveDecimal(bd: JBigDecimal) = new HiveDecimal(bd)
 
   def createDriverResultsArray = new JArrayList[String]
 

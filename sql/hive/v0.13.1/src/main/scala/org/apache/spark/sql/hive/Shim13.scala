@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.{InputStream, OutputStream}
+import java.math.{BigDecimal => JBigDecimal}
 import java.util.{ArrayList => JArrayList}
 
 import scala.collection.JavaConversions._
@@ -26,12 +27,10 @@ import scala.language.implicitConversions
 import com.esotericsoftware.kryo.Kryo
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.`type`.HiveDecimal
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.exec.{UDF, Utilities}
-import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
+import org.apache.hadoop.hive.ql.metadata.{Hive, Table}
 import org.apache.hadoop.hive.ql.plan.CreateTableDesc
-import org.apache.hadoop.hive.ql.processors.CommandProcessorFactory
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.{HiveDecimalObjectInspector, PrimitiveObjectInspectorFactory}
 import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, PrimitiveObjectInspector}
 import org.apache.hadoop.hive.serde2.typeinfo.{DecimalTypeInfo, TypeInfo, TypeInfoFactory}
@@ -156,8 +155,10 @@ object HiveShim {
     } else {
       // TODO precise, scale?
       new hiveIo.HiveDecimalWritable(
-        HiveCompat.newHiveDecimal(value.asInstanceOf[Decimal].toJavaBigDecimal))
+        HiveShim.newHiveDecimal(value.asInstanceOf[Decimal].toJavaBigDecimal))
     }
+
+  def newHiveDecimal(bd: JBigDecimal) = HiveDecimal.create(bd)
 
   def createDriverResultsArray = new JArrayList[Object]
 
