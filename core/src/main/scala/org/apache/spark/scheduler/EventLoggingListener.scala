@@ -93,7 +93,7 @@ private[spark] class EventLoggingListener(
         
     )
     catch{
-        case ioe: FileNotFoundException => new File(logBaseDir, null).mkdir()
+        case ioe: FileNotFoundException => new File(logBaseDir).mkdir()
     }
 
     val workingPath = logPath + IN_PROGRESS
