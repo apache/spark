@@ -68,7 +68,7 @@ install_app() {
 # Install maven under the build/ folder
 install_mvn() {
   install_app \
-    "http://apache.claz.org/maven/maven-3/3.2.3/binaries" \
+    "http://archive.apache.org/dist/maven/maven-3/3.2.3/binaries" \
     "apache-maven-3.2.3-bin.tar.gz" \
     "apache-maven-3.2.3/bin/mvn"
   MVN_BIN="${_DIR}/apache-maven-3.2.3/bin/mvn"
