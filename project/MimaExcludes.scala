@@ -78,6 +78,14 @@ object MimaExcludes {
               "org.apache.spark.TaskContext.taskAttemptId"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.TaskContext.attemptNumber")
+          ) ++ Seq(
+            // SPARK-5166 Spark SQL API stabilization
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.Transformer.transform"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.Estimator.fit")
+          ) ++ Seq(
+            // SPARK-5270
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.isEmpty")
           )
 
         case v if v.startsWith("1.2") =>

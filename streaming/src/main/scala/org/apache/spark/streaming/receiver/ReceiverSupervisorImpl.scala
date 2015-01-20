@@ -77,13 +77,6 @@ private[streaming] class ReceiverSupervisorImpl(
   /** Akka actor for receiving messages from the ReceiverTracker in the driver */
   private val actor = env.actorSystem.actorOf(
     Props(new Actor {
-      override def preStart() {
-        logInfo("Registered receiver " + streamId)
-        val msg = RegisterReceiver(
-          streamId, receiver.getClass.getSimpleName, Utils.localHostName(), self)
-        val future = trackerActor.ask(msg)(askTimeout)
-        Await.result(future, askTimeout)
-      }
 
       override def receive() = {
         case StopReceiver =>

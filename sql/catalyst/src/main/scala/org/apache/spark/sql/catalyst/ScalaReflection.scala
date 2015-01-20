@@ -66,6 +66,7 @@ trait ScalaReflection {
           convertToCatalyst(elem, field.dataType)
         }.toArray)
     case (d: BigDecimal, _) => Decimal(d)
+    case (d: java.math.BigDecimal, _) => Decimal(d)
     case (other, _) => other
   }
 
@@ -78,7 +79,7 @@ trait ScalaReflection {
       convertToScala(k, mapType.keyType) -> convertToScala(v, mapType.valueType)
     }
     case (r: Row, s: StructType) => convertRowToScala(r, s)
-    case (d: Decimal, _: DecimalType) => d.toBigDecimal
+    case (d: Decimal, _: DecimalType) => d.toJavaBigDecimal
     case (other, _) => other
   }
 
@@ -152,6 +153,7 @@ trait ScalaReflection {
       case t if t <:< typeOf[Timestamp] => Schema(TimestampType, nullable = true)
       case t if t <:< typeOf[Date] => Schema(DateType, nullable = true)
       case t if t <:< typeOf[BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
+      case t if t <:< typeOf[java.math.BigDecimal] => Schema(DecimalType.Unlimited, nullable = true)
       case t if t <:< typeOf[Decimal] => Schema(DecimalType.Unlimited, nullable = true)
       case t if t <:< typeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
       case t if t <:< typeOf[java.lang.Long] => Schema(LongType, nullable = true)
@@ -182,7 +184,7 @@ trait ScalaReflection {
     case obj: FloatType.JvmType => FloatType
     case obj: DoubleType.JvmType => DoubleType
     case obj: DateType.JvmType => DateType
-    case obj: BigDecimal => DecimalType.Unlimited
+    case obj: java.math.BigDecimal => DecimalType.Unlimited
     case obj: Decimal => DecimalType.Unlimited
     case obj: TimestampType.JvmType => TimestampType
     case null => NullType

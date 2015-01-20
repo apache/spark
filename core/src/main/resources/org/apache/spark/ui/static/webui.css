@@ -19,6 +19,7 @@
   height: 50px;
   font-size: 15px;
   margin-bottom: 15px;
+  min-width: 1200px
 }
 
 .navbar .navbar-inner {
@@ -39,12 +40,12 @@
 
 .navbar .nav > li a {
   height: 30px;
-  line-height: 30px;
+  line-height: 2;
 }
 
 .navbar-text {
   height: 50px;
-  line-height: 50px;
+  line-height: 3.3;
 }
 
 table.sortable thead {
@@ -170,7 +171,7 @@ span.additional-metric-title {
 }
 
 .version {
-  line-height: 30px;
+  line-height: 2.5;
   vertical-align: bottom;
   font-size: 12px;
   padding: 0;

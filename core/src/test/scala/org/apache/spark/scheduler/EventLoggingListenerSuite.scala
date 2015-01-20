@@ -160,7 +160,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
    */
   private def testApplicationEventLogging(compressionCodec: Option[String] = None) {
     val conf = getLoggingConf(testDirPath, compressionCodec)
-    val sc = new SparkContext("local", "test", conf)
+    val sc = new SparkContext("local-cluster[2,2,512]", "test", conf)
     assert(sc.eventLogger.isDefined)
     val eventLogger = sc.eventLogger.get
     val expectedLogDir = testDir.toURI().toString()
@@ -184,6 +184,7 @@ class EventLoggingListenerSuite extends FunSuite with BeforeAndAfter with Loggin
     val eventSet = mutable.Set(
       SparkListenerApplicationStart,
       SparkListenerBlockManagerAdded,
+      SparkListenerExecutorAdded,
       SparkListenerEnvironmentUpdate,
       SparkListenerJobStart,
       SparkListenerJobEnd,

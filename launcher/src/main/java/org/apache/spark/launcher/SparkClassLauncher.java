@@ -82,7 +82,8 @@ class SparkClassLauncher extends AbstractLauncher<SparkClassLauncher> {
       }
 
       checkState(extraClassPath != null,
-        "Failed to find Spark Tools Jar in %s. You need to build Spark before running %s.",
+        "Failed to find Spark Tools Jar in %s.\n" +
+        "You need to run \"build/sbt tools/package\" before running %s.",
         toolsDir.getAbsolutePath(), className);
 
       javaOptsKeys.add("SPARK_JAVA_OPTS");

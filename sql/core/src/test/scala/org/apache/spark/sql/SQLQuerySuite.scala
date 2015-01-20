@@ -766,7 +766,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-3371 Renaming a function expression with group by gives error") {
-    registerFunction("len", (s: String) => s.length)
+    udf.register("len", (s: String) => s.length)
     checkAnswer(
       sql("SELECT len(value) as temp FROM testData WHERE key = 1 group by len(value)"), 1)
   }
@@ -844,11 +844,11 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     )
 
     checkAnswer(
-      sql("SELECT 9223372036854775808"), BigDecimal("9223372036854775808")
+      sql("SELECT 9223372036854775808"), new java.math.BigDecimal("9223372036854775808")
     )
 
     checkAnswer(
-      sql("SELECT -9223372036854775809"), BigDecimal("-9223372036854775809")
+      sql("SELECT -9223372036854775809"), new java.math.BigDecimal("-9223372036854775809")
     )
   }
 

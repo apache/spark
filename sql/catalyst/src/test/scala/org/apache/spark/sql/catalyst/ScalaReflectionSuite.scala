@@ -43,7 +43,7 @@ case class NullableData(
     byteField: java.lang.Byte,
     booleanField: java.lang.Boolean,
     stringField: String,
-    decimalField: BigDecimal,
+    decimalField: java.math.BigDecimal,
     dateField: Date,
     timestampField: Timestamp,
     binaryField: Array[Byte])
@@ -204,7 +204,8 @@ class ScalaReflectionSuite extends FunSuite {
     assert(DoubleType === typeOfObject(1.7976931348623157E308))
 
     // DecimalType
-    assert(DecimalType.Unlimited === typeOfObject(BigDecimal("1.7976931348623157E318")))
+    assert(DecimalType.Unlimited ===
+      typeOfObject(new java.math.BigDecimal("1.7976931348623157E318")))
 
     // DateType
     assert(DateType === typeOfObject(Date.valueOf("2014-07-25")))
