@@ -37,8 +37,7 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
         case "stopBackend" => {
           // dos.write(0)
           writeInt(dos, 0)
-          writeString(dos, "character")
-          writeString(dos, "void")
+          writeType(dos, "void")
           server.close()
         }
         case "rm" => {

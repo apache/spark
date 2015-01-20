@@ -18,33 +18,37 @@ readBoolean <- function(con) {
   as.logical(readInt(con))
 }
 
-readObject <- function(con) {
-  # Read type first
-  type <- readString(con)
-  readObjectType(con, type)
+readType <- function(con) {
+  rawToChar(readBin(con, "raw", n = 1L))
 }
 
-readObjectType <- function(con, type) {
+readObject <- function(con) {
+  # Read type first
+  type <- readType(con)
+  readTypedObject(con, type)
+}
+
+readTypedObject <- function(con, type) {
   switch (type,
-    integer = readInt(con),
-    character = readString(con),
-    logical = readBoolean(con),
-    double = readDouble(con),
-    raw = readRaw(con),
-    vector = readVector(con),
-    list = readList(con),
-    void = NULL,
-    jobj = getJobj(readString(con)),
+    "i" = readInt(con),
+    "c" = readString(con),
+    "b" = readBoolean(con),
+    "d" = readDouble(con),
+    "r" = readRaw(con),
+    "v" = readVector(con),
+    "l" = readList(con),
+    "n" = NULL,
+    "j" = getJobj(readString(con)),
     stop("Unsupported type for deserialization"))
 }
 
 # TODO: We don't use readVector as it is tricky
 # to assembly array of raw objects. Delete this ?
 readVector <- function(con) {
-  type <- readString(con)
+  type <- readType(con)
   len <- readInt(con)
   if (length > 0) {
-    sapply(1:len, readObjectType(con, type))
+    sapply(1:len, readTypedObject(con, type))
   } else {
     vector(mode=type)
   }
@@ -52,12 +56,12 @@ readVector <- function(con) {
 
 # We only support lists where all elements are of same type
 readList <- function(con) {
-  type <- readString(con)
+  type <- readType(con)
   len <- readInt(con)
   if (len > 0) {
     l <- vector("list", len)
     for (i in 1:len) {
-      l[[i]] <- readObjectType(con, type)
+      l[[i]] <- readTypedObject(con, type)
     }
     l
   } else {

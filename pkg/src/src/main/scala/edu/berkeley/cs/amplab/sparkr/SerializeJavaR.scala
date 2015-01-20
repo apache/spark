@@ -123,33 +123,47 @@ object SerializeJavaR {
 
   /// Methods to write out data from Java to R
 
+  def writeType(dos: DataOutputStream, typeStr: String) {
+    typeStr match {
+      case "void" => dos.writeByte('n')
+      case "character" => dos.writeByte('c')
+      case "double" => dos.writeByte('d')
+      case "integer" => dos.writeByte('i')
+      case "logical" => dos.writeByte('b')
+      case "raw" => dos.writeByte('r')
+      case "list" => dos.writeByte('l')
+      case "jobj" => dos.writeByte('j')
+      case _ => throw new IllegalArgumentException(s"Invalid type $typeStr")
+    }
+  }
+
   def writeObject(dos: DataOutputStream, value: Object, objMap: HashMap[String, Object]) {
     if (value == null) {
-      writeString(dos, "void")
+      writeType(dos, "void")
     } else {
       value.getClass.getName match {
         case "java.lang.String" => {
-          writeString(dos, "character")
+          writeType(dos, "character")
           writeString(dos, value.asInstanceOf[String])
         }
         case "long" | "java.lang.Long" => {
-          writeString(dos, "double")
+          writeType(dos, "double")
           writeDouble(dos, value.asInstanceOf[Long].toDouble)
         }
         case "double" | "java.lang.Double" => {
-          writeString(dos, "double")
+          writeType(dos, "double")
           writeDouble(dos, value.asInstanceOf[Double])
         }
         case "int" | "java.lang.Integer" => {
-          writeString(dos, "integer")
+          writeType(dos, "integer")
           writeInt(dos, value.asInstanceOf[Int])
         }
         case "boolean" | "java.lang.Boolean" => {
-          writeString(dos, "logical")
+          writeType(dos, "logical")
           writeBoolean(dos, value.asInstanceOf[Boolean])
         }
         case "[B" => {
-          writeString(dos, "raw")
+          writeType(dos, "raw")
           writeBytes(dos, value.asInstanceOf[Array[Byte]])
         }
         // TODO: Types not handled right now include
@@ -157,39 +171,39 @@ object SerializeJavaR {
 
         // Handle arrays
         case "[Ljava.lang.String;" => {
-          writeString(dos, "list")
+          writeType(dos, "list")
           writeStringArr(dos, value.asInstanceOf[Array[String]])
         }
         case "[I" => {
-          writeString(dos, "list")
+          writeType(dos, "list")
           writeIntArr(dos, value.asInstanceOf[Array[Int]])
         }
         case "[J" => {
-          writeString(dos, "list")
+          writeType(dos, "list")
           writeDoubleArr(dos, value.asInstanceOf[Array[Long]].map(_.toDouble))
         }
         case "[D" => {
-          writeString(dos, "list")
+          writeType(dos, "list")
           writeDoubleArr(dos, value.asInstanceOf[Array[Double]])
         }
         case "[Z" => {
-          writeString(dos, "list")
+          writeType(dos, "list")
           writeBooleanArr(dos, value.asInstanceOf[Array[Boolean]])
         }
         case "[[B" => {
-          writeString(dos, "list")
+          writeType(dos, "list")
           writeBytesArr(dos, value.asInstanceOf[Array[Array[Byte]]])
         }
         case _ => {
           // Handle array of objects
           if (value.getClass().getName().startsWith("[L")) {
             val objArr = value.asInstanceOf[Array[Object]]
-            writeString(dos, "list")
-            writeString(dos, "jobj")
+            writeType(dos, "list")
+            writeType(dos, "jobj")
             dos.writeInt(objArr.length)
             objArr.foreach(o => writeJObj(dos, o, objMap)) 
           } else {
-            writeString(dos, "jobj")
+            writeType(dos, "jobj")
             writeJObj(dos, value, objMap)
           }
         }
@@ -231,31 +245,31 @@ object SerializeJavaR {
   }
 
   def writeIntArr(out: DataOutputStream, value: Array[Int]) {
-    writeString(out, "integer")
+    writeType(out, "integer")
     out.writeInt(value.length)
     value.foreach(v => out.writeInt(v))
   }
 
   def writeDoubleArr(out: DataOutputStream, value: Array[Double]) {
-    writeString(out, "double")
+    writeType(out, "double")
     out.writeInt(value.length)
     value.foreach(v => out.writeDouble(v))
   }
 
   def writeBooleanArr(out: DataOutputStream, value: Array[Boolean]) {
-    writeString(out, "logical")
+    writeType(out, "logical")
     out.writeInt(value.length)
     value.foreach(v => writeBoolean(out, v))
   }
 
   def writeStringArr(out: DataOutputStream, value: Array[String]) {
-    writeString(out, "character")
+    writeType(out, "character")
     out.writeInt(value.length)
     value.foreach(v => writeString(out, v))
   }
 
   def writeBytesArr(out: DataOutputStream, value: Array[Array[Byte]]) {
-    writeString(out, "raw")
+    writeType(out, "raw")
     out.writeInt(value.length)
     value.foreach(v => writeBytes(out, v))
   }
