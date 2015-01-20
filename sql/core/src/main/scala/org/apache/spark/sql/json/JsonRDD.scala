@@ -474,6 +474,16 @@ private[sql] object JsonRDD extends Logging {
             valWriter(field.dataType, v)
         }
         gen.writeEndObject()
+
+      case (StructType(ty), v: Row) =>
+        gen.writeStartObject()
+        ty.zip(v.toSeq).foreach {
+          case (_, null) =>
+          case (field, v) =>
+            gen.writeFieldName(field.name)
+            valWriter(field.dataType, v)
+        }
+        gen.writeEndObject()
     }
 
     valWriter(rowSchema, row)

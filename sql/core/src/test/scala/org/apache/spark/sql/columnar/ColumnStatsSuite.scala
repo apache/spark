@@ -42,8 +42,8 @@ class ColumnStatsSuite extends FunSuite {
 
     test(s"$columnStatsName: empty") {
       val columnStats = columnStatsClass.newInstance()
-      columnStats.collectedStatistics.zip(initialStatistics).foreach { case (actual, expected) =>
-        assert(actual === expected)
+      columnStats.collectedStatistics.toSeq.zip(initialStatistics.toSeq).foreach {
+        case (actual, expected) => assert(actual === expected)
       }
     }
 

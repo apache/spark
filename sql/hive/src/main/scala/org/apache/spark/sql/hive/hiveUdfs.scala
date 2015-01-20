@@ -297,7 +297,7 @@ private[hive] case class HiveGenericUdtf(
     val inputProjection = new InterpretedProjection(children)
     val collector = new UDTFCollector
     function.setCollector(collector)
-    function.process(wrap(inputProjection(input), inputInspectors, udtInput))
+    function.process(wrap(inputProjection(input).toSeq, inputInspectors, udtInput))
     collector.collectRows()
   }
 

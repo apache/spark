@@ -45,7 +45,8 @@ case class WrapDynamic(children: Seq[Attribute]) extends Expression {
   override def eval(input: Row): DynamicRow = input match {
     // Avoid copy for generic rows.
     case g: GenericRow => new DynamicRow(children, g.values)
-    case otherRowType => new DynamicRow(children, otherRowType.toArray)
+    case otherRowType => new DynamicRow(children, otherRowType.toSeq.toArray)
+    // TODO: toSeq.toArray is very slow!
   }
 }
 

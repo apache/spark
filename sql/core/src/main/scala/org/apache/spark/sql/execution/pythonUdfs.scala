@@ -143,7 +143,8 @@ object EvaluatePython {
    * Convert Row into Java Array (for pickled into Python)
    */
   def rowToArray(row: Row, fields: Seq[DataType]): Array[Any] = {
-    row.zip(fields).map {case (obj, dt) => toJava(obj, dt)}.toArray
+    // TODO: this is slow!
+    row.toSeq.zip(fields).map {case (obj, dt) => toJava(obj, dt)}.toArray
   }
 
   // Converts value to the type specified by the data type.

@@ -21,7 +21,6 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
@@ -121,15 +120,14 @@ private[sql] case class InMemoryRelation(
           while (rowIterator.hasNext && rowCount < batchSize) {
             val row = rowIterator.next()
             var i = 0
-            while (i < row.length) {
+            while (i < row.size) {
               columnBuilders(i).appendFrom(row, i)
               i += 1
             }
             rowCount += 1
           }
 
-          val stats = Row.fromSeq(
-            columnBuilders.map(_.columnStats.collectedStatistics).foldLeft(Seq.empty[Any])(_ ++ _))
+          val stats = Row.merge(columnBuilders.map(_.columnStats.collectedStatistics) : _*)
 
           batchStats += stats
           CachedBatch(columnBuilders.map(_.build().array()), stats)
@@ -273,7 +271,7 @@ private[sql] case class InMemoryColumnarTableScan(
           new Iterator[Row] {
             override def next() = {
               var i = 0
-              while (i < nextRow.length) {
+              while (i < nextRow.size) {
                 columnAccessors(i).extractTo(nextRow, i)
                 i += 1
               }
@@ -297,7 +295,7 @@ private[sql] case class InMemoryColumnarTableScan(
           cachedBatchIterator.filter { cachedBatch =>
             if (!partitionFilter(cachedBatch.stats)) {
               def statsString = relation.partitionStatistics.schema
-                .zip(cachedBatch.stats)
+                .zip(cachedBatch.stats.toSeq)
                 .map { case (a, s) => s"${a.name}: $s" }
                 .mkString(", ")
               logInfo(s"Skipping partition based on stats $statsString")

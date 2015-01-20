@@ -129,6 +129,12 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
     }
   }
 
+  def checkValues(row1: Seq[Any], row2: Row): Unit = {
+    row1.zip(row2.toSeq).map {
+      case (r1, r2) => checkValue(r1, r2)
+    }
+  }
+
   def checkValue(v1: Any, v2: Any): Unit = {
     (v1, v2) match {
       case (r1: Decimal, r2: Decimal) =>
@@ -198,7 +204,7 @@ class HiveInspectorSuite extends FunSuite with HiveInspectors {
       case (t, idx) => StructField(s"c_$idx", t)
     })
 
-    checkValues(row, unwrap(wrap(row, toInspector(dt)), toInspector(dt)).asInstanceOf[Row])
+    checkValues(row, unwrap(wrap(Row.fromSeq(row), toInspector(dt)), toInspector(dt)).asInstanceOf[Row])
     checkValue(null, unwrap(wrap(null, toInspector(dt)), toInspector(dt)))
   }
 
