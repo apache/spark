@@ -41,7 +41,7 @@ object RDDConversions {
         val schemaFields = schema.fields.toArray
         bufferedIterator.map { r =>
           var i = 0
-          while (i < mutableRow.size) {
+          while (i < mutableRow.length) {
             mutableRow(i) =
               ScalaReflection.convertToCatalyst(r.productElement(i), schemaFields(i).dataType)
             i += 1

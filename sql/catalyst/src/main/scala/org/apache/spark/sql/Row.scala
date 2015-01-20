@@ -309,9 +309,9 @@ trait Row extends Serializable {
 
   /** Returns true if there are any NULL values in this row. */
   def anyNull: Boolean = {
-    val l = size
+    val len = length
     var i = 0
-    while (i < l) {
+    while (i < len) {
       if (isNullAt(i)) { return true }
       i += 1
     }
@@ -366,7 +366,4 @@ trait Row extends Serializable {
    * start, end, and separator strings.
    */
   def mkString(start: String, sep: String, end: String): String = toSeq.mkString(start, sep, end)
-
-  /** Selects the first element of this row. */
-  def head: Any = apply(0)
 }

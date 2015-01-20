@@ -120,7 +120,7 @@ private[sql] case class InMemoryRelation(
           while (rowIterator.hasNext && rowCount < batchSize) {
             val row = rowIterator.next()
             var i = 0
-            while (i < row.size) {
+            while (i < row.length) {
               columnBuilders(i).appendFrom(row, i)
               i += 1
             }
@@ -269,9 +269,10 @@ private[sql] case class InMemoryColumnarTableScan(
 
           // Extract rows via column accessors
           new Iterator[Row] {
+            private[this] val rowLen = nextRow.length
             override def next() = {
               var i = 0
-              while (i < nextRow.size) {
+              while (i < rowLen) {
                 columnAccessors(i).extractTo(nextRow, i)
                 i += 1
               }

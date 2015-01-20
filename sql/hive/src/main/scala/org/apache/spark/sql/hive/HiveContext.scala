@@ -368,7 +368,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
               .mkString("\t")
         }
       case command: ExecutedCommand =>
-        command.executeCollect().map(_.head.toString)
+        command.executeCollect().map(_(0).toString)
 
       case other =>
         val result: Seq[Seq[Any]] = other.executeCollect().map(_.toSeq).toSeq
