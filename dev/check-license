@@ -30,9 +30,9 @@ acquire_rat_jar () {
       # Download
       printf "Attempting to fetch rat\n"
       JAR_DL="${JAR}.part"
-      if type curl &>/dev/null; then
+      if command -v curl &>/dev/null; then
         curl --silent "${URL}" > "$JAR_DL" && mv "$JAR_DL" "$JAR"
-      elif type wget &>/dev/null; then
+      elif command -v wget &>/dev/null; then
         wget --quiet ${URL} -O "$JAR_DL" && mv "$JAR_DL" "$JAR"
       else
         printf "You do not have curl or wget installed, please install rat manually.\n"

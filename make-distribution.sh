@@ -232,9 +232,9 @@ if [ "$SPARK_TACHYON" == "true" ]; then
   echo "Fetching tachyon tgz"
 
   TACHYON_DL="${TACHYON_TGZ}.part"
-  if type curl &>/dev/null; then
+  if command -v curl &>/dev/null; then
     curl --silent -k -L "${TACHYON_URL}" > "${TACHYON_DL}" && mv "${TACHYON_DL}" "${TACHYON_TGZ}"
-  elif type wget &>/dev/null; then
+  elif command -v wget &>/dev/null; then
     wget --quiet "${TACHYON_URL}" -O "${TACHYON_DL}" && mv "${TACHYON_DL}" "${TACHYON_TGZ}"
   else
     printf "You do not have curl or wget installed. please install Tachyon manually.\n"
