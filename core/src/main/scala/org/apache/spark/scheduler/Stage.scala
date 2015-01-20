@@ -60,6 +60,8 @@ private[spark] class Stage(
   val isShuffleMap = shuffleDep.isDefined
   val numPartitions = rdd.partitions.size
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
+  val curOutputLocs = Array.fill[MapStatus](numPartitions)(null)
+  val outputExecutorIds = Array.fill[HashSet[String]](numPartitions)(new HashSet())
   var numAvailableOutputs = 0
 
   /** Set of jobs that this stage belongs to. */
@@ -88,6 +90,8 @@ private[spark] class Stage(
   def addOutputLoc(partition: Int, status: MapStatus) {
     val prevList = outputLocs(partition)
     outputLocs(partition) = status :: prevList
+    curOutputLocs(partition) = status
+    outputExecutorIds(partition) += status.location.executorId
     if (prevList == Nil) {
       numAvailableOutputs += 1
     }
@@ -97,6 +101,8 @@ private[spark] class Stage(
     val prevList = outputLocs(partition)
     val newList = prevList.filterNot(_.location == bmAddress)
     outputLocs(partition) = newList
+    curOutputLocs(partition) = if (newList != Nil) newList.head else null
+    outputExecutorIds(partition) -= bmAddress.executorId
     if (prevList != Nil && newList == Nil) {
       numAvailableOutputs -= 1
     }
@@ -110,12 +116,16 @@ private[spark] class Stage(
   def removeOutputsOnExecutor(execId: String) {
     var becameUnavailable = false
     for (partition <- 0 until numPartitions) {
-      val prevList = outputLocs(partition)
-      val newList = prevList.filterNot(_.location.executorId == execId)
-      outputLocs(partition) = newList
-      if (prevList != Nil && newList == Nil) {
-        becameUnavailable = true
-        numAvailableOutputs -= 1
+      if (outputExecutorIds(partition).contains(execId)) {
+        val prevList = outputLocs(partition)
+        val newList = prevList.filterNot(_.location.executorId == execId)
+        outputLocs(partition) = newList
+        curOutputLocs(partition) = if (newList != Nil) newList.head else null
+        outputExecutorIds(partition) -= execId
+        if (prevList != Nil && newList == Nil) {
+          becameUnavailable = true
+          numAvailableOutputs -= 1
+        }
       }
     }
     if (becameUnavailable) {
