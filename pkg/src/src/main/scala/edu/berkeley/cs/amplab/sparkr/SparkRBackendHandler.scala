@@ -43,9 +43,10 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
         }
         case "rm" => {
           try {
-            val t = readString(dis)
-            assert(t == "character")
+            val t = readObjectType(dis)
+            assert(t == 'c')
             val objToRemove = readString(dis)
+            System.err.println(s"Remove java object $objToRemove")
             objMap.remove(objToRemove)
             writeInt(dos, 0)
             writeObject(dos, null, objMap)

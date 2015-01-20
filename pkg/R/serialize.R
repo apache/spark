@@ -28,12 +28,27 @@ writeRaw <- function(con, batch) {
   writeBin(batch, con, endian="big")
 }
 
+writeType <- function(con, class) {
+  type <- switch(class,
+            integer = "i",
+            character = "c",
+            logical = "b",
+            double = "d",
+            numeric = "d",
+            raw = "r",
+            list = "l",
+            jobj = "j",
+            environment = "e",
+            stop("Unsupported type for serialization"))
+  writeBin(charToRaw(type), con)
+}
+
 writeObject <- function(con, object, withType = TRUE) {
   # In R vectors have same type as objects. So check if this is a vector
   # and if so just call writeVector
   # TODO: Should we just throw an exception here instead ?
   if (withType) {
-    writeString(con, class(object))
+    writeType(con, class(object))
   }
   switch(class(object),
     integer = writeInt(con, object),
@@ -59,7 +74,7 @@ writeList <- function(con, arr) {
     elemType <- "character"
   }
 
-  writeString(con, elemType)
+  writeType(con, elemType)
   writeInt(con, length(arr))
 
   if (length(arr) > 0) {

@@ -8,24 +8,29 @@ import java.io.DataOutputStream
 
 object SerializeJavaR {
 
-  def readObject(dis: DataInputStream, objMap: HashMap[String, Object]): Object = {
-    val dataType = readString(dis)
-    readObjectType(dis, objMap, dataType)
+  def readObjectType(dis: DataInputStream) = {
+    dis.readByte().toChar
   }
 
-  def readObjectType(
+  def readObject(dis: DataInputStream, objMap: HashMap[String, Object]): Object = {
+    val dataType = readObjectType(dis)
+    readTypedObject(dis, objMap, dataType)
+  }
+
+  def readTypedObject(
       dis: DataInputStream,
       objMap: HashMap[String, Object],
-      dataType: String): Object = {
+      dataType: Char): Object = {
     dataType match {
-      case "integer" => new java.lang.Integer(readInt(dis))
-      case "numeric" | "double" => new java.lang.Double(readDouble(dis))
-      case "logical" => new java.lang.Boolean(readBoolean(dis))
-      case "character" => readString(dis)
-      case "environment" => readMap(dis, objMap)
-      case "raw" => readBytes(dis)
-      case "list" => readList(dis, objMap)
-      case "jobj" => objMap(readString(dis))
+      case 'i' => new java.lang.Integer(readInt(dis))
+      case 'd' => new java.lang.Double(readDouble(dis))
+      case 'b' => new java.lang.Boolean(readBoolean(dis))
+      case 'c' => readString(dis)
+      case 'e' => readMap(dis, objMap)
+      case 'r' => readBytes(dis)
+      case 'l' => readList(dis, objMap)
+      case 'j' => objMap(readString(dis))
+      case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
     }
   }
 
@@ -84,14 +89,14 @@ object SerializeJavaR {
   }
 
   def readList(dis: DataInputStream, objMap: HashMap[String, Object]) = {
-    val arrType = readString(dis)
+    val arrType = readObjectType(dis)
     arrType match {
-      case "integer" => readIntArr(dis)
-      case "character" => readStringArr(dis)
-      case "double" => readDoubleArr(dis)
-      case "logical" => readBooleanArr(dis)
-      case "jobj" => readStringArr(dis).map(x => objMap(x))
-      case "raw" => readBytesArr(dis)
+      case 'i' => readIntArr(dis)
+      case 'c' => readStringArr(dis)
+      case 'd' => readDoubleArr(dis)
+      case 'l' => readBooleanArr(dis)
+      case 'j' => readStringArr(dis).map(x => objMap(x))
+      case 'r' => readBytesArr(dis)
       case _ => throw new IllegalArgumentException(s"Invalid array type $arrType")
     }
   }
@@ -101,13 +106,13 @@ object SerializeJavaR {
       objMap: HashMap[String, Object]): java.util.Map[Object, Object] = {
     val len = readInt(in)
     if (len > 0) {
-      val typeStr = readString(in)
+      val keysType = readObjectType(in)
       val keysLen = readInt(in)
-      val keys = (0 until keysLen).map(_ => readObjectType(in, objMap, typeStr))
+      val keys = (0 until keysLen).map(_ => readTypedObject(in, objMap, keysType))
 
-      val valuesType = readString(in)
+      val valuesType = readObjectType(in)
       val valuesLen = readInt(in)
-      val values = (0 until len).map(_ => readObjectType(in, objMap, typeStr))
+      val values = (0 until len).map(_ => readTypedObject(in, objMap, valuesType))
       mapAsJavaMap(keys.zip(values).toMap)
     } else {
       new java.util.HashMap[Object, Object]()
@@ -221,6 +226,7 @@ object SerializeJavaR {
       Integer.toHexString(System.identityHashCode(value))
     objMap.put(objId, value)
     writeString(out, objId)
+    System.err.println(s"New java object $objId")
   }
 
   def writeIntArr(out: DataOutputStream, value: Array[Int]) {
