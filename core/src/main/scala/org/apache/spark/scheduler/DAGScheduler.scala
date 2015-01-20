@@ -500,10 +500,10 @@ class DAGScheduler(
     // the job submitter sends a message into the DAGScheduler actor.
     // Although getPartitions may be called in rdd.partitions.length before this.
     try {
-      getParentStages(rdd, jobId)
+      getParentStages(rdd, jobId).foreach(_.rdd.partitions)
     } catch {
       case e: Exception =>
-        logWarning("Get or create the list of parent stages failed due to exception - job: "
+        logWarning("Get the partitions of parent stages' rdds failed due to exception - job: "
                    + jobId, e)
         waiter.jobFailed(e)
         return waiter
