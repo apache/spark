@@ -73,15 +73,15 @@ private[hive] class SparkSQLCLIService(hiveContext: HiveContext)
 }
 
 private[thriftserver] trait ReflectedCompositeService { this: AbstractService =>
-  def initCompositeService(hiveConf: HiveConf, level: Int = 2) {
+  def initCompositeService(hiveConf: HiveConf) {
     // Emulating `CompositeService.init(hiveConf)`
-    val serviceList = getAncestorField[JList[Service]](this, level, "serviceList")
+    val serviceList = getAncestorField[JList[Service]](this, 2, "serviceList")
     serviceList.foreach(_.init(hiveConf))
 
     // Emulating `AbstractService.init(hiveConf)`
     invoke(classOf[AbstractService], this, "ensureCurrentState", classOf[STATE] -> STATE.NOTINITED)
-    setAncestorField(this, level + 1, "hiveConf", hiveConf)
+    setAncestorField(this, 3, "hiveConf", hiveConf)
     invoke(classOf[AbstractService], this, "changeState", classOf[STATE] -> STATE.INITED)
-    getAncestorField[Log](this, level + 1, "LOG").info(s"Service: $getName is inited.")
+    getAncestorField[Log](this, 3, "LOG").info(s"Service: $getName is inited.")
   }
 }

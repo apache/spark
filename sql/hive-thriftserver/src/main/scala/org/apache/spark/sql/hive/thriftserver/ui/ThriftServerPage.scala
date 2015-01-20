@@ -70,13 +70,16 @@ private[ui] class ThriftServerPage(parent: ThriftServerTab) extends WebUIPage(""
       val dataRows = listener.executeList.values.toSeq.sortBy(_.startTimestamp).reverse
 
       def generateDataRow(info: ExecutionInfo): Seq[Node] = {
-        val detailUrl = "%s/jobs/job?id=%s"
-          .format(UIUtils.prependBaseUri(parent.basePath), info.jobId)
+        val jobLink = info.jobId.map { id: String =>
+          <a href={"%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), id)}>
+            [{id}]
+          </a>
+        }
         val detail = if(info.state == ExecutionState.FAILED) info.detail else info.executePlan
         <tr>
           <td>{info.userName}</td>
           <td>
-            <a href={detailUrl}>{info.jobId}</a>
+            {jobLink}
           </td>
           <td>{info.groupId}</td>
           <td>{formatDate(info.startTimestamp)}</td>

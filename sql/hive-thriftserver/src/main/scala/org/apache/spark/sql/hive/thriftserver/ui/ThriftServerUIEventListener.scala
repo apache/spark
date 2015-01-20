@@ -28,32 +28,36 @@ private[thriftserver] trait ThriftServerEventListener {
   /**
    * Called when a session created.
    */
-  def onSessionCreated(ip: String, session: HiveSession) { }
+  def onSessionCreated(ip: String, session: HiveSession): Unit = {}
 
   /**
    * Called when a session closed.
    */
-  def onSessionClosed(session: HiveSession) { }
+  def onSessionClosed(session: HiveSession): Unit = {}
 
   /**
    * Called when a statement started to run.
    */
-  def onStatementStart(id: String, session: HiveSession, statement: String, groupId: String) { }
+  def onStatementStart(
+      id: String,
+      session: HiveSession,
+      statement: String,
+      groupId: String): Unit = {}
 
   /**
    * Called when a statement completed compilation.
    */
-  def onStatementParse(id: String, executePlan: String) { }
+  def onStatementParse(id: String, executePlan: String): Unit = {}
 
   /**
    * Called when a statement got a error during running.
    */
-  def onStatementError(id: String, errorMessage: String, errorTrace: String) { }
+  def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit = {}
 
   /**
    * Called when a statement ran success.
    */
-  def onStatementFinish(id: String) { }
+  def onStatementFinish(id: String): Unit = {}
 }
 
 private[thriftserver] class SessionInfo(
@@ -88,7 +92,7 @@ private[thriftserver] class ExecutionInfo(
   var executePlan = ""
   var detail = ""
   var state: ExecutionState.Value = ExecutionState.STARTED
-  var jobId = ""
+  var jobId = scala.collection.mutable.ArrayBuffer[String]()
   var groupId = ""
   def totalTime = {
     if (finishTimestamp == 0L) {
@@ -122,11 +126,11 @@ private[sql] class ThriftServerUIEventListener(val conf: SparkConf)
       case Some(groupId: String) => {
         val ret = executeList.find( _ match {
           case (id: String, info: ExecutionInfo) => {
-            info.jobId == "" && info.groupId == groupId
+            info.groupId == groupId
           }
         })
         if(ret.isDefined) {
-          ret.get._2.jobId = jobStart.jobId.toString
+          ret.get._2.jobId += jobStart.jobId.toString
           ret.get._2.groupId = groupId
         }
       }
@@ -144,7 +148,7 @@ private[sql] class ThriftServerUIEventListener(val conf: SparkConf)
   }
 
   override def onStatementStart(id: String, session: HiveSession,
-      statement: String, groupId:String): Unit = {
+      statement: String, groupId: String): Unit = {
     val info = new ExecutionInfo(statement, session, System.currentTimeMillis())
     info.state = ExecutionState.STARTED
     executeList(id) = info
