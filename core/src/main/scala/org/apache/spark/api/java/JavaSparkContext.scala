@@ -34,7 +34,7 @@ import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 
 import org.apache.spark._
 import org.apache.spark.AccumulatorParam._
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
@@ -686,15 +686,6 @@ class JavaSparkContext(val sc: SparkContext)
   @deprecated("adding files no longer creates local copies that need to be deleted", "1.0.0")
   def clearFiles() {
     sc.clearFiles()
-  }
-
-  /**
-   * :: DeveloperApi ::
-   * Register a listener to receive up-calls from events that happen during execution.
-   */
-  @DeveloperApi
-  def addSparkListener(listener: SparkListener): Unit = {
-    sc.addSparkListener(listener)
   }
 
   /**
