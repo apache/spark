@@ -28,8 +28,8 @@ import org.apache.spark.util.Utils
  */
 private[spark] trait SparkListenerBus extends Logging {
 
-  // SparkListeners attached to this event bus
-  protected val sparkListeners = new ArrayBuffer[SparkListener]
+  // SparkListeners attached to this event bus. Marked `protected[spark]` for access in tests.
+  protected[spark] val sparkListeners = new ArrayBuffer[SparkListener]
     with mutable.SynchronizedBuffer[SparkListener]
 
   def addListener(listener: SparkListener) {

@@ -21,24 +21,20 @@ import java.util.concurrent.Semaphore
 
 import scala.collection.mutable
 
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
-import org.scalatest.Matchers
-
-import org.apache.spark.{LocalSparkContext, SparkContext}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.ResetSystemProperties
 
-class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers with BeforeAndAfter
-  with BeforeAndAfterAll with ResetSystemProperties {
+import org.mockito.Mockito._
+import org.scalatest.{FunSuite, Matchers}
+
+class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
+  with ResetSystemProperties {
 
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
 
   val jobCompletionTime = 1421191296660L
-
-  before {
-    sc = new SparkContext("local", "SparkListenerSuite")
-  }
 
   test("basic creation and shutdown of LiveListenerBus") {
     val counter = new BasicJobCounter
@@ -127,6 +123,7 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
   }
 
   test("basic creation of StageInfo") {
+    sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
     val rdd1 = sc.parallelize(1 to 100, 4)
@@ -148,6 +145,7 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
   }
 
   test("basic creation of StageInfo with shuffle") {
+    sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
     val rdd1 = sc.parallelize(1 to 100, 4)
@@ -185,6 +183,7 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
   }
 
   test("StageInfo with fewer tasks than partitions") {
+    sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
     val rdd1 = sc.parallelize(1 to 100, 4)
@@ -201,6 +200,7 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
   }
 
   test("local metrics") {
+    sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
     sc.addSparkListener(new StatsReportListener)
@@ -267,6 +267,7 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
   }
 
   test("onTaskGettingResult() called when result fetched remotely") {
+    sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
 
@@ -287,6 +288,7 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
   }
 
   test("onTaskGettingResult() not called when result sent directly") {
+    sc = new SparkContext("local", "SparkListenerSuite")
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
 
@@ -302,6 +304,7 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
   }
 
   test("onTaskEnd() should be called for all started tasks, even after job has been killed") {
+    sc = new SparkContext("local", "SparkListenerSuite")
     val WAIT_TIMEOUT_MILLIS = 10000
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
@@ -356,19 +359,35 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
     assert(jobCounter2.count === 5)
   }
 
+  test("registering listeners via spark.extraListeners") {
+    val conf = new SparkConf().setMaster("local").setAppName("test")
+      .set("spark.extraListeners", classOf[ListenerThatAcceptsSparkConf].getName + "," +
+        classOf[BasicJobCounter].getName)
+    sc = new SparkContext(conf)
+    sc.listenerBus.sparkListeners.collect { case x: BasicJobCounter => x}.size should be (1)
+    sc.listenerBus.sparkListeners.collect {
+      case x: ListenerThatAcceptsSparkConf => x
+    }.size should be (1)
+  }
+
+  test("registering listeners via SPARK_EXTRA_LISTENERS") {
+    val SPARK_EXTRA_LISTENERS = classOf[ListenerThatAcceptsSparkConf].getName + "," +
+      classOf[BasicJobCounter].getName
+    val conf = spy(new SparkConf().setMaster("local").setAppName("test"))
+    when(conf.getenv("SPARK_EXTRA_LISTENERS")).thenReturn(SPARK_EXTRA_LISTENERS)
+    when(conf.clone).thenReturn(conf)  // so that our mock is still used
+    sc = new SparkContext(conf)
+    sc.listenerBus.sparkListeners.collect { case x: BasicJobCounter => x}.size should be (1)
+    sc.listenerBus.sparkListeners.collect {
+      case x: ListenerThatAcceptsSparkConf => x
+    }.size should be (1)
+  }
+
   /**
    * Assert that the given list of numbers has an average that is greater than zero.
    */
   private def checkNonZeroAvg(m: Traversable[Long], msg: String) {
     assert(m.sum / m.size.toDouble > 0.0, msg)
-  }
-
-  /**
-   * A simple listener that counts the number of jobs observed.
-   */
-  private class BasicJobCounter extends SparkListener {
-    var count = 0
-    override def onJobEnd(job: SparkListenerJobEnd) = count += 1
   }
 
   /**
@@ -422,4 +441,20 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
     override def onJobEnd(jobEnd: SparkListenerJobEnd) = { throw new Exception }
   }
 
+}
+
+// These classes can't be declared inside of the SparkListenerSuite class because we don't want
+// their constructors to contain references to SparkListenerSuite:
+
+/**
+ * A simple listener that counts the number of jobs observed.
+ */
+private class BasicJobCounter extends SparkListener {
+  var count = 0
+  override def onJobEnd(job: SparkListenerJobEnd) = count += 1
+}
+
+private class ListenerThatAcceptsSparkConf(conf: SparkConf) extends SparkListener {
+  var count = 0
+  override def onJobEnd(job: SparkListenerJobEnd) = count += 1
 }
