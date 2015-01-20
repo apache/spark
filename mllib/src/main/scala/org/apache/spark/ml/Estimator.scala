@@ -18,12 +18,10 @@
 package org.apache.spark.ml
 
 import scala.annotation.varargs
-import scala.collection.JavaConverters._
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param.{ParamMap, ParamPair, Params}
 import org.apache.spark.sql.SchemaRDD
-import org.apache.spark.sql.api.java.JavaSchemaRDD
 
 /**
  * :: AlphaComponent ::
@@ -65,41 +63,5 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage with Params {
    */
   def fit(dataset: SchemaRDD, paramMaps: Array[ParamMap]): Seq[M] = {
     paramMaps.map(fit(dataset, _))
-  }
-
-  // Java-friendly versions of fit.
-
-  /**
-   * Fits a single model to the input data with optional parameters.
-   *
-   * @param dataset input dataset
-   * @param paramPairs optional list of param pairs (overwrite embedded params)
-   * @return fitted model
-   */
-  @varargs
-  def fit(dataset: JavaSchemaRDD, paramPairs: ParamPair[_]*): M = {
-    fit(dataset.schemaRDD, paramPairs: _*)
-  }
-
-  /**
-   * Fits a single model to the  input data with provided parameter map.
-   *
-   * @param dataset input dataset
-   * @param paramMap parameter map
-   * @return fitted model
-   */
-  def fit(dataset: JavaSchemaRDD, paramMap: ParamMap): M = {
-    fit(dataset.schemaRDD, paramMap)
-  }
-
-  /**
-   * Fits multiple models to the input data with multiple sets of parameters.
-   *
-   * @param dataset input dataset
-   * @param paramMaps an array of parameter maps
-   * @return fitted models, matching the input parameter maps
-   */
-  def fit(dataset: JavaSchemaRDD, paramMaps: Array[ParamMap]): java.util.List[M] = {
-    fit(dataset.schemaRDD, paramMaps).asJava
   }
 }

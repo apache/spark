@@ -23,7 +23,6 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
 import org.apache.spark.sql.SchemaRDD
-import org.apache.spark.sql.api.java.JavaSchemaRDD
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.expressions.ScalaUdf
 import org.apache.spark.sql.types._
@@ -55,29 +54,6 @@ abstract class Transformer extends PipelineStage with Params {
    * @return transformed dataset
    */
   def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD
-
-  // Java-friendly versions of transform.
-
-  /**
-   * Transforms the dataset with optional parameters.
-   * @param dataset input datset
-   * @param paramPairs optional list of param pairs, overwrite embedded params
-   * @return transformed dataset
-   */
-  @varargs
-  def transform(dataset: JavaSchemaRDD, paramPairs: ParamPair[_]*): JavaSchemaRDD = {
-    transform(dataset.schemaRDD, paramPairs: _*).toJavaSchemaRDD
-  }
-
-  /**
-   * Transforms the dataset with provided parameter map as additional parameters.
-   * @param dataset input dataset
-   * @param paramMap additional parameters, overwrite embedded params
-   * @return transformed dataset
-   */
-  def transform(dataset: JavaSchemaRDD, paramMap: ParamMap): JavaSchemaRDD = {
-    transform(dataset.schemaRDD, paramMap).toJavaSchemaRDD
-  }
 }
 
 /**
