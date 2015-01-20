@@ -407,7 +407,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     val casts = from.fields.zip(to.fields).map {
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
-    buildCast[Row](_, row => Row(row.zip(casts).map {
+    // TODO: This is very slow!
+    buildCast[Row](_, row => Row(row.toSeq.zip(casts).map {
       case (v, cast) => if (v == null) null else cast(v)
     }: _*))
   }
