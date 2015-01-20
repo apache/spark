@@ -202,7 +202,7 @@ class InputOutputMetricsSuite extends FunSuite with SharedSparkContext {
     val fs = FileSystem.getLocal(new Configuration())
     val outPath = new Path(fs.getWorkingDirectory, "outdir")
 
-    if (SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback(outPath, fs.getConf).isDefined) {
+    if (SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback(fs.getConf).isDefined) {
       val taskBytesWritten = new ArrayBuffer[Long]()
       sc.addSparkListener(new SparkListener() {
         override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {

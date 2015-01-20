@@ -1088,9 +1088,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
   private def initHadoopOutputMetrics(context: TaskContext, config: Configuration)
     : (OutputMetrics, Option[() => Long]) = {
-    val bytesWrittenCallback = Option(config.get("mapreduce.output.fileoutputformat.outputdir"))
-      .map(new Path(_))
-      .flatMap(SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback(_, config))
+    val bytesWrittenCallback = SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback(config)
     val outputMetrics = new OutputMetrics(DataWriteMethod.Hadoop)
     if (bytesWrittenCallback.isDefined) {
       context.taskMetrics.outputMetrics = Some(outputMetrics)
