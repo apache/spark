@@ -45,7 +45,7 @@ private[spark] abstract class SubmitRestServer(host: String, requestedPort: Int)
 }
 
 /**
- * A handler that responds to requests submitted via the submit REST protocol.
+ * A handler for requests submitted via the stable REST protocol for submitting applications.
  * This represents the main handler used in the SubmitRestServer.
  */
 private[spark] abstract class SubmitRestServerHandler extends AbstractHandler with Logging {
@@ -78,7 +78,7 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
 
   /**
    * Construct the appropriate response message based on the type of the request message.
-   * If an IllegalArgumentException is thrown in the process, construct an error message.
+   * If an IllegalArgumentException is thrown in the process, construct an error message instead.
    */
   private def constructResponseMessage(
       request: SubmitRestProtocolMessage): SubmitRestProtocolMessage = {
@@ -95,8 +95,9 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
           s"Received message of unexpected type ${Utils.getFormattedClassName(unexpected)}.")
       }
     } catch {
-      // Propagate exception to user in an ErrorMessage. If the construction of the
-      // ErrorMessage itself throws an exception, log the exception and ignore the request.
+      // Propagate exception to user in an ErrorMessage.
+      // Note that the construction of the error message itself may throw an exception.
+      // In this case, let the higher level caller take care of this request.
       case e: IllegalArgumentException => handleError(e.getMessage)
     }
   }

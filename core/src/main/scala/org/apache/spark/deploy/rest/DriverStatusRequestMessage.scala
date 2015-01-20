@@ -21,7 +21,8 @@ package org.apache.spark.deploy.rest
  * A field used in a DriverStatusRequestMessage.
  */
 private[spark] abstract class DriverStatusRequestField extends SubmitRestProtocolField
-private[spark] object DriverStatusRequestField extends SubmitRestProtocolFieldCompanion {
+private[spark] object DriverStatusRequestField
+  extends SubmitRestProtocolFieldCompanion[DriverStatusRequestField] {
   case object ACTION extends DriverStatusRequestField
   case object SPARK_VERSION extends DriverStatusRequestField
   case object MESSAGE extends DriverStatusRequestField
@@ -39,9 +40,8 @@ private[spark] class DriverStatusRequestMessage extends SubmitRestProtocolMessag
   DriverStatusRequestField.ACTION,
   DriverStatusRequestField.requiredFields)
 
-private[spark] object DriverStatusRequestMessage extends SubmitRestProtocolMessageCompanion {
-  protected override def newMessage(): SubmitRestProtocolMessage =
-    new DriverStatusRequestMessage
-  protected override def fieldWithName(field: String): SubmitRestProtocolField =
-    DriverStatusRequestField.withName(field)
+private[spark] object DriverStatusRequestMessage
+  extends SubmitRestProtocolMessageCompanion[DriverStatusRequestMessage] {
+  protected override def newMessage() = new DriverStatusRequestMessage
+  protected override def fieldWithName(field: String) = DriverStatusRequestField.withName(field)
 }

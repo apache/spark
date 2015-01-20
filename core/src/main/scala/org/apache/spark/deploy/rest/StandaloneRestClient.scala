@@ -24,9 +24,8 @@ import org.apache.spark.deploy.SparkSubmitArguments
 import org.apache.spark.util.Utils
 
 /**
- * A client that submits Spark applications to the standalone Master using a stable
- * REST protocol. This client is intended to communicate with the StandaloneRestServer,
- * and currently only used in cluster mode.
+ * A client that submits Spark applications to the standalone Master using a stable REST protocol.
+ * This client is intended to communicate with the StandaloneRestServer. Cluster mode only.
  */
 private[spark] class StandaloneRestClient extends SubmitRestClient {
 
@@ -56,12 +55,8 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
       .setFieldIfNotNull(SUPERVISE_DRIVER, args.supervise.toString)
       .setFieldIfNotNull(EXECUTOR_MEMORY, executorMemory)
       .setFieldIfNotNull(TOTAL_EXECUTOR_CORES, args.totalExecutorCores)
-    args.childArgs.zipWithIndex.foreach { case (arg, i) =>
-      message.setFieldIfNotNull(APP_ARG(i), arg)
-    }
-    args.sparkProperties.foreach { case (k, v) =>
-      message.setFieldIfNotNull(SPARK_PROPERTY(k), v)
-    }
+    args.childArgs.foreach(message.appendAppArg)
+    args.sparkProperties.foreach { case (k, v) => message.setSparkProperty(k, v) }
     // TODO: set environment variables?
     message.validate()
   }

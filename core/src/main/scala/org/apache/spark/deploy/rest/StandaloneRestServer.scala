@@ -33,7 +33,7 @@ import akka.actor.ActorRef
 
 /**
  * A server that responds to requests submitted by the StandaloneRestClient.
- * This is intended to be embedded in the standalone Master.
+ * This is intended to be embedded in the standalone Master. Cluster mode only.
  */
 private[spark] class StandaloneRestServer(
     master: Master,
@@ -44,8 +44,7 @@ private[spark] class StandaloneRestServer(
 }
 
 /**
- * A handler that responds to requests submitted to the standalone Master
- * through the REST protocol.
+ * A handler for requests submitted to the standalone Master through the REST protocol.
  */
 private[spark] class StandaloneRestServerHandler(
     conf: SparkConf,
@@ -53,7 +52,7 @@ private[spark] class StandaloneRestServerHandler(
     masterUrl: String)
   extends SubmitRestServerHandler {
 
-  private implicit val askTimeout = AkkaUtils.askTimeout(conf)
+  private val askTimeout = AkkaUtils.askTimeout(conf)
 
   def this(master: Master) = {
     this(master.conf, master.self, master.masterUrl)
@@ -109,18 +108,15 @@ private[spark] class StandaloneRestServerHandler(
 
   /**
    * Build a driver description from the fields specified in the submit request.
-   * This currently does not consider fields used by python applications since
+   * This does not currently consider fields used by python applications since
    * python is not supported in standalone cluster mode yet.
    */
   private def buildDriverDescription(request: SubmitDriverRequestMessage): DriverDescription = {
     import SubmitDriverRequestField._
 
-    // Required fields
+    // Required fields, including the main class because python is not yet supported
     val appName = request.getFieldNotNull(APP_NAME)
     val appResource = request.getFieldNotNull(APP_RESOURCE)
-
-    // Since standalone cluster mode does not yet support python,
-    // we treat the main class as required
     val mainClass = request.getFieldNotNull(MAIN_CLASS)
 
     // Optional fields
@@ -134,25 +130,20 @@ private[spark] class StandaloneRestServerHandler(
     val superviseDriver = request.getFieldOption(SUPERVISE_DRIVER)
     val executorMemory = request.getFieldOption(EXECUTOR_MEMORY)
     val totalExecutorCores = request.getFieldOption(TOTAL_EXECUTOR_CORES)
+    val appArgs = request.getAppArgs
+    val sparkProperties = request.getSparkProperties
+    val environmentVariables = request.getEnvironmentVariables
 
-    // Parse special fields that take in parameters
+    // Translate all fields to the relevant Spark properties
     val conf = new SparkConf(false)
-    val env = new mutable.HashMap[String, String]
-    val appArgs = new ArrayBuffer[(Int, String)]
-    request.getFields.foreach { case (k, v) =>
-      k match {
-        case APP_ARG(index) => appArgs += ((index, v))
-        case SPARK_PROPERTY(propKey) => conf.set(propKey, v)
-        case ENVIRONMENT_VARIABLE(envKey) => env(envKey) = v
-        case _ =>
-      }
-    }
-
-    // Use the actual master URL instead of the one that refers to this REST server
-    // Otherwise, once the driver is launched it will contact with the wrong server
-    conf.set("spark.master", masterUrl)
-    conf.set("spark.app.name", appName)
-    conf.set("spark.jars", jars.map(_ + ",").getOrElse("") + appResource) // include app resource
+      .setAll(sparkProperties)
+      // Use the actual master URL instead of the one that refers to this REST server
+      // Otherwise, once the driver is launched it will contact with the wrong server
+      .set("spark.master", masterUrl)
+      .set("spark.app.name", appName)
+      // Include main app resource on the executor classpath
+      // The corresponding behavior in client mode is handled in SparkSubmit
+      .set("spark.jars", jars.map(_ + ",").getOrElse("") + appResource)
     files.foreach { f => conf.set("spark.files", f) }
     driverExtraJavaOptions.foreach { j => conf.set("spark.driver.extraJavaOptions", j) }
     driverExtraClassPath.foreach { cp => conf.set("spark.driver.extraClassPath", cp) }
@@ -161,10 +152,6 @@ private[spark] class StandaloneRestServerHandler(
     totalExecutorCores.foreach { c => conf.set("spark.cores.max", c) }
 
     // Construct driver description and submit it
-    val actualDriverMemory = driverMemory.map(_.toInt).getOrElse(DEFAULT_MEMORY)
-    val actualDriverCores = driverCores.map(_.toInt).getOrElse(DEFAULT_CORES)
-    val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
-    val actualAppArgs = appArgs.sortBy(_._1).map(_._2) // sort by index, map to value
     val extraClassPath = driverExtraClassPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraLibraryPath = driverExtraLibraryPath.toSeq.flatMap(_.split(File.pathSeparator))
     val extraJavaOpts = driverExtraJavaOptions.map(Utils.splitCommandString).getOrElse(Seq.empty)
@@ -172,8 +159,11 @@ private[spark] class StandaloneRestServerHandler(
     val javaOpts = sparkJavaOpts ++ extraJavaOpts
     val command = new Command(
       "org.apache.spark.deploy.worker.DriverWrapper",
-      Seq("{{WORKER_URL}}", mainClass) ++ actualAppArgs,
-      env, extraClassPath, extraLibraryPath, javaOpts)
+      Seq("{{WORKER_URL}}", mainClass) ++ appArgs, // args to the DriverWrapper
+      environmentVariables, extraClassPath, extraLibraryPath, javaOpts)
+    val actualDriverMemory = driverMemory.map(_.toInt).getOrElse(DEFAULT_MEMORY)
+    val actualDriverCores = driverCores.map(_.toInt).getOrElse(DEFAULT_CORES)
+    val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
     new DriverDescription(
       appResource, actualDriverMemory, actualDriverCores, actualSuperviseDriver, command)
   }

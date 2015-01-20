@@ -17,15 +17,19 @@
 
 package org.apache.spark.deploy.rest
 
-import scala.util.matching.Regex
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.util.Utils
+import org.json4s.JsonAST._
+
+import org.apache.spark.util.JsonProtocol
 
 /**
  * A field used in a SubmitDriverRequestMessage.
  */
 private[spark] abstract class SubmitDriverRequestField extends SubmitRestProtocolField
-private[spark] object SubmitDriverRequestField extends SubmitRestProtocolFieldCompanion {
+private[spark] object SubmitDriverRequestField
+  extends SubmitRestProtocolFieldCompanion[SubmitRestProtocolField] {
   case object ACTION extends SubmitDriverRequestField
   case object SPARK_VERSION extends SubmitDriverRequestField
   case object MESSAGE extends SubmitDriverRequestField
@@ -44,35 +48,14 @@ private[spark] object SubmitDriverRequestField extends SubmitRestProtocolFieldCo
   case object SUPERVISE_DRIVER extends SubmitDriverRequestField // standalone cluster mode only
   case object EXECUTOR_MEMORY extends SubmitDriverRequestField
   case object TOTAL_EXECUTOR_CORES extends SubmitDriverRequestField
-  case class APP_ARG(index: Int) extends SubmitDriverRequestField {
-    override def toString: String = Utils.getFormattedClassName(this) + "_" + index
-  }
-  case class SPARK_PROPERTY(prop: String) extends SubmitDriverRequestField {
-    override def toString: String = Utils.getFormattedClassName(this) + "_" + prop
-  }
-  case class ENVIRONMENT_VARIABLE(envVar: String) extends SubmitDriverRequestField {
-    override def toString: String = Utils.getFormattedClassName(this) + "_" + envVar
-  }
+  case object APP_ARGS extends SubmitDriverRequestField
+  case object SPARK_PROPERTIES extends SubmitDriverRequestField
+  case object ENVIRONMENT_VARIABLES extends SubmitDriverRequestField
   override val requiredFields = Seq(ACTION, SPARK_VERSION, MASTER, APP_NAME, APP_RESOURCE)
   override val optionalFields = Seq(MESSAGE, MAIN_CLASS, JARS, FILES, PY_FILES, DRIVER_MEMORY,
     DRIVER_CORES, DRIVER_EXTRA_JAVA_OPTIONS, DRIVER_EXTRA_CLASS_PATH, DRIVER_EXTRA_LIBRARY_PATH,
-    SUPERVISE_DRIVER, EXECUTOR_MEMORY, TOTAL_EXECUTOR_CORES)
-
-  // Because certain fields taken in arguments, we cannot simply rely on the
-  // list of all fields to reconstruct a field from its String representation.
-  // Instead, we must treat these fields as special cases and match on their prefixes.
-  override def withName(field: String): SubmitRestProtocolField = {
-    def buildRegex(obj: AnyRef): Regex = s"${Utils.getFormattedClassName(obj)}_(.*)".r
-    val appArg = buildRegex(APP_ARG)
-    val sparkProperty = buildRegex(SPARK_PROPERTY)
-    val environmentVariable = buildRegex(ENVIRONMENT_VARIABLE)
-    field match {
-      case appArg(f) => APP_ARG(f.toInt)
-      case sparkProperty(f) => SPARK_PROPERTY(f)
-      case environmentVariable(f) => ENVIRONMENT_VARIABLE(f)
-      case _ => super.withName(field)
-    }
-  }
+    SUPERVISE_DRIVER, EXECUTOR_MEMORY, TOTAL_EXECUTOR_CORES, APP_ARGS, SPARK_PROPERTIES,
+    ENVIRONMENT_VARIABLES)
 }
 
 /**
@@ -85,37 +68,66 @@ private[spark] class SubmitDriverRequestMessage extends SubmitRestProtocolMessag
 
   import SubmitDriverRequestField._
 
-  // Ensure continuous range of app arg indices starting from 0
-  override def validate(): this.type = {
-    import SubmitDriverRequestField._
-    val indices = fields.collect { case (a: APP_ARG, _) => a }.toSeq.sortBy(_.index).map(_.index)
-    val expectedIndices = (0 until indices.size).toSeq
-    if (indices != expectedIndices) {
-      throw new IllegalArgumentException(s"Malformed app arg indices: ${indices.mkString(",")}")
-    }
-    super.validate()
-  }
+  private val appArgs = new ArrayBuffer[String]
+  private val sparkProperties = new mutable.HashMap[String, String]
+  private val environmentVariables = new mutable.HashMap[String, String]
 
-  // List the fields in the following order:
-  // ACTION < SPARK_VERSION < * < APP_ARG < SPARK_PROPERTY < ENVIRONMENT_VARIABLE < MESSAGE
-  protected override def sortedFields: Seq[(SubmitRestProtocolField, String)] = {
-    fields.toSeq.sortBy { case (k, _) =>
-      k match {
-        case ACTION => 0
-        case SPARK_VERSION => 1
-        case APP_ARG(index) => 10 + index
-        case SPARK_PROPERTY(propKey) => 100
-        case ENVIRONMENT_VARIABLE(envKey) => 1000
-        case MESSAGE => Int.MaxValue
-        case _ => 2
-      }
-    }
+  // Special field setters
+  def appendAppArg(arg: String): Unit = { appArgs += arg }
+  def setSparkProperty(k: String, v: String): Unit = { sparkProperties(k) = v }
+  def setEnvironmentVariable(k: String, v: String): Unit = { environmentVariables(k) = v }
+
+  // Special field getters
+  def getAppArgs: Seq[String] = appArgs.clone()
+  def getSparkProperties: Map[String, String] = sparkProperties.toMap
+  def getEnvironmentVariables: Map[String, String] = environmentVariables.toMap
+
+  // Include app args, spark properties, and environment variables in the JSON object
+  override def toJsonObject: JObject = {
+    val otherFields = super.toJsonObject.obj
+    val appArgsJson = JArray(appArgs.map(JString).toList)
+    val sparkPropertiesJson = JsonProtocol.mapToJson(sparkProperties)
+    val environmentVariablesJson = JsonProtocol.mapToJson(environmentVariables)
+    val allFields = otherFields ++ List(
+      (APP_ARGS.toString, appArgsJson),
+      (SPARK_PROPERTIES.toString, sparkPropertiesJson),
+      (ENVIRONMENT_VARIABLES.toString, environmentVariablesJson)
+    )
+    JObject(allFields)
   }
 }
 
-private[spark] object SubmitDriverRequestMessage extends SubmitRestProtocolMessageCompanion {
-  protected override def newMessage(): SubmitRestProtocolMessage =
-    new SubmitDriverRequestMessage
-  protected override def fieldWithName(field: String): SubmitRestProtocolField =
-    SubmitDriverRequestField.withName(field)
+private[spark] object SubmitDriverRequestMessage
+  extends SubmitRestProtocolMessageCompanion[SubmitDriverRequestMessage] {
+
+  import SubmitDriverRequestField._
+
+  protected override def newMessage() = new SubmitDriverRequestMessage
+  protected override def fieldWithName(field: String) = SubmitDriverRequestField.withName(field)
+
+  /**
+   * Process the given field and value appropriately based on the type of the field.
+   * This handles certain nested values in addition to flat values.
+   */
+  override def handleField(
+      message: SubmitDriverRequestMessage,
+      field: SubmitRestProtocolField,
+      value: JValue): Unit = {
+    (field, value) match {
+      case (APP_ARGS, JArray(args)) =>
+        args.map(_.asInstanceOf[JString].s).foreach { arg =>
+          message.appendAppArg(arg)
+        }
+      case (SPARK_PROPERTIES, props: JObject) =>
+        JsonProtocol.mapFromJson(props).foreach { case (k, v) =>
+          message.setSparkProperty(k, v)
+        }
+      case (ENVIRONMENT_VARIABLES, envVars: JObject) =>
+        JsonProtocol.mapFromJson(envVars).foreach { case (envKey, envValue) =>
+          message.setEnvironmentVariable(envKey, envValue)
+        }
+      // All other fields are assumed to have flat values
+      case _ => super.handleField(message, field, value)
+    }
+  }
 }

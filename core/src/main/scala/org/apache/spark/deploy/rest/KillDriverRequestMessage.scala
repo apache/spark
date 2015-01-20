@@ -21,7 +21,8 @@ package org.apache.spark.deploy.rest
  * A field used in a KillDriverRequestMessage.
  */
 private[spark] abstract class KillDriverRequestField extends SubmitRestProtocolField
-private[spark] object KillDriverRequestField extends SubmitRestProtocolFieldCompanion {
+private[spark] object KillDriverRequestField
+  extends SubmitRestProtocolFieldCompanion[KillDriverRequestField] {
   case object ACTION extends KillDriverRequestField
   case object SPARK_VERSION extends KillDriverRequestField
   case object MESSAGE extends KillDriverRequestField
@@ -39,9 +40,8 @@ private[spark] class KillDriverRequestMessage extends SubmitRestProtocolMessage(
   KillDriverRequestField.ACTION,
   KillDriverRequestField.requiredFields)
 
-private[spark] object KillDriverRequestMessage extends SubmitRestProtocolMessageCompanion {
-  protected override def newMessage(): SubmitRestProtocolMessage =
-    new KillDriverRequestMessage
-  protected override def fieldWithName(field: String): SubmitRestProtocolField =
-    KillDriverRequestField.withName(field)
+private[spark] object KillDriverRequestMessage
+  extends SubmitRestProtocolMessageCompanion[KillDriverRequestMessage] {
+  protected override def newMessage() = new KillDriverRequestMessage
+  protected override def fieldWithName(field: String) = KillDriverRequestField.withName(field)
 }

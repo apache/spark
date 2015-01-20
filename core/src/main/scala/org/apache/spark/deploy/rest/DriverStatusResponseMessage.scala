@@ -21,15 +21,16 @@ package org.apache.spark.deploy.rest
  * A field used in a DriverStatusResponseMessage.
  */
 private[spark] abstract class DriverStatusResponseField extends SubmitRestProtocolField
-private[spark] object DriverStatusResponseField extends SubmitRestProtocolFieldCompanion {
+private[spark] object DriverStatusResponseField
+  extends SubmitRestProtocolFieldCompanion[DriverStatusResponseField] {
   case object ACTION extends DriverStatusResponseField
   case object SPARK_VERSION extends DriverStatusResponseField
   case object MESSAGE extends DriverStatusResponseField
   case object MASTER extends DriverStatusResponseField
   case object DRIVER_ID extends DriverStatusResponseField
-  case object DRIVER_STATE extends SubmitDriverResponseField
-  case object WORKER_ID extends SubmitDriverResponseField
-  case object WORKER_HOST_PORT extends SubmitDriverResponseField
+  case object DRIVER_STATE extends DriverStatusResponseField
+  case object WORKER_ID extends DriverStatusResponseField
+  case object WORKER_HOST_PORT extends DriverStatusResponseField
   override val requiredFields = Seq(ACTION, SPARK_VERSION, MESSAGE,
     MASTER, DRIVER_ID, DRIVER_STATE, WORKER_ID, WORKER_HOST_PORT)
   override val optionalFields = Seq.empty
@@ -43,9 +44,8 @@ private[spark] class DriverStatusResponseMessage extends SubmitRestProtocolMessa
   DriverStatusResponseField.ACTION,
   DriverStatusResponseField.requiredFields)
 
-private[spark] object DriverStatusResponseMessage extends SubmitRestProtocolMessageCompanion {
-  protected override def newMessage(): SubmitRestProtocolMessage =
-    new DriverStatusResponseMessage
-  protected override def fieldWithName(field: String): SubmitRestProtocolField =
-    DriverStatusResponseField.withName(field)
+private[spark] object DriverStatusResponseMessage
+  extends SubmitRestProtocolMessageCompanion[DriverStatusResponseMessage] {
+  protected override def newMessage() = new DriverStatusResponseMessage
+  protected override def fieldWithName(field: String) = DriverStatusResponseField.withName(field)
 }

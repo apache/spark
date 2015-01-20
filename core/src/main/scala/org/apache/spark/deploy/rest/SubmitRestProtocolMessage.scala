@@ -24,7 +24,7 @@ import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonAST._
 
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * A field used in a SubmitRestProtocolMessage.
@@ -64,8 +64,8 @@ private[spark] abstract class SubmitRestProtocolMessage(
 
   import SubmitRestProtocolField._
 
-  private val className = Utils.getFormattedClassName(this)
-  protected val fields = new mutable.HashMap[SubmitRestProtocolField, String]
+  private val fields = new mutable.HashMap[SubmitRestProtocolField, String]
+  val className = Utils.getFormattedClassName(this)
 
   // Set the action field
   fields(actionField) = action.toString
@@ -125,27 +125,27 @@ private[spark] abstract class SubmitRestProtocolMessage(
   }
 
   /** Return the JSON representation of this message. */
-  def toJson: String = {
+  def toJson: String = pretty(render(toJsonObject))
+
+  /**
+   * Return a JObject that represents the JSON form of this message.
+   * This orders the fields by ACTION (first) < SPARK_VERSION < MESSAGE < * (last)
+   * and ignores fields with null values.
+   */
+  protected def toJsonObject: JObject = {
+    val sortedFields = fields.toSeq.sortBy { case (k, _) =>
+      k.toString match {
+        case x if isActionField(x) => 0
+        case x if isSparkVersionField(x) => 1
+        case x if isMessageField(x) => 2
+        case _ => 3
+      }
+    }
     val jsonFields = sortedFields
       .filter { case (_, v) => v != null }
       .map { case (k, v) => JField(k.toString, JString(v)) }
       .toList
-    pretty(render(JObject(jsonFields)))
-  }
-
-  /**
-   * Return a list of (field, value) pairs with the following ordering:
-   * ACTION < SPARK_VERSION < * < MESSAGE
-   */
-  protected def sortedFields: Seq[(SubmitRestProtocolField, String)] = {
-    fields.toSeq.sortBy { case (k, _) =>
-      k.toString match {
-        case x if isActionField(x) => 0
-        case x if isSparkVersionField(x) => 1
-        case x if isMessageField(x) => Int.MaxValue
-        case _ => 2
-      }
-    }
+    JObject(jsonFields)
   }
 }
 
@@ -153,26 +153,40 @@ private[spark] object SubmitRestProtocolMessage {
   import SubmitRestProtocolField._
   import SubmitRestProtocolAction._
 
+  /** Construct a SubmitRestProtocolMessage from its JSON representation. */
+  def fromJson(json: String): SubmitRestProtocolMessage = {
+    fromJsonObject(parse(json).asInstanceOf[JObject])
+  }
+
   /**
-   * Construct a SubmitRestProtocolMessage from JSON.
+   * Construct a SubmitRestProtocolMessage from the given JSON object.
    * This uses the ACTION field to determine the type of the message to reconstruct.
+   */
+  protected def fromJsonObject(jsonObject: JObject): SubmitRestProtocolMessage = {
+    val action = getAction(jsonObject)
+    SubmitRestProtocolAction.withName(action) match {
+      case SUBMIT_DRIVER_REQUEST => SubmitDriverRequestMessage.fromJsonObject(jsonObject)
+      case SUBMIT_DRIVER_RESPONSE => SubmitDriverResponseMessage.fromJsonObject(jsonObject)
+      case KILL_DRIVER_REQUEST => KillDriverRequestMessage.fromJsonObject(jsonObject)
+      case KILL_DRIVER_RESPONSE => KillDriverResponseMessage.fromJsonObject(jsonObject)
+      case DRIVER_STATUS_REQUEST => DriverStatusRequestMessage.fromJsonObject(jsonObject)
+      case DRIVER_STATUS_RESPONSE => DriverStatusResponseMessage.fromJsonObject(jsonObject)
+      case ERROR => ErrorMessage.fromJsonObject(jsonObject)
+    }
+  }
+
+  /**
+   * Extract the value of the ACTION field in the JSON object.
    * If such a field does not exist in the JSON, throw an exception.
    */
-  def fromJson(json: String): SubmitRestProtocolMessage = {
-    val fields = JsonProtocol.mapFromJson(parse(json))
-    val action = fields
-      .flatMap { case (k, v) => if (isActionField(k)) Some(v) else None }
+  private def getAction(jsonObject: JObject): String = {
+    jsonObject.obj
+      .collect { case JField(k, JString(v)) if isActionField(k) => v }
       .headOption
-      .getOrElse { throw new IllegalArgumentException(s"ACTION not found in message:\n$json") }
-    SubmitRestProtocolAction.withName(action) match {
-      case SUBMIT_DRIVER_REQUEST => SubmitDriverRequestMessage.fromFields(fields)
-      case SUBMIT_DRIVER_RESPONSE => SubmitDriverResponseMessage.fromFields(fields)
-      case KILL_DRIVER_REQUEST => KillDriverRequestMessage.fromFields(fields)
-      case KILL_DRIVER_RESPONSE => KillDriverResponseMessage.fromFields(fields)
-      case DRIVER_STATUS_REQUEST => DriverStatusRequestMessage.fromFields(fields)
-      case DRIVER_STATUS_RESPONSE => DriverStatusResponseMessage.fromFields(fields)
-      case ERROR => ErrorMessage.fromFields(fields)
-    }
+      .getOrElse {
+        throw new IllegalArgumentException(
+          "ACTION not found in message:\n" + pretty(render(jsonObject)))
+      }
   }
 }
 
@@ -182,17 +196,17 @@ private[spark] object SubmitRestProtocolMessage {
  * It is necessary to keep track of all fields that belong to this object in order to
  * reconstruct the fields from their names.
  */
-private[spark] trait SubmitRestProtocolFieldCompanion {
-  val requiredFields: Seq[SubmitRestProtocolField]
-  val optionalFields: Seq[SubmitRestProtocolField]
+private[spark] trait SubmitRestProtocolFieldCompanion[FieldType <: SubmitRestProtocolField] {
+  val requiredFields: Seq[FieldType]
+  val optionalFields: Seq[FieldType]
 
   /** Listing of all fields indexed by the field's string representation. */
-  private lazy val allFieldsMap: Map[String, SubmitRestProtocolField] = {
+  private lazy val allFieldsMap: Map[String, FieldType] = {
     (requiredFields ++ optionalFields).map { f => (f.toString, f) }.toMap
   }
 
   /** Return a SubmitRestProtocolField from its string representation. */
-  def withName(field: String): SubmitRestProtocolField = {
+  def withName(field: String): FieldType = {
     allFieldsMap.get(field).getOrElse {
       throw new IllegalArgumentException(s"Unknown field $field")
     }
@@ -202,29 +216,50 @@ private[spark] trait SubmitRestProtocolFieldCompanion {
 /**
  * A trait that holds common methods for SubmitRestProtocolMessage companion objects.
  */
-private[spark] trait SubmitRestProtocolMessageCompanion extends Logging {
+private[spark] trait SubmitRestProtocolMessageCompanion[MessageType <: SubmitRestProtocolMessage]
+  extends Logging {
+
   import SubmitRestProtocolField._
 
   /** Construct a new message of the relevant type. */
-  protected def newMessage(): SubmitRestProtocolMessage
+  protected def newMessage(): MessageType
 
   /** Return a field of the relevant type from the field's string representation. */
   protected def fieldWithName(field: String): SubmitRestProtocolField
 
-  /** Construct a SubmitRestProtocolMessage from the set of fields provided. */
-  def fromFields(fields: Map[String, String]): SubmitRestProtocolMessage = {
-    val message = newMessage()
-    fields.foreach { case (k, v) =>
-      try {
-        // The ACTION field is already set on instantiation
-        if (!isActionField(k)) {
-          message.setField(fieldWithName(k), v)
-        }
-      } catch {
-        case e: IllegalArgumentException =>
-          logWarning(s"Unexpected field $k in message ${Utils.getFormattedClassName(this)}")
-      }
+  /**
+   * Process the given field and value appropriately based on the type of the field.
+   * The default behavior only considers fields that have flat values and ignores other fields.
+   * If the subclass uses fields with nested values, it should override this method appropriately.
+   */
+  protected def handleField(
+      message: MessageType,
+      field: SubmitRestProtocolField,
+      value: JValue): Unit = {
+    value match {
+      case JString(s) => message.setField(field, s)
+      case _ => logWarning(
+        s"Unexpected value for field $field in message ${message.className}:\n$value")
     }
+  }
+
+  /** Construct a SubmitRestProtocolMessage from the given JSON object. */
+  def fromJsonObject(jsonObject: JObject): MessageType = {
+    val message = newMessage()
+    val fields = jsonObject.obj
+      .map { case JField(k, v) => (k, v) }
+      // The ACTION field is already handled on instantiation
+      .filter { case (k, _) => !isActionField(k) }
+      .flatMap { case (k, v) =>
+        try {
+          Some((fieldWithName(k), v))
+        } catch {
+          case e: IllegalArgumentException =>
+            logWarning(s"Unexpected field $k in message ${Utils.getFormattedClassName(this)}")
+            None
+        }
+      }
+    fields.foreach { case (k, v) => handleField(message, k, v) }
     message
   }
 }
