@@ -244,7 +244,7 @@ class TableScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT count(*) FROM tableWithSchema",
-    10)
+    Seq(Row(10)))
 
   sqlTest(
     "SELECT `string$%Field` FROM tableWithSchema",
@@ -260,7 +260,7 @@ class TableScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT structFieldSimple.key, arrayFieldSimple[1] FROM tableWithSchema a where int_Field=1",
-    Seq(Seq(1, 2)))
+    Seq(Row(1, 2)))
 
   sqlTest(
     "SELECT structFieldComplex.Value.`value_(2)` FROM tableWithSchema",
