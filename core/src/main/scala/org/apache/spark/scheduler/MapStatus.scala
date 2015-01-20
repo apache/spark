@@ -39,6 +39,8 @@ private[spark] sealed trait MapStatus {
    * necessary for correctness, since block fetchers are allowed to skip zero-size blocks.
    */
   def getSizeForBlock(reduceId: Int): Long
+
+  def getUncompressedSize(): Long
 }
 
 
@@ -106,6 +108,14 @@ private[spark] class CompressedMapStatus(
     MapStatus.decompressSize(compressedSizes(reduceId))
   }
 
+  override def getUncompressedSize(): Long = {
+    var totalSize: Long = 0
+    compressedSizes.foreach { byteSize =>
+      totalSize += MapStatus.decompressSize(byteSize)
+    }
+    totalSize
+  }
+
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
     loc.writeExternal(out)
     out.writeInt(compressedSizes.length)
@@ -151,6 +161,10 @@ private[spark] class HighlyCompressedMapStatus private (
     } else {
       avgSize
     }
+  }
+
+  override def getUncompressedSize():  Long = {
+    avgSize * numNonEmptyBlocks
   }
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {

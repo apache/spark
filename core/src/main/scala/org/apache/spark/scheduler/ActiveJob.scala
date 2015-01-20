@@ -29,12 +29,24 @@ private[spark] class ActiveJob(
     val jobId: Int,
     val finalStage: Stage,
     val func: (TaskContext, Iterator[_]) => _,
-    val partitions: Array[Int],
+    var partitions: Array[Int],
     val callSite: CallSite,
     val listener: JobListener,
     val properties: Properties) {
 
-  val numPartitions = partitions.length
-  val finished = Array.fill[Boolean](numPartitions)(false)
+  var numPartitions = partitions.length
+  var finished = Array.fill[Boolean](numPartitions)(false)
   var numFinished = 0
+
+  def resetPartition(numPartitions: Int){
+    this.numPartitions = numPartitions
+    partitions = (0 until numPartitions).toArray
+    finished = Array.fill[Boolean](numPartitions)(false)
+    if(listener.isInstanceOf[JobWaiter[_]]){
+      val waiter:JobWaiter[_] = listener.asInstanceOf[JobWaiter[_]]
+      val results = new Array[Any](numPartitions)
+      waiter.resultHandler = (index, res) => results(index) = res
+      waiter.totalTasks = numPartitions
+    }
+  }
 }

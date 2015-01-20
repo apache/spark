@@ -22,7 +22,7 @@ import scala.collection.mutable.HashSet
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.CallSite
+import org.apache.spark.util.{Utils, CallSite}
 
 /**
  * A stage is a set of independent tasks all computing the same function that need to run as part
@@ -50,7 +50,7 @@ import org.apache.spark.util.CallSite
 private[spark] class Stage(
     val id: Int,
     val rdd: RDD[_],
-    val numTasks: Int,
+    var numTasks: Int,
     val shuffleDep: Option[ShuffleDependency[_, _, _]],  // Output shuffle if stage is a map stage
     val parents: List[Stage],
     val jobId: Int,
@@ -58,9 +58,11 @@ private[spark] class Stage(
   extends Logging {
 
   val isShuffleMap = shuffleDep.isDefined
-  val numPartitions = rdd.partitions.size
-  val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
+  var numPartitions = rdd.partitions.size
+  var outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
   var numAvailableOutputs = 0
+  var outputSize:Long = -1L
+  var isResetNumPartitions:Boolean = false
 
   /** Set of jobs that this stage belongs to. */
   val jobIds = new HashSet[Int]
@@ -121,6 +123,41 @@ private[spark] class Stage(
     if (becameUnavailable) {
       logInfo("%s is now unavailable on executor %s (%d/%d, %s)".format(
         this, execId, numAvailableOutputs, numPartitions, isAvailable))
+    }
+  }
+
+  def getOutputSize(): Long = {
+    if (outputSize < 0) {
+      updateOutputSize
+    }
+    outputSize
+  }
+
+  def updateOutputSize() {
+    outputSize = 0
+    for (partition <- 0 until numPartitions) {
+      val prevList = outputLocs(partition)
+      prevList.foreach { mapStatus =>
+        outputSize += mapStatus.getUncompressedSize
+      }
+    }
+    logInfo("%s 's numPartition:%d outputSize is %s".format(this, numPartitions,
+      Utils.bytesToString(outputSize)))
+  }
+
+  def resetNumPartitions(partitions: Int) {
+    if (!isResetNumPartitions) {
+      numPartitions = rdd.resetPartitions(partitions).size
+      logInfo("after " + rdd + " reset " + numPartitions +
+        " partitions, actual paritionNumber is " + numPartitions)
+      latestInfo = StageInfo.fromStage(this)
+      outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
+      numTasks = numPartitions
+      if (!isShuffleMap) {
+        val job = resultOfJob.get
+        job.resetPartition(numPartitions)
+      }
+      isResetNumPartitions = true
     }
   }
 

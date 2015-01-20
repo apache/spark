@@ -190,6 +190,18 @@ class HadoopRDD[K, V](
     newInputFormat
   }
 
+  override def getInputSize:  Long = {
+    var totalSize:Long = 0L
+    this.partitions_.map(partition =>
+      if (partition.isInstanceOf[HadoopPartition]) {
+        val hadoopSplit = partition.asInstanceOf[HadoopPartition]
+        totalSize += hadoopSplit.inputSplit.value.getLength
+      }
+    )
+    logInfo("Input Size: " + totalSize)
+    totalSize
+  }
+
   override def getPartitions: Array[Partition] = {
     val jobConf = getJobConf()
     // add the credentials here as this can be called before SparkContext initialized

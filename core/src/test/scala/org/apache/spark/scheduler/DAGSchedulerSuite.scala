@@ -47,11 +47,18 @@ class BuggyDAGEventProcessActor extends Actor {
  */
 class MyRDD(
     sc: SparkContext,
-    numPartitions: Int,
+    var numPartitions: Int,
     dependencies: List[Dependency[_]],
-    locations: Seq[Seq[String]] = Nil) extends RDD[(Int, Int)](sc, dependencies) with Serializable {
+    locations: Seq[Seq[String]] = Nil,
+    inputSize: Long = 0) extends RDD[(Int, Int)](sc, dependencies) with Serializable {
   override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
     throw new RuntimeException("should not be reached")
+  override def getInputSize: Long = inputSize
+  override def resetPartitions(numPartitions: Int): Array[Partition] = {
+    this.numPartitions = numPartitions
+    this.partitions_ = getPartitions
+    this.partitions_
+  }
   override def getPartitions = (0 until numPartitions).map(i => new Partition {
     override def index = i
   }).toArray
@@ -540,6 +547,58 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     assertDataStructuresEmpty
   }
 
+  test("run serial shuffleDep with  auto reduce partition") {
+    scheduler.setAutoPartitionForTest(true, 100, 512 * 1024 * 1024)
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, Nil, 2048L * 1024 * 1024)
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, null)
+    val reduceRdd1 = new MyRDD(sc, 2, List(shuffleDep1))
+    val shuffleDep2 = new ShuffleDependency(reduceRdd1, null)
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep2))
+    submit(finalRdd, Array(0))
+    assert(taskSets(0).tasks.size == 2)
+    // have the first stage complete normally
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 4, 512L * 1024 * 1024)),
+      (Success, makeMapStatus("hostB", 4, 512L * 1024 * 1024))))
+    assert(taskSets(1).tasks.size == 4)
+    // have the second stage complete normally
+    complete(taskSets(1), Seq(
+      (Success, makeMapStatus("hostA", 9, 128L * 1024 * 1024)),
+      (Success, makeMapStatus("hostA", 9, 128L * 1024 * 1024)),
+      (Success, makeMapStatus("hostA", 9, 128L * 1024 * 1024)),
+      (Success, makeMapStatus("hostB", 9, 128L * 1024 * 1024))))
+    assert(taskSets(2).tasks.size == 9)
+    // have the third stage complete normally
+    complete(taskSets(2), Seq((Success, 9)))
+    assert(results === Map(0 -> 9))
+    scheduler.setAutoPartitionForTest(false, 0, 0)
+  }
+
+  test("run two join shuffleDep with auto reduce partition") {
+    scheduler.setAutoPartitionForTest(true, 100, 1024 * 1024 * 1024)
+    val shuffleMapRdd1 = new MyRDD(sc, 2, Nil, Nil, 2048L * 1024 * 1024)
+    val shuffleDep1 = new ShuffleDependency(shuffleMapRdd1, null)
+    val shuffleMapRdd2 = new MyRDD(sc, 2, Nil, Nil, 2048L * 1024 * 1024)
+    val shuffleDep2 = new ShuffleDependency(shuffleMapRdd2, null)
+    val finalRdd = new MyRDD(sc, 2, List(shuffleDep1,shuffleDep2))
+    submit(finalRdd, Array(0))
+    assert(taskSets(0).tasks.size == 2)
+    assert(taskSets(1).tasks.size == 2)
+    // have the first stage complete normally
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostA", 4, 64L * 1024 * 1024)),
+      (Success, makeMapStatus("hostB", 4, 64L * 1024 * 1024))))
+    // have the second stage complete normally
+    complete(taskSets(1), Seq(
+      (Success, makeMapStatus("hostA", 4, 64L * 1024 * 1024)),
+      (Success, makeMapStatus("hostB", 4, 64L * 1024 * 1024))))
+    assert(taskSets(2).tasks.size == 4)
+    // have the third stage complete normally
+    complete(taskSets(2), Seq((Success, 4)))
+    assert(results === Map(0 -> 4))
+    scheduler.setAutoPartitionForTest(false, 0, 0)
+  }
+
   /**
    * Makes sure that failures of stage used by multiple jobs are correctly handled.
    *
@@ -763,6 +822,9 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
 
   private def makeMapStatus(host: String, reduces: Int): MapStatus =
     MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(2))
+
+  private def makeMapStatus(host: String, reduces: Int, outputSize:Long): MapStatus =
+    MapStatus(makeBlockManagerId(host), Array.fill[Long](reduces)(outputSize))
 
   private def makeBlockManagerId(host: String): BlockManagerId =
     BlockManagerId("exec-" + host, host, 12345)

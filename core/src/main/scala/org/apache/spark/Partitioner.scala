@@ -36,6 +36,7 @@ import org.apache.spark.util.random.{XORShiftRandom, SamplingUtils}
 abstract class Partitioner extends Serializable {
   def numPartitions: Int
   def getPartition(key: Any): Int
+  def setNumPartitions(numPartitions: Int) = {}
 }
 
 object Partitioner {
@@ -75,12 +76,16 @@ object Partitioner {
  * so attempting to partition an RDD[Array[_]] or RDD[(Array[_], _)] using a HashPartitioner will
  * produce an unexpected or incorrect result.
  */
-class HashPartitioner(partitions: Int) extends Partitioner {
+class HashPartitioner(var partitions: Int) extends Partitioner {
   def numPartitions = partitions
 
   def getPartition(key: Any): Int = key match {
     case null => 0
     case _ => Utils.nonNegativeMod(key.hashCode, numPartitions)
+  }
+
+  override def setNumPartitions(numPartitions: Int){
+    partitions = numPartitions
   }
 
   override def equals(other: Any): Boolean = other match {
@@ -102,7 +107,7 @@ class HashPartitioner(partitions: Int) extends Partitioner {
  * the value of `partitions`.
  */
 class RangePartitioner[K : Ordering : ClassTag, V](
-    @transient partitions: Int,
+    @transient var partitions: Int,
     @transient rdd: RDD[_ <: Product2[K,V]],
     private var ascending: Boolean = true)
   extends Partitioner {
@@ -113,7 +118,9 @@ class RangePartitioner[K : Ordering : ClassTag, V](
   private var ordering = implicitly[Ordering[K]]
 
   // An array of upper bounds for the first (partitions - 1) partitions
-  private var rangeBounds: Array[K] = {
+  private var rangeBounds: Array[K] = getRangeBounds
+
+  private def getRangeBounds(): Array[K] = {
     if (partitions <= 1) {
       Array.empty
     } else {
@@ -182,6 +189,11 @@ class RangePartitioner[K : Ordering : ClassTag, V](
     } else {
       rangeBounds.length - partition
     }
+  }
+
+  override def setNumPartitions(numPartitions: Int){
+    partitions = numPartitions
+    rangeBounds = getRangeBounds
   }
 
   override def equals(other: Any): Boolean = other match {
