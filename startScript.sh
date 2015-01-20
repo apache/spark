@@ -8,7 +8,8 @@ export SPARK_LOCAL_IP=${HOST_IP_ADDRESS}
 
 if [[ "${EXECUTION_MODE}" = "master" ]]
 then
-    nohup /root/spark1.3/sbin/start-master.sh &
+    /root/spark1.3/sbin/start-master.sh
+    /bin/bash
 elif [[ "${EXECUTION_MODE}" = "worker" ]]
 then
     /root/spark1.3/bin/spark-class org.apache.spark.deploy.worker.Worker spark://${MASTER_IP_ADDRESS}:${MASTER_PORT}
