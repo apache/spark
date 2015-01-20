@@ -18,7 +18,9 @@
 package org.apache.spark.launcher;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.Test;
 import static org.junit.Assert.*;
@@ -65,11 +67,12 @@ public class SparkSubmitCliLauncherSuite {
       "--master=foo",
       "--deploy-mode=bar");
 
+    Map<String, String> env = new HashMap<String, String>();
     List<String> cmd = new SparkSubmitCliLauncher(sparkSubmitArgs)
       .setSparkHome(System.getProperty("spark.test.home"))
-      .buildShellCommand();
+      .buildLauncherCommand(env);
     assertEquals("python", cmd.get(cmd.size() - 1));
-    assertTrue(cmd.contains("PYSPARK_SUBMIT_ARGS=\"--master\" \"foo\" \"--deploy-mode\" \"bar\""));
+    assertEquals("\"--master\" \"foo\" \"--deploy-mode\" \"bar\"", env.get("PYSPARK_SUBMIT_ARGS"));
   }
 
   @Test
@@ -80,9 +83,11 @@ public class SparkSubmitCliLauncherSuite {
       "script.py",
       "arg1");
 
+    Map<String, String> env = new HashMap<String, String>();
     List<String> cmd = new SparkSubmitCliLauncher(sparkSubmitArgs)
       .setSparkHome(System.getProperty("spark.test.home"))
-      .buildShellCommand();
+      .buildLauncherCommand(env);
+
     assertEquals("foo", findArgValue(cmd, "--master"));
     assertEquals("bar", findArgValue(cmd, "--deploy-mode"));
     assertEquals("script.py", cmd.get(cmd.size() - 2));

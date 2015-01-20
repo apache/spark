@@ -33,8 +33,6 @@ import static org.junit.Assert.*;
 
 /**
  * These tests require the Spark assembly to be built before they can be run.
- *
- * TODO: these tests do not work on Win32.
  */
 public class SparkLauncherSuite {
 
@@ -85,7 +83,8 @@ public class SparkLauncherSuite {
       .setConf(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, "/native")
       .setConf("spark.foo", "foo");
 
-    List<String> cmd = launcher.buildShellCommand();
+    Map<String, String> env = new HashMap<String, String>();
+    List<String> cmd = launcher.buildLauncherCommand(env);
 
     // Checks below are different for driver and non-driver mode.
 
@@ -110,18 +109,11 @@ public class SparkLauncherSuite {
       assertFalse("Driver classpath should not be in command.", contains("/driver", cp));
     }
 
-    String[] libPath = null;
-    String envName = launcher.getLibPathEnvName() + "=";
-    for (String arg : cmd) {
-      if (arg.startsWith(envName)) {
-        libPath = arg.substring(envName.length()).split(Pattern.quote(File.pathSeparator));
-        break;
-      }
-    }
+    String libPath = env.get(launcher.getLibPathEnvName());
     if (isDriver) {
       assertNotNull("Native library path should be set.", libPath);
       assertTrue("Native library path should contain provided entry.",
-        contains("/native", libPath));
+        contains("/native", libPath.split(Pattern.quote(File.pathSeparator))));
     } else {
       assertNull("Native library should not be set.", libPath);
     }
