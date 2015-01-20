@@ -263,6 +263,7 @@ class BlockMatrix(
     }
   }
 
+  /** Checks if the partitioners match for operations like add and multiply */
   private def checkPartitioning(other: BlockMatrix, operation: Int): Boolean = {
     val otherPartitioner = other.partitioner
     operation match {
