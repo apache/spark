@@ -17,14 +17,9 @@
 
 package org.apache.spark
 
-import org.apache.hadoop.io.BytesWritable
 import org.scalatest.FunSuite
-import org.scalatest.concurrent.Eventually._
 
-import scala.concurrent.duration._
-import scala.language.{implicitConversions, postfixOps}
-
-import org.apache.spark.scheduler.{SparkListener, SparkListenerEnvironmentUpdate}
+import org.apache.hadoop.io.BytesWritable
 
 class SparkContextSuite extends FunSuite with LocalSparkContext {
 
@@ -76,19 +71,5 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     bytesWritable.set(inputArray, 0, 0)
     val byteArray2 = converter.convert(bytesWritable)
     assert(byteArray2.length === 0)
-  }
-
-  test("SparkListeners can be registered via the SparkContext constructor (SPARK-5190)") {
-    @volatile var gotEnvironmentUpdate: Boolean = false
-    val listener = new SparkListener {
-      override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate): Unit = {
-        gotEnvironmentUpdate = true
-      }
-    }
-    val conf = new SparkConf().setAppName("test").setMaster("local")
-    sc = new SparkContext(conf, Seq(listener))
-    eventually(timeout(10 seconds)) {
-      assert(gotEnvironmentUpdate === true)
-    }
   }
 }
