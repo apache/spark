@@ -87,7 +87,7 @@ private[spark] class EventLoggingListener(
    */
   def start() {
     try(
-        if(!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory(){
+        if(!fileSystem.getFileStatus(new Path(logBaseDir)).isDirectory()){
           throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
         }
         
