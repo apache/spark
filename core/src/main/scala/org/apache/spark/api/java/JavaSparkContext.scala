@@ -38,6 +38,7 @@ import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.{EmptyRDD, HadoopRDD, NewHadoopRDD, RDD}
+import org.apache.spark.scheduler.SparkListener
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns
@@ -104,7 +105,21 @@ class JavaSparkContext(val sc: SparkContext)
    */
   def this(master: String, appName: String, sparkHome: String, jars: Array[String],
       environment: JMap[String, String]) =
-    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment, Map()))
+    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment, Map(), Nil))
+
+  /**
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param appName A name for your application, to display on the cluster web UI
+   * @param sparkHome The SPARK_HOME directory on the slave nodes
+   * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
+   *             system or HDFS, HTTP, HTTPS, or FTP URLs.
+   * @param environment Environment variables to set on worker nodes
+   * @param sparkListeners an optional list of [[SparkListener]]s to register.
+   */
+  def this(master: String, appName: String, sparkHome: String, jars: Array[String],
+    environment: JMap[String, String], sparkListeners: Array[SparkListener]) =
+    this(new SparkContext(master, appName, sparkHome, jars.toSeq, environment, Map(),
+      sparkListeners))
 
   private[spark] val env = sc.env
 

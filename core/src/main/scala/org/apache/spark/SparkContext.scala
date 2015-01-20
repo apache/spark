@@ -63,8 +63,12 @@ import org.apache.spark.util._
  *
  * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
+ * @param sparkListeners an optional list of [[SparkListener]]s to register.
  */
-class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationClient {
+class SparkContext(
+    config: SparkConf,
+    sparkListeners: Seq[SparkListener] = Nil
+  ) extends Logging with ExecutorAllocationClient {
 
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -89,7 +93,15 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Create a SparkContext that loads settings from system properties (for instance, when
    * launching with ./bin/spark-submit).
    */
-  def this() = this(new SparkConf())
+  def this() = this(new SparkConf(), Nil)
+
+  /**
+   * Alternative constructor for binary compatibility.
+   *
+   * @param config a Spark Config object describing the application configuration. Any settings in
+   *   this config overrides the default configs as well as system properties.
+   */
+  def this(config: SparkConf) = this(config, Nil)
 
   /**
    * :: DeveloperApi ::
@@ -124,6 +136,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    * @param environment Environment variables to set on worker nodes.
+   * @param sparkListeners an optional list of [[SparkListener]]s to register.
    */
   def this(
       master: String,
@@ -131,11 +144,31 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       sparkHome: String = null,
       jars: Seq[String] = Nil,
       environment: Map[String, String] = Map(),
-      preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map()) =
-  {
-    this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment))
+      preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map(),
+      sparkListeners: Seq[SparkListener] = Nil) = {
+    this(SparkContext.updatedConf(new SparkConf(), master, appName, sparkHome, jars, environment),
+      sparkListeners)
     this.preferredNodeLocationData = preferredNodeLocationData
   }
+
+  /**
+   * Alternative constructor for binary compatibility.
+   *
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param appName A name for your application, to display on the cluster web UI.
+   * @param sparkHome Location where Spark is installed on cluster nodes.
+   * @param jars Collection of JARs to send to the cluster. These can be paths on the local file
+   *             system or HDFS, HTTP, HTTPS, or FTP URLs.
+   * @param environment Environment variables to set on worker nodes.
+   */
+  def this(
+      master: String,
+      appName: String,
+      sparkHome: String,
+      jars: Seq[String],
+      environment: Map[String, String],
+      preferredNodeLocationData: Map[String, Set[SplitInfo]]) =
+    this(master, appName, sparkHome, jars, environment, preferredNodeLocationData, Nil)
 
   // NOTE: The below constructors could be consolidated using default arguments. Due to
   // Scala bug SI-8479, however, this causes the compile step to fail when generating docs.
@@ -148,7 +181,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param appName A name for your application, to display on the cluster web UI.
    */
   private[spark] def this(master: String, appName: String) =
-    this(master, appName, null, Nil, Map(), Map())
+    this(master, appName, null, Nil, Map(), Map(), Nil)
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -158,7 +191,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @param sparkHome Location where Spark is installed on cluster nodes.
    */
   private[spark] def this(master: String, appName: String, sparkHome: String) =
-    this(master, appName, sparkHome, Nil, Map(), Map())
+    this(master, appName, sparkHome, Nil, Map(), Map(), Nil)
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
@@ -170,7 +203,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *             system or HDFS, HTTP, HTTPS, or FTP URLs.
    */
   private[spark] def this(master: String, appName: String, sparkHome: String, jars: Seq[String]) =
-    this(master, appName, sparkHome, jars, Map(), Map())
+    this(master, appName, sparkHome, jars, Map(), Map(), Nil)
 
   // log out Spark Version in Spark driver log
   logInfo(s"Running Spark version $SPARK_VERSION")
@@ -378,6 +411,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       None
     }
   executorAllocationManager.foreach(_.start())
+
+  sparkListeners.foreach(listenerBus.addListener)
 
   // At this point, all relevant SparkListeners have been registered, so begin releasing events
   listenerBus.start()
