@@ -7,6 +7,8 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 
 object SerializeJavaR {
+  // We supports only one connection now, so no need to use atomic integer.
+  var objCounter: Int = 0
 
   def readObjectType(dis: DataInputStream) = {
     dis.readByte().toChar
@@ -222,11 +224,10 @@ object SerializeJavaR {
   }
 
   def writeJObj(out: DataOutputStream, value: Object, objMap: HashMap[String, Object]) {
-    val objId = value.getClass().getName() + "@" +
-      Integer.toHexString(System.identityHashCode(value))
+    val objId = value.getClass().getName() + "@" + objCounter
+    objCounter = objCounter + 1
     objMap.put(objId, value)
     writeString(out, objId)
-    System.err.println(s"New java object $objId")
   }
 
   def writeIntArr(out: DataOutputStream, value: Array[Int]) {
