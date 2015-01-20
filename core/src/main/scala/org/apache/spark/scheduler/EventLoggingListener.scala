@@ -86,8 +86,14 @@ private[spark] class EventLoggingListener(
    * Creates the log file in the configured log directory.
    */
   def start() {
-    if (!fileSystem.isDirectory(new Path(logBaseDir))) {
-      throw new IllegalArgumentException(s"Log directory $logBaseDir does not exist.")
+    try(
+        if(!fileSystem.getFileStatus(new Path(logBaseDir)).isDir()){
+          throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
+        }
+        
+    )
+    catch{
+        case ioe: FileNotFoundException => new File(logBaseDir, null).mkdir()
     }
 
     val workingPath = logPath + IN_PROGRESS
