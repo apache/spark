@@ -40,9 +40,9 @@ class GMMExpectationMaximizationSuite extends FunSuite with MLlibTestSparkContex
     val seeds = Array(314589, 29032897, 50181, 494821, 4660)
     seeds.foreach { seed =>
       val gmm = new GaussianMixtureEM().setK(1).setSeed(seed).run(data)
-      assert(gmm.weight(0) ~== Ew absTol 1E-5)
-      assert(gmm.gaussian(0).mu ~== Emu absTol 1E-5)
-      assert(gmm.gaussian(0).sigma ~== Esigma absTol 1E-5)
+      assert(gmm.weights(0) ~== Ew absTol 1E-5)
+      assert(gmm.gaussians(0).mu ~== Emu absTol 1E-5)
+      assert(gmm.gaussians(0).sigma ~== Esigma absTol 1E-5)
     }
   }
   
@@ -73,11 +73,11 @@ class GMMExpectationMaximizationSuite extends FunSuite with MLlibTestSparkContex
       .setInitialModel(initialGmm)
       .run(data)
       
-    assert(gmm.weight(0) ~== Ew(0) absTol 1E-3)
-    assert(gmm.weight(1) ~== Ew(1) absTol 1E-3)
-    assert(gmm.gaussian(0).mu ~== Emu(0) absTol 1E-3)
-    assert(gmm.gaussian(1).mu ~== Emu(1) absTol 1E-3)
-    assert(gmm.gaussian(0).sigma ~== Esigma(0) absTol 1E-3)
-    assert(gmm.gaussian(1).sigma ~== Esigma(1) absTol 1E-3)
+    assert(gmm.weights(0) ~== Ew(0) absTol 1E-3)
+    assert(gmm.weights(1) ~== Ew(1) absTol 1E-3)
+    assert(gmm.gaussians(0).mu ~== Emu(0) absTol 1E-3)
+    assert(gmm.gaussians(1).mu ~== Emu(1) absTol 1E-3)
+    assert(gmm.gaussians(0).sigma ~== Esigma(0) absTol 1E-3)
+    assert(gmm.gaussians(1).sigma ~== Esigma(1) absTol 1E-3)
   }
 }

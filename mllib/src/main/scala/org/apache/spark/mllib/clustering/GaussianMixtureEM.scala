@@ -134,7 +134,7 @@ class GaussianMixtureEM private (
     // diagonal covariance matrices using component variances
     // derived from the samples    
     val (weights, gaussians) = initialModel match {
-      case Some(gmm) => (gmm.weight, gmm.gaussian)
+      case Some(gmm) => (gmm.weights, gmm.gaussians)
       
       case None => {
         val samples = breezeData.takeSample(withReplacement = true, k * nSamples, seed)

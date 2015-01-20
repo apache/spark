@@ -36,13 +36,13 @@ import org.apache.spark.mllib.util.MLUtils
  *              covariance matrix for Gaussian i
  */
 class GaussianMixtureModel(
-  val weight: Array[Double], 
-  val gaussian: Array[MultivariateGaussian]) extends Serializable {
+  val weights: Array[Double], 
+  val gaussians: Array[MultivariateGaussian]) extends Serializable {
   
-  require(weight.length == gaussian.length, "Length of weight and Gaussian arrays must match")
+  require(weights.length == gaussians.length, "Length of weight and Gaussian arrays must match")
   
   /** Number of gaussians in mixture */
-  def k: Int = weight.length
+  def k: Int = weights.length
 
   /** Maps given points to their cluster indices. */
   def predict(points: RDD[Vector]): RDD[Int] = {
@@ -56,10 +56,10 @@ class GaussianMixtureModel(
    */
   def predictSoft(points: RDD[Vector]): RDD[Array[Double]] = {
     val sc = points.sparkContext
-    val dists = sc.broadcast(gaussian)
-    val weights = sc.broadcast(weight)
+    val bcDists = sc.broadcast(gaussians)
+    val bcWeights = sc.broadcast(weights)
     points.map { x => 
-      computeSoftAssignments(x.toBreeze.toDenseVector, dists.value, weights.value, k)
+      computeSoftAssignments(x.toBreeze.toDenseVector, bcDists.value, bcWeights.value, k)
     }
   }
   
