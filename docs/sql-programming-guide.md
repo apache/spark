@@ -1253,7 +1253,7 @@ import  org.apache.spark.sql._
 </tr>
 <tr>
   <td> <b>DecimalType</b> </td>
-  <td> scala.math.BigDecimal </td>
+  <td> java.math.BigDecimal </td>
   <td>
   DecimalType
   </td>
