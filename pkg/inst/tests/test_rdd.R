@@ -349,7 +349,7 @@ test_that("rightOuterJoin() on pairwise RDDs", {
 
 test_that("fullOuterJoin() on pairwise RDDs", {
   rdd1 <- parallelize(sc, list(list(1,2), list(1,3), list(3,3)))
-  rdd1 <- parallelize(sc, list(list(1,1), list(2,4)))
+  rdd2 <- parallelize(sc, list(list(1,1), list(2,4)))
   actual <- collect(fullOuterJoin(rdd1, rdd2, 2L))
   expected <- list(list(1, list(2, 1)), list(1, list(3, 1)), list(2, list(NULL, 4)), list(3, list(3, NULL)))
   expect_equal(sortKeyValueList(actual), sortKeyValueList(expected))
