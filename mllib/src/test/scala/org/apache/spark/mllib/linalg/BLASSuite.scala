@@ -193,6 +193,10 @@ class BLASSuite extends FunSuite {
     val C10 = C1.copy
     val C11 = C1.copy
     val C12 = C1.copy
+    val C13 = C1.copy
+    val C14 = C1.copy
+    val C15 = C1.copy
+    val C16 = C1.copy
     val expected2 = new DenseMatrix(4, 2, Array(2.0, 1.0, 4.0, 2.0, 4.0, 0.0, 4.0, 3.0))
     val expected3 = new DenseMatrix(4, 2, Array(2.0, 2.0, 4.0, 2.0, 8.0, 0.0, 6.0, 6.0))
 
@@ -233,6 +237,10 @@ class BLASSuite extends FunSuite {
     gemm(true, true, 1.0, sAT, BT, 2.0, C10)
     gemm(true, true, 2.0, dAT, BT, 2.0, C11)
     gemm(true, true, 2.0, sAT, BT, 2.0, C12)
+    gemm(false, true, 1.0, dA, BT, 2.0, C13)
+    gemm(false, true, 1.0, sA, BT, 2.0, C14)
+    gemm(false, true, 2.0, dA, BT, 2.0, C15)
+    gemm(false, true, 2.0, sA, BT, 2.0, C16)
     assert(C5 ~== expected2 absTol 1e-15)
     assert(C6 ~== expected2 absTol 1e-15)
     assert(C7 ~== expected3 absTol 1e-15)

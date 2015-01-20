@@ -181,7 +181,6 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
     var j = 0
     while (j < numCols) {
       var i = 0
-      val indStart = j * numRows
       while (i < numRows) {
         val v = values(index(i, j))
         if (v != 0.0) {

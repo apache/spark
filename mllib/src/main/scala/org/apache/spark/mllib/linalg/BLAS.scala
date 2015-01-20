@@ -364,8 +364,8 @@ private[spark] object BLAS extends Serializable with Logging {
     val Avals = A.values
     val Bvals = B.values
     val Cvals = C.values
-    val Arows = if (!transModA) A.rowIndices else A.colPtrs
-    val Acols = if (!transModA) A.colPtrs else A.rowIndices
+    val ArowIndices = A.rowIndices
+    val AcolPtrs = A.colPtrs
 
     // Slicing is easy in this case. This is the optimal multiplication setting for sparse matrices
     if (transModA){
@@ -376,11 +376,11 @@ private[spark] object BLAS extends Serializable with Logging {
           val Cstart = colCounterForB * mA
           val Bstart = colCounterForB * kA
           while (rowCounterForA < mA) {
-            var i = Arows(rowCounterForA)
-            val indEnd = Arows(rowCounterForA + 1)
+            var i = AcolPtrs(rowCounterForA)
+            val indEnd = AcolPtrs(rowCounterForA + 1)
             var sum = 0.0
             while (i < indEnd) {
-              sum += Avals(i) * Bvals(Bstart + Acols(i))
+              sum += Avals(i) * Bvals(Bstart + ArowIndices(i))
               i += 1
             }
             val Cindex = Cstart + rowCounterForA
@@ -390,20 +390,23 @@ private[spark] object BLAS extends Serializable with Logging {
           colCounterForB += 1
         }
       } else {
+        // this is a hack, because the indexing is different when B.isTranspose is true, but transB
+        // is false and when transB is true, but B.isTranspose is false
+        val tempB = if (transB) B else new DenseMatrix(B.numCols, B.numRows, B.values)
         while (colCounterForB < nB) {
-          var rowCounter = 0
+          var rowCounterForA = 0
           val Cstart = colCounterForB * mA
-          while (rowCounter < mA) {
-            var i = Arows(rowCounter)
-            val indEnd = Arows(rowCounter + 1)
+          while (rowCounterForA < mA) {
+            var i = AcolPtrs(rowCounterForA)
+            val indEnd = AcolPtrs(rowCounterForA + 1)
             var sum = 0.0
             while (i < indEnd) {
-              sum += Avals(i) * B(colCounterForB, Acols(i))
+              sum += Avals(i) * tempB(colCounterForB, ArowIndices(i))
               i += 1
             }
-            val Cindex = Cstart + rowCounter
+            val Cindex = Cstart + rowCounterForA
             Cvals(Cindex) = beta * Cvals(Cindex) + sum * alpha
-            rowCounter += 1
+            rowCounterForA += 1
           }
           colCounterForB += 1
         }
@@ -422,11 +425,11 @@ private[spark] object BLAS extends Serializable with Logging {
           val Bstart = colCounterForB * kB
           val Cstart = colCounterForB * mA
           while (colCounterForA < kA) {
-            var i = Acols(colCounterForA)
-            val indEnd = Acols(colCounterForA + 1)
+            var i = AcolPtrs(colCounterForA)
+            val indEnd = AcolPtrs(colCounterForA + 1)
             val Bval = Bvals(Bstart + colCounterForA) * alpha
             while (i < indEnd) {
-              Cvals(Cstart + Arows(i)) += Avals(i) * Bval
+              Cvals(Cstart + ArowIndices(i)) += Avals(i) * Bval
               i += 1
             }
             colCounterForA += 1
@@ -434,15 +437,18 @@ private[spark] object BLAS extends Serializable with Logging {
           colCounterForB += 1
         }
       } else {
+        // this is a hack, because the indexing is different when B.isTranspose is true, but transB
+        // is false and when transB is true, but B.isTranspose is false
+        val tempB = if (transB) B else new DenseMatrix(B.numCols, B.numRows, B.values)
         while (colCounterForB < nB) {
           var colCounterForA = 0 // The column of A to multiply with the row of B
           val Cstart = colCounterForB * mA
           while (colCounterForA < kA) {
-            var i = Acols(colCounterForA)
-            val indEnd = Acols(colCounterForA + 1)
-            val Bval = B(colCounterForB, colCounterForA) * alpha
+            var i = AcolPtrs(colCounterForA)
+            val indEnd = AcolPtrs(colCounterForA + 1)
+            val Bval = tempB(colCounterForB, colCounterForA) * alpha
             while (i < indEnd) {
-              Cvals(Cstart + Arows(i)) += Avals(i) * Bval
+              Cvals(Cstart + ArowIndices(i)) += Avals(i) * Bval
               i += 1
             }
             colCounterForA += 1
