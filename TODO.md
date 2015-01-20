@@ -1,7 +1,6 @@
 TODO
 -----
 #### UI
-* User login / security
 * Pause button for dags (affect master scheduler)
 * Tree view: remove dummy root node
 * Backfill wizard
@@ -13,7 +12,6 @@ TODO
 * `airflow task_state dag_id task_id YYYY-MM-DD`
 
 #### More Operators!
-* HdfsSensor
 * S3Sensor
 * BaseDataTransferOperator
 * File2MySqlOperator
@@ -26,16 +24,13 @@ TODO
 * ...
 
 #### Backend
-* Pickle content of files along with the DAG
 * Add decorator to timeout imports on master process [lib](https://github.com/pnpnpn/timeout-decorator)
 * Clear should kill running jobs
 * Mysql port should carry through (using default now)
+* Make authentication universal
 
 #### Misc
 * Write an hypervisor, looks for dead jobs without a heartbeat and kills
-* Authentication with Flask-Login and Flask-Principal
-* email_on_retry
-* Naming for the DatabaseConnection model was shortsighted, the same model can be used for any external connections (FTP, samba, ...), rename the model to Connection.
 
 #### Wishlist
 * Support for cron like synthax (0 * * * ) using croniter library
