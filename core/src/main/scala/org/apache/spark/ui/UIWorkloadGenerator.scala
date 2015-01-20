@@ -22,11 +22,13 @@ import scala.util.Random
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.scheduler.SchedulingMode
 
+// scalastyle:off
 /**
  * Continuously generates jobs that expose various features of the WebUI (internal testing tool).
  *
  * Usage: ./bin/spark-class org.apache.spark.ui.UIWorkloadGenerator [master] [FIFO|FAIR] [#job set (4 jobs per set)]
  */
+// scalastyle:on
 private[spark] object UIWorkloadGenerator {
 
   val NUM_PARTITIONS = 100
