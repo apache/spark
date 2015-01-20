@@ -32,6 +32,10 @@ SPARK_HOME="$(cd "`dirname "$0"`"; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
 SPARK_TACHYON=false
+TACHYON_VERSION="0.5.0"
+TACHYON_TGZ="tachyon-${TACHYON_VERSION}-bin.tar.gz"
+TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/${TACHYON_TGZ}"
+
 MAKE_TGZ=false
 NAME=none
 MVN="$SPARK_HOME/build/mvn"
@@ -222,10 +226,6 @@ cp -r "$SPARK_HOME/ec2" "$DISTDIR"
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then
-  TACHYON_VERSION="0.5.0"
-  TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/tachyon-${TACHYON_VERSION}-bin.tar.gz"
-  TACHYON_TGZ="tachyon-${TACHYON_VERSION}-bin.tar.gz"
-
   TMPD=`mktemp -d 2>/dev/null || mktemp -d -t 'disttmp'`
 
   pushd $TMPD > /dev/null
