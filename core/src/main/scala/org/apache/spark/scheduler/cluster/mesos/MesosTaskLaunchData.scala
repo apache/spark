@@ -20,6 +20,7 @@ package org.apache.spark.scheduler.cluster.mesos
 import java.nio.ByteBuffer
 
 import org.apache.mesos.protobuf.ByteString
+
 import org.apache.spark.Logging
 
 /**
