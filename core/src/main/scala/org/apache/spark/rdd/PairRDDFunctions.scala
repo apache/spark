@@ -978,12 +978,9 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
 
     val writeShard = (context: TaskContext, iter: Iterator[(K,V)]) => {
       val config = wrappedConf.value
-      // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
-      // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
-        attemptNumber)
+        context.attemptNumber)
       val hadoopContext = newTaskAttemptContext(config, attemptId)
       val format = outfmt.newInstance
       format match {
@@ -1010,7 +1007,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         writer.close(hadoopContext)
       }
       committer.commitTask(hadoopContext)
-      bytesWrittenCallback.foreach { fn => outputMetrics.bytesWritten = fn() }
+      bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
       1
     } : Int
 
@@ -1062,11 +1059,11 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val config = wrappedConf.value
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
-      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
+      val taskAttemptId = (context.taskAttemptId % Int.MaxValue).toInt
 
       val (outputMetrics, bytesWrittenCallback) = initHadoopOutputMetrics(context, config)
 
-      writer.setup(context.stageId, context.partitionId, attemptNumber)
+      writer.setup(context.stageId, context.partitionId, taskAttemptId)
       writer.open()
       try {
         var recordsWritten = 0L
@@ -1082,7 +1079,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
         writer.close()
       }
       writer.commit()
-      bytesWrittenCallback.foreach { fn => outputMetrics.bytesWritten = fn() }
+      bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
     }
 
     self.context.runJob(self, writeToFile)
@@ -1105,7 +1102,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       outputMetrics: OutputMetrics, recordsWritten: Long): Unit = {
     if (recordsWritten % PairRDDFunctions.RECORDS_BETWEEN_BYTES_WRITTEN_METRIC_UPDATES == 0
         && bytesWrittenCallback.isDefined) {
-      bytesWrittenCallback.foreach { fn => outputMetrics.bytesWritten = fn() }
+      bytesWrittenCallback.foreach { fn => outputMetrics.setBytesWritten(fn()) }
     }
   }
 

@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LocalRelation}
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
@@ -41,7 +41,7 @@ class DecimalPrecisionSuite extends FunSuite with BeforeAndAfter {
   val f: Expression = UnresolvedAttribute("f")
 
   before {
-    catalog.registerTable(None, "table", relation)
+    catalog.registerTable(Seq("table"), relation)
   }
 
   private def checkType(expression: Expression, expectedType: DataType): Unit = {

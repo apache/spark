@@ -19,12 +19,18 @@ package org.apache.spark.sql.catalyst.expressions
 
 import scala.language.dynamics
 
-import org.apache.spark.sql.catalyst.types.DataType
+import org.apache.spark.sql.types.DataType
 
 /**
  * The data type representing [[DynamicRow]] values.
  */
-case object DynamicType extends DataType
+case object DynamicType extends DataType {
+
+  /**
+   * The default size of a value of the DynamicType is 4096 bytes.
+   */
+  override def defaultSize: Int = 4096
+}
 
 /**
  * Wrap a [[Row]] as a [[DynamicRow]].

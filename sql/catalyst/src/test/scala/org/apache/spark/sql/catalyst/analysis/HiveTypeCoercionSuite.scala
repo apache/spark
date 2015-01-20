@@ -21,7 +21,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 class HiveTypeCoercionSuite extends FunSuite {
 

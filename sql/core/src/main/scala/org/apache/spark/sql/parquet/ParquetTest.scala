@@ -54,7 +54,7 @@ trait ParquetTest {
     try f finally {
       keys.zip(currentValues).foreach {
         case (key, Some(value)) => setConf(key, value)
-        case (key, None) => unsetConf(key)
+        case (key, None) => conf.unsetConf(key)
       }
     }
   }

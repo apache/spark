@@ -59,6 +59,7 @@ object TestData {
   testData2.registerTempTable("testData2")
 
   case class DecimalData(a: BigDecimal, b: BigDecimal)
+
   val decimalData =
     TestSQLContext.sparkContext.parallelize(
       DecimalData(1, 1) ::

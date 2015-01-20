@@ -28,37 +28,37 @@ trait Catalog {
 
   def caseSensitive: Boolean
 
-  def tableExists(db: Option[String], tableName: String): Boolean
+  def tableExists(tableIdentifier: Seq[String]): Boolean
 
   def lookupRelation(
-    databaseName: Option[String],
-    tableName: String,
-    alias: Option[String] = None): LogicalPlan
+      tableIdentifier: Seq[String],
+      alias: Option[String] = None): LogicalPlan
 
-  def registerTable(databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit
+  def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit
 
-  def unregisterTable(databaseName: Option[String], tableName: String): Unit
+  def unregisterTable(tableIdentifier: Seq[String]): Unit
 
   def unregisterAllTables(): Unit
 
-  protected def processDatabaseAndTableName(
-      databaseName: Option[String],
-      tableName: String): (Option[String], String) = {
+  protected def processTableIdentifier(tableIdentifier: Seq[String]): Seq[String] = {
     if (!caseSensitive) {
-      (databaseName.map(_.toLowerCase), tableName.toLowerCase)
+      tableIdentifier.map(_.toLowerCase)
     } else {
-      (databaseName, tableName)
+      tableIdentifier
     }
   }
 
-  protected def processDatabaseAndTableName(
-      databaseName: String,
-      tableName: String): (String, String) = {
-    if (!caseSensitive) {
-      (databaseName.toLowerCase, tableName.toLowerCase)
+  protected def getDbTableName(tableIdent: Seq[String]): String = {
+    val size = tableIdent.size
+    if (size <= 2) {
+      tableIdent.mkString(".")
     } else {
-      (databaseName, tableName)
+      tableIdent.slice(size - 2, size).mkString(".")
     }
+  }
+
+  protected def getDBTable(tableIdent: Seq[String]) : (Option[String], String) = {
+    (tableIdent.lift(tableIdent.size - 2), tableIdent.last)
   }
 }
 
@@ -66,39 +66,36 @@ class SimpleCatalog(val caseSensitive: Boolean) extends Catalog {
   val tables = new mutable.HashMap[String, LogicalPlan]()
 
   override def registerTable(
-      databaseName: Option[String],
-      tableName: String,
+      tableIdentifier: Seq[String],
       plan: LogicalPlan): Unit = {
-    val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
-    tables += ((tblName, plan))
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    tables += ((getDbTableName(tableIdent), plan))
   }
 
-  override def unregisterTable(
-      databaseName: Option[String],
-      tableName: String) = {
-    val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
-    tables -= tblName
+  override def unregisterTable(tableIdentifier: Seq[String]) = {
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    tables -= getDbTableName(tableIdent)
   }
 
   override def unregisterAllTables() = {
     tables.clear()
   }
 
-  override def tableExists(db: Option[String], tableName: String): Boolean = {
-    val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
-    tables.get(tblName) match {
+  override def tableExists(tableIdentifier: Seq[String]): Boolean = {
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    tables.get(getDbTableName(tableIdent)) match {
       case Some(_) => true
       case None => false
     }
   }
 
   override def lookupRelation(
-      databaseName: Option[String],
-      tableName: String,
+      tableIdentifier: Seq[String],
       alias: Option[String] = None): LogicalPlan = {
-    val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
-    val table = tables.getOrElse(tblName, sys.error(s"Table Not Found: $tableName"))
-    val tableWithQualifiers = Subquery(tblName, table)
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    val tableFullName = getDbTableName(tableIdent)
+    val table = tables.getOrElse(tableFullName, sys.error(s"Table Not Found: $tableFullName"))
+    val tableWithQualifiers = Subquery(tableIdent.last, table)
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
     // properly qualified with this alias.
@@ -117,41 +114,39 @@ trait OverrideCatalog extends Catalog {
   // TODO: This doesn't work when the database changes...
   val overrides = new mutable.HashMap[(Option[String],String), LogicalPlan]()
 
-  abstract override def tableExists(db: Option[String], tableName: String): Boolean = {
-    val (dbName, tblName) = processDatabaseAndTableName(db, tableName)
-    overrides.get((dbName, tblName)) match {
+  abstract override def tableExists(tableIdentifier: Seq[String]): Boolean = {
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    overrides.get(getDBTable(tableIdent)) match {
       case Some(_) => true
-      case None => super.tableExists(db, tableName)
+      case None => super.tableExists(tableIdentifier)
     }
   }
 
   abstract override def lookupRelation(
-    databaseName: Option[String],
-    tableName: String,
+    tableIdentifier: Seq[String],
     alias: Option[String] = None): LogicalPlan = {
-    val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
-    val overriddenTable = overrides.get((dbName, tblName))
-    val tableWithQualifers = overriddenTable.map(r => Subquery(tblName, r))
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    val overriddenTable = overrides.get(getDBTable(tableIdent))
+    val tableWithQualifers = overriddenTable.map(r => Subquery(tableIdent.last, r))
 
     // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
     // properly qualified with this alias.
     val withAlias =
       tableWithQualifers.map(r => alias.map(a => Subquery(a, r)).getOrElse(r))
 
-    withAlias.getOrElse(super.lookupRelation(dbName, tblName, alias))
+    withAlias.getOrElse(super.lookupRelation(tableIdentifier, alias))
   }
 
   override def registerTable(
-      databaseName: Option[String],
-      tableName: String,
+      tableIdentifier: Seq[String],
       plan: LogicalPlan): Unit = {
-    val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
-    overrides.put((dbName, tblName), plan)
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    overrides.put(getDBTable(tableIdent), plan)
   }
 
-  override def unregisterTable(databaseName: Option[String], tableName: String): Unit = {
-    val (dbName, tblName) = processDatabaseAndTableName(databaseName, tableName)
-    overrides.remove((dbName, tblName))
+  override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
+    val tableIdent = processTableIdentifier(tableIdentifier)
+    overrides.remove(getDBTable(tableIdent))
   }
 
   override def unregisterAllTables(): Unit = {
@@ -167,22 +162,21 @@ object EmptyCatalog extends Catalog {
 
   val caseSensitive: Boolean = true
 
-  def tableExists(db: Option[String], tableName: String): Boolean = {
+  def tableExists(tableIdentifier: Seq[String]): Boolean = {
     throw new UnsupportedOperationException
   }
 
   def lookupRelation(
-    databaseName: Option[String],
-    tableName: String,
+    tableIdentifier: Seq[String],
     alias: Option[String] = None) = {
     throw new UnsupportedOperationException
   }
 
-  def registerTable(databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit = {
+  def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit = {
     throw new UnsupportedOperationException
   }
 
-  def unregisterTable(databaseName: Option[String], tableName: String): Unit = {
+  def unregisterTable(tableIdentifier: Seq[String]): Unit = {
     throw new UnsupportedOperationException
   }
 

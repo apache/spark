@@ -26,8 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types._
 
 /**
  * A collection of implicit conversions that create a DSL for constructing catalyst data structures.
@@ -127,7 +126,8 @@ package object dsl {
     implicit def doubleToLiteral(d: Double): Literal = Literal(d)
     implicit def stringToLiteral(s: String): Literal = Literal(s)
     implicit def dateToLiteral(d: Date): Literal = Literal(d)
-    implicit def bigDecimalToLiteral(d: BigDecimal): Literal = Literal(d)
+    implicit def bigDecimalToLiteral(d: BigDecimal): Literal = Literal(d.underlying())
+    implicit def bigDecimalToLiteral(d: java.math.BigDecimal): Literal = Literal(d)
     implicit def decimalToLiteral(d: Decimal): Literal = Literal(d)
     implicit def timestampToLiteral(t: Timestamp): Literal = Literal(t)
     implicit def binaryToLiteral(a: Array[Byte]): Literal = Literal(a)
@@ -290,7 +290,7 @@ package object dsl {
 
     def insertInto(tableName: String, overwrite: Boolean = false) =
       InsertIntoTable(
-        analysis.UnresolvedRelation(None, tableName), Map.empty, logicalPlan, overwrite)
+        analysis.UnresolvedRelation(Seq(tableName)), Map.empty, logicalPlan, overwrite)
 
     def analyze = analysis.SimpleAnalyzer(logicalPlan)
   }

@@ -36,7 +36,6 @@ object MimaExcludes {
         case v if v.startsWith("1.3") =>
           Seq(
             MimaBuild.excludeSparkPackage("deploy"),
-            MimaBuild.excludeSparkPackage("graphx"),
             // These are needed if checking against the sbt build, since they are part of
             // the maven-generated artifacts in the 1.2 build.
             MimaBuild.excludeSparkPackage("unused"),
@@ -61,6 +60,32 @@ object MimaExcludes {
             ProblemFilters.exclude[IncompatibleResultTypeProblem](
               "org.apache.spark.streaming.flume.sink.SparkAvroCallbackHandler." +
                 "removeAndGetProcessor")
+          ) ++ Seq(
+            // SPARK-5123 (SparkSQL data type change) - alpha component only
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.ml.feature.HashingTF.outputDataType"),
+            ProblemFilters.exclude[IncompatibleResultTypeProblem](
+              "org.apache.spark.ml.feature.Tokenizer.outputDataType"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.ml.feature.Tokenizer.validateInputType"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.ml.classification.LogisticRegressionModel.validateAndTransformSchema"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem](
+              "org.apache.spark.ml.classification.LogisticRegression.validateAndTransformSchema")
+          ) ++ Seq(
+            // SPARK-4014
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.TaskContext.taskAttemptId"),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.TaskContext.attemptNumber")
+          ) ++ Seq(
+            // SPARK-5166 Spark SQL API stabilization
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.Transformer.transform"),
+            ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.Estimator.fit")
+          ) ++ Seq(
+            // SPARK-5270
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.api.java.JavaRDDLike.isEmpty")
           )
 
         case v if v.startsWith("1.2") =>
