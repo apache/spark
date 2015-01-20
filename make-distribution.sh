@@ -97,7 +97,7 @@ done
 
 if [ -z "$JAVA_HOME" ]; then
   # Fall back on JAVA_HOME from rpm, if found
-  if which rpm &>/dev/null; then
+  if [ $(command -v  rpm) ]; then
     RPM_JAVA_HOME=$(rpm -E %java_home 2>/dev/null)
     if [ "$RPM_JAVA_HOME" != "%java_home" ]; then
       JAVA_HOME=$RPM_JAVA_HOME
@@ -111,7 +111,7 @@ if [ -z "$JAVA_HOME" ]; then
   exit -1
 fi
 
-if which git &>/dev/null; then
+if [ $(command -v git) ]; then
     GITREV=$(git rev-parse --short HEAD 2>/dev/null || :)
     if [ ! -z $GITREV ]; then
 	 GITREVSTRING=" (git revision $GITREV)"
@@ -119,14 +119,14 @@ if which git &>/dev/null; then
     unset GITREV
 fi
 
-if ! which $MVN &>/dev/null; then
+if [ ! $(command -v $MVN) ] ; then
     echo -e "Could not locate Maven command: '$MVN'."
     echo -e "Specify the Maven command with the --mvn flag"
     exit -1;
 fi
 
-VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
-SPARK_HADOOP_VERSION=$(mvn help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
+VERSION=$($MVN help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
+SPARK_HADOOP_VERSION=$($MVN help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
     | grep -v "INFO"\
     | tail -n 1)
 SPARK_HIVE=$($MVN help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ 2>/dev/null\
