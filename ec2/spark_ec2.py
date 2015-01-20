@@ -1082,11 +1082,11 @@ def real_main():
                     time.sleep(30)  # Yes, it does have to be this long :-(
                     for group in groups:
                         try:
-                            conn.delete_security_group(group.name)
-                            print "Deleted security group " + group.name
+                            conn.delete_security_group(group_id=group.id)
+                            print "Deleted security group %s, id %s" % (group.name, group.id)
                         except boto.exception.EC2ResponseError:
                             success = False
-                            print "Failed to delete security group " + group.name
+                            print "Failed to delete security group %s, id %s" % (group.name, group.id)
 
                     # Unfortunately, group.revoke() returns True even if a rule was not
                     # deleted, so this needs to be rerun if something fails
