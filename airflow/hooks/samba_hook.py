@@ -2,7 +2,7 @@ import os
 from smbclient import SambaClient
 
 from airflow import settings
-from airflow.models import DatabaseConnection
+from airflow.models import Connection
 
 
 class SambaHook(object):
@@ -10,11 +10,11 @@ class SambaHook(object):
     Allows for interaction with an samba server.
     '''
 
-    def __init__(self, samba_dbid=None):
+    def __init__(self, samba_conn_id=None):
         session = settings.Session()
         samba_conn = session.query(
-            DatabaseConnection).filter(
-                DatabaseConnection.db_id == samba_dbid).first()
+            Connection).filter(
+                Connection.conn_id == samba_conn_id).first()
         if not samba_conn:
             raise Exception("The samba id you provided isn't defined")
         self.host = samba_conn.host

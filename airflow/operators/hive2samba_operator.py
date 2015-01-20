@@ -30,7 +30,7 @@ class Hive2SambaOperator(BaseOperator):
             self, hql,
             samba_dbid,
             destination_filepath,
-            hive_dbid=conf.get('hooks', 'HIVE_DEFAULT_DBID'),
+            hive_dbid=conf.get('hooks', 'HIVE_DEFAULT_CONN_ID'),
             *args, **kwargs):
         super(Hive2SambaOperator, self).__init__(*args, **kwargs)
 
