@@ -1130,6 +1130,18 @@ class RDD(object):
             return rs[0]
         raise ValueError("RDD is empty")
 
+    def isEmpty(self):
+        """
+        Returns true if and only if the RDD contains no elements at all. Note that an RDD
+        may be empty even when it has at least 1 partition.
+
+        >>> sc.parallelize([]).isEmpty()
+        True
+        >>> sc.parallelize([1]).isEmpty()
+        False
+        """
+        return self._jrdd.partitions().size() == 0 or len(self.take(1)) == 0
+
     def saveAsNewAPIHadoopDataset(self, conf, keyConverter=None, valueConverter=None):
         """
         Output a Python RDD of key-value pairs (of form C{RDD[(K, V)]}) to any Hadoop file
