@@ -55,11 +55,11 @@ sealed trait Vector extends Serializable {
         if (this.size != v2.size) return false
         (this, v2) match {
           case (s1: SparseVector, s2: SparseVector) =>
-            Vectors.getEquality(s1.indices, s1.values, s2.indices, s2.values)
+            Vectors.equals(s1.indices, s1.values, s2.indices, s2.values)
           case (s1: SparseVector, d1: DenseVector) =>
-            Vectors.getEquality(s1.indices, s1.values, 0 until d1.size, d1.values)
+            Vectors.equals(s1.indices, s1.values, 0 until d1.size, d1.values)
           case (d1: DenseVector, s1: SparseVector) =>
-            Vectors.getEquality(0 until d1.size, d1.values, s1.indices, s1.values)
+            Vectors.equals(0 until d1.size, d1.values, s1.indices, s1.values)
           case (_, _) => util.Arrays.equals(this.toArray, v2.toArray)
         }
       }
@@ -419,7 +419,7 @@ object Vectors {
   /**
    * Check equality between sparse/dense vectors
    */
-  private[mllib] def getEquality(
+  private[mllib] def equals(
       v1Indices: IndexedSeq[Int],
       v1Values: Array[Double],
       v2Indices: IndexedSeq[Int],
