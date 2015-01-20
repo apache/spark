@@ -121,6 +121,8 @@ pre {
 }
 
 .description-input {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
   background: #f9f9f9 !important;
   border-style: none !important;
   width: 95%;
