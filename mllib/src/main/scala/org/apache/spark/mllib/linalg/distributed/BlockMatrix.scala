@@ -215,6 +215,7 @@ class BlockMatrix(
     new BDM[Double](localMat.numRows, localMat.numCols, localMat.toArray)
   }
 
+  /** Adds two block matrices together. */
   def add(other: BlockMatrix): BlockMatrix = {
     if (checkPartitioning(other, OperationNames.add)) {
       val addedBlocks = rdd.zip(other.rdd).map{ case (a, b) =>
@@ -228,6 +229,7 @@ class BlockMatrix(
     }
   }
 
+  /** Left multiplies this `BlockMatrix` to `other`, another `BlockMatrix`. */
   def multiply(other: BlockMatrix): BlockMatrix = {
     if (checkPartitioning(other, OperationNames.multiply)) {
       val otherPartitioner = other.partitioner
