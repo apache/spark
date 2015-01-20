@@ -33,6 +33,10 @@ object Analytics extends Logging {
     if (args.length < 2) {
       System.err.println(
         "Usage: Analytics <taskType> <file> --numEPart=<num_edge_partitions> [other options]")
+      System.err.println("Supported 'taskType' as follows:")
+      System.err.println("  pagerank    Compute PageRank")
+      System.err.println("  cc          Compute the connected components of vertices")
+      System.err.println("  triangles   Count the number of triangles")
       System.exit(1)
     }
 

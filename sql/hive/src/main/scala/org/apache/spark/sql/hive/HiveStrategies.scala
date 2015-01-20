@@ -17,21 +17,24 @@
 
 package org.apache.spark.sql.hive
 
+import scala.collection.JavaConversions._
+
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.{SQLContext, SchemaRDD, Strategy}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GeneratePredicate
 import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.types.StringType
+import org.apache.spark.sql.execution.{DescribeCommand => RunnableDescribeCommand}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive
 import org.apache.spark.sql.hive.execution._
 import org.apache.spark.sql.parquet.ParquetRelation
-import org.apache.spark.sql.{SQLContext, SchemaRDD, Strategy}
+import org.apache.spark.sql.sources.CreateTableUsing
+import org.apache.spark.sql.types.StringType
 
-import scala.collection.JavaConversions._
 
 private[hive] trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
@@ -207,16 +210,26 @@ private[hive] trait HiveStrategies {
     }
   }
 
+  object HiveDDLStrategy extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case CreateTableUsing(tableName, userSpecifiedSchema, provider, false, options) =>
+        ExecutedCommand(
+          CreateMetastoreDataSource(tableName, userSpecifiedSchema, provider, options)) :: Nil
+
+      case _ => Nil
+    }
+  }
+
   case class HiveCommandStrategy(context: HiveContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case describe: logical.DescribeCommand =>
+      case describe: DescribeCommand =>
         val resolvedTable = context.executePlan(describe.table).analyzed
         resolvedTable match {
           case t: MetastoreRelation =>
             ExecutedCommand(
               DescribeHiveTableCommand(t, describe.output, describe.isExtended)) :: Nil
           case o: LogicalPlan =>
-            ExecutedCommand(DescribeCommand(planLater(o), describe.output)) :: Nil
+            ExecutedCommand(RunnableDescribeCommand(planLater(o), describe.output)) :: Nil
         }
 
       case _ => Nil

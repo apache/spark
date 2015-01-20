@@ -17,15 +17,11 @@
 
 package org.apache.spark.sql.json
 
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
-import org.apache.spark.sql.types.util.DataTypeConversions
-
 import java.io.StringWriter
+import java.sql.{Date, Timestamp}
 
 import scala.collection.Map
 import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
-import scala.math.BigDecimal
-import java.sql.{Date, Timestamp}
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.core.JsonFactory
@@ -34,8 +30,8 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.types._
 import org.apache.spark.Logging
 
 private[sql] object JsonRDD extends Logging {
@@ -246,7 +242,7 @@ private[sql] object JsonRDD extends Logging {
         // The value associated with the key is an array.
         // Handle inner structs of an array.
         def buildKeyPathForInnerStructs(v: Any, t: DataType): Seq[(String, DataType)] = t match {
-          case ArrayType(StructType(Nil), containsNull) => {
+          case ArrayType(e: StructType, containsNull) => {
             // The elements of this arrays are structs.
             v.asInstanceOf[Seq[Map[String, Any]]].flatMap(Option(_)).flatMap {
               element => allKeysWithValueTypes(element)
@@ -336,9 +332,9 @@ private[sql] object JsonRDD extends Logging {
     value match {
       case value: java.lang.Integer => Decimal(value)
       case value: java.lang.Long => Decimal(value)
-      case value: java.math.BigInteger => Decimal(BigDecimal(value))
+      case value: java.math.BigInteger => Decimal(new java.math.BigDecimal(value))
       case value: java.lang.Double => Decimal(value)
-      case value: java.math.BigDecimal => Decimal(BigDecimal(value))
+      case value: java.math.BigDecimal => Decimal(value)
     }
   }
 
@@ -449,7 +445,6 @@ private[sql] object JsonRDD extends Logging {
       case (FloatType, v: Float) => gen.writeNumber(v)
       case (DoubleType, v: Double) => gen.writeNumber(v)
       case (LongType, v: Long) => gen.writeNumber(v)
-      case (DecimalType(), v: scala.math.BigDecimal) => gen.writeNumber(v.bigDecimal)
       case (DecimalType(), v: java.math.BigDecimal) => gen.writeNumber(v)
       case (ByteType, v: Byte) => gen.writeNumber(v.toInt)
       case (BinaryType, v: Array[Byte]) => gen.writeBinary(v)

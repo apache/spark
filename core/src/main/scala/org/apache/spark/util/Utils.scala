@@ -246,8 +246,11 @@ private[spark] object Utils extends Logging {
     retval
   }
 
-  /** Create a temporary directory inside the given parent directory */
-  def createTempDir(root: String = System.getProperty("java.io.tmpdir")): File = {
+  /**
+   * Create a directory inside the given parent directory. The directory is guaranteed to be
+   * newly created, and is not marked for automatic deletion.
+   */
+  def createDirectory(root: String): File = {
     var attempts = 0
     val maxAttempts = 10
     var dir: File = null
@@ -265,6 +268,15 @@ private[spark] object Utils extends Logging {
       } catch { case e: SecurityException => dir = null; }
     }
 
+    dir
+  }
+
+  /**
+   * Create a temporary directory inside the given parent directory. The directory will be
+   * automatically deleted when the VM shuts down.
+   */
+  def createTempDir(root: String = System.getProperty("java.io.tmpdir")): File = {
+    val dir = createDirectory(root)
     registerShutdownDeleteDir(dir)
     dir
   }
@@ -689,7 +701,7 @@ private[spark] object Utils extends Logging {
     }
   }
 
-  private var customHostname: Option[String] = None
+  private var customHostname: Option[String] = sys.env.get("SPARK_LOCAL_HOSTNAME")
 
   /**
    * Allow setting a custom host name because when we run on Mesos we need to use the same
@@ -978,11 +990,12 @@ private[spark] object Utils extends Logging {
     for ((key, value) <- extraEnvironment) {
       environment.put(key, value)
     }
+
     val process = builder.start()
     new Thread("read stderr for " + command(0)) {
       override def run() {
         for (line <- Source.fromInputStream(process.getErrorStream).getLines()) {
-          System.err.println(line)
+          logInfo(line)
         }
       }
     }.start()
@@ -1077,7 +1090,7 @@ private[spark] object Utils extends Logging {
     var firstUserLine = 0
     var insideSpark = true
     var callStack = new ArrayBuffer[String]() :+ "<unknown>"
- 
+
     Thread.currentThread.getStackTrace().foreach { ste: StackTraceElement =>
       // When running under some profilers, the current stack trace might contain some bogus
       // frames. This is intended to ensure that we don't crash in these situations by
@@ -1677,17 +1690,15 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Default maximum number of retries when binding to a port before giving up.
+   * Maximum number of retries when binding to a port before giving up.
    */
-  val portMaxRetries: Int = {
-    if (sys.props.contains("spark.testing")) {
+  def portMaxRetries(conf: SparkConf): Int = {
+    val maxRetries = conf.getOption("spark.port.maxRetries").map(_.toInt)
+    if (conf.contains("spark.testing")) {
       // Set a higher number of retries for tests...
-      sys.props.get("spark.port.maxRetries").map(_.toInt).getOrElse(100)
+      maxRetries.getOrElse(100)
     } else {
-      Option(SparkEnv.get)
-        .flatMap(_.conf.getOption("spark.port.maxRetries"))
-        .map(_.toInt)
-        .getOrElse(16)
+      maxRetries.getOrElse(16)
     }
   }
 
@@ -1696,17 +1707,18 @@ private[spark] object Utils extends Logging {
    * Each subsequent attempt uses 1 + the port used in the previous attempt (unless the port is 0).
    *
    * @param startPort The initial port to start the service on.
-   * @param maxRetries Maximum number of retries to attempt.
-   *                   A value of 3 means attempting ports n, n+1, n+2, and n+3, for example.
    * @param startService Function to start service on a given port.
    *                     This is expected to throw java.net.BindException on port collision.
+   * @param conf A SparkConf used to get the maximum number of retries when binding to a port.
+   * @param serviceName Name of the service.
    */
   def startServiceOnPort[T](
       startPort: Int,
       startService: Int => (T, Int),
-      serviceName: String = "",
-      maxRetries: Int = portMaxRetries): (T, Int) = {
+      conf: SparkConf,
+      serviceName: String = ""): (T, Int) = {
     val serviceString = if (serviceName.isEmpty) "" else s" '$serviceName'"
+    val maxRetries = portMaxRetries(conf)
     for (offset <- 0 to maxRetries) {
       // Do not increment port if startPort is 0, which is treated as a special port
       val tryPort = if (startPort == 0) {
@@ -1830,24 +1842,63 @@ private[spark] object Utils extends Logging {
       sparkValue
     }
   }
+
+  /**
+   * Return a pair of host and port extracted from the `sparkUrl`.
+   *
+   * A spark url (`spark://host:port`) is a special URI that its scheme is `spark` and only contains
+   * host and port.
+   *
+   * @throws SparkException if `sparkUrl` is invalid.
+   */
+  def extractHostPortFromSparkUrl(sparkUrl: String): (String, Int) = {
+    try {
+      val uri = new java.net.URI(sparkUrl)
+      val host = uri.getHost
+      val port = uri.getPort
+      if (uri.getScheme != "spark" ||
+        host == null ||
+        port < 0 ||
+        (uri.getPath != null && !uri.getPath.isEmpty) || // uri.getPath returns "" instead of null
+        uri.getFragment != null ||
+        uri.getQuery != null ||
+        uri.getUserInfo != null) {
+        throw new SparkException("Invalid master URL: " + sparkUrl)
+      }
+      (host, port)
+    } catch {
+      case e: java.net.URISyntaxException =>
+        throw new SparkException("Invalid master URL: " + sparkUrl, e)
+    }
+  }
 }
 
 /**
  * A utility class to redirect the child process's stdout or stderr.
  */
-private[spark] class RedirectThread(in: InputStream, out: OutputStream, name: String)
+private[spark] class RedirectThread(
+    in: InputStream,
+    out: OutputStream,
+    name: String,
+    propagateEof: Boolean = false)
   extends Thread(name) {
 
   setDaemon(true)
   override def run() {
     scala.util.control.Exception.ignoring(classOf[IOException]) {
       // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-      val buf = new Array[Byte](1024)
-      var len = in.read(buf)
-      while (len != -1) {
-        out.write(buf, 0, len)
-        out.flush()
-        len = in.read(buf)
+      try {
+        val buf = new Array[Byte](1024)
+        var len = in.read(buf)
+        while (len != -1) {
+          out.write(buf, 0, len)
+          out.flush()
+          len = in.read(buf)
+        }
+      } finally {
+        if (propagateEof) {
+          out.close()
+        }
       }
     }
   }

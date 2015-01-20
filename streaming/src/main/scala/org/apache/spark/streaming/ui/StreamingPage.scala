@@ -67,6 +67,12 @@ private[ui] class StreamingPage(parent: StreamingTab)
       <li>
         <strong>Waiting batches: </strong>{listener.numUnprocessedBatches}
       </li>
+      <li>
+        <strong>Received records: </strong>{listener.numTotalReceivedRecords}
+      </li>
+      <li>
+        <strong>Processed records: </strong>{listener.numTotalProcessedRecords}
+      </li>
     </ul>
   }
 

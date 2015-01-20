@@ -19,7 +19,7 @@ import org.apache.spark.SPARK_VERSION
 /**
  *  Machinery for the asynchronous initialization of the repl.
  */
-trait SparkILoopInit {
+private[repl] trait SparkILoopInit {
   self: SparkILoop =>
 
   /** Print a welcome message */

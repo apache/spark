@@ -22,6 +22,7 @@ import java.io.File
 import com.google.common.io.Files
 import org.apache.spark.sql.{QueryTest, _}
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.types._
 
 /* Implicits */
 import org.apache.spark.sql.hive.test.TestHive._
