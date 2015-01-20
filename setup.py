@@ -7,7 +7,7 @@ from setuptools import setup, find_packages
 setup(
     name='airflow',
     description='programmatically author, schedule and monitor data pipelines',
-    version='0.1',
+    version='0.2',
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
@@ -28,5 +28,5 @@ setup(
     author='Maxime Beauchemin',
     author_email='maximebeauchemin@gmail.com',
     url='https://github.com/mistercrunch/Airflow',
-    download_url='https://github.com/mistercrunch/Airflow/tarball/0.1',
+    download_url='https://github.com/mistercrunch/Airflow/tarball/0.2',
 )
