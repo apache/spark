@@ -176,10 +176,12 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
         {if (hasInput) Seq(("Input", "")) else Nil} ++
         {if (hasOutput) Seq(("Output", "")) else Nil} ++
-        {if (hasShuffleRead)
+        {if (hasShuffleRead) {
           Seq(("Shuffle Read Blocked Time", TaskDetailsClassNames.SHUFFLE_READ_BLOCKED_TIME),
             ("Shuffle Read", ""))
-          else Nil} ++
+        } else {
+          Nil
+        }} ++
         {if (hasShuffleWrite) Seq(("Write Time", ""), ("Shuffle Write", "")) else Nil} ++
         {if (hasBytesSpilled) Seq(("Shuffle Spill (Memory)", ""), ("Shuffle Spill (Disk)", ""))
           else Nil} ++
