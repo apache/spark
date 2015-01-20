@@ -46,7 +46,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
       predicate: Predicate,
       filterClass: Class[_ <: FilterPredicate],
       checker: (SchemaRDD, Any) => Unit,
-      expectedResult: => Any): Unit = {
+      expectedResult: Any): Unit = {
     withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED -> "true") {
       val query = rdd.select(output.map(_.attr): _*).where(predicate)
 
@@ -65,11 +65,20 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
     }
   }
 
-  private def checkFilterPushdown
+  private def checkFilterPushdown1
       (rdd: SchemaRDD, output: Symbol*)
       (predicate: Predicate, filterClass: Class[_ <: FilterPredicate])
-      (expectedResult: => Any): Unit = {
-    checkFilterPushdown(rdd, output, predicate, filterClass, checkAnswer _, expectedResult)
+      (expectedResult: => Seq[Row]): Unit = {
+    checkFilterPushdown(rdd, output, predicate, filterClass,
+      (query, expected) => checkAnswer(query, expected.asInstanceOf[Seq[Row]]), expectedResult)
+  }
+
+  private def checkFilterPushdown
+    (rdd: SchemaRDD, output: Symbol*)
+      (predicate: Predicate, filterClass: Class[_ <: FilterPredicate])
+      (expectedResult: Int): Unit = {
+    checkFilterPushdown(rdd, output, predicate, filterClass,
+      (query, expected) => checkAnswer(query, expected.asInstanceOf[Seq[Row]]), Seq(Row(expectedResult)))
   }
 
   def checkBinaryFilterPushdown
@@ -89,27 +98,25 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
 
   test("filter pushdown - boolean") {
     withParquetRDD((true :: false :: Nil).map(b => Tuple1.apply(Option(b)))) { rdd =>
-      checkFilterPushdown(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.Boolean]])(Seq.empty[Row])
-      checkFilterPushdown(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.Boolean]]) {
+      checkFilterPushdown1(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.Boolean]])(Seq.empty[Row])
+      checkFilterPushdown1(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.Boolean]]) {
         Seq(Row(true), Row(false))
       }
 
-      checkFilterPushdown(rdd, '_1)('_1 === true, classOf[Eq[java.lang.Boolean]])(true)
-      checkFilterPushdown(rdd, '_1)('_1 !== true, classOf[Operators.NotEq[java.lang.Boolean]]) {
-        false
-      }
+      checkFilterPushdown1(rdd, '_1)('_1 === true, classOf[Eq[java.lang.Boolean]])(Seq(Row(true)))
+      checkFilterPushdown1(rdd, '_1)('_1 !== true, classOf[Operators.NotEq[java.lang.Boolean]])(Seq(Row(false)))
     }
   }
 
   test("filter pushdown - integer") {
     withParquetRDD((1 to 4).map(i => Tuple1(Option(i)))) { rdd =>
-      checkFilterPushdown(rdd, '_1)('_1.isNull, classOf[Eq[Integer]])(Seq.empty[Row])
-      checkFilterPushdown(rdd, '_1)('_1.isNotNull, classOf[NotEq[Integer]]) {
+      checkFilterPushdown1(rdd, '_1)('_1.isNull, classOf[Eq[Integer]])(Seq.empty[Row])
+      checkFilterPushdown1(rdd, '_1)('_1.isNotNull, classOf[NotEq[Integer]]) {
         (1 to 4).map(Row.apply(_))
       }
 
       checkFilterPushdown(rdd, '_1)('_1 === 1, classOf[Eq[Integer]])(1)
-      checkFilterPushdown(rdd, '_1)('_1 !== 1, classOf[Operators.NotEq[Integer]]) {
+      checkFilterPushdown1(rdd, '_1)('_1 !== 1, classOf[Operators.NotEq[Integer]]) {
         (2 to 4).map(Row.apply(_))
       }
 
@@ -126,7 +133,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
 
       checkFilterPushdown(rdd, '_1)(!('_1 < 4), classOf[Operators.GtEq[Integer]])(4)
       checkFilterPushdown(rdd, '_1)('_1 > 2 && '_1 < 4, classOf[Operators.And])(3)
-      checkFilterPushdown(rdd, '_1)('_1 < 2 || '_1 > 3, classOf[Operators.Or]) {
+      checkFilterPushdown1(rdd, '_1)('_1 < 2 || '_1 > 3, classOf[Operators.Or]) {
         Seq(Row(1), Row(4))
       }
     }
@@ -134,13 +141,13 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
 
   test("filter pushdown - long") {
     withParquetRDD((1 to 4).map(i => Tuple1(Option(i.toLong)))) { rdd =>
-      checkFilterPushdown(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.Long]])(Seq.empty[Row])
-      checkFilterPushdown(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.Long]]) {
+      checkFilterPushdown1(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.Long]])(Seq.empty[Row])
+      checkFilterPushdown1(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.Long]]) {
         (1 to 4).map(Row.apply(_))
       }
 
       checkFilterPushdown(rdd, '_1)('_1 === 1, classOf[Eq[java.lang.Long]])(1)
-      checkFilterPushdown(rdd, '_1)('_1 !== 1, classOf[Operators.NotEq[java.lang.Long]]) {
+      checkFilterPushdown1(rdd, '_1)('_1 !== 1, classOf[Operators.NotEq[java.lang.Long]]) {
         (2 to 4).map(Row.apply(_))
       }
 
@@ -157,7 +164,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
 
       checkFilterPushdown(rdd, '_1)(!('_1 < 4), classOf[Operators.GtEq[java.lang.Long]])(4)
       checkFilterPushdown(rdd, '_1)('_1 > 2 && '_1 < 4, classOf[Operators.And])(3)
-      checkFilterPushdown(rdd, '_1)('_1 < 2 || '_1 > 3, classOf[Operators.Or]) {
+      checkFilterPushdown1(rdd, '_1)('_1 < 2 || '_1 > 3, classOf[Operators.Or]) {
         Seq(Row(1), Row(4))
       }
     }
@@ -165,13 +172,13 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
 
   test("filter pushdown - float") {
     withParquetRDD((1 to 4).map(i => Tuple1(Option(i.toFloat)))) { rdd =>
-      checkFilterPushdown(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.Float]])(Seq.empty[Row])
-      checkFilterPushdown(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.Float]]) {
+      checkFilterPushdown1(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.Float]])(Seq.empty[Row])
+      checkFilterPushdown1(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.Float]]) {
         (1 to 4).map(Row.apply(_))
       }
 
       checkFilterPushdown(rdd, '_1)('_1 === 1, classOf[Eq[java.lang.Float]])(1)
-      checkFilterPushdown(rdd, '_1)('_1 !== 1, classOf[Operators.NotEq[java.lang.Float]]) {
+      checkFilterPushdown1(rdd, '_1)('_1 !== 1, classOf[Operators.NotEq[java.lang.Float]]) {
         (2 to 4).map(Row.apply(_))
       }
 
@@ -188,7 +195,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
 
       checkFilterPushdown(rdd, '_1)(!('_1 < 4), classOf[Operators.GtEq[java.lang.Float]])(4)
       checkFilterPushdown(rdd, '_1)('_1 > 2 && '_1 < 4, classOf[Operators.And])(3)
-      checkFilterPushdown(rdd, '_1)('_1 < 2 || '_1 > 3, classOf[Operators.Or]) {
+      checkFilterPushdown1(rdd, '_1)('_1 < 2 || '_1 > 3, classOf[Operators.Or]) {
         Seq(Row(1), Row(4))
       }
     }
@@ -196,13 +203,13 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
 
   test("filter pushdown - double") {
     withParquetRDD((1 to 4).map(i => Tuple1(Option(i.toDouble)))) { rdd =>
-      checkFilterPushdown(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.Double]])(Seq.empty[Row])
-      checkFilterPushdown(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.Double]]) {
+      checkFilterPushdown1(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.Double]])(Seq.empty[Row])
+      checkFilterPushdown1(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.Double]]) {
         (1 to 4).map(Row.apply(_))
       }
 
       checkFilterPushdown(rdd, '_1)('_1 === 1, classOf[Eq[java.lang.Double]])(1)
-      checkFilterPushdown(rdd, '_1)('_1 !== 1, classOf[Operators.NotEq[java.lang.Double]]) {
+      checkFilterPushdown1(rdd, '_1)('_1 !== 1, classOf[Operators.NotEq[java.lang.Double]]) {
         (2 to 4).map(Row.apply(_))
       }
 
@@ -219,7 +226,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
 
       checkFilterPushdown(rdd, '_1)(!('_1 < 4), classOf[Operators.GtEq[java.lang.Double]])(4)
       checkFilterPushdown(rdd, '_1)('_1 > 2 && '_1 < 4, classOf[Operators.And])(3)
-      checkFilterPushdown(rdd, '_1)('_1 < 2 || '_1 > 3, classOf[Operators.Or]) {
+      checkFilterPushdown1(rdd, '_1)('_1 < 2 || '_1 > 3, classOf[Operators.Or]) {
         Seq(Row(1), Row(4))
       }
     }
@@ -227,30 +234,30 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
 
   test("filter pushdown - string") {
     withParquetRDD((1 to 4).map(i => Tuple1(i.toString))) { rdd =>
-      checkFilterPushdown(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.String]])(Seq.empty[Row])
-      checkFilterPushdown(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.String]]) {
+      checkFilterPushdown1(rdd, '_1)('_1.isNull, classOf[Eq[java.lang.String]])(Seq.empty[Row])
+      checkFilterPushdown1(rdd, '_1)('_1.isNotNull, classOf[NotEq[java.lang.String]]) {
         (1 to 4).map(i => Row.apply(i.toString))
       }
 
-      checkFilterPushdown(rdd, '_1)('_1 === "1", classOf[Eq[String]])("1")
-      checkFilterPushdown(rdd, '_1)('_1 !== "1", classOf[Operators.NotEq[String]]) {
+      checkFilterPushdown1(rdd, '_1)('_1 === "1", classOf[Eq[String]])(Seq(Row("1")))
+      checkFilterPushdown1(rdd, '_1)('_1 !== "1", classOf[Operators.NotEq[String]]) {
         (2 to 4).map(i => Row.apply(i.toString))
       }
 
-      checkFilterPushdown(rdd, '_1)('_1 <  "2", classOf[Lt  [java.lang.String]])("1")
-      checkFilterPushdown(rdd, '_1)('_1 >  "3", classOf[Gt  [java.lang.String]])("4")
-      checkFilterPushdown(rdd, '_1)('_1 <= "1", classOf[LtEq[java.lang.String]])("1")
-      checkFilterPushdown(rdd, '_1)('_1 >= "4", classOf[GtEq[java.lang.String]])("4")
+      checkFilterPushdown1(rdd, '_1)('_1 <  "2", classOf[Lt  [java.lang.String]])(Seq(Row("1")))
+      checkFilterPushdown1(rdd, '_1)('_1 >  "3", classOf[Gt  [java.lang.String]])(Seq(Row("4")))
+      checkFilterPushdown1(rdd, '_1)('_1 <= "1", classOf[LtEq[java.lang.String]])(Seq(Row("1")))
+      checkFilterPushdown1(rdd, '_1)('_1 >= "4", classOf[GtEq[java.lang.String]])(Seq(Row("4")))
 
-      checkFilterPushdown(rdd, '_1)(Literal("1") === '_1, classOf[Eq  [java.lang.String]])("1")
-      checkFilterPushdown(rdd, '_1)(Literal("2") >   '_1, classOf[Lt  [java.lang.String]])("1")
-      checkFilterPushdown(rdd, '_1)(Literal("3") <   '_1, classOf[Gt  [java.lang.String]])("4")
-      checkFilterPushdown(rdd, '_1)(Literal("1") >=  '_1, classOf[LtEq[java.lang.String]])("1")
-      checkFilterPushdown(rdd, '_1)(Literal("4") <=  '_1, classOf[GtEq[java.lang.String]])("4")
+      checkFilterPushdown1(rdd, '_1)(Literal("1") === '_1, classOf[Eq  [java.lang.String]])(Seq(Row("1")))
+      checkFilterPushdown1(rdd, '_1)(Literal("2") >   '_1, classOf[Lt  [java.lang.String]])(Seq(Row("1")))
+      checkFilterPushdown1(rdd, '_1)(Literal("3") <   '_1, classOf[Gt  [java.lang.String]])(Seq(Row("4")))
+      checkFilterPushdown1(rdd, '_1)(Literal("1") >=  '_1, classOf[LtEq[java.lang.String]])(Seq(Row("1")))
+      checkFilterPushdown1(rdd, '_1)(Literal("4") <=  '_1, classOf[GtEq[java.lang.String]])(Seq(Row("4")))
 
-      checkFilterPushdown(rdd, '_1)(!('_1 < "4"), classOf[Operators.GtEq[java.lang.String]])("4")
-      checkFilterPushdown(rdd, '_1)('_1 > "2" && '_1 < "4", classOf[Operators.And])("3")
-      checkFilterPushdown(rdd, '_1)('_1 < "2" || '_1 > "3", classOf[Operators.Or]) {
+      checkFilterPushdown1(rdd, '_1)(!('_1 < "4"), classOf[Operators.GtEq[java.lang.String]])(Seq(Row("4")))
+      checkFilterPushdown1(rdd, '_1)('_1 > "2" && '_1 < "4", classOf[Operators.And])(Seq(Row("3")))
+      checkFilterPushdown1(rdd, '_1)('_1 < "2" || '_1 > "3", classOf[Operators.Or]) {
         Seq(Row("1"), Row("4"))
       }
     }

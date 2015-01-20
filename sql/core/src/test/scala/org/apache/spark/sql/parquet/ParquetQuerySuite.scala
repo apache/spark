@@ -28,7 +28,7 @@ import parquet.hadoop.util.ContextUtil
 import parquet.io.api.Binary
 
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Row => _, _}
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
@@ -191,8 +191,8 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
       sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
-      (5, "val_5") ::
-      (7, "val_7") :: Nil)
+      Row(5, "val_5") ::
+      Row(7, "val_7") :: Nil)
 
     Utils.deleteRecursively(file)
 
@@ -207,8 +207,8 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
       sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
-      (5, "val_5") ::
-      (7, "val_7") :: Nil)
+      Row(5, "val_5") ::
+        Row(7, "val_7") :: Nil)
 
     Utils.deleteRecursively(file)
 
@@ -223,8 +223,8 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
       sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
-      (5, "val_5") ::
-      (7, "val_7") :: Nil)
+      Row(5, "val_5") ::
+        Row(7, "val_7") :: Nil)
 
     Utils.deleteRecursively(file)
 
@@ -239,8 +239,8 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
       sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
-      (5, "val_5") ::
-      (7, "val_7") :: Nil)
+      Row(5, "val_5") ::
+        Row(7, "val_7") :: Nil)
 
     Utils.deleteRecursively(file)
 
@@ -255,8 +255,8 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     parquetFile(path).registerTempTable("tmp")
     checkAnswer(
       sql("SELECT key, value FROM tmp WHERE value = 'val_5' OR value = 'val_7'"),
-      (5, "val_5") ::
-      (7, "val_7") :: Nil)
+      Row(5, "val_5") ::
+        Row(7, "val_7") :: Nil)
 
     Utils.deleteRecursively(file)
 
@@ -303,7 +303,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     assert(result.size === 9, "self-join result has incorrect size")
     assert(result(0).size === 12, "result row has incorrect size")
     result.zipWithIndex.foreach {
-      case (row, index) => row.zipWithIndex.foreach {
+      case (row, index) => row.toSeq.zipWithIndex.foreach {
         case (field, column) => assert(field != null, s"self-join contains null value in row $index field $column")
       }
     }
@@ -423,7 +423,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val readFile = parquetFile(path)
 
     val rdd_saved = readFile.collect()
-    assert(rdd_saved(0) === Seq.fill(5)(null))
+    assert(rdd_saved(0) === Row(null, null, null, null, null))
     Utils.deleteRecursively(file)
     assert(true)
   }
@@ -438,7 +438,7 @@ class ParquetQuerySuite extends QueryTest with FunSuiteLike with BeforeAndAfterA
     val readFile = parquetFile(path)
 
     val rdd_saved = readFile.collect()
-    assert(rdd_saved(0) === Seq.fill(5)(null))
+    assert(rdd_saved(0) === Row(null, null, null, null, null))
     Utils.deleteRecursively(file)
     assert(true)
   }

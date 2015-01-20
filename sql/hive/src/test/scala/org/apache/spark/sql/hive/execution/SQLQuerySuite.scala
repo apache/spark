@@ -41,7 +41,7 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("CTAS with serde") {
-    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect
+    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect()
     sql(
       """CREATE TABLE ctas2
         | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
@@ -51,23 +51,23 @@ class SQLQuerySuite extends QueryTest {
         | AS
         |   SELECT key, value
         |   FROM src
-        |   ORDER BY key, value""".stripMargin).collect
+        |   ORDER BY key, value""".stripMargin).collect()
     sql(
       """CREATE TABLE ctas3
         | ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' LINES TERMINATED BY '\012'
         | STORED AS textfile AS
         |   SELECT key, value
         |   FROM src
-        |   ORDER BY key, value""".stripMargin).collect
+        |   ORDER BY key, value""".stripMargin).collect()
 
     // the table schema may like (key: integer, value: string)
     sql(
       """CREATE TABLE IF NOT EXISTS ctas4 AS
-        | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin).collect
+        | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin).collect()
     // do nothing cause the table ctas4 already existed.
     sql(
       """CREATE TABLE IF NOT EXISTS ctas4 AS
-        | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect
+        | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
 
     checkAnswer(
       sql("SELECT k, value FROM ctas1 ORDER BY k, value"),
@@ -89,7 +89,7 @@ class SQLQuerySuite extends QueryTest {
     intercept[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] {
       sql(
         """CREATE TABLE ctas4 AS
-          | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect
+          | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
     }
     checkAnswer(
       sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
@@ -126,7 +126,7 @@ class SQLQuerySuite extends QueryTest {
     sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil).registerTempTable("nested")
     checkAnswer(
       sql("SELECT f1.f2.f3 FROM nested"),
-      1)
+      Row(1))
     checkAnswer(sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested"),
       Seq.empty[Row])
     checkAnswer(
@@ -233,7 +233,7 @@ class SQLQuerySuite extends QueryTest {
         |  (s struct<innerStruct: struct<s1:string>,
         |            innerArray:array<int>,
         |            innerMap: map<string, int>>)
-      """.stripMargin).collect
+      """.stripMargin).collect()
 
     sql(
       """
@@ -243,7 +243,7 @@ class SQLQuerySuite extends QueryTest {
 
     checkAnswer(
       sql("SELECT * FROM nullValuesInInnerComplexTypes"),
-      Seq(Seq(Seq(null, null, null)))
+      Row(Row(null, null, null))
     )
 
     sql("DROP TABLE nullValuesInInnerComplexTypes")

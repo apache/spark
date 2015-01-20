@@ -272,9 +272,6 @@ package object dsl {
     def sfilter[T1](arg1: Symbol)(udf: (T1) => Boolean) =
       Filter(ScalaUdf(udf, BooleanType, Seq(UnresolvedAttribute(arg1.name))), logicalPlan)
 
-    def sfilter(dynamicUdf: (DynamicRow) => Boolean) =
-      Filter(ScalaUdf(dynamicUdf, BooleanType, Seq(WrapDynamic(logicalPlan.output))), logicalPlan)
-
     def sample(
         fraction: Double,
         withReplacement: Boolean = true,
