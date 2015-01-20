@@ -94,15 +94,14 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
         }
       }
 
+      val args = readArgs(numArgs, dis)
+
       val methods = cls.get.getMethods()
-      // TODO: We only use first method with the same name
       val selectedMethods = methods.filter(m => m.getName() == methodName)
       if (selectedMethods.length > 0) {
         val selectedMethod = selectedMethods.filter { x => 
-          x.getParameterTypes().length == numArgs
+          matchMethod(numArgs, args, x.getParameterTypes())
         }.head
-        val argTypes = selectedMethod.getParameterTypes()
-        val args = parseArgs(argTypes, dis)
 
         val ret = selectedMethod.invoke(obj, args:_*)
 
@@ -111,14 +110,11 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
         writeObject(dos, ret.asInstanceOf[AnyRef], objMap)
       } else if (methodName == "new") {
         // methodName should be "new" for constructor
-        // TODO: We only use the first constructor ?
         val ctor = cls.get.getConstructors().filter { x =>
-          x.getParameterTypes().length == numArgs
+          matchMethod(numArgs, args, x.getParameterTypes())
         }.head
 
-        val argTypes = ctor.getParameterTypes()
-        val params = parseArgs(argTypes, dis)
-        val obj = ctor.newInstance(params:_*)
+        val obj = ctor.newInstance(args:_*)
 
         writeInt(dos, 0)
         writeObject(dos, obj.asInstanceOf[AnyRef], objMap)
@@ -134,11 +130,35 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
     }
   }
 
-  def parseArgs(argTypes: Array[Class[_]], dis: DataInputStream): Array[java.lang.Object] =  {
-    // TODO: Check each parameter type to the R provided type
-    argTypes.map { arg =>
-      readObject(dis, objMap)
-    }.toArray
+  def readArgs(numArgs: Int, dis: DataInputStream): Array[java.lang.Object] =  {
+    val args = new Array[java.lang.Object](numArgs)
+    for (i <- 0 to numArgs - 1) {
+      args(i) = readObject(dis, objMap)
+    }
+    args
   }
 
+  def matchMethod(numArgs: Int, args: Array[java.lang.Object], parameterTypes: Array[Class[_]]): Boolean = {
+    if (parameterTypes.length != numArgs) {
+      return false
+    }
+    // Currently we do exact match. We may add type conversion later.
+    for (i <- 0 to numArgs - 1) {
+      val parameterType = parameterTypes(i)
+      var parameterWrapperType = parameterType
+
+      if (parameterType.isPrimitive()) {
+        parameterWrapperType = parameterType match {
+          case java.lang.Integer.TYPE => classOf[java.lang.Integer]
+          case java.lang.Double.TYPE => classOf[java.lang.Double]
+          case java.lang.Boolean.TYPE => classOf[java.lang.Boolean]
+          case _ => parameterType
+        }
+      }
+      if(!parameterWrapperType.isInstance(args(i))) {
+        return false
+      }
+    }
+    return true
+  }
 }
