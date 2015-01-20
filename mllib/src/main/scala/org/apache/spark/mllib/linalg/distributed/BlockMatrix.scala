@@ -172,13 +172,13 @@ class BlockMatrix(
   }
 
   /** Cache the underlying RDD. */
-  def cache(): DistributedMatrix = {
+  def cache(): BlockMatrix = {
     rdd.cache()
     this
   }
 
   /** Set the storage level for the underlying RDD. */
-  def persist(storageLevel: StorageLevel): DistributedMatrix = {
+  def persist(storageLevel: StorageLevel): BlockMatrix = {
     rdd.persist(storageLevel)
     this
   }
