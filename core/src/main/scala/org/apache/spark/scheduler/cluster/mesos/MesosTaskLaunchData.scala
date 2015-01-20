@@ -34,8 +34,8 @@ private[spark] case class MesosTaskLaunchData(
     val dataBuffer = ByteBuffer.allocate(4 + serializedTask.limit)
     dataBuffer.putInt(attemptNumber)
     dataBuffer.put(serializedTask)
-    logDebug(s"ByteBuffer size: [${dataBuffer.remaining}]")
     dataBuffer.rewind
+    logDebug(s"ByteBuffer size: [${dataBuffer.remaining}]")
     ByteString.copyFrom(dataBuffer)
   }
 }
