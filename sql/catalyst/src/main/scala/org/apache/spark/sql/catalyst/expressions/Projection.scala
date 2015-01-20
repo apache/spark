@@ -158,11 +158,11 @@ class JoinedRow extends Row {
     if ((row1 eq null) && (row2 eq null)) {
       "[ empty row ]"
     } else if (row1 eq null) {
-      "[" + row2.mkString(",") + "]"
+      row2.mkString("[", ",", "]")
     } else if (row2 eq null) {
-      "[" + row1.mkString(",") + "]"
+      row1.mkString("[", ",", "]")
     } else {
-      "[" + mkString(",") + "]"
+      mkString("[", ",", "]")
     }
   }
 }

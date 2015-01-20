@@ -297,7 +297,7 @@ private[hive] case class HiveGenericUdtf(
     val inputProjection = new InterpretedProjection(children)
     val collector = new UDTFCollector
     function.setCollector(collector)
-    function.process(wrap(inputProjection(input).toSeq, inputInspectors, udtInput))
+    function.process(wrap(inputProjection(input), inputInspectors, udtInput))
     collector.collectRows()
   }
 
@@ -360,7 +360,7 @@ private[hive] case class HiveUdafFunction(
   protected lazy val cached = new Array[AnyRef](exprs.length)
   
   def update(input: Row): Unit = {
-    val inputs = inputProjection(input).asInstanceOf[Seq[AnyRef]].toArray
+    val inputs = inputProjection(input)
     function.iterate(buffer, wrap(inputs, inspectors, cached))
   }
 }

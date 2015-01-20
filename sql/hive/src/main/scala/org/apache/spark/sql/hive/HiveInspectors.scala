@@ -475,9 +475,21 @@ private[hive] trait HiveInspectors {
   }
 
   def wrap(
-      row: Seq[Any],
+      row: Row,
       inspectors: Seq[ObjectInspector],
       cache: Array[AnyRef]): Array[AnyRef] = {
+    var i = 0
+    while (i < inspectors.length) {
+      cache(i) = wrap(row(i), inspectors(i))
+      i += 1
+    }
+    cache
+  }
+
+  def wrap(
+    row: Seq[Any],
+    inspectors: Seq[ObjectInspector],
+    cache: Array[AnyRef]): Array[AnyRef] = {
     var i = 0
     while (i < inspectors.length) {
       cache(i) = wrap(row(i), inspectors(i))
