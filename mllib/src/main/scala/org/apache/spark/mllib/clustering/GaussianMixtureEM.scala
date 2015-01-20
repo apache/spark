@@ -134,9 +134,7 @@ class GaussianMixtureEM private (
     // diagonal covariance matrices using component variances
     // derived from the samples    
     val (weights, gaussians) = initialModel match {
-      case Some(gmm) => (gmm.weight, gmm.mu.zip(gmm.sigma).map { case(mu, sigma) => 
-        new MultivariateGaussian(mu, sigma) 
-      })
+      case Some(gmm) => (gmm.weights, gmm.gaussians)
       
       case None => {
         val samples = breezeData.takeSample(withReplacement = true, k * nSamples, seed)
@@ -176,10 +174,7 @@ class GaussianMixtureEM private (
       iter += 1
     } 
     
-    // Need to convert the breeze matrices to MLlib matrices
-    val means = Array.tabulate(k) { i => gaussians(i).mu }
-    val sigmas = Array.tabulate(k) { i => gaussians(i).sigma }
-    new GaussianMixtureModel(weights, means, sigmas)
+    new GaussianMixtureModel(weights, gaussians)
   }
     
   /** Average of dense breeze vectors */
