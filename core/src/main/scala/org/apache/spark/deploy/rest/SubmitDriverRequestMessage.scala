@@ -83,6 +83,8 @@ private[spark] class SubmitDriverRequestMessage extends SubmitRestProtocolMessag
   SubmitDriverRequestField.ACTION,
   SubmitDriverRequestField.requiredFields) {
 
+  import SubmitDriverRequestField._
+
   // Ensure continuous range of app arg indices starting from 0
   override def validate(): this.type = {
     import SubmitDriverRequestField._
@@ -92,6 +94,22 @@ private[spark] class SubmitDriverRequestMessage extends SubmitRestProtocolMessag
       throw new IllegalArgumentException(s"Malformed app arg indices: ${indices.mkString(",")}")
     }
     super.validate()
+  }
+
+  // List the fields in the following order:
+  // ACTION < SPARK_VERSION < * < APP_ARG < SPARK_PROPERTY < ENVIRONMENT_VARIABLE < MESSAGE
+  protected override def sortedFields: Seq[(SubmitRestProtocolField, String)] = {
+    fields.toSeq.sortBy { case (k, _) =>
+      k match {
+        case ACTION => 0
+        case SPARK_VERSION => 1
+        case APP_ARG(index) => 10 + index
+        case SPARK_PROPERTY(propKey) => 100
+        case ENVIRONMENT_VARIABLE(envKey) => 1000
+        case MESSAGE => Int.MaxValue
+        case _ => 2
+      }
+    }
   }
 }
 

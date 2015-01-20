@@ -24,7 +24,7 @@ import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonAST._
 
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
  * A field used in a SubmitRestProtocolMessage.
@@ -32,8 +32,9 @@ import org.apache.spark.util.Utils
  */
 private[spark] abstract class SubmitRestProtocolField
 private[spark] object SubmitRestProtocolField {
-  /** Return whether the provided field name refers to the ACTION field. */
   def isActionField(field: String): Boolean = field == "ACTION"
+  def isSparkVersionField(field: String): Boolean = field == "SPARK_VERSION"
+  def isMessageField(field: String): Boolean = field == "MESSAGE"
 }
 
 /**
@@ -125,23 +126,26 @@ private[spark] abstract class SubmitRestProtocolMessage(
 
   /** Return the JSON representation of this message. */
   def toJson: String = {
-    val stringFields = fields
+    val jsonFields = sortedFields
       .filter { case (_, v) => v != null }
-      .map { case (k, v) => (k.toString, v) }
-    val jsonFields = fieldsToJson(stringFields)
-    pretty(render(jsonFields))
+      .map { case (k, v) => JField(k.toString, JString(v)) }
+      .toList
+    pretty(render(JObject(jsonFields)))
   }
 
   /**
-   * Return the JSON representation of the message fields, putting ACTION first.
-   * This assumes that applying `org.apache.spark.util.JsonProtocol.mapFromJson`
-   * to the result yields the original input.
+   * Return a list of (field, value) pairs with the following ordering:
+   * ACTION < SPARK_VERSION < * < MESSAGE
    */
-  private def fieldsToJson(fields: Map[String, String]): JValue = {
-    val jsonFields = fields.toList
-      .sortBy { case (k, _) => if (isActionField(k)) 0 else 1 }
-      .map { case (k, v) => JField(k, JString(v)) }
-    JObject(jsonFields)
+  protected def sortedFields: Seq[(SubmitRestProtocolField, String)] = {
+    fields.toSeq.sortBy { case (k, _) =>
+      k.toString match {
+        case x if isActionField(x) => 0
+        case x if isSparkVersionField(x) => 1
+        case x if isMessageField(x) => Int.MaxValue
+        case _ => 2
+      }
+    }
   }
 }
 
@@ -155,7 +159,7 @@ private[spark] object SubmitRestProtocolMessage {
    * If such a field does not exist in the JSON, throw an exception.
    */
   def fromJson(json: String): SubmitRestProtocolMessage = {
-    val fields = org.apache.spark.util.JsonProtocol.mapFromJson(parse(json))
+    val fields = JsonProtocol.mapFromJson(parse(json))
     val action = fields
       .flatMap { case (k, v) => if (isActionField(k)) Some(v) else None }
       .headOption
