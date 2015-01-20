@@ -106,21 +106,13 @@ class BlockMatrix(
     this(numRowBlocks, numColBlocks, rdd)
     val part = new GridPartitioner(numRowBlocks, numColBlocks, rowsPerBlock,
       colsPerBlock, rdd.partitions.length)
-    setPartitioner(part)
+    partitioner = part
   }
 
   private[mllib] var partitioner: GridPartitioner = {
     val firstSubMatrix = rdd.first()._2
     new GridPartitioner(numRowBlocks, numColBlocks,
       firstSubMatrix.numRows, firstSubMatrix.numCols, rdd.partitions.length)
-  }
-
-  /**
-   * Set the partitioner for the matrix. For internal use only. Users should use `repartition`.
-   * @param part A partitioner that specifies how SubMatrices are stored in the cluster
-   */
-  private def setPartitioner(part: GridPartitioner): Unit = {
-    partitioner = part
   }
 
   private lazy val dims: (Long, Long) = getDim
