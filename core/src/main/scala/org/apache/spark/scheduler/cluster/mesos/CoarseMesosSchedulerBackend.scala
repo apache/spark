@@ -96,7 +96,7 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   override def start() {
     super.start()
-    
+
     synchronized {
       new Thread("CoarseMesosSchedulerBackend driver") {
         setDaemon(true)
