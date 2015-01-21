@@ -62,28 +62,49 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
   @SuppressWarnings("unchecked")
   private final T THIS = (T) this;
 
-  /** Set a custom JAVA_HOME for launching the Spark application. */
+  /**
+   * Set a custom JAVA_HOME for launching the Spark application.
+   *
+   * @param javaHome Path to the JAVA_HOME to use.
+   * @return This launcher.
+   */
   public T setJavaHome(String javaHome) {
     checkNotNull(javaHome, "javaHome");
     this.javaHome = javaHome;
     return THIS;
   }
 
-  /** Set a custom Spark installation location for the application. */
+  /**
+   * Set a custom Spark installation location for the application.
+   *
+   * @param sparkHome Path to the Spark installation to use.
+   * @return This launcher.
+   */
   public T setSparkHome(String sparkHome) {
     checkNotNull(sparkHome, "sparkHome");
     launcherEnv.put(ENV_SPARK_HOME, sparkHome);
     return THIS;
   }
 
-  /** Set a custom properties file with Spark configuration for the application. */
+  /**
+   * Set a custom properties file with Spark configuration for the application.
+   *
+   * @param path Path to custom properties file to use.
+   * @return This launcher.
+   */
   public T setPropertiesFile(String path) {
     checkNotNull(path, "path");
     this.propertiesFile = path;
     return THIS;
   }
 
-  /** Set a single configuration value for the application. */
+  /**
+   * Set a single configuration value for the application.
+   *
+   * @param key Configuration key.
+   * @param value The value to use.
+   * @return This launcher.
+   */
   public T setConf(String key, String value) {
     checkNotNull(key, "key");
     checkNotNull(value, "value");
@@ -117,7 +138,7 @@ public abstract class AbstractLauncher<T extends AbstractLauncher> extends Launc
   }
 
   /**
-   * Loads the configuration file for the application, if it exists. This is  either the
+   * Loads the configuration file for the application, if it exists. This is either the
    * user-specified properties file, or the spark-defaults.conf file under the Spark configuration
    * directory.
    */

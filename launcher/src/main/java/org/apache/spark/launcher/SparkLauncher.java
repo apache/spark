@@ -56,21 +56,36 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
     this.pyFiles = new ArrayList<String>();
   }
 
-  /** Set the application name. */
+  /**
+   * Set the application name.
+   *
+   * @param appName Application name.
+   * @return This launcher.
+   */
   public SparkLauncher setAppName(String appName) {
     checkNotNull(appName, "appName");
     this.appName = appName;
     return this;
   }
 
-  /** Set the Spark master for the application. */
+  /**
+   * Set the Spark master for the application.
+   *
+   * @param master Spark master.
+   * @return This launcher.
+   */
   public SparkLauncher setMaster(String master) {
     checkNotNull(master, "master");
     this.master = master;
     return this;
   }
 
-  /** Set the deploy mode for the application. */
+  /**
+   * Set the deploy mode for the application.
+   *
+   * @param mode Deploy mode.
+   * @return This launcher.
+   */
   public SparkLauncher setDeployMode(String mode) {
     checkNotNull(mode, "mode");
     this.deployMode = mode;
@@ -80,6 +95,9 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
   /**
    * Set the main application resource. This should be the location of a jar file for Scala/Java
    * applications, or a python script for PySpark applications.
+   *
+   * @param resource Path to the main application resource.
+   * @return This launcher.
    */
   public SparkLauncher setAppResource(String resource) {
     checkNotNull(resource, "resource");
@@ -87,14 +105,24 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
     return this;
   }
 
-  /** Sets the application class name for Java/Scala applications. */
+  /**
+   * Sets the application class name for Java/Scala applications.
+   *
+   * @param mainClass Application's main class.
+   * @return This launcher.
+   */
   public SparkLauncher setMainClass(String mainClass) {
     checkNotNull(mainClass, "mainClass");
     this.mainClass = mainClass;
     return this;
   }
 
-  /** Adds command line arguments for the application. */
+  /**
+   * Adds command line arguments for the application.
+   *
+   * @param args Arguments to pass to the application's main class.
+   * @return This launcher.
+   */
   public SparkLauncher addAppArgs(String... args) {
     for (String arg : args) {
       checkNotNull(arg, "arg");
@@ -103,28 +131,48 @@ public class SparkLauncher extends AbstractLauncher<SparkLauncher> {
     return this;
   }
 
-  /** Adds a jar file to be submitted with the application. */
+  /**
+   * Adds a jar file to be submitted with the application.
+   *
+   * @param jar Path to the jar file.
+   * @return This launcher.
+   */
   public SparkLauncher addJar(String jar) {
     checkNotNull(jar, "jar");
     jars.add(jar);
     return this;
   }
 
-  /** Adds a file to be submitted with the application. */
+  /**
+   * Adds a file to be submitted with the application.
+   *
+   * @param file Path to the file.
+   * @return This launcher.
+   */
   public SparkLauncher addFile(String file) {
     checkNotNull(file, "file");
     files.add(file);
     return this;
   }
 
-  /** Adds a python file / zip / egg to be submitted with the application. */
+  /**
+   * Adds a python file / zip / egg to be submitted with the application.
+   *
+   * @param file Path to the file.
+   * @return This launcher.
+   */
   public SparkLauncher addPyFile(String file) {
     checkNotNull(file, "file");
     pyFiles.add(file);
     return this;
   }
 
-  /** Enables verbose reporting for SparkSubmit. */
+  /**
+   * Enables verbose reporting for SparkSubmit.
+   *
+   * @param verbose Whether to enable verbose output.
+   * @return This launcher.
+   */
   public SparkLauncher setVerbose(boolean verbose) {
     this.verbose = verbose;
     return this;
