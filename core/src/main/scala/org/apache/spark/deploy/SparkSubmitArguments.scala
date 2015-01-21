@@ -23,6 +23,7 @@ import java.util.jar.JarFile
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
 import org.apache.spark.util.Utils
+import org.apache.spark.deploy.Action.Action
 
 /**
  * Parses and encapsulates arguments from the spark-submit script.
@@ -39,8 +40,6 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var driverExtraClassPath: String = null
   var driverExtraLibraryPath: String = null
   var driverExtraJavaOptions: String = null
-  var driverCores: String = null
-  var supervise: Boolean = false
   var queue: String = null
   var numExecutors: String = null
   var files: String = null
@@ -54,6 +53,23 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var isPython: Boolean = false
   var pyFiles: String = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
+
+  // Standalone cluster mode only
+  var supervise: Boolean = false
+  var driverCores: String = null
+  var driverToKill: String = null
+  var driverToRequestStatusFor: String = null
+
+  def action: Action = {
+    (driverToKill, driverToRequestStatusFor) match {
+      case (null, null) => Action.SUBMIT
+      case (_, null) => Action.KILL
+      case (null, _) => Action.REQUEST_STATUS
+      case _ => SparkSubmit.printErrorAndExit(
+        "Requested to both kill and request status for a driver. Choose only one.")
+        null // never reached
+    }
+  }
 
   /** Default properties present in the currently defined defaults file. */
   lazy val defaultSparkProperties: HashMap[String, String] = {
@@ -79,7 +95,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   // Use `sparkProperties` map along with env vars to fill in any missing parameters
   loadEnvironmentArguments()
 
-  checkRequiredArguments()
+  validateArguments()
 
   /**
    * Merge values from the default properties file with those specified through --conf.
@@ -171,7 +187,15 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   }
 
   /** Ensure that required fields exists. Call this only once all defaults are loaded. */
-  private def checkRequiredArguments(): Unit = {
+  private def validateArguments(): Unit = {
+    action match {
+      case Action.SUBMIT => validateSubmitArguments()
+      case Action.KILL => validateKillArguments()
+      case Action.REQUEST_STATUS => validateStatusRequestArguments()
+    }
+  }
+
+  private def validateSubmitArguments(): Unit = {
     if (args.length == 0) {
       printUsageAndExit(-1)
     }
@@ -203,6 +227,25 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         throw new Exception(s"When running with master '$master' " +
           "either HADOOP_CONF_DIR or YARN_CONF_DIR must be set in the environment.")
       }
+    }
+  }
+
+  private def validateKillArguments(): Unit = {
+    if (!master.startsWith("spark://") || deployMode != "cluster") {
+      SparkSubmit.printErrorAndExit("Killing drivers is only supported in standalone cluster mode")
+    }
+    if (driverToKill == null) {
+      SparkSubmit.printErrorAndExit("Please specify a driver to kill")
+    }
+  }
+
+  private def validateStatusRequestArguments(): Unit = {
+    if (!master.startsWith("spark://") || deployMode != "cluster") {
+      SparkSubmit.printErrorAndExit(
+        "Requesting driver statuses is only supported in standalone cluster mode")
+    }
+    if (driverToRequestStatusFor == null) {
+      SparkSubmit.printErrorAndExit("Please specify a driver to request status for")
     }
   }
 
@@ -312,6 +355,14 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         propertiesFile = value
         parse(tail)
 
+      case ("--kill") :: value :: tail =>
+        driverToKill = value
+        parse(tail)
+
+      case ("--status") :: value :: tail =>
+        driverToRequestStatusFor = value
+        parse(tail)
+
       case ("--supervise") :: tail =>
         supervise = true
         parse(tail)
@@ -410,6 +461,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         | Spark standalone with cluster deploy mode only:
         |  --driver-cores NUM          Cores for driver (Default: 1).
         |  --supervise                 If given, restarts the driver on failure.
+        |  --kill DRIVER_ID            If given, kills the driver specified.
+        |  --status DRIVER_ID          If given, requests the status of the driver specified.
         |
         | Spark standalone and Mesos only:
         |  --total-executor-cores NUM  Total cores for all executors.

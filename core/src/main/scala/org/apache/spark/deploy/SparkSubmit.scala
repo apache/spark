@@ -28,6 +28,15 @@ import org.apache.spark.util.Utils
 import org.apache.spark.deploy.rest.StandaloneRestClient
 
 /**
+ * Whether to submit, kill, or request the status of an application.
+ * The latter two operations are currently supported only for standalone cluster mode.
+ */
+private[spark] object Action extends Enumeration {
+  type Action = Value
+  val SUBMIT, KILL, REQUEST_STATUS = Value
+}
+
+/**
  * Main gateway of launching a Spark application.
  *
  * This program handles setting up the classpath with relevant Spark dependencies and provides
@@ -73,11 +82,30 @@ object SparkSubmit {
     if (appArgs.verbose) {
       printStream.println(appArgs)
     }
-    launch(appArgs)
+    appArgs.action match {
+      case Action.SUBMIT => submit(appArgs)
+      case Action.KILL => kill(appArgs)
+      case Action.REQUEST_STATUS => requestStatus(appArgs)
+    }
   }
 
   /**
-   * Launch the application using the provided parameters.
+   * Kill an existing driver using the stable REST protocol. Standalone cluster mode only.
+   */
+  private[spark] def kill(args: SparkSubmitArguments): Unit = {
+    new StandaloneRestClient().killDriver(args.master, args.driverToKill)
+  }
+
+  /**
+   * Request the status of an existing driver using the stable REST protocol.
+   * Standalone cluster mode only.
+   */
+  private[spark] def requestStatus(args: SparkSubmitArguments): Unit = {
+    new StandaloneRestClient().requestDriverStatus(args.master, args.driverToRequestStatusFor)
+  }
+
+  /**
+   * Submit the application using the provided parameters.
    *
    * This runs in two steps. First, we prepare the launch environment by setting up
    * the appropriate classpath, system properties, and application arguments for
@@ -89,7 +117,7 @@ object SparkSubmit {
    * main method of a child class. Instead, we pass the submit parameters directly to
    * a REST client, which will submit the application using the stable REST protocol.
    */
-  private[spark] def launch(args: SparkSubmitArguments): Unit = {
+  private[spark] def submit(args: SparkSubmitArguments): Unit = {
     // Environment needed to launch the child main class
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
