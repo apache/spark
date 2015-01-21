@@ -151,10 +151,10 @@ private[sql] object ParquetRelation {
    *
    * @param pathString The directory the Parquetfile will be stored in.
    * @param attributes The schema of the relation.
-   * @param overwrite  Overwrite the existed file path,
-   *                      If it's false, an exception will raise if the path already existed,
-   *                                     otherwise create a new file path.
-   *                      If it's true, we will remove the path if it's existed, and recreate it.
+   * @param overwrite Overwrite the existed file path:
+   *                    If it's false, an exception will raise if the path already existed,
+   *                      otherwise create a new file path.
+   *                    If it's true, we will remove the path if it's existed, and recreate it.
    * @param conf A configuration to be used.
    * @param sqlContext SQLContext
    * @return An empty ParquetRelation.
@@ -194,8 +194,7 @@ private[sql] object ParquetRelation {
           fs.delete(path, true)
         } catch {
           case e: IOException =>
-            throw new IOException(
-              s"Unable to clear output directory ${path}")
+            throw new IOException(s"Unable to clear output directory ${path}")
         }
       } else {
         sys.error(s"File ${path} already exists.")

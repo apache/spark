@@ -81,7 +81,8 @@ private[sql] trait SchemaRDDLike {
    * Saves the contents of this `SchemaRDD` as a parquet file, preserving the schema.  Files that
    * are written out using this method can be read back in as a SchemaRDD using the `parquetFile`
    * function.
-   * @param path      The destination path.
+   *
+   * @param path The destination path.
    * @param overwrite If it's false, an exception will raise if the path already existed,
    *                  otherwise create it.
    *                  If it's true, we either create the specified path or overwrite
