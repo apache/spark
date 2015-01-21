@@ -93,7 +93,13 @@ class LDA private (
    *     - The 50/k is common in LDA libraries.
    *     - The +1 follows Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    */
-  def getTopicSmoothing: Double = topicSmoothing
+  def getTopicSmoothing: Double = {
+    if (this.topicSmoothing > 0) {
+      this.topicSmoothing
+    } else {
+      (50.0 / k) + 1.0
+    }
+  }
 
   def setTopicSmoothing(topicSmoothing: Double): this.type = {
     require(topicSmoothing > 0.0 || topicSmoothing == -1.0,
@@ -108,7 +114,7 @@ class LDA private (
   /**
    * Term smoothing parameter (commonly named "eta").
    *
-   * This is the parameter to the Dirichlet prior placed on the per-topic word distributions
+   * This is the parameter to the Dirichlet prior placed on the per-topic term distributions
    * (which are called "beta" in the original LDA paper by Blei et al., but are called "phi" in many
    *  later papers such as Asuncion et al., 2009.)
    *
@@ -121,7 +127,13 @@ class LDA private (
    *     - The 0.1 gives a small amount of smoothing.
    *     - The +1 follows Asuncion et al. (2009), who recommend a +1 adjustment for EM.
    */
-  def getTermSmoothing: Double = termSmoothing
+  def getTermSmoothing: Double = {
+    if (this.termSmoothing > 0) {
+      this.termSmoothing
+    } else {
+      1.1
+    }
+  }
 
   def setTermSmoothing(termSmoothing: Double): this.type = {
     require(termSmoothing > 0.0 || termSmoothing == -1.0,
@@ -160,17 +172,7 @@ class LDA private (
    * @return  Inferred LDA model
    */
   def run(documents: RDD[Document]): DistributedLDAModel = {
-    val topicSmoothing = if (this.topicSmoothing > 0) {
-      this.topicSmoothing
-    } else {
-      (50.0 / k) + 1.0
-    }
-    val termSmoothing = if (this.termSmoothing > 0) {
-      this.termSmoothing
-    } else {
-      1.1
-    }
-    var state = LDA.initialState(documents, k, topicSmoothing, termSmoothing, seed)
+    var state = LDA.initialState(documents, k, getTopicSmoothing, getTermSmoothing, seed)
     var iter = 0
     while (iter < maxIterations) {
       state = state.next()
@@ -390,14 +392,14 @@ object LDA {
    */
   private def computePTopic(
       docTopicCounts: TopicCounts,
-      wordTopicCounts: TopicCounts,
+      termTopicCounts: TopicCounts,
       totalTopicCounts: TopicCounts,
       vocabSize: Int,
       eta: Double,
       alpha: Double): TopicCounts = {
     val K = docTopicCounts.length
     val N_j = docTopicCounts.data
-    val N_w = wordTopicCounts.data
+    val N_w = termTopicCounts.data
     val N = totalTopicCounts.data
     val eta1 = eta - 1.0
     val alpha1 = alpha - 1.0

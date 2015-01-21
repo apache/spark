@@ -46,8 +46,8 @@ object LDAExample {
       input: Seq[String] = Seq.empty,
       k: Int = 20,
       maxIterations: Int = 10,
-      topicSmoothing: Double = 0.1,
-      termSmoothing: Double = 0.1,
+      topicSmoothing: Double = -1,
+      termSmoothing: Double = -1,
       vocabSize: Int = 10000,
       stopwordFile: String = "") extends AbstractParams[Params]
 
@@ -63,10 +63,10 @@ object LDAExample {
         .text(s"number of iterations of learning. default: ${defaultParams.maxIterations}")
         .action((x, c) => c.copy(maxIterations = x))
       opt[Double]("topicSmoothing")
-        .text(s"amount of topic smoothing to use.  default: ${defaultParams.topicSmoothing}")
+        .text(s"amount of topic smoothing to use (-1=auto).  default: ${defaultParams.topicSmoothing}")
         .action((x, c) => c.copy(topicSmoothing = x))
       opt[Double]("termSmoothing")
-        .text(s"amount of word smoothing to use.  default: ${defaultParams.termSmoothing}")
+        .text(s"amount of term (word) smoothing to use (-1=auto).  default: ${defaultParams.termSmoothing}")
         .action((x, c) => c.copy(termSmoothing = x))
       opt[Int]("vocabSize")
         .text(s"number of distinct word types to use, chosen by frequency." +
@@ -135,7 +135,7 @@ object LDAExample {
   }
 
   /**
-   * Load documents, tokenize them, create vocabulary, and prepare documents as word count vectors.
+   * Load documents, tokenize them, create vocabulary, and prepare documents as term count vectors.
    */
   private def preprocess(
       sc: SparkContext,
