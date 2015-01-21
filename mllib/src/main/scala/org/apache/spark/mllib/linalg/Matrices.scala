@@ -352,9 +352,6 @@ class SparseMatrix(
   override def toArray: Array[Double] = {
     val arr = new Array[Double](numRows * numCols)
     // if statement inside the loop would be expensive
-    def fillMatrixArray(i: Int, j: Int, ind: Int, v: Int): Unit = {
-
-    }
     if (!isTransposed) {
       var j = 0
       while (j < numCols) {
@@ -678,10 +675,11 @@ object Matrices {
   private[mllib] def fromBreeze(breeze: BM[Double]): Matrix = {
     breeze match {
       case dm: BDM[Double] =>
-        require(dm.majorStride == dm.rows,
-          "Do not support stride size different from the number of rows.")
-        new DenseMatrix(dm.rows, dm.cols, dm.data)
+        val mat = new DenseMatrix(dm.rows, dm.cols, dm.data)
+        mat.isTransposed = dm.isTranspose
+        mat
       case sm: BSM[Double] =>
+        // There is no isTranspose flag for sparse matrices in Breeze
         new SparseMatrix(sm.rows, sm.cols, sm.colPtrs, sm.rowIndices, sm.data)
       case _ =>
         throw new UnsupportedOperationException(
@@ -805,20 +803,18 @@ object Matrices {
         mat match {
           case spMat: SparseMatrix =>
             val data = new Array[(Int, Int, Double)](spMat.values.length)
-            def generateEntries(i: Int, j: Int, index: Int, v: Double): Unit = {
+            spMat.foreachActive { (i, j, index, v) =>
               data(index) = (i, j + startCol, v)
             }
-            spMat.foreachActive(generateEntries)
             startCol += nCols
             data
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
-            def generateEntries(i: Int, j: Int, index: Int, v: Double): Unit = {
+            dnMat.foreachActive { (i, j, index, v) =>
               if (v != 0.0) {
                 data.append((i, j + startCol, v))
               }
             }
-            dnMat.foreachActive(generateEntries)
             startCol += nCols
             data
         }
@@ -860,11 +856,10 @@ object Matrices {
       matrices.foreach { mat =>
         var j = 0
         val nRows = mat.numRows
-        def fillEntries(i: Int, j: Int, index: Int, v: Double): Unit = {
+        mat.foreachActive { (i, j, index, v) =>
           val indStart = j * numRows + startRow
           allValues(indStart + i) = v
         }
-        mat.foreachActive(fillEntries)
         startRow += nRows
       }
       new DenseMatrix(numRows, numCols, allValues)
@@ -875,20 +870,18 @@ object Matrices {
         mat match {
           case spMat: SparseMatrix =>
             val data = new Array[(Int, Int, Double)](spMat.values.length)
-            def generateEntries(i: Int, j: Int, index: Int, v: Double): Unit = {
+            spMat.foreachActive { (i, j, index, v) =>
               data(index) = (i + startRow, j, v)
             }
-            spMat.foreachActive(generateEntries)
             startRow += nRows
             data
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
-            def generateEntries(i: Int, j: Int, index: Int, v: Double): Unit = {
+            dnMat.foreachActive { (i, j, index, v) =>
               if (v != 0.0) {
                 data.append((i + startRow, j, v))
               }
             }
-            dnMat.foreachActive(generateEntries)
             startRow += nRows
             data
         }

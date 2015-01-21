@@ -187,6 +187,40 @@ class MatricesSuite extends FunSuite {
     assert(sAT.toDense().toBreeze === dATexpected.toBreeze)
   }
 
+  test("foreachActive") {
+    val m = 3
+    val n = 2
+    val values = Array(1.0, 2.0, 4.0, 5.0)
+    val allValues = Array(1.0, 2.0, 0.0, 0.0, 4.0, 5.0)
+    val colPtrs = Array(0, 2, 4)
+    val rowIndices = Array(0, 1, 1, 2)
+
+    val sp = new SparseMatrix(m, n, colPtrs, rowIndices, values)
+    val dn = new DenseMatrix(m, n, allValues)
+
+    val dnMap = scala.collection.mutable.Map[(Int, Int), Double]()
+    dn.foreachActive { (i, j, index, value) =>
+      dnMap.put((i, j), value)
+    }
+    assert(dnMap.size === 6)
+    assert(dnMap.get(0, 0) === Some(1.0))
+    assert(dnMap.get(1, 0) === Some(2.0))
+    assert(dnMap.get(2, 0) === Some(0.0))
+    assert(dnMap.get(0, 1) === Some(0.0))
+    assert(dnMap.get(1, 1) === Some(4.0))
+    assert(dnMap.get(2, 1) === Some(5.0))
+
+    val spMap = scala.collection.mutable.Map[Int, Double]()
+    sp.foreachActive { (i, j, index, value) =>
+      spMap.put(index, value)
+    }
+    assert(spMap.size === 4)
+    assert(spMap.get(0) === Some(1.0))
+    assert(spMap.get(1) === Some(2.0))
+    assert(spMap.get(2) === Some(4.0))
+    assert(spMap.get(3) === Some(5.0))
+  }
+
   test("horzcat, vertcat, eye, speye") {
     val m = 3
     val n = 2
