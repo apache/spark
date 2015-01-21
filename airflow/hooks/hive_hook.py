@@ -149,3 +149,24 @@ class HiveHook(BaseHook):
 
             self.hive._oprot.trans.close()
             return max([p.values[0] for p in parts])
+
+   def get_partitions(self, schema, table_name):
+        '''
+        Returns a list of all partitions in a table. Works only
+        for tables with less than 32767 (java short max val).
+        For subpartitionned table, the number might easily exceed this.
+        '''
+        self.hive._oprot.trans.open()
+        table = self.hive.get_table(dbname=schema, tbl_name=table_name)
+        if len(table.partitionKeys) == 0:
+            raise Exception("The table isn't partitionned")
+        elif len(table.partitionKeys) > 1:
+            raise Exception(
+                "The table is partitionned by multiple columns, "
+                "use a signal table!")
+        else:
+            parts = self.hive.get_partitions(
+                db_name=schema, tbl_name=table_name, max_parts=32767)
+
+            self.hive._oprot.trans.close()
+            return parts
