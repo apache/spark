@@ -18,7 +18,8 @@
 package org.apache.spark
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{HashMap, LinkedHashSet, SynchronizedMap}
+import scala.collection.concurrent.TrieMap
+import scala.collection.mutable.{HashMap, LinkedHashSet}
 import org.apache.spark.serializer.KryoSerializer
 
 /**
@@ -46,7 +47,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
 
-  private[spark] val settings = new HashMap[String, String] with SynchronizedMap[String, String]
+  private[spark] val settings = new TrieMap[String, String]()
 
   if (loadDefaults) {
     // Load any spark.* system properties
