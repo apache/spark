@@ -121,16 +121,11 @@ pre {
 }
 
 .description-input {
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
-  background: #f9f9f9 !important;
-  border-style: none !important;
-  width: 95%;
-  display: block !important;
-  margin-bottom: 0px !important;
-  padding-left: 0px !important;
-  cursor: text !important;
-  box-shadow: none !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  white-space: nowrap;
+  display: block;
 }
 
 .stacktrace-details {

@@ -60,14 +60,12 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val formattedSubmissionTime = job.startTime.map(UIUtils.formatDate).getOrElse("Unknown")
       val detailUrl =
         "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), job.jobId)
-
       <tr>
         <td sorttable_customkey={job.jobId.toString}>
           {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
         </td>
         <td>
-          <input class="description-input" title={lastStageDescription} type="text"
-                 name="StageDescription" disabled="false" value={lastStageDescription}/>
+          <span class="description-input" title={lastStageDescription}>{lastStageDescription}</span>
           <a href={detailUrl}>{lastStageName}</a>
         </td>
         <td sorttable_customkey={job.startTime.getOrElse(-1).toString}>
