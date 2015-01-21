@@ -540,8 +540,8 @@ private[master] class Master(
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
     if (spreadOutApps) {
-      // Try to spread out each app among all the workers, until it has all its cores
-      for (app <- waitingApps if app.coresLeft > 0) {
+      // Try to spread out each app among all the nodes, until it has all its cores
+      for (app <- waitingApps if app.coresLeft >= app.desc.coreNumPerTask) {
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
             worker.coresFree >= app.desc.coresPerExecutor.getOrElse(1))
@@ -550,10 +550,10 @@ private[master] class Master(
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
         var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
         var pos = 0
-        while (toAssign > 0) {
-          if (usableWorkers(pos).coresFree - assigned(pos) > 0) {
-            toAssign -= 1
-            assigned(pos) += 1
+        while (toAssign >= app.desc.coreNumPerTask) {
+          if (usableWorkers(pos).coresFree - assigned(pos) >= app.desc.coreNumPerTask) {
+            toAssign -= app.desc.coreNumPerTask
+            assigned(pos) += app.desc.coreNumPerTask
           }
           pos = (pos + 1) % numUsable
         }

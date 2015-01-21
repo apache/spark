@@ -33,6 +33,8 @@ private[spark] class ApplicationDescription(
 
   val user = System.getProperty("user.name", "<unknown>")
 
+  var coreNumPerTask = 1
+
   def copy(
       name: String = name,
       maxCores: Option[Int] = maxCores,

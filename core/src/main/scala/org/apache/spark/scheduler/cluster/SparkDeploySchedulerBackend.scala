@@ -85,6 +85,11 @@ private[spark] class SparkDeploySchedulerBackend(
     val coresPerExecutor = conf.getOption("spark.executor.cores").map(_.toInt)
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory,
       command, appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor)
+    appDesc.coreNumPerTask = scheduler.CPUS_PER_TASK
+    if (appDesc.coreNumPerTask < 1) {
+      throw new IllegalArgumentException("spark.task.cpus is set to an invalid value " +
+        s"${appDesc.coreNumPerTask}")
+    }
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
     waitForRegistration()
