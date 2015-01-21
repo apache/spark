@@ -85,17 +85,13 @@ def run(args):
     # TODO: add run_local and fire it with the right executor from run
     ti = TaskInstance(task, args.execution_date)
 
-    # This is enough to fail the task instance
-    def signal_handler(signum, frame):
-        logging.error("SIGINT (ctrl-c) received".format(args.task_id))
-        ti.error(args.execution_date)
-        sys.exit()
-    signal.signal(signal.SIGINT, signal_handler)
 
-    ti.run(
+    run_job = jobs.LocalTaskJob(
+        task_instance=ti,
         mark_success=args.mark_success,
         force=args.force,
         ignore_dependencies=args.ignore_dependencies)
+    run_job.run()
 
 
 def list_dags(args):
@@ -166,7 +162,6 @@ def webserver(args):
                 host=args.hostname, port=args.port))
         from tornado.httpserver import HTTPServer
         from tornado.ioloop import IOLoop
-        from tornado import log
         from tornado.wsgi import WSGIContainer
 
         # simple multi-process server
