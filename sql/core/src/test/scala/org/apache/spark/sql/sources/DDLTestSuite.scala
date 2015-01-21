@@ -24,8 +24,8 @@ class DDLScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-      SimpleDDLScan(parameters("from").toInt, parameters("TO").toInt)(sqlContext)
-    }
+    SimpleDDLScan(parameters("from").toInt, parameters("TO").toInt)(sqlContext)
+  }
 }
 
 case class SimpleDDLScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
@@ -50,14 +50,15 @@ case class SimpleDDLScan(from: Int, to: Int)(@transient val sqlContext: SQLConte
       StructField("arrayType", ArrayType(StringType)),
       StructField("structType",
         StructType(StructField("f1",StringType) ::
-          (StructField("f2",IntegerType)) :: Nil
+          StructField("f2",IntegerType) :: Nil
         )
       )
     ))
 
 
-  override def buildScan() = sqlContext.sparkContext.parallelize(from to to).
-    map(e => Row(s"people$e",e*2))
+  override def buildScan() = sqlContext.sparkContext.parallelize(from to to).map { e =>
+    Row(s"people$e", e * 2)
+  }
 }
 
 class DDLTestSuite extends DataSourceTest {

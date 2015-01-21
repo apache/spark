@@ -80,7 +80,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       }
       new SchemaRDD(this, basicPlan)
     } else {
-      sys.error(s"Unsupported SQL dialect: ${conf.dialect}.  Try 'sql' or 'hiveql'")
+      sys.error(s"Unsupported SQL dialect: ${conf.dialect}. Try 'sql' or 'hiveql'")
     }
   }
 
