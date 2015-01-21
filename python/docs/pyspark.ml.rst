@@ -34,4 +34,5 @@ pyspark.ml.classification module
 .. automodule:: pyspark.ml.classification
     :members:
     :undoc-members:
+    :inherited-members:
     :show-inheritance:

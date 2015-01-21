@@ -17,11 +17,13 @@
 
 from pyspark.sql import SchemaRDD, inherit_doc
 from pyspark.ml import Estimator, Transformer, _jvm
-from pyspark.ml.param import Param
+from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,\
+    HasRegParam
 
 
 @inherit_doc
-class LogisticRegression(Estimator):
+class LogisticRegression(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
+                         HasRegParam):
     """
     Logistic regression.
     """
@@ -29,31 +31,8 @@ class LogisticRegression(Estimator):
     # _java_class = "org.apache.spark.ml.classification.LogisticRegression"
 
     def __init__(self):
+        super(LogisticRegression, self).__init__()
         self._java_obj = _jvm().org.apache.spark.ml.classification.LogisticRegression()
-        self.maxIter = Param(self, "maxIter", "max number of iterations", 100)
-        self.regParam = Param(self, "regParam", "regularization constant", 0.1)
-        self.featuresCol = Param(self, "featuresCol", "features column name", "features")
-
-    def setMaxIter(self, value):
-        self._java_obj.setMaxIter(value)
-        return self
-
-    def getMaxIter(self):
-        return self._java_obj.getMaxIter()
-
-    def setRegParam(self, value):
-        self._java_obj.setRegParam(value)
-        return self
-
-    def getRegParam(self):
-        return self._java_obj.getRegParam()
-
-    def setFeaturesCol(self, value):
-        self._java_obj.setFeaturesCol(value)
-        return self
-
-    def getFeaturesCol(self):
-        return self._java_obj.getFeaturesCol()
 
     def fit(self, dataset, params=None):
         """

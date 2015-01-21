@@ -27,3 +27,9 @@ class Identifiable(object):
         #: A unique id for the object. The default implementation
         #: concatenates the class name, "-", and 8 random hex chars.
         self.uid = type(self).__name__ + "-" + uuid.uuid4().hex[:8]
+
+    def __str__(self):
+        return self.uid
+
+    def __repr__(self):
+        return str(self)

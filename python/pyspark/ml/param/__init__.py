@@ -19,7 +19,6 @@ from abc import ABCMeta
 
 from pyspark.ml.util import Identifiable
 
-
 __all__ = ["Param"]
 
 
@@ -29,16 +28,18 @@ class Param(object):
     """
 
     def __init__(self, parent, name, doc, defaultValue=None):
+        if not isinstance(parent, Identifiable):
+            raise ValueError("Parent must be identifiable but got type %s." % type(parent).__name__)
         self.parent = parent
-        self.name = name
-        self.doc = doc
+        self.name = str(name)
+        self.doc = str(doc)
         self.defaultValue = defaultValue
 
     def __str__(self):
-        return self.parent + "_" + self.name
+        return str(self.parent) + "_" + self.name
 
     def __repr__(self):
-        return self.parent + "_" + self.name
+        return str(self.parent) + "_" + self.name
 
 
 class Params(Identifiable):
@@ -49,10 +50,11 @@ class Params(Identifiable):
 
     __metaclass__ = ABCMeta
 
+    #: Internal param map.
+    paramMap = {}
+
     def __init__(self):
         super(Params, self).__init__()
-        #: Internal param map.
-        self.paramMap = {}
 
     def params(self):
         """
@@ -60,4 +62,4 @@ class Params(Identifiable):
         :py:func:`dir` to get all attributes of type
         :py:class:`Param`.
         """
-        return [attr for attr in dir(self) if isinstance(attr, Param)]
+        return filter(lambda x: isinstance(x, Param), map(lambda x: getattr(self, x), dir(self)))
