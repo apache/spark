@@ -59,8 +59,7 @@ class NaiveBayesModel private[mllib] (
   private val brzNegTheta: Option[BDM[Double]] = model match {
     case NaiveBayesModels.Multinomial => None
     case NaiveBayesModels.Bernoulli =>
-      val negTheta = brzLog((brzExp(brzTheta.copy) :*= (-1.0)) :+= 1.0)
-      //((x) => math.log(1.0 - math.exp(x))
+      val negTheta = brzLog((brzExp(brzTheta.copy) :*= (-1.0)) :+= 1.0) // log(1.0 - exp(x))
       Option(negTheta)
   }
 
