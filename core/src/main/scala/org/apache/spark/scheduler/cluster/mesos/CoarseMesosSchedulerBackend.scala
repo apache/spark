@@ -63,8 +63,15 @@ private[spark] class CoarseMesosSchedulerBackend(
   // Maximum number of cores to acquire (TODO: we'll need more flexible controls here)
   val maxCores = conf.get("spark.cores.max",  Int.MaxValue.toString).toInt
   
-  val coreNumPerTask = conf.getInt("spark.task.cpus", 1)
-  
+  val coreNumPerTask = {
+    val corePerTask = conf.getInt("spark.task.cpus", 1)
+    if (corePerTask < 1) {
+      throw new IllegalArgumentException(
+        s"spark.task.cpus is set to an invalid value $corePerTask")
+    }
+    corePerTask
+  }
+
   // Cores we have acquired with each Mesos task ID
   val coresByTaskId = new HashMap[Int, Int]
   var totalCoresAcquired = 0
@@ -89,11 +96,6 @@ private[spark] class CoarseMesosSchedulerBackend(
 
   override def start() {
     super.start()
-    
-    if (coreNumPerTask < 1) {
-      throw new IllegalArgumentException(
-        s"spark.task.cpus is set to an invalid value $coreNumPerTask")
-    }
     
     synchronized {
       new Thread("CoarseMesosSchedulerBackend driver") {

@@ -542,6 +542,7 @@ private[master] class Master(
     if (spreadOutApps) {
       // Try to spread out each app among all the nodes, until it has all its cores
       for (app <- waitingApps if app.coresLeft >= app.desc.coreNumPerTask) {
+        val coreNumPerTask = app.desc.coreNumPerTask
         val usableWorkers = workers.toArray.filter(_.state == WorkerState.ALIVE)
           .filter(worker => worker.memoryFree >= app.desc.memoryPerExecutorMB &&
             worker.coresFree >= app.desc.coresPerExecutor.getOrElse(1))
@@ -550,10 +551,10 @@ private[master] class Master(
         val assigned = new Array[Int](numUsable) // Number of cores to give on each node
         var toAssign = math.min(app.coresLeft, usableWorkers.map(_.coresFree).sum)
         var pos = 0
-        while (toAssign >= app.desc.coreNumPerTask) {
-          if (usableWorkers(pos).coresFree - assigned(pos) >= app.desc.coreNumPerTask) {
-            toAssign -= app.desc.coreNumPerTask
-            assigned(pos) += app.desc.coreNumPerTask
+        while (toAssign >= coreNumPerTask) {
+          if (usableWorkers(pos).coresFree - assigned(pos) >= coreNumPerTask) {
+            toAssign -= coreNumPerTask
+            assigned(pos) += coreNumPerTask
           }
           pos = (pos + 1) % numUsable
         }
