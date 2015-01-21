@@ -40,6 +40,7 @@ import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperat
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand, QueryExecutionException}
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTableCommand}
+import org.apache.spark.sql.hive.HiveQl.ParseException
 import org.apache.spark.sql.sources.DataSourceStrategy
 import org.apache.spark.sql.types._
 
@@ -70,8 +71,15 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     if (conf.dialect == "sql") {
       super.sql(sqlText)
     } else if (conf.dialect == "hiveql") {
-      new SchemaRDD(this, ddlParser(sqlText).getOrElse(HiveQl.parseSql(sqlText)))
-    }  else {
+      val ddlPlan = ddlParser(sqlText)
+      val basicPlan = try {
+        HiveQl.parseSql(sqlText)
+      }catch {
+        case e: Exception if ddlPlan.nonEmpty => ddlPlan.get
+        case e: Throwable => throw e
+      }
+      new SchemaRDD(this, basicPlan)
+    } else {
       sys.error(s"Unsupported SQL dialect: ${conf.dialect}.  Try 'sql' or 'hiveql'")
     }
   }

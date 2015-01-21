@@ -227,8 +227,9 @@ abstract class DataType {
   def json: String = compact(render(jsonValue))
 
   def prettyJson: String = pretty(render(jsonValue))
-}
 
+  def toSimpleString: String = typeName
+}
 
 /**
  * :: DeveloperApi ::
@@ -240,8 +241,8 @@ abstract class DataType {
 @DeveloperApi
 case object NullType extends DataType {
   override def defaultSize: Int = 1
+  override def toSimpleString = "null"
 }
-
 
 protected[sql] object NativeType {
   val all = Seq(
@@ -300,6 +301,8 @@ case object StringType extends NativeType with PrimitiveType {
    * The default size of a value of the StringType is 4096 bytes.
    */
   override def defaultSize: Int = 4096
+
+  override def toSimpleString = "string"
 }
 
 
@@ -329,6 +332,8 @@ case object BinaryType extends NativeType with PrimitiveType {
    * The default size of a value of the BinaryType is 4096 bytes.
    */
   override def defaultSize: Int = 4096
+
+  override def toSimpleString = "binary"
 }
 
 
@@ -349,6 +354,8 @@ case object BooleanType extends NativeType with PrimitiveType {
    * The default size of a value of the BooleanType is 1 byte.
    */
   override def defaultSize: Int = 1
+
+  override def toSimpleString = "boolean"
 }
 
 
@@ -374,6 +381,8 @@ case object TimestampType extends NativeType {
    * The default size of a value of the TimestampType is 8 bytes.
    */
   override def defaultSize: Int = 8
+
+  override def toSimpleString = "timestamp"
 }
 
 
@@ -399,6 +408,8 @@ case object DateType extends NativeType {
    * The default size of a value of the DateType is 8 bytes.
    */
   override def defaultSize: Int = 8
+
+  override def toSimpleString = "date"
 }
 
 
@@ -450,6 +461,8 @@ case object LongType extends IntegralType {
    * The default size of a value of the LongType is 8 bytes.
    */
   override def defaultSize: Int = 8
+
+  override def toSimpleString = "bigint"
 }
 
 
@@ -472,6 +485,8 @@ case object IntegerType extends IntegralType {
    * The default size of a value of the IntegerType is 4 bytes.
    */
   override def defaultSize: Int = 4
+
+  override def toSimpleString = "int"
 }
 
 
@@ -494,6 +509,8 @@ case object ShortType extends IntegralType {
    * The default size of a value of the ShortType is 2 bytes.
    */
   override def defaultSize: Int = 2
+
+  override def toSimpleString = "smallint"
 }
 
 
@@ -516,6 +533,8 @@ case object ByteType extends IntegralType {
    * The default size of a value of the ByteType is 1 byte.
    */
   override def defaultSize: Int = 1
+
+  override def toSimpleString = "tinyint"
 }
 
 
@@ -575,6 +594,11 @@ case class DecimalType(precisionInfo: Option[PrecisionInfo]) extends FractionalT
    * The default size of a value of the DecimalType is 4096 bytes.
    */
   override def defaultSize: Int = 4096
+
+  override def toSimpleString = precisionInfo match {
+    case Some(PrecisionInfo(precision, scale)) => s"decimal($precision,$scale)"
+    case None => "decimal(10,0)"
+  }
 }
 
 
@@ -630,6 +654,8 @@ case object DoubleType extends FractionalType {
    * The default size of a value of the DoubleType is 8 bytes.
    */
   override def defaultSize: Int = 8
+
+  override def toSimpleString = "double"
 }
 
 
@@ -653,6 +679,8 @@ case object FloatType extends FractionalType {
    * The default size of a value of the FloatType is 4 bytes.
    */
   override def defaultSize: Int = 4
+
+  override def toSimpleString = "float"
 }
 
 
@@ -697,6 +725,8 @@ case class ArrayType(elementType: DataType, containsNull: Boolean) extends DataT
    * (We assume that there are 100 elements).
    */
   override def defaultSize: Int = 100 * elementType.defaultSize
+
+  override def toSimpleString = s"array<${elementType.toSimpleString}>"
 }
 
 
@@ -871,6 +901,11 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
    * The default size of a value of the StructType is the total default sizes of all field types.
    */
   override def defaultSize: Int = fields.map(_.dataType.defaultSize).sum
+
+  override def toSimpleString = {
+    val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.toSimpleString}")
+    s"struct<${fieldTypes.mkString(",")}>"
+  }
 }
 
 
@@ -921,6 +956,8 @@ case class MapType(
    * (We assume that there are 100 elements).
    */
   override def defaultSize: Int = 100 * (keyType.defaultSize + valueType.defaultSize)
+
+  override def toSimpleString = s"map<${keyType.toSimpleString},${valueType.toSimpleString}>"
 }
 
 
