@@ -182,7 +182,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
     .setAppName(framework)
 
   // Timeout for use in ScalaTest `eventually` blocks
-  val eventuallyTimeout: PatienceConfiguration.Timeout = timeout(Span(10, ScalaTestSeconds))
+  val eventuallyTimeout: PatienceConfiguration.Timeout = timeout(Span(100, ScalaTestSeconds))
 
   // Default before function for any streaming test suite. Override this
   // if you want to add your stuff to "before" (i.e., don't call before { } )

@@ -160,6 +160,10 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     }
   }
 
+  def getMaxInputStreamRememberDuration(): Duration = {
+    inputStreams.map { _.rememberDuration }.maxBy { _.milliseconds }
+  }
+
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
     logDebug("DStreamGraph.writeObject used")

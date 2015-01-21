@@ -25,7 +25,7 @@ import akka.actor._
 
 import org.apache.spark.{Logging, SerializableWritable, SparkEnv, SparkException}
 import org.apache.spark.streaming.{StreamingContext, Time}
-import org.apache.spark.streaming.receiver.{Receiver, ReceiverSupervisorImpl, StopReceiver}
+import org.apache.spark.streaming.receiver.{CleanupOldBlocks, Receiver, ReceiverSupervisorImpl, StopReceiver}
 
 /**
  * Messages used by the NetworkReceiver and the ReceiverTracker to communicate
@@ -43,7 +43,6 @@ private[streaming] case class AddBlock(receivedBlockInfo: ReceivedBlockInfo)
 private[streaming] case class ReportError(streamId: Int, message: String, error: String)
 private[streaming] case class DeregisterReceiver(streamId: Int, msg: String, error: String)
   extends ReceiverTrackerMessage
-private[streaming] case class DeleteOldBatch(threshTime: Time) extends ReceiverTrackerMessage
 
 /**
  * This class manages the execution of the receivers of ReceiverInputDStreams. Instance of
@@ -119,25 +118,18 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
   }
 
-  /** Clean up metadata older than the given threshold time */
-  def cleanupOldMetadata(cleanupThreshTime: Time) {
+  /** Clean up the data and metadata of old blocks and batches */
+  def cleanupOldBlocksAndBatches(cleanupThreshTime: Time) {
+    // Clean up old block and batch metadata
     receivedBlockTracker.cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)
-  }
 
-  /**
-   * Clean up received batch data old than the given threshold time.
-   * This is specific for write ahead log based ReceivedBlockHandler,
-   * for the previous BlockManager based ReceivedBlockHandler, the previous clearMetadata() is
-   * enough to clean the old data.
-   */
-  def cleanupOldReceivedBatchData(cleanupThreshTime: Time): Unit = {
-    // Signal the receivers to delete old batches
+    // Signal the receivers to delete old block data
     if (ssc.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)) {
       logInfo(s"Cleanup old received batch data: $cleanupThreshTime")
       receiverInfo.values.flatMap { info => Option(info.actor) }
-        .foreach { _ ! DeleteOldBatch(cleanupThreshTime) }
-      }
+        .foreach { _ ! CleanupOldBlocks(cleanupThreshTime) }
     }
+  }
 
   /** Register a receiver */
   private def registerReceiver(

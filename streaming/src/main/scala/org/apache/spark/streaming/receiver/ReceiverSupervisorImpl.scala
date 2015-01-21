@@ -90,9 +90,9 @@ private[streaming] class ReceiverSupervisorImpl(
         case StopReceiver =>
           logInfo("Received stop signal")
           stop("Stopped by driver", None)
-        case DeleteOldBatch(threshTime) =>
+        case CleanupOldBlocks(threshTime) =>
           logDebug("Received delete old batch signal")
-          cleanupOldReceivedBatchData(threshTime)
+          cleanupOldBlocks(threshTime)
       }
 
       def ref = self
@@ -205,9 +205,8 @@ private[streaming] class ReceiverSupervisorImpl(
   /** Generate new block ID */
   private def nextBlockId = StreamBlockId(streamId, newBlockId.getAndIncrement)
 
-  private def cleanupOldReceivedBatchData(cleanupThreshTime: Time): Unit = {
-    logInfo("Received DeleteOldBatch message to clean up the related data older than" +
-      s"$cleanupThreshTime")
+  private def cleanupOldBlocks(cleanupThreshTime: Time): Unit = {
+    logDebug(s"Cleaning up blocks older then $cleanupThreshTime")
     receivedBlockHandler.cleanupOldBlocks(cleanupThreshTime.milliseconds)
   }
 }
