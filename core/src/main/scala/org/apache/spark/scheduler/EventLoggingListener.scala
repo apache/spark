@@ -87,13 +87,12 @@ private[spark] class EventLoggingListener(
    */
   def start() {
     try{
-        if(!fileSystem.getFileStatus(new Path(logBaseDir)).isDir()){
-          throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
+        if( !fileSystem.getFileStatus( new Path( logBaseDir ) ).isDir() ){
+          throw new IllegalArgumentException( s"Log directory $logBaseDir is not a directory." )
         }
         
-    }
-    catch{
-        case ioe: FileNotFoundException => fileSystem.mkdirs(new Path(logBaseDir))
+    }catch{
+        case ioe: FileNotFoundException => fileSystem.mkdirs( new Path( logBaseDir ) )
     }
 
     val workingPath = logPath + IN_PROGRESS
