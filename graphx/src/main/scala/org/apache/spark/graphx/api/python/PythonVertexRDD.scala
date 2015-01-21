@@ -36,7 +36,7 @@ private[graphx] class PythonVertexRDD(
     pythonExec: String,
     broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]],
-    targetStorageLevel : StorageLevel = StorageLevel.MEMORY_ONLY)
+    targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
   extends PythonRDD (parent.rdd, command, envVars,
                      pythonIncludes, preservePartitioning,
                      pythonExec, broadcastVars, accumulator) {
@@ -87,11 +87,10 @@ object PythonVertexRDD {
                      pythonExec: String,
                      broadcastVars: JList[Broadcast[PythonBroadcast]],
                      accumulator: Accumulator[JList[Array[Byte]]],
-                     targetStorageLevel : StorageLevel = StorageLevel.MEMORY_ONLY) = {
+                     targetStorageLevel : StorageLevel) = {
     System.out.println("DEBUG: in PythonVertexRDD:apply")
     new PythonVertexRDD(JavaRDD.fromRDD(parent), command, envVars, pythonIncludes,
-      preservePartitioning,
-      pythonExec, broadcastVars, accumulator, targetStorageLevel)
+      preservePartitioning, pythonExec, broadcastVars, accumulator, targetStorageLevel)
   }
 }
 

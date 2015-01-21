@@ -16,8 +16,9 @@
 #
 
 """
-Python bindings for GraphX.
+Python bindings for EdgeRDD in GraphX
 """
+
 import os
 import itertools
 from tempfile import NamedTemporaryFile

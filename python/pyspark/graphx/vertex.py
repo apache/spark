@@ -16,7 +16,7 @@
 #
 
 """
-Python bindings for GraphX.
+Python bindings for VertexRDD in GraphX
 """
 
 import itertools
@@ -25,6 +25,7 @@ from tempfile import NamedTemporaryFile
 from numpy.numarray.numerictypes import Long
 
 from py4j.java_collections import MapConverter, ListConverter
+import operator
 from pyspark.accumulators import PStatsParam
 from pyspark.rdd import PipelinedRDD
 from pyspark.serializers import CloudPickleSerializer, NoOpSerializer, AutoBatchedSerializer
@@ -36,21 +37,21 @@ __all__ = ["VertexRDD", "VertexId"]
 
 
 """
-Vertex id type is long by default.
-Defining a type for that enables
-us to override it in future if
-need be
+The default type of vertex id is Long
+A separate VertexId type is defined
+here so that other types can be used
+for vertex ids in future
 """
 VertexId = Long
 
 
 class VertexRDD(object):
     """
-    VertexRDD class defines the vertex operations/transformation. The list of
-    vertex transformations and actions are available at
+    VertexRDD class defines the vertex actions and transformations. The complete list of
+    transformations and actions for vertices are available at
     `http://spark.apache.org/docs/latest/graphx-programming-guide.html`
     These operations are mapped to Scala functions defined
-    in `org.apache.spark.graphx.api.python.PythonVertexRDD`
+    in `org.apache.spark.graphx.impl.VertexRDDImpl`
     """
 
     def __init__(self, jrdd, jrdd_deserializer=AutoBatchedSerializer(PickleSerializer())):
@@ -61,7 +62,6 @@ class VertexRDD(object):
         :param jrdd_deserializer:  The deserializer used in Python workers
                                    created from PythonRDD to execute a
                                    serialized Python function and RDD
-
         """
 
         self.name = "VertexRDD"
@@ -80,10 +80,6 @@ class VertexRDD(object):
     def __repr__(self):
         return self.jvertex_rdd.toString()
 
-    @property
-    def context(self):
-        return self.ctx
-
     def cache(self):
         """
         Persist this vertex RDD with the default storage level (C{MEMORY_ONLY_SER}).
@@ -94,28 +90,30 @@ class VertexRDD(object):
 
     def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
         self.is_cached = True
-        java_storage_level = self.context._getJavaStorageLevel(storageLevel)
+        java_storage_level = self.ctx._getJavaStorageLevel(storageLevel)
         self.jvertex_rdd.persist(java_storage_level)
         return self
 
-    def unpersist(self):
+    def unpersist(self, blocking = False):
         self.is_cached = False
-        self.jvertex_rdd.unpersist()
+        self.jvertex_rdd.unpersist(blocking)
         return self
 
     def checkpoint(self):
         self.is_checkpointed = True
-        self.jvertex_rdd.rdd().checkpoint()
+        self.jvertex_rdd.checkpoint()
+
+    def isCheckpointed(self):
+        """
+        Return whether this RDD has been checkpointed or not
+        """
+        return self.jvertex_rdd.isCheckpointed()
 
     def count(self):
-        return self.mapPartitions(lambda i: [sum(1 for _ in i)]).sum()
-        # return self.jvertex_rdd.count()
+        return self.jrdd.count()
 
     def take(self, num=10):
         return self.jrdd.take(num)
-
-    def sum(self):
-        self.jvertex_rdd.sum()
 
     def mapValues(self, f, preserves_partitioning=False):
         """
@@ -127,9 +125,10 @@ class VertexRDD(object):
         >>> sorted(vertices.mapValues(lambda x: (x + ":" + x)).collect())
         [(1, 'a:a'), (2, 'b:b'), (3, 'c:c')]
         """
-        map_func = lambda (k, v): (k, f(v))
         def func(_, iterator):
-            return itertools.imap(map_func, iterator)
+            print "in func"
+            return itertools.imap(lambda (k, v): (k, f(v)), iterator)
+        print "in mapValues"
         return PipelinedVertexRDD(self, func, preserves_partitioning)
 
     def mapVertexPartitions(self, f, preserve_partitioning=False):
@@ -146,9 +145,7 @@ class VertexRDD(object):
         >>> vertices.filter(lambda x: x._1 % 2 == 0).collect()
         [2]
         """
-        def func(iterator):
-            return itertools.ifilter(f, iterator)
-        return self.mapVertexPartitions(func, True)
+        return self.jrdd.filter(f)
 
     def diff(self, other, numPartitions=2):
         """
@@ -178,7 +175,6 @@ class VertexRDD(object):
         return vs.union(ws).groupByKey(numPartitions)\
                 .flatMapValues(lambda x: dispatch(x.__iter__()))
 
-
     def innerJoin(self, other, numPartitions=None):
         def dispatch(seq):
             vbuf, wbuf = [], []
@@ -191,122 +187,24 @@ class VertexRDD(object):
             return [(v, w) for v in vbuf for w in wbuf]
         vs = self.map(lambda (k, v): (k, (1, v)))
         ws = other.map(lambda (k, v): (k, (2, v)))
-        return vs.union(ws).groupByKey(numPartitions).flatMapValues(lambda x: dispatch(x.__iter__()))
-
-
-
-    # def aggregateUsingIndex(self, other, reduceFunc):
-    #     return self._jrdd._jvm.org.apache.spark.PythonVertexRDD.aggregateUsingIndex()
+        return vs.union(ws).groupByKey(numPartitions).\
+            flatMapValues(lambda x: dispatch(x.__iter__()))
 
     def collect(self):
         """
         Return a list that contains all of the elements in this RDD.
         """
-        with SCCallSiteSync(self.context) as css:
+        with SCCallSiteSync(self.ctx) as css:
             bytesInJava = self.jrdd.collect()
         return list(bytesInJava)
 
     def getJavaVertexRDD(self, rdd, rdd_deserializer):
         if self.bypass_serializer:
             self.jvertex_rdd_deserializer = NoOpSerializer()
-        enable_profile = self.context._conf.get("spark.python.profile", "false") == "true"
-        profileStats = self.context.accumulator(None, PStatsParam) if enable_profile else None
-
-        # the serialized command will be compressed by broadcast
-        broadcast_vars = ListConverter().convert(
-            [x._jbroadcast for x in self.context._pickled_broadcast_vars],
-            self.context._gateway._gateway_client)
-        self.context._pickled_broadcast_vars.clear()
-        env = MapConverter().convert(self.context.environment,
-                                     self.context._gateway._gateway_client)
-        includes = ListConverter().convert(self.context._python_includes,
-                                           self.context._gateway._gateway_client)
-        target_storage_level = StorageLevel.MEMORY_ONLY
-        java_storage_level = self.context._getJavaStorageLevel(target_storage_level)
-        jvertex_rdd = self.context._jvm.PythonVertexRDD(rdd._jrdd,
-                                                   bytearray(" "),
-                                                   env, includes, self.preserve_partitioning,
-                                                   self.context.pythonExec,
-                                                   broadcast_vars, self.context._javaAccumulator,
-                                                   java_storage_level)
-
-        if enable_profile:
-            self.id = self.jvertex_rdd.id()
-            self.context._add_profile(self.id, profileStats)
-        return jvertex_rdd
-
-
-class PipelinedVertexRDD(VertexRDD):
-
-    """
-    Pipelined maps:
-
-    >>> rdd = sc.parallelize([1, 2, 3, 4])
-    >>> rdd.map(lambda x: 2 * x).cache().map(lambda x: 2 * x).collect()
-    [4, 8, 12, 16]
-    >>> rdd.map(lambda x: 2 * x).map(lambda x: 2 * x).collect()
-    [4, 8, 12, 16]
-
-    Pipelined reduces:
-    >>> from operator import add
-    >>> rdd.map(lambda x: 2 * x).reduce(add)
-    20
-    >>> rdd.flatMap(lambda x: [x, x]).reduce(add)
-    20
-    """
-
-    def __init__(self, prev, func, preservesPartitioning=False):
-        if isinstance(prev, PipelinedRDD) or not prev._is_pipelinable():
-            # This transformation is the first in its stage:
-            self.func = func
-            self.preservesPartitioning = preservesPartitioning
-            self.prev_jvertex_rdd = prev._prev_jrdd
-            self.prev_jvertex_rdd_deserializer = prev._prev_jrdd_deserializer
-        elif isinstance(prev, PipelinedVertexRDD) or isinstance(prev, RDD):
-            prev_func = prev.func
-
-            def pipeline_func(split, iterator):
-                return func(split, prev_func(split, iterator))
-            self.func = pipeline_func
-            self.preservesPartitioning = \
-                prev.preservesPartitioning and preservesPartitioning
-            self.prev_jvertex_rdd = prev.prev_jvertex_rdd
-            self.prev_jvertex_rdd_deserializer = prev.prev_jvertex_rdd_deserializer
-        self.is_cached = False
-        self.is_checkpointed = False
-        self.ctx = prev.ctx
-        self.prev = prev
-        self._jrdd_val = None
-        self._id = None
-        self._jrdd_deserializer = self.ctx.serializer
-        self._bypass_serializer = False
-        self._partitionFunc = prev._partitionFunc if self.preservesPartitioning else None
-        self._broadcast = None
-
-    def __del__(self):
-        if self._broadcast:
-            self._broadcast.unpersist()
-            self._broadcast = None
-
-    @property
-    def jvertex_rdd(self):
-        print "**********************************"
-        print "in jvertex_rdd of vertex.py"
-        print "**********************************"
-        if self._jrdd_val:
-            return self._jrdd_val
-        if self._bypass_serializer:
-            self._jrdd_deserializer = NoOpSerializer()
         enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
         profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
-        command = (self.func, profileStats, self._prev_jrdd_deserializer,
-                   self._jrdd_deserializer)
+
         # the serialized command will be compressed by broadcast
-        ser = CloudPickleSerializer()
-        pickled_command = ser.dumps(command)
-        if len(pickled_command) > (1 << 20):  # 1M
-            self._broadcast = self.ctx.broadcast(pickled_command)
-            pickled_command = ser.dumps(self._broadcast)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
             self.ctx._gateway._gateway_client)
@@ -316,23 +214,121 @@ class PipelinedVertexRDD(VertexRDD):
         includes = ListConverter().convert(self.ctx._python_includes,
                                            self.ctx._gateway._gateway_client)
         target_storage_level = StorageLevel.MEMORY_ONLY
-        python_rdd = self.ctx._jvm.PythonVertexRDD(self._prev_jrdd.rdd(),
+        java_storage_level = self.ctx._getJavaStorageLevel(target_storage_level)
+        jvertex_rdd = self.ctx._jvm.PythonVertexRDD(rdd._jrdd,
+                                                   bytearray(" "),
+                                                   env, includes, self.preserve_partitioning,
+                                                   self.ctx.pythonExec,
+                                                   broadcast_vars, self.ctx._javaAccumulator,
+                                                   java_storage_level)
+
+        if enable_profile:
+            self.id = self.jvertex_rdd.id()
+            self.ctx._add_profile(self.id, profileStats)
+        return jvertex_rdd
+
+
+class PipelinedVertexRDD(VertexRDD):
+
+    """
+    Pipelined mapValues in VertexRDD:
+
+    >>> rdd = sc.parallelize([(1, ("Alice", 29)), (2, ("Bob", 30)), \
+                              (3, ("Charlie", 31)), (4, ("Dwayne", 32))])
+    >>> vertices = VertexRDD(rdd)
+    >>> vertices.mapValues(lambda x: x[1] * 2).cache().collect()
+    [(1, ("Alice", 58)), (2, ("Bob", 60)), \
+     (3, ("Charlie", 62)), (4, ("Dwayne", 64))]
+
+    Pipelined reduces in VertexRDD:
+    >>> from operator import add
+    >>> rdd.map(lambda x: 2 * x).reduce(add)
+    20
+    >>> rdd.flatMap(lambda x: [x, x]).reduce(add)
+    20
+    """
+
+    def __init__(self, prev, func, preservesPartitioning=False):
+        if not isinstance(prev, PipelinedVertexRDD) or not prev.is_pipelinable():
+            # This transformation is the first in its stage:
+            self.func = func
+            self.preservesPartitioning = preservesPartitioning
+            self.prev_jvertex_rdd = prev.jvertex_rdd
+            self.prev_jvertex_rdd_deserializer = prev.jvertex_rdd_deserializer
+        else:
+            prev_func = prev.func
+
+            def pipeline_func(split, iterator):
+                return func(split, prev_func(split, iterator))
+            self.func = pipeline_func
+            self.preservesPartitioning = \
+                prev.preservesPartitioning and preservesPartitioning
+            self.prev_jvertex_rdd = prev.jvrdd_val
+            self.prev_jvertex_rdd_deserializer = prev.prev_jvertex_rdd_deserializer
+
+        self.is_cached = False
+        self.is_checkpointed = False
+        self.ctx = prev.ctx
+        self.prev = prev
+        self.jvrdd_val = None
+        self.id = None
+        self.jvertex_rdd_deserializer = self.ctx.serializer
+        self.bypass_serializer = False
+        self.partitionFunc = prev._partitionFunc if self.preservesPartitioning else None
+        self.broadcast = None
+
+    def __del__(self):
+        if self.broadcast:
+            self.broadcast.unpersist()
+            self.broadcast = None
+
+    @property
+    def jvertex_rdd(self):
+        print "\n**********************************"
+        print "in jvertex_rdd of vertex.py"
+        print "**********************************\n"
+        import traceback
+        traceback.print_stack()
+        if self.jvrdd_val:
+            return self.jvrdd_val
+        if self.bypass_serializer:
+            self.jvertex_rdd_deserializer = NoOpSerializer()
+        enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
+        profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
+        command = (self.func, profileStats, self.prev_jvertex_rdd_deserializer,
+                   self.jvertex_rdd_deserializer)
+        # the serialized command will be compressed by broadcast
+        ser = CloudPickleSerializer()
+        pickled_command = ser.dumps(command)
+        if len(pickled_command) > (1 << 20):  # 1M
+            self.broadcast = self.ctx.broadcast(pickled_command)
+            pickled_command = ser.dumps(self.broadcast)
+        broadcast_vars = ListConverter().convert(
+            [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
+            self.ctx._gateway._gateway_client)
+        self.ctx._pickled_broadcast_vars.clear()
+        env = MapConverter().convert(self.ctx.environment,
+                                     self.ctx._gateway._gateway_client)
+        includes = ListConverter().convert(self.ctx._python_includes,
+                                           self.ctx._gateway._gateway_client)
+        java_storage_level = self.ctx._getJavaStorageLevel(StorageLevel.MEMORY_ONLY)
+        python_rdd = self.ctx._jvm.PythonVertexRDD(self.prev_jvertex_rdd.jrdd,
                                              bytearray(pickled_command),
                                              env, includes, self.preservesPartitioning,
                                              self.ctx.pythonExec,
                                              broadcast_vars, self.ctx._javaAccumulator,
-                                             target_storage_level)
-        self._jrdd_val = python_rdd.asJavaVertexRDD()
+                                             java_storage_level)
+        self.jvrdd_val = python_rdd.asJavaVertexRDD()
 
         if enable_profile:
-            self._id = self._jrdd_val.id()
-            self.ctx._add_profile(self._id, profileStats)
-        return self._jrdd_val
+            self.id = self.jvrdd_val.id()
+            self.ctx._add_profile(self.id, profileStats)
+        return self.jvrdd_val
 
     def id(self):
-        if self._id is None:
-            self._id = self._jrdd.id()
-        return self._id
+        if self.id is None:
+            self.id = self.jvertex_rdd.id()
+        return self.id
 
     def is_pipelinable(self):
         return not (self.is_cached or self.is_checkpointed)

@@ -16,8 +16,9 @@
 #
 
 """
-Python bindings for GraphX.
+Python bindings for Graph[VertexRDD, EdgeRDD] in GraphX
 """
+
 import itertools
 from pyspark import PickleSerializer, RDD, StorageLevel, SparkContext
 from pyspark.graphx import VertexRDD, EdgeRDD
