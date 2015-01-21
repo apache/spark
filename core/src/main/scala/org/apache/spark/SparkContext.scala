@@ -936,8 +936,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
    * driver can access the accumulator's `value`.
    */
-  def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T]) =
+  def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T]) = {
     new Accumulator(initialValue, param, Some(name))
+  }
 
   /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, to which tasks can add values
@@ -1500,9 +1501,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
   }
 
-  def getCheckpointDir = {
-    checkpointDir
-  }
+  def getCheckpointDir = checkpointDir
 
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
   def defaultParallelism: Int = {
