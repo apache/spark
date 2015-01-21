@@ -20,6 +20,11 @@ package org.apache.spark.deploy.yarn
 import java.io.File
 import java.net.URI
 
+import scala.collection.JavaConversions._
+import scala.collection.mutable.{ HashMap => MutableHashMap }
+import scala.reflect.ClassTag
+import scala.util.Try
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.MRJobConfig
@@ -28,15 +33,8 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.mockito.Matchers._
 import org.mockito.Mockito._
-
-
 import org.scalatest.FunSuite
 import org.scalatest.Matchers
-
-import scala.collection.JavaConversions._
-import scala.collection.mutable.{ HashMap => MutableHashMap }
-import scala.reflect.ClassTag
-import scala.util.Try
 
 import org.apache.spark.{SparkException, SparkConf}
 import org.apache.spark.util.Utils
@@ -99,6 +97,7 @@ class ClientSuite extends FunSuite with Matchers {
       }
     })
     cp should contain (Environment.PWD.$())
+    cp should contain (Environment.PWD.$() + Path.SEPARATOR + Client.HADOOP_CONF_DIR)
     cp should contain (s"${Environment.PWD.$()}${File.separator}*")
     cp should not contain (Client.SPARK_JAR)
     cp should not contain (Client.APP_JAR)

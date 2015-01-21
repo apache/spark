@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.File
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
 
@@ -69,12 +70,6 @@ private[spark] class Client(
 
 
   def stop(): Unit = yarnClient.stop()
-
-  /* ------------------------------------------------------------------------------------- *
-   | The following methods have much in common in the stable and alpha versions of Client, |
-   | but cannot be implemented in the parent trait due to subtle API differences across    |
-   | hadoop versions.                                                                      |
-   * ------------------------------------------------------------------------------------- */
 
   /**
    * Submit an application running our ApplicationMaster to the ResourceManager.
@@ -265,6 +260,45 @@ private[spark] class Client(
           sparkConf.set(confKey, localPath)
         }
       }
+    }
+
+    // Distribute the Hadoop config files. These are only really used by the AM, since executors
+    // will use the configuration object broadcast by the driver. But this is the easiest way to
+    // make sure the files are available for the AM. The files are placed in a subdirectory so
+    // that they do not clash with other user files. This directory is then added to the classpath
+    // of all processes (both the AM and all the executors), just to make sure that everybody is
+    // using the same default config.
+    //
+    // This follows the order of precedence set by the startup scripts, in which HADOOP_CONF_DIR
+    // shows up in the classpath before YARN_CONF_DIR.
+    //
+    // Currently this makes a shallow copy of the conf directory. If there are cases where a
+    // Hadoop config directory contains subdirectories, this code will have to be fixed.
+    val hadoopConfFiles = new HashMap[String, File]()
+    Seq("HADOOP_CONF_DIR", "YARN_CONF_DIR").foreach { envKey =>
+      sys.env.get(envKey).foreach { path =>
+        val dir = new File(path)
+        if (dir.isDirectory()) {
+          dir.listFiles().foreach { file =>
+            if (!hadoopConfFiles.contains(file.getName())) {
+              hadoopConfFiles(file.getName()) = file
+            }
+          }
+        }
+      }
+    }
+
+    val hadoopConfPath = new Path(dst, HADOOP_CONF_DIR)
+    fs.mkdirs(hadoopConfPath)
+
+    hadoopConfFiles.foreach { case (name, file) =>
+      val destPath = copyFileToRemote(hadoopConfPath, new Path(file.toURI()),
+        replication, true)
+      distCacheMgr.addResource(fs, hadoopConf, destPath,
+        localResources,
+        LocalResourceType.FILE,
+        HADOOP_CONF_DIR + Path.SEPARATOR + name,
+        statCache)
     }
 
     /**
@@ -660,6 +694,9 @@ object Client extends Logging {
   // Distribution-defined classpath to add to processes
   val ENV_DIST_CLASSPATH = "SPARK_DIST_CLASSPATH"
 
+  // Subdirectory where the user's hadoop config files are written in the job staging dir.
+  val HADOOP_CONF_DIR = "__hadoop_conf_dir__"
+
   /**
    * Find the user-defined Spark jar if configured, or return the jar containing this
    * class if not.
@@ -770,6 +807,7 @@ object Client extends Logging {
       extraClassPath: Option[String] = None): Unit = {
     extraClassPath.foreach(addClasspathEntry(_, env))
     addClasspathEntry(Environment.PWD.$(), env)
+    addClasspathEntry(Environment.PWD.$() + Path.SEPARATOR + HADOOP_CONF_DIR, env)
 
     // Normally the users app.jar is last in case conflicts with spark jars
     if (sparkConf.getBoolean("spark.yarn.user.classpath.first", false)) {
