@@ -42,7 +42,7 @@ for (pkg in packageNames) {
 }
 
 # read function dependencies
-depsLen <- readInt(inputCon)
+depsLen <- SparkR:::readInt(inputCon)
 if (depsLen > 0) {
   execFunctionDeps <- SparkR:::readRawLen(inputCon, depsLen)
   # load the dependencies into current environment
