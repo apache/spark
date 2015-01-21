@@ -120,12 +120,10 @@ getDependencies <- function(name) {
                     function(x) { !exists(x, .broadcastNames, inherits=FALSE) },
                     filteredVars)
 
-  fileName <- tempfile(pattern="spark-utils", fileext=".deps")
-  save(list=filteredVars, file=fileName, envir=closureEnv)
-  fileSize <- file.info(fileName)$size
-  binData <- readBin(fileName, raw(), fileSize, endian="big")
-
-  unlink(fileName)
+  rc <- rawConnection(raw(), 'wb')
+  save(list=filteredVars, file=rc, envir=closureEnv)
+  binData <- rawConnectionValue(rc)
+  close(rc)
   binData
 }
 

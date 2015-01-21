@@ -7,6 +7,11 @@
 #include <R.h>
 #include <Rinternals.h>
 
+/* for compatibility with R before 3.1 */
+#ifndef IS_SCALAR
+#define IS_SCALAR(x, type) (TYPEOF(x) == (type) && XLENGTH(x) == 1)
+#endif
+
 SEXP stringHashCode(SEXP string) {
   const char* str;
   R_xlen_t len, i;

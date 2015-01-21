@@ -1,4 +1,6 @@
 *.class
+*.so
+*.o
 # Package Files #
 *.jar
 *.war
