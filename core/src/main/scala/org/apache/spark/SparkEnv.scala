@@ -34,7 +34,7 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
-import org.apache.spark.scheduler.LiveListenerBus
+import org.apache.spark.scheduler.{OutputCommitCoordinator, LiveListenerBus}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
 import org.apache.spark.storage._
@@ -67,6 +67,7 @@ class SparkEnv (
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
     val shuffleMemoryManager: ShuffleMemoryManager,
+    val outputCommitCoordinator: OutputCommitCoordinator,
     val conf: SparkConf) extends Logging {
 
   private[spark] var isStopped = false
@@ -86,6 +87,7 @@ class SparkEnv (
     blockManager.stop()
     blockManager.master.stop()
     metricsSystem.stop()
+    outputCommitCoordinator.stop()
     actorSystem.shutdown()
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
@@ -346,6 +348,11 @@ object SparkEnv extends Logging {
         "levels using the RDD.persist() method instead.")
     }
 
+    val outputCommitCoordinator = new OutputCommitCoordinator
+    val outputCommitCoordinatorActor = registerOrLookup("OutputCommitCoordinator",
+      OutputCommitCoordinator.createActor(outputCommitCoordinator))
+    outputCommitCoordinator.coordinatorActor = outputCommitCoordinatorActor
+
     new SparkEnv(
       executorId,
       actorSystem,
@@ -362,6 +369,7 @@ object SparkEnv extends Logging {
       sparkFilesDir,
       metricsSystem,
       shuffleMemoryManager,
+      outputCommitCoordinator,
       conf)
   }
 

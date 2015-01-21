@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
 import org.apache.spark.rdd.HadoopRDD
+import org.apache.spark.util.AkkaUtils
 
 /**
  * Internal helper class that saves an RDD using a Hadoop OutputFormat.
@@ -43,6 +44,8 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
 
   private val now = new Date()
   private val conf = new SerializableWritable(jobConf)
+
+  private val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
 
   private var jobID = 0
   private var splitID = 0
@@ -106,18 +109,28 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
     val taCtxt = getTaskContext()
     val cmtr = getOutputCommitter()
     if (cmtr.needsTaskCommit(taCtxt)) {
-      try {
-        cmtr.commitTask(taCtxt)
-        logInfo (taID + ": Committed")
-      } catch {
-        case e: IOException => {
-          logError("Error committing the output of task: " + taID.value, e)
-          cmtr.abortTask(taCtxt)
-          throw e
+      val conf = SparkEnv.get.conf
+      val timeout = AkkaUtils.askTimeout(conf)
+      val maxAttempts = AkkaUtils.numRetries(conf)
+      val retryInterval = AkkaUtils.retryWaitMs(conf)
+      val canCommit: Boolean = outputCommitCoordinator.canCommit(jobID, splitID, attemptID,
+        maxAttempts, retryInterval, timeout)
+      if (canCommit) {
+        try {
+          cmtr.commitTask(taCtxt)
+          logInfo (s"$taID: Committed")
+        } catch {
+          case e: IOException => {
+            logError("Error committing the output of task: " + taID.value, e)
+            cmtr.abortTask(taCtxt)
+            throw e
+          }
         }
+      } else {
+        logInfo(s"$taID: Not committed because DAGScheduler did not authorize commit")
       }
     } else {
-      logInfo ("No need to commit output of task: " + taID.value)
+      logInfo(s"No need to commit output of task because needsTaskCommit=false: ${taID.value}")
     }
   }
 
