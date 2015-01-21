@@ -19,9 +19,9 @@ package org.apache.spark.deploy.yarn
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
-import org.apache.spark.util.{Utils, IntParam, MemoryParam}
+import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
 // TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
 private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) {
@@ -94,6 +94,10 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
     if (numExecutors <= 0) {
       throw new IllegalArgumentException(
         "You must specify at least 1 executor!\n" + getUsageMessage())
+    }
+    if (executorCores < sparkConf.getInt("spark.task.cpus", 1)) {
+      throw new SparkException("Executor cores must not be less than " +
+        "spark.task.cpus.")
     }
     if (isClusterMode) {
       for (key <- Seq(amMemKey, amMemOverheadKey, amCoresKey)) {
@@ -222,7 +226,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
       |  --arg ARG                Argument to be passed to your application's main class.
       |                           Multiple invocations are possible, each will be passed in order.
       |  --num-executors NUM      Number of executors to start (Default: 2)
-      |  --executor-cores NUM     Number of cores for the executors (Default: 1).
+      |  --executor-cores NUM     Number of cores per executor (Default: 1).
       |  --driver-memory MEM      Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)
       |  --driver-cores NUM       Number of cores used by the driver (Default: 1).
       |  --executor-memory MEM    Memory per executor (e.g. 1000M, 2G) (Default: 1G)

@@ -116,9 +116,9 @@ object EvaluatePython {
   def toJava(obj: Any, dataType: DataType): Any = (obj, dataType) match {
     case (null, _) => null
 
-    case (row: Seq[Any], struct: StructType) =>
+    case (row: Row, struct: StructType) =>
       val fields = struct.fields.map(field => field.dataType)
-      row.zip(fields).map {
+      row.toSeq.zip(fields).map {
         case (obj, dataType) => toJava(obj, dataType)
       }.toArray
 
@@ -143,7 +143,8 @@ object EvaluatePython {
    * Convert Row into Java Array (for pickled into Python)
    */
   def rowToArray(row: Row, fields: Seq[DataType]): Array[Any] = {
-    row.zip(fields).map {case (obj, dt) => toJava(obj, dt)}.toArray
+    // TODO: this is slow!
+    row.toSeq.zip(fields).map {case (obj, dt) => toJava(obj, dt)}.toArray
   }
 
   // Converts value to the type specified by the data type.
