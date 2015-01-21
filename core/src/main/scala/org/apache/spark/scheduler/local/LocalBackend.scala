@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler.local
 
 import java.nio.ByteBuffer
+import java.util.{Timer, TimerTask}
 
 import akka.actor.{Actor, ActorRef, Props}
 
@@ -54,6 +55,8 @@ private[spark] class LocalActor(
   private val executor = new Executor(
     localExecutorId, localExecutorHostname, SparkEnv.get, isLocal = true)
 
+  private val timer = new Timer("reviveOffers", true)
+
   override def receiveWithLogging = {
     case ReviveOffers =>
       reviveOffers()
@@ -74,10 +77,20 @@ private[spark] class LocalActor(
 
   def reviveOffers() {
     val offers = Seq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
-    for (task <- scheduler.resourceOffers(offers).flatten) {
-      freeCores -= scheduler.CPUS_PER_TASK
-      executor.launchTask(executorBackend, taskId = task.taskId, attemptNumber = task.attemptNumber,
-        task.name, task.serializedTask)
+    val tasks = scheduler.resourceOffers(offers).flatten
+    if (tasks.nonEmpty) {
+      for (task <- tasks) {
+        freeCores -= scheduler.CPUS_PER_TASK
+        executor.launchTask(executorBackend, taskId = task.taskId, attemptNumber = task.attemptNumber,
+          task.name, task.serializedTask)
+      }
+    } if (scheduler.activeTaskSets.nonEmpty) {
+      // Try to reviveOffer after 1 second, because scheduler may wait for locality timeout
+      timer.schedule(new TimerTask {
+        override def run(): Unit = {
+          reviveOffers()
+        }
+      }, 1000)
     }
   }
 }
