@@ -21,7 +21,7 @@ import org.apache.spark.sql.QueryTest
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.types._
 
 case class Nested1(f1: Nested2)
 case class Nested2(f2: Nested3)
@@ -41,7 +41,7 @@ class SQLQuerySuite extends QueryTest {
   }
 
   test("CTAS with serde") {
-    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect
+    sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value").collect()
     sql(
       """CREATE TABLE ctas2
         | ROW FORMAT SERDE "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"
@@ -51,23 +51,23 @@ class SQLQuerySuite extends QueryTest {
         | AS
         |   SELECT key, value
         |   FROM src
-        |   ORDER BY key, value""".stripMargin).collect
+        |   ORDER BY key, value""".stripMargin).collect()
     sql(
       """CREATE TABLE ctas3
         | ROW FORMAT DELIMITED FIELDS TERMINATED BY ',' LINES TERMINATED BY '\012'
         | STORED AS textfile AS
         |   SELECT key, value
         |   FROM src
-        |   ORDER BY key, value""".stripMargin).collect
+        |   ORDER BY key, value""".stripMargin).collect()
 
     // the table schema may like (key: integer, value: string)
     sql(
       """CREATE TABLE IF NOT EXISTS ctas4 AS
-        | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin).collect
+        | SELECT 1 AS key, value FROM src LIMIT 1""".stripMargin).collect()
     // do nothing cause the table ctas4 already existed.
     sql(
       """CREATE TABLE IF NOT EXISTS ctas4 AS
-        | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect
+        | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
 
     checkAnswer(
       sql("SELECT k, value FROM ctas1 ORDER BY k, value"),
@@ -89,7 +89,7 @@ class SQLQuerySuite extends QueryTest {
     intercept[org.apache.hadoop.hive.metastore.api.AlreadyExistsException] {
       sql(
         """CREATE TABLE ctas4 AS
-          | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect
+          | SELECT key, value FROM src ORDER BY key, value""".stripMargin).collect()
     }
     checkAnswer(
       sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
@@ -126,7 +126,7 @@ class SQLQuerySuite extends QueryTest {
     sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil).registerTempTable("nested")
     checkAnswer(
       sql("SELECT f1.f2.f3 FROM nested"),
-      1)
+      Row(1))
     checkAnswer(sql("CREATE TABLE test_ctas_1234 AS SELECT * from nested"),
       Seq.empty[Row])
     checkAnswer(
@@ -215,17 +215,52 @@ class SQLQuerySuite extends QueryTest {
     }
   }
 
+  test("SPARK-5284 Insert into Hive throws NPE when a inner complex type field has a null value") {
+    val schema = StructType(
+      StructField("s",
+        StructType(
+          StructField("innerStruct", StructType(StructField("s1", StringType, true) :: Nil)) ::
+            StructField("innerArray", ArrayType(IntegerType), true) ::
+            StructField("innerMap", MapType(StringType, IntegerType)) :: Nil), true) :: Nil)
+    val row = Row(Row(null, null, null))
+
+    val rowRdd = sparkContext.parallelize(row :: Nil)
+
+    applySchema(rowRdd, schema).registerTempTable("testTable")
+
+    sql(
+      """CREATE TABLE nullValuesInInnerComplexTypes
+        |  (s struct<innerStruct: struct<s1:string>,
+        |            innerArray:array<int>,
+        |            innerMap: map<string, int>>)
+      """.stripMargin).collect()
+
+    sql(
+      """
+        |INSERT OVERWRITE TABLE nullValuesInInnerComplexTypes
+        |SELECT * FROM testTable
+      """.stripMargin)
+
+    checkAnswer(
+      sql("SELECT * FROM nullValuesInInnerComplexTypes"),
+      Row(Row(null, null, null))
+    )
+
+    sql("DROP TABLE nullValuesInInnerComplexTypes")
+    dropTempTable("testTable")
+  }
+
   test("SPARK-4296 Grouping field with Hive UDF as sub expression") {
-    val rdd = sparkContext.makeRDD("""{"a": "str", "b":"1", "c":"1970-01-01 00:00:00"}""" :: Nil)
+    val rdd = sparkContext.makeRDD( """{"a": "str", "b":"1", "c":"1970-01-01 00:00:00"}""" :: Nil)
     jsonRDD(rdd).registerTempTable("data")
     checkAnswer(
       sql("SELECT concat(a, '-', b), year(c) FROM data GROUP BY concat(a, '-', b), year(c)"),
-      Seq(Seq("str-1", 1970)))
+      Row("str-1", 1970))
 
     dropTempTable("data")
 
     jsonRDD(rdd).registerTempTable("data")
-    checkAnswer(sql("SELECT year(c) + 1 FROM data GROUP BY year(c) + 1"), Seq(Seq(1971)))
+    checkAnswer(sql("SELECT year(c) + 1 FROM data GROUP BY year(c) + 1"), Row(1971))
 
     dropTempTable("data")
   }

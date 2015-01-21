@@ -108,8 +108,13 @@ private[spark] class Executor(
   startDriverHeartbeater()
 
   def launchTask(
-      context: ExecutorBackend, taskId: Long, taskName: String, serializedTask: ByteBuffer) {
-    val tr = new TaskRunner(context, taskId, taskName, serializedTask)
+      context: ExecutorBackend,
+      taskId: Long,
+      attemptNumber: Int,
+      taskName: String,
+      serializedTask: ByteBuffer) {
+    val tr = new TaskRunner(context, taskId = taskId, attemptNumber = attemptNumber, taskName,
+      serializedTask)
     runningTasks.put(taskId, tr)
     threadPool.execute(tr)
   }
@@ -134,7 +139,11 @@ private[spark] class Executor(
   private def gcTime = ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
 
   class TaskRunner(
-      execBackend: ExecutorBackend, val taskId: Long, taskName: String, serializedTask: ByteBuffer)
+      execBackend: ExecutorBackend,
+      val taskId: Long,
+      val attemptNumber: Int,
+      taskName: String,
+      serializedTask: ByteBuffer)
     extends Runnable {
 
     @volatile private var killed = false
@@ -180,7 +189,7 @@ private[spark] class Executor(
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
-        val value = task.run(taskId.toInt)
+        val value = task.run(taskAttemptId = taskId, attemptNumber = attemptNumber)
         val taskFinish = System.currentTimeMillis()
 
         // If the task has been killed, let's fail it.
@@ -194,10 +203,10 @@ private[spark] class Executor(
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
-          m.executorDeserializeTime = taskStart - deserializeStartTime
-          m.executorRunTime = taskFinish - taskStart
-          m.jvmGCTime = gcTime - startGCTime
-          m.resultSerializationTime = afterSerialization - beforeSerialization
+          m.setExecutorDeserializeTime(taskStart - deserializeStartTime)
+          m.setExecutorRunTime(taskFinish - taskStart)
+          m.setJvmGCTime(gcTime - startGCTime)
+          m.setResultSerializationTime(afterSerialization - beforeSerialization)
         }
 
         val accumUpdates = Accumulators.values
@@ -248,8 +257,8 @@ private[spark] class Executor(
           val serviceTime = System.currentTimeMillis() - taskStart
           val metrics = attemptedTask.flatMap(t => t.metrics)
           for (m <- metrics) {
-            m.executorRunTime = serviceTime
-            m.jvmGCTime = gcTime - startGCTime
+            m.setExecutorRunTime(serviceTime)
+            m.setJvmGCTime(gcTime - startGCTime)
           }
           val reason = new ExceptionFailure(t, metrics)
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
@@ -367,10 +376,12 @@ private[spark] class Executor(
           val curGCTime = gcTime
 
           for (taskRunner <- runningTasks.values()) {
-            if (!taskRunner.attemptedTask.isEmpty) {
+            if (taskRunner.attemptedTask.nonEmpty) {
               Option(taskRunner.task).flatMap(_.metrics).foreach { metrics =>
-                metrics.updateShuffleReadMetrics
-                metrics.jvmGCTime = curGCTime - taskRunner.startGCTime
+                metrics.updateShuffleReadMetrics()
+                metrics.updateInputMetrics()
+                metrics.setJvmGCTime(curGCTime - taskRunner.startGCTime)
+
                 if (isLocal) {
                   // JobProgressListener will hold an reference of it during
                   // onExecutorMetricsUpdate(), then JobProgressListener can not see

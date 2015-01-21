@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.util.{Map => JMap, List => JList}
-
+import java.util.{List => JList}
 
 import scala.collection.JavaConversions._
 
@@ -31,14 +30,14 @@ import org.apache.spark.annotation.{AlphaComponent, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.api.java.JavaSchemaRDD
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
+import org.apache.spark.sql.json.JsonRDD
+import org.apache.spark.sql.types.{BooleanType, StructType}
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -333,25 +332,6 @@ class SchemaRDD(
 
   /**
    * :: Experimental ::
-   * Filters tuples using a function over a `Dynamic` version of a given Row.  DynamicRows use
-   * scala's Dynamic trait to emulate an ORM of in a dynamically typed language.  Since the type of
-   * the column is not known at compile time, all attributes are converted to strings before
-   * being passed to the function.
-   *
-   * {{{
-   *   schemaRDD.where(r => r.firstName == "Bob" && r.lastName == "Smith")
-   * }}}
-   *
-   * @group Query
-   */
-  @Experimental
-  def where(dynamicUdf: (DynamicRow) => Boolean) =
-    new SchemaRDD(
-      sqlContext,
-      Filter(ScalaUdf(dynamicUdf, BooleanType, Seq(WrapDynamic(logicalPlan.output))), logicalPlan))
-
-  /**
-   * :: Experimental ::
    * Returns a sampled version of the underlying dataset.
    *
    * @group Query
@@ -409,13 +389,6 @@ class SchemaRDD(
   def toSchemaRDD = this
 
   /**
-   * Returns this RDD as a JavaSchemaRDD.
-   *
-   * @group schema
-   */
-  def toJavaSchemaRDD: JavaSchemaRDD = new JavaSchemaRDD(sqlContext, logicalPlan)
-
-  /**
    * Converts a JavaRDD to a PythonRDD. It is used by pyspark.
    */
   private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
@@ -470,6 +443,8 @@ class SchemaRDD(
 
   override def collect(): Array[Row] = queryExecution.executedPlan.executeCollect()
 
+  def collectAsList(): java.util.List[Row] = java.util.Arrays.asList(collect() : _*)
+
   override def take(num: Int): Array[Row] = limit(num).collect()
 
   // =======================================================================
@@ -482,12 +457,14 @@ class SchemaRDD(
                        (implicit ord: Ordering[Row] = null): SchemaRDD =
     applySchema(super.coalesce(numPartitions, shuffle)(ord))
 
-  override def distinct(): SchemaRDD =
-    applySchema(super.distinct())
+  override def distinct(): SchemaRDD = applySchema(super.distinct())
 
   override def distinct(numPartitions: Int)
                        (implicit ord: Ordering[Row] = null): SchemaRDD =
     applySchema(super.distinct(numPartitions)(ord))
+
+  def distinct(numPartitions: Int): SchemaRDD =
+    applySchema(super.distinct(numPartitions)(null))
 
   override def filter(f: Row => Boolean): SchemaRDD =
     applySchema(super.filter(f))
