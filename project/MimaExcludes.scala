@@ -81,7 +81,7 @@ object MimaExcludes {
           ) ++ Seq(
             // SPARK-5205
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.TaskContext.addTaskKilledListener"
+              "org.apache.spark.TaskContext.addTaskKilledListener")
           ) ++ Seq(
             // SPARK-5166 Spark SQL API stabilization
             ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.Transformer.transform"),
