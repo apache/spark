@@ -108,10 +108,10 @@
     </plugins>
     <resources>
       <resource>
-      <directory>../python</directory>
-      <includes>
-        <include>pyspark/streaming/*.py</include>
-      </includes>
+        <directory>../python</directory>
+        <includes>
+          <include>pyspark/streaming/*.py</include>
+        </includes>
       </resource>
     </resources>
   </build>
