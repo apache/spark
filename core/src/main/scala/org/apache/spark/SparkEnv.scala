@@ -310,7 +310,7 @@ object SparkEnv extends Logging {
     val cacheManager = new CacheManager(blockManager)
 
     val httpFileServer =
-      if (isDriver) {
+      if (isDriver && !isLocal) {
         val fileServerPort = conf.getInt("spark.fileserver.port", 0)
         val server = new HttpFileServer(conf, securityManager, fileServerPort)
         server.initialize()
