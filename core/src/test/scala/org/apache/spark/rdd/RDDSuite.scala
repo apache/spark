@@ -956,7 +956,6 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       assert(thrown.getMessage.contains("stopped"))
     }
     assertFails { sc.parallelize(1 to 100) }
-    assertFails { sc.accumulator(10) }
     assertFails { sc.textFile("/nonexistent-path") }
   }
 }
