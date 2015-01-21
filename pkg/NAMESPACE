@@ -19,6 +19,7 @@ exportMethods(
               "flatMapValues",
               "foreach",
               "foreachPartition",
+              "fullOuterJoin",
               "groupByKey",
               "join",
               "keyBy",
