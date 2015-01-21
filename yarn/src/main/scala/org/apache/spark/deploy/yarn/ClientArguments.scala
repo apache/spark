@@ -96,7 +96,7 @@ private[spark] class ClientArguments(args: Array[String], sparkConf: SparkConf) 
         "You must specify at least 1 executor!\n" + getUsageMessage())
     }
     if (executorCores < sparkConf.getInt("spark.task.cpus", 1)) {
-      throw new SparkException("spark.executor.cores must not be less than " +
+      throw new SparkException("Executor cores must not be less than " +
         "spark.task.cpus.")
     }
     if (isClusterMode) {
