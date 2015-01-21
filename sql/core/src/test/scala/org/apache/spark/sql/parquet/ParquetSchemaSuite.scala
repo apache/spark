@@ -24,7 +24,6 @@ import org.scalatest.FunSuite
 import parquet.schema.MessageTypeParser
 
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.types.{BinaryType, IntegerType, StructField, StructType}
 import org.apache.spark.sql.test.TestSQLContext
 
 class ParquetSchemaSuite extends FunSuite with ParquetTest {
@@ -148,12 +147,20 @@ class ParquetSchemaSuite extends FunSuite with ParquetTest {
     """.stripMargin)
 
   test("DataType string parser compatibility") {
-    val schema = StructType(List(
-      StructField("c1", IntegerType, false),
-      StructField("c2", BinaryType, true)))
+    // This is the generated string from previous versions of the Spark SQL, using the following:
+    // val schema = StructType(List(
+    //  StructField("c1", IntegerType, false),
+    //  StructField("c2", BinaryType, true)))
+    val caseClassString =
+      "StructType(List(StructField(c1,IntegerType,false), StructField(c2,BinaryType,true)))"
 
-    val fromCaseClassString = ParquetTypesConverter.convertFromString(schema.toString)
-    val fromJson = ParquetTypesConverter.convertFromString(schema.json)
+    val jsonString =
+      """
+        |{"type":"struct","fields":[{"name":"c1","type":"integer","nullable":false,"metadata":{}},{"name":"c2","type":"binary","nullable":true,"metadata":{}}]}
+      """.stripMargin
+
+    val fromCaseClassString = ParquetTypesConverter.convertFromString(caseClassString)
+    val fromJson = ParquetTypesConverter.convertFromString(jsonString)
 
     (fromCaseClassString, fromJson).zipped.foreach { (a, b) =>
       assert(a.name == b.name)

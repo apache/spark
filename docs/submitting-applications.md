@@ -10,7 +10,7 @@ through a uniform interface so you don't have to configure your application spec
 # Bundling Your Application's Dependencies
 If your code depends on other projects, you will need to package them alongside
 your application in order to distribute the code to a Spark cluster. To do this,
-to create an assembly jar (or "uber" jar) containing your code and its dependencies. Both
+create an assembly jar (or "uber" jar) containing your code and its dependencies. Both
 [sbt](https://github.com/sbt/sbt-assembly) and
 [Maven](http://maven.apache.org/plugins/maven-shade-plugin/)
 have assembly plugins. When creating assembly jars, list Spark and Hadoop
@@ -59,7 +59,7 @@ for applications that involve the REPL (e.g. Spark shell).
 Alternatively, if your application is submitted from a machine far from the worker machines (e.g.
 locally on your laptop), it is common to use `cluster` mode to minimize network latency between
 the drivers and the executors. Note that `cluster` mode is currently not supported for standalone
-clusters, Mesos clusters, or python applications.
+clusters, Mesos clusters, or Python applications.
 
 For Python applications, simply pass a `.py` file in the place of `<application-jar>` instead of a JAR,
 and add Python `.zip`, `.egg` or `.py` files to the search path with `--py-files`.
@@ -174,7 +174,7 @@ This can use up a significant amount of space over time and will need to be clea
 is handled automatically, and with Spark standalone, automatic cleanup can be configured with the
 `spark.worker.cleanup.appDataTtl` property.
 
-For python, the equivalent `--py-files` option can be used to distribute `.egg`, `.zip` and `.py` libraries
+For Python, the equivalent `--py-files` option can be used to distribute `.egg`, `.zip` and `.py` libraries
 to executors.
 
 # More Information

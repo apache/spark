@@ -112,9 +112,8 @@ private[ui] class StageTableBase(
       stageData <- listener.stageIdToData.get((s.stageId, s.attemptId))
       desc <- stageData.description
     } yield {
-      <div><em>{desc}</em></div>
+      <span class="description-input" title={desc}>{desc}</span>
     }
-
     <div>{stageDesc.getOrElse("")} {killLink} {nameLink} {details}</div>
   }
 

@@ -36,8 +36,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
-  private val originalColumnBatchSize = TestHive.columnBatchSize
-  private val originalInMemoryPartitionPruning = TestHive.inMemoryPartitionPruning
+  private val originalColumnBatchSize = TestHive.conf.columnBatchSize
+  private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
 
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
@@ -101,6 +101,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "describe_comment_nonascii",
 
     "create_merge_compressed",
+    "create_view",
     "create_view_partitioned",
     "database_location",
     "database_properties",
@@ -110,7 +111,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
     // Weird DDL differences result in failures on jenkins.
     "create_like2",
-    "create_view_translate",
     "partitions_json",
 
     // This test is totally fine except that it includes wrong queries and expects errors, but error
@@ -349,6 +349,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "create_nested_type",
     "create_skewed_table1",
     "create_struct_table",
+    "create_view_translate",
     "cross_join",
     "cross_product_check_1",
     "cross_product_check_2",
