@@ -86,6 +86,15 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     setConf(SQLConf.CODEGEN_ENABLED, originalValue.toString)
   }
 
+  test("Add Parser of SQL COALESCE()") {
+    checkAnswer(
+      sql("""SELECT COALESCE(1, 2)"""),
+      1)
+    checkAnswer(
+      sql("SELECT COALESCE(null, null, null)"),
+      null)
+  }
+
   test("SPARK-3176 Added Parser of SQL LAST()") {
     checkAnswer(
       sql("SELECT LAST(n) FROM lowerCaseData"),
