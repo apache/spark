@@ -1963,7 +1963,7 @@ setGeneric("name", function(rdd) { standardGeneric("name") })
 setMethod("name",
           signature(rdd = "RDD"),
           function(rdd) {
-            .jcall(getJRDD(rdd), "Ljava/lang/String;", "name")
+            callJMethod(getJRDD(rdd), "name")
           })
 
 #' Set an RDD's name.
@@ -1987,6 +1987,6 @@ setGeneric("setName", function(rdd, name) { standardGeneric("setName") })
 setMethod("setName",
           signature(rdd = "RDD", name = "character"),
           function(rdd, name) {
-            .jcall(getJRDD(rdd), "Lorg/apache/spark/api/java/JavaRDD;", "setName", name)
+            callJMethod(getJRDD(rdd), "setName", name)
             rdd
           })
