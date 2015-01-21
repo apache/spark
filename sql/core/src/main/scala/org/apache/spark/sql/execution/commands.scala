@@ -21,10 +21,12 @@ import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{SchemaRDD, SQLConf, SQLContext}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Row, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import scala.collection.mutable.ArrayBuffer
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -178,3 +180,34 @@ case class DescribeCommand(
     child.output.map(field => Row(field.name, field.dataType.toString, null))
   }
 }
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+case class DDLDescribeCommand(
+    dbName: Option[String],
+    tableName: String, isExtended: Boolean) extends RunnableCommand {
+
+  override def run(sqlContext: SQLContext) = {
+    val tblRelation = dbName match {
+      case Some(db) => UnresolvedRelation(Seq(db, tableName))
+      case None => UnresolvedRelation(Seq(tableName))
+    }
+    val logicalRelation = sqlContext.executePlan(tblRelation).analyzed
+    val rows = new ArrayBuffer[Row]()
+    rows ++= logicalRelation.schema.fields.map{field =>
+      Row(field.name, field.dataType.toSimpleString, null)}
+
+    /*
+     * TODO if future support partition table, add header below:
+     * # Partition Information
+     * # col_name data_type comment
+     */
+    if (isExtended) { // TODO describe extended table
+      // rows += Row("# extended", null, null)
+    }
+    rows
+   }
+}
+

@@ -25,9 +25,10 @@ import org.apache.spark.Logging
 import org.apache.spark.sql.{SchemaRDD, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.SqlLexical
-import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.execution.{DDLDescribeCommand, RunnableCommand}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 
 /**
  * A parser for foreign DDL commands.
@@ -61,6 +62,8 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected val TABLE = Keyword("TABLE")
   protected val USING = Keyword("USING")
   protected val OPTIONS = Keyword("OPTIONS")
+  protected val DESCRIBE = Keyword("DESCRIBE")
+  protected val EXTENDED = Keyword("EXTENDED")
 
   // Data types.
   protected val STRING = Keyword("STRING")
@@ -89,7 +92,7 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
 
   override val lexical = new SqlLexical(reservedWords)
 
-  protected lazy val ddl: Parser[LogicalPlan] = createTable
+  protected lazy val ddl: Parser[LogicalPlan] = createTable | describeTable
 
   /**
    * `CREATE [TEMPORARY] TABLE avroTable
@@ -111,6 +114,16 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   )
 
   protected lazy val tableCols: Parser[Seq[StructField]] =  "(" ~> repsep(column, ",") <~ ")"
+
+  /*
+   * describe [extended] table avroTable
+   * This will display all columns of table `avroTable` includes column_name,column_type,nullable
+   */
+  protected lazy val describeTable: Parser[LogicalPlan] =
+    (DESCRIBE ~> opt(EXTENDED)) ~ (ident <~ ".").? ~ ident  ^^ {
+      case e ~ db ~ tbl  =>
+        DDLDescribeCommand(db, tbl, e.nonEmpty)
+   }
 
   protected lazy val options: Parser[Map[String, String]] =
     "(" ~> repsep(pair, ",") <~ ")" ^^ { case s: Seq[(String, String)] => s.toMap }
