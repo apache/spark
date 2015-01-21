@@ -506,7 +506,7 @@ JavaRDD<LabeledPoint> testData = splits[1];
 
 // Train a GradientBoostedTrees model.
 //  The defaultParams for Classification use LogLoss by default.
-BoostingStrategy boostingStrategy = BoostingStrategy.defaultParams(Algo.Classification);
+BoostingStrategy boostingStrategy = BoostingStrategy.defaultParams(Algo.Classification());
 boostingStrategy.setNumIterations(3); // Note: Use more iterations in practice.
 boostingStrategy.getTreeStrategy().setNumClassesForClassification(2);
 boostingStrategy.getTreeStrategy().setMaxDepth(5);
@@ -614,7 +614,7 @@ JavaRDD<LabeledPoint> testData = splits[1];
 
 // Train a GradientBoostedTrees model.
 //  The defaultParams for Regression use SquaredError by default.
-BoostingStrategy boostingStrategy = BoostingStrategy.defaultParams(Algo.Regression);
+BoostingStrategy boostingStrategy = BoostingStrategy.defaultParams(Algo.Regression());
 boostingStrategy.setNumIterations(3); // Note: Use more iterations in practice.
 boostingStrategy.getTreeStrategy().setMaxDepth(5);
 //  Empty categoricalFeaturesInfo indicates all features are continuous.

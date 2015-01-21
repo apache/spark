@@ -171,9 +171,9 @@ object Strategy {
 
   /**
    * Construct a default set of parameters for [[org.apache.spark.mllib.tree.DecisionTree]]
-   * @param algo  "Classification" or "Regression"
+   * @param algoStr  "Classification" or "Regression"
    */
-  def defaultStrategy(algo: String): Strategy = algo match {
+  def defaultStrategy(algoStr: String): Strategy = algoStr match {
     case "Classification" =>
       new Strategy(algo = Classification, impurity = Gini, maxDepth = 10,
         numClasses = 2)
