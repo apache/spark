@@ -29,7 +29,7 @@ import org.apache.spark.rdd.RDD
  */
 
 class RBFKernel(private var bandwidth: Double)
-  extends SVMKernel[RDD[((Int, Int), Double)]] with Logging with Serializable{
+  extends SVMKernel[RDD[((Int, Int), Double)]] with Logging with Serializable {
 
   def setBandwidth(d: Double): Unit = {
     this.bandwidth = d
