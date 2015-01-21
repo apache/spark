@@ -6,32 +6,44 @@ import scala.collection.JavaConversions._
 import java.io.DataInputStream
 import java.io.DataOutputStream
 
+/**
+ * Utility functions to serialize, deserialize objects to / from R
+ */
 object SerializeJavaR {
-  // We supports only one connection now, so no need to use atomic integer.
-  var objCounter: Int = 0
+
+  // Type mapping from R to Java
+  //
+  // integer -> Int
+  // character -> String
+  // logical -> Boolean
+  // double, numeric -> Double
+  // raw -> Array[Byte]
+  //
+  // list[T] -> Array[T], where T is one of above mentioned types
+  // environment -> Map[String, T], where T is a native type
+  // jobj -> Object, where jobj is an object created in the backend
 
   def readObjectType(dis: DataInputStream) = {
     dis.readByte().toChar
   }
 
-  def readObject(dis: DataInputStream, objMap: HashMap[String, Object]): Object = {
+  def readObject(dis: DataInputStream): Object = {
     val dataType = readObjectType(dis)
-    readTypedObject(dis, objMap, dataType)
+    readTypedObject(dis, dataType)
   }
 
   def readTypedObject(
       dis: DataInputStream,
-      objMap: HashMap[String, Object],
       dataType: Char): Object = {
     dataType match {
       case 'i' => new java.lang.Integer(readInt(dis))
       case 'd' => new java.lang.Double(readDouble(dis))
       case 'b' => new java.lang.Boolean(readBoolean(dis))
       case 'c' => readString(dis)
-      case 'e' => readMap(dis, objMap)
+      case 'e' => readMap(dis)
       case 'r' => readBytes(dis)
-      case 'l' => readList(dis, objMap)
-      case 'j' => objMap(readString(dis))
+      case 'l' => readList(dis)
+      case 'j' => JavaObjectTracker.getObject(readString(dis))
       case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
     }
   }
@@ -90,38 +102,48 @@ object SerializeJavaR {
     (0 until len).map(_ => readString(in)).toArray
   }
 
-  def readList(dis: DataInputStream, objMap: HashMap[String, Object]) = {
+  def readList(dis: DataInputStream) = {
     val arrType = readObjectType(dis)
     arrType match {
       case 'i' => readIntArr(dis)
       case 'c' => readStringArr(dis)
       case 'd' => readDoubleArr(dis)
       case 'l' => readBooleanArr(dis)
-      case 'j' => readStringArr(dis).map(x => objMap(x))
+      case 'j' => readStringArr(dis).map(x => JavaObjectTracker.getObject(x))
       case 'r' => readBytesArr(dis)
       case _ => throw new IllegalArgumentException(s"Invalid array type $arrType")
     }
   }
 
-  def readMap(
-      in: DataInputStream,
-      objMap: HashMap[String, Object]): java.util.Map[Object, Object] = {
+  def readMap(in: DataInputStream): java.util.Map[Object, Object] = {
     val len = readInt(in)
     if (len > 0) {
       val keysType = readObjectType(in)
       val keysLen = readInt(in)
-      val keys = (0 until keysLen).map(_ => readTypedObject(in, objMap, keysType))
+      val keys = (0 until keysLen).map(_ => readTypedObject(in, keysType))
 
       val valuesType = readObjectType(in)
       val valuesLen = readInt(in)
-      val values = (0 until len).map(_ => readTypedObject(in, objMap, valuesType))
+      val values = (0 until len).map(_ => readTypedObject(in, valuesType))
       mapAsJavaMap(keys.zip(values).toMap)
     } else {
       new java.util.HashMap[Object, Object]()
     }
   }
 
-  /// Methods to write out data from Java to R
+  // Methods to write out data from Java to R
+  //
+  // Type mapping from Java to R
+  //
+  // void -> NULL
+  // Int -> integer
+  // String -> character
+  // Boolean -> logical
+  // Double -> numeric / double
+  // Array[Byte] -> raw
+  //
+  // Array[T] -> list()
+  // Object -> jobj
 
   def writeType(dos: DataOutputStream, typeStr: String) {
     typeStr match {
@@ -137,7 +159,7 @@ object SerializeJavaR {
     }
   }
 
-  def writeObject(dos: DataOutputStream, value: Object, objMap: HashMap[String, Object]) {
+  def writeObject(dos: DataOutputStream, value: Object) {
     if (value == null) {
       writeType(dos, "void")
     } else {
@@ -201,10 +223,10 @@ object SerializeJavaR {
             writeType(dos, "list")
             writeType(dos, "jobj")
             dos.writeInt(objArr.length)
-            objArr.foreach(o => writeJObj(dos, o, objMap)) 
+            objArr.foreach(o => writeJObj(dos, o))
           } else {
             writeType(dos, "jobj")
-            writeJObj(dos, value, objMap)
+            writeJObj(dos, value)
           }
         }
       }
@@ -237,10 +259,8 @@ object SerializeJavaR {
     out.write(value)
   }
 
-  def writeJObj(out: DataOutputStream, value: Object, objMap: HashMap[String, Object]) {
-    val objId = value.getClass().getName() + "@" + objCounter
-    objCounter = objCounter + 1
-    objMap.put(objId, value)
+  def writeJObj(out: DataOutputStream, value: Object) {
+    val objId = JavaObjectTracker.put(value)
     writeString(out, objId)
   }
 

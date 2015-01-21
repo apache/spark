@@ -1,9 +1,7 @@
 package edu.berkeley.cs.amplab.sparkr
 
-import java.io._
-import java.net._
-import java.util.{Map => JMap}
-import java.util.concurrent.Executors
+import java.io.IOException
+import java.net.InetSocketAddress
 import java.util.concurrent.TimeUnit
 
 import io.netty.bootstrap.ServerBootstrap
@@ -19,6 +17,9 @@ import io.netty.handler.codec.bytes.ByteArrayDecoder
 import io.netty.handler.codec.bytes.ByteArrayEncoder
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 
+/**
+ * Netty-based backend server that is used to communicate between R and Java.
+ */
 class SparkRBackend() {
 
   var channelFuture: ChannelFuture = null  

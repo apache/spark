@@ -1,7 +1,11 @@
 package edu.berkeley.cs.amplab.sparkr
 
 import scala.collection.mutable.HashMap
-import java.io._
+
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.DataInputStream
+import java.io.DataOutputStream
 
 import io.netty.channel.ChannelHandler.Sharable
 import io.netty.channel.ChannelHandlerContext
@@ -16,8 +20,6 @@ import edu.berkeley.cs.amplab.sparkr.SerializeJavaR._
  */
 @Sharable
 class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHandler[Array[Byte]] {
-
-  val objMap = new HashMap[String, Object]
 
   override def channelRead0(ctx: ChannelHandlerContext, msg: Array[Byte]) {
     val bis = new ByteArrayInputStream(msg)
@@ -45,9 +47,9 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
             val t = readObjectType(dis)
             assert(t == 'c')
             val objToRemove = readString(dis)
-            objMap.remove(objToRemove)
+            JavaObjectTracker.remove(objToRemove)
             writeInt(dos, 0)
-            writeObject(dos, null, objMap)
+            writeObject(dos, null)
           } catch {
             case e: Exception => {
               System.err.println(s"Removing $objId failed with " + e)
@@ -85,7 +87,7 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
       if (isStatic) {
         cls = Some(Class.forName(objId))
       } else {
-        objMap.get(objId) match {
+        JavaObjectTracker.get(objId) match {
           case None => throw new IllegalArgumentException("Object not found " + objId)
           case Some(o) => {
             cls = Some(o.getClass)
@@ -107,7 +109,7 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
 
         // Write status bit
         writeInt(dos, 0)
-        writeObject(dos, ret.asInstanceOf[AnyRef], objMap)
+        writeObject(dos, ret.asInstanceOf[AnyRef])
       } else if (methodName == "new") {
         // methodName should be "new" for constructor
         val ctor = cls.get.getConstructors().filter { x =>
@@ -117,7 +119,7 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
         val obj = ctor.newInstance(args:_*)
 
         writeInt(dos, 0)
-        writeObject(dos, obj.asInstanceOf[AnyRef], objMap)
+        writeObject(dos, obj.asInstanceOf[AnyRef])
       } else {
         throw new IllegalArgumentException("invalid method " + methodName + " for object " + objId)
       }
@@ -130,19 +132,23 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
     }
   }
 
+  // Read a number of arguments from the data input stream
   def readArgs(numArgs: Int, dis: DataInputStream): Array[java.lang.Object] =  {
-    val args = new Array[java.lang.Object](numArgs)
-    for (i <- 0 to numArgs - 1) {
-      args(i) = readObject(dis, objMap)
-    }
-    args
+    (0 until numArgs).map { arg =>
+      readObject(dis)
+    }.toArray
   }
 
-  def matchMethod(numArgs: Int, args: Array[java.lang.Object], parameterTypes: Array[Class[_]]): Boolean = {
+  // Checks if the arguments passed in args matches the parameter types.
+  // NOTE: Currently we do exact match. We may add type conversions later.
+  def matchMethod(
+      numArgs: Int,
+      args: Array[java.lang.Object],
+      parameterTypes: Array[Class[_]]): Boolean = {
     if (parameterTypes.length != numArgs) {
       return false
     }
-    // Currently we do exact match. We may add type conversion later.
+
     for (i <- 0 to numArgs - 1) {
       val parameterType = parameterTypes(i)
       var parameterWrapperType = parameterType
@@ -161,4 +167,39 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
     }
     return true
   }
+}
+
+/**
+ * Helper singleton that tracks Java objects returned to R.
+ * This is useful for referencing these objects in RPC calls.
+ */
+object JavaObjectTracker {
+
+  // TODO: This map should be thread-safe if we want to support multiple
+  // connections at the same time
+  val objMap = new HashMap[String, Object]
+
+  // TODO: We support only one connection now, so an integer is fine.
+  // Investiage using use atomic integer in the future.
+  var objCounter: Int = 0
+
+  def getObject(id: String): Object = {
+    objMap(id)
+  }
+
+  def get(id: String): Option[Object] = {
+    objMap.get(id)
+  }
+
+  def put(obj: Object): String = {
+    val objId = obj.getClass().getName() + "@" + objCounter
+    objCounter = objCounter + 1
+    objMap.put(objId, obj)
+    objId
+  }
+
+  def remove(id: String): Option[Object] = {
+    objMap.remove(id)
+  }
+
 }
