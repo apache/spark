@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
+import org.apache.spark.util.{TaskKilledListener, TaskKilledListenerException, TaskCompletionListener, TaskCompletionListenerException}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -34,6 +34,9 @@ private[spark] class TaskContextImpl(
 
   // For backwards-compatibility; this method is now deprecated as of 1.3.0.
   override def attemptId: Long = taskAttemptId
+
+  // List of callback functions to execute when kill the task.
+  @transient private val onKilledCallbacks = new ArrayBuffer[TaskKilledListener]
 
   // List of callback functions to execute when the task completes.
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]
@@ -52,6 +55,18 @@ private[spark] class TaskContextImpl(
   override def addTaskCompletionListener(f: TaskContext => Unit): this.type = {
     onCompleteCallbacks += new TaskCompletionListener {
       override def onTaskCompletion(context: TaskContext): Unit = f(context)
+    }
+    this
+  }
+
+  override def addTaskKilledListener(listener: TaskKilledListener): this.type = {
+    onKilledCallbacks += listener
+    this
+  }
+
+  override def addTaskKilledListener(f: TaskContext => Unit): this.type = {
+    onKilledCallbacks += new TaskKilledListener {
+      override def onTaskKilled(context: TaskContext): Unit = f(context)
     }
     this
   }
@@ -79,6 +94,31 @@ private[spark] class TaskContextImpl(
     }
     if (errorMsgs.nonEmpty) {
       throw new TaskCompletionListenerException(errorMsgs)
+    }
+  }
+
+  /**
+   * Marks the task as interruption, i.e. cancellation. We add this
+   * method for some more clean works. For example, we need to register
+   * a "kill" callback to completely stop a receiver supervisor. And more,
+   * we reuse the "interrupted" flag to indicate whether the corresponding
+   * task has been killed.
+   */
+  private[spark] def markTaskKilled(): Unit = {
+    interrupted = true
+    val errorMsgs = new ArrayBuffer[String](2)
+    // Process kill callbacks in the reverse order of registration
+    onKilledCallbacks.reverse.foreach { listener =>
+      try {
+        listener.onTaskKilled(this)
+      } catch {
+        case e: Throwable =>
+          errorMsgs += e.getMessage
+          logError("Error in TaskKilledListener", e)
+      }
+    }
+    if (errorMsgs.nonEmpty) {
+      throw new TaskKilledListenerException(errorMsgs)
     }
   }
 

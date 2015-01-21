@@ -23,10 +23,11 @@ import scala.language.existentials
 
 import akka.actor._
 
-import org.apache.spark.{Logging, SerializableWritable, SparkEnv, SparkException}
+import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{StreamingContext, Time}
 import org.apache.spark.streaming.receiver.{Receiver, ReceiverSupervisorImpl, StopReceiver}
+import scala.Some
 
 /**
  * Messages used by the NetworkReceiver and the ReceiverTracker to communicate
@@ -266,7 +267,7 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       val serializableHadoopConf = new SerializableWritable(ssc.sparkContext.hadoopConfiguration)
 
       // Function to start the receiver on the worker node
-      val startReceiver = (iterator: Iterator[Receiver[_]]) => {
+      val startReceiver = (context: TaskContext, iterator: Iterator[Receiver[_]]) => {
         if (!iterator.hasNext) {
           throw new SparkException(
             "Could not start receiver as object not found.")
@@ -274,6 +275,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         val receiver = iterator.next()
         val supervisor = new ReceiverSupervisorImpl(
           receiver, SparkEnv.get, serializableHadoopConf.value, checkpointDirOption)
+
+        // Due to SPARK-5205, `Receiver` stage can not be stopped properly, we need to add a
+        // callback to do some more clean works.
+        context.addTaskKilledListener(context => supervisor.stop("Receiver was killed.", None))
         supervisor.start()
         supervisor.awaitTermination()
       }

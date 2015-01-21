@@ -26,6 +26,7 @@ import scala.Unit;
 import org.apache.spark.annotation.DeveloperApi;
 import org.apache.spark.executor.TaskMetrics;
 import org.apache.spark.util.TaskCompletionListener;
+import org.apache.spark.util.TaskKilledListener;
 
 /**
  * Contextual information about a task which can be read or mutated during
@@ -93,6 +94,20 @@ public abstract class TaskContext implements Serializable {
    */
   @Deprecated
   public abstract void addOnCompleteCallback(final Function0<Unit> f);
+
+  /**
+   * Add a (Java friendly) listener to be executed on task interruption. We add this
+   * listener for some more clean works. An example use is to stop `receiver supervisor`
+   * properly.
+   */
+  public abstract TaskContext addTaskKilledListener(TaskKilledListener listener);
+
+  /**
+   * Add a listener in the form of a Scala closure to be executed on task interruption.
+   * We add this listener for some more clean works. An example use is stop `receiver
+   * supervisor` properly.
+   */
+  public abstract TaskContext addTaskKilledListener(final Function1<TaskContext, Unit> f);
 
   /**
    * The ID of the stage that this task belong to.
