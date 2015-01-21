@@ -36,7 +36,7 @@ private[spark] class HttpFileServer(
   var serverUri : String = null
 
   def initialize() {
-    baseDir = Utils.createTempDir()
+    baseDir = Utils.createTempDir(Utils.getLocalDir(conf), "httpd")
     fileDir = new File(baseDir, "files")
     jarDir = new File(baseDir, "jars")
     fileDir.mkdir()

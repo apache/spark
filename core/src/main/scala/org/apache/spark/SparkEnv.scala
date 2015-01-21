@@ -339,7 +339,7 @@ object SparkEnv extends Logging {
     // this is a temporary directory; in distributed mode, this is the executor's current working
     // directory.
     val sparkFilesDir: String = if (isDriver) {
-      Utils.createTempDir().getAbsolutePath
+      Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
     } else {
       "."
     }
