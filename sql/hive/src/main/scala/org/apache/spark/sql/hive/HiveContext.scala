@@ -74,7 +74,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       val ddlPlan = ddlParser(sqlText)
       val basicPlan = try {
         HiveQl.parseSql(sqlText)
-      }catch {
+      } catch {
         case e: Exception if ddlPlan.nonEmpty => ddlPlan.get
         case e: Throwable => throw e
       }
