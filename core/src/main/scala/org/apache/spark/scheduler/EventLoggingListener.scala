@@ -91,7 +91,12 @@ private[spark] class EventLoggingListener(
         throw new IllegalArgumentException(s"Log directory $logBaseDir is not a directory.")
       }
     } catch {
-      case ioe: FileNotFoundException => fileSystem.mkdirs(new Path(logBaseDir))
+      case ioe: FileNotFoundException => {
+        logWarning(s"Log directory $logBaseDir does not exist. Creating with default file " +
+          "permissions...")
+        new File(logBaseDir).mkdir()
+        fileSystem.mkdirs(new Path(logBaseDir))
+      }
     }
 
     val workingPath = logPath + IN_PROGRESS
