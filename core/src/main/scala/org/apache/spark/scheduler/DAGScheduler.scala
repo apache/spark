@@ -349,34 +349,7 @@ class DAGScheduler(
   }
 
   private def getMissingParentStages(stage: Stage): List[Stage] = {
-    val missing = new HashSet[Stage]
-    val visited = new HashSet[RDD[_]]
-    // We are manually maintaining a stack here to prevent StackOverflowError
-    // caused by recursively visiting
-    val waitingForVisit = new Stack[RDD[_]]
-    def visit(rdd: RDD[_]) {
-      if (!visited(rdd)) {
-        visited += rdd
-        if (getCacheLocs(rdd).contains(Nil)) {
-          for (dep <- rdd.dependencies) {
-            dep match {
-              case shufDep: ShuffleDependency[_, _, _] =>
-                val mapStage = getShuffleMapStage(shufDep, stage.jobId)
-                if (!mapStage.isAvailable) {
-                  missing += mapStage
-                }
-              case narrowDep: NarrowDependency[_] =>
-                waitingForVisit.push(narrowDep.rdd)
-            }
-          }
-        }
-      }
-    }
-    waitingForVisit.push(stage.rdd)
-    while (!waitingForVisit.isEmpty) {
-      visit(waitingForVisit.pop())
-    }
-    missing.toList
+    stage.parents.filter(s => getCacheLocs(s.rdd).contains(Nil) && !s.isAvailable)
   }
 
   /**
@@ -389,8 +362,7 @@ class DAGScheduler(
         val s = stages.head
         s.jobIds += jobId
         jobIdToStageIds.getOrElseUpdate(jobId, new HashSet[Int]()) += s.id
-        val parents: List[Stage] = getParentStages(s.rdd, jobId)
-        val parentsWithoutThisJobId = parents.filter { ! _.jobIds.contains(jobId) }
+        val parentsWithoutThisJobId = stage.parents.filterNot(_.jobIds.contains(jobId))
         updateJobIdStageIdMapsList(parentsWithoutThisJobId ++ stages.tail)
       }
     }
@@ -1235,33 +1207,7 @@ class DAGScheduler(
     if (stage == target) {
       return true
     }
-    val visitedRdds = new HashSet[RDD[_]]
-    val visitedStages = new HashSet[Stage]
-    // We are manually maintaining a stack here to prevent StackOverflowError
-    // caused by recursively visiting
-    val waitingForVisit = new Stack[RDD[_]]
-    def visit(rdd: RDD[_]) {
-      if (!visitedRdds(rdd)) {
-        visitedRdds += rdd
-        for (dep <- rdd.dependencies) {
-          dep match {
-            case shufDep: ShuffleDependency[_, _, _] =>
-              val mapStage = getShuffleMapStage(shufDep, stage.jobId)
-              if (!mapStage.isAvailable) {
-                visitedStages += mapStage
-                waitingForVisit.push(mapStage.rdd)
-              }  // Otherwise there's no need to follow the dependency back
-            case narrowDep: NarrowDependency[_] =>
-              waitingForVisit.push(narrowDep.rdd)
-          }
-        }
-      }
-    }
-    waitingForVisit.push(stage.rdd)
-    while (!waitingForVisit.isEmpty) {
-      visit(waitingForVisit.pop())
-    }
-    visitedRdds.contains(target.rdd)
+    stage.parents.exists(_.rdd == target.rdd)
   }
 
   /**
