@@ -60,6 +60,8 @@ private[spark] object CallSite {
 private[spark] object Utils extends Logging {
   val random = new Random()
 
+  private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
+
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
@@ -247,12 +249,27 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * JDK equivalent of `chmod 700 file`.
+   *
+   * @param file the file whose permissions will be modified
+   * @return true if the permissions were successfully changed, false otherwise.
+   */
+  def chmod700(file: File): Boolean = {
+    file.setReadable(false, false) &&
+    file.setReadable(true, true) &&
+    file.setWritable(false, false) &&
+    file.setWritable(true, true) &&
+    file.setExecutable(false, false) &&
+    file.setExecutable(true, true)
+  }
+
+  /**
    * Create a directory inside the given parent directory. The directory is guaranteed to be
    * newly created, and is not marked for automatic deletion.
    */
-  def createDirectory(root: String): File = {
+  def createDirectory(root: String, namePrefix: String = "spark"): File = {
     var attempts = 0
-    val maxAttempts = 10
+    val maxAttempts = MAX_DIR_CREATION_ATTEMPTS
     var dir: File = null
     while (dir == null) {
       attempts += 1
@@ -264,6 +281,11 @@ private[spark] object Utils extends Logging {
         dir = new File(root, "spark-" + UUID.randomUUID.toString)
         if (dir.exists() || !dir.mkdirs()) {
           dir = null
+        } else {
+          if (!chmod700(dir)) {
+            dir.delete()
+            dir = null
+          }
         }
       } catch { case e: SecurityException => dir = null; }
     }
@@ -275,8 +297,10 @@ private[spark] object Utils extends Logging {
    * Create a temporary directory inside the given parent directory. The directory will be
    * automatically deleted when the VM shuts down.
    */
-  def createTempDir(root: String = System.getProperty("java.io.tmpdir")): File = {
-    val dir = createDirectory(root)
+  def createTempDir(
+      root: String = System.getProperty("java.io.tmpdir"),
+      namePrefix: String = "spark"): File = {
+    val dir = createDirectory(root, namePrefix)
     registerShutdownDeleteDir(dir)
     dir
   }
@@ -599,26 +623,35 @@ private[spark] object Utils extends Logging {
    * If no directories could be created, this will return an empty list.
    */
   private[spark] def getOrCreateLocalRootDirs(conf: SparkConf): Array[String] = {
-    val confValue = if (isRunningInYarnContainer(conf)) {
+    if (isRunningInYarnContainer(conf)) {
       // If we are in yarn mode, systems can have different disk layouts so we must set it
-      // to what Yarn on this system said was available.
-      getYarnLocalDirs(conf)
+      // to what Yarn on this system said was available. Note this assumes that Yarn has
+      // created the directories already, and that they are secured so that only the
+      // user has access to them.
+      getYarnLocalDirs(conf).split(",")
     } else {
-      Option(conf.getenv("SPARK_LOCAL_DIRS")).getOrElse(
-        conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
-    }
-    val rootDirs = confValue.split(',')
-    logDebug(s"Getting/creating local root dirs at '$confValue'")
-
-    rootDirs.flatMap { rootDir =>
-      val localDir: File = new File(rootDir)
-      val foundLocalDir = localDir.exists || localDir.mkdirs()
-      if (!foundLocalDir) {
-        logError(s"Failed to create local root dir in $rootDir.  Ignoring this directory.")
-        None
-      } else {
-        Some(rootDir)
-      }
+      // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
+      // configuration to point to a secure directory. So create a subdirectory with restricted
+      // permissions under each listed directory.
+      Option(conf.getenv("SPARK_LOCAL_DIRS"))
+        .getOrElse(conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")))
+        .split(",")
+        .flatMap { root =>
+          try {
+            val rootDir = new File(root)
+            if (rootDir.exists || rootDir.mkdirs()) {
+              Some(createDirectory(root).getAbsolutePath())
+            } else {
+              logError(s"Failed to create dir in $root. Ignoring this directory.")
+              None
+            }
+          } catch {
+            case e: IOException =>
+            logError(s"Failed to create local root dir in $root. Ignoring this directory.")
+            None
+          }
+        }
+        .toArray
     }
   }
 
