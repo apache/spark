@@ -73,30 +73,24 @@ object SparkSubmit {
     if (appArgs.verbose) {
       printStream.println(appArgs)
     }
-
-    // In standalone cluster mode, use the brand new REST client to submit the application
-    val isStandaloneCluster =
-      appArgs.master.startsWith("spark://") && appArgs.deployMode == "cluster"
-    if (isStandaloneCluster) {
-      new StandaloneRestClient().submitDriver(appArgs)
-      return
-    }
-
-    val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
-    launch(childArgs, classpath, sysProps, mainClass, appArgs.verbose)
+    launch(appArgs)
   }
 
   /**
-   * @return a tuple containing
-   *           (1) the arguments for the child process,
-   *           (2) a list of classpath entries for the child,
-   *           (3) a list of system properties and env vars, and
-   *           (4) the main class for the child
+   * Launch the application using the provided parameters.
+   *
+   * This runs in two steps. First, we prepare the launch environment by setting up
+   * the appropriate classpath, system properties, and application arguments for
+   * running the child main class based on the cluster manager and the deploy mode.
+   * Second, we use this launch environment to invoke the main method of the child
+   * main class.
+   *
+   * Note that standalone cluster mode is an exception in that we do not invoke the
+   * main method of a child class. Instead, we pass the submit parameters directly to
+   * a REST client, which will submit the application using the stable REST protocol.
    */
-  private[spark] def createLaunchEnv(args: SparkSubmitArguments)
-      : (ArrayBuffer[String], ArrayBuffer[String], Map[String, String], String) = {
-
-    // Values to return
+  private[spark] def launch(args: SparkSubmitArguments): Unit = {
+    // Environment needed to launch the child main class
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
     val sysProps = new HashMap[String, String]()
@@ -198,8 +192,6 @@ object SparkSubmit {
 
       // Standalone cluster only
       OptionAssigner(args.jars, STANDALONE, CLUSTER, sysProp = "spark.jars"),
-      OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, clOption = "--memory"),
-      OptionAssigner(args.driverCores, STANDALONE, CLUSTER, clOption = "--cores"),
 
       // Yarn client only
       OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
@@ -228,6 +220,9 @@ object SparkSubmit {
         sysProp = "spark.files")
     )
 
+    val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
+    val isStandaloneCluster = clusterManager == STANDALONE && deployMode == CLUSTER
+
     // In client mode, launch the application main class directly
     // In addition, add the main application jar and any added jars (if any) to the classpath
     if (deployMode == CLIENT) {
@@ -238,7 +233,6 @@ object SparkSubmit {
       if (args.jars != null) { childClasspath ++= args.jars.split(",") }
       if (args.childArgs != null) { childArgs ++= args.childArgs }
     }
-
 
     // Map all arguments to command-line options or system properties for our chosen mode
     for (opt <- options) {
@@ -253,26 +247,12 @@ object SparkSubmit {
     // Add the application jar automatically so the user doesn't have to call sc.addJar
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
     // For python files, the primary resource is already distributed as a regular file
-    val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     if (!isYarnCluster && !args.isPython) {
       var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
       if (isUserJar(args.primaryResource)) {
         jars = jars ++ Seq(args.primaryResource)
       }
       sysProps.put("spark.jars", jars.mkString(","))
-    }
-
-    // In standalone-cluster mode, use Client as a wrapper around the user class
-    if (clusterManager == STANDALONE && deployMode == CLUSTER) {
-      childMainClass = "org.apache.spark.deploy.Client"
-      if (args.supervise) {
-        childArgs += "--supervise"
-      }
-      childArgs += "launch"
-      childArgs += (args.master, args.primaryResource, args.mainClass)
-      if (args.childArgs != null) {
-        childArgs ++= args.childArgs
-      }
     }
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class
@@ -294,7 +274,7 @@ object SparkSubmit {
 
     // Ignore invalid spark.driver.host in cluster modes.
     if (deployMode == CLUSTER) {
-      sysProps -= ("spark.driver.host")
+      sysProps -= "spark.driver.host"
     }
 
     // Resolve paths in certain spark properties
@@ -320,10 +300,28 @@ object SparkSubmit {
       sysProps("spark.submit.pyFiles") = formattedPyFiles
     }
 
-    (childArgs, childClasspath, sysProps, childMainClass)
+    // In standalone cluster mode, use the stable application submission REST protocol.
+    // Otherwise, just call the main method of the child class.
+    if (isStandaloneCluster) {
+      // NOTE: since we mutate the values of some configs in this method, we must update the
+      // corresponding fields in the original SparkSubmitArguments to reflect these changes.
+      args.sparkProperties.clear()
+      args.sparkProperties ++= sysProps
+      sysProps.get("spark.jars").foreach { args.jars = _ }
+      sysProps.get("spark.files").foreach { args.files = _ }
+      new StandaloneRestClient().submitDriver(args)
+    } else {
+      runMain(childArgs, childClasspath, sysProps, childMainClass)
+    }
   }
 
-  private def launch(
+  /**
+   * Run the main method of the child class using the provided launch environment.
+   *
+   * Depending on the deploy mode, cluster manager, and the type of the application,
+   * this main class may not necessarily be the one provided by the user.
+   */
+  private def runMain(
       childArgs: ArrayBuffer[String],
       childClasspath: ArrayBuffer[String],
       sysProps: Map[String, String],

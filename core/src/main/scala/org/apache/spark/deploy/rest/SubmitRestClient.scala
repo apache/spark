@@ -28,7 +28,7 @@ import org.apache.spark.Logging
 import org.apache.spark.deploy.SparkSubmitArguments
 
 /**
- * An abstract client that submits Spark applications using a stable REST protocol.
+ * An abstract client that submits applications using the stable REST protocol.
  * This client is intended to communicate with the SubmitRestServer.
  */
 private[spark] abstract class SubmitRestClient extends Logging {
@@ -78,6 +78,7 @@ private[spark] abstract class SubmitRestClient extends Logging {
 
   /**
    * Send the provided request in an HTTP message to the given URL.
+   * This assumes both the request and the response use the JSON format.
    * Return the response received from the REST server.
    */
   private def sendHttp(url: URL, request: SubmitRestProtocolMessage): SubmitRestProtocolMessage = {

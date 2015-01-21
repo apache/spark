@@ -24,7 +24,7 @@ import org.apache.spark.deploy.SparkSubmitArguments
 import org.apache.spark.util.Utils
 
 /**
- * A client that submits Spark applications to the standalone Master using a stable REST protocol.
+ * A client that submits applications to the standalone Master using the stable REST protocol.
  * This client is intended to communicate with the StandaloneRestServer. Cluster mode only.
  */
 private[spark] class StandaloneRestClient extends SubmitRestClient {
@@ -33,12 +33,8 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
   override protected def constructSubmitRequest(
       args: SparkSubmitArguments): SubmitDriverRequestMessage = {
     import SubmitDriverRequestField._
-    val driverMemory = Option(args.driverMemory)
-      .map { m => Utils.memoryStringToMb(m).toString }
-      .orNull
-    val executorMemory = Option(args.executorMemory)
-      .map { m => Utils.memoryStringToMb(m).toString }
-      .orNull
+    val dm = Option(args.driverMemory).map { m => Utils.memoryStringToMb(m).toString }.orNull
+    val em = Option(args.executorMemory).map { m => Utils.memoryStringToMb(m).toString }.orNull
     val message = new SubmitDriverRequestMessage()
       .setField(SPARK_VERSION, sparkVersion)
       .setField(MASTER, args.master)
@@ -47,17 +43,17 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
       .setFieldIfNotNull(MAIN_CLASS, args.mainClass)
       .setFieldIfNotNull(JARS, args.jars)
       .setFieldIfNotNull(FILES, args.files)
-      .setFieldIfNotNull(DRIVER_MEMORY, driverMemory)
+      .setFieldIfNotNull(DRIVER_MEMORY, dm)
       .setFieldIfNotNull(DRIVER_CORES, args.driverCores)
       .setFieldIfNotNull(DRIVER_EXTRA_JAVA_OPTIONS, args.driverExtraJavaOptions)
       .setFieldIfNotNull(DRIVER_EXTRA_CLASS_PATH, args.driverExtraClassPath)
       .setFieldIfNotNull(DRIVER_EXTRA_LIBRARY_PATH, args.driverExtraLibraryPath)
       .setFieldIfNotNull(SUPERVISE_DRIVER, args.supervise.toString)
-      .setFieldIfNotNull(EXECUTOR_MEMORY, executorMemory)
+      .setFieldIfNotNull(EXECUTOR_MEMORY, em)
       .setFieldIfNotNull(TOTAL_EXECUTOR_CORES, args.totalExecutorCores)
     args.childArgs.foreach(message.appendAppArg)
     args.sparkProperties.foreach { case (k, v) => message.setSparkProperty(k, v) }
-    // TODO: set environment variables?
+    // TODO: send special environment variables?
     message.validate()
   }
 

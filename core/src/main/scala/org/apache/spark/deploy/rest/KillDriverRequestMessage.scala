@@ -33,15 +33,16 @@ private[spark] object KillDriverRequestField
 }
 
 /**
- * A request sent to the cluster manager to kill a driver.
+ * A request sent to the cluster manager to kill a driver
+ * in the stable application submission REST protocol.
  */
 private[spark] class KillDriverRequestMessage extends SubmitRestProtocolMessage(
-  SubmitRestProtocolAction.KILL_DRIVER_REQUEST,
-  KillDriverRequestField.ACTION,
-  KillDriverRequestField.requiredFields)
+    SubmitRestProtocolAction.KILL_DRIVER_REQUEST,
+    KillDriverRequestField.ACTION,
+    KillDriverRequestField.requiredFields)
 
 private[spark] object KillDriverRequestMessage
   extends SubmitRestProtocolMessageCompanion[KillDriverRequestMessage] {
   protected override def newMessage() = new KillDriverRequestMessage
-  protected override def fieldWithName(field: String) = KillDriverRequestField.withName(field)
+  protected override def fieldFromString(field: String) = KillDriverRequestField.fromString(field)
 }

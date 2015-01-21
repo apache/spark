@@ -180,6 +180,7 @@ private[spark] class Master(
       recoveryCompletionTask.cancel()
     }
     webUi.stop()
+    restServer.stop()
     masterMetricsSystem.stop()
     applicationMetricsSystem.stop()
     persistenceEngine.close()

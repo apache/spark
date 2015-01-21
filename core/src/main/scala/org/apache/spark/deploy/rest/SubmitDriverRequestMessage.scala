@@ -29,7 +29,7 @@ import org.apache.spark.util.JsonProtocol
  */
 private[spark] abstract class SubmitDriverRequestField extends SubmitRestProtocolField
 private[spark] object SubmitDriverRequestField
-  extends SubmitRestProtocolFieldCompanion[SubmitRestProtocolField] {
+  extends SubmitRestProtocolFieldCompanion[SubmitDriverRequestField] {
   case object ACTION extends SubmitDriverRequestField
   case object SPARK_VERSION extends SubmitDriverRequestField
   case object MESSAGE extends SubmitDriverRequestField
@@ -59,12 +59,13 @@ private[spark] object SubmitDriverRequestField
 }
 
 /**
- * A request sent to the cluster manager to submit a driver.
+ * A request sent to the cluster manager to submit a driver
+ * in the stable application submission REST protocol.
  */
 private[spark] class SubmitDriverRequestMessage extends SubmitRestProtocolMessage(
-  SubmitRestProtocolAction.SUBMIT_DRIVER_REQUEST,
-  SubmitDriverRequestField.ACTION,
-  SubmitDriverRequestField.requiredFields) {
+    SubmitRestProtocolAction.SUBMIT_DRIVER_REQUEST,
+    SubmitDriverRequestField.ACTION,
+    SubmitDriverRequestField.requiredFields) {
 
   import SubmitDriverRequestField._
 
@@ -72,17 +73,18 @@ private[spark] class SubmitDriverRequestMessage extends SubmitRestProtocolMessag
   private val sparkProperties = new mutable.HashMap[String, String]
   private val environmentVariables = new mutable.HashMap[String, String]
 
-  // Special field setters
+  // Setters for special fields
   def appendAppArg(arg: String): Unit = { appArgs += arg }
   def setSparkProperty(k: String, v: String): Unit = { sparkProperties(k) = v }
   def setEnvironmentVariable(k: String, v: String): Unit = { environmentVariables(k) = v }
 
-  // Special field getters
+  // Getters for special fields
   def getAppArgs: Seq[String] = appArgs.clone()
   def getSparkProperties: Map[String, String] = sparkProperties.toMap
   def getEnvironmentVariables: Map[String, String] = environmentVariables.toMap
 
   // Include app args, spark properties, and environment variables in the JSON object
+  // The order imposed here is as follows: * < APP_ARGS < SPARK_PROPERTIES < ENVIRONMENT_VARIABLES
   override def toJsonObject: JObject = {
     val otherFields = super.toJsonObject.obj
     val appArgsJson = JArray(appArgs.map(JString).toList)
@@ -103,7 +105,7 @@ private[spark] object SubmitDriverRequestMessage
   import SubmitDriverRequestField._
 
   protected override def newMessage() = new SubmitDriverRequestMessage
-  protected override def fieldWithName(field: String) = SubmitDriverRequestField.withName(field)
+  protected override def fieldFromString(field: String) = SubmitDriverRequestField.fromString(field)
 
   /**
    * Process the given field and value appropriately based on the type of the field.

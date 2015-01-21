@@ -19,8 +19,7 @@ package org.apache.spark.deploy.rest
 
 import java.io.File
 
-import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
+import akka.actor.ActorRef
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion}
 import org.apache.spark.SparkConf
@@ -29,22 +28,19 @@ import org.apache.spark.deploy.{Command, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
-import akka.actor.ActorRef
 
 /**
  * A server that responds to requests submitted by the StandaloneRestClient.
  * This is intended to be embedded in the standalone Master. Cluster mode only.
  */
-private[spark] class StandaloneRestServer(
-    master: Master,
-    host: String,
-    requestedPort: Int)
-  extends SubmitRestServer(host, requestedPort) {
+private[spark] class StandaloneRestServer(master: Master, host: String, requestedPort: Int)
+  extends SubmitRestServer(host, requestedPort, master.conf) {
   override protected val handler = new StandaloneRestServerHandler(master)
 }
 
 /**
- * A handler for requests submitted to the standalone Master through the REST protocol.
+ * A handler for requests submitted to the standalone Master
+ * via the stable application submission REST protocol.
  */
 private[spark] class StandaloneRestServerHandler(
     conf: SparkConf,
@@ -141,9 +137,7 @@ private[spark] class StandaloneRestServerHandler(
       // Otherwise, once the driver is launched it will contact with the wrong server
       .set("spark.master", masterUrl)
       .set("spark.app.name", appName)
-      // Include main app resource on the executor classpath
-      // The corresponding behavior in client mode is handled in SparkSubmit
-      .set("spark.jars", jars.map(_ + ",").getOrElse("") + appResource)
+    jars.foreach { j => conf.set("spark.jars", j) }
     files.foreach { f => conf.set("spark.files", f) }
     driverExtraJavaOptions.foreach { j => conf.set("spark.driver.extraJavaOptions", j) }
     driverExtraClassPath.foreach { cp => conf.set("spark.driver.extraClassPath", cp) }

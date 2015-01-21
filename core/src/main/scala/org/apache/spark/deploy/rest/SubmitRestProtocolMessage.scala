@@ -38,7 +38,7 @@ private[spark] object SubmitRestProtocolField {
 }
 
 /**
- * All possible values of the ACTION field.
+ * All possible values of the ACTION field in a SubmitRestProtocolMessage.
  */
 private[spark] object SubmitRestProtocolAction extends Enumeration {
   type SubmitRestProtocolAction = Value
@@ -53,9 +53,9 @@ import SubmitRestProtocolAction.SubmitRestProtocolAction
  * A general message exchanged in the stable application submission REST protocol.
  *
  * The message is represented by a set of fields in the form of key value pairs.
- * Each message must contain an ACTION field, which should have only one possible value
- * for each type of message. For compatibility with older versions of Spark, existing
- * fields must not be removed or modified, though new fields can be added as necessary.
+ * Each message must contain an ACTION field, which fully specifies the type of the message.
+ * For compatibility with older versions of Spark, existing fields must not be removed or
+ * modified, though new fields can be added as necessary.
  */
 private[spark] abstract class SubmitRestProtocolMessage(
     action: SubmitRestProtocolAction,
@@ -104,8 +104,8 @@ private[spark] abstract class SubmitRestProtocolMessage(
   }
 
   /**
-   * Validate that all required fields are set and the value of the action field is as expected.
-   * If any of these conditions are not met, throw an IllegalArgumentException.
+   * Validate that all required fields are set and the value of the ACTION field is as expected.
+   * If any of these conditions are not met, throw an exception.
    */
   def validate(): this.type = {
     if (!fields.contains(actionField)) {
@@ -153,17 +153,16 @@ private[spark] object SubmitRestProtocolMessage {
   import SubmitRestProtocolField._
   import SubmitRestProtocolAction._
 
-  /** Construct a SubmitRestProtocolMessage from its JSON representation. */
-  def fromJson(json: String): SubmitRestProtocolMessage = {
-    fromJsonObject(parse(json).asInstanceOf[JObject])
-  }
-
   /**
-   * Construct a SubmitRestProtocolMessage from the given JSON object.
+   * Construct a SubmitRestProtocolMessage from its JSON representation.
    * This uses the ACTION field to determine the type of the message to reconstruct.
+   * If such a field does not exist, throw an exception.
    */
-  protected def fromJsonObject(jsonObject: JObject): SubmitRestProtocolMessage = {
-    val action = getAction(jsonObject)
+  def fromJson(json: String): SubmitRestProtocolMessage = {
+    val jsonObject = parse(json).asInstanceOf[JObject]
+    val action = getAction(jsonObject).getOrElse {
+      throw new IllegalArgumentException(s"ACTION not found in message:\n$json")
+    }
     SubmitRestProtocolAction.withName(action) match {
       case SUBMIT_DRIVER_REQUEST => SubmitDriverRequestMessage.fromJsonObject(jsonObject)
       case SUBMIT_DRIVER_RESPONSE => SubmitDriverResponseMessage.fromJsonObject(jsonObject)
@@ -177,36 +176,30 @@ private[spark] object SubmitRestProtocolMessage {
 
   /**
    * Extract the value of the ACTION field in the JSON object.
-   * If such a field does not exist in the JSON, throw an exception.
    */
-  private def getAction(jsonObject: JObject): String = {
+  private def getAction(jsonObject: JObject): Option[String] = {
     jsonObject.obj
       .collect { case JField(k, JString(v)) if isActionField(k) => v }
       .headOption
-      .getOrElse {
-        throw new IllegalArgumentException(
-          "ACTION not found in message:\n" + pretty(render(jsonObject)))
-      }
   }
 }
 
 /**
- * A trait that holds common methods for SubmitRestProtocolField companion objects.
- *
- * It is necessary to keep track of all fields that belong to this object in order to
- * reconstruct the fields from their names.
+ * Common methods used by companion objects of SubmitRestProtocolField's subclasses.
+ * This keeps track of all fields that belong to this object in order to reconstruct
+ * the fields from their names.
  */
 private[spark] trait SubmitRestProtocolFieldCompanion[FieldType <: SubmitRestProtocolField] {
   val requiredFields: Seq[FieldType]
   val optionalFields: Seq[FieldType]
 
-  /** Listing of all fields indexed by the field's string representation. */
+  // Listing of all fields indexed by the field's string representation
   private lazy val allFieldsMap: Map[String, FieldType] = {
     (requiredFields ++ optionalFields).map { f => (f.toString, f) }.toMap
   }
 
-  /** Return a SubmitRestProtocolField from its string representation. */
-  def withName(field: String): FieldType = {
+  /** Return the appropriate SubmitRestProtocolField from its string representation. */
+  def fromString(field: String): FieldType = {
     allFieldsMap.get(field).getOrElse {
       throw new IllegalArgumentException(s"Unknown field $field")
     }
@@ -214,7 +207,7 @@ private[spark] trait SubmitRestProtocolFieldCompanion[FieldType <: SubmitRestPro
 }
 
 /**
- * A trait that holds common methods for SubmitRestProtocolMessage companion objects.
+ * Common methods used by companion objects of SubmitRestProtocolMessage's subclasses.
  */
 private[spark] trait SubmitRestProtocolMessageCompanion[MessageType <: SubmitRestProtocolMessage]
   extends Logging {
@@ -225,11 +218,11 @@ private[spark] trait SubmitRestProtocolMessageCompanion[MessageType <: SubmitRes
   protected def newMessage(): MessageType
 
   /** Return a field of the relevant type from the field's string representation. */
-  protected def fieldWithName(field: String): SubmitRestProtocolField
+  protected def fieldFromString(field: String): SubmitRestProtocolField
 
   /**
-   * Process the given field and value appropriately based on the type of the field.
-   * The default behavior only considers fields that have flat values and ignores other fields.
+   * Populate the given field and value in the provided message.
+   * The default behavior only handles fields that have flat values and ignores other fields.
    * If the subclass uses fields with nested values, it should override this method appropriately.
    */
   protected def handleField(
@@ -252,7 +245,7 @@ private[spark] trait SubmitRestProtocolMessageCompanion[MessageType <: SubmitRes
       .filter { case (k, _) => !isActionField(k) }
       .flatMap { case (k, v) =>
         try {
-          Some((fieldWithName(k), v))
+          Some((fieldFromString(k), v))
         } catch {
           case e: IllegalArgumentException =>
             logWarning(s"Unexpected field $k in message ${Utils.getFormattedClassName(this)}")

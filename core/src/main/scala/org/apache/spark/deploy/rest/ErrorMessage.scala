@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.rest
 
 /**
- * A field used in a ErrorMessage.
+ * A field used in an ErrorMessage.
  */
 private[spark] abstract class ErrorField extends SubmitRestProtocolField
 private[spark] object ErrorField extends SubmitRestProtocolFieldCompanion[ErrorField] {
@@ -30,14 +30,14 @@ private[spark] object ErrorField extends SubmitRestProtocolFieldCompanion[ErrorF
 }
 
 /**
- * An error message exchanged in the stable application submission protocol.
+ * An error message exchanged in the stable application submission REST protocol.
  */
 private[spark] class ErrorMessage extends SubmitRestProtocolMessage(
-  SubmitRestProtocolAction.ERROR,
-  ErrorField.ACTION,
-  ErrorField.requiredFields)
+    SubmitRestProtocolAction.ERROR,
+    ErrorField.ACTION,
+    ErrorField.requiredFields)
 
 private[spark] object ErrorMessage extends SubmitRestProtocolMessageCompanion[ErrorMessage] {
   protected override def newMessage() = new ErrorMessage
-  protected override def fieldWithName(field: String) = ErrorField.withName(field)
+  protected override def fieldFromString(field: String) = ErrorField.fromString(field)
 }

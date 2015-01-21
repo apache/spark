@@ -34,15 +34,16 @@ private[spark] object SubmitDriverResponseField
 }
 
 /**
- * A message sent from the cluster manager in response to a SubmitDriverRequestMessage.
+ * A message sent from the cluster manager in response to a SubmitDriverRequestMessage
+ * in the stable application submission REST protocol.
  */
 private[spark] class SubmitDriverResponseMessage extends SubmitRestProtocolMessage(
-  SubmitRestProtocolAction.SUBMIT_DRIVER_RESPONSE,
-  SubmitDriverResponseField.ACTION,
-  SubmitDriverResponseField.requiredFields)
+    SubmitRestProtocolAction.SUBMIT_DRIVER_RESPONSE,
+    SubmitDriverResponseField.ACTION,
+    SubmitDriverResponseField.requiredFields)
 
 private[spark] object SubmitDriverResponseMessage
   extends SubmitRestProtocolMessageCompanion[SubmitDriverResponseMessage] {
   protected override def newMessage() = new SubmitDriverResponseMessage
-  protected override def fieldWithName(field: String) = SubmitDriverResponseField.withName(field)
+  protected override def fieldFromString(field: String) = SubmitDriverResponseField.fromString(field)
 }

@@ -34,15 +34,16 @@ private[spark] object KillDriverResponseField
 }
 
 /**
- * A message sent from the cluster manager in response to a KillDriverResponseMessage.
+ * A message sent from the cluster manager in response to a KillDriverRequestMessage
+ * in the stable application submission REST protocol.
  */
 private[spark] class KillDriverResponseMessage extends SubmitRestProtocolMessage(
-  SubmitRestProtocolAction.KILL_DRIVER_RESPONSE,
-  KillDriverResponseField.ACTION,
-  KillDriverResponseField.requiredFields)
+    SubmitRestProtocolAction.KILL_DRIVER_RESPONSE,
+    KillDriverResponseField.ACTION,
+    KillDriverResponseField.requiredFields)
 
 private[spark] object KillDriverResponseMessage
   extends SubmitRestProtocolMessageCompanion[KillDriverResponseMessage] {
   protected override def newMessage() = new KillDriverResponseMessage
-  protected override def fieldWithName(field: String) = KillDriverResponseField.withName(field)
+  protected override def fieldFromString(field: String) = KillDriverResponseField.fromString(field)
 }

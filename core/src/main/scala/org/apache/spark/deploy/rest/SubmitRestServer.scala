@@ -27,25 +27,40 @@ import com.google.common.base.Charsets
 import org.eclipse.jetty.server.{Request, Server}
 import org.eclipse.jetty.server.handler.AbstractHandler
 
-import org.apache.spark.{SPARK_VERSION => sparkVersion, Logging}
+import org.apache.spark.{SPARK_VERSION => sparkVersion, Logging, SparkConf}
 import org.apache.spark.util.Utils
 
 /**
- * A server that responds to requests submitted by the SubmitRestClient.
+ * An abstract server that responds to requests submitted by the SubmitRestClient
+ * in the stable application submission REST protocol.
  */
-private[spark] abstract class SubmitRestServer(host: String, requestedPort: Int) {
-  protected val handler: SubmitRestServerHandler
+private[spark] abstract class SubmitRestServer(host: String, requestedPort: Int, conf: SparkConf)
+  extends Logging {
 
-  /** Start the server. */
+  protected val handler: SubmitRestServerHandler
+  private var _server: Option[Server] = None
+
   def start(): Unit = {
+    val (server, boundPort) = Utils.startServiceOnPort[Server](requestedPort, doStart, conf)
+    _server = Some(server)
+    logInfo(s"Started REST server for submitting applications on port $boundPort")
+  }
+
+  def stop(): Unit = {
+    _server.foreach(_.stop())
+  }
+
+  private def doStart(startPort: Int): (Server, Int) = {
     val server = new Server(new InetSocketAddress(host, requestedPort))
     server.setHandler(handler)
     server.start()
+    val boundPort = server.getConnectors()(0).getLocalPort
+    (server, boundPort)
   }
 }
 
 /**
- * A handler for requests submitted via the stable REST protocol for submitting applications.
+ * An abstract handler for requests submitted via the stable application submission REST protocol.
  * This represents the main handler used in the SubmitRestServer.
  */
 private[spark] abstract class SubmitRestServerHandler extends AbstractHandler with Logging {
@@ -53,7 +68,10 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
   protected def handleKill(request: KillDriverRequestMessage): KillDriverResponseMessage
   protected def handleStatus(request: DriverStatusRequestMessage): DriverStatusResponseMessage
 
-  /** Handle a request submitted by the SubmitRestClient. */
+  /**
+   * Handle a request submitted by the SubmitRestClient.
+   * This assumes both the request and the response use the JSON format.
+   */
   override def handle(
       target: String,
       baseRequest: Request,
@@ -82,9 +100,9 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
    */
   private def constructResponseMessage(
       request: SubmitRestProtocolMessage): SubmitRestProtocolMessage = {
-    // If the request is sent via the SubmitRestClient, it should have already been
-    // validated remotely. In case this is not true, validate the request here to guard
-    // against potential NPEs. If validation fails, return an ERROR message to the sender.
+    // If the request is sent via the SubmitRestClient, it should have already been validated
+    // remotely. In case this is not true, validate the request here again to guard against
+    // potential NPEs. If validation fails, send an error message back to the sender.
     try {
       request.validate()
       request match {
