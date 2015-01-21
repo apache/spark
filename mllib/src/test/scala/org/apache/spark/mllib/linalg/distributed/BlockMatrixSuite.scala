@@ -54,7 +54,8 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
       new SubMatrix((1, 1), new DenseMatrix(2, 2, Array(1.0, 2.0, 0.0, 1.0))),
       new SubMatrix((2, 1), new DenseMatrix(1, 2, Array(1.0, 5.0))))
 
-    gridBasedMat = new BlockMatrix(numRowBlocks, numColBlocks, sc.parallelize(entries, 2))
+    gridBasedMat = new BlockMatrix(sc.parallelize(entries, 2), numRowBlocks, numColBlocks,
+      rowPerPart, colPerPart)
   }
 
   test("size and frobenius norm") {
