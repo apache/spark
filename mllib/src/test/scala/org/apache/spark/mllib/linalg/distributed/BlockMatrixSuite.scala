@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.linalg.distributed
 
 import org.scalatest.FunSuite
-
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix}
