@@ -2,7 +2,7 @@
 
 # Creates a SparkR client connection object
 # if one doesn't already exist
-init <- function(hostname, port, timeout=60) {
+connectBackend <- function(hostname, port, timeout=60) {
   if (exists(".sparkRcon", envir=.sparkREnv)) {
     cat("SparkRBackend client connection already exists\n")
     return(get(".sparkRcon", envir=.sparkREnv))
@@ -15,6 +15,7 @@ init <- function(hostname, port, timeout=60) {
   get(".sparkRCon", envir=.sparkREnv)
 }
 
+# Launch the SparkR backend using a call to 'system'.
 launchBackend <- function(
     classPath, 
     mainClass, 

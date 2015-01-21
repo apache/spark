@@ -1,4 +1,36 @@
-# Utility functions to serialize, deserialize etc.
+# Utility functions to serialize R objects so they can be read in Java.
+
+# Type mapping from R to Java
+#  
+# integer -> Int
+# character -> String
+# logical -> Boolean
+# double, numeric -> Double
+# raw -> Array[Byte]
+#
+# list[T] -> Array[T], where T is one of above mentioned types
+# environment -> Map[String, T], where T is a native type
+# jobj -> Object, where jobj is an object created in the backend
+
+writeObject <- function(con, object, withType = TRUE) {
+  # NOTE: In R vectors have same type as objects. So we don't support
+  # passing in vectors as arrays and instead require arrays to be passed
+  # as lists.
+  if (withType) {
+    writeType(con, class(object))
+  }
+  switch(class(object),
+    integer = writeInt(con, object),
+    character = writeString(con, object),
+    logical = writeBoolean(con, object),
+    double = writeDouble(con, object),
+    numeric = writeDouble(con, object),
+    raw = writeRaw(con, object),
+    list = writeList(con, object),
+    jobj = writeString(con, object$id),
+    environment = writeEnv(con, object),
+    stop("Unsupported type for serialization"))
+}
 
 writeString <- function(con, value) {
   writeInt(con, as.integer(nchar(value) + 1))
@@ -43,27 +75,7 @@ writeType <- function(con, class) {
   writeBin(charToRaw(type), con)
 }
 
-writeObject <- function(con, object, withType = TRUE) {
-  # In R vectors have same type as objects. So check if this is a vector
-  # and if so just call writeVector
-  # TODO: Should we just throw an exception here instead ?
-  if (withType) {
-    writeType(con, class(object))
-  }
-  switch(class(object),
-    integer = writeInt(con, object),
-    character = writeString(con, object),
-    logical = writeBoolean(con, object),
-    double = writeDouble(con, object),
-    numeric = writeDouble(con, object),
-    raw = writeRaw(con, object),
-    list = writeList(con, object),
-    jobj = writeString(con, object$id),
-    environment = writeEnv(con, object),
-    stop("Unsupported type for serialization"))
-}
-
-# Used to pass arrays
+# Used to pass arrays where all the elements are of the same type
 writeList <- function(con, arr) {
   # All elements should be of same type
   elemType <- unique(sapply(arr, function(elem) { class(elem) }))
@@ -84,10 +96,7 @@ writeList <- function(con, arr) {
   }
 }
 
-# Used to pass named lists as hash maps and lists as vectors
-#
-# We don't support pass in heterogenous lists.
-# Note that all the elements of the list should be of same type 
+# Used to pass in hash maps required on Java side.
 writeEnv <- function(con, env) {
   len <- length(env)
 

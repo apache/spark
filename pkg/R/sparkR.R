@@ -16,7 +16,12 @@ sparkR.onLoad <- function(libname, pkgname) {
 sparkR.stop <- function(sparkREnv) {
   sc <- get(".sparkRjsc", envir=.sparkREnv)
   callJMethod(sc, "stop")
-  stopBackend()
+  callJStatic("SparkRHandler", "stopBackend")
+
+  # Also close the connection and remove it from our env
+  conn <- get(".sparkRCon", .sparkREnv)
+  close(conn)
+  rm(".sparkRCon", envir=.sparkREnv)
 }
 
 #' Initialize a new Spark Context.
@@ -64,7 +69,7 @@ sparkR.init <- function(
   launchBackend(classPath=cp, mainClass="edu.berkeley.cs.amplab.sparkr.SparkRBackend",
                 args="12345", javaOpts=paste("-Xmx", sparkMem, sep=""))
   Sys.sleep(2) # Wait for backend to come up
-  init("localhost", 12345) # Connect to it
+  connectBackend("localhost", 12345) # Connect to it
 
   if (nchar(sparkHome) != 0) {
     sparkHome <- normalizePath(sparkHome)
@@ -95,7 +100,9 @@ sparkR.init <- function(
 
   assign(
     ".sparkRjsc",
-    createSparkContext(
+    callJStatic(
+      className="edu.berkeley.cs.amplab.sparkr.RRDD",
+      methodName="createSparkContext",
       master,
       appName,
       as.character(sparkHome),

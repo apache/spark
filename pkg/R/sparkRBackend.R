@@ -1,43 +1,25 @@
 # Methods to call into SparkRBackend. 
-#
 
-createSparkContext <- function(
-  master,
-  appName,
-  sparkHome,
-  jars=list(),
-  sparkEnvirMap=new.env(),
-  sparkExecutorEnvMap=new.env()) {
-
-  invokeJava(
-    isStatic=TRUE,
-    objId="edu.berkeley.cs.amplab.sparkr.RRDD",
-    methodName="createSparkContext",
-    master, appName, sparkHome, jars, sparkEnvirMap, sparkExecutorEnvMap)
-}
-
-stopBackend <- function() {
-  invokeJava(TRUE, "SparkRHandler", "stopBackend")
-
-  # Also close the connection and remove it from our env
-  conn <- get(".sparkRCon", .sparkREnv)
-  close(conn)
-  rm(".sparkRCon", envir=.sparkREnv)
-}
-
+# Call a Java method named methodName on the object
+# specified by objId. objId should be a "jobj" returned
+# from the SparkRBackend.
 callJMethod <- function(objId, methodName, ...) {
   stopifnot(class(objId) == "jobj")
   invokeJava(isStatic=FALSE, objId, methodName, ...)
 }
 
+# Call a static method on a specified className
 callJStatic <- function(className, methodName, ...) {
   invokeJava(isStatic=TRUE, className, methodName, ...)
 }
 
+# Create a new object of the specified class name
 newJObject <- function(className, ...) {
   invokeJava(isStatic=TRUE, className, methodName="new", ...)
 }
 
+# Remove an object from the SparkR backend. This is done
+# automatically when a jobj is garbage collected.
 removeJObject <- function(objId) {
   invokeJava(isStatic=TRUE, "SparkRHandler", "rm", objId)
 }
@@ -46,6 +28,10 @@ isRemoveMethod <- function(isStatic, objId, methodName) {
   isStatic == TRUE && objId == "SparkRHandler" && methodName == "rm"
 }
 
+# Invoke a Java method on the SparkR backend. Users
+# should typically use one of the higher level methods like
+# callJMethod, callJStatic etc. instead of using this.
+#
 # If isStatic is true, objId contains className otherwise
 # it should contain a jobj returned previously by the backend
 invokeJava <- function(isStatic, objId, methodName, ...) {

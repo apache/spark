@@ -1,4 +1,35 @@
-# Utility functions to serialize, deserialize etc.
+# Utility functions to deserialize objects from Java.
+
+# Type mapping from Java to R
+# 
+# void -> NULL
+# Int -> integer
+# String -> character
+# Boolean -> logical
+# Double -> numeric / double
+# Array[Byte] -> raw
+#
+# Array[T] -> list()
+# Object -> jobj
+
+readObject <- function(con) {
+  # Read type first
+  type <- readType(con)
+  readTypedObject(con, type)
+}
+
+readTypedObject <- function(con, type) {
+  switch (type,
+    "i" = readInt(con),
+    "c" = readString(con),
+    "b" = readBoolean(con),
+    "d" = readDouble(con),
+    "r" = readRaw(con),
+    "l" = readList(con),
+    "n" = NULL,
+    "j" = getJobj(readString(con)),
+    stop("Unsupported type for deserialization"))
+}
 
 readString <- function(con) {
   stringLen <- readInt(con)
@@ -20,38 +51,6 @@ readBoolean <- function(con) {
 
 readType <- function(con) {
   rawToChar(readBin(con, "raw", n = 1L))
-}
-
-readObject <- function(con) {
-  # Read type first
-  type <- readType(con)
-  readTypedObject(con, type)
-}
-
-readTypedObject <- function(con, type) {
-  switch (type,
-    "i" = readInt(con),
-    "c" = readString(con),
-    "b" = readBoolean(con),
-    "d" = readDouble(con),
-    "r" = readRaw(con),
-    "v" = readVector(con),
-    "l" = readList(con),
-    "n" = NULL,
-    "j" = getJobj(readString(con)),
-    stop("Unsupported type for deserialization"))
-}
-
-# TODO: We don't use readVector as it is tricky
-# to assembly array of raw objects. Delete this ?
-readVector <- function(con) {
-  type <- readType(con)
-  len <- readInt(con)
-  if (length > 0) {
-    sapply(1:len, readTypedObject(con, type))
-  } else {
-    vector(mode=type)
-  }
 }
 
 # We only support lists where all elements are of same type
