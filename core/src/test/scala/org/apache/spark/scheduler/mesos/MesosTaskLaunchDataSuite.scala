@@ -15,22 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.scheduler.mesos
 
-import org.apache.hadoop.yarn.util.RackResolver
+import java.nio.ByteBuffer
 
-import org.apache.spark._
-import org.apache.spark.scheduler.TaskSchedulerImpl
-import org.apache.spark.util.Utils
+import org.scalatest.FunSuite
 
-/**
- * This scheduler launches executors through Yarn - by calling into Client to launch the Spark AM.
- */
-private[spark] class YarnClientClusterScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
+import org.apache.spark.scheduler.cluster.mesos.MesosTaskLaunchData
 
-  // By default, rack is unknown
-  override def getRackForHost(hostPort: String): Option[String] = {
-    val host = Utils.parseHostPort(hostPort)._1
-    Option(RackResolver.resolve(sc.hadoopConfiguration, host).getNetworkLocation)
+class MesosTaskLaunchDataSuite extends FunSuite {
+  test("serialize and deserialize data must be same") {
+    val serializedTask = ByteBuffer.allocate(40)
+    (Range(100, 110).map(serializedTask.putInt(_)))
+    serializedTask.rewind
+    val attemptNumber = 100
+    val byteString = MesosTaskLaunchData(serializedTask, attemptNumber).toByteString
+    serializedTask.rewind
+    val mesosTaskLaunchData = MesosTaskLaunchData.fromByteString(byteString)
+    assert(mesosTaskLaunchData.attemptNumber == attemptNumber)
+    assert(mesosTaskLaunchData.serializedTask.equals(serializedTask))
   }
 }

@@ -84,8 +84,9 @@ trait ScalaReflection {
   }
 
   def convertRowToScala(r: Row, schema: StructType): Row = {
+    // TODO: This is very slow!!!
     new GenericRow(
-      r.zip(schema.fields.map(_.dataType))
+      r.toSeq.zip(schema.fields.map(_.dataType))
         .map(r_dt => convertToScala(r_dt._1, r_dt._2)).toArray)
   }
 

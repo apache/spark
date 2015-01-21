@@ -38,7 +38,7 @@ class ParquetQuerySuite2 extends QueryTest with ParquetTest {
     val data = (0 until 10).map(i => (i, i.toString))
     withParquetTable(data, "t") {
       sql("INSERT INTO t SELECT * FROM t")
-      checkAnswer(table("t"), data ++ data)
+      checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
     }
   }
 

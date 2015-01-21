@@ -368,10 +368,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
               .mkString("\t")
         }
       case command: ExecutedCommand =>
-        command.executeCollect().map(_.head.toString)
+        command.executeCollect().map(_(0).toString)
 
       case other =>
-        val result: Seq[Seq[Any]] = other.executeCollect().toSeq
+        val result: Seq[Seq[Any]] = other.executeCollect().map(_.toSeq).toSeq
         // We need the types so we can output struct field names
         val types = analyzed.output.map(_.dataType)
         // Reformat to match hive tab delimited output.
@@ -395,7 +395,7 @@ private object HiveContext {
 
   protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
-      struct.zip(fields).map {
+      struct.toSeq.zip(fields).map {
         case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
@@ -418,7 +418,7 @@ private object HiveContext {
   /** Hive outputs fields of structs slightly differently than top level attributes. */
   protected def toHiveStructString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
-      struct.zip(fields).map {
+      struct.toSeq.zip(fields).map {
         case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>

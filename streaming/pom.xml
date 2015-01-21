@@ -96,5 +96,13 @@
         </executions>
       </plugin>
     </plugins>
+    <resources>
+      <resource>
+        <directory>../python</directory>
+        <includes>
+          <include>pyspark/streaming/*.py</include>
+        </includes>
+      </resource>
+    </resources>
   </build>
 </project>

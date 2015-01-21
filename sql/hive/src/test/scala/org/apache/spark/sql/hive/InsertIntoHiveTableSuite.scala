@@ -43,7 +43,7 @@ class InsertIntoHiveTableSuite extends QueryTest {
     // Make sure the table has also been updated.
     checkAnswer(
       sql("SELECT * FROM createAndInsertTest"),
-      testData.collect().toSeq
+      testData.collect().toSeq.map(Row.fromTuple)
     )
 
     // Add more data.
@@ -52,7 +52,7 @@ class InsertIntoHiveTableSuite extends QueryTest {
     // Make sure the table has been updated.
     checkAnswer(
       sql("SELECT * FROM createAndInsertTest"),
-      testData.collect().toSeq ++ testData.collect().toSeq
+      testData.toSchemaRDD.collect().toSeq ++ testData.toSchemaRDD.collect().toSeq
     )
 
     // Now overwrite.
@@ -61,7 +61,7 @@ class InsertIntoHiveTableSuite extends QueryTest {
     // Make sure the registered table has also been updated.
     checkAnswer(
       sql("SELECT * FROM createAndInsertTest"),
-      testData.collect().toSeq
+      testData.collect().toSeq.map(Row.fromTuple)
     )
   }
 
