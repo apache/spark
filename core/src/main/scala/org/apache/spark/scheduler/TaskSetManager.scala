@@ -533,7 +533,7 @@ private[spark] class TaskSetManager(
           }
       }
       emptyKeys.foreach(x => pendingTasks.remove(x))
-      !hasTasks
+      hasTasks
     }
 
     while (currentLocalityIndex < myLocalityLevels.length - 1) {
@@ -546,12 +546,16 @@ private[spark] class TaskSetManager(
       if (!moreTasks) {
         // Move to next locality level if there is no task for current level
         lastLaunchTime = curTime
+        logDebug(s"No tasks for locality level ${myLocalityLevels(currentLocalityIndex)} " +
+          s"move to ${myLocalityLevels(currentLocalityIndex + 1)}")
         currentLocalityIndex += 1
       } else if (curTime - lastLaunchTime >= localityWaits(currentLocalityIndex)) {
         // Jump to the next locality level, and remove our waiting time for the current one since
         // we don't want to count it again on the next one
         lastLaunchTime += localityWaits(currentLocalityIndex)
         currentLocalityIndex += 1
+        logDebug(s"Move to ${myLocalityLevels(currentLocalityIndex)} after wait for " +
+          s"${localityWaits(currentLocalityIndex)} ms")
       } else {
         return myLocalityLevels(currentLocalityIndex)
       }
