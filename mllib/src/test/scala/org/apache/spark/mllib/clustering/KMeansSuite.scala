@@ -97,17 +97,17 @@ class KMeansSuite extends FunSuite with MLlibTestSparkContext {
 
     for (initMode <- Seq(RANDOM, K_MEANS_PARALLEL)) {
       // Create three deterministic models and compare cluster means
-      val model1 = KMeans.train(rdd, k = 10, maxIterations = 2, runs = 1, initializationMode = initMode, seed = 42)
+      val model1 = KMeans.train(rdd, k = 10, maxIterations = 2, runs = 1,
+        initializationMode = initMode, seed = 42)
       val centers1 = model1.clusterCenters
 
-      val model2 = KMeans.train(rdd, k = 10, maxIterations = 2, runs = 1, initializationMode = initMode, seed = 42)
+      val model2 = KMeans.train(rdd, k = 10, maxIterations = 2, runs = 1,
+        initializationMode = initMode, seed = 42)
       val centers2 = model2.clusterCenters
 
-      val model3 = KMeans.train(rdd, k = 10, maxIterations = 2, runs = 1, initializationMode = initMode, seed = 42)
-      val centers3 = model3.clusterCenters
-
-      assert(centers1.deep == centers2.deep)
-      assert(centers1.deep == centers3.deep)
+      centers1.zip(centers2).foreach { case (c1, c2) =>
+        assert(c1 ~== c2 absTol 1E-14)
+      }
     }
   }
 
