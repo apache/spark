@@ -155,14 +155,29 @@ class SVMKernelMatrix(protected override val kernel: RDD[((Int, Int), Double)],
 
     logInfo("Applying Nystrom formula to calculate feature map of kernel matrix")
 
-    //TODO: Comment here
-
+    /*
+    * Get row number i of the
+    * Kernel Matrix
+    * */
     val rows = kernel.groupBy((couple) => {
       couple._1._1
     })
 
+    /*
+    * Join the each row i with the
+    * target label for point i.
+    * */
     val temp = labels.join(rows)
 
+    /*
+    * Now for each data point,
+    * calculate n dimensions of the
+    * feature map where n is the number
+    * of eigenvalues/vectors obtained from
+    * the Eigen Decomposition.
+    *
+    * phi_i(x) = (1/sqrt(eigenvalue(i)))*Sum(k, 1, n, K(k, x)*eigenvector(i)(k))
+    * */
     temp.map((datapoint) => {
       val y: DenseVector[Double] = DenseVector.tabulate(decomposition._1.length){i =>
         val eigenvector = decomposition._2(::, i)

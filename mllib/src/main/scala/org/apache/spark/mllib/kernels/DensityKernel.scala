@@ -24,14 +24,9 @@ import org.apache.spark.rdd.RDD
  * implement various Multivariate Density
  * Kernels.
  */
-abstract class DensityKernel extends Kernel with Serializable{
-  protected var bandwidth: Vector
+trait DensityKernel extends Kernel with Serializable{
 
-  protected def setBandwidth(b: Vector): Unit = {
-    this.bandwidth = b
-  }
-
-  protected def eval(x: Vector):Double
+  def eval(x: Vector):Double
 
   override def evaluate(x: Vector, y: Vector): Double =
     this.eval(Vectors.fromBreeze(x.toBreeze.-=(y.toBreeze)))
