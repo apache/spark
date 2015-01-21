@@ -506,26 +506,42 @@ private[spark] class TaskSetManager(
    * Get the level we can launch tasks according to delay scheduling, based on current wait time.
    */
   private def getAllowedLocalityLevel(curTime: Long): TaskLocality.TaskLocality = {
-    // remove the emptyList from pendingTasks lazily
-    def hasNonEmptyList(pendingTasks: HashMap[String, ArrayBuffer[Int]]): Boolean = {
+    // Remove the scheduled or finished tasks lazily
+    def hasNotScheduledTasks(list: ArrayBuffer[Int]): Boolean = {
+      var indexOffset = list.size
+      while (indexOffset > 0) {
+        indexOffset -= 1
+        val index = list(indexOffset)
+        if (copiesRunning(index) == 0 && !successful(index)) {
+          return true
+        } else {
+          list.remove(indexOffset)
+        }
+      }
+      false
+    }
+    // It removes the empty lists after check
+    def hasMoreTasks(pendingTasks: HashMap[String, ArrayBuffer[Int]]): Boolean = {
       val emptyKeys = new ArrayBuffer[String]
-      val nonEmpty = pendingTasks.exists{
+      val hasTasks = pendingTasks.exists{
         case (key: String, list: ArrayBuffer[Int]) =>
-          if (list.isEmpty) {
+          if (hasNotScheduledTasks(list)) {
+            true
+          } else {
             emptyKeys += key
+            false
           }
-          list.nonEmpty
       }
       emptyKeys.foreach(x => pendingTasks.remove(x))
-      nonEmpty
+      !hasTasks
     }
 
     while (currentLocalityIndex < myLocalityLevels.length - 1) {
       val moreTasks = myLocalityLevels(currentLocalityIndex) match {
-        case TaskLocality.PROCESS_LOCAL => hasNonEmptyList(pendingTasksForExecutor)
-        case TaskLocality.NODE_LOCAL => hasNonEmptyList(pendingTasksForHost)
+        case TaskLocality.PROCESS_LOCAL => hasMoreTasks(pendingTasksForExecutor)
+        case TaskLocality.NODE_LOCAL => hasMoreTasks(pendingTasksForHost)
         case TaskLocality.NO_PREF => pendingTasksWithNoPrefs.isEmpty
-        case TaskLocality.RACK_LOCAL => hasNonEmptyList(pendingTasksForRack)
+        case TaskLocality.RACK_LOCAL => hasMoreTasks(pendingTasksForRack)
       }
       if (!moreTasks) {
         // Move to next locality level if there is no task for current level
