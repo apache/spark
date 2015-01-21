@@ -913,22 +913,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /** Build the union of a list of RDDs. */
-  def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = {
-    assertNotStopped()
-    new UnionRDD(this, rdds)
-  }
+  def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = new UnionRDD(this, rdds)
 
   /** Build the union of a list of RDDs passed as variable-length arguments. */
-  def union[T: ClassTag](first: RDD[T], rest: RDD[T]*): RDD[T] = {
-    assertNotStopped()
+  def union[T: ClassTag](first: RDD[T], rest: RDD[T]*): RDD[T] =
     new UnionRDD(this, Seq(first) ++ rest)
-  }
 
   /** Get an RDD that has no partitions or elements. */
-  def emptyRDD[T: ClassTag] = {
-    assertNotStopped()
-    new EmptyRDD[T](this)
-  }
+  def emptyRDD[T: ClassTag] = new EmptyRDD[T](this)
 
   // Methods for creating shared variables
 
@@ -936,20 +928,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
    * values to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
-  def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) = {
-    assertNotStopped()
+  def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
     new Accumulator(initialValue, param)
-  }
 
   /**
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, with a name for display
    * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
    * driver can access the accumulator's `value`.
    */
-  def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T]) = {
-    assertNotStopped()
+  def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T]) =
     new Accumulator(initialValue, param, Some(name))
-  }
 
   /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, to which tasks can add values
@@ -957,10 +945,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
-  def accumulable[R, T](initialValue: R)(implicit param: AccumulableParam[R, T]) = {
-    assertNotStopped()
+  def accumulable[R, T](initialValue: R)(implicit param: AccumulableParam[R, T]) =
     new Accumulable(initialValue, param)
-  }
 
   /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, with a name for display in the
@@ -969,10 +955,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
-  def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T]) = {
-    assertNotStopped()
+  def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T]) =
     new Accumulable(initialValue, param, Some(name))
-  }
 
   /**
    * Create an accumulator from a "mutable collection" type.
@@ -982,7 +966,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
       (initialValue: R): Accumulable[R, T] = {
-    assertNotStopped()
     val param = new GrowableAccumulableParam[R,T]
     new Accumulable(initialValue, param)
   }
@@ -1012,7 +995,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * use `SparkFiles.get(fileName)` to find its download location.
    */
   def addFile(path: String) {
-    assertNotStopped()
     val uri = new URI(path)
     val key = uri.getScheme match {
       case null | "file" => env.httpFileServer.addFile(new File(uri.getPath))
@@ -1036,7 +1018,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   def addSparkListener(listener: SparkListener) {
-    assertNotStopped()
     listenerBus.addListener(listener)
   }
 
@@ -1047,7 +1028,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
-    assertNotStopped()
     assert(master.contains("yarn") || dynamicAllocationTesting,
       "Requesting executors is currently only supported in YARN mode")
     schedulerBackend match {
@@ -1066,7 +1046,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @DeveloperApi
   override def killExecutors(executorIds: Seq[String]): Boolean = {
-    assertNotStopped()
     assert(master.contains("yarn") || dynamicAllocationTesting,
       "Killing executors is currently only supported in YARN mode")
     schedulerBackend match {
@@ -1084,10 +1063,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * This is currently only supported in Yarn mode. Return whether the request is received.
    */
   @DeveloperApi
-  override def killExecutor(executorId: String): Boolean = {
-    assertNotStopped()
-    super.killExecutor(executorId)
-  }
+  override def killExecutor(executorId: String): Boolean = super.killExecutor(executorId)
 
   /** The version of Spark on which this application is running. */
   def version = SPARK_VERSION
@@ -1120,10 +1096,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Returns an immutable map of RDDs that have marked themselves as persistent via cache() call.
    * Note that this does not necessarily mean the caching or computation was successful.
    */
-  def getPersistentRDDs: Map[Int, RDD[_]] = {
-    assertNotStopped()
-    persistentRdds.toMap
-  }
+  def getPersistentRDDs: Map[Int, RDD[_]] = persistentRdds.toMap
 
   /**
    * :: DeveloperApi ::
@@ -1170,7 +1143,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @deprecated("adding files no longer creates local copies that need to be deleted", "1.0.0")
   def clearFiles() {
-    assertNotStopped()
     addedFiles.clear()
   }
 
@@ -1206,7 +1178,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    */
   def addJar(path: String) {
-    assertNotStopped()
     if (path == null) {
       logWarning("null specified as parameter to addJar")
     } else {
@@ -1260,7 +1231,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   @deprecated("adding jars no longer creates local copies that need to be deleted", "1.0.0")
   def clearJars() {
-    assertNotStopped()
     addedJars.clear()
   }
 
@@ -1522,7 +1492,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * be a HDFS path if running on a cluster.
    */
   def setCheckpointDir(directory: String) {
-    assertNotStopped()
     checkpointDir = Option(directory).map { dir =>
       val path = new Path(dir, UUID.randomUUID().toString)
       val fs = path.getFileSystem(hadoopConfiguration)
@@ -1532,7 +1501,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   def getCheckpointDir = {
-    assertNotStopped()
     checkpointDir
   }
 
@@ -1544,16 +1512,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
   @deprecated("use defaultMinPartitions", "1.0.0")
-  def defaultMinSplits: Int = {
-    assertNotStopped()
-    math.min(defaultParallelism, 2)
-  }
+  def defaultMinSplits: Int = math.min(defaultParallelism, 2)
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
-  def defaultMinPartitions: Int = {
-    assertNotStopped()
-    math.min(defaultParallelism, 2)
-  }
+  def defaultMinPartitions: Int = math.min(defaultParallelism, 2)
 
   private val nextShuffleId = new AtomicInteger(0)
 
