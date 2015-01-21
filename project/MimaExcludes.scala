@@ -61,7 +61,9 @@ object MimaExcludes {
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.DenseMatrix.transposeMultiply"),
             ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.Matrix.isTransposed_=")
+              "org.apache.spark.mllib.linalg.Matrix.isTransposed_="),
+            ProblemFilters.exclude[MissingMethodProblem](
+              "org.apache.spark.mllib.linalg.Matrix.foreachActive")
           ) ++ Seq(
             // SPARK-3325
             ProblemFilters.exclude[MissingMethodProblem](
