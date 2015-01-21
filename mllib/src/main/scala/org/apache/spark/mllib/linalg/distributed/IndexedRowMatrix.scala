@@ -84,13 +84,9 @@ class IndexedRowMatrix(
       val rowIndex = row.index
       row.vector match {
         case SparseVector(size, indices, values) =>
-          indices.zip(values).map { case (i, iVal) =>
-            MatrixEntry(rowIndex, i, iVal)
-          }
+          Iterator.tabulate(indices.size)(x => MatrixEntry(rowIndex, indices(x), values(x)))
         case DenseVector(values) =>
-          values.zipWithIndex.map { case (iVal, i) =>
-            MatrixEntry(rowIndex, i, iVal)
-          }
+          Iterator.tabulate(values.size)(x => MatrixEntry(rowIndex, x, values(x)))
       }
     }
     new CoordinateMatrix(entries, numRows(), numCols())
