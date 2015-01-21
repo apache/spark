@@ -117,7 +117,7 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val model = NaiveBayes.train(testRDD, 1.0, NaiveBayesModels.Multinomial)
+    val model = NaiveBayes.train(testRDD, 1.0, "Multinomial")
     validateModelFit(pi, theta, model)
 
     val validationData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 17, NaiveBayesModels.Multinomial)
@@ -140,11 +140,12 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
       Array(0.02, 0.02, 0.60, 0.02,  0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.02, 0.30)  // label 2
     ).map(_.map(math.log))
 
+
     val testData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 45, NaiveBayesModels.Bernoulli)
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val model = NaiveBayes.train(testRDD, 1.0, NaiveBayesModels.Bernoulli) ///!!! this gives same result on both models check the math
+    val model = NaiveBayes.train(testRDD, 1.0, "Bernoulli") ///!!! this gives same result on both models check the math
     validateModelFit(pi, theta, model)
 
     val validationData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 20, NaiveBayesModels.Bernoulli)

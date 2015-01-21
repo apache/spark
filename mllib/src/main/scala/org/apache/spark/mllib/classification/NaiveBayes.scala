@@ -18,12 +18,13 @@
 package org.apache.spark.mllib.classification
 
 import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV, argmax => brzArgmax, sum => brzSum, Axis}
-import org.apache.spark.mllib.classification.NaiveBayesModels.NaiveBayesModels
+import breeze.numerics.{exp => brzExp, log => brzLog}
 
 import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.classification.NaiveBayesModels.NaiveBayesModels
 import org.apache.spark.rdd.RDD
 
 
@@ -52,29 +53,14 @@ class NaiveBayesModel private[mllib] (
     val theta: Array[Array[Double]],
     val model: NaiveBayesModels) extends ClassificationModel with Serializable {
 
-  def populateMatrix(arrayIn: Array[Array[Double]],
-                     matrixIn: BDM[Double],
-                     transformation: (Double) => Double = (x) => x) = {
-    var i = 0
-    while (i < arrayIn.length) {
-      var j = 0
-      while (j < arrayIn(i).length) {
-        matrixIn(i, j) = transformation(theta(i)(j))
-        j += 1
-      }
-      i += 1
-    }
-  }
-
   private val brzPi = new BDV[Double](pi)
-  private val brzTheta = new BDM[Double](theta.length, theta(0).length)
-  populateMatrix(theta, brzTheta)
+  private val brzTheta = new BDM(theta(0).length, theta.length, theta.flatten).t
 
   private val brzNegTheta: Option[BDM[Double]] = model match {
     case NaiveBayesModels.Multinomial => None
     case NaiveBayesModels.Bernoulli =>
-      val negTheta = new BDM[Double](theta.length, theta(0).length)
-      populateMatrix(theta, negTheta, (x) => math.log(1.0 - math.exp(x)))
+      val negTheta = brzLog((brzExp(brzTheta.copy) :*= (-1.0)) :+= 1.0)
+      //((x) => math.log(1.0 - math.exp(x))
       Option(negTheta)
   }
 
@@ -244,7 +230,7 @@ object NaiveBayes {
    * @param model The type of NB model to fit from the enumeration NaiveBayesModels, can be
    *              Multinomial or Bernoulli
    */
-  def train(input: RDD[LabeledPoint], lambda: Double, model: NaiveBayesModels): NaiveBayesModel = {
-    new NaiveBayes(lambda, model).run(input)
+  def train(input: RDD[LabeledPoint], lambda: Double, model: String): NaiveBayesModel = {
+    new NaiveBayes(lambda,  NaiveBayesModels.withName(model)).run(input)
   }
 }
