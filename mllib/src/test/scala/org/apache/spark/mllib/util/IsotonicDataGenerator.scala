@@ -17,9 +17,11 @@
 
 package org.apache.spark.mllib.util
 
-import org.apache.spark.annotation.DeveloperApi
-import scala.collection.JavaConversions._
 import java.lang.{Double => JDouble}
+
+import scala.collection.JavaConversions._
+
+import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::

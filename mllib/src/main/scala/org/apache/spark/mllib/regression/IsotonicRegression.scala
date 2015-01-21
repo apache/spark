@@ -17,7 +17,9 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.api.java.{JavaRDD, JavaPairRDD}
+import java.io.Serializable
+
+import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -46,8 +48,8 @@ class IsotonicRegressionModel (
    * @param testData features to be labeled
    * @return predicted labels
    */
-  def predict(testData: JavaRDD[java.lang.Double]): JavaRDD[java.lang.Double] =
-    testData.rdd.map(_.doubleValue()).map(predict).map(new java.lang.Double(_))
+  def predict(testData: JavaRDD[java.lang.Double]): JavaDoubleRDD =
+    JavaDoubleRDD.fromRDD(predict(testData.rdd.asInstanceOf[RDD[Double]]))
 
   /**
    * Predict a single label
@@ -61,22 +63,11 @@ class IsotonicRegressionModel (
 }
 
 /**
- * Base representing algorithm for isotonic regression
+ * Isotonic regression
+ * Currently implemented using oarallel pool adjacent violators algorithm for monotone regression
  */
-trait IsotonicRegressionAlgorithm
+class IsotonicRegression
   extends Serializable {
-
-  /**
-   * Creates isotonic regression model with given parameters
-   *
-   * @param predictions labels estimated using isotonic regression algorithm.
-   *                    Used for predictions on new data points.
-   * @param isotonic isotonic (increasing) or antitonic (decreasing) sequence
-   * @return isotonic regression model
-   */
-  protected def createModel(
-      predictions: Seq[(Double, Double, Double)],
-      isotonic: Boolean): IsotonicRegressionModel
 
   /**
    * Run algorithm to obtain isotonic regression model
@@ -87,24 +78,21 @@ trait IsotonicRegressionAlgorithm
    */
   def run(
       input: RDD[(Double, Double, Double)],
-      isotonic: Boolean): IsotonicRegressionModel
-}
-
-/**
- * Parallel pool adjacent violators algorithm for monotone regression
- */
-class PoolAdjacentViolators private [mllib]
-  extends IsotonicRegressionAlgorithm {
-
-  override def run(
-      input: RDD[(Double, Double, Double)],
       isotonic: Boolean = true): IsotonicRegressionModel = {
     createModel(
       parallelPoolAdjacentViolators(input, isotonic),
       isotonic)
   }
 
-  override protected def createModel(
+  /**
+   * Creates isotonic regression model with given parameters
+   *
+   * @param predictions labels estimated using isotonic regression algorithm.
+   *                    Used for predictions on new data points.
+   * @param isotonic isotonic (increasing) or antitonic (decreasing) sequence
+   * @return isotonic regression model
+   */
+  protected def createModel(
       predictions: Seq[(Double, Double, Double)],
       isotonic: Boolean): IsotonicRegressionModel = {
     new IsotonicRegressionModel(predictions, isotonic)
@@ -132,31 +120,27 @@ class PoolAdjacentViolators private [mllib]
       val weightedSum = poolSubArray.map(lp => lp._1 * lp._3).sum
       val weight = poolSubArray.map(_._3).sum
 
-      for(i <- start to end) {
+      var i = start
+      while (i <= end) {
         in(i) = (weightedSum / weight, in(i)._2, in(i)._3)
+        i = i + 1
       }
     }
 
-    val isotonicConstraint: (Double, Double) => Boolean = (x, y) => x <= y
-    val antitonicConstraint: (Double, Double) => Boolean = (x, y) => x >= y
-
-    def monotonicityConstraint(isotonic: Boolean) =
-      if(isotonic) isotonicConstraint else antitonicConstraint
-
-    val monotonicityConstraintHolds = monotonicityConstraint(isotonic)
+    val monotonicityConstraintHolds: (Double, Double) => Boolean =
+      (x, y) => if (isotonic) x <= y else x >= y
 
     var i = 0
-
-    while(i < in.length) {
+    while (i < in.length) {
       var j = i
 
       // Find monotonicity violating sequence, if any
-      while(j < in.length - 1 && !monotonicityConstraintHolds(in(j)._1, in(j + 1)._1)) {
+      while (j < in.length - 1 && !monotonicityConstraintHolds(in(j)._1, in(j + 1)._1)) {
         j = j + 1
       }
 
       // If monotonicity was not violated, move to next data point
-      if(i == j) {
+      if (i == j) {
         i = i + 1
       } else {
         // Otherwise pool the violating sequence
@@ -212,7 +196,7 @@ object IsotonicRegression {
   def train(
       input: RDD[(Double, Double, Double)],
       isotonic: Boolean = true): IsotonicRegressionModel = {
-    new PoolAdjacentViolators().run(input, isotonic)
+    new IsotonicRegression().run(input, isotonic)
   }
 
   /**
@@ -227,7 +211,7 @@ object IsotonicRegression {
   def train(
       input: JavaRDD[(java.lang.Double, java.lang.Double, java.lang.Double)],
       isotonic: Boolean): IsotonicRegressionModel = {
-    new PoolAdjacentViolators()
+    new IsotonicRegression()
       .run(
         input.rdd.map(x => (x._1.doubleValue(), x._2.doubleValue(), x._3.doubleValue())),
         isotonic)
