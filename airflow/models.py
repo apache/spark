@@ -28,7 +28,9 @@ Base = declarative_base()
 ID_LEN = conf.getint('misc', 'ID_LEN')
 SQL_ALCHEMY_CONN = conf.get('core', 'SQL_ALCHEMY_CONN')
 if 'mysql' in SQL_ALCHEMY_CONN:
-    Text = LONGTEXT
+    LongText = LONGTEXT
+else:
+    LongText = Text
 
 
 class DagBag(object):
@@ -199,7 +201,7 @@ class DagPickle(Base):
     the database.
     """
     id = Column(Integer, primary_key=True)
-    pickle = Column(Text())
+    pickle = Column(LongText())
 
     __tablename__ = "dag_pickle"
 
@@ -1196,7 +1198,8 @@ class Chart(Base):
     show_sql = Column(Boolean, default=True)
     height = Column(Integer, default=600)
     default_params = Column(String(5000), default="{}")
-    owner = relationship("User", cascade=False, cascade_backrefs=False)
+    owner = relationship(
+        "User", cascade=False, cascade_backrefs=False, backref='charts')
     x_is_date = Column(Boolean, default=True)
     db = relationship("Connection")
     iteration_no = Column(Integer, default=0)

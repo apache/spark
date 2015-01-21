@@ -1124,7 +1124,7 @@ class ChartModelView(LoginMixin, ModelView):
     create_template = 'airflow/chart/create.html'
     edit_template = 'airflow/chart/edit.html'
     column_filters = ('owner.username', 'conn_id',)
-    column_searchable_list = ('owner.username', 'label', )
+    column_searchable_list = ('owner.username', 'label', 'sql')
     column_descriptions = {
         'label': "Can include {{ templated_fields }} and {{ macros }}",
         'chart_type': "The type of chart to be displayed",
