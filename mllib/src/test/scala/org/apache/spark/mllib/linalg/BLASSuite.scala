@@ -169,14 +169,14 @@ class BLASSuite extends FunSuite {
   }
 
   test("gemm") {
-
     val dA =
       new DenseMatrix(4, 3, Array(0.0, 1.0, 0.0, 0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 3.0))
     val sA = new SparseMatrix(4, 3, Array(0, 1, 3, 4), Array(1, 0, 2, 3), Array(1.0, 2.0, 1.0, 3.0))
 
     val B = new DenseMatrix(3, 2, Array(1.0, 0.0, 0.0, 0.0, 2.0, 1.0))
     val expected = new DenseMatrix(4, 2, Array(0.0, 1.0, 0.0, 0.0, 4.0, 0.0, 2.0, 3.0))
-    val BT = new DenseMatrix(2, 3, Array(1.0, 0.0, 0.0, 2.0, 0.0, 1.0))
+    val BTman = new DenseMatrix(2, 3, Array(1.0, 0.0, 0.0, 2.0, 0.0, 1.0))
+    val BT = B.transpose
 
     assert(dA.multiply(B) ~== expected absTol 1e-15)
     assert(sA.multiply(B) ~== expected absTol 1e-15)
@@ -193,10 +193,6 @@ class BLASSuite extends FunSuite {
     val C10 = C1.copy
     val C11 = C1.copy
     val C12 = C1.copy
-    val C13 = C1.copy
-    val C14 = C1.copy
-    val C15 = C1.copy
-    val C16 = C1.copy
     val expected2 = new DenseMatrix(4, 2, Array(2.0, 1.0, 4.0, 2.0, 4.0, 0.0, 4.0, 3.0))
     val expected3 = new DenseMatrix(4, 2, Array(2.0, 2.0, 4.0, 2.0, 8.0, 0.0, 6.0, 6.0))
 
@@ -211,36 +207,32 @@ class BLASSuite extends FunSuite {
 
     withClue("columns of A don't match the rows of B") {
       intercept[Exception] {
-        gemm(true, false, 1.0, dA, B, 2.0, C1)
+        gemm(1.0, dA, B, 2.0, C1)
       }
     }
 
-    val dAT =
+    val dATman =
       new DenseMatrix(3, 4, Array(0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 3.0))
-    val sAT =
+    val sATman =
       new SparseMatrix(3, 4, Array(0, 1, 2, 3, 4), Array(1, 0, 1, 2), Array(2.0, 1.0, 1.0, 3.0))
 
-    val dATT = dAT.transpose
-    val sATT = sAT.transpose
-    val BTT = BT.transpose.asInstanceOf[DenseMatrix]
+    val dATT = dATman.transpose
+    val sATT = sATman.transpose
+    val BTT = BTman.transpose.asInstanceOf[DenseMatrix]
 
     assert(dATT.multiply(B) ~== expected absTol 1e-15)
     assert(sATT.multiply(B) ~== expected absTol 1e-15)
     assert(dATT.multiply(BTT) ~== expected absTol 1e-15)
     assert(sATT.multiply(BTT) ~== expected absTol 1e-15)
 
-    gemm(true, false, 1.0, dAT, B, 2.0, C5)
-    gemm(true, false, 1.0, sAT, B, 2.0, C6)
-    gemm(true, false, 2.0, dAT, B, 2.0, C7)
-    gemm(true, false, 2.0, sAT, B, 2.0, C8)
-    gemm(true, true, 1.0, dAT, BT, 2.0, C9)
-    gemm(true, true, 1.0, sAT, BT, 2.0, C10)
-    gemm(true, true, 2.0, dAT, BT, 2.0, C11)
-    gemm(true, true, 2.0, sAT, BT, 2.0, C12)
-    gemm(false, true, 1.0, dA, BT, 2.0, C13)
-    gemm(false, true, 1.0, sA, BT, 2.0, C14)
-    gemm(false, true, 2.0, dA, BT, 2.0, C15)
-    gemm(false, true, 2.0, sA, BT, 2.0, C16)
+    gemm(1.0, dATT, BTT, 2.0, C5)
+    gemm(1.0, sATT, BTT, 2.0, C6)
+    gemm(2.0, dATT, BTT, 2.0, C7)
+    gemm(2.0, sATT, BTT, 2.0, C8)
+    gemm(1.0, dA, BTT, 2.0, C9)
+    gemm(1.0, sA, BTT, 2.0, C10)
+    gemm(2.0, dA, BTT, 2.0, C11)
+    gemm(2.0, sA, BTT, 2.0, C12)
     assert(C5 ~== expected2 absTol 1e-15)
     assert(C6 ~== expected2 absTol 1e-15)
     assert(C7 ~== expected3 absTol 1e-15)
@@ -267,10 +259,6 @@ class BLASSuite extends FunSuite {
     val y2 = y1.copy
     val y3 = y1.copy
     val y4 = y1.copy
-    val y5 = y1.copy
-    val y6 = y1.copy
-    val y7 = y1.copy
-    val y8 = y1.copy
     val expected2 = new DenseVector(Array(6.0, 7.0, 4.0, 9.0))
     val expected3 = new DenseVector(Array(10.0, 8.0, 6.0, 18.0))
 
@@ -284,10 +272,9 @@ class BLASSuite extends FunSuite {
     assert(y4 ~== expected3 absTol 1e-15)
     withClue("columns of A don't match the rows of B") {
       intercept[Exception] {
-        gemv(true, 1.0, dA, x, 2.0, y1)
+        gemv(1.0, dA, x, 2.0, y1)
       }
     }
-
     val dAT =
       new DenseMatrix(3, 4, Array(0.0, 2.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 3.0))
     val sAT =
@@ -298,14 +285,5 @@ class BLASSuite extends FunSuite {
 
     assert(dATT.multiply(x) ~== expected absTol 1e-15)
     assert(sATT.multiply(x) ~== expected absTol 1e-15)
-
-    gemv(true, 1.0, dAT, x, 2.0, y5)
-    gemv(true, 1.0, sAT, x, 2.0, y6)
-    gemv(true, 2.0, dAT, x, 2.0, y7)
-    gemv(true, 2.0, sAT, x, 2.0, y8)
-    assert(y5 ~== expected2 absTol 1e-15)
-    assert(y6 ~== expected2 absTol 1e-15)
-    assert(y7 ~== expected3 absTol 1e-15)
-    assert(y8 ~== expected3 absTol 1e-15)
   }
 }

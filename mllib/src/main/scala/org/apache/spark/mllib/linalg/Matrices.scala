@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.linalg
 
-import java.util.{Arrays => jArrays, Random}
+import java.util.{Arrays, Random}
 
 import scala.collection.mutable.{ArrayBuilder => MArrayBuilder, HashSet => MHashSet, ArrayBuffer}
 
@@ -61,14 +61,14 @@ sealed trait Matrix extends Serializable {
   /** Convenience method for `Matrix`-`DenseMatrix` multiplication. */
   def multiply(y: DenseMatrix): DenseMatrix = {
     val C: DenseMatrix = DenseMatrix.zeros(numRows, y.numCols)
-    BLAS.gemm(false, false, 1.0, this, y, 0.0, C)
+    BLAS.gemm(1.0, this, y, 0.0, C)
     C
   }
 
   /** Convenience method for `Matrix`-`DenseVector` multiplication. */
   def multiply(y: DenseVector): DenseVector = {
     val output = new DenseVector(new Array[Double](numRows))
-    BLAS.gemv(false, 1.0, this, y, 0.0, output)
+    BLAS.gemv(1.0, this, y, 0.0, output)
     output
   }
 
@@ -84,6 +84,16 @@ sealed trait Matrix extends Serializable {
     * backing array. For example, an operation such as addition or subtraction will only be
     * performed on the non-zero values in a `SparseMatrix`. */
   private[mllib] def update(f: Double => Double): Matrix
+
+  /**
+   * Applies a function `f` to all the active elements of dense and sparse matrix.
+   *
+   * @param f the function takes three parameters where the first two parameters are the row
+   *          and column indices respectively with the type `Int`, the third parameter is
+   *          the corresponding array index, and the final parameter is the corresponding
+   *          value in the matrix with type `Double`.
+   */
+  private[spark] def foreachActive(f: (Int, Int, Int, Double) => Unit)
 }
 
 /**
@@ -127,7 +137,7 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
 
   override def equals(o: Any) = o match {
     case m: DenseMatrix =>
-      m.numRows == numRows && m.numCols == numCols && jArrays.equals(toArray, m.toArray)
+      m.numRows == numRows && m.numCols == numCols && Arrays.equals(toArray, m.toArray)
     case _ => false
   }
 
@@ -170,6 +180,34 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
     val transposedMatrix = new DenseMatrix(numCols, numRows, values)
     transposedMatrix.isTransposed = !isTransposed
     transposedMatrix
+  }
+
+  private[spark] override def foreachActive(f: (Int, Int, Int, Double) => Unit): Unit = {
+    if (!isTransposed) {
+      // outer loop over columns
+      var j = 0
+      while (j < numCols) {
+        var i = 0
+        while (i < numRows) {
+          val ind = index(i, j)
+          f(i, j, ind, values(ind))
+          i += 1
+        }
+        j += 1
+      }
+    } else {
+      // outer loop over rows
+      var i = 0
+      while (i < numRows) {
+        var j = 0
+        while (j < numCols) {
+          val ind = index(i, j)
+          f(i, j, ind, values(ind))
+          j += 1
+        }
+        i += 1
+      }
+    }
   }
 
   /** Generate a `SparseMatrix` from the given `DenseMatrix`. */
@@ -314,6 +352,9 @@ class SparseMatrix(
   override def toArray: Array[Double] = {
     val arr = new Array[Double](numRows * numCols)
     // if statement inside the loop would be expensive
+    def fillMatrixArray(i: Int, j: Int, ind: Int, v: Int): Unit = {
+
+    }
     if (!isTransposed) {
       var j = 0
       while (j < numCols) {
@@ -359,9 +400,9 @@ class SparseMatrix(
 
   private[mllib] def index(i: Int, j: Int): Int = {
     if (!isTransposed) {
-      jArrays.binarySearch(rowIndices, colPtrs(j), colPtrs(j + 1), i)
+      Arrays.binarySearch(rowIndices, colPtrs(j), colPtrs(j + 1), i)
     } else {
-      jArrays.binarySearch(rowIndices, colPtrs(i), colPtrs(i + 1), j)
+      Arrays.binarySearch(rowIndices, colPtrs(i), colPtrs(i + 1), j)
     }
   }
 
@@ -394,6 +435,31 @@ class SparseMatrix(
     val transposedMatrix = new SparseMatrix(numCols, numRows, colPtrs, rowIndices, values)
     transposedMatrix.isTransposed = !isTransposed
     transposedMatrix
+  }
+
+  private[spark] override def foreachActive(f: (Int, Int, Int, Double) => Unit): Unit = {
+    if (!isTransposed) {
+      var j = 0
+      while (j < numCols) {
+        var idx = colPtrs(j)
+        while (idx < colPtrs(j + 1)) {
+          f(rowIndices(idx), j, idx, values(idx))
+          idx += 1
+        }
+        j += 1
+      }
+    } else {
+      var i = 0
+      while (i < numRows) {
+        var idx = colPtrs(i)
+        while (idx < colPtrs(i + 1)) {
+          val j = rowIndices(idx)
+          f(i, j, idx, values(idx))
+          idx += 1
+        }
+        i += 1
+      }
+    }
   }
 
   /** Generate a `DenseMatrix` from the given `SparseMatrix`. */
@@ -735,73 +801,24 @@ object Matrices {
     } else {
       var startCol = 0
       val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat =>
-        val nRows = mat.numRows
         val nCols = mat.numCols
         mat match {
           case spMat: SparseMatrix =>
-            val colPtrs = spMat.colPtrs
-            val rowIndices = spMat.rowIndices
-            val values = spMat.values
-            val data = new Array[(Int, Int, Double)](values.length)
-            if (!spMat.isTransposed) {
-              var j = 0
-              while (j < nCols) {
-                var idx = colPtrs(j)
-                while (idx < colPtrs(j + 1)) {
-                  val i = rowIndices(idx)
-                  val v = values(idx)
-                  data(idx) = (i, j + startCol, v)
-                  idx += 1
-                }
-                j += 1
-              }
-            } else {
-              var i = 0
-              while (i < nRows) {
-                var idx = colPtrs(i)
-                while (idx < colPtrs(i + 1)) {
-                  val j = rowIndices(idx)
-                  val v = values(idx)
-                  data(idx) = (i, j + startCol, v)
-                  idx += 1
-                }
-                i += 1
-              }
+            val data = new Array[(Int, Int, Double)](spMat.values.length)
+            def generateEntries(i: Int, j: Int, index: Int, v: Double): Unit = {
+              data(index) = (i, j + startCol, v)
             }
+            spMat.foreachActive(generateEntries)
             startCol += nCols
             data
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
-            val values = dnMat.values
-            if (!dnMat.isTransposed) {
-              var j = 0
-              while (j < nCols) {
-                var i = 0
-                val indStart = j * nRows
-                while (i < nRows) {
-                  val v = values(indStart + i)
-                  if (v != 0.0) {
-                    data.append((i, j + startCol, v))
-                  }
-                  i += 1
-                }
-                j += 1
-              }
-            } else {
-              var i = 0
-              while (i < nRows) {
-                var j = 0
-                val indStart = i * nCols
-                while (j < nCols) {
-                  val v = values(indStart + j)
-                  if (v != 0.0) {
-                    data.append((i, j + startCol, v))
-                  }
-                  j += 1
-                }
-                i += 1
+            def generateEntries(i: Int, j: Int, index: Int, v: Double): Unit = {
+              if (v != 0.0) {
+                data.append((i, j + startCol, v))
               }
             }
+            dnMat.foreachActive(generateEntries)
             startCol += nCols
             data
         }
@@ -843,17 +860,11 @@ object Matrices {
       matrices.foreach { mat =>
         var j = 0
         val nRows = mat.numRows
-        val values = mat.toArray
-        while (j < numCols) {
-          var i = 0
+        def fillEntries(i: Int, j: Int, index: Int, v: Double): Unit = {
           val indStart = j * numRows + startRow
-          val subMatStart = j * nRows
-          while (i < nRows) {
-            allValues(indStart + i) = values(subMatStart + i)
-            i += 1
-          }
-          j += 1
+          allValues(indStart + i) = v
         }
+        mat.foreachActive(fillEntries)
         startRow += nRows
       }
       new DenseMatrix(numRows, numCols, allValues)
@@ -861,72 +872,23 @@ object Matrices {
       var startRow = 0
       val entries: Array[(Int, Int, Double)] = matrices.flatMap { mat =>
         val nRows = mat.numRows
-        val nCols = mat.numCols
         mat match {
           case spMat: SparseMatrix =>
-            val colPtrs = spMat.colPtrs
-            val rowIndices = spMat.rowIndices
-            val values = spMat.values
-            val data = new Array[(Int, Int, Double)](values.length)
-            if (!spMat.isTransposed) {
-              var j = 0
-              while (j < nCols) {
-                var idx = colPtrs(j)
-                while (idx < colPtrs(j + 1)) {
-                  val i = rowIndices(idx)
-                  val v = values(idx)
-                  data(idx) = (i + startRow, j, v)
-                  idx += 1
-                }
-                j += 1
-              }
-            } else {
-              var i = 0
-              while (i < nRows) {
-                var idx = colPtrs(i)
-                while (idx < colPtrs(i + 1)) {
-                  val j = rowIndices(idx)
-                  val v = values(idx)
-                  data(idx) = (i + startRow, j, v)
-                  idx += 1
-                }
-                i += 1
-              }
+            val data = new Array[(Int, Int, Double)](spMat.values.length)
+            def generateEntries(i: Int, j: Int, index: Int, v: Double): Unit = {
+              data(index) = (i + startRow, j, v)
             }
+            spMat.foreachActive(generateEntries)
             startRow += nRows
             data
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
-            val values = dnMat.values
-            if (!dnMat.isTransposed) {
-              var j = 0
-              while (j < nCols) {
-                var i = 0
-                val indStart = j * nRows
-                while (i < nRows) {
-                  val v = values(indStart + i)
-                  if (v != 0.0) {
-                    data.append((i + startRow, j, v))
-                  }
-                  i += 1
-                }
-                j += 1
-              }
-            } else {
-              var i = 0
-              while (i < nRows) {
-                var j = 0
-                val indStart = i * nCols
-                while (j < nCols) {
-                  val v = values(indStart + j)
-                  if (v != 0.0) {
-                    data.append((i + startRow, j, v))
-                  }
-                  j += 1
-                }
-                i += 1
+            def generateEntries(i: Int, j: Int, index: Int, v: Double): Unit = {
+              if (v != 0.0) {
+                data.append((i + startRow, j, v))
               }
             }
+            dnMat.foreachActive(generateEntries)
             startRow += nRows
             data
         }
