@@ -53,7 +53,7 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
     val summary = data.treeAggregate(new MultivariateOnlineSummarizer)(
       (aggregator, data) => aggregator.add(data),
       (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
-    new StandardScalerModel(withMean, withStd, summary.mean, summary.variance)
+    new StandardScalerModel(summary.mean, summary.variance, withMean, withStd)
   }
 }
 
@@ -61,19 +61,29 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
  * :: Experimental ::
  * Represents a StandardScaler model that can transform vectors.
  *
- * @param withMean whether to center the data before scaling
- * @param withStd whether to scale the data to have unit standard deviation
  * @param mean column mean values
  * @param variance column variance values
+ * @param withMean whether to center the data before scaling
+ * @param withStd whether to scale the data to have unit standard deviation
  */
 @Experimental
-class StandardScalerModel private[mllib] (
-    val withMean: Boolean,
-    val withStd: Boolean,
+class StandardScalerModel (
     val mean: Vector,
-    val variance: Vector) extends VectorTransformer {
+    val variance: Vector,
+    private var withMean: Boolean = false,
+    private var withStd: Boolean = true) extends VectorTransformer {
 
   require(mean.size == variance.size)
+
+  def setWithMean(withMean: Boolean): this.type = {
+    this.withMean = withMean
+    this
+  }
+
+  def setWithStd(withStd: Boolean): this.type = {
+    this.withStd = withStd
+    this
+  }
 
   private lazy val factor: Array[Double] = {
     val f = Array.ofDim[Double](variance.size)
