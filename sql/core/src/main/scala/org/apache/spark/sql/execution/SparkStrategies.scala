@@ -206,11 +206,15 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object ParquetOperations extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       // TODO: need to support writing to other types of files.  Unify the below code paths.
-      case logical.WriteToFile(path, child) =>
+      case logical.WriteToFile(path, child, overwrite) =>
         val relation =
-          ParquetRelation.create(path, child, sparkContext.hadoopConfiguration, sqlContext)
-        // Note: overwrite=false because otherwise the metadata we just created will be deleted
-        InsertIntoParquetTable(relation, planLater(child), overwrite = false) :: Nil
+          ParquetRelation.createEmpty(
+            path,
+            child.output,
+            overwrite,
+            sparkContext.hadoopConfiguration,
+            sqlContext)
+        InsertIntoParquetTable(relation, planLater(child), overwrite) :: Nil
       case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
         InsertIntoParquetTable(table, planLater(child), overwrite) :: Nil
       case PhysicalOperation(projectList, filters: Seq[Expression], relation: ParquetRelation) =>
