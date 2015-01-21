@@ -342,7 +342,7 @@ private[hive] trait HiveInspectors {
 
     case _: JavaHiveDecimalObjectInspector =>
       (o: Any) => o match {
-        case b: BigDecimal => HiveShim.createDecimal(b.underlying())
+        case b: java.math.BigDecimal => HiveShim.createDecimal(b)
         case d: Decimal => HiveShim.createDecimal(d.toJavaBigDecimal)
       }
 
@@ -425,7 +425,7 @@ private[hive] trait HiveInspectors {
       case _: HiveDecimalObjectInspector if x.preferWritable() =>
         HiveShim.getDecimalWritable(a.asInstanceOf[Decimal])
       case _: HiveDecimalObjectInspector => a match {
-        case b: BigDecimal => HiveShim.createDecimal(b.underlying())
+        case b: java.math.BigDecimal => HiveShim.createDecimal(b)
         case d: Decimal => HiveShim.createDecimal(d.toJavaBigDecimal)
       }
       case _: BinaryObjectInspector if x.preferWritable() => HiveShim.getBinaryWritable(a)
