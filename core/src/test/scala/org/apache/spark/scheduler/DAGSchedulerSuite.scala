@@ -200,8 +200,8 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
    * below, we do not expect this function to ever be executed; instead, we will return results
    * directly through CompletionEvents.
    */
-  private val jobComputeFunc = (context: TaskContext, it: Iterator[(_)]) =>
-     it.next.asInstanceOf[Tuple2[_, _]]._1
+  private val jobComputeFunc = (context: TaskContext, it: Iterator[Any]) =>
+     it.next.asInstanceOf[(Any, Any)]._1
 
   /** Send the given CompletionEvent messages for the tasks in the TaskSet. */
   private def complete(taskSet: TaskSet, results: Seq[(TaskEndReason, Any)]) {
@@ -228,7 +228,7 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
   private def submit(
       rdd: RDD[_],
       partitions: Array[Int],
-      func: (TaskContext, Iterator[_]) => _ = jobComputeFunc,
+      func: (TaskContext, Iterator[Any]) => Any = jobComputeFunc,
       allowLocal: Boolean = false,
       listener: JobListener = jobListener): Int = {
     val jobId = scheduler.nextJobId.getAndIncrement()
