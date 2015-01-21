@@ -271,7 +271,7 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
    * Execute the command using Hive and return the results as a sequence. Each element
    * in the sequence is one row.
    */
-  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = synchronized {
+  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] =  {
     try {
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
@@ -289,15 +289,17 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
       proc match {
         case driver: Driver =>
           val results = HiveShim.createDriverResultsArray
-          val response: CommandProcessorResponse = driver.run(cmd)
-          // Throw an exception if there is an error in query processing.
-          if (response.getResponseCode != 0) {
+          synchronized {
+            val response: CommandProcessorResponse = driver.run(cmd)
+            // Throw an exception if there is an error in query processing.
+            if (response.getResponseCode != 0) {
+              driver.close()
+              throw new QueryExecutionException(response.getErrorMessage)
+            }
+            driver.setMaxRows(maxRows)
+            driver.getResults(results)
             driver.close()
-            throw new QueryExecutionException(response.getErrorMessage)
           }
-          driver.setMaxRows(maxRows)
-          driver.getResults(results)
-          driver.close()
           HiveShim.processResults(results)
         case _ =>
           if (sessionState.out != null) {
