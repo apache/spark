@@ -207,7 +207,7 @@ class BLASSuite extends FunSuite {
 
     withClue("columns of A don't match the rows of B") {
       intercept[Exception] {
-        gemm(1.0, dA, B, 2.0, C1)
+        gemm(1.0, dA.transpose, B, 2.0, C1)
       }
     }
 
@@ -272,7 +272,7 @@ class BLASSuite extends FunSuite {
     assert(y4 ~== expected3 absTol 1e-15)
     withClue("columns of A don't match the rows of B") {
       intercept[Exception] {
-        gemv(1.0, dA, x, 2.0, y1)
+        gemv(1.0, dA.transpose, x, 2.0, y1)
       }
     }
     val dAT =
