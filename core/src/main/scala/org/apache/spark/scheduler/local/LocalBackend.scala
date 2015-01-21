@@ -84,7 +84,7 @@ private[spark] class LocalActor(
         executor.launchTask(executorBackend, taskId = task.taskId, attemptNumber = task.attemptNumber,
           task.name, task.serializedTask)
       }
-    } if (scheduler.activeTaskSets.nonEmpty) {
+    } else if (scheduler.activeTaskSets.nonEmpty) {
       // Try to reviveOffer after 1 second, because scheduler may wait for locality timeout
       timer.schedule(new TimerTask {
         override def run(): Unit = {
