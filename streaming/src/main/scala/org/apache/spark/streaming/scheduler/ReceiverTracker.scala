@@ -118,7 +118,10 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
     }
   }
 
-  /** Clean up the data and metadata of old blocks and batches */
+  /**
+   * Clean up the data and metadata of blocks and batches that are strictly
+   * older than the threshold time. Note that this does not
+   */
   def cleanupOldBlocksAndBatches(cleanupThreshTime: Time) {
     // Clean up old block and batch metadata
     receivedBlockTracker.cleanupOldBatches(cleanupThreshTime, waitForCompletion = false)

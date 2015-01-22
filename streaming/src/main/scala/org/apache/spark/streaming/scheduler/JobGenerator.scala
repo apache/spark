@@ -244,8 +244,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     if (shouldCheckpoint) {
       eventActor ! DoCheckpoint(time)
     } else {
-      // If no checkpointing to be done, delete received block information right now,
-      // else postpone until checkpoint written (better guarantees)
+      // If checkpointing is not enabled, then delete metadata information about
+      // received blocks (block data not saved in any case). Otherwise, wait for
+      // checkpointing of this batch to complete.
       val maxRememberDuration = graph.getMaxInputStreamRememberDuration()
       jobScheduler.receiverTracker.cleanupOldBlocksAndBatches(time - maxRememberDuration)
       markBatchFullyProcessed(time)
