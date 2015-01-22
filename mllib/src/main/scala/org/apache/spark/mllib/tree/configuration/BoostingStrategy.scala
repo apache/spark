@@ -70,13 +70,11 @@ object BoostingStrategy {
 
   /**
    * Returns default configuration for the boosting algorithm
-   * @param algoStr Learning goal.  Supported:
-   *             [[org.apache.spark.mllib.tree.configuration.Algo.Classification]],
-   *             [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
+   * @param algo Learning goal.  Supported: "Classification" or "Regression"
    * @return Configuration for boosting algorithm
    */
-  def defaultParams(algoStr: String): BoostingStrategy = {
-    defaultParams(Algo.fromString(algoStr))
+  def defaultParams(algo: String): BoostingStrategy = {
+    defaultParams(Algo.fromString(algo))
   }
 
   /**

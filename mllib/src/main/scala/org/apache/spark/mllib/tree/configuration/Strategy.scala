@@ -171,9 +171,11 @@ object Strategy {
 
   /**
    * Construct a default set of parameters for [[org.apache.spark.mllib.tree.DecisionTree]]
-   * @param algoStr  "Classification" or "Regression"
+   * @param algo  "Classification" or "Regression"
    */
-  def defaultStrategy(algoStr: String): Strategy = defaultStategy(Algo.fromString(algoStr))
+  def defaultStrategy(algo: String): Strategy = {
+    defaultStategy(Algo.fromString(algo))
+  }
 
   /**
    * Construct a default set of parameters for [[org.apache.spark.mllib.tree.DecisionTree]]
