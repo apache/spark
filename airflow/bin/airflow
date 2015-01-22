@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from airflow.configuration import conf 
+from airflow.executors import DEFAULT_EXECUTOR
 from airflow import settings
 from airflow import utils
 from airflow import jobs
@@ -10,7 +11,6 @@ import dateutil.parser
 from datetime import datetime
 import logging
 import os
-import signal
 import sys
 
 import argparse
@@ -67,7 +67,6 @@ def run(args):
     logging.basicConfig(
         filename=filename, level=logging.INFO,
         format=settings.LOG_FORMAT)
-    print("Logging into: " + filename)
 
     if not args.pickle:
         dagbag = DagBag(args.subdir)
@@ -85,13 +84,19 @@ def run(args):
     # TODO: add run_local and fire it with the right executor from run
     ti = TaskInstance(task, args.execution_date)
 
-
-    run_job = jobs.LocalTaskJob(
-        task_instance=ti,
-        mark_success=args.mark_success,
-        force=args.force,
-        ignore_dependencies=args.ignore_dependencies)
-    run_job.run()
+    if args.local:
+        print("Logging into: " + filename)
+        run_job = jobs.LocalTaskJob(
+            task_instance=ti,
+            mark_success=args.mark_success,
+            force=args.force,
+            ignore_dependencies=args.ignore_dependencies)
+        run_job.run()
+    else:
+        executor = DEFAULT_EXECUTOR
+        executor.start()
+        executor.queue_command(ti.key, ti.command())
+        executor.end()
 
 
 def list_dags(args):
@@ -343,6 +348,10 @@ if __name__ == '__main__':
     parser_run.add_argument(
         "-f", "--force",
         help="Force a run regardless or previous success",
+        action="store_true")
+    parser_run.add_argument(
+        "-l", "--local",
+        help="Runs the task locally, don't use the executor",
         action="store_true")
     parser_run.add_argument(
         "-i", "--ignore_dependencies",

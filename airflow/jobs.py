@@ -394,7 +394,6 @@ class LocalTaskJob(BaseJob):
             })
         self.thr = thr
 
-
         thr.start()
         while thr.is_alive():
             self.heartbeat()
