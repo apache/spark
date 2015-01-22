@@ -97,6 +97,14 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT key, value FROM ctas4 ORDER BY key, value"),
       sql("SELECT key, value FROM ctas4 LIMIT 1").collect().toSeq)
 
+    checkExistence(sql("DESC EXTENDED ctas2"), true,
+      "name:key", "type:string", "name:value", "ctas2",
+      "org.apache.hadoop.hive.ql.io.RCFileInputFormat",
+      "org.apache.hadoop.hive.ql.io.RCFileOutputFormat",
+      "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe",
+      "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22","MANAGED_TABLE"
+    )
+
     if (HiveShim.version =="0.13.1") {
       sql(
         """CREATE TABLE ctas5
@@ -105,21 +113,22 @@ class SQLQuerySuite extends QueryTest {
           |   FROM src
           |   ORDER BY key, value""".stripMargin).collect
 
+      checkExistence(sql("DESC EXTENDED ctas5"), true,
+        "name:key", "type:string", "name:value", "ctas5",
+        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat",
+        "org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat",
+        "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe",
+        "MANAGED_TABLE"
+      )
+
+      val default = getConf("spark.sql.hive.convertMetastoreParquet", "true")
       // use the Hive SerDe for parquet tables
       sql("set spark.sql.hive.convertMetastoreParquet = false")
       checkAnswer(
         sql("SELECT key, value FROM ctas5 ORDER BY key, value"),
         sql("SELECT key, value FROM src ORDER BY key, value").collect().toSeq)
-      sql("set spark.sql.hive.convertMetastoreParquet = true")
+      sql(s"set spark.sql.hive.convertMetastoreParquet = $default")
     }
-
-    checkExistence(sql("DESC EXTENDED ctas2"), true,
-      "name:key", "type:string", "name:value", "ctas2",
-      "org.apache.hadoop.hive.ql.io.RCFileInputFormat",
-      "org.apache.hadoop.hive.ql.io.RCFileOutputFormat",
-      "org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe",
-      "serde_p1=p1", "serde_p2=p2", "tbl_p1=p11", "tbl_p2=p22","MANAGED_TABLE"
-    )
   }
 
   test("ordering not in select") {
