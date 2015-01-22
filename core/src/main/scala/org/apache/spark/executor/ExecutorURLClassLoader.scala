@@ -56,7 +56,7 @@ private[spark] class ChildExecutorURLClassLoader(urls: Array[URL], parent: Class
         super.loadClass(name, resolve)
       } catch {
         case e: ClassNotFoundException =>
-          parentClassLoader.loadClass(name)
+          parentClassLoader.loadClass(name, resolve)
       }
     }
   }
