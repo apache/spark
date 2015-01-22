@@ -29,20 +29,20 @@ if __name__ == "__main__":
         sc.parallelize([(0L, "a b c d e spark", 1.0),
                         (1L, "b d", 0.0),
                         (2L, "spark f g h", 1.0),
-                        (3L, "hadoop mapreduce", 0.0)]) \
+                        (3L, "hadoop mapreduce", 0.0)])
           .map(lambda x: Row(id=x[0], text=x[1], label=x[2])))
 
     tokenizer = Tokenizer() \
-      .setInputCol("text") \
-      .setOutputCol("words")
+        .setInputCol("text") \
+        .setOutputCol("words")
     hashingTF = HashingTF() \
-      .setInputCol(tokenizer.getOutputCol()) \
-      .setOutputCol("features")
+        .setInputCol(tokenizer.getOutputCol()) \
+        .setOutputCol("features")
     lr = LogisticRegression() \
-      .setMaxIter(10) \
-      .setRegParam(0.01)
+        .setMaxIter(10) \
+        .setRegParam(0.01)
     pipeline = Pipeline() \
-      .setStages([tokenizer, hashingTF, lr])
+        .setStages([tokenizer, hashingTF, lr])
 
     model = pipeline.fit(training)
 
@@ -50,7 +50,7 @@ if __name__ == "__main__":
         sc.parallelize([(4L, "spark i j k"),
                         (5L, "l m n"),
                         (6L, "mapreduce spark"),
-                        (7L, "apache hadoop")]) \
+                        (7L, "apache hadoop")])
           .map(lambda x: Row(id=x[0], text=x[1])))
 
     for row in model.transform(test).collect():

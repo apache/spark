@@ -18,7 +18,7 @@
 from abc import ABCMeta, abstractmethod, abstractproperty
 
 from pyspark import SparkContext
-from pyspark.sql import SchemaRDD, inherit_doc # TODO: move inherit_doc to Spark Core
+from pyspark.sql import SchemaRDD, inherit_doc  # TODO: move inherit_doc to Spark Core
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import Identifiable
 
