@@ -17,9 +17,9 @@
 package org.apache.spark.sql.hbase
 
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.SqlParser
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.{SqlLexical, SqlParser}
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.hbase.execution._
 import org.apache.spark.util.Utils
@@ -65,14 +65,6 @@ class HBaseSQLParser extends SqlParser {
   protected val VALUES = Keyword("VALUES")
   protected val TERMINATED = Keyword("TERMINATED")
 
-  protected val newReservedWords =
-    this.getClass
-      .getMethods
-      .filter(_.getReturnType == classOf[Keyword])
-      .map(_.invoke(this).asInstanceOf[Keyword].str)
-
-  override val lexical = new SqlLexical(newReservedWords)
-
   override protected lazy val start: Parser[LogicalPlan] =
     (select *
       (UNION ~ ALL ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2)}
@@ -90,7 +82,7 @@ class HBaseSQLParser extends SqlParser {
       |
       INSERT ~> INTO ~> ident ~ (VALUES ~> "(" ~> values <~ ")") ^^ {
         case tableName ~ valueSeq =>
-          val valueStringSeq = valueSeq.map{case v =>
+          val valueStringSeq = valueSeq.map { case v =>
             if (v.value == null) null
             else v.value.toString
           }
@@ -237,7 +229,7 @@ class HBaseSQLParser extends SqlParser {
       (opt(OVERWRITE) ~> INTO ~> TABLE ~> ident) ~
       (FIELDS ~> TERMINATED ~> BY ~> stringLit).? <~ opt(";") ^^ {
       case isparall ~ isLocal ~ filePath ~ table ~ delimiter =>
-        if(isparall.isDefined) {
+        if (isparall.isDefined) {
           ParallelizedBulkLoadIntoTableCommand(filePath,
             table, isLocal.isDefined, delimiter)
         } else {

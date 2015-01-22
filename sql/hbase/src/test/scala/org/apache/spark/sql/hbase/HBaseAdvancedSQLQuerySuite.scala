@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.hbase
 
-import org.apache.spark.sql.{SQLConf, _}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.{SQLConf, _}
 
 class HBaseAdvancedSQLQuerySuite extends HBaseIntegrationTestBase {
   // Make sure the tables are loaded.
@@ -39,10 +39,10 @@ class HBaseAdvancedSQLQuerySuite extends HBaseIntegrationTestBase {
     val tableA = sql("SELECT * FROM ta")
     checkAnswer(
       tableA.where('col7 === 1).orderBy('col2.asc).select('col4),
-      Seq(Seq(1)))
+      Row(1) :: Nil)
     checkAnswer(
       tableA.where('col2 === 6).orderBy('col2.asc).select('col7),
-      Seq(Seq(-31)))
+      Row(-31) :: Nil)
   }
 
   test("metadata is propagated correctly") {

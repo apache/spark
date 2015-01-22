@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.hbase
 
-import org.apache.spark.Logging
 import org.apache.spark.sql.Row
 
 class HBaseInsertTableSuite extends QueriesSuiteBase {
@@ -76,7 +75,7 @@ class HBaseInsertTableSuite extends QueriesSuiteBase {
   def compareResults(fetchResult: Array[Row], targetResult: Array[Row]) = {
     val res = {
       for (rx <- 0 until targetResult.size)
-      yield compareWithTol(fetchResult(rx).toSeq, targetResult(rx), s"Row$rx failed")
+      yield compareWithTol(fetchResult(rx).toSeq, targetResult(rx).toSeq, s"Row$rx failed")
     }.foldLeft(true) { case (res1, newres) => res1 && newres}
     assert(res, "One or more rows did not match expected")
   }
@@ -162,7 +161,7 @@ class HBaseInsertTableSuite extends QueriesSuiteBase {
 
     assert(selectAllResult.size == 3, s"$testnm failed on size")
 
-    var currentResultRow : Int = 0
+    var currentResultRow: Int = 0
 
     // check 1st result row
     assert(selectAllResult(currentResultRow).length == 4, s"$testnm failed on row size (# of cols)")

@@ -20,10 +20,10 @@ package org.apache.spark.sql.hbase
 
 import java.util.Date
 
-import org.apache.spark.sql.SchemaRDD
-import org.apache.spark.sql.catalyst.plans
-import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.Logging
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.{Row, SchemaRDD}
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Suite}
 
 abstract class HBaseIntegrationTestBase
@@ -32,17 +32,25 @@ abstract class HBaseIntegrationTestBase
 
   val startTime = (new Date).getTime
 
-  protected def checkAnswer(rdd: SchemaRDD, expectedAnswer: Any): Unit = {
-    val convertedAnswer = expectedAnswer match {
-      case s: Seq[_] if s.isEmpty => s
-      case s: Seq[_] if s.head.isInstanceOf[Product] &&
-        !s.head.isInstanceOf[Seq[_]] => s.map(_.asInstanceOf[Product].productIterator.toIndexedSeq)
-      case s: Seq[_] => s
-      case singleItem => Seq(Seq(singleItem))
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   * @param rdd the [[SchemaRDD]] to be executed
+   * @param expectedAnswer the expected result, can either be an Any, Seq[Product], or Seq[ Seq[Any] ].
+   */
+  protected def checkAnswer(rdd: SchemaRDD, expectedAnswer: Seq[Row]): Unit = {
+    val isSorted = rdd.logicalPlan.collect { case s: logical.Sort => s}.nonEmpty
+    def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
+      // Converts data to types that we can do equality comparison using Scala collections.
+      // For BigDecimal type, the Scala type has a better definition of equality test (similar to
+      // Java's java.math.BigDecimal.compareTo).
+      val converted: Seq[Row] = answer.map { s =>
+        Row.fromSeq(s.toSeq.map {
+          case d: java.math.BigDecimal => BigDecimal(d)
+          case o => o
+        })
+      }
+      if (!isSorted) converted.sortBy(_.toString) else converted
     }
-
-    val isSorted = rdd.logicalPlan.collect { case s: plans.logical.Sort => s }.nonEmpty
-    def prepareAnswer(answer: Seq[Any]) = if (!isSorted) answer.sortBy(_.toString) else answer
     val sparkAnswer = try rdd.collect().toSeq catch {
       case e: Exception =>
         fail(
@@ -55,8 +63,8 @@ abstract class HBaseIntegrationTestBase
           """.stripMargin)
     }
 
-    if (prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {
-      fail(s"""
+    if (prepareAnswer(expectedAnswer) != prepareAnswer(sparkAnswer)) {
+      fail( s"""
         |Results do not match for query:
         |${rdd.logicalPlan}
         |== Analyzed Plan ==
@@ -64,13 +72,19 @@ abstract class HBaseIntegrationTestBase
         |== Physical Plan ==
         |${rdd.queryExecution.executedPlan}
         |== Results ==
-        |${sideBySide(
-        s"== Correct Answer - ${convertedAnswer.size} ==" +:
-          prepareAnswer(convertedAnswer).map(_.toString),
-        s"== Spark Answer - ${sparkAnswer.size} ==" +:
-          prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
+        |${
+        sideBySide(
+          s"== Correct Answer - ${expectedAnswer.size} ==" +:
+            prepareAnswer(expectedAnswer).map(_.toString),
+          s"== Spark Answer - ${sparkAnswer.size} ==" +:
+            prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")
+      }
       """.stripMargin)
     }
+  }
+
+  protected def checkAnswer(rdd: SchemaRDD, expectedAnswer: Row): Unit = {
+    checkAnswer(rdd, Seq(expectedAnswer))
   }
 
   override protected def afterAll(): Unit = {
