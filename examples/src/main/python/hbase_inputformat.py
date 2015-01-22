@@ -26,24 +26,24 @@ Create test data in HBase first:
 hbase(main):016:0> create 'test', 'f1'
 0 row(s) in 1.0430 seconds
 
-hbase(main):017:0> put 'test', 'row1', 'f1', 'value1'
+hbase(main):017:0> put 'test', 'row1', 'f1:a', 'value1'
 0 row(s) in 0.0130 seconds
 
-hbase(main):018:0> put 'test', 'row2', 'f1', 'value2'
+hbase(main):018:0> put 'test', 'row1', 'f1:b', 'value2'
 0 row(s) in 0.0030 seconds
 
-hbase(main):019:0> put 'test', 'row3', 'f1', 'value3'
+hbase(main):019:0> put 'test', 'row2', 'f1', 'value3'
 0 row(s) in 0.0050 seconds
 
-hbase(main):020:0> put 'test', 'row4', 'f1', 'value4'
+hbase(main):020:0> put 'test', 'row3', 'f1', 'value4'
 0 row(s) in 0.0110 seconds
 
 hbase(main):021:0> scan 'test'
 ROW                           COLUMN+CELL
- row1                         column=f1:, timestamp=1401883411986, value=value1
- row2                         column=f1:, timestamp=1401883415212, value=value2
- row3                         column=f1:, timestamp=1401883417858, value=value3
- row4                         column=f1:, timestamp=1401883420805, value=value4
+ row1                         column=f1:a, timestamp=1401883411986, value=value1
+ row1                         column=f1:b, timestamp=1401883415212, value=value2
+ row2                         column=f1:, timestamp=1401883417858, value=value3
+ row3                         column=f1:, timestamp=1401883420805, value=value4
 4 row(s) in 0.0240 seconds
 """
 if __name__ == "__main__":

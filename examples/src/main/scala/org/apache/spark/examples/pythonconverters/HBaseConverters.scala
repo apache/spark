@@ -35,7 +35,7 @@ class HBaseResultToStringConverter extends Converter[Any, String] {
     import collection.JavaConverters._
     val result = obj.asInstanceOf[Result]
     val output = result.listCells.asScala.map(cell =>
-        "{'columnFamliy':'%s','qualifier':'%s','timestamp':'%s','type':'%s','value':'%s'}".format(
+        "{'columnFamily':'%s','qualifier':'%s','timestamp':'%s','type':'%s','value':'%s'}".format(
           Bytes.toStringBinary(CellUtil.cloneFamily(cell)),
           Bytes.toStringBinary(CellUtil.cloneQualifier(cell)),
           cell.getTimestamp.toString,
