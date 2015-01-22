@@ -17,12 +17,13 @@
 
 package org.apache.spark.scheduler
 
-import akka.actor.{PoisonPill, ActorRef, Actor}
-import org.apache.spark.Logging
-import org.apache.spark.util.{AkkaUtils, ActorLogReceive}
-
 import scala.collection.mutable
 import scala.concurrent.duration.FiniteDuration
+
+import akka.actor.{PoisonPill, ActorRef, Actor}
+
+import org.apache.spark.Logging
+import org.apache.spark.util.{AkkaUtils, ActorLogReceive}
 
 private[spark] sealed trait OutputCommitCoordinationMessage
 
