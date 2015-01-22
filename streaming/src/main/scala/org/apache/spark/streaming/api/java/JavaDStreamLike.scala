@@ -213,7 +213,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    *                       DStream's batching interval
    * @deprecated As this API is not Java compatible.
    */
-  @deprecated("Use Java compatible version", "1.3.0")
+  @deprecated("Use Java-compatible version of reduceByWindow", "1.3.0")
   def reduceByWindow(
       reduceFunc: (T, T) => T,
       windowDuration: Duration,
