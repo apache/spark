@@ -100,7 +100,7 @@ class OutputCommitCoordinatorSuite
   /**
    * Function that constructs a SparkHadoopWriter with a mock committer and runs its commit
    */
-  private class OutputCommittingFunctionWithAccumulator(var accum: Accumulator[Int])
+  private class OutputCommittingFunctionWithAccumulator
       extends ((TaskContext, Iterator[Int]) => Int) with Serializable {
 
     def apply(ctxt: TaskContext, it: Iterator[Int]): Int = {
@@ -150,8 +150,8 @@ class OutputCommitCoordinatorSuite
   /**
    * Function that will explicitly fail to commit on the first attempt
    */
-  private class FailFirstTimeCommittingFunctionWithAccumulator(accum: Accumulator[Int])
-      extends OutputCommittingFunctionWithAccumulator(accum) {
+  private class FailFirstTimeCommittingFunctionWithAccumulator
+      extends OutputCommittingFunctionWithAccumulator {
     override def apply(ctxt: TaskContext, it: Iterator[Int]): Int = {
       if (ctxt.attemptNumber == 0) {
         val outputCommitter = new FakeOutputCommitter {
@@ -168,13 +168,13 @@ class OutputCommitCoordinatorSuite
 
   test("Only one of two duplicate commit tasks should commit") {
     val rdd = sc.parallelize(1 to 10, 10)
-    sc.runJob(rdd, new OutputCommittingFunctionWithAccumulator(accum))
+    sc.runJob(rdd, new OutputCommittingFunctionWithAccumulator)
     assert(accum.value === 10)
   }
 
   test("If commit fails, if task is retried it should not be locked, and will succeed.") {
     val rdd = sc.parallelize(Seq(1), 1)
-    sc.runJob(rdd, new FailFirstTimeCommittingFunctionWithAccumulator(accum))
+    sc.runJob(rdd, new FailFirstTimeCommittingFunctionWithAccumulator)
     assert(accum.value == 1)
   }
 }
