@@ -341,13 +341,14 @@ class KMeans private (
     }
 
     mergeNewCenters()
+    costs.unpersist(blocking = false)
 
     // Finally, we might have a set of more than k candidate centers for each run; weigh each
     // candidate by the number of points in the dataset mapping to it and run a local k-means++
     // on the weighted centers to pick just k of them
     val bcCenters = data.context.broadcast(centers)
     val weightMap = data.flatMap { p =>
-      (0 until runs).map { r =>
+      Iterator.tabulate(runs) { r =>
         ((r, KMeans.findClosest(bcCenters.value(r), p)._1), 1.0)
       }
     }.reduceByKey(_ + _).collectAsMap()
