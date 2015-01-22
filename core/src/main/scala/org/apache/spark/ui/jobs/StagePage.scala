@@ -333,7 +333,9 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
                 {shuffleReadBlockedQuantiles}
               </tr>
               <tr>{shuffleReadQuantiles}</tr>
-            } else Nil,
+            } else {
+              Nil
+            },
             if (hasShuffleWrite) <tr>{shuffleWriteQuantiles}</tr> else Nil,
             if (hasBytesSpilled) <tr>{memoryBytesSpilledQuantiles}</tr> else Nil,
             if (hasBytesSpilled) <tr>{diskBytesSpilledQuantiles}</tr> else Nil)
@@ -404,9 +406,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
       val maybeShuffleReadBlockedTime = metrics.flatMap(_.shuffleReadMetrics).map(_.fetchWaitTime)
       val shuffleReadBlockedTimeSortable = maybeShuffleReadBlockedTime.map(_.toString).getOrElse("")
-      val shuffleReadBlockedTimeReadable = maybeShuffleReadBlockedTime.map{
-        ms => UIUtils.formatDuration(ms)
-      }.getOrElse("")
+      val shuffleReadBlockedTimeReadable =
+        maybeShuffleReadBlockedTime.map(ms => UIUtils.formatDuration(ms)).getOrElse("")
 
       val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead)
       val shuffleReadSortable = maybeShuffleRead.map(_.toString).getOrElse("")
