@@ -19,9 +19,11 @@ package org.apache.spark.sql
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.Utils
 
 
 trait RDDApi[T] {
@@ -129,6 +131,12 @@ trait DataFrameSpecificApi {
 
   def except(other: DataFrame): DataFrame
 
+  def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame
+
+  def sample(withReplacement: Boolean, fraction: Double): DataFrame = {
+    sample(withReplacement, fraction, Utils.random.nextLong)
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Column mutation
   /////////////////////////////////////////////////////////////////////////////
@@ -144,11 +152,20 @@ trait DataFrameSpecificApi {
 
   def rdd: RDD[Row]
 
+  def toJSON: RDD[String]
+
   def registerTempTable(tableName: String): Unit
 
   def saveAsParquetFile(path: String): Unit
 
-  def toJSON: RDD[String]
+  @Experimental
+  def saveAsTable(tableName: String): Unit
+
+  @Experimental
+  def insertInto(tableName: String, overwrite: Boolean): Unit
+
+  @Experimental
+  def insertInto(tableName: String): Unit = insertInto(tableName, overwrite = false)
 
   /////////////////////////////////////////////////////////////////////////////
   // Stat functions

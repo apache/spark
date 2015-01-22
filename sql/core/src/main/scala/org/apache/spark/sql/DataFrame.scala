@@ -22,9 +22,11 @@ import scala.reflect.ClassTag
 
 import com.fasterxml.jackson.core.JsonFactory
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => LiteralExpr}
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
@@ -170,9 +172,13 @@ class DataFrame(
 
   override def unionAll(other: DataFrame): DataFrame = Union(logicalPlan, other.logicalPlan)
 
-  def intersect(other: DataFrame): DataFrame = Intersect(logicalPlan, other.logicalPlan)
+  override def intersect(other: DataFrame): DataFrame = Intersect(logicalPlan, other.logicalPlan)
 
-  def except(other: DataFrame): DataFrame = Except(logicalPlan, other.logicalPlan)
+  override def except(other: DataFrame): DataFrame = Except(logicalPlan, other.logicalPlan)
+
+  override def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame = {
+    Sample(fraction, withReplacement, seed, logicalPlan)
+  }
 
   /////////////////////////////////////////////////////////////////////////////
 
@@ -236,6 +242,18 @@ class DataFrame(
 
   override def saveAsParquetFile(path: String): Unit = {
     sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
+  }
+
+  @Experimental
+  override def saveAsTable(tableName: String): Unit = {
+    sqlContext.executePlan(
+      CreateTableAsSelect(None, tableName, logicalPlan, allowExisting = false)).toRdd
+  }
+
+  @Experimental
+  override def insertInto(tableName: String, overwrite: Boolean): Unit = {
+    sqlContext.executePlan(InsertIntoTable(UnresolvedRelation(Seq(tableName)),
+      Map.empty, logicalPlan, overwrite)).toRdd
   }
 
   override def toJSON: RDD[String] = {
