@@ -238,13 +238,17 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   /** Clear DStream metadata for the given `time`. */
   private def clearMetadata(time: Time) {
     ssc.graph.clearMetadata(time)
-    jobScheduler.receiverTracker.cleanupOldMetadata(time - graph.batchDuration)
 
     // If checkpointing is enabled, then checkpoint,
     // else mark batch to be fully processed
     if (shouldCheckpoint) {
       eventActor ! DoCheckpoint(time)
     } else {
+      // If checkpointing is not enabled, then delete metadata information about
+      // received blocks (block data not saved in any case). Otherwise, wait for
+      // checkpointing of this batch to complete.
+      val maxRememberDuration = graph.getMaxInputStreamRememberDuration()
+      jobScheduler.receiverTracker.cleanupOldBlocksAndBatches(time - maxRememberDuration)
       markBatchFullyProcessed(time)
     }
   }
@@ -252,6 +256,11 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   /** Clear DStream checkpoint data for the given `time`. */
   private def clearCheckpointData(time: Time) {
     ssc.graph.clearCheckpointData(time)
+
+    // All the checkpoint information about which batches have been processed, etc have
+    // been saved to checkpoints, so its safe to delete block metadata and data WAL files
+    val maxRememberDuration = graph.getMaxInputStreamRememberDuration()
+    jobScheduler.receiverTracker.cleanupOldBlocksAndBatches(time - maxRememberDuration)
     markBatchFullyProcessed(time)
   }
 
