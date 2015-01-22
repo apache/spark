@@ -104,5 +104,6 @@ abstract class ReceiverInputDStream[T: ClassTag](@transient ssc_ : StreamingCont
   private[streaming] override def clearMetadata(time: Time) {
     super.clearMetadata(time)
     ssc.scheduler.receiverTracker.cleanupOldMetadata(time - rememberDuration)
+    ssc.scheduler.receiverTracker.cleanupOldReceivedBatchData(time - rememberDuration)
   }
 }
