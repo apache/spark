@@ -250,9 +250,13 @@ class Analyzer(catalog: Catalog,
         Project(
           projectList.flatMap {
             case s: Star => s.expand(child.output, resolver)
-            case o => o transformUp {
-              case s: Star => s.expand(child.output, resolver)
-            }
+            case Alias(UnresolvedFunction(name1, clds), name2) if containsStar(clds) =>
+              val newClds = clds.flatMap {
+                case s: Star => s.expand(child.output, resolver)
+                case o => o :: Nil
+              }
+              Alias(UnresolvedFunction(name1, newClds), name2)() :: Nil
+            case o => o :: Nil
           },
           child)
       case t: ScriptTransformation if containsStar(t.input) =>
