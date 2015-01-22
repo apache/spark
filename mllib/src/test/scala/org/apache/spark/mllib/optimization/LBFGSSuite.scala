@@ -45,7 +45,7 @@ class LBFGSSuite extends FunSuite with MLlibTestSparkContext with Matchers {
   // Add an extra variable consisting of all 1.0's for the intercept.
   val testData = GradientDescentSuite.generateGDInput(A, B, nPoints, 42)
   val data = testData.map { case LabeledPoint(label, features) =>
-    label -> Vectors.dense(1.0 +: features.toArray)
+    Vectors.dense(Array(label)) -> Vectors.dense(1.0 +: features.toArray)
   }
 
   lazy val dataRDD = sc.parallelize(data, 2).cache()
@@ -236,7 +236,7 @@ class LBFGSClusterSuite extends FunSuite with LocalClusterSparkContext {
     val n = 200000
     val examples = sc.parallelize(0 until m, 2).mapPartitionsWithIndex { (idx, iter) =>
       val random = new Random(idx)
-      iter.map(i => (1.0, Vectors.dense(Array.fill(n)(random.nextDouble))))
+      iter.map(i => (Vectors.dense(Array(1.0)), Vectors.dense(Array.fill(n)(random.nextDouble))))
     }.cache()
     val lbfgs = new LBFGS(new LogisticGradient, new SquaredL2Updater)
       .setNumCorrections(1)

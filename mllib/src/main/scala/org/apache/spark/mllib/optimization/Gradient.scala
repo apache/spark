@@ -51,6 +51,24 @@ abstract class Gradient extends Serializable {
    * @return loss
    */
   def compute(data: Vector, label: Double, weights: Vector, cumGradient: Vector): Double
+
+  /**
+   * Compute the gradient and loss given the features of a single data point,
+   * add the gradient to a provided vector to avoid creating new objects, and return loss.
+   * This is a more generic version of compute, when one can pass complex output
+   * instead of a single label or pass data and output in batches
+   *
+   * @param data features for one or many data points
+   * @param output vector of outputs for this (these) data point(s)
+   * @param weights weights/coefficients corresponding to features
+   * @param cumGradient the computed gradient will be added to this vector
+   *
+   * @return loss
+   */
+  def compute(data: Vector, output: Vector, weights: Vector, cumGradient: Vector): Double = {
+    val label = output(0)
+    compute(data, label, weights, cumGradient)
+  }
 }
 
 /**

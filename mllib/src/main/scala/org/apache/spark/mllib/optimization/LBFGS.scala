@@ -111,7 +111,7 @@ class LBFGS(private var gradient: Gradient, private var updater: Updater)
     this
   }
 
-  override def optimize(data: RDD[(Double, Vector)], initialWeights: Vector): Vector = {
+  override def optimize(data: RDD[(Vector, Vector)], initialWeights: Vector): Vector = {
     val (weights, _) = LBFGS.runLBFGS(
       data,
       gradient,
@@ -152,7 +152,7 @@ object LBFGS extends Logging {
    *         computed for every iteration.
    */
   def runLBFGS(
-      data: RDD[(Double, Vector)],
+      data: RDD[(Vector, Vector)],
       gradient: Gradient,
       updater: Updater,
       numCorrections: Int,
@@ -196,7 +196,7 @@ object LBFGS extends Logging {
    * at a particular point (weights). It's used in Breeze's convex optimization routines.
    */
   private class CostFun(
-    data: RDD[(Double, Vector)],
+    data: RDD[(Vector, Vector)],
     gradient: Gradient,
     updater: Updater,
     regParam: Double,
@@ -210,9 +210,9 @@ object LBFGS extends Logging {
       val localGradient = gradient
 
       val (gradientSum, lossSum) = data.treeAggregate((Vectors.zeros(n), 0.0))(
-          seqOp = (c, v) => (c, v) match { case ((grad, loss), (label, features)) =>
+          seqOp = (c, v) => (c, v) match { case ((grad, loss), (output, features)) =>
             val l = localGradient.compute(
-              features, label, bcW.value, grad)
+              features, output, bcW.value, grad)
             (grad, loss + l)
           },
           combOp = (c1, c2) => (c1, c2) match { case ((grad1, loss1), (grad2, loss2)) =>
