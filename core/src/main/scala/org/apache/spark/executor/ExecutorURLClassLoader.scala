@@ -19,7 +19,37 @@ package org.apache.spark.executor
 
 import java.net.{URLClassLoader, URL}
 
-import org.apache.spark.classloader.GreedyUrlClassLoader
+/**
+ * A ClassLoader trait that changes the normal delegation scheme.
+ * Normally, it's (cache, parent, self).  GreedyClassLoader uses
+ * (cache, self, parent).  This lets this CL "hide" or "override"
+ * class defs that also exist in the parent loader.
+ */
+private[spark] trait GreedyClassLoader extends ClassLoader {
+  override def loadClass(name: String, resolve: Boolean): Class[_] = {
+    this.synchronized {
+      // Check the cache
+      var c: Class[_] = findLoadedClass(name)
+      if (c == null) {
+        try {
+          // Try loading it ourselves
+          c = findClass(name)
+        } catch {
+          case ignored: ClassNotFoundException =>
+        }
+
+        if (c == null) {
+          // Finally, try delegating to the parent
+          c = getParent.loadClass(name)
+        }
+      }
+      if (resolve) {
+        resolveClass(c)
+      }
+      c
+    }
+  }
+}
 
 /**
  * The addURL method in URLClassLoader is protected. We subclass it to make this accessible.
@@ -31,7 +61,7 @@ private[spark] trait MutableURLClassLoader extends ClassLoader {
 }
 
 private[spark] class ChildExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader)
-  extends GreedyUrlClassLoader(urls, parent) with MutableURLClassLoader {
+  extends URLClassLoader(urls, parent) with GreedyClassLoader with MutableURLClassLoader {
 }
 
 private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader)
