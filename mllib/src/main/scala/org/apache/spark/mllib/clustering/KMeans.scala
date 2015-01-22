@@ -328,14 +328,15 @@ class KMeans private (
       val chosen = data.zip(costs).mapPartitionsWithIndex { (index, pointsWithCosts) =>
         val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
         pointsWithCosts.flatMap { case (p, c) =>
-          (0 until runs).filter { r =>
+          val rs = (0 until runs).filter { r =>
             rand.nextDouble() < 2.0 * c(r) * k / sumCosts(r)
-          }.map((_, p))
+          }
+          if (rs.length > 0) Some(p, rs) else None
         }
       }.collect()
       mergeNewCenters()
-      chosen.foreach { case (r, p) =>
-        newCenters(r) += p.toDense
+      chosen.foreach { case (p, rs) =>
+        rs.foreach(newCenters(_) += p.toDense)
       }
       step += 1
     }
