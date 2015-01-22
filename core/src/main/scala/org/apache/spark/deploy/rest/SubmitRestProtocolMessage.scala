@@ -28,12 +28,16 @@ import org.apache.spark.util.Utils
 
 /**
  * A field used in a SubmitRestProtocolMessage.
- * Three special fields ACTION, SPARK_VERSION, and MESSAGE are common across all messages.
+ * There are a few special fields:
+ *   - ACTION entirely specifies the type of the message and is required in all messages
+ *   - MESSAGE contains arbitrary messages and is common, but not required, in all messages
+ *   - CLIENT_SPARK_VERSION is required in all messages sent from the client
+ *   - SERVER_SPARK_VERSION is required in all messages sent from the server
  */
 private[spark] abstract class SubmitRestProtocolField
 private[spark] object SubmitRestProtocolField {
   def isActionField(field: String): Boolean = field == "ACTION"
-  def isSparkVersionField(field: String): Boolean = field == "SPARK_VERSION"
+  def isSparkVersionField(field: String): Boolean = field.endsWith("_SPARK_VERSION")
   def isMessageField(field: String): Boolean = field == "MESSAGE"
 }
 
@@ -129,7 +133,7 @@ private[spark] abstract class SubmitRestProtocolMessage(
 
   /**
    * Return a JObject that represents the JSON form of this message.
-   * This orders the fields by ACTION (first) < SPARK_VERSION < MESSAGE < * (last)
+   * This orders the fields by ACTION (first) < SERVER_SPARK_VERSION < MESSAGE < * (last)
    * and ignores fields with null values.
    */
   protected def toJsonObject: JObject = {

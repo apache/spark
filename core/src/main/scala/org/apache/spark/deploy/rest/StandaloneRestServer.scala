@@ -62,7 +62,7 @@ private[spark] class StandaloneRestServerHandler(
     val response = AkkaUtils.askWithReply[SubmitDriverResponse](
       RequestSubmitDriver(driverDescription), masterActor, askTimeout)
     new SubmitDriverResponseMessage()
-      .setField(SPARK_VERSION, sparkVersion)
+      .setField(SERVER_SPARK_VERSION, sparkVersion)
       .setField(MESSAGE, response.message)
       .setField(MASTER, masterUrl)
       .setField(SUCCESS, response.success.toString)
@@ -77,7 +77,7 @@ private[spark] class StandaloneRestServerHandler(
     val response = AkkaUtils.askWithReply[KillDriverResponse](
       RequestKillDriver(driverId), masterActor, askTimeout)
     new KillDriverResponseMessage()
-      .setField(SPARK_VERSION, sparkVersion)
+      .setField(SERVER_SPARK_VERSION, sparkVersion)
       .setField(MESSAGE, response.message)
       .setField(MASTER, masterUrl)
       .setField(DRIVER_ID, driverId)
@@ -97,7 +97,7 @@ private[spark] class StandaloneRestServerHandler(
       s"Exception from the cluster:\n$e\n$stackTraceString"
     }
     new DriverStatusResponseMessage()
-      .setField(SPARK_VERSION, sparkVersion)
+      .setField(SERVER_SPARK_VERSION, sparkVersion)
       .setField(MASTER, masterUrl)
       .setField(DRIVER_ID, driverId)
       .setField(SUCCESS, response.found.toString)

@@ -24,12 +24,12 @@ private[spark] abstract class SubmitDriverResponseField extends SubmitRestProtoc
 private[spark] object SubmitDriverResponseField
   extends SubmitRestProtocolFieldCompanion[SubmitDriverResponseField] {
   case object ACTION extends SubmitDriverResponseField
-  case object SPARK_VERSION extends SubmitDriverResponseField
+  case object SERVER_SPARK_VERSION extends SubmitDriverResponseField
   case object MESSAGE extends SubmitDriverResponseField
   case object MASTER extends SubmitDriverResponseField
   case object SUCCESS extends SubmitDriverResponseField
   case object DRIVER_ID extends SubmitDriverResponseField
-  override val requiredFields = Seq(ACTION, SPARK_VERSION, MESSAGE, MASTER, SUCCESS)
+  override val requiredFields = Seq(ACTION, SERVER_SPARK_VERSION, MESSAGE, MASTER, SUCCESS)
   override val optionalFields = Seq(DRIVER_ID)
 }
 

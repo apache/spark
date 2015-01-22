@@ -23,14 +23,15 @@ package org.apache.spark.deploy.rest
 private[spark] abstract class ErrorField extends SubmitRestProtocolField
 private[spark] object ErrorField extends SubmitRestProtocolFieldCompanion[ErrorField] {
   case object ACTION extends ErrorField
-  case object SPARK_VERSION extends ErrorField
+  case object SERVER_SPARK_VERSION extends ErrorField
   case object MESSAGE extends ErrorField
-  override val requiredFields = Seq(ACTION, SPARK_VERSION, MESSAGE)
+  override val requiredFields = Seq(ACTION, SERVER_SPARK_VERSION, MESSAGE)
   override val optionalFields = Seq.empty
 }
 
 /**
- * An error message exchanged in the stable application submission REST protocol.
+ * An error message sent from the cluster manager
+ * in the stable application submission REST protocol.
  */
 private[spark] class ErrorMessage extends SubmitRestProtocolMessage(
     SubmitRestProtocolAction.ERROR,

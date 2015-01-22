@@ -130,7 +130,7 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
   private def handleError(message: String): ErrorMessage = {
     import ErrorField._
     new ErrorMessage()
-      .setField(SPARK_VERSION, sparkVersion)
+      .setField(SERVER_SPARK_VERSION, sparkVersion)
       .setField(MESSAGE, message)
   }
 }

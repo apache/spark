@@ -24,12 +24,12 @@ private[spark] abstract class KillDriverResponseField extends SubmitRestProtocol
 private[spark] object KillDriverResponseField
   extends SubmitRestProtocolFieldCompanion[KillDriverResponseField] {
   case object ACTION extends KillDriverResponseField
-  case object SPARK_VERSION extends KillDriverResponseField
+  case object SERVER_SPARK_VERSION extends KillDriverResponseField
   case object MESSAGE extends KillDriverResponseField
   case object MASTER extends KillDriverResponseField
   case object DRIVER_ID extends KillDriverResponseField
   case object SUCCESS extends KillDriverResponseField
-  override val requiredFields = Seq(ACTION, SPARK_VERSION, MESSAGE, MASTER, DRIVER_ID, SUCCESS)
+  override val requiredFields = Seq(ACTION, SERVER_SPARK_VERSION, MESSAGE, MASTER, DRIVER_ID, SUCCESS)
   override val optionalFields = Seq.empty
 }
 
