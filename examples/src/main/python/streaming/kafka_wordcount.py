@@ -22,12 +22,13 @@
  To run this on your local machine, you need to setup Kafka and create a producer first
      $ bin/zookeeper-server-start.sh config/zookeeper.properties
      $ bin/kafka-server-start.sh config/server.properties
+     $ bin/kafka-topics.sh --create --zookeeper localhost:2181 --partitions 1 --topic test
      $ bin/kafka-console-producer.sh --broker-list localhost:9092 --topic test
 
  and then run the example
-    `$ bin/spark-submit --driver-class-path lib_managed/jars/kafka_*.jar:\
-      external/kafka/target/scala-*/spark-streaming-kafka_*.jar examples/src/main/python/\
-      streaming/kafka_wordcount.py localhost:2181 test`
+    `$ bin/spark-submit --driver-class-path external/kafka-assembly/target/scala-*/\
+      spark-streaming-kafka-assembly-*.jar examples/src/main/python/streaming/kafka_wordcount.py \
+      localhost:2181 test`
 """
 
 import sys

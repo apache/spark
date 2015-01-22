@@ -73,10 +73,9 @@ class KafkaUtils(object):
         except Py4JError, e:
             # TODO: use --jar once it also work on driver
             if not e.message or 'call a package' in e.message:
-                print "No kafka package, please build it and add it into classpath:"
-                print " $ sbt/sbt streaming-kafka/package"
-                print " $ bin/submit --driver-class-path lib_managed/jars/kafka_2.10-0.8.0.jar:" \
-                    "external/kafka/target/scala-2.10/spark-streaming-kafka_2.10-1.3.0-SNAPSHOT.jar"
+                print "No kafka package, please put the assembly jar into classpath:"
+                print " $ bin/submit --driver-class-path external/kafka-assembly/target/" + \
+                      "scala-*/spark-streaming-kafka-assembly-*.jar"
             raise e
         ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())
         stream = DStream(jstream, ssc, ser)
