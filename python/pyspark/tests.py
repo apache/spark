@@ -249,6 +249,7 @@ class SerializationTestCase(unittest.TestCase):
         self.assertEqual(["abc", u"123", range(5)] + range(1000), list(ser.load_stream(io)))
 
 
+
 class PySparkTestCase(unittest.TestCase):
 
     def setUp(self):
@@ -714,6 +715,25 @@ class RDDTests(ReusedPySparkTestCase):
         wr_s21 = rdd.sample(True, 0.4, 21).collect()
         self.assertNotEqual(set(wr_s11), set(wr_s21))
 
+    def test_multiple_python_java_RDD_conversions(self):
+        # Regression test for SPARK-5361
+        data = [
+            (u'1', {u'director': u'David Lean'}), 
+            (u'2', {u'director': u'Andrew Dominik'})
+        ]
+        from pyspark.rdd import RDD
+        data_rdd = self.sc.parallelize(data)
+        data_java_rdd = data_rdd._to_java_object_rdd()
+        data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
+        converted_rdd = RDD(data_python_rdd, self.sc)
+        self.assertEqual(2, converted_rdd.count())
+
+        # conversion between python and java RDD threw exceptions
+        data_java_rdd = converted_rdd._to_java_object_rdd()
+        data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
+        converted_rdd = RDD(data_python_rdd, self.sc)
+        self.assertEqual(2, converted_rdd.count())
+
 
 class ProfilerTests(PySparkTestCase):
 
@@ -1105,19 +1125,19 @@ class InputFormatTests(ReusedPySparkTestCase):
 
     def test_newhadoop(self):
         basepath = self.tempdir.name
-        ints = sorted(self.sc.newAPIHadoopFile(
-            basepath + "/sftestdata/sfint/",
-            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
-            "org.apache.hadoop.io.IntWritable",
+        ints = sorted(self.sc.newAPIHadoopFile(\
+            basepath + "/sftestdata/sfint/",\
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",\
+            "org.apache.hadoop.io.IntWritable",\
             "org.apache.hadoop.io.Text").collect())
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.assertEqual(ints, ei)
 
         hellopath = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
         newconf = {"mapred.input.dir": hellopath}
-        hello = self.sc.newAPIHadoopRDD("org.apache.hadoop.mapreduce.lib.input.TextInputFormat",
-                                        "org.apache.hadoop.io.LongWritable",
-                                        "org.apache.hadoop.io.Text",
+        hello = self.sc.newAPIHadoopRDD("org.apache.hadoop.mapreduce.lib.input.TextInputFormat",\
+                                        "org.apache.hadoop.io.LongWritable",\
+                                        "org.apache.hadoop.io.Text",\
                                         conf=newconf).collect()
         result = [(0, u'Hello World!')]
         self.assertEqual(hello, result)
