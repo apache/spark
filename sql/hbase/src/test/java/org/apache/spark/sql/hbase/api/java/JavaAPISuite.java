@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hbase.api.java;
 
 import java.io.Serializable;
+
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.client.HBaseAdmin;
@@ -31,56 +32,52 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Row;
 
 public class JavaAPISuite extends HBaseIntegrationTestBase implements Serializable {
-  private transient JavaSparkContext sc;
-  private transient HBaseSQLContext hsc;
-  private transient MiniHBaseCluster cluster;
-  private transient HBaseAdmin hbaseAdmin;
+    private transient JavaSparkContext sc;
+    private transient HBaseSQLContext hsc;
+    private transient MiniHBaseCluster cluster;
+    private transient HBaseAdmin hbaseAdmin;
 
-  String hb_staging_table = "HbStagingTable";
-  String staging_table = "StagingTable";
-  String create_sql = "CREATE TABLE "+staging_table+"(strcol STRING, bytecol String, shortcol String, intcol String, " +
-          "longcol string, floatcol string, doublecol string, PRIMARY KEY(doublecol, strcol, intcol))" +
-          " MAPPED BY ("+hb_staging_table+", COLS=[bytecol=cf1.hbytecol, " +
-          "shortcol=cf1.hshortcol, longcol=cf2.hlongcol, floatcol=cf2.hfloatcol])";
-  String insert_sql = "INSERT INTO "+staging_table+" VALUES (\"strcol\" , \"bytecol\" , \"shortcol\" , \"intcol\" ," +
-          "  \"longcol\" , \"floatcol\" , \"doublecol\")";
-  String retrieve_sql = "SELECT * FROM "+staging_table;
+    String hb_staging_table = "HbStagingTable";
+    String staging_table = "StagingTable";
+    String create_sql = "CREATE TABLE " + staging_table + "(strcol STRING, bytecol String, shortcol String, intcol String, " +
+            "longcol string, floatcol string, doublecol string, PRIMARY KEY(doublecol, strcol, intcol))" +
+            " MAPPED BY (" + hb_staging_table + ", COLS=[bytecol=cf1.hbytecol, " +
+            "shortcol=cf1.hshortcol, longcol=cf2.hlongcol, floatcol=cf2.hfloatcol])";
+    String insert_sql = "INSERT INTO " + staging_table + " VALUES (\"strcol\" , \"bytecol\" , \"shortcol\" , \"intcol\" ," +
+            "  \"longcol\" , \"floatcol\" , \"doublecol\")";
+    String retrieve_sql = "SELECT * FROM " + staging_table;
 
     @Before
     public void setUp() {
-      System.setProperty("spark.hadoop.hbase.zookeeper.quorum", "localhost");
+        System.setProperty("spark.hadoop.hbase.zookeeper.quorum", "localhost");
 
-      sc = new JavaSparkContext("local[2]", "JavaAPISuite", new SparkConf(true));
-      hsc = new HBaseSQLContext(sc);
+        sc = new JavaSparkContext("local[2]", "JavaAPISuite", new SparkConf(true));
+        hsc = new HBaseSQLContext(sc);
 
-      HBaseTestingUtility testUtil = new HBaseTestingUtility(hsc.configuration());
+        HBaseTestingUtility testUtil = new HBaseTestingUtility(hsc.configuration());
 
-      int nRegionServers= 1;
-      int nDataNodes = 1;
-      int nMasters = 1;
+        int nRegionServers = 1;
+        int nDataNodes = 1;
+        int nMasters = 1;
 
-      try{
-        cluster = testUtil.startMiniCluster(nMasters, nRegionServers, nDataNodes);
-        hbaseAdmin = new HBaseAdmin(hsc.configuration());
-      }catch (Exception e){
-        e.printStackTrace();
-      }
-
-
-
+        try {
+            cluster = testUtil.startMiniCluster(nMasters, nRegionServers, nDataNodes);
+            hbaseAdmin = new HBaseAdmin(hsc.configuration());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     @After
     public void tearDown() {
     }
 
-  @Test
-  public void testCreate_Insert_Retrieve_Table() {
-    hsc.sql(create_sql).collect();
-    hsc.sql(insert_sql).collect();
-    Row[] row = hsc.sql(retrieve_sql).collect();
+    @Test
+    public void testCreateInsertRetrieveTable() {
+        hsc.sql(create_sql).collect();
+        hsc.sql(insert_sql).collect();
+        Row[] row = hsc.sql(retrieve_sql).collect();
 
-    assert(row[0].toString().equals("[strcol,bytecol,shortcol,intcol,longcol,floatcol,doublecol]"));
-  }
-
+        assert (row[0].toString().equals("[strcol,bytecol,shortcol,intcol,longcol,floatcol,doublecol]"));
+    }
 }
