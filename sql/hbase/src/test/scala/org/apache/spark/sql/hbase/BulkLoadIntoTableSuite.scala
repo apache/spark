@@ -22,11 +22,12 @@ import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat2
 import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.rdd.ShuffledRDD
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.types._
+import org.apache.spark.sql.hbase.HBasePartitioner.HBaseRawOrdering
 import org.apache.spark.sql.hbase.execution._
 import org.apache.spark.sql.hbase.util.{BytesUtils, Util}
-import org.apache.spark.sql.hbase.HBasePartitioner.HBaseRawOrdering
+import org.apache.spark.sql.types._
 import org.apache.spark.{SerializableWritable, SparkContext}
 
 import scala.collection.mutable.ArrayBuffer
@@ -180,7 +181,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
         .setKeyOrdering(ordering)
 
     val bulkLoadRDD = shuffled.mapPartitions { iter =>
-    // the rdd now already sort by key, to sort by value
+      // the rdd now already sort by key, to sort by value
       val map = new java.util.TreeSet[KeyValue](KeyValue.COMPARATOR)
       var preKV: (HBaseRawType, Array[HBaseRawType]) = null
       var nowKV: (HBaseRawType, Array[HBaseRawType]) = null
@@ -266,8 +267,56 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
 
     val executeSql3 = TestHbase.executeSql(loadSql)
     executeSql3.toRdd.collect().foreach(println)
-    val rows = TestHbase.sql("select * from testblk").collect()
-    assert(rows.length == 3, s"load data into hbase test failed to bulkload data into htable")
+
+    checkAnswer(TestHbase.sql("select * from testblk"),
+      Row("row4", "4", "8") ::
+        Row("row5", "5", "10") ::
+        Row("row6", "6", "12") :: Nil)
+
+    // cleanup
+    TestHbase.sql(drop)
+  }
+
+  test("load parall data into hbase") {
+
+    val drop = "drop table testblk"
+    val executeSql0 = TestHbase.executeSql(drop)
+    try {
+      executeSql0.toRdd.collect().foreach(println)
+    } catch {
+      case e: IllegalStateException =>
+        // do not throw exception here
+        println(e.getMessage)
+    }
+
+    // create sql table map with hbase table and run simple sql
+    val sql1 =
+      s"""CREATE TABLE testblk(col1 STRING, col2 STRING, col3 STRING, PRIMARY KEY(col1))
+          MAPPED BY (testblkHTable, COLS=[col2=cf1.a, col3=cf1.b])"""
+        .stripMargin
+
+    val sql2 =
+      s"""select * from testblk limit 5"""
+        .stripMargin
+
+    val executeSql1 = TestHbase.executeSql(sql1)
+    executeSql1.toRdd.collect().foreach(println)
+
+    val executeSql2 = TestHbase.executeSql(sql2)
+    executeSql2.toRdd.collect().foreach(println)
+
+    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadData.txt'"
+
+    // then load parall data into table
+    val loadSql = "LOAD PARALL DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
+
+    val executeSql3 = TestHbase.executeSql(loadSql)
+    executeSql3.toRdd.collect().foreach(println)
+
+    checkAnswer(TestHbase.sql("select * from testblk"),
+      Row("row4", "4", "8") ::
+        Row("row5", "5", "10") ::
+        Row("row6", "6", "12") :: Nil)
 
     // cleanup
     TestHbase.sql(drop)
@@ -311,11 +360,71 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
 
     val executeSql3 = TestHbase.executeSql(loadSql)
     executeSql3.toRdd.collect().foreach(println)
-    val rows = TestHbase.sql("select * from testNullColumnBulkload").collect()
-    assert(rows.length == 3, s"load data with null column values into hbase")
-    assert(rows(0)(1).asInstanceOf[String].isEmpty, s"load data into hbase test failed to select empty-string col1 value")
-    assert(rows(1)(2).asInstanceOf[String].isEmpty, s"load data into hbase test failed to select empty-string col2 value")
-    assert(rows(2)(3) == null, s"load data into hbase test failed to select null col3 value")
+
+    val sqlResult = TestHbase.sql("select * from testNullColumnBulkload")
+    val rows = sqlResult.collect()
+    assert(rows.length == 3, s"load parall data with null column values into hbase")
+    assert(rows(0)(1).asInstanceOf[String].isEmpty, s"load parall data into hbase test failed to select empty-string col1 value")
+    assert(rows(1)(2).asInstanceOf[String].isEmpty, s"load parall data into hbase test failed to select empty-string col2 value")
+    assert(rows(2)(3) == null, s"load parall data into hbase test failed to select null col3 value")
+    checkAnswer(sqlResult,
+      Row("row1", "", "8", "101") ::
+        Row("row2", "2", "", "102") ::
+        Row("row3", "3", "10", null) :: Nil)
+
+    // cleanup
+    TestHbase.sql(drop)
+  }
+
+  test("load parall data with null column values into hbase") {
+
+    val drop = "drop table testNullColumnBulkload"
+    val executeSql0 = TestHbase.executeSql(drop)
+    try {
+      executeSql0.toRdd.collect().foreach(println)
+    } catch {
+      case e: IllegalStateException =>
+        // do not throw exception here
+        println(e.getMessage)
+    }
+
+    // create sql table map with hbase table and run simple sql
+    val sql1 =
+      s"""CREATE TABLE testNullColumnBulkload(col1 STRING, col2 STRING, col3 STRING, col4 STRING, PRIMARY KEY(col1))
+          MAPPED BY (testNullColumnBulkloadHTable, COLS=[col2=cf1.a, col3=cf1.b, col4=cf1.c])"""
+        .stripMargin
+
+    val sql2 =
+      s"""select * from testNullColumnBulkload"""
+        .stripMargin
+
+    val executeSql1 = TestHbase.executeSql(sql1)
+    executeSql1.toRdd.collect().foreach(println)
+
+    val executeSql2 = TestHbase.executeSql(sql2)
+    executeSql2.toRdd.collect().foreach(println)
+
+    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadNullableData.txt'"
+
+    //val conf = TestHbase.sparkContext.hadoopConfiguration
+    //FileSystem.get(conf).delete(new Path("./hfileoutput"), true)
+
+    // then load parall data into table
+    val loadSql = "LOAD PARALL DATA LOCAL INPATH " + inputFile + " INTO TABLE testNullColumnBulkload"
+
+    val executeSql3 = TestHbase.executeSql(loadSql)
+    executeSql3.toRdd.collect().foreach(println)
+
+    val sqlResult = TestHbase.sql("select * from testNullColumnBulkload")
+    val rows = sqlResult.collect()
+    assert(rows.length == 3, s"load parall data with null column values into hbase")
+    assert(rows(0)(1).asInstanceOf[String].isEmpty, s"load parall data into hbase test failed to select empty-string col1 value")
+    assert(rows(1)(2).asInstanceOf[String].isEmpty, s"load parall data into hbase test failed to select empty-string col2 value")
+    assert(rows(2)(3) == null, s"load parall data into hbase test failed to select null col3 value")
+    checkAnswer(sqlResult,
+      Row("row1", "", "8", "101") ::
+        Row("row2", "2", "", "102") ::
+        Row("row3", "3", "10", null) :: Nil)
 
     // cleanup
     TestHbase.sql(drop)
