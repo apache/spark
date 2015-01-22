@@ -359,7 +359,6 @@ def launch_cluster(conn, opts, cluster_name):
     if opts.key_pair is None:
         print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
         sys.exit(1)
-    print "pass"
 
     user_data_content = None
     if opts.user_data:
