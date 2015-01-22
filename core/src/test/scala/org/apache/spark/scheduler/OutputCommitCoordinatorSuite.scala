@@ -32,9 +32,9 @@ import org.apache.spark.executor.{TaskMetrics}
 import org.apache.spark.rdd.FakeOutputCommitter
 
 /**
- * Unit tests for the output commit coordination functionality. Overrides the SchedulerImpl
- * to just run the tasks directly and send completion or error messages back to the
- * DAG scheduler.
+ * Unit tests for the output commit coordination functionality. Overrides the
+ * SchedulerImpl to just run the tasks directly and send completion or error
+ * messages back to the DAG scheduler.
  */
 class OutputCommitCoordinatorSuite
     extends FunSuiteLike
