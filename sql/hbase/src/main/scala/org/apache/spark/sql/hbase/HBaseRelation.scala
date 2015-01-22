@@ -105,8 +105,8 @@ private[hbase] case class HBaseRelation(
       (a: NonKeyColumn, b: NonKeyColumn) => {
         val empty = new HBaseRawType(0)
         KeyValue.COMPARATOR.compare(
-          new KeyValue(empty, a.familyRaw, a.qualifierRaw, empty),
-          new KeyValue(empty, b.familyRaw, b.qualifierRaw, empty)) < 0
+          new KeyValue(empty, a.familyRaw, a.qualifierRaw),
+          new KeyValue(empty, b.familyRaw, b.qualifierRaw)) < 0
       }
     )
 
