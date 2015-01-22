@@ -106,15 +106,15 @@ private[streaming] class ReceivedBlockTracker(
       timeToAllocatedBlocks(batchTime) = allocatedBlocks
       lastAllocatedBatchTime = batchTime
       allocatedBlocks
-    } else if (batchTime == lastAllocatedBatchTime) {
-      // This situation occurs when WAL is ended with BatchAllocationEvent,
-      // but without BatchCleanupEvent, possibly processed batch job or half-processed batch
-      // job need to process again, so the batchTime will be equal to lastAllocatedBatchTime.
+    } else {
+      // This situation occurs when:
+      // 1. WAL is ended with BatchAllocationEvent, but without BatchCleanupEvent,
+      // possibly processed batch job or half-processed batch job need to be processed again,
+      // so the batchTime will be equal to lastAllocatedBatchTime.
+      // 2. Slow checkpointing makes recovered batch time older than WAL recovered
+      // lastAllocatedBatchTime.
       // This situation will only occurs in recovery time.
       logWarning(s"Possibly processed batch $batchTime need to be processed again in WAL recovery")
-    } else {
-      throw new SparkException(s"Unexpected allocation of blocks, " +
-        s"last batch = $lastAllocatedBatchTime, batch time to allocate = $batchTime  ")
     }
   }
 

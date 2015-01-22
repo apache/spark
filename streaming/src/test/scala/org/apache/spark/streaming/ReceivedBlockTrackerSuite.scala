@@ -82,10 +82,13 @@ class ReceivedBlockTrackerSuite
     receivedBlockTracker.allocateBlocksToBatch(2)
     receivedBlockTracker.getBlocksOfBatchAndStream(2, streamId) shouldBe empty
 
-    // Verify that older batches cannot be allocated again
-    intercept[SparkException] {
-      receivedBlockTracker.allocateBlocksToBatch(1)
-    }
+    // Verify that older batches have no operation on batch allocation,
+    // will return the same blocks as previously allocated.
+    receivedBlockTracker.allocateBlocksToBatch(1)
+    receivedBlockTracker.getBlocksOfBatchAndStream(1, streamId) shouldEqual blockInfos
+
+    receivedBlockTracker.allocateBlocksToBatch(2)
+    receivedBlockTracker.getBlocksOfBatchAndStream(2, streamId) shouldBe empty
   }
 
   test("block addition, block to batch allocation and cleanup with write ahead log") {
