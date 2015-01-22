@@ -24,7 +24,8 @@ import org.apache.spark.Accumulator
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.python.{PythonBroadcast, PythonRDD}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
+import org.apache.spark.graphx.VertexId
+import org.apache.spark.graphx.api.java.JavaVertexRDD
 import org.apache.spark.storage.StorageLevel
 
 private[graphx] class PythonVertexRDD(
@@ -37,11 +38,28 @@ private[graphx] class PythonVertexRDD(
     broadcastVars: JList[Broadcast[PythonBroadcast]],
     accumulator: Accumulator[JList[Array[Byte]]],
     targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
-  extends PythonRDD (parent.rdd, command, envVars,
+  extends PythonRDD (parent, command, envVars,
                      pythonIncludes, preservePartitioning,
                      pythonExec, broadcastVars, accumulator) {
 
-  val asJavaVertexRDD = JavaRDD.fromRDD(parent)
+  def this(@transient parent: JavaVertexRDD[_],
+                     command: Array[Byte],
+                     envVars: JMap[String, String],
+                     pythonIncludes: JList[String],
+                     preservePartitioning: Boolean,
+                     pythonExec: String,
+                     broadcastVars: JList[Broadcast[PythonBroadcast]],
+                     accumulator: Accumulator[JList[Array[Byte]]],
+                     targetStorageLevel : StorageLevel) = {
+    this(parent.toRDD, command, envVars, pythonIncludes,
+      preservePartitioning, pythonExec, broadcastVars, accumulator, targetStorageLevel)
+  }
+
+  val asJavaVertexRDD = {
+//    new JavaVertexRDD[Array[Byte]](parent.asInstanceOf[JavaRDD[(VertexId, Array[Byte])]])
+    JavaVertexRDD(JavaRDD.fromRDD(this).asInstanceOf[JavaRDD[(VertexId, Array[Byte])]])
+  }
+
 
   def writeToFile[T](items: java.util.Iterator[T], filename: String) {
     import scala.collection.JavaConverters._
@@ -78,19 +96,5 @@ private[graphx] class PythonVertexRDD(
 
 object PythonVertexRDD {
   val DEFAULT_SPARK_BUFFER_SIZE = 65536
-
-  implicit def apply(@transient parent: RDD[_],
-                     command: Array[Byte],
-                     envVars: JMap[String, String],
-                     pythonIncludes: JList[String],
-                     preservePartitioning: Boolean,
-                     pythonExec: String,
-                     broadcastVars: JList[Broadcast[PythonBroadcast]],
-                     accumulator: Accumulator[JList[Array[Byte]]],
-                     targetStorageLevel : StorageLevel) = {
-    System.out.println("DEBUG: in PythonVertexRDD:apply")
-    new PythonVertexRDD(JavaRDD.fromRDD(parent), command, envVars, pythonIncludes,
-      preservePartitioning, pythonExec, broadcastVars, accumulator, targetStorageLevel)
-  }
 }
 

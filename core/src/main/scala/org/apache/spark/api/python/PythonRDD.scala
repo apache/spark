@@ -56,6 +56,9 @@ private[spark] class PythonRDD(
   override val partitioner = if (preservePartitioning) firstParent.partitioner else None
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
+
+    logError("Inside PythonRDD.compute()")
+
     val startTime = System.currentTimeMillis
     val env = SparkEnv.get
     val localdir = env.blockManager.diskBlockManager.localDirs.map(

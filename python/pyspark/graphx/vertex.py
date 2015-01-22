@@ -110,8 +110,9 @@ class VertexRDD(object):
         return self.jvertex_rdd.isCheckpointed()
 
     def count(self):
-        return self.jrdd.count()
+        return self.jvertex_rdd.count()
 
+    # TODO: This is a hack. take() must call JavaVertexRDD.take()
     def take(self, num=10):
         return self.jrdd.take(num)
 
@@ -126,9 +127,7 @@ class VertexRDD(object):
         [(1, 'a:a'), (2, 'b:b'), (3, 'c:c')]
         """
         def func(_, iterator):
-            print "in func"
             return itertools.imap(lambda (k, v): (k, f(v)), iterator)
-        print "in mapValues"
         return PipelinedVertexRDD(self, func, preserves_partitioning)
 
     def mapVertexPartitions(self, f, preserve_partitioning=False):
@@ -185,8 +184,8 @@ class VertexRDD(object):
                 elif n == 2:
                     wbuf.append(v)
             return [(v, w) for v in vbuf for w in wbuf]
-        vs = self.map(lambda (k, v): (k, (1, v)))
-        ws = other.map(lambda (k, v): (k, (2, v)))
+        vs = self.mapValues(lambda (k, v): (k, (1, v)))
+        ws = other.mapValues(lambda (k, v): (k, (2, v)))
         return vs.union(ws).groupByKey(numPartitions).\
             flatMapValues(lambda x: dispatch(x.__iter__()))
 
@@ -195,14 +194,38 @@ class VertexRDD(object):
         Return a list that contains all of the elements in this RDD.
         """
         with SCCallSiteSync(self.ctx) as css:
-            bytesInJava = self.jrdd.collect()
-        return list(bytesInJava)
+            bytesInJava = self.jvertex_rdd.collect().iterator()
+        return list(self._collect_iterator_through_file(bytesInJava))
+
+    def _collect_iterator_through_file(self, iterator):
+        # Transferring lots of data through Py4J can be slow because
+        # socket.readline() is inefficient.  Instead, we'll dump the data to a
+        # file and read it back.
+        tempFile = NamedTemporaryFile(delete=False, dir=self.ctx._temp_dir)
+        tempFile.close()
+        self.ctx._writeToFile(iterator, tempFile.name)
+        # Read the data into Python and deserialize it:
+        with open(tempFile.name, 'rb') as tempFile:
+            for item in self.jvertex_rdd_deserializer.load_stream(tempFile):
+                yield item
+        os.unlink(tempFile.name)
 
     def getJavaVertexRDD(self, rdd, rdd_deserializer):
         if self.bypass_serializer:
             self.jvertex_rdd_deserializer = NoOpSerializer()
+            rdd_deserializer = NoOpSerializer()
         enable_profile = self.ctx._conf.get("spark.python.profile", "false") == "true"
         profileStats = self.ctx.accumulator(None, PStatsParam) if enable_profile else None
+        def f(index, iterator):
+            return iterator
+        command = (f, profileStats, rdd_deserializer,
+                   rdd_deserializer)
+        # the serialized command will be compressed by broadcast
+        ser = CloudPickleSerializer()
+        pickled_command = ser.dumps(command)
+        if len(pickled_command) > (1 << 20):  # 1M
+            self.broadcast = self.ctx.broadcast(pickled_command)
+            pickled_command = ser.dumps(self.broadcast)
 
         # the serialized command will be compressed by broadcast
         broadcast_vars = ListConverter().convert(
@@ -215,17 +238,17 @@ class VertexRDD(object):
                                            self.ctx._gateway._gateway_client)
         target_storage_level = StorageLevel.MEMORY_ONLY
         java_storage_level = self.ctx._getJavaStorageLevel(target_storage_level)
-        jvertex_rdd = self.ctx._jvm.PythonVertexRDD(rdd._jrdd,
-                                                   bytearray(" "),
+        prdd = self.ctx._jvm.PythonVertexRDD(rdd._jrdd,
+                                                   bytearray(pickled_command),
                                                    env, includes, self.preserve_partitioning,
                                                    self.ctx.pythonExec,
                                                    broadcast_vars, self.ctx._javaAccumulator,
                                                    java_storage_level)
-
+        self.jvertex_rdd = prdd.asJavaVertexRDD()
         if enable_profile:
             self.id = self.jvertex_rdd.id()
             self.ctx._add_profile(self.id, profileStats)
-        return jvertex_rdd
+        return self.jvertex_rdd
 
 
 class PipelinedVertexRDD(VertexRDD):
@@ -263,7 +286,7 @@ class PipelinedVertexRDD(VertexRDD):
             self.func = pipeline_func
             self.preservesPartitioning = \
                 prev.preservesPartitioning and preservesPartitioning
-            self.prev_jvertex_rdd = prev.jvrdd_val
+            self.prev_jvertex_rdd = prev.jvertex_rdd
             self.prev_jvertex_rdd_deserializer = prev.prev_jvertex_rdd_deserializer
 
         self.is_cached = False
@@ -284,11 +307,6 @@ class PipelinedVertexRDD(VertexRDD):
 
     @property
     def jvertex_rdd(self):
-        print "\n**********************************"
-        print "in jvertex_rdd of vertex.py"
-        print "**********************************\n"
-        import traceback
-        traceback.print_stack()
         if self.jvrdd_val:
             return self.jvrdd_val
         if self.bypass_serializer:
@@ -312,7 +330,7 @@ class PipelinedVertexRDD(VertexRDD):
         includes = ListConverter().convert(self.ctx._python_includes,
                                            self.ctx._gateway._gateway_client)
         java_storage_level = self.ctx._getJavaStorageLevel(StorageLevel.MEMORY_ONLY)
-        python_rdd = self.ctx._jvm.PythonVertexRDD(self.prev_jvertex_rdd.jrdd,
+        python_rdd = self.ctx._jvm.PythonVertexRDD(self.prev_jvertex_rdd,
                                              bytearray(pickled_command),
                                              env, includes, self.preservesPartitioning,
                                              self.ctx.pythonExec,

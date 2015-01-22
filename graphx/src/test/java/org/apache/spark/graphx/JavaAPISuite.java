@@ -89,7 +89,7 @@ public class JavaAPISuite implements Serializable {
         JavaVertexRDD<VertexProperty<String, String>> javaVertexRDD =
                 JavaVertexRDD.apply(javaRDD, this.classTag);
 
-        assertEquals(javaVertexRDD.count(), 3L);
+        assertEquals(3L, javaVertexRDD.count().intValue());
     }
 
     @Test
