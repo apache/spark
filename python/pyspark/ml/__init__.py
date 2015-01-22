@@ -15,10 +15,10 @@
 # limitations under the License.
 #
 
-from abc import ABCMeta, abstractmethod
+from abc import ABCMeta, abstractmethod, abstractproperty
 
 from pyspark import SparkContext
-from pyspark.sql import inherit_doc # TODO: move inherit_doc to Spark Core
+from pyspark.sql import SchemaRDD, inherit_doc # TODO: move inherit_doc to Spark Core
 from pyspark.ml.param import Param, Params
 from pyspark.ml.util import Identifiable
 
@@ -146,16 +146,17 @@ class Pipeline(Estimator):
         if self.stages in self.paramMap:
             return self.paramMap[self.stages]
 
-    def fit(self, dataset):
+    def fit(self, dataset, params={}):
+        map = self._merge_params(params)
         transformers = []
         for stage in self.getStages():
             if isinstance(stage, Transformer):
                 transformers.append(stage)
-                dataset = stage.transform(dataset)
+                dataset = stage.transform(dataset, map)
             elif isinstance(stage, Estimator):
-                model = stage.fit(dataset)
+                model = stage.fit(dataset, map)
                 transformers.append(model)
-                dataset = model.transform(dataset)
+                dataset = model.transform(dataset, map)
             else:
                 raise ValueError(
                     "Cannot recognize a pipeline stage of type %s." % type(stage).__name__)
@@ -169,7 +170,65 @@ class PipelineModel(Transformer):
         super(PipelineModel, self).__init__()
         self.transformers = transformers
 
-    def transform(self, dataset):
+    def transform(self, dataset, params={}):
+        map = self._merge_params(params)
         for t in self.transformers:
-            dataset = t.transform(dataset)
+            dataset = t.transform(dataset, map)
         return dataset
+
+
+@inherit_doc
+class JavaWrapper(object):
+
+    __metaclass__ = ABCMeta
+
+    def __init__(self):
+        super(JavaWrapper, self).__init__()
+
+    @abstractproperty
+    def _java_class(self):
+        raise NotImplementedError
+
+    def _create_java_obj(self):
+        java_obj = _jvm()
+        for name in self._java_class.split("."):
+            java_obj = getattr(java_obj, name)
+        return java_obj()
+
+
+@inherit_doc
+class JavaEstimator(Estimator, JavaWrapper):
+
+    __metaclass__ = ABCMeta
+
+    def __init__(self):
+        super(JavaEstimator, self).__init__()
+
+    @abstractmethod
+    def _create_model(self, java_model):
+        raise NotImplementedError
+
+    def _fit_java(self, dataset, params={}):
+        java_obj = self._create_java_obj()
+        self._transfer_params_to_java(params, java_obj)
+        return java_obj.fit(dataset._jschema_rdd, _jvm().org.apache.spark.ml.param.ParamMap())
+
+    def fit(self, dataset, params={}):
+        java_model = self._fit_java(dataset, params)
+        return self._create_model(java_model)
+
+
+@inherit_doc
+class JavaTransformer(Transformer, JavaWrapper):
+
+    __metaclass__ = ABCMeta
+
+    def __init__(self):
+        super(JavaTransformer, self).__init__()
+
+    def transform(self, dataset, params={}):
+        java_obj = self._create_java_obj()
+        self._transfer_params_to_java(params, java_obj)
+        return SchemaRDD(java_obj.transform(dataset._jschema_rdd,
+                                            _jvm().org.apache.spark.ml.param.ParamMap()),
+                         dataset.sql_ctx)

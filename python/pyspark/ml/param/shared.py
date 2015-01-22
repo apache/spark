@@ -31,11 +31,11 @@ class HasMaxIter(Params):
         self.paramMap[self.maxIter] = value
         return self
 
-    def getMaxIter(self, value):
+    def getMaxIter(self):
         if self.maxIter in self.paramMap:
             return self.paramMap[self.maxIter]
         else:
-            return self.defaultValue
+            return self.maxIter.defaultValue
 
 
 class HasRegParam(Params):
@@ -49,11 +49,11 @@ class HasRegParam(Params):
         self.paramMap[self.regParam] = value
         return self
 
-    def getRegParam(self, value):
+    def getRegParam(self):
         if self.regParam in self.paramMap:
             return self.paramMap[self.regParam]
         else:
-            return self.defaultValue
+            return self.regParam.defaultValue
 
 
 class HasFeaturesCol(Params):
@@ -67,11 +67,11 @@ class HasFeaturesCol(Params):
         self.paramMap[self.featuresCol] = value
         return self
 
-    def getFeaturesCol(self, value):
+    def getFeaturesCol(self):
         if self.featuresCol in self.paramMap:
             return self.paramMap[self.featuresCol]
         else:
-            return self.defaultValue
+            return self.featuresCol.defaultValue
 
 
 class HasLabelCol(Params):
@@ -85,11 +85,11 @@ class HasLabelCol(Params):
         self.paramMap[self.labelCol] = value
         return self
 
-    def getLabelCol(self, value):
+    def getLabelCol(self):
         if self.labelCol in self.paramMap:
             return self.paramMap[self.labelCol]
         else:
-            return self.defaultValue
+            return self.labelCol.defaultValue
 
 
 class HasPredictionCol(Params):
@@ -103,11 +103,11 @@ class HasPredictionCol(Params):
         self.paramMap[self.predictionCol] = value
         return self
 
-    def getPredictionCol(self, value):
+    def getPredictionCol(self):
         if self.predictionCol in self.paramMap:
             return self.paramMap[self.predictionCol]
         else:
-            return self.defaultValue
+            return self.predictionCol.defaultValue
 
 
 class HasInputCol(Params):
@@ -121,11 +121,11 @@ class HasInputCol(Params):
         self.paramMap[self.inputCol] = value
         return self
 
-    def getInputCol(self, value):
+    def getInputCol(self):
         if self.inputCol in self.paramMap:
             return self.paramMap[self.inputCol]
         else:
-            return self.defaultValue
+            return self.inputCol.defaultValue
 
 
 class HasOutputCol(Params):
@@ -139,8 +139,8 @@ class HasOutputCol(Params):
         self.paramMap[self.outputCol] = value
         return self
 
-    def getOutputCol(self, value):
+    def getOutputCol(self):
         if self.outputCol in self.paramMap:
             return self.paramMap[self.outputCol]
         else:
-            return self.defaultValue
+            return self.outputCol.defaultValue

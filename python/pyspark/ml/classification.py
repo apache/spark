@@ -16,42 +16,40 @@
 #
 
 from pyspark.sql import SchemaRDD, inherit_doc
-from pyspark.ml import Estimator, Transformer, _jvm
+from pyspark.ml import JavaEstimator, Transformer, _jvm
 from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,\
     HasRegParam
 
 
 @inherit_doc
-class LogisticRegression(Estimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
+class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                          HasRegParam):
     """
     Logistic regression.
     """
 
-    # _java_class = "org.apache.spark.ml.classification.LogisticRegression"
-
     def __init__(self):
         super(LogisticRegression, self).__init__()
-        self._java_obj = _jvm().org.apache.spark.ml.classification.LogisticRegression()
 
-    def fit(self, dataset, params=None):
-        """
-        Fits a dataset with optional parameters.
-        """
-        java_model = self._java_obj.fit(dataset._jschema_rdd,
-                                        _jvm().org.apache.spark.ml.param.ParamMap())
+    @property
+    def _java_class(self):
+        return "org.apache.spark.ml.classification.LogisticRegression"
+
+    def _create_model(self, java_model):
         return LogisticRegressionModel(java_model)
 
 
+@inherit_doc
 class LogisticRegressionModel(Transformer):
     """
     Model fitted by LogisticRegression.
     """
 
-    def __init__(self, _java_model):
-        self._java_model = _java_model
+    def __init__(self, java_model):
+        self._java_model = java_model
 
-    def transform(self, dataset):
+    def transform(self, dataset, params={}):
+        # TODO: handle params here.
         return SchemaRDD(self._java_model.transform(
             dataset._jschema_rdd,
             _jvm().org.apache.spark.ml.param.ParamMap()), dataset.sql_ctx)

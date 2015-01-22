@@ -21,6 +21,7 @@ from pyspark.ml import Pipeline
 from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.ml.classification import LogisticRegression
 
+
 if __name__ == "__main__":
     sc = SparkContext(appName="SimpleTextClassificationPipeline")
     sqlCtx = SQLContext(sc)

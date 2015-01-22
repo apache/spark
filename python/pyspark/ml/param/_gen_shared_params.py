@@ -54,13 +54,13 @@ def _gen_param_code(name, doc, defaultValue):
         self.paramMap[self.%s] = value
         return self
 
-    def get%s(self, value):
+    def get%s(self):
         if self.%s in self.paramMap:
             return self.paramMap[self.%s]
         else:
-            return self.defaultValue""" % (
+            return self.%s.defaultValue""" % (
         upperCamelName, upperCamelName, doc, name, name, doc, defaultValue, upperCamelName, name,
-        upperCamelName, name, name)
+        upperCamelName, name, name, name)
 
 if __name__ == "__main__":
     print header

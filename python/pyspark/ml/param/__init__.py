@@ -63,3 +63,14 @@ class Params(Identifiable):
         :py:class:`Param`.
         """
         return filter(lambda x: isinstance(x, Param), map(lambda x: getattr(self, x), dir(self)))
+
+    def _merge_params(self, params):
+        map = self.paramMap.copy()
+        map.update(params)
+        return map
+
+    def _transfer_params_to_java(self, params, java_obj):
+        map = self._merge_params(params)
+        for param in self.params():
+            if param in map:
+                java_obj.set(param.name, map[param])
