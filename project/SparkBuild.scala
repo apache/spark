@@ -42,8 +42,9 @@ object BuildCommons {
     sparkKinesisAsl) = Seq("yarn", "yarn-stable", "java8-tests", "ganglia-lgpl",
     "kinesis-asl").map(ProjectRef(buildLocation, _))
 
-  val assemblyProjects@Seq(assembly, examples, networkYarn) =
-    Seq("assembly", "examples", "network-yarn").map(ProjectRef(buildLocation, _))
+  val assemblyProjects@Seq(assembly, examples, networkYarn, streamingKafkaAssembly) =
+    Seq("assembly", "examples", "network-yarn", "streaming-kafka-assembly")
+      .map(ProjectRef(buildLocation, _))
 
   val tools = ProjectRef(buildLocation, "tools")
   // Root project.
@@ -298,6 +299,9 @@ object Assembly {
       if (mName.contains("network-yarn")) {
         // This must match the same name used in maven (see network/yarn/pom.xml)
         "spark-" + v + "-yarn-shuffle.jar"
+      } else if (mName.contains("streaming-kafka-assembly")) {
+        // This must match the same name used in maven (see external/kafka-assembly/pom.xml)
+        mName + "-" + v + ".jar"
       } else {
         mName + "-" + v + "-hadoop" +
           Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar"
