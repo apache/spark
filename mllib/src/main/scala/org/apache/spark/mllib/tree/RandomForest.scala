@@ -132,7 +132,6 @@ private class RandomForest (
     timer.start("init")
 
     val retaggedInput = input.retag(classOf[LabeledPoint])
-    val subsample = strategy.subsamplingRate
     val metadata =
       DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
     logDebug("algo = " + strategy.algo)
@@ -141,7 +140,7 @@ private class RandomForest (
     logDebug("maxBins = " + metadata.maxBins)
     logDebug("featureSubsetStrategy = " + featureSubsetStrategy)
     logDebug("numFeaturesPerNode = " + metadata.numFeaturesPerNode)
-    logDebug("subsamplingRate = " + subsample)
+    logDebug("subsamplingRate = " + strategy.subsamplingRate)
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
@@ -160,8 +159,9 @@ private class RandomForest (
     val withReplacement = if (numTrees > 1) true else false
 
     val baggedInput
-      = BaggedPoint.convertToBaggedRDD(treeInput, subsample, numTrees, withReplacement, seed)
-        .persist(StorageLevel.MEMORY_AND_DISK)
+      = BaggedPoint.convertToBaggedRDD(treeInput,
+          strategy.subsamplingRate, numTrees,
+          withReplacement, seed).persist(StorageLevel.MEMORY_AND_DISK)
 
     // depth of the decision tree
     val maxDepth = strategy.maxDepth
