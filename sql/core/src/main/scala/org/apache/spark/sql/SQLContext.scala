@@ -454,12 +454,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
   @DeveloperApi
   protected class QueryExecution(val logical: LogicalPlan) {
 
-    lazy val analyzed = ExtractPythonUdfs(analyzer(logical))
-    lazy val withCachedData = useCachedData(analyzed)
-    lazy val optimizedPlan = optimizer(withCachedData)
+    lazy val analyzed: LogicalPlan = ExtractPythonUdfs(analyzer(logical))
+    lazy val withCachedData: LogicalPlan = useCachedData(analyzed)
+    lazy val optimizedPlan: LogicalPlan = optimizer(withCachedData)
 
     // TODO: Don't just pick the first one...
-    lazy val sparkPlan = {
+    lazy val sparkPlan: SparkPlan = {
       SparkPlan.currentContext.set(self)
       planner(optimizedPlan).next()
     }
