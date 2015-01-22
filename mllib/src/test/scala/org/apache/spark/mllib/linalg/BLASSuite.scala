@@ -127,6 +127,47 @@ class BLASSuite extends FunSuite {
     }
   }
 
+  test("syr") {
+    val dA = new DenseMatrix(4, 4,
+      Array(0.0, 1.2, 2.2, 3.1, 1.2, 3.2, 5.3, 4.6, 2.2, 5.3, 1.8, 3.0, 3.1, 4.6, 3.0, 0.8))
+    val x = new DenseVector(Array(0.0, 2.7, 3.5, 2.1))
+    val alpha = 0.15
+
+    val expected = new DenseMatrix(4, 4,
+      Array(0.0, 1.2, 2.2, 3.1, 1.2, 4.2935, 6.7175, 5.4505, 2.2, 6.7175, 3.6375, 4.1025, 3.1,
+        5.4505, 4.1025, 1.4615))
+
+    syr(alpha, x, dA)
+
+    assert(dA ~== expected absTol 1e-15)
+ 
+    val dB =
+      new DenseMatrix(3, 4, Array(0.0, 1.2, 2.2, 3.1, 1.2, 3.2, 5.3, 4.6, 2.2, 5.3, 1.8, 3.0))
+
+    withClue("Matrix A must be a symmetric Matrix") {
+      intercept[Exception] {
+        syr(alpha, x, dB)
+      }
+    }
+ 
+    val dC =
+      new DenseMatrix(3, 3, Array(0.0, 1.2, 2.2, 1.2, 3.2, 5.3, 2.2, 5.3, 1.8))
+
+    withClue("Size of vector must match the rank of matrix") {
+      intercept[Exception] {
+        syr(alpha, x, dC)
+      }
+    }
+ 
+    val y = new DenseVector(Array(0.0, 2.7, 3.5, 2.1, 1.5))
+
+    withClue("Size of vector must match the rank of matrix") {
+      intercept[Exception] {
+        syr(alpha, y, dA)
+      }
+    }
+  }
+
   test("gemm") {
 
     val dA =

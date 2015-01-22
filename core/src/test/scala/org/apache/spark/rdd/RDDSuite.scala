@@ -17,6 +17,10 @@
 
 package org.apache.spark.rdd
 
+import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
+
+import com.esotericsoftware.kryo.KryoException
+
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -48,6 +52,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(nums.glom().map(_.toList).collect().toList === List(List(1, 2), List(3, 4)))
     assert(nums.collect({ case i if i >= 3 => i.toString }).collect().toList === List("3", "4"))
     assert(nums.keyBy(_.toString).collect().toList === List(("1", 1), ("2", 2), ("3", 3), ("4", 4)))
+    assert(!nums.isEmpty())
     assert(nums.max() === 4)
     assert(nums.min() === 1)
     val partitionSums = nums.mapPartitions(iter => Iterator(iter.reduceLeft(_ + _)))
@@ -541,6 +546,14 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(sortedTopK === nums.sorted(ord).take(5))
   }
 
+  test("isEmpty") {
+    assert(sc.emptyRDD.isEmpty())
+    assert(sc.parallelize(Seq[Int]()).isEmpty())
+    assert(!sc.parallelize(Seq(1)).isEmpty())
+    assert(sc.parallelize(Seq(1,2,3), 3).filter(_ < 0).isEmpty())
+    assert(!sc.parallelize(Seq(1,2,3), 3).filter(_ > 1).isEmpty())
+  }
+
   test("sample preserves partitioner") {
     val partitioner = new HashPartitioner(2)
     val rdd = sc.parallelize(Seq((0, 1), (2, 3))).partitionBy(partitioner)
@@ -885,6 +898,23 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(ancestors6.count(_.isInstanceOf[UnionRDD[_]]) === 2)
     assert(ancestors6.count(_.isInstanceOf[MapPartitionsRDD[_, _]]) === 7)
     assert(ancestors6.count(_.isInstanceOf[CyclicalDependencyRDD[_]]) === 3)
+  }
+
+  test("task serialization exception should not hang scheduler") {
+    class BadSerializable extends Serializable {
+      @throws(classOf[IOException])
+      private def writeObject(out: ObjectOutputStream): Unit = throw new KryoException("Bad serialization")
+
+      @throws(classOf[IOException])
+      private def readObject(in: ObjectInputStream): Unit = {}
+    }
+    // Note that in the original bug, SPARK-4349, that this verifies, the job would only hang if there were
+    // more threads in the Spark Context than there were number of objects in this sequence.
+    intercept[Throwable] {
+      sc.parallelize(Seq(new BadSerializable, new BadSerializable)).collect
+    }
+    // Check that the context has not crashed
+    sc.parallelize(1 to 100).map(x => x*2).collect
   }
 
   /** A contrived RDD that allows the manual addition of dependencies after creation. */

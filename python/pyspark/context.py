@@ -319,7 +319,7 @@ class SparkContext(object):
         # Make sure we distribute data evenly if it's smaller than self.batchSize
         if "__len__" not in dir(c):
             c = list(c)    # Make it a list so we can compute its length
-        batchSize = max(1, min(len(c) // numSlices, self._batchSize))
+        batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
         serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
         serializer.dump_stream(c, tempFile)
         tempFile.close()
@@ -407,7 +407,7 @@ class SparkContext(object):
 
     def binaryFiles(self, path, minPartitions=None):
         """
-        :: Experimental ::
+        .. note:: Experimental
 
         Read a directory of binary files from HDFS, a local file system
         (available on all nodes), or any Hadoop-supported file system URI
@@ -424,7 +424,7 @@ class SparkContext(object):
 
     def binaryRecords(self, path, recordLength):
         """
-        :: Experimental ::
+        .. note:: Experimental
 
         Load data from a flat binary file, assuming each record is a set of numbers
         with the specified numerical format (see ByteBuffer), and the number of

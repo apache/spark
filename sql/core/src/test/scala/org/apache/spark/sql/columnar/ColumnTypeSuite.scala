@@ -24,9 +24,9 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.columnar.ColumnarTestUtils._
 import org.apache.spark.sql.execution.SparkSqlSerializer
+import org.apache.spark.sql.types._
 
 class ColumnTypeSuite extends FunSuite with Logging {
   val DEFAULT_BUFFER_SIZE = 512

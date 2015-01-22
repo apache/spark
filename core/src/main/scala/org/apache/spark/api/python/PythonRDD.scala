@@ -125,8 +125,8 @@ private[spark] class PythonRDD(
                 init, finish))
               val memoryBytesSpilled = stream.readLong()
               val diskBytesSpilled = stream.readLong()
-              context.taskMetrics.memoryBytesSpilled += memoryBytesSpilled
-              context.taskMetrics.diskBytesSpilled += diskBytesSpilled
+              context.taskMetrics.incMemoryBytesSpilled(memoryBytesSpilled)
+              context.taskMetrics.incDiskBytesSpilled(diskBytesSpilled)
               read()
             case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
               // Signals that an exception has been thrown in python

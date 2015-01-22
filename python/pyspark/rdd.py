@@ -1130,6 +1130,18 @@ class RDD(object):
             return rs[0]
         raise ValueError("RDD is empty")
 
+    def isEmpty(self):
+        """
+        Returns true if and only if the RDD contains no elements at all. Note that an RDD
+        may be empty even when it has at least 1 partition.
+
+        >>> sc.parallelize([]).isEmpty()
+        True
+        >>> sc.parallelize([1]).isEmpty()
+        False
+        """
+        return self._jrdd.partitions().size() == 0 or len(self.take(1)) == 0
+
     def saveAsNewAPIHadoopDataset(self, conf, keyConverter=None, valueConverter=None):
         """
         Output a Python RDD of key-value pairs (of form C{RDD[(K, V)]}) to any Hadoop file
@@ -1964,7 +1976,7 @@ class RDD(object):
 
     def countApprox(self, timeout, confidence=0.95):
         """
-        :: Experimental ::
+        .. note:: Experimental
         Approximate version of count() that returns a potentially incomplete
         result within a timeout, even if not all tasks have finished.
 
@@ -1977,7 +1989,7 @@ class RDD(object):
 
     def sumApprox(self, timeout, confidence=0.95):
         """
-        :: Experimental ::
+        .. note:: Experimental
         Approximate operation to return the sum within a timeout
         or meet the confidence.
 
@@ -1993,7 +2005,7 @@ class RDD(object):
 
     def meanApprox(self, timeout, confidence=0.95):
         """
-        :: Experimental ::
+        .. note:: Experimental
         Approximate operation to return the mean within a timeout
         or meet the confidence.
 
@@ -2009,7 +2021,7 @@ class RDD(object):
 
     def countApproxDistinct(self, relativeSD=0.05):
         """
-        :: Experimental ::
+        .. note:: Experimental
         Return approximate number of distinct elements in the RDD.
 
         The algorithm used is based on streamlib's implementation of

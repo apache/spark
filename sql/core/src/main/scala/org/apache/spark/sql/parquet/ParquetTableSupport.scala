@@ -29,8 +29,7 @@ import parquet.schema.MessageType
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types._
 
 /**
  * A `parquet.io.api.RecordMaterializer` for Rows.
@@ -130,7 +129,7 @@ private[parquet] object RowReadSupport {
 private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
 
   private[parquet] var writer: RecordConsumer = null
-  private[parquet] var attributes: Seq[Attribute] = null
+  private[parquet] var attributes: Array[Attribute] = null
 
   override def init(configuration: Configuration): WriteSupport.WriteContext = {
     val origAttributesStr: String = configuration.get(RowWriteSupport.SPARK_ROW_SCHEMA)
@@ -138,7 +137,7 @@ private[parquet] class RowWriteSupport extends WriteSupport[Row] with Logging {
     metadata.put(RowReadSupport.SPARK_METADATA_KEY, origAttributesStr)
 
     if (attributes == null) {
-      attributes = ParquetTypesConverter.convertFromString(origAttributesStr)
+      attributes = ParquetTypesConverter.convertFromString(origAttributesStr).toArray
     }
 
     log.debug(s"write support initialized for requested schema $attributes")

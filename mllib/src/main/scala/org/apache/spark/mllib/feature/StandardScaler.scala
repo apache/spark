@@ -105,8 +105,8 @@ class StandardScalerModel private[mllib] (
       // This can be avoid by having a local reference of `shift`.
       val localShift = shift
       vector match {
-        case dv: DenseVector =>
-          val values = dv.values.clone()
+        case DenseVector(vs) =>
+          val values = vs.clone()
           val size = values.size
           if (withStd) {
             // Having a local reference of `factor` to avoid overhead as the comment before.
@@ -130,8 +130,8 @@ class StandardScalerModel private[mllib] (
       // Having a local reference of `factor` to avoid overhead as the comment before.
       val localFactor = factor
       vector match {
-        case dv: DenseVector =>
-          val values = dv.values.clone()
+        case DenseVector(vs) =>
+          val values = vs.clone()
           val size = values.size
           var i = 0
           while(i < size) {
@@ -139,18 +139,17 @@ class StandardScalerModel private[mllib] (
             i += 1
           }
           Vectors.dense(values)
-        case sv: SparseVector =>
+        case SparseVector(size, indices, vs) =>
           // For sparse vector, the `index` array inside sparse vector object will not be changed,
           // so we can re-use it to save memory.
-          val indices = sv.indices
-          val values = sv.values.clone()
+          val values = vs.clone()
           val nnz = values.size
           var i = 0
           while (i < nnz) {
             values(i) *= localFactor(indices(i))
             i += 1
           }
-          Vectors.sparse(sv.size, indices, values)
+          Vectors.sparse(size, indices, values)
         case v => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
       }
     } else {

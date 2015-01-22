@@ -18,8 +18,8 @@
 package org.apache.spark.sql.columnar.compression
 
 import org.apache.spark.sql.catalyst.expressions.MutableRow
-import org.apache.spark.sql.catalyst.types.NativeType
 import org.apache.spark.sql.columnar.{ColumnAccessor, NativeColumnAccessor}
+import org.apache.spark.sql.types.NativeType
 
 private[sql] trait CompressibleColumnAccessor[T <: NativeType] extends ColumnAccessor {
   this: NativeColumnAccessor[T] =>

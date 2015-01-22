@@ -168,7 +168,7 @@ class ReceivedBlockHandlerSuite extends FunSuite with BeforeAndAfter with Matche
       manualClock.currentTime() shouldEqual 5000L
 
       val cleanupThreshTime = 3000L
-      handler.cleanupOldBlock(cleanupThreshTime)
+      handler.cleanupOldBlocks(cleanupThreshTime)
       eventually(timeout(10000 millis), interval(10 millis)) {
         getWriteAheadLogFiles().size should be < preCleanupLogFiles.size
       }
