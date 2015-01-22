@@ -205,7 +205,7 @@ class DagPickle(Base):
 
     __tablename__ = "dag_pickle"
 
-    def __init__(self, dag, job):
+    def __init__(self, dag, job=None):
         self.dag_id = dag.dag_id
         self.job = job
         for t in dag.tasks:
@@ -468,15 +468,19 @@ class TaskInstance(Base):
             self.end_date + self.task.retry_delay < datetime.now()
 
     def get_template(self, source):
-        env = jinja2.Environment(
-            loader=jinja2.FileSystemLoader(self.task.dag.folder))
+        searchpath = []
+        if hasattr(self, 'task') and hasattr(self.task, 'dag'):
+            searchpath = [self.task.dag.folder]
+            if self.task.dag.template_searchpath:
+                searchpath += self.task.dag.template_searchpath
+
+        env = jinja2.Environment(loader=jinja2.FileSystemLoader(searchpath))
         template = None
         for ext in self.task.__class__.template_ext:
-            # Magic, if field has the right extension, look
-            # for the file.
+            # if field has the right extension, look for the file.
             if source.strip().endswith(ext):
                 template = env.get_template(source)
-        return template or jinja2.Template(source)
+        return template or env.template_class(source)
 
     def run(
             self,
@@ -965,7 +969,8 @@ class DAG(Base):
             self, dag_id,
             schedule_interval=timedelta(days=1),
             start_date=None, end_date=None, parallelism=0,
-            full_filepath=None, executor=DEFAULT_EXECUTOR):
+            full_filepath=None, executor=DEFAULT_EXECUTOR,
+            template_searchpath=None):
 
         self.tasks = []
         utils.validate_key(dag_id)
@@ -976,6 +981,7 @@ class DAG(Base):
         self.parallelism = parallelism
         self.schedule_interval = schedule_interval
         self.full_filepath = full_filepath if full_filepath else ''
+        self.template_searchpath = template_searchpath
 
     def __repr__(self):
         return "<DAG: {self.dag_id}>".format(self=self)
