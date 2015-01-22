@@ -509,7 +509,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   test("SPARK-5367: resolve star expression in udf") {
-    assert(sql("select concat(*), array(*) from src limit 5").collect().size == 5)
+    assert(sql("select concat(*) from src limit 5").collect().size == 5)
     assert(sql("select array(*) from src limit 5").collect().size == 5)
   }
 
