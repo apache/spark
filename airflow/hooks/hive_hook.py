@@ -150,7 +150,7 @@ class HiveHook(BaseHook):
             self.hive._oprot.trans.close()
             return max([p.values[0] for p in parts])
 
-   def get_partitions(self, schema, table_name):
+    def get_partitions(self, schema, table_name):
         '''
         Returns a list of all partitions in a table. Works only
         for tables with less than 32767 (java short max val).
@@ -169,4 +169,4 @@ class HiveHook(BaseHook):
                 db_name=schema, tbl_name=table_name, max_parts=32767)
 
             self.hive._oprot.trans.close()
-            return parts
+            return [p.values[0] for p in parts]
