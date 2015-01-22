@@ -122,7 +122,7 @@ if [[ ! "$@" =~ --package-only ]]; then
   for file in $(find . -type f)
   do
     echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --output $file.asc --detach-sig --armour $file;
-    if [ `command -v md5` ]; then
+    if [ $(command -v md5) ]; then
       # Available on OS X; -q to keep only hash
       md5 -q $file > $file.md5
     else
