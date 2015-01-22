@@ -76,17 +76,7 @@ object BoostingStrategy {
    * @return Configuration for boosting algorithm
    */
   def defaultParams(algoStr: String): BoostingStrategy = {
-    val treeStrategy = Strategy.defaultStrategy(algoStr)
-    treeStrategy.maxDepth = 3
-    algoStr match {
-      case "Classification" =>
-        treeStrategy.numClasses = 2
-        new BoostingStrategy(treeStrategy, LogLoss)
-      case "Regression" =>
-        new BoostingStrategy(treeStrategy, SquaredError)
-      case _ =>
-        throw new IllegalArgumentException(s"$algoStr is not supported by boosting.")
-    }
+    defaultParams(Algo.fromString(algoStr))
   }
 
   /**
