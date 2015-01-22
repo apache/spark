@@ -1125,19 +1125,19 @@ class InputFormatTests(ReusedPySparkTestCase):
 
     def test_newhadoop(self):
         basepath = self.tempdir.name
-        ints = sorted(self.sc.newAPIHadoopFile(\
-            basepath + "/sftestdata/sfint/",\
-            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",\
-            "org.apache.hadoop.io.IntWritable",\
+        ints = sorted(self.sc.newAPIHadoopFile(
+            basepath + "/sftestdata/sfint/",
+            "org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat",
+            "org.apache.hadoop.io.IntWritable",
             "org.apache.hadoop.io.Text").collect())
         ei = [(1, u'aa'), (1, u'aa'), (2, u'aa'), (2, u'bb'), (2, u'bb'), (3, u'cc')]
         self.assertEqual(ints, ei)
 
         hellopath = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
         newconf = {"mapred.input.dir": hellopath}
-        hello = self.sc.newAPIHadoopRDD("org.apache.hadoop.mapreduce.lib.input.TextInputFormat",\
-                                        "org.apache.hadoop.io.LongWritable",\
-                                        "org.apache.hadoop.io.Text",\
+        hello = self.sc.newAPIHadoopRDD("org.apache.hadoop.mapreduce.lib.input.TextInputFormat",
+                                        "org.apache.hadoop.io.LongWritable",
+                                        "org.apache.hadoop.io.Text",
                                         conf=newconf).collect()
         result = [(0, u'Hello World!')]
         self.assertEqual(hello, result)
