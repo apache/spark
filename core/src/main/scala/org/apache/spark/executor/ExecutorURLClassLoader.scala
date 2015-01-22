@@ -19,6 +19,7 @@ package org.apache.spark.executor
 
 import java.net.{URLClassLoader, URL}
 import java.util.Enumeration
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.JavaConversions._
 
@@ -38,13 +39,25 @@ private[spark] class ChildExecutorURLClassLoader(urls: Array[URL], parent: Class
   extends URLClassLoader(urls, null) with MutableURLClassLoader {
 
   private val parentClassLoader = new ParentClassLoader(parent)
+  private val locks = new ConcurrentHashMap[String, Object]()
 
   override def loadClass(name: String, resolve: Boolean): Class[_] = {
-    try {
-      super.loadClass(name, resolve)
-    } catch {
-      case e: ClassNotFoundException =>
-        parentClassLoader.loadClass(name)
+    var lock = locks.get(name)
+    if (lock == null) {
+      val newLock = new Object()
+      lock = locks.putIfAbsent(name, newLock)
+      if (lock == null) {
+        lock = newLock
+      }
+    }
+
+    lock.synchronized {
+      try {
+        super.loadClass(name, resolve)
+      } catch {
+        case e: ClassNotFoundException =>
+          parentClassLoader.loadClass(name)
+      }
     }
   }
 
