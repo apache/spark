@@ -490,10 +490,10 @@ private[parquet] object CatalystTimestampConverter {
     }
     parquetTsCalendar.get
   }
-  val NANOS_PER_SECOND = 1000000000
-  val SECONDS_PER_MINUTE = 60
-  val MINUTES_PER_HOUR = 60
-  val NANOS_PER_MILLI = 1000000
+  val NANOS_PER_SECOND: Long = 1000000000
+  val SECONDS_PER_MINUTE: Long = 60
+  val MINUTES_PER_HOUR: Long = 60
+  val NANOS_PER_MILLI: Long = 1000000
 
   def convertToTimestamp(value: Binary): Timestamp = {
     val nt = NanoTime.fromBinary(value)
