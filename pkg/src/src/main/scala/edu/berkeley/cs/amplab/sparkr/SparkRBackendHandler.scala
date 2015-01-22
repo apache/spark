@@ -37,7 +37,6 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
     if (objId == "SparkRHandler") {
       methodName match {
         case "stopBackend" => {
-          // dos.write(0)
           writeInt(dos, 0)
           writeType(dos, "void")
           server.close()
@@ -110,8 +109,8 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
         // Write status bit
         writeInt(dos, 0)
         writeObject(dos, ret.asInstanceOf[AnyRef])
-      } else if (methodName == "new") {
-        // methodName should be "new" for constructor
+      } else if (methodName == "<init>") {
+        // methodName should be "<init>" for constructor
         val ctor = cls.get.getConstructors().filter { x =>
           matchMethod(numArgs, args, x.getParameterTypes())
         }.head

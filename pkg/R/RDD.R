@@ -19,7 +19,9 @@ getJobj <- function(objId) {
 
 # Handler for a java object that exists on the backend.
 jobj <- function(objId) {
-  if (!is.character(objId)) stop("object id must be a character")
+  if (!is.character(objId)) {
+    stop("object id must be a character")
+  }
   obj <- structure(new.env(parent = emptyenv()), class = "jobj")
   obj$id <- objId
   # Register a finalizer to remove the Java object when this reference
@@ -33,7 +35,7 @@ cleanup.jobj <- function(e) {
   .validJobjs[[objId]] <- .validJobjs[[objId]] - 1
 
   if (.validJobjs[[objId]] == 0) {
-    rm(list=objId, envir = .validJobjs)
+    rm(list=objId, envir=.validJobjs)
     # NOTE: We cannot call removeJObject here as the finalizer may be run
     # in the middle of another RPC. Thus we queue up this object Id to be removed
     # and then run all the removeJObject when the next RPC is called.

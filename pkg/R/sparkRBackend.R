@@ -15,7 +15,7 @@ callJStatic <- function(className, methodName, ...) {
 
 # Create a new object of the specified class name
 newJObject <- function(className, ...) {
-  invokeJava(isStatic=TRUE, className, methodName="new", ...)
+  invokeJava(isStatic=TRUE, className, methodName="<init>", ...)
 }
 
 # Remove an object from the SparkR backend. This is done

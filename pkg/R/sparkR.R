@@ -53,7 +53,8 @@ sparkR.init <- function(
   sparkEnvir = list(),
   sparkExecutorEnv = list(),
   sparkJars = "",
-  sparkRLibDir = "") {
+  sparkRLibDir = "",
+  sparkRBackendPort = 12345) {
 
   if (exists(".sparkRjsc", envir=.sparkREnv)) {
     cat("Re-using existing Spark Context. Please restart R to create a new Spark Context\n")
@@ -61,13 +62,16 @@ sparkR.init <- function(
   }
 
   sparkMem <- Sys.getenv("SPARK_MEM", "512m")
-  cp = .sparkREnv$assemblyJarPath
+  jars <- c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))
+
+  cp <- paste0(jars, collapse=":")
+
   yarn_conf_dir <- Sys.getenv("YARN_CONF_DIR", "")
   if (yarn_conf_dir != "") {
-    cp = paste(cp, yarn_conf_dir, sep=":")
+    cp <- paste(cp, yarn_conf_dir, sep=":")
   }
   launchBackend(classPath=cp, mainClass="edu.berkeley.cs.amplab.sparkr.SparkRBackend",
-                args="12345", javaOpts=paste("-Xmx", sparkMem, sep=""))
+                args=as.character(sparkRBackendPort), javaOpts=paste("-Xmx", sparkMem, sep=""))
   Sys.sleep(2) # Wait for backend to come up
   connectBackend("localhost", 12345) # Connect to it
 
@@ -91,9 +95,6 @@ sparkR.init <- function(
   for (varname in names(sparkExecutorEnv)) {
     sparkExecutorEnvMap[[varname]] <- sparkExecutorEnv[[varname]]
   }
-  
-  #.jaddClassPath(sparkJars)
-  jars <- c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))
 
   nonEmptyJars <- Filter(function(x) { x != "" }, jars)
   localJarPaths <- sapply(nonEmptyJars, function(j) { paste("file://", j, sep="") })
@@ -101,8 +102,8 @@ sparkR.init <- function(
   assign(
     ".sparkRjsc",
     callJStatic(
-      className="edu.berkeley.cs.amplab.sparkr.RRDD",
-      methodName="createSparkContext",
+      "edu.berkeley.cs.amplab.sparkr.RRDD",
+      "createSparkContext",
       master,
       appName,
       as.character(sparkHome),

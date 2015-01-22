@@ -68,6 +68,7 @@ object SerializeJavaR {
     val len = in.readInt()
     val asciiBytes = new Array[Byte](len)
     in.read(asciiBytes, 0, len)
+    assert(asciiBytes(len - 1) == 0)
     val str = new String(asciiBytes.dropRight(1).map(_.toChar))
     str
   }
