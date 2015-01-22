@@ -383,6 +383,7 @@ private[spark] object PythonRDD extends Logging {
         dataOut.write(bytes)
       }
     }
+
     def writeS(str: String) {
       if (str == null) {
         dataOut.writeInt(SpecialLengths.NULL)
@@ -390,6 +391,7 @@ private[spark] object PythonRDD extends Logging {
         writeUTF(str, dataOut)
       }
     }
+
     if (iter.hasNext) {
       val first = iter.next()
       val newIter = Seq(first).iterator ++ iter
