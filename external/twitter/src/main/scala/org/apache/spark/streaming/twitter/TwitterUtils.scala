@@ -25,7 +25,6 @@ import org.apache.spark.streaming.api.java.{JavaReceiverInputDStream, JavaDStrea
 import org.apache.spark.streaming.dstream.{ReceiverInputDStream, DStream}
 
 object TwitterUtils {
- 
   /**
    * Create a input stream that returns tweets received from Twitter.
    * @param ssc         StreamingContext object
@@ -67,7 +66,7 @@ object TwitterUtils {
    * @param jssc   JavaStreamingContext object
    */
   def createStream(jssc: JavaStreamingContext): JavaReceiverInputDStream[Status] = {
-    createStream(jssc.ssc, None) 
+    createStream(jssc.ssc, None)
   }
 
   /**
@@ -83,7 +82,7 @@ object TwitterUtils {
       ): JavaReceiverInputDStream[Status] = {
     createStream(jssc.ssc, None, filters)
   }
- 
+
   /**
    * Create a input stream that returns tweets received from Twitter using Twitter4J's default
    * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
