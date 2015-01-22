@@ -81,11 +81,11 @@ class OutputCommitCoordinatorSuite
           try {
             accumUpdates(accumId) = t.run(attemptNumber, attemptNumber)
             dagSchedulerEventProcessLoop.post(
-                new CompletionEvent(t, Success, 0, accumUpdates, taskInfo, new TaskMetrics))
+              new CompletionEvent(t, Success, 0, accumUpdates, taskInfo, new TaskMetrics))
           } catch {
             case e: Throwable =>
               dagSchedulerEventProcessLoop.post(new CompletionEvent(t, new ExceptionFailure(e,
-                  Option.empty[TaskMetrics]), 1, accumUpdates, taskInfo, new TaskMetrics))
+                Option.empty[TaskMetrics]), 1, accumUpdates, taskInfo, new TaskMetrics))
           }
         })
       }

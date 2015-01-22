@@ -913,7 +913,8 @@ class DAGScheduler(
     val taskType = Utils.getFormattedClassName(task)
     val isSuccess = event.reason == Success
 
-    outputCommitCoordinator.taskCompleted(stageId, task.partitionId, event.taskInfo.taskId, isSuccess)
+    outputCommitCoordinator.taskCompleted(stageId, task.partitionId,
+      event.taskInfo.taskId, isSuccess)
 
     // The success case is dealt with separately below, since we need to compute accumulator
     // updates before posting.
