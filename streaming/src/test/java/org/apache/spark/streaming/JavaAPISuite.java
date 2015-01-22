@@ -1708,7 +1708,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @SuppressWarnings("unchecked")
   @Test
   public void testTextFileStream() throws IOException {
-    File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"));
+    File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     List<List<String>> expected = fileTestPrepare(testDir);
 
     JavaDStream<String> input = ssc.textFileStream(testDir.toString());
@@ -1721,7 +1721,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   @SuppressWarnings("unchecked")
   @Test
   public void testFileStream() throws IOException {
-    File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"));
+    File testDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     List<List<String>> expected = fileTestPrepare(testDir);
 
     JavaPairInputDStream<LongWritable, Text> inputStream = ssc.fileStream(
@@ -1761,9 +1761,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Files.write("0\n", existingFile, Charset.forName("UTF-8"));
     assertTrue(existingFile.setLastModified(1000) && existingFile.lastModified() == 1000);
 
-    List<List<String>> expected = Arrays.asList(
-      Arrays.asList("0")
-    );
+    List<List<String>> expected = Arrays.asList(Arrays.<String>asList());
 
     return expected;
   }
