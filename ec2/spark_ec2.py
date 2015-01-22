@@ -24,6 +24,7 @@ from __future__ import with_statement
 import hashlib
 import logging
 import os
+import os.path
 import pipes
 import random
 import shutil
@@ -346,12 +347,19 @@ def get_spark_ami(opts):
 # Returns a tuple of EC2 reservation objects for the master and slaves
 # Fails if there already instances running in the cluster's groups.
 def launch_cluster(conn, opts, cluster_name):
-    if opts.identity_file is None:
+    if opts.identity_file is None or \
+       not os.path.exists(opts.identity_file):
         print >> stderr, "ERROR: Must provide an identity file (-i) for ssh connections."
         sys.exit(1)
+
+    if oct(os.stat(opts.identity_file).st_mode)[-3:] != "600":
+        print >> stderr, "ERROR: Must set the permissions for the private key file to 600."
+        sys.exit(1)
+
     if opts.key_pair is None:
         print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
         sys.exit(1)
+    print "pass"
 
     user_data_content = None
     if opts.user_data:
