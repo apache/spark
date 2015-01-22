@@ -249,7 +249,6 @@ class SerializationTestCase(unittest.TestCase):
         self.assertEqual(["abc", u"123", range(5)] + range(1000), list(ser.load_stream(io)))
 
 
-
 class PySparkTestCase(unittest.TestCase):
 
     def setUp(self):
@@ -718,7 +717,7 @@ class RDDTests(ReusedPySparkTestCase):
     def test_multiple_python_java_RDD_conversions(self):
         # Regression test for SPARK-5361
         data = [
-            (u'1', {u'director': u'David Lean'}), 
+            (u'1', {u'director': u'David Lean'}),
             (u'2', {u'director': u'Andrew Dominik'})
         ]
         from pyspark.rdd import RDD
