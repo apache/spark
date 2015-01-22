@@ -67,7 +67,7 @@ private[streaming] class ReceivedBlockTracker(
   extends Logging {
 
   private type ReceivedBlockQueue = mutable.Queue[ReceivedBlockInfo]
-  
+
   private val streamIdToUnallocatedBlockQueues = new mutable.HashMap[Int, ReceivedBlockQueue]
   private val timeToAllocatedBlocks = new mutable.HashMap[Time, AllocatedBlocks]
   private val logManagerOption = createLogManager()
@@ -114,7 +114,7 @@ private[streaming] class ReceivedBlockTracker(
       // 2. Slow checkpointing makes recovered batch time older than WAL recovered
       // lastAllocatedBatchTime.
       // This situation will only occurs in recovery time.
-      logWarning(s"Possibly processed batch $batchTime need to be processed again in WAL recovery")
+      logInfo(s"Possibly processed batch $batchTime need to be processed again in WAL recovery")
     }
   }
 

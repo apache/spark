@@ -209,9 +209,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     logInfo("Batches to reschedule (" + timesToReschedule.size + " batches): " +
       timesToReschedule.mkString(", "))
     timesToReschedule.foreach { time =>
-      // Allocate the related blocks when recovering from failure, because some added but not
-      // allocated block is dangled in the queue after recovering, we have to insert some block
-      // allocation event to group up them and get the right behavior.
+      // Allocate the related blocks when recovering from failure, because some blocks that were
+      // added but not allocated, are dangling in the queue after recovering, we have to allocate
+      // those blocks to the next batch, which is the batch they were supposed to go.
       jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
       jobScheduler.submitJobSet(JobSet(time, graph.generateJobs(time)))
     }
