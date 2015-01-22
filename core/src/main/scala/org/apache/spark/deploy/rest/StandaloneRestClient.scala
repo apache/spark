@@ -28,6 +28,58 @@ import org.apache.spark.util.Utils
  * This client is intended to communicate with the StandaloneRestServer. Cluster mode only.
  */
 private[spark] class StandaloneRestClient extends SubmitRestClient {
+  import StandaloneRestClient._
+
+  /**
+   * Request that the REST server submit a driver specified by the provided arguments.
+   *
+   * If the driver was successfully submitted, this polls the status of the driver that was
+   * just submitted and reports it to the user. Otherwise, if the submission was unsuccessful,
+   * this reports failure and logs an error message provided by the REST server.
+   */
+  override def submitDriver(args: SparkSubmitArguments): SubmitDriverResponseMessage = {
+    import SubmitDriverResponseField._
+    val submitResponse = super.submitDriver(args).asInstanceOf[SubmitDriverResponseMessage]
+    val submitSuccess = submitResponse.getFieldNotNull(SUCCESS).toBoolean
+    if (submitSuccess) {
+      val driverId = submitResponse.getFieldNotNull(DRIVER_ID)
+      logInfo(s"Driver successfully submitted as $driverId. Polling driver state...")
+      pollSubmittedDriverStatus(args.master, driverId)
+    } else {
+      val submitMessage = submitResponse.getFieldNotNull(MESSAGE)
+      logError(s"Application submission failed: $submitMessage")
+    }
+    submitResponse
+  }
+
+  /**
+   * Poll the status of the driver that was just submitted and report it.
+   * This retries up to a fixed number of times until giving up.
+   */
+  private def pollSubmittedDriverStatus(master: String, driverId: String): Unit = {
+    import DriverStatusResponseField._
+    (1 to REPORT_DRIVER_STATUS_MAX_TRIES).foreach { _ =>
+      val statusResponse = requestDriverStatus(master, driverId)
+        .asInstanceOf[DriverStatusResponseMessage]
+      val statusSuccess = statusResponse.getFieldNotNull(SUCCESS).toBoolean
+      if (statusSuccess) {
+        val driverState = statusResponse.getFieldNotNull(DRIVER_STATE)
+        val workerId = statusResponse.getFieldOption(WORKER_ID)
+        val workerHostPort = statusResponse.getFieldOption(WORKER_HOST_PORT)
+        val exception = statusResponse.getFieldOption(MESSAGE)
+        logInfo(s"State of driver $driverId is now $driverState.")
+        // Log worker node, if present
+        (workerId, workerHostPort) match {
+          case (Some(id), Some(hp)) => logInfo(s"Driver is running on worker $id at $hp.")
+          case _ =>
+        }
+        // Log exception stack trace, if present
+        exception.foreach { e => logError(e) }
+        return
+      }
+    }
+    logError(s"Error: Master did not recognize driver $driverId.")
+  }
 
   /** Construct a submit driver request message. */
   override protected def constructSubmitRequest(
@@ -54,7 +106,7 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
     args.childArgs.foreach(message.appendAppArg)
     args.sparkProperties.foreach { case (k, v) => message.setSparkProperty(k, v) }
     // TODO: send special environment variables?
-    message.validate()
+    message
   }
 
   /** Construct a kill driver request message. */
@@ -66,7 +118,6 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
       .setField(SPARK_VERSION, sparkVersion)
       .setField(MASTER, master)
       .setField(DRIVER_ID, driverId)
-      .validate()
   }
 
   /** Construct a driver status request message. */
@@ -78,7 +129,6 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
       .setField(SPARK_VERSION, sparkVersion)
       .setField(MASTER, master)
       .setField(DRIVER_ID, driverId)
-      .validate()
   }
 
   /** Throw an exception if this is not standalone mode. */
@@ -100,4 +150,9 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
     validateMaster(master)
     new URL("http://" + master.stripPrefix("spark://"))
   }
+}
+
+private object StandaloneRestClient {
+  val REPORT_DRIVER_STATUS_INTERVAL = 1000
+  val REPORT_DRIVER_STATUS_MAX_TRIES = 10
 }

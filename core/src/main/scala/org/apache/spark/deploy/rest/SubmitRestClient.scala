@@ -17,14 +17,14 @@
 
 package org.apache.spark.deploy.rest
 
-import java.io.DataOutputStream
+import java.io.{DataOutputStream, FileNotFoundException}
 import java.net.{HttpURLConnection, URL}
 
 import scala.io.Source
 
 import com.google.common.base.Charsets
 
-import org.apache.spark.Logging
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.deploy.SparkSubmitArguments
 
 /**
@@ -33,8 +33,8 @@ import org.apache.spark.deploy.SparkSubmitArguments
  */
 private[spark] abstract class SubmitRestClient extends Logging {
 
-  /** Request that the REST server submits a driver specified by the provided arguments. */
-  def submitDriver(args: SparkSubmitArguments): Unit = {
+  /** Request that the REST server submit a driver specified by the provided arguments. */
+  def submitDriver(args: SparkSubmitArguments): SubmitRestProtocolMessage = {
     validateSubmitArguments(args)
     val url = getHttpUrl(args.master)
     val request = constructSubmitRequest(args)
@@ -42,8 +42,8 @@ private[spark] abstract class SubmitRestClient extends Logging {
     sendHttp(url, request)
   }
 
-  /** Request that the REST server kills the specified driver. */
-  def killDriver(master: String, driverId: String): Unit = {
+  /** Request that the REST server kill the specified driver. */
+  def killDriver(master: String, driverId: String): SubmitRestProtocolMessage = {
     validateMaster(master)
     val url = getHttpUrl(master)
     val request = constructKillRequest(master, driverId)
@@ -52,7 +52,7 @@ private[spark] abstract class SubmitRestClient extends Logging {
   }
 
   /** Request the status of the specified driver from the REST server. */
-  def requestDriverStatus(master: String, driverId: String): Unit = {
+  def requestDriverStatus(master: String, driverId: String): SubmitRestProtocolMessage = {
     validateMaster(master)
     val url = getHttpUrl(master)
     val request = constructStatusRequest(master, driverId)
@@ -82,18 +82,24 @@ private[spark] abstract class SubmitRestClient extends Logging {
    * Return the response received from the REST server.
    */
   private def sendHttp(url: URL, request: SubmitRestProtocolMessage): SubmitRestProtocolMessage = {
-    val conn = url.openConnection().asInstanceOf[HttpURLConnection]
-    conn.setRequestMethod("POST")
-    conn.setRequestProperty("Content-Type", "application/json")
-    conn.setRequestProperty("charset", "utf-8")
-    conn.setDoOutput(true)
-    val requestJson = request.toJson
-    logDebug(s"Sending the following request to the REST server:\n$requestJson")
-    val out = new DataOutputStream(conn.getOutputStream)
-    out.write(requestJson.getBytes(Charsets.UTF_8))
-    out.close()
-    val responseJson = Source.fromInputStream(conn.getInputStream).mkString
-    logDebug(s"Response from the REST server:\n$responseJson")
-    SubmitRestProtocolMessage.fromJson(responseJson)
+    try {
+      val conn = url.openConnection().asInstanceOf[HttpURLConnection]
+      conn.setRequestMethod("POST")
+      conn.setRequestProperty("Content-Type", "application/json")
+      conn.setRequestProperty("charset", "utf-8")
+      conn.setDoOutput(true)
+      request.validate()
+      val requestJson = request.toJson
+      logDebug(s"Sending the following request to the REST server:\n$requestJson")
+      val out = new DataOutputStream(conn.getOutputStream)
+      out.write(requestJson.getBytes(Charsets.UTF_8))
+      out.close()
+      val responseJson = Source.fromInputStream(conn.getInputStream).mkString
+      logDebug(s"Response from the REST server:\n$responseJson")
+      SubmitRestProtocolMessage.fromJson(responseJson)
+    } catch {
+      case e: FileNotFoundException =>
+        throw new SparkException(s"Unable to connect to REST server $url", e)
+    }
   }
 }

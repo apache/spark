@@ -44,5 +44,5 @@ private[spark] class KillDriverRequestMessage extends SubmitRestProtocolMessage(
 private[spark] object KillDriverRequestMessage
   extends SubmitRestProtocolMessageCompanion[KillDriverRequestMessage] {
   protected override def newMessage() = new KillDriverRequestMessage
-  protected override def fieldFromString(field: String) = KillDriverRequestField.fromString(field)
+  protected override def fieldFromString(f: String) = KillDriverRequestField.fromString(f)
 }

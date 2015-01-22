@@ -44,5 +44,5 @@ private[spark] class DriverStatusRequestMessage extends SubmitRestProtocolMessag
 private[spark] object DriverStatusRequestMessage
   extends SubmitRestProtocolMessageCompanion[DriverStatusRequestMessage] {
   protected override def newMessage() = new DriverStatusRequestMessage
-  protected override def fieldFromString(field: String) = DriverStatusRequestField.fromString(field)
+  protected override def fieldFromString(f: String) = DriverStatusRequestField.fromString(f)
 }

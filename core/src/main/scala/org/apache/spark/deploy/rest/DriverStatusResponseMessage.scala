@@ -28,12 +28,13 @@ private[spark] object DriverStatusResponseField
   case object MESSAGE extends DriverStatusResponseField
   case object MASTER extends DriverStatusResponseField
   case object DRIVER_ID extends DriverStatusResponseField
+  case object SUCCESS extends DriverStatusResponseField
+  // Standalone specific fields
   case object DRIVER_STATE extends DriverStatusResponseField
   case object WORKER_ID extends DriverStatusResponseField
   case object WORKER_HOST_PORT extends DriverStatusResponseField
-  override val requiredFields = Seq(ACTION, SPARK_VERSION, MESSAGE,
-    MASTER, DRIVER_ID, DRIVER_STATE, WORKER_ID, WORKER_HOST_PORT)
-  override val optionalFields = Seq.empty
+  override val requiredFields = Seq(ACTION, SPARK_VERSION, MASTER, DRIVER_ID, SUCCESS)
+  override val optionalFields = Seq(MESSAGE, DRIVER_STATE, WORKER_ID, WORKER_HOST_PORT)
 }
 
 /**
@@ -48,5 +49,5 @@ private[spark] class DriverStatusResponseMessage extends SubmitRestProtocolMessa
 private[spark] object DriverStatusResponseMessage
   extends SubmitRestProtocolMessageCompanion[DriverStatusResponseMessage] {
   protected override def newMessage() = new DriverStatusResponseMessage
-  protected override def fieldFromString(field: String) = DriverStatusResponseField.fromString(field)
+  protected override def fieldFromString(f: String) = DriverStatusResponseField.fromString(f)
 }

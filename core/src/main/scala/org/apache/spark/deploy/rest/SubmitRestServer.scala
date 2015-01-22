@@ -100,23 +100,29 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
    */
   private def constructResponseMessage(
       request: SubmitRestProtocolMessage): SubmitRestProtocolMessage = {
-    // If the request is sent via the SubmitRestClient, it should have already been validated
-    // remotely. In case this is not true, validate the request here again to guard against
-    // potential NPEs. If validation fails, send an error message back to the sender.
-    try {
-      request.validate()
-      request match {
-        case submit: SubmitDriverRequestMessage => handleSubmit(submit)
-        case kill: KillDriverRequestMessage => handleKill(kill)
-        case status: DriverStatusRequestMessage => handleStatus(status)
-        case unexpected => handleError(
-          s"Received message of unexpected type ${Utils.getFormattedClassName(unexpected)}.")
+    // Validate the request message to ensure that it is correctly constructed. If the request
+    // is sent via the SubmitRestClient, it should have already been validated remotely. In case
+    // this is not true, do it again here to guard against potential NPEs. If validation fails,
+    // send an error message back to the sender.
+    val response =
+      try {
+        request.validate()
+        request match {
+          case submit: SubmitDriverRequestMessage => handleSubmit(submit)
+          case kill: KillDriverRequestMessage => handleKill(kill)
+          case status: DriverStatusRequestMessage => handleStatus(status)
+          case unexpected => handleError(
+            s"Received message of unexpected type ${Utils.getFormattedClassName(unexpected)}.")
+        }
+      } catch {
+        case e: IllegalArgumentException => handleError(e.getMessage)
       }
+    // Validate the response message to ensure that it is correctly constructed. If it is not,
+    // propagate the exception back to the client and signal that it is a server error.
+    try {
+      response.validate()
     } catch {
-      // Propagate exception to user in an ErrorMessage.
-      // Note that the construction of the error message itself may throw an exception.
-      // In this case, let the higher level caller take care of this request.
-      case e: IllegalArgumentException => handleError(e.getMessage)
+      case e: IllegalArgumentException => handleError(s"Internal server error: ${e.getMessage}")
     }
   }
 
@@ -126,6 +132,5 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
     new ErrorMessage()
       .setField(SPARK_VERSION, sparkVersion)
       .setField(MESSAGE, message)
-      .validate()
   }
 }

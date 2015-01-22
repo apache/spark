@@ -105,7 +105,7 @@ private[spark] object SubmitDriverRequestMessage
   import SubmitDriverRequestField._
 
   protected override def newMessage() = new SubmitDriverRequestMessage
-  protected override def fieldFromString(field: String) = SubmitDriverRequestField.fromString(field)
+  protected override def fieldFromString(f: String) = SubmitDriverRequestField.fromString(f)
 
   /**
    * Process the given field and value appropriately based on the type of the field.

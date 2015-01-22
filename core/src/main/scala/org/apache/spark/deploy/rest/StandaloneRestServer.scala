@@ -67,7 +67,6 @@ private[spark] class StandaloneRestServerHandler(
       .setField(MASTER, masterUrl)
       .setField(SUCCESS, response.success.toString)
       .setFieldIfNotNull(DRIVER_ID, response.driverId.orNull)
-      .validate()
   }
 
   /** Handle a request to kill a driver. */
@@ -83,23 +82,29 @@ private[spark] class StandaloneRestServerHandler(
       .setField(MASTER, masterUrl)
       .setField(DRIVER_ID, driverId)
       .setField(SUCCESS, response.success.toString)
-      .validate()
   }
 
   /** Handle a request for a driver's status. */
   override protected def handleStatus(
       request: DriverStatusRequestMessage): DriverStatusResponseMessage = {
     import DriverStatusResponseField._
-    // TODO: Actually look up the status of the driver
-    val master = request.getField(DriverStatusRequestField.MASTER)
     val driverId = request.getField(DriverStatusRequestField.DRIVER_ID)
-    val driverState = "HEALTHY"
+    val response = AkkaUtils.askWithReply[DriverStatusResponse](
+      RequestDriverStatus(driverId), masterActor, askTimeout)
+    // Format exception nicely, if it exists
+    val message = response.exception.map { e =>
+      val stackTraceString = e.getStackTrace.map { "\t" + _ }.mkString("\n")
+      s"Exception from the cluster:\n$e\n$stackTraceString"
+    }
     new DriverStatusResponseMessage()
       .setField(SPARK_VERSION, sparkVersion)
-      .setField(MASTER, master)
+      .setField(MASTER, masterUrl)
       .setField(DRIVER_ID, driverId)
-      .setField(DRIVER_STATE, driverState)
-      .validate()
+      .setField(SUCCESS, response.found.toString)
+      .setFieldIfNotNull(DRIVER_STATE, response.state.map(_.toString).orNull)
+      .setFieldIfNotNull(WORKER_ID, response.workerId.orNull)
+      .setFieldIfNotNull(WORKER_HOST_PORT, response.workerHostPort.orNull)
+      .setFieldIfNotNull(MESSAGE, message.orNull)
   }
 
   /**

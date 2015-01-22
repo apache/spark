@@ -39,5 +39,5 @@ private[spark] class ErrorMessage extends SubmitRestProtocolMessage(
 
 private[spark] object ErrorMessage extends SubmitRestProtocolMessageCompanion[ErrorMessage] {
   protected override def newMessage() = new ErrorMessage
-  protected override def fieldFromString(field: String) = ErrorField.fromString(field)
+  protected override def fieldFromString(f: String) = ErrorField.fromString(f)
 }

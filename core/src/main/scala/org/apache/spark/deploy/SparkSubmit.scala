@@ -49,8 +49,7 @@ object SparkSubmit {
   private val STANDALONE = 2
   private val MESOS = 4
   private val LOCAL = 8
-  private val REST = 16
-  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL | REST
+  private val ALL_CLUSTER_MGRS = YARN | STANDALONE | MESOS | LOCAL
 
   // Deploy modes
   private val CLIENT = 1
