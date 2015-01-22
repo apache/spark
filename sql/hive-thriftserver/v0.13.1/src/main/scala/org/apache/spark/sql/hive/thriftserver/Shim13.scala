@@ -94,7 +94,7 @@ private[hive] class SparkExecuteStatementOperation(
       case FloatType =>
         to += from.getFloat(ordinal)
       case DecimalType() =>
-        to += from.getAs[BigDecimal](ordinal).bigDecimal
+        to += from.getDecimal(ordinal)
       case LongType =>
         to += from.getLong(ordinal)
       case ByteType =>

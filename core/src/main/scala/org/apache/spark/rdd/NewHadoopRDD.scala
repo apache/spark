@@ -154,6 +154,7 @@ class NewHadoopRDD[K, V](
           throw new java.util.NoSuchElementException("End of stream")
         }
         havePair = false
+
         (reader.getCurrentKey, reader.getCurrentValue)
       }
 

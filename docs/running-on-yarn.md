@@ -30,6 +30,23 @@ Most of the configs are the same for Spark on YARN as for other deployment modes
   </td>
 </tr>
 <tr>
+  <td><code>spark.driver.cores</code></td>
+  <td>1</td>
+  <td>
+    Number of cores used by the driver in YARN cluster mode.
+    Since the driver is run in the same JVM as the YARN Application Master in cluster mode, this also controls the cores used by the YARN AM.
+    In client mode, use <code>spark.yarn.am.cores</code> to control the number of cores used by the YARN AM instead.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.am.cores</code></td>
+  <td>1</td>
+  <td>
+    Number of cores to use for the YARN Application Master in client mode.
+    In cluster mode, use <code>spark.driver.cores</code> instead.
+  </td>
+</tr>
+<tr>
   <td><code>spark.yarn.am.waitTime</code></td>
   <td>100000</td>
   <td>
