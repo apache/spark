@@ -22,12 +22,18 @@ launchBackend <- function(
     args, 
     javaOpts="-Xms2g -Xmx2g",
     javaHome=Sys.getenv("JAVA_HOME")) {
-  if (javaHome != "") {
-    java_bin <- paste(javaHome, "bin", "java", sep="/")
+  if (.Platform$OS.type == "unix") {
+    java_bin_name = "java"
   } else {
-    java_bin <- "java"
+    java_bin_name = "java.exe"
   }
-  command <- paste(java_bin, javaOpts, "-cp", classPath, mainClass, args, sep=" ")
-  cat("Launching java with command ", command, "\n")
-  invisible(system(command, intern=FALSE, ignore.stdout=F, ignore.stderr=F, wait=F))
+
+  if (javaHome != "") {
+    java_bin <- file.path(javaHome, "bin", java_bin_name)
+  } else {
+    java_bin <- java_bin_name
+  }
+  combinedArgs <- paste(javaOpts, "-cp", classPath, mainClass, args, sep=" ")
+  cat("Launching java with command ", java_bin, " ", combinedArgs, "\n")
+  invisible(system2(java_bin, combinedArgs, wait=F))
 }
