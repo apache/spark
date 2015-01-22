@@ -70,6 +70,11 @@ private[spark] class CoarseMesosSchedulerBackend(
       s"spark.task.cpus is set to an invalid value $coreNumPerTask")
   }
 
+  if (maxCores < coreNumPerTask) {
+    throw new IllegalArgumentException(
+      s"spark.task.cpus ($coreNumPerTask) should not be larger than spark.cores.max ($maxCores)")
+  }
+
   // Cores we have acquired with each Mesos task ID
   val coresByTaskId = new HashMap[Int, Int]
   var totalCoresAcquired = 0

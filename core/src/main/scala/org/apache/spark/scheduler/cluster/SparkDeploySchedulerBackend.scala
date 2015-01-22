@@ -49,6 +49,11 @@ private[spark] class SparkDeploySchedulerBackend(
     throw new IllegalArgumentException(
       s"spark.task.cpus is set to an invalid value $coreNumPerTask")
   }
+
+  if (maxCores.isDefined && maxCores.get < coreNumPerTask) {
+    throw new IllegalArgumentException(
+      s"spark.task.cpus ($coreNumPerTask) should not be larger than spark.cores.max ($maxCores)")
+  }
   
   val totalExpectedCores = maxCores.getOrElse(0)
 
