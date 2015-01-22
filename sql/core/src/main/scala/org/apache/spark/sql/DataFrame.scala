@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.catalyst.ScalaReflection
-
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
@@ -26,17 +24,19 @@ import com.fasterxml.jackson.core.JsonFactory
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => LiteralExpr}
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.types.{NumericType, StructType}
 
 
 class DataFrame(
     val sqlContext: SQLContext,
-    val logicalPlan: LogicalPlan,
+    val baseLogicalPlan: LogicalPlan,
     operatorsEnabled: Boolean)
   extends DataFrameSpecificApi with RDDApi[Row] {
 
@@ -46,7 +46,16 @@ class DataFrame(
   def this(sqlContext: SQLContext, plan: LogicalPlan) = this(sqlContext, plan, true)
 
   @transient
-  protected[sql] lazy val queryExecution = sqlContext.executePlan(logicalPlan)
+  protected[sql] lazy val queryExecution = sqlContext.executePlan(baseLogicalPlan)
+
+  @transient protected[sql] val logicalPlan: LogicalPlan = baseLogicalPlan match {
+    // For various commands (like DDL) and queries with side effects, we force query optimization to
+    // happen right away to let these side effects take place eagerly.
+    case _: Command | _: InsertIntoTable | _: CreateTableAsSelect[_] |_: WriteToFile =>
+      LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sqlContext)
+    case _ =>
+      baseLogicalPlan
+  }
 
   private[this] implicit def toDataFrame(logicalPlan: LogicalPlan): DataFrame = {
     new DataFrame(sqlContext, logicalPlan, true)
@@ -123,8 +132,8 @@ class DataFrame(
   override def as(name: String): DataFrame = Subquery(name, logicalPlan)
 
   @scala.annotation.varargs
-  override def select(cols: Column*): DataFrame = {
-    val exprs = cols.zipWithIndex.map {
+  override def select(col: Column, cols: Column*): DataFrame = {
+    val exprs = (col +: cols).zipWithIndex.map {
       case (Column(expr: NamedExpression), _) =>
         expr
       case (Column(expr: Expression), _) =>
