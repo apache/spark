@@ -508,6 +508,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(sql("select key from src having key > 490").collect().size < 100)
   }
 
+  test("SPARK-5367: resolve star expression in udf") {
+    assert(sql("select concat(*), array(*) from src limit 5").collect().size == 5)
+    assert(sql("select array(*) from src limit 5").collect().size == 5)
+  }
+
   test("Query Hive native command execution result") {
     val tableName = "test_native_commands"
 

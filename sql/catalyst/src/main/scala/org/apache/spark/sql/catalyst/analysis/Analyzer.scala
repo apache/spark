@@ -246,7 +246,7 @@ class Analyzer(catalog: Catalog,
       case p: LogicalPlan if !p.childrenResolved => p
 
       // If the projection list contains Stars, expand it.
-      case p@Project(projectList, child) if containsStar(projectList) =>
+      case p @ Project(projectList, child) if containsStar(projectList) =>
         Project(
           projectList.flatMap {
             case s: Star => s.expand(child.output, resolver)
@@ -279,19 +279,18 @@ class Analyzer(catalog: Catalog,
       case q: LogicalPlan =>
         logTrace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressions {
-          case u@UnresolvedAttribute(name)
-            if resolver(name, VirtualColumn.groupingIdName) &&
-              q.isInstanceOf[GroupingAnalytics] =>
+          case u @ UnresolvedAttribute(name) if resolver(name, VirtualColumn.groupingIdName) &&
+            q.isInstanceOf[GroupingAnalytics] =>
             // Resolve the virtual column GROUPING__ID for the operator GroupingAnalytics
             q.asInstanceOf[GroupingAnalytics].gid
-          case u@UnresolvedAttribute(name) =>
+          case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result = q.resolveChildren(name, resolver).getOrElse(u)
             logDebug(s"Resolving $u to $result")
             result
 
           // Resolve field names using the resolver.
-          case f@GetField(child, fieldName) if !f.resolved && child.resolved =>
+          case f @ GetField(child, fieldName) if !f.resolved && child.resolved =>
             child.dataType match {
               case StructType(fields) =>
                 val resolvedFieldName = fields.map(_.name).find(resolver(_, fieldName))
