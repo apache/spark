@@ -256,18 +256,19 @@ class TaskInstance(Base):
             mark_success=False,
             ignore_dependencies=False,
             force=False,
+            local=True,
             pickle_id=None):
         """
         Returns a command that can be executed anywhere where airflow is
         installed. This command is part of the message sent to executors by
         the orchestrator.
         """
-
         iso = self.execution_date.isoformat()
         mark_success = "--mark_success" if mark_success else ""
         pickle = "--pickle {0}".format(pickle_id) if pickle_id else ""
         ignore_dependencies = "-i" if ignore_dependencies else ""
         force = "--force" if force else ""
+        local = "--local" if local else ""
         subdir = ""
         if not pickle and self.task.dag and self.task.dag.full_filepath:
             subdir = "-sd {0}".format(self.task.dag.full_filepath)
@@ -276,6 +277,7 @@ class TaskInstance(Base):
             "{self.dag_id} {self.task_id} {iso} "
             "{mark_success} "
             "{pickle} "
+            "{local} "
             "{ignore_dependencies} "
             "{force} "
             "{subdir} "

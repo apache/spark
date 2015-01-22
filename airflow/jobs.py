@@ -3,10 +3,11 @@ import getpass
 import logging
 import signal
 import sys
+import threading
 from time import sleep
 
 from sqlalchemy import (
-        Column, Integer, String, DateTime, ForeignKey)
+        Column, Integer, String, DateTime)
 from sqlalchemy import func
 from sqlalchemy.orm.session import make_transient
 
@@ -57,7 +58,7 @@ class BaseJob(Base):
         self.executor = executor
         self.executor_class = executor.__class__.__name__
         self.start_date = datetime.now()
-        self.latest_heartbeat = None
+        self.latest_heartbeat = datetime.now()
         self.heartrate = heartrate
         self.unixname = getpass.getuser()
         super(BaseJob, self).__init__(*args, **kwargs)
@@ -67,6 +68,25 @@ class BaseJob(Base):
             (datetime.now() - self.latest_heartbeat).seconds <
             (conf.getint('misc', 'JOB_HEARTBEAT_SEC') * 2.1)
         )
+
+    def kill(self):
+        session = settings.Session()
+        job = session.query(BaseJob).filter(BaseJob.id==self.id).first()
+        job.state = State.FAILED
+        job.end_date = datetime.now()
+        try:
+            self.on_kill()
+        except:
+            logging.error('on_kill() method failed')
+        session.merge(job)
+        session.commit()
+        session.close()
+
+    def on_kill(self):
+        '''
+        Will be called when an external kill command is received from the db
+        '''
+        pass
 
     def heartbeat(self):
         '''
@@ -87,14 +107,12 @@ class BaseJob(Base):
         heart rate. If you go over 60 seconds before calling it, it won't
         sleep at all.
         '''
-        failed = False
         session = settings.Session()
         job = session.query(BaseJob).filter(BaseJob.id==self.id).first()
 
         if job.state == State.SHUTDOWN:
-            job.state = State.FAILED
-            job.end_date = datetime.now()
-            failed = True
+            self.kill()
+            raise Exception("Task shut down externally")
 
         if job.latest_heartbeat:
             sleep_for = self.heartrate - (
@@ -107,9 +125,7 @@ class BaseJob(Base):
         session.merge(job)
         session.commit()
         session.close()
-
-        if failed:
-            raise Exception("Task shut down externally")
+        logging.info('[heart] Boom.')
 
     def run(self):
         # Adding an entry in the DB
@@ -122,6 +138,13 @@ class BaseJob(Base):
         self.id = id_
 
         # Run!
+        # This is enough to fail the task instance
+        def signal_handler(signum, frame):
+            logging.error("SIGINT (ctrl-c) received")
+            self.kill()
+            sys.exit()
+
+        signal.signal(signal.SIGINT, signal_handler)
         self._execute()
 
         # Marking the success in the DB
@@ -338,5 +361,43 @@ class BackfillJob(BaseJob):
                     succeeded.append(key)
                     del tasks_to_run[key]
         executor.end()
-        logging.info("Run summary:")
         session.close()
+
+
+class LocalTaskJob(BaseJob):
+
+    __mapper_args__ = {
+        'polymorphic_identity': 'LocalTaskJob'
+    }
+
+    def __init__(
+            self,
+            task_instance,
+            ignore_dependencies=False,
+            force=False,
+            mark_success=False,
+            *args, **kwargs):
+        self.task_instance = task_instance
+        self.ignore_dependencies = ignore_dependencies
+        self.force = force
+        self.mark_success = mark_success
+        super(LocalTaskJob, self).__init__(*args, **kwargs)
+
+    def _execute(self):
+
+        thr = threading.Thread(
+            target=self.task_instance.run,
+            kwargs={
+                'ignore_dependencies': self.ignore_dependencies,
+                'force': self.force,
+                'mark_success': self.mark_success,
+            })
+        self.thr = thr
+
+        thr.start()
+        while thr.is_alive():
+            self.heartbeat()
+
+    def on_kill(self):
+        self.task_instance.error(self.task_instance.execution_date)
+        self.thr.kill()

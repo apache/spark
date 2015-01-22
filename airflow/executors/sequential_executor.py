@@ -23,7 +23,8 @@ class SequentialExecutor(BaseExecutor):
     def heartbeat(self):
         for key, command in self.commands_to_run:
             try:
-                sp = subprocess.Popen(command, shell=True).wait()
+                sp = subprocess.Popen(command, shell=True)
+                sp.wait()
             except Exception as e:
                 self.change_state(key, State.FAILED)
                 raise e
@@ -31,4 +32,4 @@ class SequentialExecutor(BaseExecutor):
         self.commands_to_run = []
 
     def end(self):
-        pass
+        self.heartbeat()

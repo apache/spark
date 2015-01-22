@@ -27,6 +27,7 @@ setup(
         'mysql-python>=1.2.5',
         'pandas>=0.15.2',
         'pygments>=2.0.1',
+        'pysmbclient>=0.1.3'
         'pyhive>=0.1.3',
         'python-dateutil>=2.3',
         'requests>=2.5.1',
