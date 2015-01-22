@@ -124,16 +124,19 @@ class DataFrame(
   }
 
   /** Projection */
-  override def apply(projection: Product): DataFrame = select(projection.productIterator.map {
-    case c: Column => c
-    case o: Any => new Column(Some(sqlContext), None, LiteralExpr(o))
-  }.toSeq :_*)
+  override def apply(projection: Product): DataFrame = {
+    require(projection.productArity >= 1)
+    select(projection.productIterator.map {
+      case c: Column => c
+      case o: Any => new Column(Some(sqlContext), None, LiteralExpr(o))
+    }.toSeq :_*)
+  }
 
   override def as(name: String): DataFrame = Subquery(name, logicalPlan)
 
   @scala.annotation.varargs
-  override def select(col: Column, cols: Column*): DataFrame = {
-    val exprs = (col +: cols).zipWithIndex.map {
+  override def select(cols: Column*): DataFrame = {
+    val exprs = cols.zipWithIndex.map {
       case (Column(expr: NamedExpression), _) =>
         expr
       case (Column(expr: Expression), _) =>

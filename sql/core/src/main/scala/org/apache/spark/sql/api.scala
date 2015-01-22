@@ -85,7 +85,7 @@ trait DataFrameSpecificApi {
   def apply(projection: Product): DataFrame
 
   @scala.annotation.varargs
-  def select(col: Column, cols: Column*): DataFrame
+  def select(cols: Column*): DataFrame
 
   /** Filtering */
   def apply(condition: Column): DataFrame = filter(condition)
