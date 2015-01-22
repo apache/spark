@@ -1,4 +1,5 @@
 from setuptools import setup, find_packages
+import airflow
 
 # To generate install_requires from requirements.txt
 # from pip.req import parse_requirements
@@ -6,8 +7,8 @@ from setuptools import setup, find_packages
 
 setup(
     name='airflow',
-    description='programmatically author, schedule and monitor data pipelines',
-    version='0.2',
+    description='Programmatically author, schedule and monitor data pipelines',
+    version=airflow.__version__,
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
@@ -27,7 +28,7 @@ setup(
         'mysql-python>=1.2.5',
         'pandas>=0.15.2',
         'pygments>=2.0.1',
-        'pysmbclient>=0.1.3'
+        'pysmbclient>=0.1.3',
         'pyhive>=0.1.3',
         'python-dateutil>=2.3',
         'requests>=2.5.1',
@@ -38,10 +39,12 @@ setup(
         'Sphinx-PyPI-upload>=0.2.1',
         'sqlalchemy>=0.9.8',
         'thrift>=0.9.2',
-        'tornado>=4.0.2'
+        'tornado>=4.0.2',
     ],
     author='Maxime Beauchemin',
     author_email='maximebeauchemin@gmail.com',
     url='https://github.com/mistercrunch/Airflow',
-    download_url='https://github.com/mistercrunch/Airflow/tarball/0.2',
+    download_url=(
+        'https://github.com/mistercrunch/Airflow/tarball/' +
+        airflow.__version__),
 )
