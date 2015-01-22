@@ -43,14 +43,13 @@ private[spark] class SparkDeploySchedulerBackend(
   private val registrationBarrier = new Semaphore(0)
 
   val maxCores = conf.getOption("spark.cores.max").map(_.toInt)
-  val coreNumPerTask = {
-    val corePerTask = scheduler.CPUS_PER_TASK
-    if (corePerTask < 1) {
-      throw new IllegalArgumentException(
-        s"spark.task.cpus is set to an invalid value $corePerTask")
-    }
-    corePerTask
+  val coreNumPerTask = scheduler.CPUS_PER_TASK
+    
+  if (coreNumPerTask < 1) {
+    throw new IllegalArgumentException(
+      s"spark.task.cpus is set to an invalid value $coreNumPerTask")
   }
+  
   val totalExpectedCores = maxCores.getOrElse(0)
 
   override def start() {
