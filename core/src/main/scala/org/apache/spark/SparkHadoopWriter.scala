@@ -45,8 +45,6 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
   private val now = new Date()
   private val conf = new SerializableWritable(jobConf)
 
-  private val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
-
   private var jobID = 0
   private var splitID = 0
   private var attemptID = 0
@@ -109,6 +107,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
     val taCtxt = getTaskContext()
     val cmtr = getOutputCommitter()
     if (cmtr.needsTaskCommit(taCtxt)) {
+      val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
       val conf = SparkEnv.get.conf
       val timeout = AkkaUtils.askTimeout(conf)
       val maxAttempts = AkkaUtils.numRetries(conf)
