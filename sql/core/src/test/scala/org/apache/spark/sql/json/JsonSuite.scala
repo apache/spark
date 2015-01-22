@@ -21,11 +21,12 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.dsl._
 import org.apache.spark.sql.json.JsonRDD.{compatibleType, enforceCorrectType}
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{QueryTest, Row, SQLConf}
+import org.apache.spark.sql.{Literal, QueryTest, Row, SQLConf}
 
 class JsonSuite extends QueryTest {
   import org.apache.spark.sql.json.TestJsonData._
@@ -463,8 +464,8 @@ class JsonSuite extends QueryTest {
     // in the Project.
     checkAnswer(
       jsonSchemaRDD.
-        where('num_str > BigDecimal("92233720368547758060")).
-        select('num_str + 1.2 as Symbol("num")),
+        where('num_str > Literal(BigDecimal("92233720368547758060"))).
+        select(('num_str + Literal(1.2)).as("num")),
       Row(new java.math.BigDecimal("92233720368547758061.2"))
     )
 

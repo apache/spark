@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.sql.Timestamp
 
 import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.dsl._
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -87,7 +88,7 @@ object TestData {
       TestData3(2, Some(2)) :: Nil).toSchemaRDD
   testData3.registerTempTable("testData3")
 
-  val emptyTableData = logical.LocalRelation('a.int, 'b.int)
+  val emptyTableData = logical.LocalRelation($"a".int, $"b".int)
 
   case class UpperCaseData(N: Int, L: String)
   val upperCaseData =

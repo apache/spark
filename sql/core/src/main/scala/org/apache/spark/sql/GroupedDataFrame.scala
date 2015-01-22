@@ -1,0 +1,84 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql
+
+import scala.language.implicitConversions
+
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Literal => LiteralExpr}
+import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+
+
+class GroupedDataFrame(df: DataFrame, groupingExprs: Seq[Expression])
+  extends GroupedDataFrameApi {
+
+  private[this] implicit def toDataFrame(aggExprs: Seq[NamedExpression]): DataFrame = {
+    val namedGroupingExprs = groupingExprs.map {
+      case expr: NamedExpression => expr
+      case expr: Expression => Alias(expr, expr.toString)()
+    }
+    new DataFrame(df.sqlContext,
+      Aggregate(groupingExprs, namedGroupingExprs ++ aggExprs, df.logicalPlan))
+  }
+
+  private[this] def aggregateNumericColumns(f: Expression => Expression): Seq[NamedExpression] = {
+    df.numericColumns.map { c =>
+      val a = f(c)
+      Alias(a, a.toString)()
+    }
+  }
+
+  private[this] def strToExpr(expr: String): (Expression => Expression) = {
+    expr.toLowerCase match {
+      case "avg" | "average" | "mean" => Average
+      case "max" => Max
+      case "min" => Min
+      case "sum" => Sum
+      case "count" | "size" => Count
+    }
+  }
+
+  override def agg(exprs: Map[String, String]): DataFrame = {
+    exprs.map { case (colName, expr) =>
+      val a = strToExpr(expr)(df(colName).expr)
+      Alias(a, a.toString)()
+    }.toSeq
+  }
+
+  @scala.annotation.varargs
+  override def agg(expr: Column, exprs: Column*): DataFrame = {
+    val aggExprs = (expr +: exprs).map(_.expr).map {
+      case expr: NamedExpression => expr
+      case expr: Expression => Alias(expr, expr.toString)()
+    }
+
+    new DataFrame(df.sqlContext, Aggregate(groupingExprs, aggExprs, df.logicalPlan))
+  }
+
+  override def count(): DataFrame = Seq(Alias(Count(LiteralExpr(1)), "count")())
+
+  override def mean(): DataFrame = aggregateNumericColumns(Average)
+
+  override def max(): DataFrame = aggregateNumericColumns(Max)
+
+  override def avg(): DataFrame = aggregateNumericColumns(Average)
+
+  override def min(): DataFrame = aggregateNumericColumns(Min)
+
+  override def sum(): DataFrame = aggregateNumericColumns(Sum)
+}
