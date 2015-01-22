@@ -37,27 +37,28 @@ public class JavaTwitterStreamSuite extends LocalJavaStreamingContext {
     // tests the API, does not actually test data receiving
     JavaDStream<Status> test1 = TwitterUtils.createStream(ssc);
     JavaDStream<Status> test2 = TwitterUtils.createStream(ssc, filters);
-    JavaDStream<Status> test3 = TwitterUtils.createStream(ssc, locations);
-    JavaDStream<Status> test4 = TwitterUtils.createStream(ssc, filters, locations);
-  
-    JavaDStream<Status> test5 = TwitterUtils.createStream(
+
+    JavaDStream<Status> test3 = TwitterUtils.setLocations(
+      TwitterUtils.createStream(ssc, filters), locations);
+
+    JavaDStream<Status> test4 = TwitterUtils.createStream(
       ssc, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
-    JavaDStream<Status> test6 = TwitterUtils.createStream(
-      ssc, locations, StorageLevel.MEMORY_AND_DISK_SER_2());
-    JavaDStream<Status> test7 = TwitterUtils.createStream(
-      ssc, filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2());
+
+    JavaDStream<Status> test5 = TwitterUtils.setLocations(
+      TwitterUtils.createStream(ssc, filters, StorageLevel.MEMORY_AND_DISK_SER_2()),
+      locations);
  
-    JavaDStream<Status> test8 = TwitterUtils.createStream(ssc, auth);
-    JavaDStream<Status> test9 = TwitterUtils.createStream(ssc, auth, filters);
-    JavaDStream<Status> test10 = TwitterUtils.createStream(ssc, auth, locations);
-    JavaDStream<Status> test11 = TwitterUtils.createStream(ssc, auth, filters, locations);
- 
-    JavaDStream<Status> test12 = TwitterUtils.createStream(ssc,
+    JavaDStream<Status> test6 = TwitterUtils.createStream(ssc, auth);
+    JavaDStream<Status> test7 = TwitterUtils.createStream(ssc, auth, filters);
+
+    JavaDStream<Status> test8 = TwitterUtils.setLocations(
+      TwitterUtils.createStream(ssc, auth, filters), locations);
+
+    JavaDStream<Status> test9 = TwitterUtils.createStream(ssc,
       auth, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
-    JavaDStream<Status> test13 = TwitterUtils.createStream(ssc,
-      auth, locations, StorageLevel.MEMORY_AND_DISK_SER_2());
-    JavaDStream<Status> test14 = TwitterUtils.createStream(ssc,
-      auth, filters, locations, StorageLevel.MEMORY_AND_DISK_SER_2());
- 
+
+    JavaDStream<Status> test10 = TwitterUtils.setLocations(
+      TwitterUtils.createStream(ssc, auth, filters, StorageLevel.MEMORY_AND_DISK_SER_2()),
+      locations);
   }
 }
