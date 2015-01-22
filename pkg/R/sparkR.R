@@ -14,14 +14,18 @@ sparkR.onLoad <- function(libname, pkgname) {
 #' Stop this Spark context
 #' Also terminates the backend this R session is connected to
 sparkR.stop <- function(sparkREnv) {
-  sc <- get(".sparkRjsc", envir=.sparkREnv)
-  callJMethod(sc, "stop")
-  callJStatic("SparkRHandler", "stopBackend")
+  if (exists(".sparkRjsc", envir=.sparkREnv)) {
+    sc <- get(".sparkRjsc", envir=.sparkREnv)
+    callJMethod(sc, "stop")
+  }
 
-  # Also close the connection and remove it from our env
-  conn <- get(".sparkRCon", .sparkREnv)
-  close(conn)
-  rm(".sparkRCon", envir=.sparkREnv)
+  if (exists(".sparkRCon", envir=.sparkREnv)) {
+    callJStatic("SparkRHandler", "stopBackend")
+    # Also close the connection and remove it from our env
+    conn <- get(".sparkRCon", .sparkREnv)
+    close(conn)
+    rm(".sparkRCon", envir=.sparkREnv)
+  }
 }
 
 #' Initialize a new Spark Context.
