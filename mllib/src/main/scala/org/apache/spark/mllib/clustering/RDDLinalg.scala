@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.apache.spark.graphx.VertexId
+import org.apache.spark.graphx.{EdgeRDD, Edge, VertexId}
 import org.apache.spark.mllib.clustering.{PICLinalg => LA}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{Partitioner, SparkContext}
@@ -204,4 +204,12 @@ object RDDLinalg {
     vertices.map { case (vid, dval) => s"($vid,$dval)"}.mkString(" , ")
   }
 
+  def printMatrixFromEdges(edgesRdd: EdgeRDD[_]) = {
+    val edgec = edgesRdd.collect
+    assert(edgec.size < 1e3,"Let us not print a large graph")
+    val sorted = edgec.sortWith { case (e1, e2) =>
+      e1.srcId < e2.srcId || (e1.srcId == e2.srcId && e1.dstId <= e2.dstId)
+    }
+
+  }
 }

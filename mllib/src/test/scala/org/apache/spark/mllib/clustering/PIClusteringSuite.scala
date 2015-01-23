@@ -125,7 +125,7 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
   }
   def concentricCirclesTest() = {
     val sigma = 1.0
-    val nIterations = 50
+    val nIterations = 10
     val nClusters = 3
     val circleSpecs = Seq(
     // Best results for 30 points

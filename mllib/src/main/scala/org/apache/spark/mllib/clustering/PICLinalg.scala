@@ -137,7 +137,7 @@ object PICLinalg {
     sb.toString
   }
 
-  def printVect(dvect: DVector) = {
+  def printVector(dvect: DVector) = {
     dvect.mkString(",")
   }
 
@@ -186,7 +186,7 @@ object PICLinalg {
       val signum = Math.signum(dot(mat(0), eigen))
       val lambda = dot(mat(0), eigen) / eigen(0)
       eigen = eigen.map(_ * signum)
-      println(s"lambda=$lambda eigen=${printVect(eigen)}")
+      println(s"lambda=$lambda eigen=${printVector(eigen)}")
       if (expLambda.length > 0) {
         val compareVect = eigen.zip(expdat(k)).map { case (a, b) => a / b}
         println(s"Ratio  to expected: lambda=${lambda / expLambda(k)} " +
