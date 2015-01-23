@@ -18,7 +18,7 @@
 package org.apache.spark.examples.streaming
 
 import org.eclipse.paho.client.mqttv3._
-import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
+import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Seconds, StreamingContext}
@@ -44,7 +44,7 @@ object MQTTPublisher {
     var client: MqttClient = null
 
     try {
-      val persistence = new MqttDefaultFilePersistence("/tmp")
+      val persistence = new MemoryPersistence()
       client = new MqttClient(brokerUrl, MqttClient.generateClientId(), persistence)
 
       client.connect()
@@ -54,8 +54,9 @@ object MQTTPublisher {
       val message = new MqttMessage(msgContent.getBytes("utf-8"))
 
       while (true) {
+        Thread.sleep(100)
         msgtopic.publish(message)
-        println("Published data. topic: " + msgtopic.getName() + " Message: " + message)
+        println("Published data. topic: %s; Message: %s".format(msgtopic.getName(), message))
       }
       
     } catch {
