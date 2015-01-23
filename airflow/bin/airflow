@@ -108,6 +108,7 @@ def run(args):
             'as pickle_id:{pickle_id}').format(**locals())
         executor = DEFAULT_EXECUTOR
         executor.start()
+        print("Sending run command to executor.")
         executor.queue_command(ti.key, ti.command(pickle_id=pickle_id))
         executor.end()
 

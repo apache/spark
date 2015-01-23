@@ -66,9 +66,7 @@ class CeleryExecutor(BaseExecutor):
                 self.last_state[key] = async.state
 
     def end(self):
-        print('entering end')
         while any([
                 async.state not in celery_states.READY_STATES
                 for async in self.tasks.values()]):
-            print str([async.state for async in self.tasks.values()])
             time.sleep(5)
