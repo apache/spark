@@ -58,7 +58,7 @@ package object dsl {
   def sqrt(e: Column): Column = Sqrt(e.expr)
   def abs(e: Column): Column = Abs(e.expr)
 
-
+  // scalastyle:off
 
   object literals {
 
@@ -89,7 +89,6 @@ package object dsl {
     implicit def binaryToLiteral(a: Array[Byte]): Column = Literal(a)
   }
 
-  // scalastyle:off
 
   /* Use the following code to generate:
   (0 to 22).map { x =>

@@ -79,37 +79,37 @@ class Column(
 
   override def unary_- : Column = UnaryMinus(expr)
 
-  override def ||(other: Column): Column = Or(expr, other.expr)
+  override def || (other: Column): Column = Or(expr, other.expr)
 
   override def unary_~ : Column = BitwiseNot(expr)
 
-  override def !==(other: Column): Column = Not(EqualTo(expr, other.expr))
+  override def !== (other: Column): Column = Not(EqualTo(expr, other.expr))
 
-  override def >(other: Column): Column = GreaterThan(expr, other.expr)
+  override def > (other: Column): Column = GreaterThan(expr, other.expr)
 
   override def unary_! : Column = Not(expr)
 
-  override def &(other: Column): Column = BitwiseAnd(expr, other.expr)
+  override def & (other: Column): Column = BitwiseAnd(expr, other.expr)
 
-  override def /(other: Column): Column = Divide(expr, other.expr)
+  override def / (other: Column): Column = Divide(expr, other.expr)
 
-  override def &&(other: Column): Column = And(expr, other.expr)
+  override def && (other: Column): Column = And(expr, other.expr)
 
-  override def |(other: Column): Column = BitwiseOr(expr, other.expr)
+  override def | (other: Column): Column = BitwiseOr(expr, other.expr)
 
-  override def ^(other: Column): Column = BitwiseXor(expr, other.expr)
+  override def ^ (other: Column): Column = BitwiseXor(expr, other.expr)
 
-  override def <=>(other: Column): Column = EqualNullSafe(expr, other.expr)
+  override def <=> (other: Column): Column = EqualNullSafe(expr, other.expr)
 
-  override def ===(other: Column): Column = EqualTo(expr, other.expr)
+  override def === (other: Column): Column = EqualTo(expr, other.expr)
 
   override def equalTo(other: Column): Column = this === other
 
-  override def +(other: Column): Column = Add(expr, other.expr)
+  override def + (other: Column): Column = Add(expr, other.expr)
 
   override def rlike(other: Column): Column = RLike(expr, other.expr)
 
-  override def %(other: Column): Column = Remainder(expr, other.expr)
+  override def % (other: Column): Column = Remainder(expr, other.expr)
 
   override def in(list: Column*): Column = In(expr, list.map(_.expr))
 
@@ -117,7 +117,7 @@ class Column(
 
   override def getItem(ordinal: Column): Column = GetItem(expr, ordinal.expr)
 
-  override def <=(other: Column): Column = LessThanOrEqual(expr, other.expr)
+  override def <= (other: Column): Column = LessThanOrEqual(expr, other.expr)
 
   override def like(other: Column): Column = Like(expr, other.expr)
 
@@ -128,23 +128,23 @@ class Column(
   override def substr(startPos: Column, len: Column): Column =
     Substring(expr, startPos.expr, len.expr)
 
-  override def <(other: Column): Column = LessThan(expr, other.expr)
+  override def < (other: Column): Column = LessThan(expr, other.expr)
 
   override def isNull: Column = IsNull(expr)
 
   override def contains(other: Column): Column = Contains(expr, other.expr)
 
-  override def -(other: Column): Column = Subtract(expr, other.expr)
+  override def - (other: Column): Column = Subtract(expr, other.expr)
 
   override def desc: Column = SortOrder(expr, Descending)
 
-  override def >=(other: Column): Column = GreaterThanOrEqual(expr, other.expr)
+  override def >= (other: Column): Column = GreaterThanOrEqual(expr, other.expr)
 
   override def asc: Column = SortOrder(expr, Ascending)
 
   override def endsWith(other: Column): Column = EndsWith(expr, other.expr)
 
-  override def *(other: Column): Column = Multiply(expr, other.expr)
+  override def * (other: Column): Column = Multiply(expr, other.expr)
 
   override def startsWith(other: Column): Column = StartsWith(expr, other.expr)
 
