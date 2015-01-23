@@ -170,16 +170,6 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
     testPackage.runCallSiteTest(sc)
   }
 
-  test("RDDs cannot be broadcasted (SPARK-5063)") {
-    sc = new SparkContext("local", "test")
-    val rdd = sc.parallelize(1 to 100)
-    val thrown = intercept[SparkException] {
-      sc.broadcast(rdd)
-    }
-    assert(thrown.getMessage.contains("SPARK-5063"))
-    assert(thrown.getMessage.toLowerCase.contains("broadcast"))
-  }
-
   test("Broadcast variables cannot be created after SparkContext is stopped (SPARK-5065)") {
     sc = new SparkContext("local", "test")
     sc.stop()

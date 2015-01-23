@@ -979,7 +979,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def broadcast[T: ClassTag](value: T): Broadcast[T] = {
     assertNotStopped()
     if (classOf[RDD[_]].isAssignableFrom(classTag[T].runtimeClass)) {
-      throw new SparkException("Can not directly broadcast RDDs; instead, call collect() and "
+      // This is a warning instead of an exception in order to avoid breaking user programs that
+      // might have created RDD broadcast variables but not used them:
+      logWarning("Can not directly broadcast RDDs; instead, call collect() and "
         + "broadcast the result (see SPARK-5063)")
     }
     val bc = env.broadcastManager.newBroadcast[T](value, isLocal)

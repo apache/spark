@@ -81,7 +81,9 @@ abstract class RDD[T: ClassTag](
   ) extends Serializable with Logging {
 
   if (classOf[RDD[_]].isAssignableFrom(elementClassTag.runtimeClass)) {
-    throw new SparkException("Spark does not support nested RDDs (see SPARK-5063)")
+    // This is a warning instead of an exception in order to avoid breaking user programs that
+    // might have defined nested RDDs without running jobs with them.
+    logWarning("Spark does not support nested RDDs (see SPARK-5063)")
   }
 
   private def sc: SparkContext = {

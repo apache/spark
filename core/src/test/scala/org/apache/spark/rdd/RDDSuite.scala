@@ -924,9 +924,9 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val rdd2: RDD[Int] = sc.parallelize(1 to 100)
     val thrown = intercept[SparkException] {
       val nestedRDD: RDD[RDD[Int]] = rdd.mapPartitions { x => Seq(rdd2.map(x => x)).iterator }
+      nestedRDD.count()
     }
     assert(thrown.getMessage.contains("SPARK-5063"))
-    assert(thrown.getMessage.toLowerCase.contains("nested"))
   }
 
   test("actions cannot be performed inside of transformations (SPARK-5063)") {
