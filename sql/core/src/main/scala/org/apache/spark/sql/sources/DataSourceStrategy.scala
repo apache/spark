@@ -20,7 +20,7 @@ package org.apache.spark.sql.sources
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, Strategy}
 import org.apache.spark.sql.catalyst.expressions
-import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, AttributeReference, AttributeSet, Expression, NamedExpression}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution
@@ -111,6 +111,7 @@ private[sql] object DataSourceStrategy extends Strategy {
     }
   }
 
+  /** Turn Catalyst [[Expression]]s into data source [[Filter]]s. */
   protected[sql] def selectFilters(filters: Seq[Expression]): Seq[Filter] = filters.collect {
     case expressions.EqualTo(a: Attribute, expressions.Literal(v, _)) => EqualTo(a.name, v)
     case expressions.EqualTo(expressions.Literal(v, _), a: Attribute) => EqualTo(a.name, v)
