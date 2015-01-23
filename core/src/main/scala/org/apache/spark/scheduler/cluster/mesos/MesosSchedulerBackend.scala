@@ -312,6 +312,7 @@ private[spark] class MesosSchedulerBackend(
       .setExecutor(createExecutorInfo(slaveId))
       .setName(task.name)
       .addResources(cpuResource)
+      .addResources(memResource)
       .setData(MesosTaskLaunchData(task.serializedTask, task.attemptNumber).toByteString)
       .build()
   }
