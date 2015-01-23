@@ -18,32 +18,32 @@
 package org.apache.spark.sql.sources
 
 import scala.language.implicitConversions
-import scala.util.parsing.combinator.syntactical.StandardTokenParsers
-import scala.util.parsing.combinator.PackratParsers
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.{SchemaRDD, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.SqlLexical
+import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.execution.RunnableCommand
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
+
 /**
  * A parser for foreign DDL commands.
  */
-private[sql] class DDLParser extends StandardTokenParsers with PackratParsers with Logging {
+private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
 
-  def apply(input: String): Option[LogicalPlan] = {
-    phrase(ddl)(new lexical.Scanner(input)) match {
-      case Success(r, x) => Some(r)
-      case x =>
-        logDebug(s"Not recognized as DDL: $x")
-        None
+  def apply(input: String, exceptionOnError: Boolean): Option[LogicalPlan] = {
+    try {
+      Some(apply(input))
+    } catch {
+      case _ if !exceptionOnError => None
+      case x: Throwable => throw x
     }
   }
 
   def parseType(input: String): DataType = {
+    lexical.initialize(reservedWords)
     phrase(dataType)(new lexical.Scanner(input)) match {
       case Success(r, x) => r
       case x =>
@@ -51,11 +51,9 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
     }
   }
 
-  protected case class Keyword(str: String)
 
-  protected implicit def asParser(k: Keyword): Parser[String] =
-    lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
-
+  // Keyword is a convention with AbstractSparkSQLParser, which will scan all of the `Keyword`
+  // properties via reflection the class in runtime for constructing the SqlLexical object
   protected val CREATE = Keyword("CREATE")
   protected val TEMPORARY = Keyword("TEMPORARY")
   protected val TABLE = Keyword("TABLE")
@@ -80,16 +78,9 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected val MAP = Keyword("MAP")
   protected val STRUCT = Keyword("STRUCT")
 
-  // Use reflection to find the reserved words defined in this class.
-  protected val reservedWords =
-    this.getClass
-      .getMethods
-      .filter(_.getReturnType == classOf[Keyword])
-      .map(_.invoke(this).asInstanceOf[Keyword].str)
-
-  override val lexical = new SqlLexical(reservedWords)
-
   protected lazy val ddl: Parser[LogicalPlan] = createTable
+
+  protected def start: Parser[LogicalPlan] = ddl
 
   /**
    * `CREATE [TEMPORARY] TABLE avroTable
