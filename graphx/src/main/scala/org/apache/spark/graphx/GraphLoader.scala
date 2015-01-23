@@ -78,13 +78,14 @@ object GraphLoader extends Logging {
           val lineArray = line.split("\\s+")
           if (lineArray.length < 2) {
             logWarning("Invalid line: " + line)
-          }
-          val srcId = lineArray(0).toLong
-          val dstId = lineArray(1).toLong
-          if (canonicalOrientation && srcId > dstId) {
-            builder.add(dstId, srcId, 1)
           } else {
-            builder.add(srcId, dstId, 1)
+            val srcId = lineArray(0).toLong
+            val dstId = lineArray(1).toLong
+            if (canonicalOrientation && srcId > dstId) {
+              builder.add(dstId, srcId, 1)
+            } else {
+              builder.add(srcId, dstId, 1)
+            }
           }
         }
       }
