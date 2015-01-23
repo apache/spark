@@ -109,7 +109,7 @@ case class Star(
     val mappedAttributes = expandedAttributes.map(mapFunction).zip(input).map {
       case (n: NamedExpression, _) => n
       case (e, originalAttribute) =>
-        Alias(e, originalAttribute.name)(qualifiers = originalAttribute.qualifiers)
+        Alias(e, Seq(originalAttribute.name))(qualifiers = originalAttribute.qualifiers)
     }
     mappedAttributes
   }

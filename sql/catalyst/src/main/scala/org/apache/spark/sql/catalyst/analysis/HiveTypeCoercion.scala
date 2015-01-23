@@ -169,17 +169,17 @@ trait HiveTypeCoercion {
         val castedInput = left.output.zip(right.output).map {
           // When a string is found on one side, make the other side a string too.
           case (l, r) if l.dataType == StringType && r.dataType != StringType =>
-            (l, Alias(Cast(r, StringType), r.name)())
+            (l, Alias(Cast(r, StringType), Seq(r.name))())
           case (l, r) if l.dataType != StringType && r.dataType == StringType =>
-            (Alias(Cast(l, StringType), l.name)(), r)
+            (Alias(Cast(l, StringType), Seq(l.name))(), r)
 
           case (l, r) if l.dataType != r.dataType =>
             logDebug(s"Resolving mismatched union input ${l.dataType}, ${r.dataType}")
             findTightestCommonType(l.dataType, r.dataType).map { widestType =>
               val newLeft =
-                if (l.dataType == widestType) l else Alias(Cast(l, widestType), l.name)()
+                if (l.dataType == widestType) l else Alias(Cast(l, widestType), Seq(l.name))()
               val newRight =
-                if (r.dataType == widestType) r else Alias(Cast(r, widestType), r.name)()
+                if (r.dataType == widestType) r else Alias(Cast(r, widestType), Seq(r.name))()
 
               (newLeft, newRight)
             }.getOrElse((l, r)) // If there is no applicable conversion, leave expression unchanged.

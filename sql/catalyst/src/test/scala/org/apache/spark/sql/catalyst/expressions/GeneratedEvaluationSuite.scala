@@ -29,7 +29,7 @@ class GeneratedEvaluationSuite extends ExpressionEvaluationSuite {
       expected: Any,
       inputRow: Row = EmptyRow): Unit = {
     val plan = try {
-      GenerateMutableProjection(Alias(expression, s"Optimized($expression)")() :: Nil)()
+      GenerateMutableProjection(Alias(expression, Seq(s"Optimized($expression)"))() :: Nil)()
     } catch {
       case e: Throwable =>
         val evaluated = GenerateProjection.expressionEvaluator(expression)

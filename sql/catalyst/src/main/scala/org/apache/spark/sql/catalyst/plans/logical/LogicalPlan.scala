@@ -163,7 +163,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
         val aliased =
           Alias(
             resolveNesting(nestedFields, a, resolver),
-            nestedFields.last)() // Preserve the case of the user's field access.
+            Seq(nestedFields.last))() // Preserve the case of the user's field access.
         Some(aliased)
 
       // No matches.

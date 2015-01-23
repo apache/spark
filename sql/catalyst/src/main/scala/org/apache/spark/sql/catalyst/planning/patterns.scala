@@ -100,7 +100,7 @@ object PhysicalOperation extends PredicateHelper {
       aliases.get(ref).map(Alias(_, name)(a.exprId, a.qualifiers)).getOrElse(a)
 
     case a: AttributeReference =>
-      aliases.get(a).map(Alias(_, a.name)(a.exprId, a.qualifiers)).getOrElse(a)
+      aliases.get(a).map(Alias(_, Seq(a.name))(a.exprId, a.qualifiers)).getOrElse(a)
   }
 }
 
@@ -143,7 +143,7 @@ object PartialAggregation {
         // referenced in the second aggregation.
         val namedGroupingExpressions: Map[Expression, NamedExpression] = groupingExpressions.map {
           case n: NamedExpression => (n, n)
-          case other => (other, Alias(other, "PartialGroup")())
+          case other => (other, Alias(other, Seq("PartialGroup"))())
         }.toMap
 
         // Replace aggregations with a new expression that computes the result from the already

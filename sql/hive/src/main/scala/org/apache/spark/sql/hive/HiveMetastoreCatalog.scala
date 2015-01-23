@@ -434,7 +434,7 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
         // Only do the casting when child output data types differ from table output data types.
         val castedChildOutput = child.output.zip(table.output).map {
           case (input, output) if input.dataType != output.dataType =>
-            Alias(Cast(input, output.dataType), input.name)()
+            Alias(Cast(input, output.dataType), Seq(input.name))()
           case (input, _) => input
         }
 

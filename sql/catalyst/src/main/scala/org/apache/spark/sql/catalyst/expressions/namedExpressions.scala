@@ -78,13 +78,14 @@ abstract class Attribute extends NamedExpression {
  *  Alias(Add(Literal(1), Literal(1), "a")()
  *
  * @param child the computation being performed
- * @param name the name to be associated with the result of computing [[child]].
+ * @param name the names to be associated with the result of computing [[child]].
  * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this
  *               alias. Auto-assigned if left blank.
  */
-case class Alias(child: Expression, name: String)
+case class Alias(child: Expression, names: Seq[String])
     (val exprId: ExprId = NamedExpression.newExprId, val qualifiers: Seq[String] = Nil)
   extends NamedExpression with trees.UnaryNode[Expression] {
+  override def name = names.mkString("|")
 
   override type EvaluatedType = Any
 

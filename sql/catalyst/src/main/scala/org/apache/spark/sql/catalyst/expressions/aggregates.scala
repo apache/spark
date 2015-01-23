@@ -95,7 +95,7 @@ case class Min(child: Expression) extends PartialAggregate with trees.UnaryNode[
   override def toString = s"MIN($child)"
 
   override def asPartial: SplitEvaluation = {
-    val partialMin = Alias(Min(child), "PartialMin")()
+    val partialMin = Alias(Min(child), Seq("PartialMin"))()
     SplitEvaluation(Min(partialMin.toAttribute), partialMin :: Nil)
   }
 
@@ -126,7 +126,7 @@ case class Max(child: Expression) extends PartialAggregate with trees.UnaryNode[
   override def toString = s"MAX($child)"
 
   override def asPartial: SplitEvaluation = {
-    val partialMax = Alias(Max(child), "PartialMax")()
+    val partialMax = Alias(Max(child), Seq("PartialMax"))()
     SplitEvaluation(Max(partialMax.toAttribute), partialMax :: Nil)
   }
 
@@ -157,7 +157,7 @@ case class Count(child: Expression) extends PartialAggregate with trees.UnaryNod
   override def toString = s"COUNT($child)"
 
   override def asPartial: SplitEvaluation = {
-    val partialCount = Alias(Count(child), "PartialCount")()
+    val partialCount = Alias(Count(child), Seq("PartialCount"))()
     SplitEvaluation(Coalesce(Seq(Sum(partialCount.toAttribute), Literal(0L))), partialCount :: Nil)
   }
 
@@ -175,7 +175,7 @@ case class CountDistinct(expressions: Seq[Expression]) extends PartialAggregate 
   override def newInstance() = new CountDistinctFunction(expressions, this)
 
   override def asPartial = {
-    val partialSet = Alias(CollectHashSet(expressions), "partialSets")()
+    val partialSet = Alias(CollectHashSet(expressions), Seq("partialSets"))()
     SplitEvaluation(
       CombineSetsAndCount(partialSet.toAttribute),
       partialSet :: Nil)
@@ -273,7 +273,7 @@ case class ApproxCountDistinct(child: Expression, relativeSD: Double = 0.05)
 
   override def asPartial: SplitEvaluation = {
     val partialCount =
-      Alias(ApproxCountDistinctPartition(child, relativeSD), "PartialApproxCountDistinct")()
+      Alias(ApproxCountDistinctPartition(child, relativeSD), Seq("PartialApproxCountDistinct"))()
 
     SplitEvaluation(
       ApproxCountDistinctMerge(partialCount.toAttribute, relativeSD),
@@ -302,8 +302,8 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
     child.dataType match {
       case DecimalType.Fixed(_, _) =>
         // Turn the child to unlimited decimals for calculation, before going back to fixed
-        val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), "PartialSum")()
-        val partialCount = Alias(Count(child), "PartialCount")()
+        val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), Seq("PartialSum"))()
+        val partialCount = Alias(Count(child), Seq("PartialCount"))()
 
         val castedSum = Cast(Sum(partialSum.toAttribute), DecimalType.Unlimited)
         val castedCount = Cast(Sum(partialCount.toAttribute), DecimalType.Unlimited)
@@ -312,8 +312,8 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
           partialCount :: partialSum :: Nil)
 
       case _ =>
-        val partialSum = Alias(Sum(child), "PartialSum")()
-        val partialCount = Alias(Count(child), "PartialCount")()
+        val partialSum = Alias(Sum(child), Seq("PartialSum"))()
+        val partialCount = Alias(Count(child), Seq("PartialCount"))()
 
         val castedSum = Cast(Sum(partialSum.toAttribute), dataType)
         val castedCount = Cast(Sum(partialCount.toAttribute), dataType)
@@ -344,13 +344,13 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
   override def asPartial: SplitEvaluation = {
     child.dataType match {
       case DecimalType.Fixed(_, _) =>
-        val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), "PartialSum")()
+        val partialSum = Alias(Sum(Cast(child, DecimalType.Unlimited)), Seq("PartialSum"))()
         SplitEvaluation(
           Cast(Sum(partialSum.toAttribute), dataType),
           partialSum :: Nil)
 
       case _ =>
-        val partialSum = Alias(Sum(child), "PartialSum")()
+        val partialSum = Alias(Sum(child), Seq("PartialSum"))()
         SplitEvaluation(
           Sum(partialSum.toAttribute),
           partialSum :: Nil)
@@ -377,7 +377,7 @@ case class SumDistinct(child: Expression)
   override def newInstance() = new SumDistinctFunction(child, this)
 
   override def asPartial = {
-    val partialSet = Alias(CollectHashSet(child :: Nil), "partialSets")()
+    val partialSet = Alias(CollectHashSet(child :: Nil), Seq("partialSets"))()
     SplitEvaluation(
       CombineSetsAndSum(partialSet.toAttribute, this),
       partialSet :: Nil)
@@ -430,7 +430,7 @@ case class First(child: Expression) extends PartialAggregate with trees.UnaryNod
   override def toString = s"FIRST($child)"
 
   override def asPartial: SplitEvaluation = {
-    val partialFirst = Alias(First(child), "PartialFirst")()
+    val partialFirst = Alias(First(child), Seq("PartialFirst"))()
     SplitEvaluation(
       First(partialFirst.toAttribute),
       partialFirst :: Nil)
@@ -445,7 +445,7 @@ case class Last(child: Expression) extends PartialAggregate with trees.UnaryNode
   override def toString = s"LAST($child)"
 
   override def asPartial: SplitEvaluation = {
-    val partialLast = Alias(Last(child), "PartialLast")()
+    val partialLast = Alias(Last(child), Seq("PartialLast"))()
     SplitEvaluation(
       Last(partialLast.toAttribute),
       partialLast :: Nil)

@@ -166,7 +166,7 @@ class SchemaRDD(
   def select(exprs: Expression*): SchemaRDD = {
     val aliases = exprs.zipWithIndex.map {
       case (ne: NamedExpression, _) => ne
-      case (e, i) => Alias(e, s"c$i")()
+      case (e, i) => Alias(e, Seq(s"c$i"))()
     }
     new SchemaRDD(sqlContext, Project(aliases, logicalPlan))
   }
@@ -254,7 +254,7 @@ class SchemaRDD(
   def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*): SchemaRDD = {
     val aliasedExprs = aggregateExprs.map {
       case ne: NamedExpression => ne
-      case e => Alias(e, e.toString)()
+      case e => Alias(e, Seq(e.toString))()
     }
     new SchemaRDD(sqlContext, Aggregate(groupingExprs, aliasedExprs, logicalPlan))
   }

@@ -389,7 +389,7 @@ private[hive] object HiveQl {
   protected def nameExpressions(exprs: Seq[Expression]): Seq[NamedExpression] = {
     exprs.zipWithIndex.map {
       case (ne: NamedExpression, _) => ne
-      case (e, i) => Alias(e, s"_c$i")()
+      case (e, i) => Alias(e, Seq(s"_c$i"))()
     }
   }
 
@@ -939,7 +939,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
 
     case Token("TOK_SELEXPR",
            e :: Token(alias, Nil) :: Nil) =>
-      Some(Alias(nodeToExpr(e), cleanIdentifier(alias))())
+      Some(Alias(nodeToExpr(e), Seq(cleanIdentifier(alias)))())
 
     /* Hints are ignored */
     case Token("TOK_HINTLIST", _) => None
