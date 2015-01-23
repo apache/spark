@@ -17,11 +17,13 @@
 
 package org.apache.spark.streaming.scheduler
 
-import akka.actor.{ActorRef, ActorSystem, Props, Actor}
-import org.apache.spark.{SparkException, SparkEnv, Logging}
-import org.apache.spark.streaming.{Checkpoint, Time, CheckpointWriter}
-import org.apache.spark.streaming.util.{ManualClock, RecurringTimer, Clock}
 import scala.util.{Failure, Success, Try}
+
+import akka.actor.{ActorRef, Props, Actor}
+
+import org.apache.spark.{SparkEnv, Logging}
+import org.apache.spark.streaming.{Checkpoint, CheckpointWriter, Time}
+import org.apache.spark.streaming.util.{Clock, ManualClock, RecurringTimer}
 
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent
@@ -206,9 +208,13 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     val timesToReschedule = (pendingTimes ++ downTimes).distinct.sorted(Time.ordering)
     logInfo("Batches to reschedule (" + timesToReschedule.size + " batches): " +
       timesToReschedule.mkString(", "))
-    timesToReschedule.foreach(time =>
+    timesToReschedule.foreach { time =>
+      // Allocate the related blocks when recovering from failure, because some blocks that were
+      // added but not allocated, are dangling in the queue after recovering, we have to allocate
+      // those blocks to the next batch, which is the batch they were supposed to go.
+      jobScheduler.receiverTracker.allocateBlocksToBatch(time) // allocate received blocks to batch
       jobScheduler.submitJobSet(JobSet(time, graph.generateJobs(time)))
-    )
+    }
 
     // Restart the timer
     timer.start(restartTime.milliseconds)
