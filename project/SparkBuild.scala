@@ -128,6 +128,7 @@ object SparkBuild extends PomBuild {
     unidocGenjavadocVersion := "0.8",
     (unitTest in Test) := {
       (testQuick in Test).toTask(" * -- -l org.apache.sparktest.tags.IntegrationTest").value
+      (testQuick in Test).toTask(" * -- --scalatest-please-do-nothing --exclude-categories=org.apache.spark.sparktest.categories.IntegrationTests").value
     },
 
     resolvers += Resolver.mavenLocal,
