@@ -36,4 +36,5 @@ case class ScriptTransformation(
     inputSerdeClass: String,
     outputSerdeClass: String,
     inputSerdeProps: Seq[(String, String)],
-    outputSerdeProps: Seq[(String, String)]) extends UnaryNode
+    outputSerdeProps: Seq[(String, String)],
+    schemaLess: Boolean) extends UnaryNode

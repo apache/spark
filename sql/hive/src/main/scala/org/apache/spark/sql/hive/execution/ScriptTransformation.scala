@@ -63,7 +63,8 @@ case class ScriptTransformation(
     inputSerdeClass: String,
     outputSerdeClass: String,
     inputSerdeProps: Seq[(String, String)],
-    outputSerdeProps: Seq[(String, String)])(@transient sc: HiveContext, schemaLess: Boolean)
+    outputSerdeProps: Seq[(String, String)],
+    schemaLess: Boolean)(@transient sc: HiveContext)
   extends UnaryNode with HiveInspectors {
 
   override def otherCopyArgs = sc :: Nil

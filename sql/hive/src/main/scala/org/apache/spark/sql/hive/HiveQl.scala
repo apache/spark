@@ -635,14 +635,16 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                    Token("TOK_RECORDREADER", readerClause) ::
                    outputClause) :: Nil) =>
 
-            val output = outputClause match {
+            val (output, schemaLess) = outputClause match {
               case Token("TOK_ALIASLIST", aliases) :: Nil =>
-                aliases.map { case Token(name, Nil) => AttributeReference(name, StringType)() }
+                (aliases.map { case Token(name, Nil) => AttributeReference(name, StringType)() },
+                  false)
               case Token("TOK_TABCOLLIST", attributes) :: Nil =>
-                attributes.map { case Token("TOK_TABCOL", Token(name, Nil) :: dataType :: Nil) =>
-                  AttributeReference(name, nodeToDataType(dataType))() }
+                (attributes.map { case Token("TOK_TABCOL", Token(name, Nil) :: dataType :: Nil) =>
+                  AttributeReference(name, nodeToDataType(dataType))() }, false)
               case Nil =>
-                Nil
+                (List(AttributeReference("key", StringType)(),
+                  AttributeReference("value", StringType)()), true)
             }
             
             val (inputFormat, inputSerdeClass, inputSerdeProps) = inputSerdeClause match {
@@ -686,7 +688,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 output,
                 withWhere, inputFormat, outputFormat,
                 inputSerdeClass, outputSerdeClass,
-                inputSerdeProps, outputSerdeProps))
+                inputSerdeProps, outputSerdeProps, schemaLess))
           case _ => None
         }
 
