@@ -341,6 +341,13 @@ Apart from these, the following properties are also available, and may be useful
     `spark.mesos.executor.memoryOverhead` or 7% of `spark.executor.memory`.
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.executor.cpus</code></td>
+  <td>1</td>
+  <td>
+    This value is the amount of cores so that executor is running itself.
+  </td>
+</tr>
 </table>
 
 #### Shuffle Behavior

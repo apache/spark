@@ -24,12 +24,14 @@ private[spark] object MemoryUtils {
   val OVERHEAD_FRACTION = 1.07
   val OVERHEAD_MINIMUM = 384
 
-  def calculateTotalMemory(sc: SparkContext) = {
+  def calculateTotalMemory(sc: SparkContext) = calculateExecutorMemory(sc) + calculateTaskMemory(sc)
+
+  def calculateTaskMemory(sc: SparkContext) = sc.executorMemory
+
+  def calculateExecutorMemory(sc: SparkContext) = {
     math.max(
       sc.conf.getOption("spark.mesos.executor.memoryOverhead")
-        .getOrElse(OVERHEAD_MINIMUM.toString)
-        .toInt + sc.executorMemory,
-        OVERHEAD_FRACTION * sc.executorMemory
-    )
+        .getOrElse(OVERHEAD_MINIMUM.toString).toInt,
+      ((OVERHEAD_FRACTION - 1) * sc.executorMemory).toInt)
   }
 }

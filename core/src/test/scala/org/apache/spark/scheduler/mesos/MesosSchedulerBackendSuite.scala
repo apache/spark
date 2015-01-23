@@ -99,7 +99,7 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Ea
     EasyMock.expect(sc.listenerBus).andReturn(listenerBus)
     EasyMock.replay(sc)
 
-    val minMem = MemoryUtils.calculateTotalMemory(sc).toInt
+    val minMem = MemoryUtils.calculateTotalMemory(sc)
     val minCpu = 4
 
     val mesosOffers = new java.util.ArrayList[Offer]

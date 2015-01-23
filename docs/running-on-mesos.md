@@ -226,6 +226,13 @@ See the [configuration page](configuration.html) for information on Spark config
     The final total amount of memory allocated is the maximum value between executor memory plus memoryOverhead, and overhead fraction (1.07) plus the executor memory.
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.executor.cpus</code></td>
+  <td>1</td>
+  <td>
+    The amount of cores that Mesos executor will request additionally for running executor itself.
+  </td>
+</tr>
 </table>
 
 # Troubleshooting and Debugging
