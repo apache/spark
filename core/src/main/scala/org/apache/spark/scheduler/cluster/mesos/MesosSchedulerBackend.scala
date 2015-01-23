@@ -68,7 +68,7 @@ private[spark] class MesosSchedulerBackend(
   // The listener bus to publish executor added/removed events.
   val listenerBus = sc.listenerBus
 
-  val executorCpus = sc.conf.getInt("spark.mesos.executor.cpus", 1)
+  val executorCpus = sc.conf.getInt("spark.mesos.executor.cores", 1)
 
   @volatile var appId: String = _
 

@@ -342,10 +342,10 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.mesos.executor.cpus</code></td>
+  <td><code>spark.mesos.executor.cores</code></td>
   <td>1</td>
   <td>
-    This value is the amount of cores so that executor is running itself.
+    The amount of cores to request for running the mesos executor.
   </td>
 </tr>
 </table>

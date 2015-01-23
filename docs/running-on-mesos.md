@@ -227,10 +227,10 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
-  <td><code>spark.mesos.executor.cpus</code></td>
+  <td><code>spark.mesos.executor.cores</code></td>
   <td>1</td>
   <td>
-    The amount of cores that Mesos executor will request additionally for running executor itself.
+    The amount of cores to request for running the mesos executor.
   </td>
 </tr>
 </table>
