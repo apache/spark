@@ -26,9 +26,9 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.SchemaRDD;
+import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SQLContext;
 
 public class JavaSparkSQL {
   public static class Person implements Serializable {
@@ -74,11 +74,11 @@ public class JavaSparkSQL {
       });
 
     // Apply a schema to an RDD of Java Beans and register it as a table.
-    SchemaRDD schemaPeople = sqlCtx.applySchema(people, Person.class);
+    DataFrame schemaPeople = sqlCtx.applySchema(people, Person.class);
     schemaPeople.registerTempTable("people");
 
     // SQL can be run over RDDs that have been registered as tables.
-    SchemaRDD teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
+    DataFrame teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
 
     // The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
     // The columns of a row in the result can be accessed by ordinal.
@@ -99,11 +99,11 @@ public class JavaSparkSQL {
     // Read in the parquet file created above.
     // Parquet files are self-describing so the schema is preserved.
     // The result of loading a parquet file is also a JavaSchemaRDD.
-    SchemaRDD parquetFile = sqlCtx.parquetFile("people.parquet");
+    DataFrame parquetFile = sqlCtx.parquetFile("people.parquet");
 
     //Parquet files can also be registered as tables and then used in SQL statements.
     parquetFile.registerTempTable("parquetFile");
-    SchemaRDD teenagers2 =
+    DataFrame teenagers2 =
       sqlCtx.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
     teenagerNames = teenagers2.toJavaRDD().map(new Function<Row, String>() {
       @Override
@@ -120,7 +120,7 @@ public class JavaSparkSQL {
     // The path can be either a single text file or a directory storing text files.
     String path = "examples/src/main/resources/people.json";
     // Create a JavaSchemaRDD from the file(s) pointed by path
-    SchemaRDD peopleFromJsonFile = sqlCtx.jsonFile(path);
+    DataFrame peopleFromJsonFile = sqlCtx.jsonFile(path);
 
     // Because the schema of a JSON dataset is automatically inferred, to write queries,
     // it is better to take a look at what is the schema.
@@ -134,7 +134,7 @@ public class JavaSparkSQL {
     peopleFromJsonFile.registerTempTable("people");
 
     // SQL statements can be run by using the sql methods provided by sqlCtx.
-    SchemaRDD teenagers3 = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
+    DataFrame teenagers3 = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
 
     // The results of SQL queries are JavaSchemaRDDs and support all the normal RDD operations.
     // The columns of a row in the result can be accessed by ordinal.
@@ -151,7 +151,7 @@ public class JavaSparkSQL {
     List<String> jsonData = Arrays.asList(
           "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
     JavaRDD<String> anotherPeopleRDD = ctx.parallelize(jsonData);
-    SchemaRDD peopleFromJsonRDD = sqlCtx.jsonRDD(anotherPeopleRDD.rdd());
+    DataFrame peopleFromJsonRDD = sqlCtx.jsonRDD(anotherPeopleRDD.rdd());
 
     // Take a look at the schema of this new JavaSchemaRDD.
     peopleFromJsonRDD.printSchema();
@@ -164,7 +164,7 @@ public class JavaSparkSQL {
 
     peopleFromJsonRDD.registerTempTable("people2");
 
-    SchemaRDD peopleWithCity = sqlCtx.sql("SELECT name, address.city FROM people2");
+    DataFrame peopleWithCity = sqlCtx.sql("SELECT name, address.city FROM people2");
     List<String> nameAndCity = peopleWithCity.toJavaRDD().map(new Function<Row, String>() {
       @Override
       public String call(Row row) {

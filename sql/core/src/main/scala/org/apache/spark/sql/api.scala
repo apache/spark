@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.api.java.JavaRDD
+
 import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.Experimental
@@ -62,6 +64,8 @@ trait DataFrameSpecificApi {
    */
   def schema: StructType
 
+  def printSchema(): Unit
+
   /////////////////////////////////////////////////////////////////////////////
   // Metadata
   /////////////////////////////////////////////////////////////////////////////
@@ -88,6 +92,9 @@ trait DataFrameSpecificApi {
 
   @scala.annotation.varargs
   def select(cols: Column*): DataFrame
+
+  @scala.annotation.varargs
+  def select(col: String, cols: String*): DataFrame
 
   /** Filtering */
   def apply(condition: Column): DataFrame = filter(condition)
@@ -151,6 +158,8 @@ trait DataFrameSpecificApi {
   /////////////////////////////////////////////////////////////////////////////
 
   def rdd: RDD[Row]
+
+  def toJavaRDD: JavaRDD[Row] = rdd.toJavaRDD()
 
   def toJSON: RDD[String]
 

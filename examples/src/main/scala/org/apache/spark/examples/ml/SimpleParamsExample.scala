@@ -18,7 +18,6 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -92,7 +91,7 @@ object SimpleParamsExample {
     // Note that model2.transform() outputs a 'probability' column instead of the usual 'score'
     // column since we renamed the lr.scoreCol parameter previously.
     model2.transform(test)
-      .select('features, 'label, 'probability, 'prediction)
+      .select("features", "label", "probability", "prediction")
       .collect()
       .foreach { case Row(features: Vector, label: Double, prob: Double, prediction: Double) =>
         println("(" + features + ", " + label + ") -> prob=" + prob + ", prediction=" + prediction)

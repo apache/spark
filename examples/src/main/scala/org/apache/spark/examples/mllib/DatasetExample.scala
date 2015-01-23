@@ -28,10 +28,10 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext, SchemaRDD}
+import org.apache.spark.sql.{Row, SQLContext, DataFrame}
 
 /**
- * An example of how to use [[org.apache.spark.sql.SchemaRDD]] as a Dataset for ML. Run with
+ * An example of how to use [[org.apache.spark.sql.DataFrame]] as a Dataset for ML. Run with
  * {{{
  * ./bin/run-example org.apache.spark.examples.mllib.DatasetExample [options]
  * }}}
@@ -81,18 +81,18 @@ object DatasetExample {
     println(s"Loaded ${origData.count()} instances from file: ${params.input}")
 
     // Convert input data to SchemaRDD explicitly.
-    val schemaRDD: SchemaRDD = origData
+    val schemaRDD: DataFrame = origData
     println(s"Inferred schema:\n${schemaRDD.schema.prettyJson}")
     println(s"Converted to SchemaRDD with ${schemaRDD.count()} records")
 
     // Select columns, using implicit conversion to SchemaRDD.
-    val labelsSchemaRDD: SchemaRDD = origData.select('label)
+    val labelsSchemaRDD: DataFrame = origData.select("label")
     val labels: RDD[Double] = labelsSchemaRDD.map { case Row(v: Double) => v }
     val numLabels = labels.count()
     val meanLabel = labels.fold(0.0)(_ + _) / numLabels
     println(s"Selected label column with average value $meanLabel")
 
-    val featuresSchemaRDD: SchemaRDD = origData.select('features)
+    val featuresSchemaRDD: DataFrame = origData.select("features")
     val features: RDD[Vector] = featuresSchemaRDD.map { case Row(v: Vector) => v }
     val featureSummary = features.aggregate(new MultivariateOnlineSummarizer())(
       (summary, feat) => summary.add(feat),
@@ -109,7 +109,7 @@ object DatasetExample {
     val newDataset = sqlContext.parquetFile(outputDir)
 
     println(s"Schema from Parquet: ${newDataset.schema.prettyJson}")
-    val newFeatures = newDataset.select('features).map { case Row(v: Vector) => v }
+    val newFeatures = newDataset.select("features").map { case Row(v: Vector) => v }
     val newFeaturesSummary = newFeatures.aggregate(new MultivariateOnlineSummarizer())(
       (summary, feat) => summary.add(feat),
       (sum1, sum2) => sum1.merge(sum2))

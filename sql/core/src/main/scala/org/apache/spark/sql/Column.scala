@@ -48,6 +48,8 @@ object Literal {
 
 object Column {
   def unapply(col: Column): Option[Expression] = Some(col.expr)
+
+  def apply(colName: String): Column = new Column(colName)
 }
 
 

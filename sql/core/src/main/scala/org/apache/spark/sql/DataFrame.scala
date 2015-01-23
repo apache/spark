@@ -84,6 +84,8 @@ class DataFrame(
 
   override def columns: Array[String] = schema.fields.map(_.name)
 
+  override def printSchema(): Unit = println(schema.treeString)
+
   override def show(): Unit = {
     ???
   }
@@ -145,6 +147,11 @@ class DataFrame(
         Alias(expr, expr.toString)()
     }
     Project(exprs.toSeq, logicalPlan)
+  }
+
+  @scala.annotation.varargs
+  override def select(col: String, cols: String*): DataFrame = {
+    select((col +: cols).map(new Column(_)) :_*)
   }
 
   /** Filtering */
