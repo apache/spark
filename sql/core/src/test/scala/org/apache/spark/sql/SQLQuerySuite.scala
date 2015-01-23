@@ -89,13 +89,13 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("Add Parser of SQL COALESCE()") {
     checkAnswer(
       sql("""SELECT COALESCE(1, 2)"""),
-      1)
+      Row(1))
     checkAnswer(
       sql("SELECT COALESCE(null, 1, 1.5)"),
-      1.toDouble)
+      Row(1.toDouble))
     checkAnswer(
       sql("SELECT COALESCE(null, null, null)"),
-      null)
+      Row(null))
   }
 
   test("SPARK-3176 Added Parser of SQL LAST()") {
