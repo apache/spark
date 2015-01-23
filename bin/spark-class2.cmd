@@ -110,16 +110,11 @@ if "%FOUND_JAR%"=="0" (
 :skip_build_test
 
 set TOOLS_DIR=%FWDIR%tools
-set SPARK_TOOLS_JAR=
-for %%d in ("%TOOLS_DIR%\target\scala-%SCALA_VERSION%\spark-tools*assembly*.jar") do (
-  set SPARK_TOOLS_JAR=%%d
-)
 
 rem Compute classpath using external script
 set DONT_PRINT_CLASSPATH=1
 call "%FWDIR%bin\compute-classpath.cmd"
 set DONT_PRINT_CLASSPATH=0
-set CLASSPATH=%CLASSPATH%;%SPARK_TOOLS_JAR%
 
 rem Figure out where java is.
 set RUNNER=java
