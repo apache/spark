@@ -67,7 +67,7 @@ private[streaming] class ReceivedBlockTracker(
   extends Logging {
 
   private type ReceivedBlockQueue = mutable.Queue[ReceivedBlockInfo]
-  
+
   private val streamIdToUnallocatedBlockQueues = new mutable.HashMap[Int, ReceivedBlockQueue]
   private val timeToAllocatedBlocks = new mutable.HashMap[Time, AllocatedBlocks]
   private val logManagerOption = createLogManager()
@@ -107,8 +107,14 @@ private[streaming] class ReceivedBlockTracker(
       lastAllocatedBatchTime = batchTime
       allocatedBlocks
     } else {
-      throw new SparkException(s"Unexpected allocation of blocks, " +
-        s"last batch = $lastAllocatedBatchTime, batch time to allocate = $batchTime  ")
+      // This situation occurs when:
+      // 1. WAL is ended with BatchAllocationEvent, but without BatchCleanupEvent,
+      // possibly processed batch job or half-processed batch job need to be processed again,
+      // so the batchTime will be equal to lastAllocatedBatchTime.
+      // 2. Slow checkpointing makes recovered batch time older than WAL recovered
+      // lastAllocatedBatchTime.
+      // This situation will only occurs in recovery time.
+      logInfo(s"Possibly processed batch $batchTime need to be processed again in WAL recovery")
     }
   }
 

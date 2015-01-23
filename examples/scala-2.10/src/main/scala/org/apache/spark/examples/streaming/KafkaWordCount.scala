@@ -77,7 +77,7 @@ object KafkaWordCountProducer {
 
     val Array(brokers, topic, messagesPerSec, wordsPerMessage) = args
 
-    // Zookeper connection properties
+    // Zookeeper connection properties
     val props = new Properties()
     props.put("metadata.broker.list", brokers)
     props.put("serializer.class", "kafka.serializer.StringEncoder")
