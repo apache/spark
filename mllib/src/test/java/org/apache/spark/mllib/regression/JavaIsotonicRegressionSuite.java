@@ -49,7 +49,7 @@ public class JavaIsotonicRegressionSuite implements Serializable {
   double difference(List<Tuple3<Double, Double, Double>> expected, IsotonicRegressionModel model) {
     double diff = 0;
 
-    for(int i = 0; i < model.predictions().length(); i++) {
+    for(int i = 0; i < model.labels().length; i++) {
       Tuple3<Double, Double, Double> exp = expected.get(i);
       diff += Math.abs(model.predict(exp._2()) - exp._1());
     }

@@ -38,9 +38,8 @@ class IsotonicRegressionSuite
     val alg = new IsotonicRegression
     val model = alg.run(trainRDD, true)
 
-    model.predictions should be(
-      generateIsotonicInput(
-        1, 2, 7d/3, 7d/3, 7d/3, 6, 7, 8, 10, 10, 10, 12, 14, 15, 16.5, 16.5, 17, 18, 19, 20))
+    model.labels should be(
+      Array(1, 2, 7d/3, 7d/3, 7d/3, 6, 7, 8, 10, 10, 10, 12, 14, 15, 16.5, 16.5, 17, 18, 19, 20))
   }
 
   test("increasing isotonic regression using api") {
@@ -50,9 +49,8 @@ class IsotonicRegressionSuite
 
     val model = IsotonicRegression.train(trainRDD, true)
 
-    model.predictions should be(
-      generateIsotonicInput(
-        1, 2, 7d/3, 7d/3, 7d/3, 6, 7, 8, 10, 10, 10, 12, 14, 15, 16.5, 16.5, 17, 18, 19, 20))
+    model.labels should be(
+      Array(1, 2, 7d/3, 7d/3, 7d/3, 6, 7, 8, 10, 10, 10, 12, 14, 15, 16.5, 16.5, 17, 18, 19, 20))
   }
 
   test("isotonic regression with size 0") {
@@ -61,7 +59,7 @@ class IsotonicRegressionSuite
     val alg = new IsotonicRegression
     val model = alg.run(trainRDD, true)
 
-    model.predictions should be(List())
+    model.labels should be(Array())
   }
 
   test("isotonic regression with size 1") {
@@ -70,7 +68,7 @@ class IsotonicRegressionSuite
     val alg = new IsotonicRegression
     val model = alg.run(trainRDD, true)
 
-    model.predictions should be(generateIsotonicInput(1))
+    model.labels should be(Array(1.0))
   }
 
   test("isotonic regression strictly increasing sequence") {
@@ -79,7 +77,7 @@ class IsotonicRegressionSuite
     val alg = new IsotonicRegression
     val model = alg.run(trainRDD, true)
 
-    model.predictions should be(generateIsotonicInput(1, 2, 3, 4, 5))
+    model.labels should be(Array(1, 2, 3, 4, 5))
   }
 
   test("isotonic regression strictly decreasing sequence") {
@@ -88,7 +86,7 @@ class IsotonicRegressionSuite
     val alg = new IsotonicRegression
     val model = alg.run(trainRDD, true)
 
-    model.predictions should be(generateIsotonicInput(3, 3, 3, 3, 3))
+    model.labels should be(Array(3, 3, 3, 3, 3))
   }
 
   test("isotonic regression with last element violating monotonicity") {
@@ -97,7 +95,7 @@ class IsotonicRegressionSuite
     val alg = new IsotonicRegression
     val model = alg.run(trainRDD, true)
 
-    model.predictions should be(generateIsotonicInput(1, 2, 3, 3, 3))
+    model.labels should be(Array(1, 2, 3, 3, 3))
   }
 
   test("isotonic regression with first element violating monotonicity") {
@@ -106,7 +104,7 @@ class IsotonicRegressionSuite
     val alg = new IsotonicRegression
     val model = alg.run(trainRDD, true)
 
-    model.predictions should be(generateIsotonicInput(3, 3, 3, 4, 5))
+    model.labels should be(Array(3, 3, 3, 4, 5))
   }
 
   test("isotonic regression with negative labels") {
@@ -115,7 +113,7 @@ class IsotonicRegressionSuite
     val alg = new IsotonicRegression
     val model = alg.run(trainRDD, true)
 
-    model.predictions should be(generateIsotonicInput(-1.5, -1.5, 0, 0, 0))
+    model.labels should be(Array(-1.5, -1.5, 0, 0, 0))
   }
 
   test("isotonic regression with unordered input") {
@@ -124,7 +122,7 @@ class IsotonicRegressionSuite
     val alg = new IsotonicRegression
     val model = alg.run(trainRDD, true)
 
-    model.predictions should be(generateIsotonicInput(1, 2, 3, 4, 5))
+    model.labels should be(Array(1, 2, 3, 4, 5))
   }
 
   test("weighted isotonic regression") {
@@ -134,8 +132,7 @@ class IsotonicRegressionSuite
     val alg = new IsotonicRegression
     val model = alg.run(trainRDD, true)
 
-    model.predictions should be(
-      generateWeightedIsotonicInput(Seq(1, 2, 2.75, 2.75,2.75), Seq(1, 1, 1, 1, 2)))
+    model.labels should be(Array(1, 2, 2.75, 2.75,2.75))
   }
 
   test("weighted isotonic regression with weights lower than 1") {
@@ -145,8 +142,7 @@ class IsotonicRegressionSuite
     val alg = new IsotonicRegression
     val model = alg.run(trainRDD, true)
 
-    model.predictions.map(p => p.copy(_1 = round(p._1))) should be(
-      generateWeightedIsotonicInput(Seq(1, 2, 3.3/1.2, 3.3/1.2, 3.3/1.2), Seq(1, 1, 1, 0.1, 0.1)))
+    model.labels.map(round) should be(Array(1, 2, 3.3/1.2, 3.3/1.2, 3.3/1.2))
   }
 
   test("weighted isotonic regression with negative weights") {
@@ -155,8 +151,7 @@ class IsotonicRegressionSuite
     val alg = new IsotonicRegression
     val model = alg.run(trainRDD, true)
 
-    model.predictions should be(
-      generateWeightedIsotonicInput(Seq(1.0, 10.0/6, 10.0/6, 10.0/6, 10.0/6), Seq(-1, 1, -3, 1, -5)))
+    model.labels should be(Array(1.0, 10.0/6, 10.0/6, 10.0/6, 10.0/6))
   }
 
   test("weighted isotonic regression with zero weights") {
@@ -165,7 +160,7 @@ class IsotonicRegressionSuite
     val alg = new IsotonicRegression
     val model = alg.run(trainRDD, true)
 
-    model.predictions should be(generateWeightedIsotonicInput(Seq(1, 2, 2, 2, 2), Seq(0, 0, 0, 1, 0)))
+    model.labels should be(Array(1, 2, 2, 2, 2))
   }
 
   test("isotonic regression prediction") {

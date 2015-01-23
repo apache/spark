@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.regression
 
 import java.io.Serializable
+import java.util.Arrays.binarySearch
 
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD}
 import org.apache.spark.rdd.RDD
@@ -25,16 +26,17 @@ import org.apache.spark.rdd.RDD
 /**
  * Regression model for Isotonic regression
  *
- * @param predictions Weights computed for every feature.
- * @param isotonic isotonic (increasing) or antitonic (decreasing) sequence
+ * @param features Array of features.
+ * @param labels Array of labels associated to the features at the same index.
  */
 class IsotonicRegressionModel (
-    val predictions: Seq[(Double, Double, Double)],
-    val isotonic: Boolean)
+    features: Array[Double],
+    val labels: Array[Double])
   extends Serializable {
 
   /**
    * Predict labels for provided features
+   * Using a piecewise constant function
    *
    * @param testData features to be labeled
    * @return predicted labels
@@ -44,6 +46,7 @@ class IsotonicRegressionModel (
 
   /**
    * Predict labels for provided features
+   * Using a piecewise constant function
    *
    * @param testData features to be labeled
    * @return predicted labels
@@ -53,13 +56,25 @@ class IsotonicRegressionModel (
 
   /**
    * Predict a single label
+   * Using a piecewise constant function
    *
    * @param testData feature to be labeled
    * @return predicted label
    */
-  def predict(testData: Double): Double =
-    // Take the highest of data points smaller than our feature or data point with lowest feature
-    (predictions.head +: predictions.filter(y => y._2 <= testData)).last._1
+  def predict(testData: Double): Double = {
+    val result = binarySearch(features, testData)
+
+    val index =
+      if (result == -1) {
+        0
+      } else if (result < 0) {
+        -result - 2
+      } else {
+        result
+      }
+
+    labels(index)
+  }
 }
 
 /**
@@ -93,9 +108,13 @@ class IsotonicRegression
    * @return isotonic regression model
    */
   protected def createModel(
-      predictions: Seq[(Double, Double, Double)],
+      predictions: Array[(Double, Double, Double)],
       isotonic: Boolean): IsotonicRegressionModel = {
-    new IsotonicRegressionModel(predictions, isotonic)
+
+    val labels = predictions.map(_._1)
+    val features = predictions.map(_._2)
+
+    new IsotonicRegressionModel(features, labels)
   }
 
   /**
@@ -167,7 +186,7 @@ class IsotonicRegression
    */
   private def parallelPoolAdjacentViolators(
       testData: RDD[(Double, Double, Double)],
-      isotonic: Boolean): Seq[(Double, Double, Double)] = {
+      isotonic: Boolean): Array[(Double, Double, Double)] = {
 
     val parallelStepResult = testData
       .sortBy(_._2)
@@ -213,7 +232,7 @@ object IsotonicRegression {
       isotonic: Boolean): IsotonicRegressionModel = {
     new IsotonicRegression()
       .run(
-        input.rdd.map(x => (x._1.doubleValue(), x._2.doubleValue(), x._3.doubleValue())),
+        input.rdd.asInstanceOf[RDD[(Double, Double, Double)]],
         isotonic)
   }
 }
