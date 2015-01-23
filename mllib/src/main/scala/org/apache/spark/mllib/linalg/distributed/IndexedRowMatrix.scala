@@ -76,6 +76,23 @@ class IndexedRowMatrix(
   }
 
   /**
+   * Converts this matrix to a
+   * [[org.apache.spark.mllib.linalg.distributed.CoordinateMatrix]].
+   */
+  def toCoordinateMatrix(): CoordinateMatrix = {
+    val entries = rows.flatMap { row =>
+      val rowIndex = row.index
+      row.vector match {
+        case SparseVector(size, indices, values) =>
+          Iterator.tabulate(indices.size)(i => MatrixEntry(rowIndex, indices(i), values(i)))
+        case DenseVector(values) =>
+          Iterator.tabulate(values.size)(i => MatrixEntry(rowIndex, i, values(i)))
+      }
+    }
+    new CoordinateMatrix(entries, numRows(), numCols())
+  }
+
+  /**
    * Computes the singular value decomposition of this IndexedRowMatrix.
    * Denote this matrix by A (m x n), this will compute matrices U, S, V such that A = U * S * V'.
    *

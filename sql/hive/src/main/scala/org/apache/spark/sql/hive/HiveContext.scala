@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.processors._
+import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 
@@ -66,11 +67,12 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     new this.QueryExecution { val logical = plan }
 
   override def sql(sqlText: String): SchemaRDD = {
+    val substituted = new VariableSubstitution().substitute(hiveconf, sqlText)
     // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
     if (conf.dialect == "sql") {
-      super.sql(sqlText)
+      super.sql(substituted)
     } else if (conf.dialect == "hiveql") {
-      new SchemaRDD(this, ddlParser(sqlText).getOrElse(HiveQl.parseSql(sqlText)))
+      new SchemaRDD(this, ddlParser(sqlText, false).getOrElse(HiveQl.parseSql(substituted)))
     }  else {
       sys.error(s"Unsupported SQL dialect: ${conf.dialect}.  Try 'sql' or 'hiveql'")
     }
@@ -368,10 +370,10 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
               .mkString("\t")
         }
       case command: ExecutedCommand =>
-        command.executeCollect().map(_.head.toString)
+        command.executeCollect().map(_(0).toString)
 
       case other =>
-        val result: Seq[Seq[Any]] = other.executeCollect().toSeq
+        val result: Seq[Seq[Any]] = other.executeCollect().map(_.toSeq).toSeq
         // We need the types so we can output struct field names
         val types = analyzed.output.map(_.dataType)
         // Reformat to match hive tab delimited output.
@@ -395,7 +397,7 @@ private object HiveContext {
 
   protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
-      struct.zip(fields).map {
+      struct.toSeq.zip(fields).map {
         case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
@@ -418,7 +420,7 @@ private object HiveContext {
   /** Hive outputs fields of structs slightly differently than top level attributes. */
   protected def toHiveStructString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
-      struct.zip(fields).map {
+      struct.toSeq.zip(fields).map {
         case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>

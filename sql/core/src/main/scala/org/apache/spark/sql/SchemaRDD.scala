@@ -332,25 +332,6 @@ class SchemaRDD(
 
   /**
    * :: Experimental ::
-   * Filters tuples using a function over a `Dynamic` version of a given Row.  DynamicRows use
-   * scala's Dynamic trait to emulate an ORM of in a dynamically typed language.  Since the type of
-   * the column is not known at compile time, all attributes are converted to strings before
-   * being passed to the function.
-   *
-   * {{{
-   *   schemaRDD.where(r => r.firstName == "Bob" && r.lastName == "Smith")
-   * }}}
-   *
-   * @group Query
-   */
-  @Experimental
-  def where(dynamicUdf: (DynamicRow) => Boolean) =
-    new SchemaRDD(
-      sqlContext,
-      Filter(ScalaUdf(dynamicUdf, BooleanType, Seq(WrapDynamic(logicalPlan.output))), logicalPlan))
-
-  /**
-   * :: Experimental ::
    * Returns a sampled version of the underlying dataset.
    *
    * @group Query

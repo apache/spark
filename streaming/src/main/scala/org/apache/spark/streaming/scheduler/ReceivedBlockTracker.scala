@@ -150,7 +150,6 @@ private[streaming] class ReceivedBlockTracker(
     writeToLog(BatchCleanupEvent(timesToCleanup))
     timeToAllocatedBlocks --= timesToCleanup
     logManagerOption.foreach(_.cleanupOldLogs(cleanupThreshTime.milliseconds, waitForCompletion))
-    log
   }
 
   /** Stop the block tracker. */

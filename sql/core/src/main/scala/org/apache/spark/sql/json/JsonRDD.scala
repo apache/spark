@@ -458,16 +458,16 @@ private[sql] object JsonRDD extends Logging {
         gen.writeEndArray()
 
       case (MapType(kv,vv, _), v: Map[_,_]) =>
-        gen.writeStartObject
+        gen.writeStartObject()
         v.foreach { p =>
           gen.writeFieldName(p._1.toString)
           valWriter(vv,p._2)
         }
-        gen.writeEndObject
+        gen.writeEndObject()
 
-      case (StructType(ty), v: Seq[_]) =>
+      case (StructType(ty), v: Row) =>
         gen.writeStartObject()
-        ty.zip(v).foreach {
+        ty.zip(v.toSeq).foreach {
           case (_, null) =>
           case (field, v) =>
             gen.writeFieldName(field.name)
