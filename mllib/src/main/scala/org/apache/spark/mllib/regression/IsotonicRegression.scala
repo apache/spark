@@ -79,7 +79,7 @@ class IsotonicRegressionModel (
 
 /**
  * Isotonic regression
- * Currently implemented using oarallel pool adjacent violators algorithm for monotone regression
+ * Currently implemented using parallel pool adjacent violators algorithm
  */
 class IsotonicRegression
   extends Serializable {
@@ -119,9 +119,9 @@ class IsotonicRegression
 
   /**
    * Performs a pool adjacent violators algorithm (PAVA)
-   * Uses approach with single processing of data where violators in previously processed
-   * data created by pooling are fixed immediatelly.
-   * Uses optimization of discovering monotonicity violating sequences
+   * Uses approach with single processing of data where violators
+   * in previously processed data created by pooling are fixed immediatelly.
+   * Uses optimization of discovering monotonicity violating sequences (blocks)
    * Method in situ mutates input array
    *
    * @param in input data
