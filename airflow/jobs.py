@@ -69,10 +69,13 @@ class BaseJob(Base):
             (conf.getint('misc', 'JOB_HEARTBEAT_SEC') * 2.1)
         )
 
-    def kill(self):
+    def kill(self, also_clear=False):
         session = settings.Session()
         job = session.query(BaseJob).filter(BaseJob.id==self.id).first()
-        job.state = State.FAILED
+        if also_clear:
+            job.state = State.CLEAR
+        else:
+            job.state = State.FAILED
         job.end_date = datetime.now()
         try:
             self.on_kill()
@@ -111,8 +114,11 @@ class BaseJob(Base):
         job = session.query(BaseJob).filter(BaseJob.id==self.id).first()
 
         if job.state == State.SHUTDOWN:
-            self.kill()
+            self.kill(also_clear=False)
             raise Exception("Task shut down externally")
+        elif job.state == State.KILL_CLEAR:
+            self.kill(also_clear=True)
+            raise Exception("Task cleared externally. KILL!")
 
         if job.latest_heartbeat:
             sleep_for = self.heartrate - (
@@ -384,13 +390,13 @@ class LocalTaskJob(BaseJob):
         super(LocalTaskJob, self).__init__(*args, **kwargs)
 
     def _execute(self):
-
         thr = threading.Thread(
             target=self.task_instance.run,
             kwargs={
                 'ignore_dependencies': self.ignore_dependencies,
                 'force': self.force,
                 'mark_success': self.mark_success,
+                'job_id': self.id,
             })
         self.thr = thr
 

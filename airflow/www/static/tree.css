@@ -31,6 +31,12 @@ rect.running {
 rect.failed {
     fill: red;
 }
+rect.kill_clear {
+    fill: orange;
+}
+rect.clear {
+    fill: yellow;
+}
 .tooltip.in {
     opacity: 1;
     filter: alpha(opacity=100);

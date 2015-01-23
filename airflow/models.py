@@ -33,6 +33,25 @@ else:
     LongText = Text
 
 
+def clear_task_instances(tis, session):
+    '''
+    Clears a set of task instances, but makes sure the running ones
+    get killed.
+    '''
+
+    TI = TaskInstance
+    job_ids = []
+    for ti in tis:
+        if ti.state == State.RUNNING:
+            if ti.job_id:
+                job_ids.append(ti.job_id)
+        else:
+            session.delete(ti)
+    if job_ids:
+        for job in session.query(TI).filter(TI.job_id.in_(job_ids)).all():
+            job.state = State.KILL_CLEAR
+
+
 class DagBag(object):
     """
     A dagbag is a collection of dags, parsed out of a folder tree and has high
@@ -242,14 +261,17 @@ class TaskInstance(Base):
     try_number = Column(Integer)
     hostname = Column(String(1000))
     unixname = Column(String(1000))
+    job_id = Column(Integer)
 
-    def __init__(self, task, execution_date):
+    def __init__(self, task, execution_date, job=None):
         self.dag_id = task.dag_id
         self.task_id = task.task_id
         self.execution_date = execution_date
         self.task = task
         self.try_number = 1
         self.unixname = getpass.getuser()
+        if job:
+            self.job_id = job.id
 
     def command(
             self,
@@ -484,13 +506,14 @@ class TaskInstance(Base):
             force=False,  # Disregards previous successes
             mark_success=False,  # Don't run the task, act as if it succeeded
             test_mode=False,  # Doesn't record success or failure in the DB
-            ):
+            job_id=None,):
         """
         Runs the task instnace.
         """
         task = self.task
         session = settings.Session()
         self.refresh_from_db(session)
+        self.job_id = job_id
         iso = datetime.now().isoformat()
         self.hostname = socket.gethostname()
 
@@ -711,7 +734,7 @@ class BaseOperator(Base):
     task_type = Column(String(20))
     start_date = Column(DateTime())
     end_date = Column(DateTime())
-    depends_on_past = Column(Integer)
+    depends_on_past = Column(Integer())
 
     __mapper_args__ = {
         'polymorphic_on': task_type,
@@ -828,7 +851,7 @@ class BaseOperator(Base):
         qry = qry.filter(TI.task_id.in_(tasks))
 
         count = qry.count()
-        qry.delete(synchronize_session='fetch')
+        clear_task_instances(qry, session)
 
         session.commit()
         session.close()
@@ -1119,12 +1142,12 @@ class DAG(Base):
                 "{ti_list}\n\n"
                 "Are you sure? (yes/no): ").format(**locals())
             if utils.ask_yesno(question):
-                tis.delete()
+                clear_task_instances(tis, session)
             else:
                 count = 0
                 print("Bail. Nothing was cleared.")
         else:
-            tis.delete()
+            clear_task_instances(tis, session)
 
         session.commit()
         session.close()

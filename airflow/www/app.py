@@ -1045,7 +1045,7 @@ class TaskInstanceModelView(ModelView):
     column_searchable_list = ('dag_id', 'task_id', 'state')
     column_list = (
         'dag_id', 'task_id', 'execution_date',
-        'start_date', 'end_date', 'duration', 'state', 'log')
+        'start_date', 'end_date', 'duration', 'state', 'job_id', 'log')
     can_delete = True
 mv = TaskInstanceModelView(
     models.TaskInstance, Session, name="Task Instances", category="Browse")
