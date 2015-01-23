@@ -42,7 +42,7 @@ class WindowedDStream[T: ClassTag](
   }
 
   // Persist parent level by default, as those RDDs are going to be obviously reused.
-  parent.persist(StorageLevel.MEMORY_ONLY_SER)
+  parent.persist(StorageLevel.MEMORY_AND_DISK_SER)
 
   def windowDuration: Duration =  _windowDuration
 

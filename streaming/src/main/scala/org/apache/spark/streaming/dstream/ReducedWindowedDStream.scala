@@ -54,9 +54,9 @@ class ReducedWindowedDStream[K: ClassTag, V: ClassTag](
   // by ReducedWindowedDStream
   val reducedStream = parent.reduceByKey(reduceFunc, partitioner)
 
-  // Persist RDDs to memory by default as these RDDs are going to be reused.
-  super.persist(StorageLevel.MEMORY_ONLY_SER)
-  reducedStream.persist(StorageLevel.MEMORY_ONLY_SER)
+  // Persist RDDs to memory and disk by default as these RDDs are going to be reused.
+  super.persist(StorageLevel.MEMORY_AND_DISK_SER)
+  reducedStream.persist(StorageLevel.MEMORY_AND_DISK_SER)
 
   def windowDuration: Duration =  _windowDuration
 
