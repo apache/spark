@@ -276,7 +276,7 @@ private[hive] object HiveShim {
     } else {
       // TODO precise, scale?
       new hiveIo.HiveDecimalWritable(
-        HiveShim.createDecimal(value.asInstanceOf[Decimal].toBigDecimal.underlying()))
+        HiveShim.createDecimal(value.asInstanceOf[Decimal].toJavaBigDecimal))
     }
 
   def getPrimitiveNullWritable: NullWritable = NullWritable.get()

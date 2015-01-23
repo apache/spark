@@ -757,12 +757,12 @@ private[spark] class ExternalSorter[K, V, C](
       }
     }
 
-    context.taskMetrics.memoryBytesSpilled += memoryBytesSpilled
-    context.taskMetrics.diskBytesSpilled += diskBytesSpilled
+    context.taskMetrics.incMemoryBytesSpilled(memoryBytesSpilled)
+    context.taskMetrics.incDiskBytesSpilled(diskBytesSpilled)
     context.taskMetrics.shuffleWriteMetrics.filter(_ => bypassMergeSort).foreach { m =>
       if (curWriteMetrics != null) {
-        m.shuffleBytesWritten += curWriteMetrics.shuffleBytesWritten
-        m.shuffleWriteTime += curWriteMetrics.shuffleWriteTime
+        m.incShuffleBytesWritten(curWriteMetrics.shuffleBytesWritten)
+        m.incShuffleWriteTime(curWriteMetrics.shuffleWriteTime)
       }
     }
 

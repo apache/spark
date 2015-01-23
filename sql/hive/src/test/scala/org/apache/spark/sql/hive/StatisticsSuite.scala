@@ -21,7 +21,7 @@ import org.scalatest.BeforeAndAfterAll
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.sql.{SQLConf, QueryTest}
+import org.apache.spark.sql.{Row, SQLConf, QueryTest}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -141,7 +141,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
         before: () => Unit,
         after: () => Unit,
         query: String,
-        expectedAnswer: Seq[Any],
+        expectedAnswer: Seq[Row],
         ct: ClassTag[_]) = {
       before()
 
@@ -183,7 +183,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
 
     /** Tests for MetastoreRelation */
     val metastoreQuery = """SELECT * FROM src a JOIN src b ON a.key = 238 AND a.key = b.key"""
-    val metastoreAnswer = Seq.fill(4)((238, "val_238", 238, "val_238"))
+    val metastoreAnswer = Seq.fill(4)(Row(238, "val_238", 238, "val_238"))
     mkTest(
       () => (),
       () => (),
@@ -197,7 +197,7 @@ class StatisticsSuite extends QueryTest with BeforeAndAfterAll {
     val leftSemiJoinQuery =
       """SELECT * FROM src a
         |left semi JOIN src b ON a.key=86 and a.key = b.key""".stripMargin
-    val answer = (86, "val_86") :: Nil
+    val answer = Row(86, "val_86")
 
     var rdd = sql(leftSemiJoinQuery)
 

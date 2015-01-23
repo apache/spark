@@ -25,15 +25,42 @@ import scala.util.parsing.input.CharArrayReader.EofCh
 
 import org.apache.spark.sql.catalyst.plans.logical._
 
+private[sql] object KeywordNormalizer {
+  def apply(str: String) = str.toLowerCase()
+}
+
 private[sql] abstract class AbstractSparkSQLParser
   extends StandardTokenParsers with PackratParsers {
 
-  def apply(input: String): LogicalPlan = phrase(start)(new lexical.Scanner(input)) match {
-    case Success(plan, _) => plan
-    case failureOrError => sys.error(failureOrError.toString)
+  def apply(input: String): LogicalPlan = {
+    // Initialize the Keywords.
+    lexical.initialize(reservedWords)
+    phrase(start)(new lexical.Scanner(input)) match {
+      case Success(plan, _) => plan
+      case failureOrError => sys.error(failureOrError.toString)
+    }
   }
 
-  protected case class Keyword(str: String)
+  protected case class Keyword(str: String) {
+    def normalize = KeywordNormalizer(str)
+    def parser: Parser[String] = normalize
+  }
+
+  protected implicit def asParser(k: Keyword): Parser[String] = k.parser
+
+  // By default, use Reflection to find the reserved words defined in the sub class.
+  // NOTICE, Since the Keyword properties defined by sub class, we couldn't call this
+  // method during the parent class instantiation, because the sub class instance
+  // isn't created yet.
+  protected lazy val reservedWords: Seq[String] =
+    this
+      .getClass
+      .getMethods
+      .filter(_.getReturnType == classOf[Keyword])
+      .map(_.invoke(this).asInstanceOf[Keyword].normalize)
+
+  // Set the keywords as empty by default, will change that later.
+  override val lexical = new SqlLexical
 
   protected def start: Parser[LogicalPlan]
 
@@ -52,17 +79,26 @@ private[sql] abstract class AbstractSparkSQLParser
   }
 }
 
-class SqlLexical(val keywords: Seq[String]) extends StdLexical {
+class SqlLexical extends StdLexical {
   case class FloatLit(chars: String) extends Token {
     override def toString = chars
   }
 
-  reserved ++= keywords.flatMap(w => allCaseVersions(w))
+  /* This is a work around to support the lazy setting */
+  def initialize(keywords: Seq[String]): Unit = {
+    reserved.clear()
+    reserved ++= keywords
+  }
 
   delimiters += (
     "@", "*", "+", "-", "<", "=", "<>", "!=", "<=", ">=", ">", "/", "(", ")",
     ",", ";", "%", "{", "}", ":", "[", "]", ".", "&", "|", "^", "~", "<=>"
   )
+
+  protected override def processIdent(name: String) = {
+    val token = KeywordNormalizer(name)
+    if (reserved contains token) Keyword(token) else Identifier(name)
+  }
 
   override lazy val token: Parser[Token] =
     ( identChar ~ (identChar | digit).* ^^
@@ -94,14 +130,5 @@ class SqlLexical(val keywords: Seq[String]) extends StdLexical {
     | '-' ~ '-' ~ chrExcept(EofCh, '\n').*
     | '/' ~ '*' ~ failure("unclosed comment")
     ).*
-
-  /** Generate all variations of upper and lower case of a given string */
-  def allCaseVersions(s: String, prefix: String = ""): Stream[String] = {
-    if (s.isEmpty) {
-      Stream(prefix)
-    } else {
-      allCaseVersions(s.tail, prefix + s.head.toLower) #:::
-        allCaseVersions(s.tail, prefix + s.head.toUpper)
-    }
-  }
 }
+

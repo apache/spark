@@ -1176,6 +1176,12 @@ abstract class RDD[T: ClassTag](
   def min()(implicit ord: Ordering[T]): T = this.reduce(ord.min)
 
   /**
+   * @return true if and only if the RDD contains no elements at all. Note that an RDD
+   *         may be empty even when it has at least 1 partition.
+   */
+  def isEmpty(): Boolean = partitions.length == 0 || take(1).length == 0
+
+  /**
    * Save this RDD as a text file, using string representations of elements.
    */
   def saveAsTextFile(path: String) {

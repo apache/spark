@@ -77,14 +77,6 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         """.children : Seq[Tree]
     }
 
-    val iteratorFunction = {
-      val allColumns = (0 until expressions.size).map { i =>
-        val iLit = ru.Literal(Constant(i))
-        q"if(isNullAt($iLit)) { null } else { ${newTermName(s"c$i")} }"
-      }
-      q"override def iterator = Iterator[Any](..$allColumns)"
-    }
-
     val accessorFailure = q"""scala.sys.error("Invalid ordinal:" + i)"""
     val applyFunction = {
       val cases = (0 until expressions.size).map { i =>
@@ -191,20 +183,26 @@ object GenerateProjection extends CodeGenerator[Seq[Expression], Projection] {
         }
       """
 
+    val allColumns = (0 until expressions.size).map { i =>
+      val iLit = ru.Literal(Constant(i))
+      q"if(isNullAt($iLit)) { null } else { ${newTermName(s"c$i")} }"
+    }
+
     val copyFunction =
-      q"""
-        override def copy() = new $genericRowType(this.toArray)
-      """
+      q"override def copy() = new $genericRowType(Array[Any](..$allColumns))"
+
+    val toSeqFunction =
+      q"override def toSeq: Seq[Any] = Seq(..$allColumns)"
 
     val classBody =
       nullFunctions ++ (
         lengthDef +:
-        iteratorFunction +:
         applyFunction +:
         updateFunction +:
         equalsFunction +:
         hashCodeFunction +:
         copyFunction +:
+        toSeqFunction +:
         (tupleElements ++ specificAccessorFunctions ++ specificMutatorFunctions))
 
     val code = q"""

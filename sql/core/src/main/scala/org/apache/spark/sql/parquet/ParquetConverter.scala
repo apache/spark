@@ -66,7 +66,7 @@ private[sql] object CatalystConverter {
 
   // TODO: consider using Array[T] for arrays to avoid boxing of primitive types
   type ArrayScalaType[T] = Seq[T]
-  type StructScalaType[T] = Seq[T]
+  type StructScalaType[T] = Row
   type MapScalaType[K, V] = Map[K, V]
 
   protected[parquet] def createConverter(

@@ -108,7 +108,7 @@ class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with Be
       val queryExecution = schemaRdd.queryExecution
 
       assertResult(expectedQueryResult.toArray, s"Wrong query result: $queryExecution") {
-        schemaRdd.collect().map(_.head).toArray
+        schemaRdd.collect().map(_(0)).toArray
       }
 
       val (readPartitions, readBatches) = schemaRdd.queryExecution.executedPlan.collect {

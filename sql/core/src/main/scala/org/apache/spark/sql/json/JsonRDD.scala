@@ -18,11 +18,10 @@
 package org.apache.spark.sql.json
 
 import java.io.StringWriter
+import java.sql.{Date, Timestamp}
 
 import scala.collection.Map
 import scala.collection.convert.Wrappers.{JMapWrapper, JListWrapper}
-import scala.math.BigDecimal
-import java.sql.{Date, Timestamp}
 
 import com.fasterxml.jackson.core.JsonProcessingException
 import com.fasterxml.jackson.core.JsonFactory
@@ -333,9 +332,9 @@ private[sql] object JsonRDD extends Logging {
     value match {
       case value: java.lang.Integer => Decimal(value)
       case value: java.lang.Long => Decimal(value)
-      case value: java.math.BigInteger => Decimal(BigDecimal(value))
+      case value: java.math.BigInteger => Decimal(new java.math.BigDecimal(value))
       case value: java.lang.Double => Decimal(value)
-      case value: java.math.BigDecimal => Decimal(BigDecimal(value))
+      case value: java.math.BigDecimal => Decimal(value)
     }
   }
 
@@ -446,7 +445,6 @@ private[sql] object JsonRDD extends Logging {
       case (FloatType, v: Float) => gen.writeNumber(v)
       case (DoubleType, v: Double) => gen.writeNumber(v)
       case (LongType, v: Long) => gen.writeNumber(v)
-      case (DecimalType(), v: scala.math.BigDecimal) => gen.writeNumber(v.bigDecimal)
       case (DecimalType(), v: java.math.BigDecimal) => gen.writeNumber(v)
       case (ByteType, v: Byte) => gen.writeNumber(v.toInt)
       case (BinaryType, v: Array[Byte]) => gen.writeBinary(v)
@@ -460,16 +458,16 @@ private[sql] object JsonRDD extends Logging {
         gen.writeEndArray()
 
       case (MapType(kv,vv, _), v: Map[_,_]) =>
-        gen.writeStartObject
+        gen.writeStartObject()
         v.foreach { p =>
           gen.writeFieldName(p._1.toString)
           valWriter(vv,p._2)
         }
-        gen.writeEndObject
+        gen.writeEndObject()
 
-      case (StructType(ty), v: Seq[_]) =>
+      case (StructType(ty), v: Row) =>
         gen.writeStartObject()
-        ty.zip(v).foreach {
+        ty.zip(v.toSeq).foreach {
           case (_, null) =>
           case (field, v) =>
             gen.writeFieldName(field.name)

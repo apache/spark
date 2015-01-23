@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, ShuffledHashJoin}
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.test.TestSQLContext.planner._
+import org.apache.spark.sql.types._
 
 class PlannerSuite extends FunSuite {
   test("unions are collapsed") {
@@ -60,19 +61,62 @@ class PlannerSuite extends FunSuite {
   }
 
   test("sizeInBytes estimation of limit operator for broadcast hash join optimization") {
+    def checkPlan(fieldTypes: Seq[DataType], newThreshold: Int): Unit = {
+      setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, newThreshold.toString)
+      val fields = fieldTypes.zipWithIndex.map {
+        case (dataType, index) => StructField(s"c${index}", dataType, true)
+      } :+ StructField("key", IntegerType, true)
+      val schema = StructType(fields)
+      val row = Row.fromSeq(Seq.fill(fields.size)(null))
+      val rowRDD = org.apache.spark.sql.test.TestSQLContext.sparkContext.parallelize(row :: Nil)
+      applySchema(rowRDD, schema).registerTempTable("testLimit")
+
+      val planned = sql(
+        """
+          |SELECT l.a, l.b
+          |FROM testData2 l JOIN (SELECT * FROM testLimit LIMIT 1) r ON (l.a = r.key)
+        """.stripMargin).queryExecution.executedPlan
+
+      val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
+      val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }
+
+      assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
+      assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
+
+      dropTempTable("testLimit")
+    }
+
     val origThreshold = conf.autoBroadcastJoinThreshold
-    setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, 81920.toString)
 
-    // Using a threshold that is definitely larger than the small testing table (b) below
-    val a = testData.as('a)
-    val b = testData.limit(3).as('b)
-    val planned = a.join(b, Inner, Some("a.key".attr === "b.key".attr)).queryExecution.executedPlan
+    val simpleTypes =
+      NullType ::
+      BooleanType ::
+      ByteType ::
+      ShortType ::
+      IntegerType ::
+      LongType ::
+      FloatType ::
+      DoubleType ::
+      DecimalType(10, 5) ::
+      DecimalType.Unlimited ::
+      DateType ::
+      TimestampType ::
+      StringType ::
+      BinaryType :: Nil
 
-    val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
-    val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }
+    checkPlan(simpleTypes, newThreshold = 16434)
 
-    assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
-    assert(shuffledHashJoins.isEmpty, "Should not use shuffled hash join")
+    val complexTypes =
+      ArrayType(DoubleType, true) ::
+      ArrayType(StringType, false) ::
+      MapType(IntegerType, StringType, true) ::
+      MapType(IntegerType, ArrayType(DoubleType), false) ::
+      StructType(Seq(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", ArrayType(DoubleType), nullable = false),
+        StructField("c", DoubleType, nullable = false))) :: Nil
+
+    checkPlan(complexTypes, newThreshold = 901617)
 
     setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, origThreshold.toString)
   }
