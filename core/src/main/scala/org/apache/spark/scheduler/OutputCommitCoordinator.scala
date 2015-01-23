@@ -93,6 +93,8 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
     if (!stopped) {
       logWarning("Expected true from stopping output coordinator actor, but got false!")
     }
+    authorizedCommittersByStage.foreach(_._2.clear)
+    authorizedCommittersByStage.clear
   }
 
   private def handleStageStart(stage: StageId): Unit = {
