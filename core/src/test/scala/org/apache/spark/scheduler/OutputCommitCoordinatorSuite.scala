@@ -137,14 +137,10 @@ class OutputCommitCoordinatorSuite
     }
 
     @throws(classOf[IOException])
-    private def writeObject(out: ObjectOutputStream) {
-      out.writeObject(accum)
-    }
+    private def writeObject(out: ObjectOutputStream) {}
 
     @throws(classOf[IOException])
-    private def readObject(in: ObjectInputStream) {
-      accum = in.readObject.asInstanceOf[Accumulator[Int]]
-    }
+    private def readObject(in: ObjectInputStream) {}
   }
 
   /**
