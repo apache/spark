@@ -1,14 +1,13 @@
 from setuptools import setup, find_packages
 import airflow
 
-# To generate install_requires from requirements.txt
-# from pip.req import parse_requirements
-# reqs = (str(ir.req) for ir in parse_requirements('requirements.txt'))
+# Kept manually in sync with airflow.__version__
+version = '0.2.1'
 
 setup(
     name='airflow',
     description='Programmatically author, schedule and monitor data pipelines',
-    version=airflow.__version__,
+    version=version,
     packages=find_packages(),
     include_package_data=True,
     zip_safe=False,
@@ -45,6 +44,5 @@ setup(
     author_email='maximebeauchemin@gmail.com',
     url='https://github.com/mistercrunch/Airflow',
     download_url=(
-        'https://github.com/mistercrunch/Airflow/tarball/' +
-        airflow.__version__),
+        'https://github.com/mistercrunch/Airflow/tarball/' + version),
 )
