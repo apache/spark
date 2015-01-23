@@ -351,7 +351,7 @@ object SparkEnv extends Logging {
     val outputCommitCoordinator = new OutputCommitCoordinator(conf)
     val outputCommitCoordinatorActor = registerOrLookup("OutputCommitCoordinator",
       OutputCommitCoordinator.createActor(outputCommitCoordinator))
-    outputCommitCoordinator.coordinatorActor = outputCommitCoordinatorActor
+    outputCommitCoordinator.coordinatorActor = Some(outputCommitCoordinatorActor)
 
     new SparkEnv(
       executorId,

@@ -53,10 +53,10 @@ private[spark] case class TaskCompleted(
 private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
 
   // Initialized by SparkEnv
-  var coordinatorActor: ActorRef = _
-  val timeout = AkkaUtils.askTimeout(conf)
-  val maxAttempts = AkkaUtils.numRetries(conf)
-  val retryInterval = AkkaUtils.retryWaitMs(conf)
+  var coordinatorActor: Option[ActorRef] = None
+  private val timeout = AkkaUtils.askTimeout(conf)
+  private val maxAttempts = AkkaUtils.numRetries(conf)
+  private val retryInterval = AkkaUtils.retryWaitMs(conf)
 
   private type StageId = Int
   private type TaskId = Long
@@ -66,18 +66,17 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
   mutable.Map[StageId, mutable.Map[TaskId, TaskAttemptId]] = mutable.HashMap()
 
   def stageStart(stage: StageId) {
-    coordinatorActor ! StageStarted(stage)
+    sendToActor(StageStarted(stage))
   }
   def stageEnd(stage: StageId) {
-    coordinatorActor ! StageEnded(stage)
+    sendToActor(StageEnded(stage))
   }
 
   def canCommit(
       stage: StageId,
       task: TaskId,
       attempt: TaskAttemptId): Boolean = {
-    AkkaUtils.askWithReply(AskPermissionToCommitOutput(stage, task, attempt),
-      coordinatorActor, maxAttempts, retryInterval, timeout)
+    askActor(AskPermissionToCommitOutput(stage, task, attempt))
   }
 
   def taskCompleted(
@@ -85,14 +84,12 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
       task: TaskId,
       attempt: TaskAttemptId,
       successful: Boolean) {
-    coordinatorActor ! TaskCompleted(stage, task, attempt, successful)
+    sendToActor(TaskCompleted(stage, task, attempt, successful))
   }
 
   def stop() {
-    val stopped = AkkaUtils.askWithReply[Boolean](StopCoordinator, coordinatorActor, timeout)
-    if (!stopped) {
-      logWarning("Expected true from stopping output coordinator actor, but got false!")
-    }
+    sendToActor(StopCoordinator)
+    coordinatorActor = None
     authorizedCommittersByStage.foreach(_._2.clear)
     authorizedCommittersByStage.clear
   }
@@ -144,6 +141,15 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
     }
   }
 
+  private def sendToActor(msg: OutputCommitCoordinationMessage) {
+    coordinatorActor.foreach(_ ! msg)
+  }
+
+  private def askActor(msg: OutputCommitCoordinationMessage): Boolean = {
+    coordinatorActor
+      .map(AkkaUtils.askWithReply[Boolean](msg, _, maxAttempts, retryInterval, timeout))
+      .getOrElse(false)
+  }
 }
 
 private[spark] object OutputCommitCoordinator {
