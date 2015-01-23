@@ -39,7 +39,7 @@ class HiveParquetSuite extends QueryTest with ParquetTest {
   test("SELECT on Parquet table") {
     val data = (1 to 4).map(i => (i, s"val_$i"))
     withParquetTable(data, "t") {
-      checkAnswer(sql("SELECT * FROM t"), data)
+      checkAnswer(sql("SELECT * FROM t"), data.map(Row.fromTuple))
     }
   }
 

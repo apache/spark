@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.util.hashing.MurmurHash3
+
 import org.apache.spark.sql.catalyst.expressions.GenericRow
 
 
@@ -32,7 +34,7 @@ object Row {
    * }
    * }}}
    */
-  def unapplySeq(row: Row): Some[Seq[Any]] = Some(row)
+  def unapplySeq(row: Row): Some[Seq[Any]] = Some(row.toSeq)
 
   /**
    * This method can be used to construct a [[Row]] with the given values.
@@ -43,6 +45,16 @@ object Row {
    * This method can be used to construct a [[Row]] from a [[Seq]] of values.
    */
   def fromSeq(values: Seq[Any]): Row = new GenericRow(values.toArray)
+
+  def fromTuple(tuple: Product): Row = fromSeq(tuple.productIterator.toSeq)
+
+  /**
+   * Merge multiple rows into a single row, one after another.
+   */
+  def merge(rows: Row*): Row = {
+    // TODO: Improve the performance of this if used in performance critical part.
+    new GenericRow(rows.flatMap(_.toSeq).toArray)
+  }
 }
 
 
@@ -103,7 +115,13 @@ object Row {
  *
  * @group row
  */
-trait Row extends Seq[Any] with Serializable {
+trait Row extends Serializable {
+  /** Number of elements in the Row. */
+  def size: Int = length
+
+  /** Number of elements in the Row. */
+  def length: Int
+
   /**
    * Returns the value at position i. If the value is null, null is returned. The following
    * is a mapping between Spark SQL types and return types:
@@ -291,12 +309,61 @@ trait Row extends Seq[Any] with Serializable {
 
   /** Returns true if there are any NULL values in this row. */
   def anyNull: Boolean = {
-    val l = length
+    val len = length
     var i = 0
-    while (i < l) {
+    while (i < len) {
       if (isNullAt(i)) { return true }
       i += 1
     }
     false
   }
+
+  override def equals(that: Any): Boolean = that match {
+    case null => false
+    case that: Row =>
+      if (this.length != that.length) {
+        return false
+      }
+      var i = 0
+      val len = this.length
+      while (i < len) {
+        if (apply(i) != that.apply(i)) {
+          return false
+        }
+        i += 1
+      }
+      true
+    case _ => false
+  }
+
+  override def hashCode: Int = {
+    // Using Scala's Seq hash code implementation.
+    var n = 0
+    var h = MurmurHash3.seqSeed
+    val len = length
+    while (n < len) {
+      h = MurmurHash3.mix(h, apply(n).##)
+      n += 1
+    }
+    MurmurHash3.finalizeHash(h, n)
+  }
+
+  /* ---------------------- utility methods for Scala ---------------------- */
+
+  /**
+   * Return a Scala Seq representing the row. ELements are placed in the same order in the Seq.
+   */
+  def toSeq: Seq[Any]
+
+  /** Displays all elements of this sequence in a string (without a separator). */
+  def mkString: String = toSeq.mkString
+
+  /** Displays all elements of this sequence in a string using a separator string. */
+  def mkString(sep: String): String = toSeq.mkString(sep)
+
+  /**
+   * Displays all elements of this traversable or iterator in a string using
+   * start, end, and separator strings.
+   */
+  def mkString(start: String, sep: String, end: String): String = toSeq.mkString(start, sep, end)
 }
