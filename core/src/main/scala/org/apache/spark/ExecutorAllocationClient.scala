@@ -23,10 +23,16 @@ package org.apache.spark
 private[spark] trait ExecutorAllocationClient {
 
   /**
-   * Request an additional number of executors from the cluster manager.
-   * Return whether the request is acknowledged by the cluster manager.
+   * Express a preference to the cluster manager for a given total number of executors. This can
+   * result in canceling pending requests or filing additional requests.
    */
-  def requestExecutors(numAdditionalExecutors: Int): Boolean
+  private[spark] def requestTotalExecutors(numExecutors: Int): Boolean
+
+  /**
+   * Request an additional number of executors from the cluster manager.
+   * This is currently only supported in YARN mode. Return whether the request is received.
+   */
+  def requestExecutors(numExecutors: Int): Boolean
 
   /**
    * Request that the cluster manager kill the specified executors.
