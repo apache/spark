@@ -22,7 +22,6 @@ import java.util.{ArrayList => JArrayList, List => JList, Map => JMap}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, Map => SMap}
-import scala.math._
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.security.UserGroupInformation
@@ -31,11 +30,11 @@ import org.apache.hive.service.cli.operation.ExecuteStatementOperation
 import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.plans.logical.SetCommand
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.{Row => SparkRow, SQLConf, SchemaRDD}
+import org.apache.spark.sql.execution.SetCommand
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.{HiveContext, HiveMetastoreTypes}
-import org.apache.spark.sql.{Row => SparkRow, SQLConf, SchemaRDD}
+import org.apache.spark.sql.types._
 
 /**
  * A compatibility layer for interacting with Hive version 0.13.1.
@@ -95,7 +94,7 @@ private[hive] class SparkExecuteStatementOperation(
       case FloatType =>
         to += from.getFloat(ordinal)
       case DecimalType() =>
-        to += from.getAs[BigDecimal](ordinal).bigDecimal
+        to += from.getDecimal(ordinal)
       case LongType =>
         to += from.getLong(ordinal)
       case ByteType =>
@@ -161,14 +160,12 @@ private[hive] class SparkExecuteStatementOperation(
       result = hiveContext.sql(statement)
       logDebug(result.queryExecution.toString())
       result.queryExecution.logical match {
-        case SetCommand(Some((SQLConf.THRIFTSERVER_POOL, Some(value)))) =>
+        case SetCommand(Some((SQLConf.THRIFTSERVER_POOL, Some(value))), _) =>
           sessionToActivePool(parentSession.getSessionHandle) = value
           logInfo(s"Setting spark.scheduler.pool=$value for future statements in this session.")
         case _ =>
       }
-
-      val groupId = round(random * 1000000).toString
-      hiveContext.sparkContext.setJobGroup(groupId, statement)
+      hiveContext.sparkContext.setJobDescription(statement)
       sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
         hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }

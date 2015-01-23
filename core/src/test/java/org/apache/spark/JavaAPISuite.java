@@ -607,6 +607,27 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void isEmpty() {
+    Assert.assertTrue(sc.emptyRDD().isEmpty());
+    Assert.assertTrue(sc.parallelize(new ArrayList<Integer>()).isEmpty());
+    Assert.assertFalse(sc.parallelize(Arrays.asList(1)).isEmpty());
+    Assert.assertTrue(sc.parallelize(Arrays.asList(1, 2, 3), 3).filter(
+        new Function<Integer,Boolean>() {
+          @Override
+          public Boolean call(Integer i) {
+            return i < 0;
+          }
+        }).isEmpty());
+    Assert.assertFalse(sc.parallelize(Arrays.asList(1, 2, 3)).filter(
+        new Function<Integer, Boolean>() {
+          @Override
+          public Boolean call(Integer i) {
+            return i > 1;
+          }
+        }).isEmpty());
+  }
+
+  @Test
   public void cartesian() {
     JavaDoubleRDD doubleRDD = sc.parallelizeDoubles(Arrays.asList(1.0, 1.0, 2.0, 3.0, 5.0, 8.0));
     JavaRDD<String> stringRDD = sc.parallelize(Arrays.asList("Hello", "World"));
@@ -820,7 +841,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void iterator() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5), 2);
-    TaskContext context = new TaskContextImpl(0, 0, 0L, false, new TaskMetrics());
+    TaskContext context = new TaskContextImpl(0, 0, 0L, 0, false, new TaskMetrics());
     Assert.assertEquals(1, rdd.iterator(rdd.partitions().get(0), context).next().intValue());
   }
 

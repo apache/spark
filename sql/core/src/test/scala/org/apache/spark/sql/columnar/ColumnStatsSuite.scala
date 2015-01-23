@@ -20,7 +20,7 @@ package org.apache.spark.sql.columnar
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 class ColumnStatsSuite extends FunSuite {
   testColumnStats(classOf[ByteColumnStats], BYTE, Row(Byte.MaxValue, Byte.MinValue, 0))
@@ -42,8 +42,8 @@ class ColumnStatsSuite extends FunSuite {
 
     test(s"$columnStatsName: empty") {
       val columnStats = columnStatsClass.newInstance()
-      columnStats.collectedStatistics.zip(initialStatistics).foreach { case (actual, expected) =>
-        assert(actual === expected)
+      columnStats.collectedStatistics.toSeq.zip(initialStatistics.toSeq).foreach {
+        case (actual, expected) => assert(actual === expected)
       }
     }
 
@@ -54,7 +54,7 @@ class ColumnStatsSuite extends FunSuite {
       val rows = Seq.fill(10)(makeRandomRow(columnType)) ++ Seq.fill(10)(makeNullRow(1))
       rows.foreach(columnStats.gatherStats(_, 0))
 
-      val values = rows.take(10).map(_.head.asInstanceOf[T#JvmType])
+      val values = rows.take(10).map(_(0).asInstanceOf[T#JvmType])
       val ordering = columnType.dataType.ordering.asInstanceOf[Ordering[T#JvmType]]
       val stats = columnStats.collectedStatistics
 

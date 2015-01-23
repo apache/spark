@@ -20,10 +20,11 @@ package org.apache.spark.mllib.clustering
 import scala.collection.mutable.IndexedSeq
 
 import breeze.linalg.{DenseVector => BreezeVector, DenseMatrix => BreezeMatrix, diag, Transpose}
-import org.apache.spark.rdd.RDD
+
 import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors, DenseVector, DenseMatrix, BLAS}
-import org.apache.spark.mllib.stat.impl.MultivariateGaussian
+import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
 /**
@@ -133,9 +134,7 @@ class GaussianMixtureEM private (
     // diagonal covariance matrices using component variances
     // derived from the samples    
     val (weights, gaussians) = initialModel match {
-      case Some(gmm) => (gmm.weight, gmm.mu.zip(gmm.sigma).map { case(mu, sigma) => 
-        new MultivariateGaussian(mu.toBreeze.toDenseVector, sigma.toBreeze.toDenseMatrix) 
-      })
+      case Some(gmm) => (gmm.weights, gmm.gaussians)
       
       case None => {
         val samples = breezeData.takeSample(withReplacement = true, k * nSamples, seed)
@@ -175,10 +174,7 @@ class GaussianMixtureEM private (
       iter += 1
     } 
     
-    // Need to convert the breeze matrices to MLlib matrices
-    val means = Array.tabulate(k) { i => Vectors.fromBreeze(gaussians(i).mu) }
-    val sigmas = Array.tabulate(k) { i => Matrices.fromBreeze(gaussians(i).sigma) }
-    new GaussianMixtureModel(weights, means, sigmas)
+    new GaussianMixtureModel(weights, gaussians)
   }
     
   /** Average of dense breeze vectors */
