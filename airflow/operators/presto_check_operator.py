@@ -35,8 +35,9 @@ class PrestoCheckOperator(BaseOperator):
 
     def execute(self, execution_date=None):
         logging.info('Executing SQL check: ' + self.sql)
-        records = self.hook.get_records(hql=self.sql)
+        records = self.hook.get_first(hql=self.sql)
         if not records:
-            return False
-        else:
-            return not any([ bool(r) for r in records[0] ])
+            raise Exception("The query returned None")
+        elif not all([bool(r) for r in records]):
+            exceptstr = "Test failed.\nQuery:\n{q}\nResults:\n{r!s}"
+            raise Exception(exceptstr.format(q=self.sql, r=records))
