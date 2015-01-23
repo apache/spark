@@ -256,6 +256,12 @@ class Analyzer(catalog: Catalog,
                 case o => o :: Nil
               }
               Alias(UnresolvedFunction(name1, newClds), name2)() :: Nil
+            case Alias(CreateArray(clds), name) if containsStar(clds) =>
+              val newClds = clds.flatMap {
+                case s: Star => s.expand(child.output, resolver)
+                case o => o :: Nil
+              }
+              Alias(CreateArray(newClds), name)() :: Nil
             case o => o :: Nil
           },
           child)
