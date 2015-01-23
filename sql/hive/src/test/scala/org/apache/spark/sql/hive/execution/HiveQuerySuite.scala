@@ -508,6 +508,16 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(sql("select key from src having key > 490").collect().size < 100)
   }
 
+  test("support multi names for alias") {
+    sql("select key as (k1, k2), value as (v1, v2) from src limit 5").collect()
+    sql("select k1, k2 from (select key as (k1, k2), value as (v1, v2) from src) t limit 5")
+      .collect()
+      .foreach { row =>
+      assert(row.getInt(0) == row.getInt(1))
+    }
+
+  }
+
   test("Query Hive native command execution result") {
     val tableName = "test_native_commands"
 

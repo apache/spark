@@ -30,6 +30,9 @@ package object analysis {
    */
   type Resolver = (String, String) => Boolean
 
-  val caseInsensitiveResolution = (a: String, b: String) => a.equalsIgnoreCase(b)
-  val caseSensitiveResolution = (a: String, b: String) => a == b
+  val caseInsensitiveResolution = (a: String, b: String) =>
+    a.split("\\|").exists(_.equalsIgnoreCase(b)) || b.split("\\|").exists(_.equalsIgnoreCase(a))
+
+  val caseSensitiveResolution = (a: String, b: String) =>
+    a.split("\\|").exists(_ == b) || b.split("\\|").exists(_.equalsIgnoreCase(a))
 }
