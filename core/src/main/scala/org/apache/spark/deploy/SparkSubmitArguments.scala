@@ -22,8 +22,8 @@ import java.util.jar.JarFile
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
+import org.apache.spark.deploy.SparkSubmitAction.SparkSubmitAction
 import org.apache.spark.util.Utils
-import org.apache.spark.deploy.Action.Action
 
 /**
  * Parses and encapsulates arguments from the spark-submit script.
@@ -60,11 +60,11 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var driverToKill: String = null
   var driverToRequestStatusFor: String = null
 
-  def action: Action = {
+  def action: SparkSubmitAction = {
     (driverToKill, driverToRequestStatusFor) match {
-      case (null, null) => Action.SUBMIT
-      case (_, null) => Action.KILL
-      case (null, _) => Action.REQUEST_STATUS
+      case (null, null) => SparkSubmitAction.SUBMIT
+      case (_, null) => SparkSubmitAction.KILL
+      case (null, _) => SparkSubmitAction.REQUEST_STATUS
       case _ => SparkSubmit.printErrorAndExit(
         "Requested to both kill and request status for a driver. Choose only one.")
         null // never reached
@@ -189,9 +189,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   /** Ensure that required fields exists. Call this only once all defaults are loaded. */
   private def validateArguments(): Unit = {
     action match {
-      case Action.SUBMIT => validateSubmitArguments()
-      case Action.KILL => validateKillArguments()
-      case Action.REQUEST_STATUS => validateStatusRequestArguments()
+      case SparkSubmitAction.SUBMIT => validateSubmitArguments()
+      case SparkSubmitAction.KILL => validateKillArguments()
+      case SparkSubmitAction.REQUEST_STATUS => validateStatusRequestArguments()
     }
   }
 

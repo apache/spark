@@ -31,8 +31,8 @@ import org.apache.spark.deploy.rest.StandaloneRestClient
  * Whether to submit, kill, or request the status of an application.
  * The latter two operations are currently supported only for standalone cluster mode.
  */
-private[spark] object Action extends Enumeration {
-  type Action = Value
+private[spark] object SparkSubmitAction extends Enumeration {
+  type SparkSubmitAction = Value
   val SUBMIT, KILL, REQUEST_STATUS = Value
 }
 
@@ -82,9 +82,9 @@ object SparkSubmit {
       printStream.println(appArgs)
     }
     appArgs.action match {
-      case Action.SUBMIT => submit(appArgs)
-      case Action.KILL => kill(appArgs)
-      case Action.REQUEST_STATUS => requestStatus(appArgs)
+      case SparkSubmitAction.SUBMIT => submit(appArgs)
+      case SparkSubmitAction.KILL => kill(appArgs)
+      case SparkSubmitAction.REQUEST_STATUS => requestStatus(appArgs)
     }
   }
 
