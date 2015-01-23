@@ -204,7 +204,7 @@ Updating vertex[2] from 0.2777777777777778 to 0.29803684040501227
 
   def gaussianDist(c1arr: DVector, c2arr: DVector, sigma: Double) = {
     val c1c2 = c1arr.zip(c2arr)
-    val dist = Math.exp((0.5 / Math.pow(sigma, 2.0)) * c1c2.foldLeft(0.0) {
+    val dist = Math.exp((-0.5 / Math.pow(sigma, 2.0)) * c1c2.foldLeft(0.0) {
       case (dist: Double, (c1: Double, c2: Double)) =>
         dist + Math.pow(c1 - c2, 2)
     })
@@ -246,12 +246,15 @@ Updating vertex[2] from 0.2777777777777778 to 0.29803684040501227
         (ix, vect)
       }
     }, nVertices)
+    println(s"Affinity:\n${LA.printMatrix(affinityRddNotNorm.collect.map(_._2._2),
+      nVertices, nVertices)}")
     val materializedRowSums = rowSums.map{ _.value}
     val affinityRdd = affinityRddNotNorm.map { case (rowx, (vid, vect)) =>
       (vid, vect.map {
         _ / materializedRowSums(rowx)
       })
     }
+    println(s"W:\n${LA.printMatrix(affinityRdd.collect.map(_._2), nVertices, nVertices)}")
     (affinityRdd, materializedRowSums)
   }
 

@@ -125,15 +125,23 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
   }
   def concentricCirclesTest() = {
     val sigma = 1.0
-    val nIterations = 20
+    val nIterations = 50
     val nClusters = 3
     val circleSpecs = Seq(
-      CircleSpec(Point(0.0,0.0), 0.2, .1, 4),
-      CircleSpec(Point(0.0,0.0), 1.0, .1, 8),
-      CircleSpec(Point(0.0,0.0), 2.0, .1, 16)
-//      CircleSpec(Point(0.0,0.0), 0.2, .1, 5),
+    // Best results for 30 points
+      CircleSpec(Point(0.0,0.0), 0.03, .1, 3),
+      CircleSpec(Point(0.0,0.0), 0.3, .03, 12),
+      CircleSpec(Point(0.0,0.0), 1.0, .01, 15)
+
+    // DECENT
+//      CircleSpec(Point(0.0,0.0), 0.1, .1, 5),
 //      CircleSpec(Point(0.0,0.0), 1.0, .1, 15),
-//      CircleSpec(Point(0.0,0.0), 2.0, .1, 30)
+//      CircleSpec(Point(0.0,0.0), 2.5, .1, 30)
+
+    // GOOD but big (90 points)
+//      CircleSpec(Point(0.0,0.0), 0.1, .1, 5),
+//      CircleSpec(Point(0.0,0.0), 1.0, .03, 25),
+//      CircleSpec(Point(0.0,0.0), 2.5, .01, 60)
     )
     withSpark { sc =>
       val vertices = createConcentricCirclesData(circleSpecs).zipWithIndex.map { case (p, ix) =>
@@ -174,8 +182,10 @@ object PIClusteringSuite {
   val LA = PICLinalg
   val A = Array
 
+  def pdoub(d: Double) = f"$d%1.6f"
+
   case class Point(x: Double, y: Double) {
-    override def toString() = s"($x,$y)"
+    override def toString() = s"(${pdoub(x)},${pdoub(y)})"
   }
   case class CircleSpec(center: Point, radius: Double, noiseToRadiusRatio: Double,
                         nPoints: Int, uniformDistOnCircle: Boolean = true)
@@ -192,13 +202,13 @@ object PIClusteringSuite {
       circlePoints
     }
     val points = circles.flatten
-    printPoints(points)
+    println(printPoints(points))
     points
   }
 
   def printPoints(points: Seq[Point]) = {
     val sorted = points.sortWith { case (p1, p2) =>
-      if (p1.y == p2.y) {
+      if (LA.withinTol(p1.y-p2.y)) {
         p1.x <= p2.x
       } else {
         p1.y >= p2.y
