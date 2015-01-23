@@ -782,6 +782,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       kClass: Class[K],
       vClass: Class[V],
       conf: Configuration = hadoopConfiguration): RDD[(K, V)] = {
+    // mapreduce.Job (NewHadoopJob) merges any credentials for you.
     val job = new NewHadoopJob(conf)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updatedConf = job.getConfiguration
@@ -802,7 +803,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V]): RDD[(K, V)] = {
-    new NewHadoopRDD(this, fClass, kClass, vClass, conf)
+    // Add necessary security credentials to the JobConf. Required to access secure HDFS.
+    val jconf = new JobConf(conf)
+    SparkHadoopUtil.get.addCredentials(jconf)
+    new NewHadoopRDD(this, fClass, kClass, vClass, jconf)
   }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
