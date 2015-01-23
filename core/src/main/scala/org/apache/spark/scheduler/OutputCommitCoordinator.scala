@@ -25,7 +25,7 @@ import akka.actor.{PoisonPill, ActorRef, Actor}
 import org.apache.spark.Logging
 import org.apache.spark.util.{AkkaUtils, ActorLogReceive}
 
-private[spark] sealed trait OutputCommitCoordinationMessage
+private[spark] sealed trait OutputCommitCoordinationMessage extends Serializable
 
 private[spark] case class StageStarted(stage: Int) extends OutputCommitCoordinationMessage
 private[spark] case class StageEnded(stage: Int) extends OutputCommitCoordinationMessage
@@ -54,13 +54,13 @@ private[spark] class OutputCommitCoordinator extends Logging {
   // Initialized by SparkEnv
   var coordinatorActor: ActorRef = _
 
-  // TODO: handling stage attempt ids?
   private type StageId = Int
   private type TaskId = Long
   private type TaskAttemptId = Long
 
   private val authorizedCommittersByStage:
   mutable.Map[StageId, mutable.Map[TaskId, TaskAttemptId]] = mutable.HashMap()
+
 
   def stageStart(stage: StageId) {
     coordinatorActor ! StageStarted(stage)
@@ -102,7 +102,6 @@ private[spark] class OutputCommitCoordinator extends Logging {
   }
 
   private def handleStageStart(stage: StageId): Unit = {
-    // TODO: assert that we're not overwriting an existing entry?
     authorizedCommittersByStage(stage) = mutable.HashMap[TaskId, TaskAttemptId]()
   }
 
