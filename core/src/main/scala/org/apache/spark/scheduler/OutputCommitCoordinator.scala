@@ -22,13 +22,14 @@ import scala.concurrent.duration.FiniteDuration
 
 import akka.actor.{PoisonPill, ActorRef, Actor}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.util.{AkkaUtils, ActorLogReceive}
 
 private[spark] sealed trait OutputCommitCoordinationMessage extends Serializable
 
 private[spark] case class StageStarted(stage: Int) extends OutputCommitCoordinationMessage
 private[spark] case class StageEnded(stage: Int) extends OutputCommitCoordinationMessage
+private[spark] case object StopCoordinator extends OutputCommitCoordinationMessage
 
 private[spark] case class AskPermissionToCommitOutput(
     stage: Int,
@@ -49,10 +50,13 @@ private[spark] case class TaskCompleted(
  * This lives on the driver, but the actor allows the tasks that commit
  * to Hadoop to invoke it.
  */
-private[spark] class OutputCommitCoordinator extends Logging {
+private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
 
   // Initialized by SparkEnv
   var coordinatorActor: ActorRef = _
+  val timeout = AkkaUtils.askTimeout(conf)
+  val maxAttempts = AkkaUtils.numRetries(conf)
+  val retryInterval = AkkaUtils.retryWaitMs(conf)
 
   private type StageId = Int
   private type TaskId = Long
@@ -60,7 +64,6 @@ private[spark] class OutputCommitCoordinator extends Logging {
 
   private val authorizedCommittersByStage:
   mutable.Map[StageId, mutable.Map[TaskId, TaskAttemptId]] = mutable.HashMap()
-
 
   def stageStart(stage: StageId) {
     coordinatorActor ! StageStarted(stage)
@@ -72,21 +75,9 @@ private[spark] class OutputCommitCoordinator extends Logging {
   def canCommit(
       stage: StageId,
       task: TaskId,
-      attempt: TaskAttemptId,
-      timeout: FiniteDuration): Boolean = {
+      attempt: TaskAttemptId): Boolean = {
     AkkaUtils.askWithReply(AskPermissionToCommitOutput(stage, task, attempt),
-      coordinatorActor, timeout)
-  }
-
-  def canCommit(
-      stage: StageId,
-      task: TaskId,
-      attempt: TaskAttemptId,
-      maxAttempts: Int,
-      retryInterval: Int,
-      timeout: FiniteDuration): Boolean = {
-    AkkaUtils.askWithReply(AskPermissionToCommitOutput(stage, task, attempt),
-        coordinatorActor, maxAttempts = maxAttempts, retryInterval, timeout)
+      coordinatorActor, maxAttempts, retryInterval, timeout)
   }
 
   def taskCompleted(
@@ -98,7 +89,10 @@ private[spark] class OutputCommitCoordinator extends Logging {
   }
 
   def stop() {
-    coordinatorActor ! PoisonPill
+    val stopped = AkkaUtils.askWithReply[Boolean](StopCoordinator, coordinatorActor, timeout)
+    if (!stopped) {
+      logWarning("Expected true from stopping output coordinator actor, but got false!")
+    }
   }
 
   private def handleStageStart(stage: StageId): Unit = {
@@ -147,6 +141,7 @@ private[spark] class OutputCommitCoordinator extends Logging {
       authorizedCommitters.remove(task)
     }
   }
+
 }
 
 private[spark] object OutputCommitCoordinator {
@@ -163,11 +158,13 @@ private[spark] object OutputCommitCoordinator {
         sender ! outputCommitCoordinator.handleAskPermissionToCommit(stage, task, taskAttempt)
       case TaskCompleted(stage, task, attempt, successful) =>
         outputCommitCoordinator.handleTaskCompletion(stage, task, attempt, successful)
+      case StopCoordinator =>
+        logInfo("OutputCommitCoordinator stopped!")
+        context.stop(self)
+        sender ! true
     }
   }
   def createActor(coordinator: OutputCommitCoordinator): OutputCommitCoordinatorActor = {
     new OutputCommitCoordinatorActor(coordinator)
   }
 }
-
-

@@ -348,7 +348,7 @@ object SparkEnv extends Logging {
         "levels using the RDD.persist() method instead.")
     }
 
-    val outputCommitCoordinator = new OutputCommitCoordinator
+    val outputCommitCoordinator = new OutputCommitCoordinator(conf)
     val outputCommitCoordinatorActor = registerOrLookup("OutputCommitCoordinator",
       OutputCommitCoordinator.createActor(outputCommitCoordinator))
     outputCommitCoordinator.coordinatorActor = outputCommitCoordinatorActor

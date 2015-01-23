@@ -109,11 +109,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
     if (cmtr.needsTaskCommit(taCtxt)) {
       val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
       val conf = SparkEnv.get.conf
-      val timeout = AkkaUtils.askTimeout(conf)
-      val maxAttempts = AkkaUtils.numRetries(conf)
-      val retryInterval = AkkaUtils.retryWaitMs(conf)
-      val canCommit: Boolean = outputCommitCoordinator.canCommit(jobID, splitID, attemptID,
-        maxAttempts, retryInterval, timeout)
+      val canCommit: Boolean = outputCommitCoordinator.canCommit(jobID, splitID, attemptID)
       if (canCommit) {
         try {
           cmtr.commitTask(taCtxt)
