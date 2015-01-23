@@ -152,7 +152,7 @@ class SqlParser extends AbstractSparkSQLParser {
 
   protected lazy val projection: Parser[Expression] =
     expression ~ (AS.? ~> ident.?) ^^ {
-      case e ~ a => a.fold(e)(x => Alias(e, Seq(x))())
+      case e ~ a => a.fold(e)(name => Alias(e, Seq(name))())
     }
 
   // Based very loosely on the MySQL Grammar.
