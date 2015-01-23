@@ -17,26 +17,20 @@
 package org.apache.spark.graphx;
 
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.graphx.api.java.JavaEdgeRDD;
 import org.apache.spark.graphx.api.java.JavaVertexRDD;
-import org.apache.spark.rdd.RDD;
-import org.apache.spark.storage.StorageLevel;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import scala.Array;
-import scala.Function1;
 import scala.Tuple2;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
 
 import java.io.Serializable;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 

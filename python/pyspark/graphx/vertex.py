@@ -88,33 +88,30 @@ class VertexRDD(object):
         self.persist(StorageLevel.MEMORY_ONLY_SER)
         return self
 
-    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
-        self.is_cached = True
-        java_storage_level = self.ctx._getJavaStorageLevel(storageLevel)
-        self.jvertex_rdd.persist(java_storage_level)
-        return self
-
-    def unpersist(self, blocking = False):
-        self.is_cached = False
-        self.jvertex_rdd.unpersist(blocking)
-        return self
-
     def checkpoint(self):
         self.is_checkpointed = True
         self.jvertex_rdd.checkpoint()
+
+    def count(self):
+        return self.jvertex_rdd.count()
+
+    def diff(self, other, numPartitions=2):
+        """
+        Hides vertices that are the same between `this` and `other`.
+        For vertices that are different, keeps the values from `other`.
+
+        TODO: give an example
+        """
+        if (isinstance(other, RDD)):
+            vs = self.map(lambda (k, v): (k, (1, v)))
+            ws = other.map(lambda (k, v): (k, (2, v)))
+        return vs.union(ws).groupByKey(numPartitions).mapValues(lambda x: x.diff(x.__iter__()))
 
     def isCheckpointed(self):
         """
         Return whether this RDD has been checkpointed or not
         """
-        return self.jvertex_rdd.isCheckpointed()
-
-    def count(self):
-        return self.jvertex_rdd.count()
-
-    # TODO: This is a hack. take() must call JavaVertexRDD.take()
-    def take(self, num=10):
-        return self.jrdd.take(num)
+        return self.is_checkpointed
 
     def mapValues(self, f, preserves_partitioning=False):
         """
@@ -130,11 +127,27 @@ class VertexRDD(object):
             return itertools.imap(lambda (k, v): (k, f(v)), iterator)
         return PipelinedVertexRDD(self, func, preserves_partitioning)
 
+    def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
+        self.is_cached = True
+        java_storage_level = self.ctx._getJavaStorageLevel(storageLevel)
+        self.jvertex_rdd.persist(java_storage_level)
+        return self
+
+    # TODO: This is a hack. take() must call JavaVertexRDD.take()
+    def take(self, num=10):
+        return self.jrdd.take(num)
+
+    def unpersist(self, blocking = False):
+        self.is_cached = False
+        self.jvertex_rdd.unpersist(blocking)
+        return self
+
     def mapVertexPartitions(self, f, preserve_partitioning=False):
         def func(s, iterator):
             return f(iterator)
         return PipelinedVertexRDD(self, func, preserve_partitioning)
 
+    # TODO
     def filter(self, f):
         """
         Return a new vertex RDD containing only the elements that satisfy a predicate.
@@ -144,19 +157,7 @@ class VertexRDD(object):
         >>> vertices.filter(lambda x: x._1 % 2 == 0).collect()
         [2]
         """
-        return self.jrdd.filter(f)
-
-    def diff(self, other, numPartitions=2):
-        """
-        Hides vertices that are the same between `this` and `other`.
-        For vertices that are different, keeps the values from `other`.
-
-        TODO: give an example
-        """
-        if (isinstance(other, RDD)):
-            vs = self.map(lambda (k, v): (k, (1, v)))
-            ws = other.map(lambda (k, v): (k, (2, v)))
-        return vs.union(ws).groupByKey(numPartitions).mapValues(lambda x: x.diff(x.__iter__()))
+        return self.jvertex_rdd.filter(f)
 
     def leftJoin(self, other, numPartitions=None):
         def dispatch(seq):
@@ -174,20 +175,13 @@ class VertexRDD(object):
         return vs.union(ws).groupByKey(numPartitions)\
                 .flatMapValues(lambda x: dispatch(x.__iter__()))
 
-    def innerJoin(self, other, numPartitions=None):
-        def dispatch(seq):
-            vbuf, wbuf = [], []
-            for (n, v) in seq:
-                if n == 1:
-                    vbuf.append(v)
-                    vbuf.append(v)
-                elif n == 2:
-                    wbuf.append(v)
-            return [(v, w) for v in vbuf for w in wbuf]
-        vs = self.mapValues(lambda (k, v): (k, (1, v)))
-        ws = other.mapValues(lambda (k, v): (k, (2, v)))
-        return vs.union(ws).groupByKey(numPartitions).\
-            flatMapValues(lambda x: dispatch(x.__iter__()))
+    # TODO: The best way to do an innerJoin on vertex RDDs is to use the optimized inner
+    # TODO: technique defined in VertexRDDImpl. This solution does not scale
+    def innerJoin(self, other):
+        return self.jrdd.join(other.jrdd)
+
+    def leftJoin(self, other, numPartitions=None):
+        return self.jrdd.leftOuterJoin(other.jrdd, numPartitions)
 
     def collect(self):
         """
