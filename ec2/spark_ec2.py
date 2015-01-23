@@ -347,9 +347,12 @@ def get_spark_ami(opts):
 # Returns a tuple of EC2 reservation objects for the master and slaves
 # Fails if there already instances running in the cluster's groups.
 def launch_cluster(conn, opts, cluster_name):
-    if opts.identity_file is None or \
-       not os.path.exists(opts.identity_file):
+    if opts.identity_file is None:
         print >> stderr, "ERROR: Must provide an identity file (-i) for ssh connections."
+        sys.exit(1)
+
+    if not os.path.exists(opts.identify_file):
+        print >> stderr, "ERROR: The identity file(%s) doesn't exist." % opts.identity_file
         sys.exit(1)
 
     if oct(os.stat(opts.identity_file).st_mode)[-3:] != "600":
