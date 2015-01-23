@@ -19,6 +19,7 @@ package org.apache.spark.mllib.clustering
 
 import org.apache.spark.SparkContext
 import org.apache.spark.graphx._
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.rdd.RDD
 
 /**
@@ -59,7 +60,12 @@ object PIClustering {
     val edgesRdd = createSparseEdgesRdd(sc, wRdd, minAffinity)
 
     val G = createGraphFromEdges(sc, edgesRdd, points.size, Some(initialVt))
-    getPrincipalEigen(sc, G)
+    val (gUpdated, lambda, vt) = getPrincipalEigen(sc, G)
+    // TODO: avoid local collect and then sc.parallelize.
+    val localVect = vt.map{Vectors.dense(_)}
+    val vectRdd = sc.parallelize(localVect)
+    val model =  KMeans.train(vectRdd, 3, 10)
+    (model, gUpdated, lambda, vt)
   }
 
   /*
@@ -219,7 +225,7 @@ Updating vertex[2] from 0.2777777777777778 to 0.29803684040501227
   def createNormalizedAffinityMatrix(sc: SparkContext, points: Points, sigma: Double) = {
     val nVertices = points.length
     val rowSums = for (bcx <- 0 until nVertices)
-    yield sc.accumulator[Double](bcx, s"ColCounts$bcx")
+        yield sc.accumulator[Double](bcx, s"ColCounts$bcx")
     val affinityRddNotNorm = sc.parallelize({
       val ivect = new Array[IndexedVector](nVertices)
       var rsum = 0.0
@@ -240,14 +246,13 @@ Updating vertex[2] from 0.2777777777777778 to 0.29803684040501227
         (ix, vect)
       }
     }, nVertices)
+    val materializedRowSums = rowSums.map{ _.value}
     val affinityRdd = affinityRddNotNorm.map { case (rowx, (vid, vect)) =>
       (vid, vect.map {
-        _ / rowSums(rowx).value
+        _ / materializedRowSums(rowx)
       })
     }
-    (affinityRdd, rowSums.map {
-      _.value
-    })
+    (affinityRdd, materializedRowSums)
   }
 
   def norm(vect: DVector): Double = {

@@ -126,6 +126,8 @@ object PICLinalg {
       "         ".substring(0, len - Math.min(len, s.length)) + s
     }
 
+    assert(darr.size == numRows * numCols,
+      s"Input array is not correct length (${darr.length}) given #rows/cols=$numRows/$numCols")
     for (r <- 0 until numRows) {
       for (c <- 0 until numCols) {
         sb.append(leftJust(f"${darr(r * stride + c)}%.6f", 9) + " ")
