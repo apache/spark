@@ -1,5 +1,13 @@
 # Methods to call into SparkRBackend. 
 
+
+# Returns TRUE if object is an instance of given class
+isInstanceOf <- function(jobj, className) {
+  stopifnot(class(jobj) == "jobj")
+  cls <- SparkR:::callJStatic("java.lang.Class", "forName", className)
+  SparkR:::callJMethod(cls, "isInstance", jobj)
+}
+
 # Call a Java method named methodName on the object
 # specified by objId. objId should be a "jobj" returned
 # from the SparkRBackend.

@@ -30,6 +30,12 @@ jobj <- function(objId) {
   obj
 }
 
+print.jobj <- function(jobj) {
+  cls <- callJMethod(jobj, "getClass")
+  name <- callJMethod(cls, "getName")
+  cat("Java ref type", name, "id", jobj$id, "\n", sep=" ")
+}
+
 cleanup.jobj <- function(e) {
   objId <- e$id
   .validJobjs[[objId]] <- .validJobjs[[objId]] - 1

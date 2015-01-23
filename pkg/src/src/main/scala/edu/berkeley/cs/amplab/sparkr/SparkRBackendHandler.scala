@@ -191,7 +191,7 @@ object JavaObjectTracker {
   }
 
   def put(obj: Object): String = {
-    val objId = obj.getClass().getName() + "@" + objCounter
+    val objId = objCounter.toString
     objCounter = objCounter + 1
     objMap.put(objId, obj)
     objId

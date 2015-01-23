@@ -20,7 +20,7 @@ convertJListToRList <- function(jList, flatten, logicalUpperBound = NULL, serial
 
              # Assume it is either an R object or a Java obj ref.
              if (inherits(obj, "jobj")) {
-               if (grepl("scala.Tuple2", obj$id)) {
+               if (isInstanceOf(obj, "scala.Tuple2")) {
                  # JavaPairRDD[Array[Byte], Array[Byte]].
 
                  keyBytes = callJMethod(obj, "_1")
