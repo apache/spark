@@ -185,4 +185,22 @@ class EventLoopSuite extends FunSuite with Timeouts {
     }
     assert(false === eventLoop.isActive)
   }
+
+  test("EventLoop: stop in eventThread") {
+    val eventLoop = new EventLoop[Int]("test") {
+
+      override def onReceive(event: Int): Unit = {
+        stop()
+      }
+
+      override def onError(e: Throwable): Unit = {
+      }
+
+    }
+    eventLoop.start()
+    eventLoop.post(1)
+    eventually(timeout(5 seconds), interval(200 millis)) {
+      assert(!eventLoop.isActive)
+    }
+  }
 }
