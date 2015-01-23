@@ -503,6 +503,18 @@ trait HiveTypeCoercion {
       // Hive lets you do aggregation of timestamps... for some reason
       case Sum(e @ TimestampType()) => Sum(Cast(e, DoubleType))
       case Average(e @ TimestampType()) => Average(Cast(e, DoubleType))
+
+      case Coalesce(es) if es.map(_.dataType).distinct.size > 1 =>
+        val dt: Option[DataType] = Some(NullType)
+        val rt = es.map(_.dataType).foldLeft(dt)((r, c) => if (r != None) {
+          findTightestCommonType(r.get, c)
+        } else {
+          None
+        })
+        rt match {
+          case Some(ddt) => Coalesce(es.map(Cast(_, ddt)))
+          case None => sys.error("Cannot do type coercion over coalesce")
+        }
     }
   }
 
