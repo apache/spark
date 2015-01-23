@@ -113,22 +113,24 @@ private[sql] object DataSourceStrategy extends Strategy {
   }
 
   protected[sql] def selectFilters(filters: Seq[Expression]): Seq[Filter] = filters.collect {
-    case expressions.EqualTo(a: Attribute, Literal(v, _)) => EqualTo(a.name, v)
-    case expressions.EqualTo(Literal(v, _), a: Attribute) => EqualTo(a.name, v)
+    case expressions.EqualTo(a: Attribute, expressions.Literal(v, _)) => EqualTo(a.name, v)
+    case expressions.EqualTo(expressions.Literal(v, _), a: Attribute) => EqualTo(a.name, v)
 
-    case expressions.GreaterThan(a: Attribute, Literal(v, _)) => GreaterThan(a.name, v)
-    case expressions.GreaterThan(Literal(v, _), a: Attribute) => LessThan(a.name, v)
+    case expressions.GreaterThan(a: Attribute, expressions.Literal(v, _)) => GreaterThan(a.name, v)
+    case expressions.GreaterThan(expressions.Literal(v, _), a: Attribute) => LessThan(a.name, v)
 
-    case expressions.LessThan(a: Attribute, Literal(v, _)) => LessThan(a.name, v)
-    case expressions.LessThan(Literal(v, _), a: Attribute) => GreaterThan(a.name, v)
+    case expressions.LessThan(a: Attribute, expressions.Literal(v, _)) => LessThan(a.name, v)
+    case expressions.LessThan(expressions.Literal(v, _), a: Attribute) => GreaterThan(a.name, v)
 
-    case expressions.GreaterThanOrEqual(a: Attribute, Literal(v, _)) =>
+    case expressions.GreaterThanOrEqual(a: Attribute, expressions.Literal(v, _)) =>
       GreaterThanOrEqual(a.name, v)
-    case expressions.GreaterThanOrEqual(Literal(v, _), a: Attribute) =>
+    case expressions.GreaterThanOrEqual(expressions.Literal(v, _), a: Attribute) =>
       LessThanOrEqual(a.name, v)
 
-    case expressions.LessThanOrEqual(a: Attribute, Literal(v, _)) => LessThanOrEqual(a.name, v)
-    case expressions.LessThanOrEqual(Literal(v, _), a: Attribute) => GreaterThanOrEqual(a.name, v)
+    case expressions.LessThanOrEqual(a: Attribute, expressions.Literal(v, _)) =>
+      LessThanOrEqual(a.name, v)
+    case expressions.LessThanOrEqual(expressions.Literal(v, _), a: Attribute) =>
+      GreaterThanOrEqual(a.name, v)
 
     case expressions.InSet(a: Attribute, set) => In(a.name, set.toArray)
   }

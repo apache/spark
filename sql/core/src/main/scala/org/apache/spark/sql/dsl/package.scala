@@ -98,11 +98,27 @@ package object dsl {
     val argsInUdf = (1 to x).map(i => s"arg$i.expr").mkString(", ")
     println(s"""
     /**
-     * Register a Scala closure of ${x} arguments as user-defined function (UDF).
+     * Call a Scala function of ${x} arguments as user-defined function (UDF), and automatically
+     * infer the data types based on the function's signature.
      */
     def callUDF[$typeTags](f: Function$x[$types]${if (args.length > 0) ", " + args else ""}): Column = {
       ScalaUdf(f, ScalaReflection.schemaFor(typeTag[RT]).dataType, Seq($argsInUdf))
     }""")
+  }
+
+  (0 to 22).map { x =>
+    val args = (1 to x).map(i => s"arg$i: Column").mkString(", ")
+    val fTypes = Seq.fill(x + 1)("_").mkString(", ")
+    val argsInUdf = (1 to x).map(i => s"arg$i.expr").mkString(", ")
+    println(s"""
+    /**
+     * Call a Scala function of ${x} arguments as user-defined function (UDF). This requires
+     * you to specify the return data type.
+     */
+    def callUDF(f: Function$x[$fTypes], returnType: DataType${if (args.length > 0) ", " + args else ""}): Column = {
+      ScalaUdf(f, returnType, Seq($argsInUdf))
+    }""")
+  }
   }
   */
   /**
