@@ -19,10 +19,10 @@ package org.apache.spark.mllib.classification
 
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.scalatest.FunSuite
 
-class ANNClassifierSuite extends FunSuite with LocalSparkContext {
+class ANNClassifierSuite extends FunSuite with MLlibTestSparkContext {
 
   test("ANN classifier test for XOR"){
     val inputs = Array[Array[Double]](
