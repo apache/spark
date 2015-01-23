@@ -129,11 +129,11 @@ class HiveHook(BaseHook):
         if sp.returncode:
             raise Exception(all_err)
 
-    def max_partition(self, schema, table_name):
+    def get_partitions(self, schema, table_name):
         '''
-        Returns the maximum value for all partitions in a table. Works only
-        for tables that have a single partition key. For subpartitionned
-        table, we recommend using signal tables.
+        Returns a list of all partitions in a table. Works only
+        for tables with less than 32767 (java short max val).
+        For subpartitionned table, the number might easily exceed this.
         '''
         self.hive._oprot.trans.open()
         table = self.hive.get_table(dbname=schema, tbl_name=table_name)
@@ -148,4 +148,12 @@ class HiveHook(BaseHook):
                 db_name=schema, tbl_name=table_name, max_parts=32767)
 
             self.hive._oprot.trans.close()
-            return max([p.values[0] for p in parts])
+            return [p.values[0] for p in parts]
+
+    def max_partition(self, schema, table_name):
+        '''
+        Returns the maximum value for all partitions in a table. Works only
+        for tables that have a single partition key. For subpartitionned
+        table, we recommend using signal tables.
+        '''
+        return max(self.get_partitions(schema, table_name))
