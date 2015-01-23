@@ -25,16 +25,24 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
  * @param input the set of expression that should be passed to the script.
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
+ * @param ioschema the input and output schema applied in the execution of the script.
  */
 case class ScriptTransformation(
     input: Seq[Expression],
     script: String,
     output: Seq[Attribute],
     child: LogicalPlan,
-    inputFormat: Seq[(String, String)],
-    outputFormat: Seq[(String, String)],
+    ioschema: ScriptInputOutputSchema) extends UnaryNode
+
+/**
+ * The wrapper class of input and output schema properties for transforming with script.
+ *
+ */
+case class ScriptInputOutputSchema(
+    inputRowFormat: Seq[(String, String)],
+    outputRowFormat: Seq[(String, String)],
     inputSerdeClass: String,
     outputSerdeClass: String,
     inputSerdeProps: Seq[(String, String)],
     outputSerdeProps: Seq[(String, String)],
-    schemaLess: Boolean) extends UnaryNode
+    schemaLess: Boolean)

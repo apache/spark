@@ -165,13 +165,9 @@ private[hive] trait HiveStrategies {
 
   object Scripts extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.ScriptTransformation(input, script, output, child,
-        inputFormat, outputFormat, inputSerdeClass, outputSerdeClass,
-        inputSerdeProps, outputSerdeProps, schemaLess) =>
+      case logical.ScriptTransformation(input, script, output, child, schema) =>
           ScriptTransformation(input, script, output,
-            planLater(child), inputFormat, outputFormat,
-            inputSerdeClass, outputSerdeClass, inputSerdeProps,
-            outputSerdeProps, schemaLess)(hiveContext) :: Nil
+            planLater(child), schema)(hiveContext) :: Nil
       case _ => Nil
     }
   }

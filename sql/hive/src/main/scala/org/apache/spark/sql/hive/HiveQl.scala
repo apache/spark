@@ -647,7 +647,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                   AttributeReference("value", StringType)()), true)
             }
             
-            val (inputFormat, inputSerdeClass, inputSerdeProps) = inputSerdeClause match {
+            val (inputRowFormat, inputSerdeClass, inputSerdeProps) = inputSerdeClause match {
               case Token("TOK_SERDEPROPS", props) :: Nil =>
                 (props.map { case Token(name, Token(value, Nil) :: Nil) => (name, value) },
                   "", Nil)
@@ -663,7 +663,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
               case Nil => (Nil, "", Nil)
             }
             
-            val (outputFormat, outputSerdeClass, outputSerdeProps) = outputSerdeClause match {
+            val (outputRowFormat, outputSerdeClass, outputSerdeProps) = outputSerdeClause match {
               case Token("TOK_SERDEPROPS", props) :: Nil =>
                 (props.map { case Token(name, Token(value, Nil) :: Nil) => (name, value) },
                   "", Nil)
@@ -681,14 +681,17 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
  
             val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
 
+            val schema = logical.ScriptInputOutputSchema(
+              inputRowFormat, outputRowFormat,
+              inputSerdeClass, outputSerdeClass,
+              inputSerdeProps, outputSerdeProps, schemaLess)
+
             Some(
               logical.ScriptTransformation(
                 inputExprs.map(nodeToExpr),
                 unescapedScript,
                 output,
-                withWhere, inputFormat, outputFormat,
-                inputSerdeClass, outputSerdeClass,
-                inputSerdeProps, outputSerdeProps, schemaLess))
+                withWhere, schema))
           case _ => None
         }
 

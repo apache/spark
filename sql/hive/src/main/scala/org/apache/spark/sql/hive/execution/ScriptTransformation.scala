@@ -36,6 +36,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.Object
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveShim}
 import org.apache.spark.util.Utils
@@ -58,13 +59,7 @@ case class ScriptTransformation(
     script: String,
     output: Seq[Attribute],
     child: SparkPlan,
-    inputFormat: Seq[(String, String)],
-    outputFormat: Seq[(String, String)],
-    inputSerdeClass: String,
-    outputSerdeClass: String,
-    inputSerdeProps: Seq[(String, String)],
-    outputSerdeProps: Seq[(String, String)],
-    schemaLess: Boolean)(@transient sc: HiveContext)
+    ioschema: ScriptInputOutputSchema)(@transient sc: HiveContext)
   extends UnaryNode with HiveInspectors {
 
   override def otherCopyArgs = sc :: Nil
@@ -72,8 +67,8 @@ case class ScriptTransformation(
   val defaultFormat = Map(("TOK_TABLEROWFORMATFIELD", "\t"),
                           ("TOK_TABLEROWFORMATLINES", "\n"))
 
-  val inputFormatMap = inputFormat.toMap.withDefault((k) => defaultFormat(k))
-  val outputFormatMap = outputFormat.toMap.withDefault((k) => defaultFormat(k))
+  val inputRowFormatMap = ioschema.inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
+  val outputRowFormatMap = ioschema.outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
 
   def execute() = {
     child.execute().mapPartitions { iter =>
@@ -84,8 +79,8 @@ case class ScriptTransformation(
       val outputStream = proc.getOutputStream
       val reader = new BufferedReader(new InputStreamReader(inputStream))
  
-      val outputSerde: AbstractSerDe = if (outputSerdeClass != "") {
-        val trimed_class = outputSerdeClass.split("'")(1) 
+      val outputSerde: AbstractSerDe = if (ioschema.outputSerdeClass != "") {
+        val trimed_class = ioschema.outputSerdeClass.split("'")(1) 
         Utils.classForName(trimed_class)
           .newInstance.asInstanceOf[AbstractSerDe]
       } else {
@@ -99,7 +94,7 @@ case class ScriptTransformation(
           aref.dataType.toTypeInfo.getTypeName()
         }.mkString(",")
 
-        var propsMap = outputSerdeProps.map(kv => {
+        var propsMap = ioschema.outputSerdeProps.map(kv => {
           (kv._1.split("'")(1), kv._2.split("'")(1))
         }).toMap + (serdeConstants.LIST_COLUMNS -> columns)
         propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypes)
@@ -173,13 +168,13 @@ case class ScriptTransformation(
             val prevLine = curLine
             curLine = reader.readLine()
  
-            if (!schemaLess) {
+            if (!ioschema.schemaLess) {
               new GenericRow(
-                prevLine.split(outputFormatMap("TOK_TABLEROWFORMATFIELD"))
+                prevLine.split(outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
                 .asInstanceOf[Array[Any]])
             } else {
               new GenericRow(
-                prevLine.split(outputFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
+                prevLine.split(outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
                 .asInstanceOf[Array[Any]])
             }
           } else {
@@ -193,8 +188,8 @@ case class ScriptTransformation(
         }
       }
 
-      val inputSerde: AbstractSerDe = if (inputSerdeClass != "") {
-        val trimed_class = inputSerdeClass.split("'")(1)
+      val inputSerde: AbstractSerDe = if (ioschema.inputSerdeClass != "") {
+        val trimed_class = ioschema.inputSerdeClass.split("'")(1)
         Utils.classForName(trimed_class)
           .newInstance.asInstanceOf[AbstractSerDe]
       } else {
@@ -207,7 +202,7 @@ case class ScriptTransformation(
           e.dataType.toTypeInfo.getTypeName() 
         }.mkString(",")
  
-        var propsMap = inputSerdeProps.map(kv => {
+        var propsMap = ioschema.inputSerdeProps.map(kv => {
           (kv._1.split("'")(1), kv._2.split("'")(1))
         }).toMap + (serdeConstants.LIST_COLUMNS -> columns)
         propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypes)
@@ -235,8 +230,8 @@ case class ScriptTransformation(
         .map(outputProjection)
         .foreach { row =>
           if (inputSerde == null) {
-            val data = row.mkString("", inputFormatMap("TOK_TABLEROWFORMATFIELD"),
-            inputFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
+            val data = row.mkString("", inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
+            inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
  
             outputStream.write(data)
           } else {
