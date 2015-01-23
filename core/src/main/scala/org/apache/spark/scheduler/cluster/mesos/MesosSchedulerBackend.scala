@@ -222,7 +222,6 @@ private[spark] class MesosSchedulerBackend(
         val mem = getResource(o.getResourcesList, "mem")
         val cpus = getResource(o.getResourcesList, "cpus")
         val slaveId = o.getSlaveId.getValue
-        // TODO(pwendell): Should below be 1 + scheduler.CPUS_PER_TASK?
         (mem >= MemoryUtils.calculateTotalMemory(sc) &&
           // need at least 1 for executor, 1 for task
           cpus >= (executorCpus + scheduler.CPUS_PER_TASK)) ||
@@ -235,7 +234,6 @@ private[spark] class MesosSchedulerBackend(
           getResource(o.getResourcesList, "cpus").toInt
         } else {
           // If the executor doesn't exist yet, subtract CPU for executor
-          // TODO(pwendell): Should below just subtract "1"?
           getResource(o.getResourcesList, "cpus").toInt - executorCpus
         }
         new WorkerOffer(
