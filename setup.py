@@ -1,8 +1,7 @@
 from setuptools import setup, find_packages
-import airflow
 
 # Kept manually in sync with airflow.__version__
-version = '0.2.1'
+version = '0.2.2'
 
 setup(
     name='airflow',
