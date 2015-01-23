@@ -33,7 +33,6 @@ private[spark] object SubmitDriverRequestField
   case object ACTION extends SubmitDriverRequestField
   case object CLIENT_SPARK_VERSION extends SubmitDriverRequestField
   case object MESSAGE extends SubmitDriverRequestField
-  case object MASTER extends SubmitDriverRequestField
   case object APP_NAME extends SubmitDriverRequestField
   case object APP_RESOURCE extends SubmitDriverRequestField
   case object MAIN_CLASS extends SubmitDriverRequestField
@@ -51,7 +50,7 @@ private[spark] object SubmitDriverRequestField
   case object APP_ARGS extends SubmitDriverRequestField
   case object SPARK_PROPERTIES extends SubmitDriverRequestField
   case object ENVIRONMENT_VARIABLES extends SubmitDriverRequestField
-  override val requiredFields = Seq(ACTION, CLIENT_SPARK_VERSION, MASTER, APP_NAME, APP_RESOURCE)
+  override val requiredFields = Seq(ACTION, CLIENT_SPARK_VERSION, APP_NAME, APP_RESOURCE)
   override val optionalFields = Seq(MESSAGE, MAIN_CLASS, JARS, FILES, PY_FILES, DRIVER_MEMORY,
     DRIVER_CORES, DRIVER_EXTRA_JAVA_OPTIONS, DRIVER_EXTRA_CLASS_PATH, DRIVER_EXTRA_LIBRARY_PATH,
     SUPERVISE_DRIVER, EXECUTOR_MEMORY, TOTAL_EXECUTOR_CORES, APP_ARGS, SPARK_PROPERTIES,

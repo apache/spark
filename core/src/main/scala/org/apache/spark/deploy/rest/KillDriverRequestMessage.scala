@@ -26,9 +26,8 @@ private[spark] object KillDriverRequestField
   case object ACTION extends KillDriverRequestField
   case object CLIENT_SPARK_VERSION extends KillDriverRequestField
   case object MESSAGE extends KillDriverRequestField
-  case object MASTER extends KillDriverRequestField
   case object DRIVER_ID extends KillDriverRequestField
-  override val requiredFields = Seq(ACTION, CLIENT_SPARK_VERSION, MASTER, DRIVER_ID)
+  override val requiredFields = Seq(ACTION, CLIENT_SPARK_VERSION, DRIVER_ID)
   override val optionalFields = Seq(MESSAGE)
 }
 

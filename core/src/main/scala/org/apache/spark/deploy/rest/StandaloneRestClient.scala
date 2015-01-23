@@ -89,7 +89,6 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
     val em = Option(args.executorMemory).map { m => Utils.memoryStringToMb(m).toString }.orNull
     val message = new SubmitDriverRequestMessage()
       .setField(CLIENT_SPARK_VERSION, sparkVersion)
-      .setField(MASTER, args.master)
       .setField(APP_NAME, args.name)
       .setField(APP_RESOURCE, args.primaryResource)
       .setFieldIfNotNull(MAIN_CLASS, args.mainClass)
@@ -116,7 +115,6 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
     import KillDriverRequestField._
     new KillDriverRequestMessage()
       .setField(CLIENT_SPARK_VERSION, sparkVersion)
-      .setField(MASTER, master)
       .setField(DRIVER_ID, driverId)
   }
 
@@ -127,7 +125,6 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
     import DriverStatusRequestField._
     new DriverStatusRequestMessage()
       .setField(CLIENT_SPARK_VERSION, sparkVersion)
-      .setField(MASTER, master)
       .setField(DRIVER_ID, driverId)
   }
 

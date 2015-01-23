@@ -26,10 +26,9 @@ private[spark] object SubmitDriverResponseField
   case object ACTION extends SubmitDriverResponseField
   case object SERVER_SPARK_VERSION extends SubmitDriverResponseField
   case object MESSAGE extends SubmitDriverResponseField
-  case object MASTER extends SubmitDriverResponseField
   case object SUCCESS extends SubmitDriverResponseField
   case object DRIVER_ID extends SubmitDriverResponseField
-  override val requiredFields = Seq(ACTION, SERVER_SPARK_VERSION, MESSAGE, MASTER, SUCCESS)
+  override val requiredFields = Seq(ACTION, SERVER_SPARK_VERSION, MESSAGE, SUCCESS)
   override val optionalFields = Seq(DRIVER_ID)
 }
 
