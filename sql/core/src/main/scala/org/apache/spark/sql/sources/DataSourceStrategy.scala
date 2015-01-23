@@ -18,19 +18,18 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Row
-import org.apache.spark.sql._
+import org.apache.spark.sql.{Row, Strategy}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution
 
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
 private[sql] object DataSourceStrategy extends Strategy {
-  def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+  def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
     case PhysicalOperation(projectList, filters, l @ LogicalRelation(t: CatalystScan)) =>
       pruneFilterProjectRaw(
         l,
