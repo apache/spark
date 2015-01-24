@@ -49,7 +49,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     assert(plan.isInstanceOf[ParallelizedBulkLoadIntoTableCommand])
 
     val l = plan.asInstanceOf[ParallelizedBulkLoadIntoTableCommand]
-    assert(l.path.equals(raw"./usr/file.txt"))
+    assert(l.inputPath.equals(raw"./usr/file.txt"))
     assert(l.isLocal)
     assert(l.tableName.equals("tb1"))
   }
@@ -65,7 +65,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     assert(plan.isInstanceOf[ParallelizedBulkLoadIntoTableCommand])
 
     val l = plan.asInstanceOf[ParallelizedBulkLoadIntoTableCommand]
-    assert(l.path.equals(raw"/usr/hdfsfile.txt"))
+    assert(l.inputPath.equals(raw"/usr/hdfsfile.txt"))
     assert(!l.isLocal)
     assert(l.tableName.equals("tb1"))
   }
@@ -80,7 +80,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     assert(plan.isInstanceOf[ParallelizedBulkLoadIntoTableCommand])
 
     val l = plan.asInstanceOf[ParallelizedBulkLoadIntoTableCommand]
-    assert(l.path.equals(raw"/usr/hdfsfile.txt"))
+    assert(l.inputPath.equals(raw"/usr/hdfsfile.txt"))
     assert(!l.isLocal)
     assert(l.tableName.equals("tb1"))
     assert(l.delimiter.get.equals("|"))
@@ -107,36 +107,6 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     val tmpPath = Util.getTempFilePath(conf, hbaseRelation.tableName)
     bulkLoad.makeBulkLoadRDD(splitKeys.toArray, hadoopReader, job, tmpPath, hbaseRelation)
     FileSystem.get(conf).delete(new Path(tmpPath), true)
-  }
-
-  test("write data to HFile with optimized bulk loading") {
-    val columns = Seq(new KeyColumn("k1", IntegerType, 0), new NonKeyColumn("v1", IntegerType, "cf1", "c1"))
-    val hbaseRelation = HBaseRelation("testtablename", "hbasenamespace", "hbasetablename", columns)(TestHbase)
-    val bulkLoad =
-      ParallelizedBulkLoadIntoTableCommand(
-        "./sql/hbase/src/test/resources/test.txt",
-        "hbasetablename",
-        isLocal = true,
-        Option(","))
-    val splitKeys = (1 to 40).filter(_ % 5 == 0).map { r =>
-      val bytesUtils = BytesUtils.create(IntegerType)
-      bytesUtils.toBytes(r)
-    }
-    val conf = TestHbase.sparkContext.hadoopConfiguration
-
-    val hadoopReader = {
-      val fs = FileSystem.getLocal(conf)
-      val pathString = fs.pathToFile(new Path(bulkLoad.path)).getCanonicalPath
-      new HadoopReader(TestHbase.sparkContext, pathString, bulkLoad.delimiter)(hbaseRelation)
-    }
-
-    val wrappedConf = new SerializableWritable(conf)
-
-    bulkLoad.makeBulkLoadRDD(
-      splitKeys.toArray,
-      hadoopReader,
-      wrappedConf,
-      "./hfileoutput")(hbaseRelation)
   }
 
   test("hfile output format, delete me when ready") {
@@ -237,7 +207,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     val drop = "drop table testblk"
     val executeSql0 = TestHbase.executeSql(drop)
     try {
-      executeSql0.toRdd.collect().foreach(println)
+      executeSql0.toRdd.collect()
     } catch {
       case e: IllegalStateException =>
         // do not throw exception here
@@ -255,10 +225,10 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
         .stripMargin
 
     val executeSql1 = TestHbase.executeSql(sql1)
-    executeSql1.toRdd.collect().foreach(println)
+    executeSql1.toRdd.collect()
 
     val executeSql2 = TestHbase.executeSql(sql2)
-    executeSql2.toRdd.collect().foreach(println)
+    executeSql2.toRdd.collect()
 
     val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadData.txt'"
 
@@ -266,7 +236,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     val loadSql = "LOAD DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
 
     val executeSql3 = TestHbase.executeSql(loadSql)
-    executeSql3.toRdd.collect().foreach(println)
+    executeSql3.toRdd.collect()
 
     checkAnswer(TestHbase.sql("select * from testblk"),
       Row("row4", "4", "8") ::
@@ -282,7 +252,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     val drop = "drop table testblk"
     val executeSql0 = TestHbase.executeSql(drop)
     try {
-      executeSql0.toRdd.collect().foreach(println)
+      executeSql0.toRdd.collect()
     } catch {
       case e: IllegalStateException =>
         // do not throw exception here
@@ -300,10 +270,10 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
         .stripMargin
 
     val executeSql1 = TestHbase.executeSql(sql1)
-    executeSql1.toRdd.collect().foreach(println)
+    executeSql1.toRdd.collect()
 
     val executeSql2 = TestHbase.executeSql(sql2)
-    executeSql2.toRdd.collect().foreach(println)
+    executeSql2.toRdd.collect()
 
     val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadData.txt'"
 
@@ -311,7 +281,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     val loadSql = "LOAD PARALL DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
 
     val executeSql3 = TestHbase.executeSql(loadSql)
-    executeSql3.toRdd.collect().foreach(println)
+    executeSql3.toRdd.collect()
 
     checkAnswer(TestHbase.sql("select * from testblk"),
       Row("row4", "4", "8") ::
@@ -327,7 +297,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     val drop = "drop table testNullColumnBulkload"
     val executeSql0 = TestHbase.executeSql(drop)
     try {
-      executeSql0.toRdd.collect().foreach(println)
+      executeSql0.toRdd.collect()
     } catch {
       case e: IllegalStateException =>
         // do not throw exception here
@@ -345,10 +315,10 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
         .stripMargin
 
     val executeSql1 = TestHbase.executeSql(sql1)
-    executeSql1.toRdd.collect().foreach(println)
+    executeSql1.toRdd.collect()
 
     val executeSql2 = TestHbase.executeSql(sql2)
-    executeSql2.toRdd.collect().foreach(println)
+    executeSql2.toRdd.collect()
 
     val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadNullableData.txt'"
 
@@ -359,7 +329,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     val loadSql = "LOAD DATA LOCAL INPATH " + inputFile + " INTO TABLE testNullColumnBulkload"
 
     val executeSql3 = TestHbase.executeSql(loadSql)
-    executeSql3.toRdd.collect().foreach(println)
+    executeSql3.toRdd.collect()
 
     val sqlResult = TestHbase.sql("select * from testNullColumnBulkload")
     val rows = sqlResult.collect()
@@ -381,7 +351,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     val drop = "drop table testNullColumnBulkload"
     val executeSql0 = TestHbase.executeSql(drop)
     try {
-      executeSql0.toRdd.collect().foreach(println)
+      executeSql0.toRdd.collect()
     } catch {
       case e: IllegalStateException =>
         // do not throw exception here
@@ -399,10 +369,10 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
         .stripMargin
 
     val executeSql1 = TestHbase.executeSql(sql1)
-    executeSql1.toRdd.collect().foreach(println)
+    executeSql1.toRdd.collect()
 
     val executeSql2 = TestHbase.executeSql(sql2)
-    executeSql2.toRdd.collect().foreach(println)
+    executeSql2.toRdd.collect()
 
     val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadNullableData.txt'"
 
@@ -413,7 +383,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     val loadSql = "LOAD PARALL DATA LOCAL INPATH " + inputFile + " INTO TABLE testNullColumnBulkload"
 
     val executeSql3 = TestHbase.executeSql(loadSql)
-    executeSql3.toRdd.collect().foreach(println)
+    executeSql3.toRdd.collect()
 
     val sqlResult = TestHbase.sql("select * from testNullColumnBulkload")
     val rows = sqlResult.collect()
