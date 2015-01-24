@@ -85,4 +85,15 @@ class ParquetQuerySuite extends QueryTest with ParquetTest {
       checkAnswer(sql(s"SELECT _1 FROM t WHERE _1 < 10"), (1 to 9).map(Row.apply(_)))
     }
   }
+
+  test("SPARK-5309 strings stored using dictionary compression in parquet") {
+    withParquetTable((0 until 1000).map(i => ("same", "run_" + i /100, 1)), "t") {
+
+      checkAnswer(sql(s"SELECT _1, _2, SUM(_3) FROM t GROUP BY _1, _2"),
+        (0 until 10).map(i => Row("same", "run_" + i, 100)))
+
+      checkAnswer(sql(s"SELECT _1, _2, SUM(_3) FROM t WHERE _2 = 'run_5' GROUP BY _1, _2"),
+        List(Row("same", "run_5", 100)))
+    }
+  }
 }
