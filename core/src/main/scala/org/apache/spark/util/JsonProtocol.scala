@@ -690,7 +690,7 @@ private[spark] object JsonProtocol {
   }
 
   def taskEndReasonFromJson(json: JValue): TaskEndReason = {
-    val success = Utils.getFormattedClassName(Success)
+    val success = Utils.getFormattedClassName(TaskSucceeded)
     val resubmitted = Utils.getFormattedClassName(Resubmitted)
     val fetchFailed = Utils.getFormattedClassName(FetchFailed)
     val exceptionFailure = Utils.getFormattedClassName(ExceptionFailure)
@@ -700,7 +700,7 @@ private[spark] object JsonProtocol {
     val unknownReason = Utils.getFormattedClassName(UnknownReason)
 
     (json \ "Reason").extract[String] match {
-      case `success` => Success
+      case `success` => TaskSucceeded
       case `resubmitted` => Resubmitted
       case `fetchFailed` =>
         val blockManagerAddress = blockManagerIdFromJson(json \ "Block Manager Address")

@@ -36,7 +36,7 @@ sealed trait TaskEndReason
  * Task succeeded.
  */
 @DeveloperApi
-case object Success extends TaskEndReason
+case object TaskSucceeded extends TaskEndReason
 
 /**
  * :: DeveloperApi ::

@@ -266,7 +266,7 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
 
   test("run trivial job") {
     submit(new MyRDD(sc, 1, Nil), Array(0))
-    complete(taskSets(0), List((Success, 42)))
+    complete(taskSets(0), List((TaskSucceeded, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
   }
@@ -303,7 +303,7 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     val baseRdd = new MyRDD(sc, 1, Nil)
     val finalRdd = new MyRDD(sc, 1, List(new OneToOneDependency(baseRdd)))
     submit(finalRdd, Array(0))
-    complete(taskSets(0), Seq((Success, 42)))
+    complete(taskSets(0), Seq((TaskSucceeded, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
   }
@@ -316,7 +316,7 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     submit(finalRdd, Array(0))
     val taskSet = taskSets(0)
     assertLocations(taskSet, Seq(Seq("hostA", "hostB")))
-    complete(taskSet, Seq((Success, 42)))
+    complete(taskSet, Seq((TaskSucceeded, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
   }
@@ -406,7 +406,7 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     assert(failure === null)
 
     // When the task set completes normally, state should be correctly updated.
-    complete(taskSets(0), Seq((Success, 42)))
+    complete(taskSets(0), Seq((TaskSucceeded, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
 
@@ -422,11 +422,11 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
     submit(reduceRdd, Array(0))
     complete(taskSets(0), Seq(
-        (Success, makeMapStatus("hostA", 1)),
-        (Success, makeMapStatus("hostB", 1))))
+        (TaskSucceeded, makeMapStatus("hostA", 1)),
+        (TaskSucceeded, makeMapStatus("hostB", 1))))
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
            Array(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
-    complete(taskSets(1), Seq((Success, 42)))
+    complete(taskSets(1), Seq((TaskSucceeded, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
   }
@@ -438,21 +438,21 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
     submit(reduceRdd, Array(0, 1))
     complete(taskSets(0), Seq(
-        (Success, makeMapStatus("hostA", 1)),
-        (Success, makeMapStatus("hostB", 1))))
+        (TaskSucceeded, makeMapStatus("hostA", 1)),
+        (TaskSucceeded, makeMapStatus("hostB", 1))))
     // the 2nd ResultTask failed
     complete(taskSets(1), Seq(
-        (Success, 42),
+        (TaskSucceeded, 42),
         (FetchFailed(makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored"), null)))
     // this will get called
     // blockManagerMaster.removeExecutor("exec-hostA")
     // ask the scheduler to try it again
     scheduler.resubmitFailedStages()
     // have the 2nd attempt pass
-    complete(taskSets(2), Seq((Success, makeMapStatus("hostA", 1))))
+    complete(taskSets(2), Seq((TaskSucceeded, makeMapStatus("hostA", 1))))
     // we can see both result blocks now
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) === Array("hostA", "hostB"))
-    complete(taskSets(3), Seq((Success, 43)))
+    complete(taskSets(3), Seq((TaskSucceeded, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty
   }
@@ -464,8 +464,8 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
     submit(reduceRdd, Array(0, 1))
     complete(taskSets(0), Seq(
-      (Success, makeMapStatus("hostA", 1)),
-      (Success, makeMapStatus("hostB", 1))))
+      (TaskSucceeded, makeMapStatus("hostA", 1)),
+      (TaskSucceeded, makeMapStatus("hostB", 1))))
     // The MapOutputTracker should know about both map output locations.
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) ===
       Array("hostA", "hostB"))
@@ -507,17 +507,17 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     assert(newEpoch > oldEpoch)
     val taskSet = taskSets(0)
     // should be ignored for being too old
-    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA", 1), null, null, null))
+    runEvent(CompletionEvent(taskSet.tasks(0), TaskSucceeded, makeMapStatus("hostA", 1), null, null, null))
     // should work because it's a non-failed host
-    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostB", 1), null, null, null))
+    runEvent(CompletionEvent(taskSet.tasks(0), TaskSucceeded, makeMapStatus("hostB", 1), null, null, null))
     // should be ignored for being too old
-    runEvent(CompletionEvent(taskSet.tasks(0), Success, makeMapStatus("hostA", 1), null, null, null))
+    runEvent(CompletionEvent(taskSet.tasks(0), TaskSucceeded, makeMapStatus("hostA", 1), null, null, null))
     // should work because it's a new epoch
     taskSet.tasks(1).epoch = newEpoch
-    runEvent(CompletionEvent(taskSet.tasks(1), Success, makeMapStatus("hostA", 1), null, null, null))
+    runEvent(CompletionEvent(taskSet.tasks(1), TaskSucceeded, makeMapStatus("hostA", 1), null, null, null))
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
            Array(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
-    complete(taskSets(1), Seq((Success, 42), (Success, 43)))
+    complete(taskSets(1), Seq((TaskSucceeded, 42), (TaskSucceeded, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
     assertDataStructuresEmpty
   }
@@ -607,13 +607,13 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     // DAGScheduler will immediately resubmit the stage after it appears to have no pending tasks
     // rather than marking it is as failed and waiting.
     complete(taskSets(0), Seq(
-        (Success, makeMapStatus("hostA", 1)),
-       (Success, makeMapStatus("hostB", 1))))
+        (TaskSucceeded, makeMapStatus("hostA", 1)),
+       (TaskSucceeded, makeMapStatus("hostB", 1))))
     // have hostC complete the resubmitted task
-    complete(taskSets(1), Seq((Success, makeMapStatus("hostC", 1))))
+    complete(taskSets(1), Seq((TaskSucceeded, makeMapStatus("hostC", 1))))
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
            Array(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
-    complete(taskSets(2), Seq((Success, 42)))
+    complete(taskSets(2), Seq((TaskSucceeded, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
   }
@@ -627,12 +627,12 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     submit(finalRdd, Array(0))
     // have the first stage complete normally
     complete(taskSets(0), Seq(
-        (Success, makeMapStatus("hostA", 2)),
-        (Success, makeMapStatus("hostB", 2))))
+        (TaskSucceeded, makeMapStatus("hostA", 2)),
+        (TaskSucceeded, makeMapStatus("hostB", 2))))
     // have the second stage complete normally
     complete(taskSets(1), Seq(
-        (Success, makeMapStatus("hostA", 1)),
-        (Success, makeMapStatus("hostC", 1))))
+        (TaskSucceeded, makeMapStatus("hostA", 1)),
+        (TaskSucceeded, makeMapStatus("hostC", 1))))
     // fail the third stage because hostA went down
     complete(taskSets(2), Seq(
         (FetchFailed(makeBlockManagerId("hostA"), shuffleDepTwo.shuffleId, 0, 0, "ignored"), null)))
@@ -640,9 +640,9 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     // blockManagerMaster.removeExecutor("exec-hostA")
     // have DAGScheduler try again
     scheduler.resubmitFailedStages()
-    complete(taskSets(3), Seq((Success, makeMapStatus("hostA", 2))))
-    complete(taskSets(4), Seq((Success, makeMapStatus("hostA", 1))))
-    complete(taskSets(5), Seq((Success, 42)))
+    complete(taskSets(3), Seq((TaskSucceeded, makeMapStatus("hostA", 2))))
+    complete(taskSets(4), Seq((TaskSucceeded, makeMapStatus("hostA", 1))))
+    complete(taskSets(5), Seq((TaskSucceeded, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
   }
@@ -658,12 +658,12 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     cacheLocations(shuffleTwoRdd.id -> 1) = Seq(makeBlockManagerId("hostC"))
     // complete stage 2
     complete(taskSets(0), Seq(
-        (Success, makeMapStatus("hostA", 2)),
-        (Success, makeMapStatus("hostB", 2))))
+        (TaskSucceeded, makeMapStatus("hostA", 2)),
+        (TaskSucceeded, makeMapStatus("hostB", 2))))
     // complete stage 1
     complete(taskSets(1), Seq(
-        (Success, makeMapStatus("hostA", 1)),
-        (Success, makeMapStatus("hostB", 1))))
+        (TaskSucceeded, makeMapStatus("hostA", 1)),
+        (TaskSucceeded, makeMapStatus("hostB", 1))))
     // pretend stage 0 failed because hostA went down
     complete(taskSets(2), Seq(
         (FetchFailed(makeBlockManagerId("hostA"), shuffleDepTwo.shuffleId, 0, 0, "ignored"), null)))
@@ -673,8 +673,8 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     scheduler.resubmitFailedStages()
     assertLocations(taskSets(3), Seq(Seq("hostD")))
     // allow hostD to recover
-    complete(taskSets(3), Seq((Success, makeMapStatus("hostD", 1))))
-    complete(taskSets(4), Seq((Success, 42)))
+    complete(taskSets(3), Seq((TaskSucceeded, makeMapStatus("hostD", 1))))
+    complete(taskSets(4), Seq((TaskSucceeded, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
   }
@@ -732,8 +732,8 @@ class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSpar
     val accum = new Accumulator[Int](0, AccumulatorParam.IntAccumulatorParam)
     val finalRdd = new MyRDD(sc, 1, Nil)
     submit(finalRdd, Array(0))
-    completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
-    completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
+    completeWithAccumulator(accum.id, taskSets(0), Seq((TaskSucceeded, 42)))
+    completeWithAccumulator(accum.id, taskSets(0), Seq((TaskSucceeded, 42)))
     assert(results === Map(0 -> 42))
     assert(Accumulators.originals(accum.id).value === 1)
     assertDataStructuresEmpty

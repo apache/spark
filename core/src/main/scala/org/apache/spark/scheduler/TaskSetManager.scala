@@ -566,7 +566,7 @@ private[spark] class TaskSetManager(
     info.markSuccessful()
     removeRunningTask(tid)
     sched.dagScheduler.taskEnded(
-      tasks(index), Success, result.value(), result.accumUpdates, info, result.metrics)
+      tasks(index), TaskSucceeded, result.value(), result.accumUpdates, info, result.metrics)
     if (!successful(index)) {
       tasksSuccessful += 1
       logInfo("Finished task %s in stage %s (TID %d) in %d ms on %s (%d/%d)".format(

@@ -328,7 +328,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       val execSummary = execSummaryMap.getOrElseUpdate(info.executorId, new ExecutorSummary)
 
       taskEnd.reason match {
-        case Success =>
+        case TaskSucceeded =>
           execSummary.succeededTasks += 1
         case _ =>
           execSummary.failedTasks += 1
@@ -338,7 +338,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
       val (errorMessage, metrics): (Option[String], Option[TaskMetrics]) =
         taskEnd.reason match {
-          case org.apache.spark.Success =>
+          case org.apache.spark.TaskSucceeded =>
             stageData.completedIndices.add(info.index)
             stageData.numCompleteTasks += 1
             (None, Option(taskEnd.taskMetrics))
@@ -367,7 +367,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       ) {
         jobData.numActiveTasks -= 1
         taskEnd.reason match {
-          case Success =>
+          case TaskSucceeded =>
             jobData.numCompletedTasks += 1
           case _ =>
             jobData.numFailedTasks += 1
