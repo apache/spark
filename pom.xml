@@ -117,7 +117,7 @@
     <scala.macros.version>2.0.1</scala.macros.version>
     <mesos.version>0.21.0</mesos.version>
     <mesos.classifier>shaded-protobuf</mesos.classifier>
-    <slf4j.version>1.7.5</slf4j.version>
+    <slf4j.version>1.7.10</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>1.0.4</hadoop.version>
     <protobuf.version>2.4.1</protobuf.version>
