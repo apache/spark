@@ -70,10 +70,14 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
 class StandardScalerModel (
     val mean: Vector,
     val variance: Vector,
-    private var withMean: Boolean = false,
-    private var withStd: Boolean = true) extends VectorTransformer {
+    var withMean: Boolean,
+    var withStd: Boolean) extends VectorTransformer {
 
   require(mean.size == variance.size)
+
+  def this(mean: Vector, variance: Vector) {
+    this(mean, variance, false, true)
+  }
 
   def setWithMean(withMean: Boolean): this.type = {
     this.withMean = withMean
