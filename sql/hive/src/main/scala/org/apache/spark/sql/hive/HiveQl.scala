@@ -36,6 +36,8 @@ import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable}
 import org.apache.spark.sql.types._
 
+import scala.collection.mutable.ArrayBuffer
+
 /* Implicit conversions */
 import scala.collection.JavaConversions._
 
@@ -937,9 +939,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
            e :: Nil) =>
       Some(nodeToExpr(e))
 
-    case Token("TOK_SELEXPR",
-           e :: Token(alias, Nil) :: Nil) =>
-      Some(Alias(nodeToExpr(e), cleanIdentifier(alias))())
+    case Token("TOK_SELEXPR", e :: otherChildren) =>
+      var aliasNames = ArrayBuffer[String]()
+      otherChildren.foreach { _ match {
+        case Token(name, Nil) => aliasNames += cleanIdentifier(name)
+        case _ =>
+        }
+      }
+      Some(Alias(nodeToExpr(e), aliasNames.mkString("|"))())
 
     /* Hints are ignored */
     case Token("TOK_HINTLIST", _) => None

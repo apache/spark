@@ -508,6 +508,18 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(sql("select key from src having key > 490").collect().size < 100)
   }
 
+  test("SPARK-5383 alias for udfs with multi output columns") {
+    assert(
+      sql("select stack(2, key, value, key, value) as (a, b) from src limit 5")
+        .collect()
+        .size == 5)
+
+    assert(
+      sql("select a, b from (select stack(2, key, value, key, value) as (a, b) from src) t limit 5")
+        .collect()
+        .size == 5)
+  }
+
   test("Query Hive native command execution result") {
     val tableName = "test_native_commands"
 

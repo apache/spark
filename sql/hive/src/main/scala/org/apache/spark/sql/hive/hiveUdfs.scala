@@ -18,6 +18,8 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -319,6 +321,18 @@ private[hive] case class HiveGenericUdtf(
   }
 
   override def toString = s"$nodeName#${funcWrapper.functionClassName}(${children.mkString(",")})"
+}
+
+/**
+ * Resolve Udtfs Alias.
+ */
+private[spark] object ResolveUdtfsAlias extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan) = plan transform {
+    case q: LogicalPlan => q transformExpressions {
+      case Alias(udtf@HiveGenericUdtf(_, _, _), names) if names.contains("|") =>
+        Alias(udtf.copy(aliasNames = names.split("\\|")), names)()
+    }
+  }
 }
 
 private[hive] case class HiveUdafFunction(
