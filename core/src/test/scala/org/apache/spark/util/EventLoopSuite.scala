@@ -41,7 +41,7 @@ class EventLoopSuite extends FunSuite with Timeouts {
     }
     eventLoop.start()
     (1 to 100).foreach(eventLoop.post)
-    eventually(timeout(5 seconds), interval(200 millis)) {
+    eventually(timeout(5 seconds), interval(5 millis)) {
       assert((1 to 100) === buffer.toSeq)
     }
     eventLoop.stop()
@@ -76,7 +76,7 @@ class EventLoopSuite extends FunSuite with Timeouts {
     }
     eventLoop.start()
     eventLoop.post(1)
-    eventually(timeout(5 seconds), interval(200 millis)) {
+    eventually(timeout(5 seconds), interval(5 millis)) {
       assert(e === receivedError)
     }
     eventLoop.stop()
@@ -98,7 +98,7 @@ class EventLoopSuite extends FunSuite with Timeouts {
     }
     eventLoop.start()
     eventLoop.post(1)
-    eventually(timeout(5 seconds), interval(200 millis)) {
+    eventually(timeout(5 seconds), interval(5 millis)) {
       assert(e === receivedError)
       assert(eventLoop.isActive)
     }
@@ -153,7 +153,7 @@ class EventLoopSuite extends FunSuite with Timeouts {
       }.start()
     }
 
-    eventually(timeout(5 seconds), interval(200 millis)) {
+    eventually(timeout(5 seconds), interval(5 millis)) {
       assert(threadNum * eventsFromEachThread === receivedEventsCount)
     }
     eventLoop.stop()
@@ -199,7 +199,7 @@ class EventLoopSuite extends FunSuite with Timeouts {
     }
     eventLoop.start()
     eventLoop.post(1)
-    eventually(timeout(5 seconds), interval(200 millis)) {
+    eventually(timeout(5 seconds), interval(5 millis)) {
       assert(!eventLoop.isActive)
     }
   }
