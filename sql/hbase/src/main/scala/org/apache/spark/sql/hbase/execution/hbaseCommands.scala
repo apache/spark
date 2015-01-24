@@ -19,12 +19,14 @@ package org.apache.spark.sql.hbase.execution
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.conf.Configurable
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hbase._
 import org.apache.hadoop.hbase.client.Put
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable
 import org.apache.hadoop.hbase.mapreduce.{HFileOutputFormat2, LoadIncrementalHFiles}
+import org.apache.hadoop.hbase.util.Bytes
+import org.apache.hadoop.mapreduce.lib.output.FileOutputCommitter
 import org.apache.hadoop.mapreduce.{Job, RecordWriter}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.mapreduce.SparkHadoopMapReduceUtil
@@ -37,7 +39,7 @@ import org.apache.spark.sql.hbase._
 import org.apache.spark.sql.hbase.util.{HBaseKVHelper, Util}
 import org.apache.spark.sql.sources.LogicalRelation
 import org.apache.spark.sql.types._
-import org.apache.spark.{Logging, SerializableWritable, SparkEnv}
+import org.apache.spark.{Logging, SerializableWritable, SparkEnv, TaskContext}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -154,17 +156,18 @@ case class InsertValueIntoTableCommand(tableName: String, valueSeq: Seq[String])
 
 @DeveloperApi
 case class BulkLoadIntoTableCommand(
-     path: String,
-     tableName: String,
-     isLocal: Boolean,
-     delimiter: Option[String]) extends RunnableCommand with Logging {
+                                     path: String,
+                                     tableName: String,
+                                     isLocal: Boolean,
+                                     delimiter: Option[String])
+  extends RunnableCommand with Logging {
 
   private[hbase] def makeBulkLoadRDD(
-       splitKeys: Array[HBaseRawType],
-       hadoopReader: HadoopReader,
-       job: Job,
-       tmpPath: String,
-       relation: HBaseRelation) = {
+                                      splitKeys: Array[HBaseRawType],
+                                      hadoopReader: HadoopReader,
+                                      job: Job,
+                                      tmpPath: String,
+                                      relation: HBaseRelation) = {
     val rdd = hadoopReader.makeBulkLoadRDDFromTextFile
     val partitioner = new HBasePartitioner(splitKeys)
     val ordering = Ordering[HBaseRawType]
@@ -174,7 +177,7 @@ case class BulkLoadIntoTableCommand(
       // the rdd now already sort by key
       logDebug(s"after shuffle, sort by value, begin: ${System.currentTimeMillis()}")
       val ret = new ArrayBuffer[(ImmutableBytesWritable, KeyValue)]
-      iter.flatMap { line:(HBaseRawType, Array[HBaseRawType]) =>
+      iter.flatMap { line: (HBaseRawType, Array[HBaseRawType]) =>
         ret.clear()
         for (i <- 0 until line._2.size) {
           val nkc = relation.nonKeyColumns(i)
@@ -230,131 +233,121 @@ case class BulkLoadIntoTableCommand(
 
 @DeveloperApi
 case class ParallelizedBulkLoadIntoTableCommand(
-    path: String,
-    tableName: String,
-    isLocal: Boolean,
-    delimiter: Option[String]) extends RunnableCommand with SparkHadoopMapReduceUtil {
-
-  private[hbase] def makeBulkLoadRDD(
-       splitKeys: Array[HBaseRawType],
-       hadoopReader: HadoopReader,
-       wrappedConf: SerializableWritable[Configuration],
-       tmpPath: String)(relation: HBaseRelation) = {
-    val rdd = hadoopReader.makeBulkLoadRDDFromTextFile
-    val partitioner = new HBasePartitioner(splitKeys)
-    val ordering = Ordering[HBaseRawType]
-    val shuffled =
-      new HBaseShuffledRDD(rdd, partitioner, relation.partitions).setKeyOrdering(ordering)
-    shuffled.mapPartitionsWithIndex { (index, iter) =>
-      // the rdd now already sort by key
-      logDebug(s"after shuffle: ${System.currentTimeMillis()}")
-      logDebug(s"save as hfile, begin: ${System.currentTimeMillis()}")
-
-      var config = wrappedConf.value
-      config.set("mapred.output.dir", tmpPath + index)
-
-      val job = new Job(config)
-      job.setOutputKeyClass(classOf[ImmutableBytesWritable])
-      job.setOutputValueClass(classOf[KeyValue])
-      job.setOutputFormatClass(classOf[HFileOutputFormat2])
-
-      val outfmt = classOf[HFileOutputFormat2]
-      val jobFormat = outfmt.newInstance
-      if (SparkEnv.get.conf.getBoolean("spark.hadoop.validateOutputSpecs", defaultValue = true)) {
-        // FileOutputFormat ignores the filesystem parameter
-        jobFormat.checkOutputSpecs(job)
-      }
-      config = job.getConfiguration
-
-      val formatter = new SimpleDateFormat("yyyyMMddHHmm")
-      val jobtrackerID = formatter.format(new Date())
-      val stageId = shuffled.id
-
-      def writeShard = {
-        // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
-        // around by taking a mod. We expect that no task will be attempted 2 billion times.
-        /* "reduce task" <split #> <attempt # = spark task #> */
-        val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = true, 0, 0)
-        val hadoopContext = newTaskAttemptContext(config, attemptId)
-        jobFormat match {
-          case c: Configurable => c.setConf(config)
-          case _ => ()
-        }
-        val committer = jobFormat.getOutputCommitter(hadoopContext)
-        committer.setupJob(hadoopContext)
-        val writer = jobFormat.getRecordWriter(hadoopContext).
-          asInstanceOf[RecordWriter[ImmutableBytesWritable, KeyValue]]
-        val bytesWritable = new ImmutableBytesWritable
-        var recordsWritten = 0L
-        var kv: (HBaseRawType, Array[HBaseRawType]) = null
-        try {
-          while (iter.hasNext) {
-            kv = iter.next()
-            for (i <- 0 until kv._2.size) {
-              val nkc = relation.nonKeyColumns(i)
-              if (kv._2(i) != null) {
-                bytesWritable.set(kv._1)
-                writer.write(bytesWritable, new KeyValue(kv._1, nkc.familyRaw,
-                  nkc.qualifierRaw, kv._2(i)))
-              }
-            }
-            recordsWritten += 1
-            if (iter.hasNext) {
-              // force flush because we cannot guarantee intra-row ordering
-              writer.write(null, null)
-            }
-          }
-        } finally {
-          writer.close(hadoopContext)
-        }
-        committer.commitTask(hadoopContext)
-        committer.commitJob(hadoopContext)
-        val path = new Path(tmpPath + index)
-        logDebug(s"save as hfile, finish: ${System.currentTimeMillis()}, " +
-          s"written $recordsWritten records")
-        // return the output path
-        Seq(path.getFileSystem(config).makeQualified(path).toString).toIterator
-      }
-      writeShard
-    }
-  }
-
+                                                 inputPath: String,
+                                                 tableName: String,
+                                                 isLocal: Boolean,
+                                                 delimiter: Option[String])
+  extends RunnableCommand with SparkHadoopMapReduceUtil {
   override def run(sqlContext: SQLContext) = {
     val solvedRelation = sqlContext.catalog.lookupRelation(Seq(tableName))
     val relation: HBaseRelation = solvedRelation.asInstanceOf[Subquery]
       .child.asInstanceOf[LogicalRelation]
       .relation.asInstanceOf[HBaseRelation]
     val hbContext = sqlContext.asInstanceOf[HBaseSQLContext]
-    val conf = hbContext.configuration
+
+    // tmp path for storing HFile
+    val tmpPath = Util.getTempFilePath(hbContext.configuration, relation.tableName)
+    val job = new Job(hbContext.configuration)
+    job.setOutputKeyClass(classOf[ImmutableBytesWritable])
+    job.setOutputValueClass(classOf[KeyValue])
+    job.setOutputFormatClass(classOf[HFileOutputFormat2])
+    job.getConfiguration.set("mapreduce.output.fileoutputformat.outputdir", tmpPath)
+
+    val conf = job.getConfiguration
 
     val hadoopReader = if (isLocal) {
       val fs = FileSystem.getLocal(conf)
-      val pathString = fs.pathToFile(new Path(path)).getCanonicalPath
+      val pathString = fs.pathToFile(new Path(inputPath)).getCanonicalPath
       new HadoopReader(hbContext.sparkContext, pathString, delimiter)(relation)
     } else {
-      new HadoopReader(hbContext.sparkContext, path, delimiter)(relation)
+      new HadoopReader(hbContext.sparkContext, inputPath, delimiter)(relation)
     }
 
-    // tmp path for storing HFile
-    val tmpPath = Util.getTempFilePath(conf, relation.tableName)
     val splitKeys = relation.getRegionStartKeys.toArray
     val wrappedConf = new SerializableWritable(conf)
-    makeBulkLoadRDD(
-      splitKeys,
-      hadoopReader,
-      wrappedConf,
-      tmpPath)(relation).foreachPartition { iter =>
-      logDebug(s"start BulkLoad : ${System.currentTimeMillis()}")
-      val conf = wrappedConf.value
-      val load = new LoadIncrementalHFiles(conf)
-      val htable = relation.htable
-      if (iter.hasNext) {
-        load.doBulkLoad(new Path(iter.next()), htable)
-      }
-      logDebug(s"finished BulkLoad : ${System.currentTimeMillis()}")
 
+    val rdd = hadoopReader.makeBulkLoadRDDFromTextFile
+    val partitioner = new HBasePartitioner(splitKeys)
+    val ordering = Ordering[HBaseRawType]
+    val shuffled =
+      new HBaseShuffledRDD(rdd, partitioner, relation.partitions).setKeyOrdering(ordering)
+
+    val formatter = new SimpleDateFormat("yyyyMMddHHmm")
+    val jobtrackerID = formatter.format(new Date())
+    val stageId = shuffled.id
+    //    val outfmt = job.getOutputFormatClass
+    val jobFormat = new HFileOutputFormat2
+
+    if (SparkEnv.get.conf.getBoolean("spark.hadoop.validateOutputSpecs", defaultValue = true)) {
+      // FileOutputFormat ignores the filesystem parameter
+      jobFormat.checkOutputSpecs(job)
     }
+
+    val writeShard = (context: TaskContext,
+                      iter: Iterator[(HBaseRawType, Array[HBaseRawType])]) => {
+      val config = wrappedConf.value
+      /* "reduce task" <split #> <attempt # = spark task #> */
+      val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
+        context.attemptNumber)
+      val hadoopContext = newTaskAttemptContext(config, attemptId)
+      val format = new HFileOutputFormat2
+      format match {
+        case c: Configurable => c.setConf(config)
+        case _ => ()
+      }
+      val committer = format.getOutputCommitter(hadoopContext).asInstanceOf[FileOutputCommitter]
+      committer.setupTask(hadoopContext)
+
+      val writer = format.getRecordWriter(hadoopContext).
+        asInstanceOf[RecordWriter[ImmutableBytesWritable, KeyValue]]
+      val bytesWritable = new ImmutableBytesWritable
+      var recordsWritten = 0L
+      var kv: (HBaseRawType, Array[HBaseRawType]) = null
+      var prevK: HBaseRawType = null
+      try {
+        while (iter.hasNext) {
+          kv = iter.next()
+
+          if (prevK != null && Bytes.compareTo(kv._1, prevK) == 0) {
+            // force flush because we cannot guarantee intra-row ordering
+            writer.write(null, null)
+          }
+
+          for (i <- 0 until kv._2.size) {
+            val nkc = relation.nonKeyColumns(i)
+            if (kv._2(i) != null) {
+              bytesWritable.set(kv._1)
+              writer.write(bytesWritable, new KeyValue(kv._1, nkc.familyRaw,
+                nkc.qualifierRaw, kv._2(i)))
+            }
+          }
+          recordsWritten += 1
+
+          prevK = kv._1
+        }
+      } finally {
+        writer.close(hadoopContext)
+      }
+
+      committer.commitTask(hadoopContext)
+
+      val targetPath = committer.getCommittedTaskPath(hadoopContext)
+      val load = new LoadIncrementalHFiles(config)
+      val htable = relation.htable
+      load.doBulkLoad(targetPath, htable)
+
+      1
+    }: Int
+
+    val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = true, 0, 0)
+    val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
+    val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
+    jobCommitter.setupJob(jobTaskContext)
     logDebug(s"Starting doBulkLoad on table ${relation.htable.getName} ...")
+    hbContext.sparkContext.runJob(shuffled, writeShard)
+    logDebug(s"finished BulkLoad : ${System.currentTimeMillis()}")
+    jobCommitter.commitJob(jobTaskContext)
+
     Seq.empty[Row]
   }
 
