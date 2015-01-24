@@ -103,7 +103,7 @@ case class Aggregate(
   /** Named attributes used to substitute grouping attributes into the final result. */
   private[this] val namedGroups = groupingExpressions.map {
     case ne: NamedExpression => ne -> ne.toAttribute
-    case e => e -> Alias(e, s"groupingExpr:$e")().toAttribute
+    case e => e -> Alias(e, Seq(s"groupingExpr:$e"))().toAttribute
   }
 
   /**

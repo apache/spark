@@ -108,8 +108,8 @@ package object dsl {
     def asc = SortOrder(expr, Ascending)
     def desc = SortOrder(expr, Descending)
 
-    def as(alias: String) = Alias(expr, alias)()
-    def as(alias: Symbol) = Alias(expr, alias.name)()
+    def as(alias: String) = Alias(expr, Seq(alias))()
+    def as(alias: Symbol) = Alias(expr, Seq(alias.name))()
   }
 
   trait ExpressionConversions {
@@ -260,7 +260,7 @@ package object dsl {
     def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*) = {
       val aliasedExprs = aggregateExprs.map {
         case ne: NamedExpression => ne
-        case e => Alias(e, e.toString)()
+        case e => Alias(e, Seq(e.toString))()
       }
       Aggregate(groupingExprs, aliasedExprs, logicalPlan)
     }

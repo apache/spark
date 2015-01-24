@@ -109,7 +109,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected def assignAliases(exprs: Seq[Expression]): Seq[NamedExpression] = {
     exprs.zipWithIndex.map {
       case (ne: NamedExpression, _) => ne
-      case (e, i) => Alias(e, s"c$i")()
+      case (e, i) => Alias(e, Seq(s"c$i"))()
     }
   }
 
@@ -152,7 +152,7 @@ class SqlParser extends AbstractSparkSQLParser {
 
   protected lazy val projection: Parser[Expression] =
     expression ~ (AS.? ~> ident.?) ^^ {
-      case e ~ a => a.fold(e)(Alias(e, _)())
+      case e ~ a => a.fold(e)(name => Alias(e, Seq(name))())
     }
 
   // Based very loosely on the MySQL Grammar.

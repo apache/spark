@@ -31,7 +31,7 @@ class GeneratedMutableEvaluationSuite extends ExpressionEvaluationSuite {
     lazy val evaluated = GenerateProjection.expressionEvaluator(expression)
 
     val plan = try {
-      GenerateProjection(Alias(expression, s"Optimized($expression)")() :: Nil)
+      GenerateProjection(Alias(expression, Seq(s"Optimized($expression)"))() :: Nil)
     } catch {
       case e: Throwable =>
         fail(

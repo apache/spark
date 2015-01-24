@@ -106,8 +106,8 @@ class HiveTypeCoercionSuite extends FunSuite {
     val booleanCasts = new HiveTypeCoercion { }.BooleanCasts
     def ruleTest(initial: Expression, transformed: Expression) {
       val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
-      assert(booleanCasts(Project(Seq(Alias(initial, "a")()), testRelation)) ==
-        Project(Seq(Alias(transformed, "a")()), testRelation))
+      assert(booleanCasts(Project(Seq(Alias(initial, Seq("a"))()), testRelation)) ==
+        Project(Seq(Alias(transformed, Seq("a"))()), testRelation))
     }
     // Remove superflous boolean -> boolean casts.
     ruleTest(Cast(Literal(true), BooleanType), Literal(true))

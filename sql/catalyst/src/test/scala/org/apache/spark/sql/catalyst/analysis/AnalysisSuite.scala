@@ -138,11 +138,11 @@ class AnalysisSuite extends FunSuite with BeforeAndAfter {
     val expr3 = 'a / 'd
     val expr4 = 'e / 'e
     val plan = caseInsensitiveAnalyze(Project(
-      Alias(expr0, s"Analyzer($expr0)")() ::
-      Alias(expr1, s"Analyzer($expr1)")() ::
-      Alias(expr2, s"Analyzer($expr2)")() ::
-      Alias(expr3, s"Analyzer($expr3)")() ::
-      Alias(expr4, s"Analyzer($expr4)")() :: Nil, testRelation2))
+      Alias(expr0, Seq(s"Analyzer($expr0)"))() ::
+      Alias(expr1, Seq(s"Analyzer($expr1)"))() ::
+      Alias(expr2, Seq(s"Analyzer($expr2)"))() ::
+      Alias(expr3, Seq(s"Analyzer($expr3)"))() ::
+      Alias(expr4, Seq(s"Analyzer($expr4)"))() :: Nil, testRelation2))
     val pl = plan.asInstanceOf[Project].projectList
     assert(pl(0).dataType == DoubleType)
     assert(pl(1).dataType == DoubleType)

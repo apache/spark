@@ -197,7 +197,7 @@ case class GeneratedAggregate(
 
     val namedGroups = groupingExpressions.zipWithIndex.map {
       case (ne: NamedExpression, _) => (ne, ne)
-      case (e, i) => (e, Alias(e, s"GroupingExpr$i")())
+      case (e, i) => (e, Alias(e, Seq(s"GroupingExpr$i"))())
     }
 
     val groupMap: Map[Expression, Attribute] =
