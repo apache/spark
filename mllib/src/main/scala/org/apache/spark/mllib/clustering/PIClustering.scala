@@ -17,13 +17,15 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.apache.log4j.Logger
 import org.apache.spark.SparkContext
 import org.apache.spark.graphx._
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
 
 object PIClustering {
 
+  private val logger = Logger.getLogger(getClass.getName())
   type DVector = Array[Double]
 
   type DEdge = Edge[Double]
@@ -44,26 +46,73 @@ object PIClustering {
   val LA = PICLinalg
   val RDDLA = RDDLinalg
 
-  def cluster(sc: SparkContext,
-              points: Points,
-              nClusters: Int,
-              nIterations: Int = DefaultIterations,
-              sigma: Double = DefaultSigma,
-              minAffinity: Double = DefaultMinAffinity) = {
+  /**
+   *
+   * @param sc
+   * @param points
+   * @param nClusters
+   * @param nIterations
+   * @param sigma
+   * @param minAffinity
+   * @return Tuple of (Seq[(Cluster Id,Cluster Center)],
+   *                   Seq[(VertexId, ClusterID Membership)]
+   */
+  def run(sc: SparkContext,
+          points: Points,
+          nClusters: Int,
+          nIterations: Int = DefaultIterations,
+          sigma: Double = DefaultSigma,
+          minAffinity: Double = DefaultMinAffinity)
+        : (Seq[(Int, Vector)], Seq[(VertexId, Int)]) = {
+    val vidsRdd = sc.parallelize(points.map(_._1).sorted)
     val nVertices = points.length
 
     val (wRdd, rowSums) = createNormalizedAffinityMatrix(sc, points, sigma)
     val initialVt = createInitialVector(sc, points.map(_._1), rowSums)
-    println(s"Vt(0)=${LA.printVector(initialVt.map{_._2}.toArray)}")
+    if (logger.isDebugEnabled) {
+      logger.debug(s"Vt(0)=${
+        LA.printVector(initialVt.map {
+          _._2
+        }.toArray)
+      }")
+    }
     val edgesRdd = createSparseEdgesRdd(sc, wRdd, minAffinity)
     val G = createGraphFromEdges(sc, edgesRdd, points.size, Some(initialVt))
-    println(RDDLA.printMatrixFromEdges(G.edges))
+    if (logger.isDebugEnabled) {
+      logger.debug(RDDLA.printMatrixFromEdges(G.edges))
+    }
     val (gUpdated, lambda, vt) = getPrincipalEigen(sc, G, nIterations)
     // TODO: avoid local collect and then sc.parallelize.
-    val localVect = vt.map{Vectors.dense(_)}
-    val vectRdd = sc.parallelize(localVect)
-    val model =  KMeans.train(vectRdd, 3, 10)
-    (model, gUpdated, lambda, vt)
+    val localVt = vt.collect.sortBy(_._1).map(_._2)
+    val vectRdd = sc.parallelize(localVt.map(Vectors.dense(_)))
+    // TODO: what to set nRuns
+    val nRuns = 10
+    vectRdd.cache()
+    val model = KMeans.train(vectRdd, nClusters, nRuns)
+    vectRdd.unpersist()
+    if (logger.isDebugEnabled) {
+      logger.debug(s"Eigenvalue = $lambda EigenVector: ${localVt.mkString(",")}")
+    }
+    val estimates = vidsRdd.zip(model.predict(sc.parallelize(localVt.map {
+      Vectors.dense(_)
+    })))
+    if (logger.isDebugEnabled) {
+      logger.debug(s"lambda=$lambda  eigen=${localVt.mkString(",")}")
+    }
+    val ccs = (0 until model.clusterCenters.length).zip(model.clusterCenters)
+    if (logger.isDebugEnabled) {
+      logger.debug(s"Kmeans model cluster centers: ${ccs.mkString(",")}")
+    }
+    val pointsMap = Map(points: _*)
+    val estCollected = estimates.collect.sortBy(_._1)
+    if (logger.isDebugEnabled) {
+      //      val clusters = estCollected.map(_._2)
+      //      logger.debug(s"Cluster Estimates: ${estCollected.mkString(",")} "
+      //      val counts = Map(estCollected:_*).groupBy(_._1).mapValues(_.size)
+      //        + s" Counts: ${counts.mkString(",")}")
+      logger.debug(s"Cluster Estimates: ${estCollected.mkString(",")}")
+    }
+    (ccs, estCollected)
   }
 
   def createInitialVector(sc: SparkContext,
@@ -93,13 +142,11 @@ object PIClustering {
 
   }
 
-  val printMatrices = true
-
   def getPrincipalEigen(sc: SparkContext,
                         G: DGraph,
                         nIterations: Int = DefaultIterations,
                         optMinNormChange: Option[Double] = None
-                         ): (DGraph, Double, DVector) = {
+                         ): (DGraph, Double, VertexRDD[Double]) = {
 
     var priorNorm = Double.MaxValue
     var norm = Double.MaxValue
@@ -120,36 +167,43 @@ object PIClustering {
         ctx.sendToDst(ctx.attr * ctx.dstAttr)
       },
         _ + _)
-      println(s"tmpEigen[$iter]: ${tmpEigen.collect.mkString(",")}\n")
+      if (logger.isDebugEnabled) {
+        logger.debug(s"tmpEigen[$iter]: ${tmpEigen.collect.mkString(",")}\n")
+      }
       val vnorm =
-        prevG.vertices.map{ _._2}.fold(0.0) { case (sum, dval) =>
+        prevG.vertices.map {
+          _._2
+        }.fold(0.0) { case (sum, dval) =>
           sum + Math.abs(dval)
         }
-      println(s"vnorm[$iter]=$vnorm")
+      if (logger.isDebugEnabled) {
+        logger.debug(s"vnorm[$iter]=$vnorm")
+      }
       outG = prevG.outerJoinVertices(tmpEigen) { case (vid, wval, optTmpEigJ) =>
         val normedEig = optTmpEigJ.getOrElse {
-          println("We got null estimated eigenvector element");
           -1.0
         } / vnorm
-        println(s"Updating vertex[$vid] from $wval to $normedEig")
+        if (logger.isDebugEnabled) {
+          logger.debug(s"Updating vertex[$vid] from $wval to $normedEig")
+        }
         normedEig
       }
       prevG = outG
 
-      if (printMatrices) {
+      if (logger.isDebugEnabled) {
         val localVertices = outG.vertices.collect
         val graphSize = localVertices.size
         print(s"Vertices[$iter]: ${localVertices.mkString(",")}\n")
       }
       normVelocity = vnorm - priorNorm
       normAccel = normVelocity - priorNormVelocity
-      println(s"normAccel[$iter]= $normAccel")
+      if (logger.isDebugEnabled) {
+        logger.debug(s"normAccel[$iter]= $normAccel")
+      }
       priorNorm = vnorm
       priorNormVelocity = vnorm - priorNorm
     }
-    (outG, vnorm, outG.vertices.collect.map {
-      _._2
-    })
+    (outG, vnorm, outG.vertices)
   }
 
   def scalarDot(d1: DVector, d2: DVector) = {
@@ -179,9 +233,9 @@ object PIClustering {
       val arr = toks.slice(1, toks.length).map(_.toDouble)
       (toks(0).toLong, arr)
     }.toSeq
-    println(s"Read in ${vertices.length} from $verticesFile")
-    //    println(vertices.map { case (x, arr) => s"($x,${arr.mkString(",")})"}
-    // .mkString("[", ",\n", "]"))
+    if (logger.isDebugEnabled) {
+      logger.debug(s"Read in ${vertices.length} from $verticesFile")
+    }
     vertices
   }
 
@@ -224,10 +278,16 @@ object PIClustering {
         (ix, vect)
       }
     }, nVertices)
-    println(s"Affinity:\n${LA.printMatrix(affinityRddNotNorm.collect.map(_._2._2),
-      nVertices, nVertices)}")
+    if (logger.isDebugEnabled) {
+      logger.debug(s"Affinity:\n${
+        LA.printMatrix(affinityRddNotNorm.collect.map(_._2._2),
+          nVertices, nVertices)
+      }")
+    }
     val rowSums = affinityRddNotNorm.map { case (ix, (vid, vect)) =>
-      vect.foldLeft(0.0){ _ + _}
+      vect.foldLeft(0.0) {
+        _ + _
+      }
     }
     val materializedRowSums = rowSums.collect
     val similarityRdd = affinityRddNotNorm.map { case (rowx, (vid, vect)) =>
@@ -235,7 +295,9 @@ object PIClustering {
         _ / materializedRowSums(rowx)
       })
     }
-    println(s"W:\n${LA.printMatrix(similarityRdd.collect.map(_._2), nVertices, nVertices)}")
+    if (logger.isDebugEnabled) {
+      logger.debug(s"W:\n${LA.printMatrix(similarityRdd.collect.map(_._2), nVertices, nVertices)}")
+    }
     (similarityRdd, materializedRowSums)
   }
 

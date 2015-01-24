@@ -206,7 +206,7 @@ object RDDLinalg {
 
   def printMatrixFromEdges(edgesRdd: EdgeRDD[_]) = {
     val edgec = edgesRdd.collect
-    assert(edgec.size < 1e3,"Let us not print a large graph")
+//    assert(edgec.size < 1e3,"Let us not print a large graph")
     val sorted = edgec.sortWith { case (e1, e2) =>
       e1.srcId < e2.srcId || (e1.srcId == e2.srcId && e1.dstId <= e2.dstId)
     }
