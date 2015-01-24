@@ -854,7 +854,7 @@ class JsonProtocolSuite extends FunSuite {
       |  "Stage Attempt ID": 0,
       |  "Task Type": "ShuffleMapTask",
       |  "Task End Reason": {
-      |    "Reason": "Success"
+      |    "Reason": "TaskSucceeded"
       |  },
       |  "Task Info": {
       |    "Task ID": 123,
@@ -937,7 +937,7 @@ class JsonProtocolSuite extends FunSuite {
       |  "Stage Attempt ID": 0,
       |  "Task Type": "ShuffleMapTask",
       |  "Task End Reason": {
-      |    "Reason": "Success"
+      |    "Reason": "TaskSucceeded"
       |  },
       |  "Task Info": {
       |    "Task ID": 123,
@@ -1018,7 +1018,7 @@ class JsonProtocolSuite extends FunSuite {
       |  "Stage Attempt ID": 0,
       |  "Task Type": "ResultTask",
       |  "Task End Reason": {
-      |    "Reason": "Success"
+      |    "Reason": "TaskSucceeded"
       |  },
       |  "Task Info": {
       |    "Task ID": 123,
