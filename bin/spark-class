@@ -71,6 +71,8 @@ case "$1" in
   'org.apache.spark.executor.MesosExecutorBackend')
     OUR_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
     OUR_JAVA_MEM=${SPARK_EXECUTOR_MEMORY:-$DEFAULT_MEM}
+    export PYTHONPATH="$FWDIR/python:$PYTHONPATH"
+    export PYTHONPATH="$FWDIR/python/lib/py4j-0.8.2.1-src.zip:$PYTHONPATH"
     ;;
 
   # Spark submit uses SPARK_JAVA_OPTS + SPARK_SUBMIT_OPTS +
