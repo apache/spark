@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.sql.Date
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Context
@@ -35,8 +36,6 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.ExplainCommand
 import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable}
 import org.apache.spark.sql.types._
-
-import scala.collection.mutable.ArrayBuffer
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
