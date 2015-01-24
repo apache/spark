@@ -1229,8 +1229,16 @@ private[spark] object Utils extends Logging {
 
   /**
    * Split a string of potentially quoted arguments from the command line the way that a shell
-   * would do it to determine arguments to a command. For example, if the string is 'a "b c" d',
-   * then it would be parsed as three arguments: 'a', 'b c' and 'd'.
+   * would do it to determine arguments to a command. For example, if the string is
+   * {{{
+   * a "b c" d
+   * }}}
+   * then it would be parsed as three arguments:
+   * {{{
+   * a
+   * "b c"
+   * d
+   * }}}
    */
   def splitCommandString(s: String): Seq[String] = {
     val buf = new ArrayBuffer[String]
@@ -1246,6 +1254,7 @@ private[spark] object Utils extends Logging {
     while (i < s.length) {
       val nextChar = s.charAt(i)
       if (inDoubleQuote) {
+        curWord.append(nextChar)
         if (nextChar == '"') {
           inDoubleQuote = false
         } else if (nextChar == '\\') {
@@ -1255,20 +1264,19 @@ private[spark] object Utils extends Logging {
             curWord.append(s.charAt(i + 1))
             i += 1
           }
-        } else {
-          curWord.append(nextChar)
         }
       } else if (inSingleQuote) {
+        curWord.append(nextChar)
         if (nextChar == '\'') {
           inSingleQuote = false
-        } else {
-          curWord.append(nextChar)
         }
         // Backslashes are not treated specially in single quotes
       } else if (nextChar == '"') {
+        curWord.append(nextChar)
         inWord = true
         inDoubleQuote = true
       } else if (nextChar == '\'') {
+        curWord.append(nextChar)
         inWord = true
         inSingleQuote = true
       } else if (!isSpace(nextChar)) {
@@ -1283,6 +1291,7 @@ private[spark] object Utils extends Logging {
     if (inWord || inDoubleQuote || inSingleQuote) {
       endWord()
     }
+    println("+++ split command to " + buf)
     buf
   }
 
