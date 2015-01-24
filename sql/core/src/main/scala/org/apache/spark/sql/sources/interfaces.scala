@@ -1,31 +1,32 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.spark.sql.sources
 
 import org.apache.spark.annotation.{Experimental, DeveloperApi}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SQLConf, Row, SQLContext, StructType}
+import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.expressions.{Expression, Attribute}
+import org.apache.spark.sql.types.StructType
 
 /**
  * ::DeveloperApi::
  * Implemented by objects that produce relations for a specific kind of data source.  When
- * Spark SQL is given a DDL operation with a USING clause specified, this interface is used to
- * pass in the parameters specified by a user.
+ * Spark SQL is given a DDL operation with a USING clause specified (to specify the implemented
+ * RelationProvider), this interface is used to pass in the parameters specified by a user.
  *
  * Users may specify the fully qualified class name of a given data source.  When that class is
  * not found Spark SQL will append the class name `DefaultSource` to the path, allowing for
@@ -36,8 +37,44 @@ import org.apache.spark.sql.catalyst.expressions.{Expression, Attribute}
  */
 @DeveloperApi
 trait RelationProvider {
-  /** Returns a new base relation with the given parameters. */
+  /**
+   * Returns a new base relation with the given parameters.
+   * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
+   * by the Map that is passed to the function.
+   */
   def createRelation(sqlContext: SQLContext, parameters: Map[String, String]): BaseRelation
+}
+
+/**
+ * ::DeveloperApi::
+ * Implemented by objects that produce relations for a specific kind of data source
+ * with a given schema.  When Spark SQL is given a DDL operation with a USING clause specified (
+ * to specify the implemented SchemaRelationProvider) and a user defined schema, this interface
+ * is used to pass in the parameters specified by a user.
+ *
+ * Users may specify the fully qualified class name of a given data source.  When that class is
+ * not found Spark SQL will append the class name `DefaultSource` to the path, allowing for
+ * less verbose invocation.  For example, 'org.apache.spark.sql.json' would resolve to the
+ * data source 'org.apache.spark.sql.json.DefaultSource'
+ *
+ * A new instance of this class with be instantiated each time a DDL call is made.
+ *
+ * The difference between a [[RelationProvider]] and a [[SchemaRelationProvider]] is that
+ * users need to provide a schema when using a SchemaRelationProvider.
+ * A relation provider can inherits both [[RelationProvider]] and [[SchemaRelationProvider]]
+ * if it can support both schema inference and user-specified schemas.
+ */
+@DeveloperApi
+trait SchemaRelationProvider {
+  /**
+   * Returns a new base relation with the given parameters and user defined schema.
+   * Note: the parameters' keywords are case insensitive and this insensitivity is enforced
+   * by the Map that is passed to the function.
+   */
+  def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String],
+      schema: StructType): BaseRelation
 }
 
 /**
@@ -63,7 +100,7 @@ abstract class BaseRelation {
    * large to broadcast.  This method will be called multiple times during query planning
    * and thus should not perform expensive operations for each invocation.
    */
-  def sizeInBytes = sqlContext.defaultSizeInBytes
+  def sizeInBytes = sqlContext.conf.defaultSizeInBytes
 }
 
 /**
@@ -111,5 +148,3 @@ abstract class PrunedFilteredScan extends BaseRelation {
 abstract class CatalystScan extends BaseRelation {
   def buildScan(requiredColumns: Seq[Attribute], filters: Seq[Expression]): RDD[Row]
 }
-
-

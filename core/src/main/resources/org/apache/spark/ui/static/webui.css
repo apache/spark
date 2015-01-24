@@ -19,6 +19,7 @@
   height: 50px;
   font-size: 15px;
   margin-bottom: 15px;
+  min-width: 1200px
 }
 
 .navbar .navbar-inner {
@@ -39,12 +40,12 @@
 
 .navbar .nav > li a {
   height: 30px;
-  line-height: 30px;
+  line-height: 2;
 }
 
 .navbar-text {
   height: 50px;
-  line-height: 50px;
+  line-height: 3.3;
 }
 
 table.sortable thead {
@@ -120,6 +121,14 @@ pre {
   border: none;
 }
 
+.description-input {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+  white-space: nowrap;
+  display: block;
+}
+
 .stacktrace-details {
   max-height: 300px;
   overflow-y: auto;
@@ -169,8 +178,18 @@ span.additional-metric-title {
   display: inline-block;
 }
 
+.version {
+  line-height: 2.5;
+  vertical-align: bottom;
+  font-size: 12px;
+  padding: 0;
+  margin: 0;
+  font-weight: bold;
+  color: #777;
+}
+
 /* Hide all additional metrics by default. This is done here rather than using JavaScript to
  * avoid slow page loads for stage pages with large numbers (e.g., thousands) of tasks. */
-.scheduler_delay, .gc_time, .deserialization_time, .serialization_time, .getting_result_time {
+.scheduler_delay, .deserialization_time, .serialization_time, .getting_result_time {
   display: none;
 }

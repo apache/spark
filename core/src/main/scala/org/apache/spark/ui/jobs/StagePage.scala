@@ -134,13 +134,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               </li>
               <li>
                 <span data-toggle="tooltip"
-                      title={ToolTips.GC_TIME} data-placement="right">
-                  <input type="checkbox" name={TaskDetailsClassNames.GC_TIME}/>
-                  <span class="additional-metric-title">GC Time</span>
-                </span>
-              </li>
-              <li>
-                <span data-toggle="tooltip"
                       title={ToolTips.RESULT_SERIALIZATION_TIME} data-placement="right">
                   <input type="checkbox" name={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}/>
                   <span class="additional-metric-title">Result Serialization Time</span>
@@ -168,7 +161,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           ("Executor ID / Host", ""), ("Launch Time", ""), ("Duration", ""),
           ("Scheduler Delay", TaskDetailsClassNames.SCHEDULER_DELAY),
           ("Task Deserialization Time", TaskDetailsClassNames.TASK_DESERIALIZATION_TIME),
-          ("GC Time", TaskDetailsClassNames.GC_TIME),
+          ("GC Time", ""),
           ("Result Serialization Time", TaskDetailsClassNames.RESULT_SERIALIZATION_TIME),
           ("Getting Result Time", TaskDetailsClassNames.GETTING_RESULT_TIME)) ++
         {if (hasAccumulators) Seq(("Accumulators", "")) else Nil} ++
@@ -308,7 +301,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             <tr class={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}>
               {deserializationQuantiles}
             </tr>
-            <tr class={TaskDetailsClassNames.GC_TIME}>{gcQuantiles}</tr>,
+            <tr>{gcQuantiles}</tr>,
             <tr class={TaskDetailsClassNames.RESULT_SERIALIZATION_TIME}>
               {serializationQuantiles}
             </tr>,
@@ -429,7 +422,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             class={TaskDetailsClassNames.TASK_DESERIALIZATION_TIME}>
           {UIUtils.formatDuration(taskDeserializationTime.toLong)}
         </td>
-        <td sorttable_customkey={gcTime.toString} class={TaskDetailsClassNames.GC_TIME}>
+        <td sorttable_customkey={gcTime.toString}>
           {if (gcTime > 0) UIUtils.formatDuration(gcTime) else ""}
         </td>
         <td sorttable_customkey={serializationTime.toString}

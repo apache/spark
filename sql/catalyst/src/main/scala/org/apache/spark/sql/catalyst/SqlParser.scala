@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 /**
  * A very simple SQL parser.  Based loosely on:
@@ -36,9 +36,8 @@ import org.apache.spark.sql.catalyst.types._
  * for a SQL like language should checkout the HiveQL support in the sql/hive sub-project.
  */
 class SqlParser extends AbstractSparkSQLParser {
-  protected implicit def asParser(k: Keyword): Parser[String] =
-    lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
-
+  // Keyword is a convention with AbstractSparkSQLParser, which will scan all of the `Keyword`
+  // properties via reflection the class in runtime for constructing the SqlLexical object
   protected val ABS = Keyword("ABS")
   protected val ALL = Keyword("ALL")
   protected val AND = Keyword("AND")
@@ -85,6 +84,7 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val ON = Keyword("ON")
   protected val OR = Keyword("OR")
   protected val ORDER = Keyword("ORDER")
+  protected val SORT = Keyword("SORT")
   protected val OUTER = Keyword("OUTER")
   protected val OVERWRITE = Keyword("OVERWRITE")
   protected val REGEXP = Keyword("REGEXP")
@@ -106,16 +106,6 @@ class SqlParser extends AbstractSparkSQLParser {
   protected val WHEN = Keyword("WHEN")
   protected val WHERE = Keyword("WHERE")
 
-  // Use reflection to find the reserved words defined in this class.
-  protected val reservedWords =
-    this
-      .getClass
-      .getMethods
-      .filter(_.getReturnType == classOf[Keyword])
-      .map(_.invoke(this).asInstanceOf[Keyword].str)
-
-  override val lexical = new SqlLexical(reservedWords)
-
   protected def assignAliases(exprs: Seq[Expression]): Seq[NamedExpression] = {
     exprs.zipWithIndex.map {
       case (ne: NamedExpression, _) => ne
@@ -124,7 +114,7 @@ class SqlParser extends AbstractSparkSQLParser {
   }
 
   protected lazy val start: Parser[LogicalPlan] =
-    ( select *
+    ( (select | ("(" ~> select <~ ")")) *
       ( UNION ~ ALL        ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Union(q1, q2) }
       | INTERSECT          ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Intersect(q1, q2) }
       | EXCEPT             ^^^ { (q1: LogicalPlan, q2: LogicalPlan) => Except(q1, q2)}
@@ -140,7 +130,7 @@ class SqlParser extends AbstractSparkSQLParser {
       (WHERE  ~> expression).? ~
       (GROUP  ~  BY ~> rep1sep(expression, ",")).? ~
       (HAVING ~> expression).? ~
-      (ORDER  ~  BY ~> ordering).? ~
+      sortType.? ~
       (LIMIT  ~> expression).? ^^ {
         case d ~ p ~ r ~ f ~ g ~ h ~ o ~ l  =>
           val base = r.getOrElse(NoRelation)
@@ -150,7 +140,7 @@ class SqlParser extends AbstractSparkSQLParser {
             .getOrElse(Project(assignAliases(p), withFilter))
           val withDistinct = d.map(_ => Distinct(withProjection)).getOrElse(withProjection)
           val withHaving = h.map(Filter(_, withDistinct)).getOrElse(withDistinct)
-          val withOrder = o.map(Sort(_, withHaving)).getOrElse(withHaving)
+          val withOrder = o.map(_(withHaving)).getOrElse(withHaving)
           val withLimit = l.map(Limit(_, withOrder)).getOrElse(withOrder)
           withLimit
       }
@@ -177,10 +167,10 @@ class SqlParser extends AbstractSparkSQLParser {
     joinedRelation | relationFactor
 
   protected lazy val relationFactor: Parser[LogicalPlan] =
-    ( ident ~ (opt(AS) ~> opt(ident)) ^^ {
-        case tableName ~ alias => UnresolvedRelation(None, tableName, alias)
+    ( rep1sep(ident, ".") ~ (opt(AS) ~> opt(ident)) ^^ {
+        case tableIdent ~ alias => UnresolvedRelation(tableIdent, alias)
       }
-    | ("(" ~> start <~ ")") ~ (AS.? ~> ident) ^^ { case s ~ a => Subquery(a, s) }
+      | ("(" ~> start <~ ")") ~ (AS.? ~> ident) ^^ { case s ~ a => Subquery(a, s) }
     )
 
   protected lazy val joinedRelation: Parser[LogicalPlan] =
@@ -202,15 +192,16 @@ class SqlParser extends AbstractSparkSQLParser {
     | FULL  ~ OUTER.? ^^^ FullOuter
     )
 
-  protected lazy val ordering: Parser[Seq[SortOrder]] =
-    ( rep1sep(singleOrder, ",")
-    | rep1sep(expression, ",") ~ direction.? ^^ {
-        case exps ~ d => exps.map(SortOrder(_, d.getOrElse(Ascending)))
-      }
+  protected lazy val sortType: Parser[LogicalPlan => LogicalPlan] =
+    ( ORDER ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, true, l) }
+    | SORT ~ BY  ~> ordering ^^ { case o => l: LogicalPlan => Sort(o, false, l) }
     )
 
-  protected lazy val singleOrder: Parser[SortOrder] =
-    expression ~ direction ^^ { case e ~ o => SortOrder(e, o) }
+  protected lazy val ordering: Parser[Seq[SortOrder]] =
+    ( rep1sep(expression ~ direction.? , ",") ^^ {
+        case exps  => exps.map(pair => SortOrder(pair._1, pair._2.getOrElse(Ascending)))
+      }
+    )
 
   protected lazy val direction: Parser[SortDirection] =
     ( ASC  ^^^ Ascending
@@ -277,7 +268,8 @@ class SqlParser extends AbstractSparkSQLParser {
     | SUM   ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => SumDistinct(exp) }
     | COUNT ~  "(" ~> "*"                    <~ ")" ^^ { case _ => Count(Literal(1)) }
     | COUNT ~  "(" ~> expression             <~ ")" ^^ { case exp => Count(exp) }
-    | COUNT ~> "(" ~> DISTINCT ~> expression <~ ")" ^^ { case exp => CountDistinct(exp :: Nil) }
+    | COUNT ~> "(" ~> DISTINCT ~> repsep(expression, ",") <~ ")" ^^
+      { case exps => CountDistinct(exps) }
     | APPROXIMATE ~ COUNT ~ "(" ~ DISTINCT ~> expression <~ ")" ^^
       { case exp => ApproxCountDistinct(exp) }
     | APPROXIMATE ~> "(" ~> floatLit ~ ")" ~ COUNT ~ "(" ~ DISTINCT ~ expression <~ ")" ^^
@@ -340,18 +332,13 @@ class SqlParser extends AbstractSparkSQLParser {
     | floatLit ^^ { f => Literal(f.toDouble) }
     )
 
-  private val longMax = BigDecimal(s"${Long.MaxValue}")
-  private val longMin = BigDecimal(s"${Long.MinValue}")
-  private val intMax = BigDecimal(s"${Int.MaxValue}")
-  private val intMin = BigDecimal(s"${Int.MinValue}")
-
-  private def toNarrowestIntegerType(value: String) = {
+  private def toNarrowestIntegerType(value: String): Any = {
     val bigIntValue = BigDecimal(value)
 
     bigIntValue match {
-      case v if v < longMin || v > longMax => v
-      case v if v < intMin || v > intMax => v.toLong
-      case v => v.toInt
+      case v if bigIntValue.isValidInt => v.toIntExact
+      case v if bigIntValue.isValidLong => v.toLongExact
+      case v => v.underlying()
     }
   }
 

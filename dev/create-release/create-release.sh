@@ -39,7 +39,6 @@ RC_NAME=${RC_NAME:-rc2}
 M2_REPO=~/.m2/repository
 SPARK_REPO=$M2_REPO/org/apache/spark
 NEXUS_ROOT=https://repository.apache.org/service/local/staging
-NEXUS_UPLOAD=$NEXUS_ROOT/deploy/maven2
 NEXUS_PROFILE=d63f592e7eac0 # Profile for Spark staging uploads
 
 if [ -z "$JAVA_HOME" ]; then
@@ -64,23 +63,32 @@ if [[ ! "$@" =~ --package-only ]]; then
   # NOTE: This is done "eagerly" i.e. we don't check if we can succesfully build
   # or before we coin the release commit. This helps avoid races where
   # other people add commits to this branch while we are in the middle of building.
-  old="  <version>${RELEASE_VERSION}-SNAPSHOT<\/version>"
-  new="  <version>${RELEASE_VERSION}<\/version>"
-  find . -name pom.xml -o -name package.scala | grep -v dev | xargs -I {} sed -i \
-    -e "s/$old/$new/" {}
+  cur_ver="${RELEASE_VERSION}-SNAPSHOT"
+  rel_ver="${RELEASE_VERSION}"
+  next_ver="${NEXT_VERSION}-SNAPSHOT"
+
+  old="^\( \{2,4\}\)<version>${cur_ver}<\/version>$"
+  new="\1<version>${rel_ver}<\/version>"
+  find . -name pom.xml | grep -v dev | xargs -I {} sed -i \
+    -e "s/${old}/${new}/" {}
+  find . -name package.scala | grep -v dev | xargs -I {} sed -i \
+    -e "s/${old}/${new}/" {}
+
   git commit -a -m "Preparing Spark release $GIT_TAG"
   echo "Creating tag $GIT_TAG at the head of $GIT_BRANCH"
   git tag $GIT_TAG
 
-  old="  <version>${RELEASE_VERSION}<\/version>"
-  new="  <version>${NEXT_VERSION}-SNAPSHOT<\/version>"
-  find . -name pom.xml -o -name package.scala | grep -v dev | xargs -I {} sed -i \
+  old="^\( \{2,4\}\)<version>${rel_ver}<\/version>$"
+  new="\1<version>${next_ver}<\/version>"
+  find . -name pom.xml | grep -v dev | xargs -I {} sed -i \
     -e "s/$old/$new/" {}
-  git commit -a -m "Preparing development version ${NEXT_VERSION}-SNAPSHOT"
+  find . -name package.scala | grep -v dev | xargs -I {} sed -i \
+    -e "s/${old}/${new}/" {}
+  git commit -a -m "Preparing development version $next_ver"
   git push origin $GIT_TAG
   git push origin HEAD:$GIT_BRANCH
-  git checkout -f $GIT_TAG 
-  
+  git checkout -f $GIT_TAG
+
   # Using Nexus API documented here:
   # https://support.sonatype.com/entries/39720203-Uploading-to-a-Staging-Repository-via-REST-API
   echo "Creating Nexus staging repository"
@@ -98,7 +106,7 @@ if [[ ! "$@" =~ --package-only ]]; then
     clean install
 
   ./dev/change-version-to-2.11.sh
-  
+
   mvn -DskipTests -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
     -Dscala-2.11 -Pyarn -Phive -Phadoop-2.2 -Pspark-ganglia-lgpl -Pkinesis-asl \
     clean install
@@ -118,12 +126,13 @@ if [[ ! "$@" =~ --package-only ]]; then
     gpg --print-md SHA1 $file > $file.sha1
   done
 
-  echo "Uplading files to $NEXUS_UPLOAD"
+  nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
+  echo "Uplading files to $nexus_upload"
   for file in $(find . -type f)
   do
     # strip leading ./
     file_short=$(echo $file | sed -e "s/\.\///")
-    dest_url="$NEXUS_UPLOAD/org/apache/spark/$file_short"
+    dest_url="$nexus_upload/org/apache/spark/$file_short"
     echo "  Uploading $file_short"
     curl -u $ASF_USERNAME:$ASF_PASSWORD --upload-file $file_short $dest_url
   done
@@ -165,7 +174,7 @@ make_binary_release() {
   NAME=$1
   FLAGS=$2
   cp -r spark spark-$RELEASE_VERSION-bin-$NAME
-  
+
   cd spark-$RELEASE_VERSION-bin-$NAME
 
   # TODO There should probably be a flag to make-distribution to allow 2.11 support
@@ -210,7 +219,7 @@ scp spark-* \
 
 # Docs
 cd spark
-sbt/sbt clean
+build/sbt clean
 cd docs
 # Compile docs with Java 7 to use nicer format
 JAVA_HOME=$JAVA_7_HOME PRODUCTION=1 jekyll build

@@ -55,7 +55,7 @@ class MultivariateStatisticalSummary(JavaModelWrapper):
 
 class ChiSqTestResult(JavaModelWrapper):
     """
-    :: Experimental ::
+    .. note:: Experimental
 
     Object containing the test results for the chi-squared hypothesis test.
     """
@@ -200,7 +200,7 @@ class Statistics(object):
     @staticmethod
     def chiSqTest(observed, expected=None):
         """
-        :: Experimental ::
+        .. note:: Experimental
 
         If `observed` is Vector, conduct Pearson's chi-squared goodness
         of fit test of the observed data against the expected distribution,

@@ -25,7 +25,6 @@ import scala.reflect.ClassTag
 import org.apache.commons.math3.distribution.PoissonDistribution
 
 import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 
 /**

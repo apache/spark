@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{BufferedReader, File, InputStreamReader, PrintStream}
+import java.io.{BufferedReader, InputStreamReader, PrintStream}
 import java.sql.{Date, Timestamp}
 
 import scala.collection.JavaConversions._
@@ -29,41 +29,20 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.ql.processors._
+import org.apache.hadoop.hive.ql.parse.VariableSubstitution
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.io.{DateWritable, TimestampWritable}
 
 import org.apache.spark.SparkContext
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EliminateAnalysisOperators, OverrideCatalog, OverrideFunctionRegistry}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.types.DecimalType
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
-import org.apache.spark.sql.execution.{ExtractPythonUdfs, QueryExecutionException, Command => PhysicalCommand}
-import org.apache.spark.sql.hive.execution.DescribeHiveTableCommand
+import org.apache.spark.sql.execution.{ExecutedCommand, ExtractPythonUdfs, SetCommand, QueryExecutionException}
+import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DescribeHiveTableCommand}
 import org.apache.spark.sql.sources.DataSourceStrategy
-
-/**
- * DEPRECATED: Use HiveContext instead.
- */
-@deprecated("""
-  Use HiveContext instead.  It will still create a local metastore if one is not specified.
-  However, note that the default directory is ./metastore_db, not ./metastore
-  """, "1.1")
-class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
-
-  lazy val metastorePath = new File("metastore").getCanonicalPath
-  lazy val warehousePath: String = new File("warehouse").getCanonicalPath
-
-  /** Sets up the system initially or after a RESET command */
-  protected def configure() {
-    setConf("javax.jdo.option.ConnectionURL",
-      s"jdbc:derby:;databaseName=$metastorePath;create=true")
-    setConf("hive.metastore.warehouse.dir", warehousePath)
-  }
-
-  configure() // Must be called before initializing the catalog below.
-}
+import org.apache.spark.sql.types._
 
 /**
  * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
@@ -72,38 +51,32 @@ class LocalHiveContext(sc: SparkContext) extends HiveContext(sc) {
 class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   self =>
 
-  // Change the default SQL dialect to HiveQL
-  override private[spark] def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+  protected[sql] override lazy val conf: SQLConf = new SQLConf {
+    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+  }
 
   /**
    * When true, enables an experimental feature where metastore tables that use the parquet SerDe
    * are automatically converted to use the Spark SQL parquet table scan, instead of the Hive
    * SerDe.
    */
-  private[spark] def convertMetastoreParquet: Boolean =
+  protected[sql] def convertMetastoreParquet: Boolean =
     getConf("spark.sql.hive.convertMetastoreParquet", "true") == "true"
 
   override protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
 
   override def sql(sqlText: String): SchemaRDD = {
+    val substituted = new VariableSubstitution().substitute(hiveconf, sqlText)
     // TODO: Create a framework for registering parsers instead of just hardcoding if statements.
-    if (dialect == "sql") {
-      super.sql(sqlText)
-    } else if (dialect == "hiveql") {
-      new SchemaRDD(this, ddlParser(sqlText).getOrElse(HiveQl.parseSql(sqlText)))
+    if (conf.dialect == "sql") {
+      super.sql(substituted)
+    } else if (conf.dialect == "hiveql") {
+      new SchemaRDD(this, ddlParser(sqlText, false).getOrElse(HiveQl.parseSql(substituted)))
     }  else {
-      sys.error(s"Unsupported SQL dialect: $dialect.  Try 'sql' or 'hiveql'")
+      sys.error(s"Unsupported SQL dialect: ${conf.dialect}.  Try 'sql' or 'hiveql'")
     }
   }
-
-  @deprecated("hiveql() is deprecated as the sql function now parses using HiveQL by default. " +
-             s"The SQL dialect for parsing can be set using ${SQLConf.DIALECT}", "1.1")
-  def hiveql(hqlQuery: String): SchemaRDD = new SchemaRDD(this, HiveQl.parseSql(hqlQuery))
-
-  @deprecated("hql() is deprecated as the sql function now parses using HiveQL by default. " +
-             s"The SQL dialect for parsing can be set using ${SQLConf.DIALECT}", "1.1")
-  def hql(hqlQuery: String): SchemaRDD = hiveql(hqlQuery)
 
   /**
    * Creates a table using the schema of the given class.
@@ -117,14 +90,31 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   /**
+   * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
+   * Spark SQL or the external data source library it uses might cache certain metadata about a
+   * table, such as the location of blocks. When those change outside of Spark SQL, users should
+   * call this function to invalidate the cache.
+   */
+  def refreshTable(tableName: String): Unit = {
+    // TODO: Database support...
+    catalog.refreshTable("default", tableName)
+  }
+
+  protected[hive] def invalidateTable(tableName: String): Unit = {
+    // TODO: Database support...
+    catalog.invalidateTable("default", tableName)
+  }
+
+  /**
    * Analyzes the given table in the current database to generate statistics, which will be
    * used in query optimizations.
    *
    * Right now, it only supports Hive tables and it only updates the size of a Hive table
    * in the Hive metastore.
    */
+  @Experimental
   def analyze(tableName: String) {
-    val relation = EliminateAnalysisOperators(catalog.lookupRelation(None, tableName))
+    val relation = EliminateAnalysisOperators(catalog.lookupRelation(Seq(tableName)))
 
     relation match {
       case relation: MetastoreRelation =>
@@ -279,12 +269,11 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
     results
   }
 
-
   /**
    * Execute the command using Hive and return the results as a sequence. Each element
    * in the sequence is one row.
    */
-  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = {
+  protected def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = synchronized {
     try {
       val cmd_trimmed: String = cmd.trim()
       val tokens: Array[String] = cmd_trimmed.split("\\s+")
@@ -335,13 +324,14 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   @transient
-  val hivePlanner = new SparkPlanner with HiveStrategies {
+  private val hivePlanner = new SparkPlanner with HiveStrategies {
     val hiveContext = self
 
-    override val strategies: Seq[Strategy] = extraStrategies ++ Seq(
+    override def strategies: Seq[Strategy] = experimental.extraStrategies ++ Seq(
       DataSourceStrategy,
-      CommandStrategy(self),
       HiveCommandStrategy(self),
+      HiveDDLStrategy,
+      DDLStrategy,
       TakeOrdered,
       ParquetOperations,
       InMemoryScans,
@@ -369,15 +359,21 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
      * execution is simply passed back to Hive.
      */
     def stringResult(): Seq[String] = executedPlan match {
-      case describeHiveTableCommand: DescribeHiveTableCommand =>
+      case ExecutedCommand(desc: DescribeHiveTableCommand) =>
         // If it is a describe command for a Hive table, we want to have the output format
         // be similar with Hive.
-        describeHiveTableCommand.hiveString
-      case command: PhysicalCommand =>
-        command.executeCollect().map(_.head.toString)
+        desc.run(self).map {
+          case Row(name: String, dataType: String, comment) =>
+            Seq(name, dataType,
+              Option(comment.asInstanceOf[String]).getOrElse(""))
+              .map(s => String.format(s"%-20s", s))
+              .mkString("\t")
+        }
+      case command: ExecutedCommand =>
+        command.executeCollect().map(_(0).toString)
 
       case other =>
-        val result: Seq[Seq[Any]] = toRdd.map(_.copy()).collect().toSeq
+        val result: Seq[Seq[Any]] = other.executeCollect().map(_.toSeq).toSeq
         // We need the types so we can output struct field names
         val types = analyzed.output.map(_.dataType)
         // Reformat to match hive tab delimited output.
@@ -386,21 +382,22 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
 
     override def simpleString: String =
       logical match {
-        case _: NativeCommand => "<Native command: executed by Hive>"
+        case _: HiveNativeCommand => "<Native command: executed by Hive>"
         case _: SetCommand => "<SET command: executed by Hive, and noted by SQLContext>"
         case _ => super.simpleString
       }
   }
 }
 
-object HiveContext {
+
+private object HiveContext {
   protected val primitiveTypes =
     Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
       ShortType, DateType, TimestampType, BinaryType)
 
   protected[sql] def toHiveString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
-      struct.zip(fields).map {
+      struct.toSeq.zip(fields).map {
         case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>
@@ -414,15 +411,16 @@ object HiveContext {
     case (d: Date, DateType) => new DateWritable(d).toString
     case (t: Timestamp, TimestampType) => new TimestampWritable(t).toString
     case (bin: Array[Byte], BinaryType) => new String(bin, "UTF-8")
-    case (decimal: Decimal, DecimalType()) =>  // Hive strips trailing zeros so use its toString
-      HiveShim.createDecimal(decimal.toBigDecimal.underlying()).toString
+    case (decimal: java.math.BigDecimal, DecimalType()) =>
+      // Hive strips trailing zeros so use its toString
+      HiveShim.createDecimal(decimal).toString
     case (other, tpe) if primitiveTypes contains tpe => other.toString
   }
 
   /** Hive outputs fields of structs slightly differently than top level attributes. */
   protected def toHiveStructString(a: (Any, DataType)): String = a match {
     case (struct: Row, StructType(fields)) =>
-      struct.zip(fields).map {
+      struct.toSeq.zip(fields).map {
         case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
       }.mkString("{", ",", "}")
     case (seq: Seq[_], ArrayType(typ, _)) =>

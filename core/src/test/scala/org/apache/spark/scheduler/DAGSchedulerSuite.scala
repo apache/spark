@@ -19,25 +19,29 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
+import scala.util.control.NonFatal
 
-import akka.actor._
-import akka.testkit.{ImplicitSender, TestKit, TestActorRef}
 import org.scalatest.{BeforeAndAfter, FunSuiteLike}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 import org.apache.spark.util.CallSite
 import org.apache.spark.executor.TaskMetrics
 
-class BuggyDAGEventProcessActor extends Actor {
-  val state = 0
-  def receive = {
-    case _ => throw new SparkException("error")
+class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
+  extends DAGSchedulerEventProcessLoop(dagScheduler) {
+
+  override def post(event: DAGSchedulerEvent): Unit = {
+    try {
+      // Forward event to `onReceive` directly to avoid processing event asynchronously.
+      onReceive(event)
+    } catch {
+      case NonFatal(e) => onError(e)
+    }
   }
 }
 
@@ -66,8 +70,7 @@ class MyRDD(
 
 class DAGSchedulerSuiteDummyException extends Exception
 
-class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with FunSuiteLike
-  with ImplicitSender with BeforeAndAfter with LocalSparkContext with Timeouts {
+class DAGSchedulerSuite extends FunSuiteLike  with BeforeAndAfter with LocalSparkContext with Timeouts {
 
   val conf = new SparkConf
   /** Set of TaskSets the DAGScheduler has requested executed. */
@@ -114,7 +117,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
 
   var mapOutputTracker: MapOutputTrackerMaster = null
   var scheduler: DAGScheduler = null
-  var dagEventProcessTestActor: TestActorRef[DAGSchedulerEventProcessActor] = null
+  var dagEventProcessLoopTester: DAGSchedulerEventProcessLoop = null
 
   /**
    * Set of cache locations to return from our mock BlockManagerMaster.
@@ -168,13 +171,11 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
         runLocallyWithinThread(job)
       }
     }
-    dagEventProcessTestActor = TestActorRef[DAGSchedulerEventProcessActor](
-      Props(classOf[DAGSchedulerEventProcessActor], scheduler))(system)
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(scheduler)
   }
 
   override def afterAll() {
     super.afterAll()
-    TestKit.shutdownActorSystem(system)
   }
 
   /**
@@ -191,7 +192,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
    * DAGScheduler event loop.
    */
   private def runEvent(event: DAGSchedulerEvent) {
-    dagEventProcessTestActor.receive(event)
+    dagEventProcessLoopTester.post(event)
   }
 
   /**
@@ -248,6 +249,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
   test("[SPARK-3353] parent stage should have lower stage id") {
     sparkListener.stageByOrderOfExecution.clear()
     sc.parallelize(1 to 10).map(x => (x, x)).reduceByKey(_ + _, 4).count()
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     assert(sparkListener.stageByOrderOfExecution.length === 2)
     assert(sparkListener.stageByOrderOfExecution(0) < sparkListener.stageByOrderOfExecution(1))
   }
@@ -397,8 +399,7 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
         runLocallyWithinThread(job)
       }
     }
-    dagEventProcessTestActor = TestActorRef[DAGSchedulerEventProcessActor](
-      Props(classOf[DAGSchedulerEventProcessActor], noKillScheduler))(system)
+    dagEventProcessLoopTester = new DAGSchedulerEventProcessLoopTester(noKillScheduler)
     val jobId = submit(new MyRDD(sc, 1, Nil), Array(0))
     cancel(jobId)
     // Because the job wasn't actually cancelled, we shouldn't have received a failure message.
@@ -726,21 +727,9 @@ class DAGSchedulerSuite extends TestKit(ActorSystem("DAGSchedulerSuite")) with F
     assert(sc.parallelize(1 to 10, 2).first() === 1)
   }
 
-  test("DAGSchedulerActorSupervisor closes the SparkContext when EventProcessActor crashes") {
-    val actorSystem = ActorSystem("test")
-    val supervisor = actorSystem.actorOf(
-      Props(classOf[DAGSchedulerActorSupervisor], scheduler), "dagSupervisor")
-    supervisor ! Props[BuggyDAGEventProcessActor]
-    val child = expectMsgType[ActorRef]
-    watch(child)
-    child ! "hi"
-    expectMsgPF(){ case Terminated(child) => () }
-    assert(scheduler.sc.dagScheduler === null)
-  }
-
   test("accumulator not calculated for resubmitted result stage") {
     //just for register
-    val accum = new Accumulator[Int](0, SparkContext.IntAccumulatorParam)
+    val accum = new Accumulator[Int](0, AccumulatorParam.IntAccumulatorParam)
     val finalRdd = new MyRDD(sc, 1, Nil)
     submit(finalRdd, Array(0))
     completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))

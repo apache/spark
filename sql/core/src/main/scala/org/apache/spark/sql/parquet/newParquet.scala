@@ -18,6 +18,8 @@ package org.apache.spark.sql.parquet
 
 import java.util.{List => JList}
 
+import scala.collection.JavaConversions._
+
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
@@ -29,18 +31,16 @@ import parquet.hadoop.util.ContextUtil
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.{Partition => SparkPartition, Logging}
 import org.apache.spark.rdd.{NewHadoopPartition, RDD}
-
 import org.apache.spark.sql.{SQLConf, Row, SQLContext}
-import org.apache.spark.sql.catalyst.expressions.{SpecificMutableRow, And, Expression, Attribute}
-import org.apache.spark.sql.catalyst.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 
-import scala.collection.JavaConversions._
 
 /**
  * Allows creation of parquet based tables using the syntax
- * `CREATE TABLE ... USING org.apache.spark.sql.parquet`.  Currently the only option required
- * is `path`, which should be the location of a collection of, optionally partitioned,
+ * `CREATE TEMPORARY TABLE ... USING org.apache.spark.sql.parquet`.  Currently the only option 
+ * required is `path`, which should be the location of a collection of, optionally partitioned,
  * parquet files.
  */
 class DefaultSource extends RelationProvider {
@@ -49,7 +49,7 @@ class DefaultSource extends RelationProvider {
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
     val path =
-      parameters.getOrElse("path", sys.error("'path' must be specifed for parquet tables."))
+      parameters.getOrElse("path", sys.error("'path' must be specified for parquet tables."))
 
     ParquetRelation2(path)(sqlContext)
   }
@@ -136,7 +136,7 @@ case class ParquetRelation2(path: String)(@transient val sqlContext: SQLContext)
     ParquetTypesConverter.readSchemaFromFile(
       partitions.head.files.head.getPath,
       Some(sparkContext.hadoopConfiguration),
-      sqlContext.isParquetBinaryAsString))
+      sqlContext.conf.isParquetBinaryAsString))
 
   val dataIncludesKey =
     partitionKeys.headOption.map(dataSchema.fieldNames.contains(_)).getOrElse(true)
@@ -151,8 +151,6 @@ case class ParquetRelation2(path: String)(@transient val sqlContext: SQLContext)
   override def buildScan(output: Seq[Attribute], predicates: Seq[Expression]): RDD[Row] = {
     // This is mostly a hack so that we can use the existing parquet filter code.
     val requiredColumns = output.map(_.name)
-    // TODO: Parquet filters should be based on data sources API, not catalyst expressions.
-    val filters = DataSourceStrategy.selectFilters(predicates)
 
     val job = new Job(sparkContext.hadoopConfiguration)
     ParquetInputFormat.setReadSupportClass(job, classOf[RowReadSupport])
@@ -160,44 +158,46 @@ case class ParquetRelation2(path: String)(@transient val sqlContext: SQLContext)
 
     val requestedSchema = StructType(requiredColumns.map(schema(_)))
 
-    // TODO: Make folder based partitioning a first class citizen of the Data Sources API.
-    val partitionFilters = filters.collect {
-      case e @ EqualTo(attr, value) if partitionKeys.contains(attr) =>
-        logInfo(s"Parquet scan partition filter: $attr=$value")
-        (p: Partition) => p.partitionValues(attr) == value
+    val partitionKeySet = partitionKeys.toSet
+    val rawPredicate =
+      predicates
+        .filter(_.references.map(_.name).toSet.subsetOf(partitionKeySet))
+        .reduceOption(And)
+        .getOrElse(Literal(true))
 
-      case e @ In(attr, values) if partitionKeys.contains(attr) =>
-        logInfo(s"Parquet scan partition filter: $attr IN ${values.mkString("{", ",", "}")}")
-        val set = values.toSet
-        (p: Partition) => set.contains(p.partitionValues(attr))
-
-      case e @ GreaterThan(attr, value) if partitionKeys.contains(attr) =>
-        logInfo(s"Parquet scan partition filter: $attr > $value")
-        (p: Partition) => p.partitionValues(attr).asInstanceOf[Int] > value.asInstanceOf[Int]
-
-      case e @ GreaterThanOrEqual(attr, value) if partitionKeys.contains(attr) =>
-        logInfo(s"Parquet scan partition filter: $attr >= $value")
-        (p: Partition) => p.partitionValues(attr).asInstanceOf[Int] >= value.asInstanceOf[Int]
-
-      case e @ LessThan(attr, value) if partitionKeys.contains(attr) =>
-        logInfo(s"Parquet scan partition filter: $attr < $value")
-        (p: Partition) => p.partitionValues(attr).asInstanceOf[Int] < value.asInstanceOf[Int]
-
-      case e @ LessThanOrEqual(attr, value) if partitionKeys.contains(attr) =>
-        logInfo(s"Parquet scan partition filter: $attr <= $value")
-        (p: Partition) => p.partitionValues(attr).asInstanceOf[Int] <= value.asInstanceOf[Int]
+    // Translate the predicate so that it reads from the information derived from the
+    // folder structure
+    val castedPredicate = rawPredicate transform {
+      case a: AttributeReference =>
+        val idx = partitionKeys.indexWhere(a.name == _)
+        BoundReference(idx, IntegerType, nullable = true)
     }
 
-    val selectedPartitions = partitions.filter(p => partitionFilters.forall(_(p)))
+    val inputData = new GenericMutableRow(partitionKeys.size)
+    val pruningCondition = InterpretedPredicate(castedPredicate)
+
+    val selectedPartitions =
+      if (partitionKeys.nonEmpty && predicates.nonEmpty) {
+        partitions.filter { part =>
+          inputData(0) = part.partitionValues.values.head
+          pruningCondition(inputData)
+        }
+      } else {
+        partitions
+      }
+
     val fs = FileSystem.get(new java.net.URI(path), sparkContext.hadoopConfiguration)
     val selectedFiles = selectedPartitions.flatMap(_.files).map(f => fs.makeQualified(f.getPath))
-    org.apache.hadoop.mapreduce.lib.input.FileInputFormat.setInputPaths(job, selectedFiles:_*)
+    // FileInputFormat cannot handle empty lists.
+    if (selectedFiles.nonEmpty) {
+      org.apache.hadoop.mapreduce.lib.input.FileInputFormat.setInputPaths(job, selectedFiles: _*)
+    }
 
     // Push down filters when possible
     predicates
       .reduceOption(And)
       .flatMap(ParquetFilters.createFilter)
-      .filter(_ => sqlContext.parquetFilterPushDown)
+      .filter(_ => sqlContext.conf.parquetFilterPushDown)
       .foreach(ParquetInputFormat.setFilterPredicate(jobConf, _))
 
     def percentRead = selectedPartitions.size.toDouble / partitions.size.toDouble * 100

@@ -27,7 +27,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.graphx._
 
 class VertexRDDImpl[VD] private[graphx] (
-    val partitionsRDD: RDD[ShippableVertexPartition[VD]],
+    @transient val partitionsRDD: RDD[ShippableVertexPartition[VD]],
     val targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
   (implicit override protected val vdTag: ClassTag[VD])
   extends VertexRDD[VD](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
@@ -71,6 +71,10 @@ class VertexRDDImpl[VD] private[graphx] (
     this
   }
 
+  override def checkpoint() = {
+    partitionsRDD.checkpoint()
+  }
+    
   /** The number of vertices in the RDD. */
   override def count(): Long = {
     partitionsRDD.map(_.size).reduce(_ + _)

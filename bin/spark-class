@@ -71,6 +71,8 @@ case "$1" in
   'org.apache.spark.executor.MesosExecutorBackend')
     OUR_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
     OUR_JAVA_MEM=${SPARK_EXECUTOR_MEMORY:-$DEFAULT_MEM}
+    export PYTHONPATH="$FWDIR/python:$PYTHONPATH"
+    export PYTHONPATH="$FWDIR/python/lib/py4j-0.8.2.1-src.zip:$PYTHONPATH"
     ;;
 
   # Spark submit uses SPARK_JAVA_OPTS + SPARK_SUBMIT_OPTS +
@@ -148,7 +150,7 @@ fi
 if [[ "$1" =~ org.apache.spark.tools.* ]]; then
   if test -z "$SPARK_TOOLS_JAR"; then
     echo "Failed to find Spark Tools Jar in $FWDIR/tools/target/scala-$SPARK_SCALA_VERSION/" 1>&2
-    echo "You need to build Spark before running $1." 1>&2
+    echo "You need to run \"build/sbt tools/package\" before running $1." 1>&2
     exit 1
   fi
   CLASSPATH="$CLASSPATH:$SPARK_TOOLS_JAR"
