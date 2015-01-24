@@ -64,13 +64,6 @@ class DecisionTree (private val strategy: Strategy) extends Serializable with Lo
     val rfModel = rf.run(input)
     rfModel.trees(0)
   }
-
-  /**
-   * Trains a decision tree model over an RDD. This is deprecated because it hides the static
-   * methods with the same name in Java.
-   */
-  @deprecated("Please use DecisionTree.run instead.", "1.2.0")
-  def train(input: RDD[LabeledPoint]): DecisionTreeModel = run(input)
 }
 
 object DecisionTree extends Serializable with Logging {

@@ -81,7 +81,8 @@ private[nio] class ConnectionManager(
   private val ackTimeoutMonitor =
     new HashedWheelTimer(Utils.namedThreadFactory("AckTimeoutMonitor"))
 
-  private val ackTimeout = conf.getInt("spark.core.connection.ack.wait.timeout", 60)
+  private val ackTimeout =
+    conf.getInt("spark.core.connection.ack.wait.timeout", conf.getInt("spark.network.timeout", 120))
 
   // Get the thread counts from the Spark Configuration.
   // 
@@ -173,7 +174,7 @@ private[nio] class ConnectionManager(
     serverChannel.socket.bind(new InetSocketAddress(port))
     (serverChannel, serverChannel.socket.getLocalPort)
   }
-  Utils.startServiceOnPort[ServerSocketChannel](port, startService, name)
+  Utils.startServiceOnPort[ServerSocketChannel](port, startService, conf, name)
   serverChannel.register(selector, SelectionKey.OP_ACCEPT)
 
   val id = new ConnectionManagerId(Utils.localHostName, serverChannel.socket.getLocalPort)

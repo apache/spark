@@ -21,8 +21,6 @@ import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
 import parquet.example.data.simple.SimpleGroup
 import parquet.example.data.{Group, GroupWriter}
 import parquet.hadoop.api.WriteSupport
@@ -32,11 +30,13 @@ import parquet.hadoop.{ParquetFileWriter, ParquetWriter}
 import parquet.io.api.RecordConsumer
 import parquet.schema.{MessageType, MessageTypeParser}
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.catalyst.types.DecimalType
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.types.DecimalType
 import org.apache.spark.sql.{QueryTest, SQLConf, SchemaRDD}
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
@@ -68,8 +68,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
   /**
    * Writes `data` to a Parquet file, reads it back and check file contents.
    */
-  protected def checkParquetFile[T <: Product: ClassTag: TypeTag](data: Seq[T]): Unit = {
-    withParquetRDD(data)(checkAnswer(_, data))
+  protected def checkParquetFile[T <: Product : ClassTag: TypeTag](data: Seq[T]): Unit = {
+    withParquetRDD(data)(r => checkAnswer(r, data.map(Row.fromTuple)))
   }
 
   test("basic data types (without binary)") {
@@ -143,7 +143,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     withParquetRDD(data) { rdd =>
       // Structs are converted to `Row`s
       checkAnswer(rdd, data.map { case Tuple1(struct) =>
-        Tuple1(Row(struct.productIterator.toSeq: _*))
+        Row(Row(struct.productIterator.toSeq: _*))
       })
     }
   }
@@ -153,7 +153,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     withParquetRDD(data) { rdd =>
       // Structs are converted to `Row`s
       checkAnswer(rdd, data.map { case Tuple1(struct) =>
-        Tuple1(Row(struct.productIterator.toSeq: _*))
+        Row(Row(struct.productIterator.toSeq: _*))
       })
     }
   }
@@ -162,7 +162,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     val data = (1 to 4).map(i => Tuple1(Map(i -> (i, s"val_$i"))))
     withParquetRDD(data) { rdd =>
       checkAnswer(rdd, data.map { case Tuple1(m) =>
-        Tuple1(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
+        Row(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
       })
     }
   }
@@ -213,7 +213,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     def checkCompressionCodec(codec: CompressionCodecName): Unit = {
       withSQLConf(SQLConf.PARQUET_COMPRESSION -> codec.name()) {
         withParquetFile(data) { path =>
-          assertResult(parquetCompressionCodec.toUpperCase) {
+          assertResult(conf.parquetCompressionCodec.toUpperCase) {
             compressionCodecFor(path)
           }
         }
@@ -221,7 +221,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     }
 
     // Checks default compression codec
-    checkCompressionCodec(CompressionCodecName.fromConf(parquetCompressionCodec))
+    checkCompressionCodec(CompressionCodecName.fromConf(conf.parquetCompressionCodec))
 
     checkCompressionCodec(CompressionCodecName.UNCOMPRESSED)
     checkCompressionCodec(CompressionCodecName.GZIP)
@@ -261,7 +261,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
       val path = new Path(dir.toURI.toString, "part-r-0.parquet")
       makeRawParquetFile(path)
       checkAnswer(parquetFile(path.toString), (0 until 10).map { i =>
-        (i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
+        Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
       })
     }
   }

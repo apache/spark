@@ -85,5 +85,7 @@ object SimpleTextClassificationPipeline {
       .foreach { case Row(id: Long, text: String, score: Double, prediction: Double) =>
         println("(" + id + ", " + text + ") --> score=" + score + ", prediction=" + prediction)
       }
+
+    sc.stop()
   }
 }

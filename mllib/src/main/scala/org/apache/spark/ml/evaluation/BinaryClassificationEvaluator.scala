@@ -21,7 +21,8 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-import org.apache.spark.sql.{DoubleType, Row, SchemaRDD}
+import org.apache.spark.sql.{Row, SchemaRDD}
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * :: AlphaComponent ::

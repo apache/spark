@@ -33,7 +33,7 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils.getContextOrSparkClassLoader
 
 /* Implicit conversions */
@@ -159,11 +159,6 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
     isUDFDeterministic && returnInspector.isInstanceOf[ConstantObjectInspector]
 
   @transient
-  protected def constantReturnValue = unwrap(
-    returnInspector.asInstanceOf[ConstantObjectInspector].getWritableConstantValue(),
-    returnInspector)
-  
-  @transient
   protected lazy val deferedObjects =
     argumentInspectors.map(new DeferredObjectAdapter(_)).toArray[DeferredObject]
 
@@ -171,7 +166,6 @@ private[hive] case class HiveGenericUdf(funcWrapper: HiveFunctionWrapper, childr
 
   override def eval(input: Row): Any = {
     returnInspector // Make sure initialized.
-    if(foldable) return constantReturnValue
 
     var i = 0
     while (i < children.length) {
@@ -366,7 +360,7 @@ private[hive] case class HiveUdafFunction(
   protected lazy val cached = new Array[AnyRef](exprs.length)
   
   def update(input: Row): Unit = {
-    val inputs = inputProjection(input).asInstanceOf[Seq[AnyRef]].toArray
+    val inputs = inputProjection(input)
     function.iterate(buffer, wrap(inputs, inspectors, cached))
   }
 }
