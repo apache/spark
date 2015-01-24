@@ -145,7 +145,7 @@ class RDD(object):
         # This method is called when attempting to pickle an RDD, which is always an error:
         raise Exception(
             "It appears that you are attempting to broadcast an RDD or reference an RDD from an "
-            "action or transforamtion. RDD transformations and actions can only be invoked by the "
+            "action or transformation. RDD transformations and actions can only be invoked by the "
             "driver, not inside of other transformations; for example, "
             "rdd1.map(lambda x: rdd2.values.count() * x) is invalid because the values "
             "transformation and count action cannot be performed inside of the rdd1.map "
