@@ -7,12 +7,10 @@ import java.util.concurrent.TimeUnit
 import io.netty.bootstrap.ServerBootstrap
 import io.netty.channel.ChannelFuture
 import io.netty.channel.ChannelInitializer
-import io.netty.channel.ChannelOption
 import io.netty.channel.EventLoopGroup
 import io.netty.channel.nio.NioEventLoopGroup
 import io.netty.channel.socket.SocketChannel
 import io.netty.channel.socket.nio.NioServerSocketChannel
-
 import io.netty.handler.codec.bytes.ByteArrayDecoder
 import io.netty.handler.codec.bytes.ByteArrayEncoder
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder
@@ -20,13 +18,15 @@ import io.netty.handler.codec.LengthFieldBasedFrameDecoder
 /**
  * Netty-based backend server that is used to communicate between R and Java.
  */
-class SparkRBackend() {
+class SparkRBackend {
 
   var channelFuture: ChannelFuture = null  
   var bootstrap: ServerBootstrap = null
   var bossGroup: EventLoopGroup = null
 
   def init(port: Int) {
+    val socketAddr = new InetSocketAddress(port)
+
     bossGroup = new NioEventLoopGroup(SparkRConf.numServerThreads)
     val workerGroup = bossGroup
     val handler = new SparkRBackendHandler(this)
@@ -51,7 +51,7 @@ class SparkRBackend() {
       }
     })
 
-    channelFuture = bootstrap.bind(new InetSocketAddress(port))
+    channelFuture = bootstrap.bind(socketAddr)
     channelFuture.syncUninterruptibly()
     println("SparkR Backend server started on port :" + port)
   }

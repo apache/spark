@@ -12,11 +12,11 @@
 # environment -> Map[String, T], where T is a native type
 # jobj -> Object, where jobj is an object created in the backend
 
-writeObject <- function(con, object, withType = TRUE) {
+writeObject <- function(con, object, writeType = TRUE) {
   # NOTE: In R vectors have same type as objects. So we don't support
   # passing in vectors as arrays and instead require arrays to be passed
   # as lists.
-  if (withType) {
+  if (writeType) {
     writeType(con, class(object))
   }
   switch(class(object),
@@ -34,15 +34,15 @@ writeObject <- function(con, object, withType = TRUE) {
 
 writeString <- function(con, value) {
   writeInt(con, as.integer(nchar(value) + 1))
-  writeBin(value, con, endian="big")
+  writeBin(value, con, endian = "big")
 }
 
 writeInt <- function(con, value) {
-  writeBin(as.integer(value), con, endian="big")
+  writeBin(as.integer(value), con, endian = "big")
 }
 
 writeDouble <- function(con, value) {
-  writeBin(value, con, endian="big")
+  writeBin(value, con, endian = "big")
 }
 
 writeBoolean <- function(con, value) {
@@ -57,7 +57,7 @@ writeRawSerialize <- function(outputCon, batch) {
 
 writeRaw <- function(con, batch) {
   writeInt(con, length(batch))
-  writeBin(batch, con, endian="big")
+  writeBin(batch, con, endian = "big")
 }
 
 writeType <- function(con, class) {
@@ -81,9 +81,10 @@ writeList <- function(con, arr) {
   elemType <- unique(sapply(arr, function(elem) { class(elem) }))
   stopifnot(length(elemType) <= 1)
 
-  # Write empty lists as strings ?
+  # TODO: Empty lists are given type "character" right now.
+  # This may not work if the Java side expects array of any other type.
   if (length(elemType) == 0) {
-    elemType <- "character"
+    elemType <- class("somestring")
   }
 
   writeType(con, elemType)
@@ -108,6 +109,9 @@ writeEnv <- function(con, env) {
   }
 }
 
+# Used to serialize in a list of objects where each
+# object can be of a different type. Serialization format is
+# <object type> <object> for each object
 writeArgs <- function(con, args) {
   if (length(args) > 0) {
     for (a in args) {

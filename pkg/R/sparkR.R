@@ -3,8 +3,8 @@
 assemblyJarName <- "sparkr-assembly-0.1.jar"
 
 sparkR.onLoad <- function(libname, pkgname) {
-  assemblyJarPath <- paste(libname, "/SparkR/", assemblyJarName, sep="")
-  assemblyJarPath <- gsub(" ", "\\ ", assemblyJarPath, fixed=T)
+  assemblyJarPath <- paste(libname, "/SparkR/", assemblyJarName, sep = "")
+  assemblyJarPath <- gsub(" ", "\\ ", assemblyJarPath, fixed = T)
   packageStartupMessage("[SparkR] Initializing with classpath ", assemblyJarPath, "\n")
  
   .sparkREnv$libname <- libname
@@ -14,17 +14,17 @@ sparkR.onLoad <- function(libname, pkgname) {
 #' Stop this Spark context
 #' Also terminates the backend this R session is connected to
 sparkR.stop <- function(sparkREnv) {
-  if (exists(".sparkRjsc", envir=.sparkREnv)) {
-    sc <- get(".sparkRjsc", envir=.sparkREnv)
+  if (exists(".sparkRjsc", envir = .sparkREnv)) {
+    sc <- get(".sparkRjsc", envir = .sparkREnv)
     callJMethod(sc, "stop")
   }
 
-  if (exists(".sparkRCon", envir=.sparkREnv)) {
+  if (exists(".sparkRCon", envir = .sparkREnv)) {
     callJStatic("SparkRHandler", "stopBackend")
     # Also close the connection and remove it from our env
     conn <- get(".sparkRCon", .sparkREnv)
     close(conn)
-    rm(".sparkRCon", envir=.sparkREnv)
+    rm(".sparkRCon", envir = .sparkREnv)
   }
 }
 
@@ -60,22 +60,24 @@ sparkR.init <- function(
   sparkRLibDir = "",
   sparkRBackendPort = 12345) {
 
-  if (exists(".sparkRjsc", envir=.sparkREnv)) {
+  if (exists(".sparkRjsc", envir = .sparkREnv)) {
     cat("Re-using existing Spark Context. Please restart R to create a new Spark Context\n")
-    return(get(".sparkRjsc", envir=.sparkREnv))
+    return(get(".sparkRjsc", envir = .sparkREnv))
   }
 
   sparkMem <- Sys.getenv("SPARK_MEM", "512m")
   jars <- c(as.character(.sparkREnv$assemblyJarPath), as.character(sparkJars))
 
-  cp <- paste0(jars, collapse=":")
+  cp <- paste0(jars, collapse = ":")
 
   yarn_conf_dir <- Sys.getenv("YARN_CONF_DIR", "")
   if (yarn_conf_dir != "") {
-    cp <- paste(cp, yarn_conf_dir, sep=":")
+    cp <- paste(cp, yarn_conf_dir, sep = ":")
   }
-  launchBackend(classPath=cp, mainClass="edu.berkeley.cs.amplab.sparkr.SparkRBackend",
-                args=as.character(sparkRBackendPort), javaOpts=paste("-Xmx", sparkMem, sep=""))
+  launchBackend(classPath = cp,
+                mainClass = "edu.berkeley.cs.amplab.sparkr.SparkRBackend",
+                args = as.character(sparkRBackendPort),
+                javaOpts = paste("-Xmx", sparkMem, sep = ""))
   Sys.sleep(2) # Wait for backend to come up
   connectBackend("localhost", 12345) # Connect to it
 
@@ -101,7 +103,7 @@ sparkR.init <- function(
   }
 
   nonEmptyJars <- Filter(function(x) { x != "" }, jars)
-  localJarPaths <- sapply(nonEmptyJars, function(j) { paste("file://", j, sep="") })
+  localJarPaths <- sapply(nonEmptyJars, function(j) { paste("file://", j, sep = "") })
 
   assign(
     ".sparkRjsc",
@@ -114,13 +116,13 @@ sparkR.init <- function(
       as.list(localJarPaths),
       sparkEnvirMap,
       sparkExecutorEnvMap),
-    envir=.sparkREnv
+    envir = .sparkREnv
   )
 
-  sc <- get(".sparkRjsc", envir=.sparkREnv)
+  sc <- get(".sparkRjsc", envir = .sparkREnv)
 
   # Register a finalizer to stop backend on R exit
-  reg.finalizer(.sparkREnv, sparkR.stop, onexit=TRUE)
+  reg.finalizer(.sparkREnv, sparkR.stop, onexit = TRUE)
 
   sc
 }

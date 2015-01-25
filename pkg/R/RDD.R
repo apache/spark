@@ -1,53 +1,5 @@
 # RDD in R implemented in S4 OO system.
 
-# Maintain a reference count of Java object references
-# This allows us to GC the java object when it is safe
-.validJobjs <- new.env(parent = emptyenv())
-
-# List of object ids to be removed
-.toRemoveJobjs <- new.env(parent = emptyenv())
-
-getJobj <- function(objId) {
-  newObj <- jobj(objId)
-  if (exists(objId, .validJobjs)) {
-    .validJobjs[[objId]] <- .validJobjs[[objId]] + 1
-  } else {
-    .validJobjs[[objId]] <- 1
-  }
-  newObj
-}
-
-# Handler for a java object that exists on the backend.
-jobj <- function(objId) {
-  if (!is.character(objId)) {
-    stop("object id must be a character")
-  }
-  obj <- structure(new.env(parent = emptyenv()), class = "jobj")
-  obj$id <- objId
-  # Register a finalizer to remove the Java object when this reference
-  # is garbage collected in R
-  reg.finalizer(obj, cleanup.jobj)
-  obj
-}
-
-print.jobj <- function(jobj) {
-  cls <- callJMethod(jobj, "getClass")
-  name <- callJMethod(cls, "getName")
-  cat("Java ref type", name, "id", jobj$id, "\n", sep=" ")
-}
-
-cleanup.jobj <- function(e) {
-  objId <- e$id
-  .validJobjs[[objId]] <- .validJobjs[[objId]] - 1
-
-  if (.validJobjs[[objId]] == 0) {
-    rm(list=objId, envir=.validJobjs)
-    # NOTE: We cannot call removeJObject here as the finalizer may be run
-    # in the middle of another RPC. Thus we queue up this object Id to be removed
-    # and then run all the removeJObject when the next RPC is called.
-    .toRemoveJobjs[[objId]] <- 1
-  }
-}
 setOldClass("jobj")
 
 #' @title S4 class that represents an RDD
@@ -147,7 +99,7 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
               rdd@func(split, part)
             }
             serializedFuncArr <- serialize("computeFunc", connection = NULL,
-                                        ascii = TRUE)
+                                           ascii = TRUE)
 
             packageNamesArr <- serialize(.sparkREnv[[".packages"]],
                                          connection = NULL,
@@ -766,7 +718,7 @@ setMethod("reduce",
             }
 
             partitionList <- collect(lapplyPartition(rdd, reducePartition),
-                                     flatten=FALSE)
+                                     flatten = FALSE)
             Reduce(func, partitionList)
           })
 
@@ -830,7 +782,7 @@ setGeneric("foreach", function(rdd, func) { standardGeneric("foreach") })
 #' @rdname foreach
 #' @aliases foreach,RDD,function-method
 setMethod("foreach",
-          signature(rdd = "RDD", func="function"),
+          signature(rdd = "RDD", func = "function"),
           function(rdd, func) {
             partition.func <- function(x) {
               lapply(x, func)
@@ -858,7 +810,7 @@ setGeneric("foreachPartition",
 #' @rdname foreach
 #' @aliases foreachPartition,RDD,function-method
 setMethod("foreachPartition",
-          signature(rdd = "RDD", func="function"),
+          signature(rdd = "RDD", func = "function"),
           function(rdd, func) {
             invisible(collect(mapPartitions(rdd, func)))
           })
@@ -1137,9 +1089,8 @@ setMethod("saveAsObjectFile",
             if (!rdd@env$serialized) {
               rdd <- reserialize(rdd)
             }
-            callJMethod(getJRDD(rdd), "saveAsObjectFile", path)
             # Return nothing
-            invisible(NULL)
+            invisible(callJMethod(getJRDD(rdd), "saveAsObjectFile", path))
           })
 
 #' Save this RDD as a text file, using string representations of elements.
@@ -1165,9 +1116,9 @@ setMethod("saveAsTextFile",
               toString(x)
             }
             stringRdd <- lapply(rdd, func)
-            callJMethod(getJRDD(stringRdd, dataSerialization = FALSE), "saveAsTextFile", path)
             # Return nothing
-            invisible(NULL)
+            invisible(
+              callJMethod(getJRDD(stringRdd, dataSerialization = FALSE), "saveAsTextFile", path))
           })
 
 #' Return an RDD with the keys of each tuple.
@@ -1358,7 +1309,7 @@ setMethod("partitionBy",
             # shuffled acutal content key-val pairs.
             r <- callJMethod(javaPairRDD, "values")
 
-            RDD(r, serialized=TRUE)
+            RDD(r, serialized = TRUE)
           })
 
 #' Group values by key

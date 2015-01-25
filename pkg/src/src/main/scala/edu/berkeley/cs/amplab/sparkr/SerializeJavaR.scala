@@ -1,6 +1,5 @@
 package edu.berkeley.cs.amplab.sparkr
 
-import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
 
 import java.io.DataInputStream
@@ -43,7 +42,7 @@ object SerializeJavaR {
       case 'e' => readMap(dis)
       case 'r' => readBytes(dis)
       case 'l' => readList(dis)
-      case 'j' => JavaObjectTracker.getObject(readString(dis))
+      case 'j' => JVMObjectTracker.getObject(readString(dis))
       case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
     }
   }
@@ -109,8 +108,8 @@ object SerializeJavaR {
       case 'i' => readIntArr(dis)
       case 'c' => readStringArr(dis)
       case 'd' => readDoubleArr(dis)
-      case 'l' => readBooleanArr(dis)
-      case 'j' => readStringArr(dis).map(x => JavaObjectTracker.getObject(x))
+      case 'b' => readBooleanArr(dis)
+      case 'j' => readStringArr(dis).map(x => JVMObjectTracker.getObject(x))
       case 'r' => readBytesArr(dis)
       case _ => throw new IllegalArgumentException(s"Invalid array type $arrType")
     }
@@ -140,7 +139,8 @@ object SerializeJavaR {
   // Int -> integer
   // String -> character
   // Boolean -> logical
-  // Double -> numeric / double
+  // Double -> double
+  // Long -> double
   // Array[Byte] -> raw
   //
   // Array[T] -> list()
@@ -219,7 +219,7 @@ object SerializeJavaR {
         }
         case _ => {
           // Handle array of objects
-          if (value.getClass().getName().startsWith("[L")) {
+          if (value.getClass.getName.startsWith("[L")) {
             val objArr = value.asInstanceOf[Array[Object]]
             writeType(dos, "list")
             writeType(dos, "jobj")
@@ -261,7 +261,7 @@ object SerializeJavaR {
   }
 
   def writeJObj(out: DataOutputStream, value: Object) {
-    val objId = JavaObjectTracker.put(value)
+    val objId = JVMObjectTracker.put(value)
     writeString(out, objId)
   }
 

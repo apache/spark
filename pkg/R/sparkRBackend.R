@@ -13,23 +13,23 @@ isInstanceOf <- function(jobj, className) {
 # from the SparkRBackend.
 callJMethod <- function(objId, methodName, ...) {
   stopifnot(class(objId) == "jobj")
-  invokeJava(isStatic=FALSE, objId, methodName, ...)
+  invokeJava(isStatic = FALSE, objId$id, methodName, ...)
 }
 
 # Call a static method on a specified className
 callJStatic <- function(className, methodName, ...) {
-  invokeJava(isStatic=TRUE, className, methodName, ...)
+  invokeJava(isStatic = TRUE, className, methodName, ...)
 }
 
 # Create a new object of the specified class name
 newJObject <- function(className, ...) {
-  invokeJava(isStatic=TRUE, className, methodName="<init>", ...)
+  invokeJava(isStatic = TRUE, className, methodName = "<init>", ...)
 }
 
 # Remove an object from the SparkR backend. This is done
 # automatically when a jobj is garbage collected.
 removeJObject <- function(objId) {
-  invokeJava(isStatic=TRUE, "SparkRHandler", "rm", objId)
+  invokeJava(isStatic = TRUE, "SparkRHandler", "rm", objId)
 }
 
 isRemoveMethod <- function(isStatic, objId, methodName) {
@@ -40,36 +40,32 @@ isRemoveMethod <- function(isStatic, objId, methodName) {
 # should typically use one of the higher level methods like
 # callJMethod, callJStatic etc. instead of using this.
 #
-# If isStatic is true, objId contains className otherwise
-# it should contain a jobj returned previously by the backend
+# isStatic - TRUE if the method to be called is static
+# objId - String that refers to the object on which method is invoked
+#         Should be a jobj id for non-static methods and the classname
+#         for static methods
+# methodName - name of method to be invoked
 invokeJava <- function(isStatic, objId, methodName, ...) {
   if (!exists(".sparkRCon", .sparkREnv)) {
     stop("No connection to backend found")
   }
 
-  # If this is already isn't a removeJObject call
+  # If this isn't a removeJObject call
   if (!isRemoveMethod(isStatic, objId, methodName)) {
     objsToRemove <- ls(.toRemoveJobjs)
     if (length(objsToRemove) > 0) {
-      #cat("Clearing up objsToRemove\n")
       sapply(objsToRemove,
             function(e) {
               removeJObject(e)
             })
-      rm(list=objsToRemove, envir=.toRemoveJobjs)
+      rm(list = objsToRemove, envir = .toRemoveJobjs)
     }
   }
 
   rc <- rawConnection(raw(0), "r+")
 
   writeBoolean(rc, isStatic)
-  # Write object id as string if it is static
-  # else check if its a jobj and write its id
-  if (isStatic) {
-    writeString(rc, objId)
-  } else {
-    writeString(rc, objId$id)
-  }
+  writeString(rc, objId)
   writeString(rc, methodName)
 
   args <- list(...)

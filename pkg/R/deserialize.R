@@ -6,7 +6,8 @@
 # Int -> integer
 # String -> character
 # Boolean -> logical
-# Double -> numeric / double
+# Double -> double
+# Long -> double
 # Array[Byte] -> raw
 #
 # Array[T] -> list()
@@ -33,16 +34,16 @@ readTypedObject <- function(con, type) {
 
 readString <- function(con) {
   stringLen <- readInt(con)
-  string <- readBin(con, raw(), stringLen, endian="big")
+  string <- readBin(con, raw(), stringLen, endian = "big")
   rawToChar(string)
 }
 
 readInt <- function(con) {
-  readBin(con, integer(), n = 1, endian="big")
+  readBin(con, integer(), n = 1, endian = "big")
 }
 
 readDouble <- function(con) {
-  readBin(con, double(), n = 1, endian="big")
+  readBin(con, double(), n = 1, endian = "big")
 }
 
 readBoolean <- function(con) {
@@ -70,11 +71,11 @@ readList <- function(con) {
 
 readRaw <- function(con) {
   dataLen <- readInt(con)
-  data <- readBin(con, raw(), as.integer(dataLen), endian="big")
+  data <- readBin(con, raw(), as.integer(dataLen), endian = "big")
 }
 
 readRawLen <- function(con, dataLen) {
-  data <- readBin(con, raw(), as.integer(dataLen), endian="big")
+  data <- readBin(con, raw(), as.integer(dataLen), endian = "big")
 }
 
 readDeserialize <- function(con) {
@@ -83,7 +84,7 @@ readDeserialize <- function(con) {
   # return firstData
   dataLen <- readInt(con)
   firstData <- unserialize(
-      readBin(con, raw(), as.integer(dataLen), endian="big"))
+      readBin(con, raw(), as.integer(dataLen), endian = "big"))
 
   # Else, read things into a list
   dataLen <- readInt(con)
@@ -91,7 +92,7 @@ readDeserialize <- function(con) {
     data <- list(firstData)
     while (length(dataLen) > 0 && dataLen > 0) {
       data[[length(data) + 1L]] <- unserialize(
-          readBin(con, raw(), as.integer(dataLen), endian="big"))
+          readBin(con, raw(), as.integer(dataLen), endian = "big"))
       dataLen <- readInt(con)
     }
     unlist(data, recursive = FALSE)

@@ -29,7 +29,7 @@ textFile <- function(sc, path, minSplits = NULL) {
   # Allow the user to have a more flexible definiton of the text file path
   path <- normalizePath(path)
   #' Convert a string vector of paths to a string containing comma separated paths
-  path <- paste(path, collapse=",")
+  path <- paste(path, collapse = ",")
 
   jrdd <- callJMethod(sc, "textFile", path, getMinSplits(sc, minSplits))
   RDD(jrdd, FALSE)
@@ -56,7 +56,7 @@ objectFile <- function(sc, path, minSplits = NULL) {
   # Allow the user to have a more flexible definiton of the text file path
   path <- normalizePath(path)
   #' Convert a string vector of paths to a string containing comma separated paths
-  path <- paste(path, collapse=",")
+  path <- paste(path, collapse = ",")
 
   jrdd <- callJMethod(sc, "objectFile", path, getMinSplits(sc, minSplits))
   # Assume the RDD contains serialized R objects.

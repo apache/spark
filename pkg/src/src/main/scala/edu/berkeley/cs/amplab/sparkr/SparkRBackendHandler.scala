@@ -46,7 +46,7 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
             val t = readObjectType(dis)
             assert(t == 'c')
             val objToRemove = readString(dis)
-            JavaObjectTracker.remove(objToRemove)
+            JVMObjectTracker.remove(objToRemove)
             writeInt(dos, 0)
             writeObject(dos, null)
           } catch {
@@ -77,16 +77,20 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
     ctx.close()
   }
 
-  def handleMethodCall(isStatic: Boolean, objId: String, methodName: String,
-    numArgs: Int, dis: DataInputStream, dos: DataOutputStream) {
-
+  def handleMethodCall(
+      isStatic: Boolean,
+      objId: String,
+      methodName: String,
+      numArgs: Int,
+      dis: DataInputStream,
+      dos: DataOutputStream) {
     var obj: Object = null
     var cls: Option[Class[_]] = None
     try {
       if (isStatic) {
         cls = Some(Class.forName(objId))
       } else {
-        JavaObjectTracker.get(objId) match {
+        JVMObjectTracker.get(objId) match {
           case None => throw new IllegalArgumentException("Object not found " + objId)
           case Some(o) => {
             cls = Some(o.getClass)
@@ -97,11 +101,11 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
 
       val args = readArgs(numArgs, dis)
 
-      val methods = cls.get.getMethods()
+      val methods = cls.get.getMethods
       val selectedMethods = methods.filter(m => m.getName() == methodName)
       if (selectedMethods.length > 0) {
         val selectedMethod = selectedMethods.filter { x => 
-          matchMethod(numArgs, args, x.getParameterTypes())
+          matchMethod(numArgs, args, x.getParameterTypes)
         }.head
 
         val ret = selectedMethod.invoke(obj, args:_*)
@@ -111,8 +115,8 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
         writeObject(dos, ret.asInstanceOf[AnyRef])
       } else if (methodName == "<init>") {
         // methodName should be "<init>" for constructor
-        val ctor = cls.get.getConstructors().filter { x =>
-          matchMethod(numArgs, args, x.getParameterTypes())
+        val ctor = cls.get.getConstructors.filter { x =>
+          matchMethod(numArgs, args, x.getParameterTypes)
         }.head
 
         val obj = ctor.newInstance(args:_*)
@@ -160,19 +164,19 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
           case _ => parameterType
         }
       }
-      if(!parameterWrapperType.isInstance(args(i))) {
+      if (!parameterWrapperType.isInstance(args(i))) {
         return false
       }
     }
-    return true
+    true
   }
 }
 
 /**
- * Helper singleton that tracks Java objects returned to R.
+ * Helper singleton that tracks JVM objects returned to R.
  * This is useful for referencing these objects in RPC calls.
  */
-object JavaObjectTracker {
+object JVMObjectTracker {
 
   // TODO: This map should be thread-safe if we want to support multiple
   // connections at the same time

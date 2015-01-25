@@ -46,7 +46,7 @@ convertJListToRList <- function(jList, flatten, logicalUpperBound = NULL, serial
                    res <- head(res, n = logicalUpperBound)
                  }
                } else {
-                 # jElem is of a primitive Java type, is simplified to R's
+                 # obj is of a primitive Java type, is simplified to R's
                  # corresponding type.
                  res <- list(obj)
                }
@@ -66,7 +66,7 @@ convertJListToRList <- function(jList, flatten, logicalUpperBound = NULL, serial
 
 # Returns TRUE if `name` refers to an RDD in the given environment `env`
 isRDD <- function(name, env) {
-  obj <- get(name, envir=env)
+  obj <- get(name, envir = env)
   inherits(obj, "RDD")
 }
 
@@ -85,10 +85,10 @@ isSparkFunction <- function(name) {
       fun <- name
     }
     envir <- parent.frame(2)
-    if (!exists(as.character(fun), mode = "function", envir=envir)) {
+    if (!exists(as.character(fun), mode = "function", envir = envir)) {
       return(FALSE)
     }
-    fun <- get(as.character(fun), mode = "function", envir=envir)
+    fun <- get(as.character(fun), mode = "function", envir = envir)
   }
   packageName(environment(fun)) == "SparkR"
 }
@@ -117,11 +117,11 @@ getDependencies <- function(name) {
   # would be to actually list all the variables used in every function using
   # `all.vars` and then walking through functions etc.
   filteredVars <- Filter(
-                    function(x) { !exists(x, .broadcastNames, inherits=FALSE) },
+                    function(x) { !exists(x, .broadcastNames, inherits = FALSE) },
                     filteredVars)
 
   rc <- rawConnection(raw(), 'wb')
-  save(list=filteredVars, file=rc, envir=closureEnv)
+  save(list = filteredVars, file = rc, envir = closureEnv)
   binData <- rawConnectionValue(rc)
   close(rc)
   binData
@@ -147,13 +147,13 @@ hashCode <- function(key) {
     as.integer(key[[1]])
   } else if (class(key) == "numeric") {
     # Convert the double to long and then calculate the hash code
-    rawVec <- writeBin(key[[1]], con=raw())
+    rawVec <- writeBin(key[[1]], con = raw())
     intBits <- packBits(rawToBits(rawVec), "integer")
     as.integer(bitwXor(intBits[2], intBits[1]))
   } else if (class(key) == "character") {
     .Call("stringHashCode", key)
   } else {
-    warning(paste("Could not hash object, returning 0", sep=""))
+    warning(paste("Could not hash object, returning 0", sep = ""))
     as.integer(0)
   }
 }
