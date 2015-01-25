@@ -156,6 +156,9 @@ class Strategy (
       s"DecisionTree Strategy requires minInstancesPerNode >= 1 but was given $minInstancesPerNode")
     require(maxMemoryInMB <= 10240,
       s"DecisionTree Strategy requires maxMemoryInMB <= 10240, but was given $maxMemoryInMB")
+    require(subsamplingRate > 0 && subsamplingRate <= 1,
+      s"DecisionTree Strategy requires subsamplingRate <=1 and >0, but was given " +
+      s"$subsamplingRate")
   }
 
   /** Returns a shallow copy of this instance. */
