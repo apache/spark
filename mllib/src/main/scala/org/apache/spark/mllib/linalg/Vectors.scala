@@ -73,7 +73,7 @@ sealed trait Vector extends Serializable {
       if (value != 0) {
         result = 31 * result + index
         // refer to {@link java.util.Arrays.equals} for hash algorithm
-        val bits = JavaDouble.doubleToLongBits(value)
+        val bits = java.lang.Double.doubleToLongBits(value)
         result = 31 * result + (bits ^ (bits >>> 32)).toInt
       }
     }
@@ -333,7 +333,7 @@ object Vectors {
       math.pow(sum, 1.0 / p)
     }
   }
- 
+
   /**
    * Returns the squared distance between two Vectors.
    * @param v1 first Vector.
@@ -342,57 +342,78 @@ object Vectors {
    */
   def sqdist(v1: Vector, v2: Vector): Double = {
     require(v1.size == v2.size, "vector dimension mismatch")
+    var squaredDistance = 0.0
     (v1, v2) match {
       case (v1: SparseVector, v2: SparseVector) =>
-        sqdist(v1.indices, v1.values, v2.indices, v2.values)
-      case (v1: SparseVector, v2: DenseVector) =>
-        sqdist(v1.indices, v1.values, 0 until v2.size, v2.values)
-      case (v1: DenseVector, v2: SparseVector) =>
-        sqdist(0 until v1.size, v1.values, v2.indices, v2.values)
+        val v1Values = v1.values
+        val v1Indices = v1.indices
+        val v2Values = v2.values
+        val v2Indices = v2.indices
+        val nnzv1 = v1Indices.size
+        val nnzv2 = v2Indices.size
+
+        var kv1 = 0
+        var kv2 = 0
+        while (kv1 < nnzv1 || kv2 < nnzv2) {
+          var score = 0.0
+
+          if (kv2 >= nnzv2 || (kv1 < nnzv1 && v1Indices(kv1) < v2Indices(kv2))) {
+            score = v1Values(kv1)
+            kv1 += 1
+          } else if (kv1 >= nnzv1 || (kv2 < nnzv2 && v2Indices(kv2) < v1Indices(kv1))) {
+            score = v2Values(kv2)
+            kv2 += 1
+          } else {
+            score = v1Values(kv1) - v2Values(kv2)
+            kv1 += 1
+            kv2 += 1
+          }
+          squaredDistance += score * score
+        }
+
+      case (v1: SparseVector, v2: DenseVector) if v1.indices.length / v1.size < 0.5 =>
+        squaredDistance = sqdist(v1, v2)
+
+      case (v1: DenseVector, v2: SparseVector) if v2.indices.length / v2.size < 0.5 =>
+        squaredDistance = sqdist(v2, v1)
+
+      // When a SparseVector is approximately dense, we treat it as a DenseVector
       case (v1, v2) =>
-        sqdist(0 until v1.size, v1.toArray, 0 until v2.size, v2.toArray)
+        squaredDistance = v1.toArray.zip(v2.toArray).foldLeft(0.0){ (distance, elems) =>
+          val score = elems._1 - elems._2
+          distance + score * score
+        }
     }
+    squaredDistance
   }
 
-
   /**
-   * Unified logic for computing squared distance
+   * Returns the squared distance between DenseVector and SparseVector.
    */
-  private[mllib] def sqdist(
-      v1Indices: IndexedSeq[Int],
-      v1Values: Array[Double],
-      v2Indices: IndexedSeq[Int],
-      v2Values: Array[Double]): Double = {
-    val v1Size = v1Values.size
-    val v2Size = v2Values.size
-    var k1 = 0
-    var k2 = 0
-    var total = 0.0
-    while (k1 < v1Size && k2 < v2Size) {
-      var diff = 0.0
-      if (v1Indices(k1) < v2Indices(k2)) {
-        diff = v1Values(k1)
-        k1 += 1
-      }
-      else if (v1Indices(k1) > v2Indices(k2)) {
-        diff = v2Values(k2)
-        k2 += 1
-      }
-      else {
-        diff = v1Values(k1) - v2Values(k2)
-        k1 += 1
-        k2 += 1
-      }
-      total += diff * diff
-    }
+  private[mllib] def sqdist(v1: SparseVector, v2: DenseVector): Double = {
+    var kv1 = 0
+    var kv2 = 0
+    val indices = v1.indices
+    var squaredDistance = 0.0
+    val nnzv1 = indices.size
+    val nnzv2 = v2.size
+    var iv1 = if (nnzv1 > 0) indices(kv1) else -1
 
-    for(k <- k1 until v1Size){
-      total += v1Values(k) * v1Values(k)
+    while (kv2 < nnzv2) {
+      var score = 0.0
+      if (kv2 != iv1) {
+        score = v2(kv2)
+      } else {
+        score = v1.values(kv1) - v2(kv2)
+        if (kv1 < nnzv1 - 1) {
+          kv1 += 1
+          iv1 = indices(kv1)
+        }
+      }
+      squaredDistance += score * score
+      kv2 += 1
     }
-    for(k <- k2 until v2Size){
-      total += v2Values(k) * v2Values(k)
-    }
-    total
+    squaredDistance
   }
 
   /**
