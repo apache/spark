@@ -328,4 +328,39 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
     // cleanup
     TestHbase.sql("drop table testblk")
   }
+
+  test("load parall data on hbase table with more than 1 column family") {
+    createNativeHbaseTable("multi_cf_table", Seq("cf1", "cf2"))
+    // create sql table map with hbase table and run simple sql
+    val sql1 =
+      s"""CREATE TABLE testblk(col1 STRING, col2 STRING, col3 STRING, PRIMARY KEY(col1))
+          MAPPED BY (multi_cf_table, COLS=[col2=cf1.a, col3=cf2.b])"""
+        .stripMargin
+
+    val sql2 =
+      s"""select * from testblk limit 5"""
+        .stripMargin
+
+    val executeSql1 = TestHbase.executeSql(sql1)
+    executeSql1.toRdd.collect()
+
+    val executeSql2 = TestHbase.executeSql(sql2)
+    executeSql2.toRdd.collect()
+
+    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadData.txt'"
+
+    // then load parall data into table
+    val loadSql = "LOAD PARALL DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
+
+    val executeSql3 = TestHbase.executeSql(loadSql)
+    executeSql3.toRdd.collect()
+
+    checkAnswer(TestHbase.sql("select * from testblk"),
+      Row("row4", "4", "8") ::
+        Row("row5", "5", "10") ::
+        Row("row6", "6", "12") :: Nil)
+
+    // cleanup
+    TestHbase.sql("drop table testblk")
+  }
 }
