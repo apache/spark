@@ -15,16 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.hive.thriftserver.ui
+package org.apache.spark.sql.hive.thriftserver
 
 import org.apache.hive.service.cli.SessionHandle
 import org.apache.hive.service.cli.session.HiveSession
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.scheduler.{SparkListenerJobStart, SparkListener}
+import org.apache.hive.service.server.HiveServer2
+import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.scheduler.{SparkListenerJobStart, SparkListenerApplicationEnd, SparkListener}
 
 import scala.collection.mutable.HashMap
 
-private[thriftserver] trait ThriftServerEventListener {
+private[thriftserver] trait HiveThriftServerEventListener {
   /**
    * Called when a session created.
    */
@@ -61,9 +62,9 @@ private[thriftserver] trait ThriftServerEventListener {
 }
 
 private[thriftserver] class SessionInfo(
-    val session: HiveSession,
-    val startTimestamp: Long,
-    val ip: String) {
+                                         val session: HiveSession,
+                                         val startTimestamp: Long,
+                                         val ip: String) {
   val sessionID = session.getSessionHandle.getSessionId.toString
   val userName = if (session.getUserName == null) "UNKNOWN" else session.getUserName
   var finishTimestamp = 0L
@@ -103,17 +104,24 @@ private[thriftserver] class ExecutionInfo(
   }
 }
 
-private[sql] class ThriftServerUIEventListener(val conf: SparkConf)
-  extends ThriftServerEventListener with SparkListener {
+/**
+ * A listener for HiveThriftServer2
+ */
+class HiveThriftServer2Listener(
+    val server: HiveServer2,
+    val conf:SparkConf) extends SparkListener with HiveThriftServerEventListener{
 
-  import ThriftServerUIEventListener._
+  // called in sc.stop to clean up the HiveThriftServer2
+  override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+    server.stop()
+  }
 
   var sessionList = new HashMap[SessionHandle, SessionInfo]
   var executeList = new HashMap[String, ExecutionInfo]
   val retainedStatements =
-    conf.getInt("spark.thriftserver.ui.retainedStatements", DEFAULT_RETAINED_STATEMENTS)
+    conf.getInt("spark.thriftserver.ui.retainedStatements", 1000)
   val retainedSessions =
-    conf.getInt("spark.thriftserver.ui.retainedSessions", DEFAULT_RETAINED_SESSIONS)
+    conf.getInt("spark.thriftserver.ui.retainedSessions", 1000)
   var totalRunning = 0
 
   override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
@@ -193,9 +201,4 @@ private[sql] class ThriftServerUIEventListener(val conf: SparkConf)
       }
     }
   }
-}
-
-private[thriftserver] object ThriftServerUIEventListener {
-  val DEFAULT_RETAINED_SESSIONS = 1000
-  val DEFAULT_RETAINED_STATEMENTS = 1000
 }

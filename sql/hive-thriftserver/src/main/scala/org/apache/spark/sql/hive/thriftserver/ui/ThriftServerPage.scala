@@ -22,6 +22,7 @@ import javax.servlet.http.HttpServletRequest
 
 import org.apache.commons.lang3.StringEscapeUtils
 import org.apache.spark.Logging
+import org.apache.spark.sql.hive.thriftserver.{ExecutionState, ExecutionInfo}
 import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui._
 

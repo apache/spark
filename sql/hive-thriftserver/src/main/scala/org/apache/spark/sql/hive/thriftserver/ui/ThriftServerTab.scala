@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive.thriftserver.ui
 
-import org.apache.spark.sql.hive.thriftserver.SparkSQLEnv
+import org.apache.spark.sql.hive.thriftserver.{HiveThriftServer2, SparkSQLEnv}
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab._
 import org.apache.spark.ui.{SparkUI, SparkUITab}
 import org.apache.spark.{SparkContext, Logging, SparkException}
@@ -30,7 +30,7 @@ private[thriftserver] class ThriftServerTab(sparkContext: SparkContext)
   extends SparkUITab(getSparkUI(sparkContext), "ThriftServer") with Logging {
 
   val parent = getSparkUI(sparkContext)
-  val listener = SparkSQLEnv.sqlEventListener
+  val listener = HiveThriftServer2.sqlEventListener
 
   attachPage(new ThriftServerPage(this))
   parent.attachTab(this)

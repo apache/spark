@@ -90,7 +90,7 @@ private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
   }
 
   override def closeSession(sessionHandle: SessionHandle) {
-    SparkSQLEnv.sqlEventListener.onSessionClosed(super.getSession(sessionHandle))
+    HiveThriftServer2.sqlEventListener.onSessionClosed(super.getSession(sessionHandle))
     super.closeSession(sessionHandle)
     sparkSqlOperationManager.sessionToActivePool -= sessionHandle
   }
@@ -103,7 +103,7 @@ private[hive] class SparkSQLSessionManager(hiveContext: HiveContext)
       withImpersonation: Boolean,
       delegationToken: java.lang.String): SessionHandle = {
     val ret = super.openSession(username, password, sessionConf, withImpersonation, delegationToken)
-    SparkSQLEnv.sqlEventListener.onSessionCreated("UNKNOWN", super.getSession(ret))
+    HiveThriftServer2.sqlEventListener.onSessionCreated("UNKNOWN", super.getSession(ret))
     ret
   }
 }
@@ -232,7 +232,7 @@ private[hive] class SparkExecuteStatementOperation(
     logInfo(s"Running query '$statement'")
     setState(OperationState.RUNNING)
     hiveContext.sparkContext.setJobGroup(statementId, statement)
-    SparkSQLEnv.sqlEventListener
+    HiveThriftServer2.sqlEventListener
       .onStatementStart(statementId, parentSession, statement, statementId)
     try {
       result = hiveContext.sql(statement)
@@ -246,7 +246,8 @@ private[hive] class SparkExecuteStatementOperation(
       sessionToActivePool.get(parentSession.getSessionHandle).foreach { pool =>
         hiveContext.sparkContext.setLocalProperty("spark.scheduler.pool", pool)
       }
-      SparkSQLEnv.sqlEventListener.onStatementParse(statementId, result.queryExecution.toString())
+      HiveThriftServer2.sqlEventListener
+        .onStatementParse(statementId, result.queryExecution.toString())
       iter = {
         val useIncrementalCollect =
           hiveContext.getConf("spark.sql.thriftServer.incrementalCollect", "false").toBoolean
@@ -263,12 +264,12 @@ private[hive] class SparkExecuteStatementOperation(
       // HiveServer will silently swallow them.
       case e: Throwable =>
         setState(OperationState.ERROR)
-        SparkSQLEnv.sqlEventListener
+        HiveThriftServer2.sqlEventListener
           .onStatementError(statementId, e.getMessage, e.getStackTraceString)
         logError("Error executing query:",e)
         throw new HiveSQLException(e.toString)
     }
     setState(OperationState.FINISHED)
-    SparkSQLEnv.sqlEventListener.onStatementFinish(statementId)
+    HiveThriftServer2.sqlEventListener.onStatementFinish(statementId)
   }
 }
