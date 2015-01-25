@@ -86,7 +86,7 @@ private[spark] class EventLoggingListener(
    * Creates the log file in the configured log directory.
    */
   def start() {
-    if (!fileSystem.isDirectory(new Path(logBaseDir))) {
+    if (!fileSystem.getFileStatus(new Path(logBaseDir)).isDir) {
       throw new IllegalArgumentException(s"Log directory $logBaseDir does not exist.")
     }
 
@@ -236,15 +236,15 @@ private[spark] object EventLoggingListener extends Logging {
   def initEventLog(
       logStream: OutputStream,
       compressionCodec: Option[CompressionCodec]): OutputStream = {
-    val meta = mutable.HashMap(("version" -> SPARK_VERSION))
+    val meta = mutable.HashMap("version" -> SPARK_VERSION)
     compressionCodec.foreach { codec =>
-      meta += ("compressionCodec" -> codec.getClass().getName())
+      meta += ("compressionCodec" -> codec.getClass.getName)
     }
 
     def write(entry: String) = {
       val bytes = entry.getBytes(Charsets.UTF_8)
       if (bytes.length > MAX_HEADER_LINE_LENGTH) {
-        throw new IOException(s"Header entry too long: ${entry}")
+        throw new IOException(s"Header entry too long: $entry")
       }
       logStream.write(bytes, 0, bytes.length)
     }
@@ -298,7 +298,7 @@ private[spark] object EventLoggingListener extends Logging {
         }
         next = in.read()
       }
-      new String(bytes.toByteArray(), Charsets.UTF_8)
+      new String(bytes.toByteArray, Charsets.UTF_8)
     }
 
     // Parse the header metadata in the form of k=v pairs
@@ -319,8 +319,8 @@ private[spark] object EventLoggingListener extends Logging {
         }
       }
 
-      val sparkVersion = meta.get("version").getOrElse(
-        throw new IllegalArgumentException("Missing Spark version in log metadata."))
+      val sparkVersion =
+        meta.getOrElse("version", throw new IllegalArgumentException("Missing Spark version in log metadata."))
       val codec = meta.get("compressionCodec").map { codecName =>
         codecMap.getOrElseUpdate(codecName, CompressionCodec.createCodec(new SparkConf, codecName))
       }
