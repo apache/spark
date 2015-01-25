@@ -18,8 +18,6 @@
 package org.apache.spark.sql.hive
 
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFUtils.ConversionHelper
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.rules.Rule
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -35,6 +33,8 @@ import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils.getContextOrSparkClassLoader
 
