@@ -80,32 +80,6 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
     assert(l.delimiter.get.equals(raw"\\|"))
   }
 
-  test("write data to HFile with non-parallelized bulk loader") {
-    val columns = Seq(new KeyColumn("k1", IntegerType, 0), new NonKeyColumn("v1", IntegerType, "cf1", "c1"))
-    val hbaseRelation = HBaseRelation("testtablename", "hbasenamespace", "hbasetablename", columns)(TestHbase)
-    val bulkLoad = BulkLoadIntoTableCommand(sparkHome + "/sql/hbase/src/test/resources/test.txt", "hbasetablename",
-      isLocal = true, Option(","))
-    val splitKeys = (1 to 40).filter(_ % 5 == 0).map { r =>
-      val bytesUtils = BytesUtils.create(IntegerType)
-      bytesUtils.toBytes(r)
-    }
-    val conf = TestHbase.sparkContext.hadoopConfiguration
-    val job = Job.getInstance(conf)
-
-    val hadoopReader = {
-      val fs = FileSystem.getLocal(conf)
-      val pathString = fs.pathToFile(new Path(bulkLoad.path)).getCanonicalPath
-      new HadoopReader(TestHbase.sparkContext, pathString, bulkLoad.delimiter)(hbaseRelation)
-    }
-    val tmpPath = Util.getTempFilePath(conf, hbaseRelation.tableName)
-    bulkLoad.makeBulkLoadRDD(splitKeys.toArray, hadoopReader, job, tmpPath, hbaseRelation)
-    val resStatus = FileSystem.get(conf).listStatus(new Path(tmpPath)).map(_.getPath)
-    assert(resStatus.size == 2)
-    assert(resStatus.exists(_.getName.endsWith("cf1")))
-    assert(resStatus.exists(_.getName.endsWith("_SUCCESS")))
-    FileSystem.get(conf).delete(new Path(tmpPath), true)
-  }
-
   test("load data into hbase") {
 
     val drop = "drop table testblk"
