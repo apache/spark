@@ -151,7 +151,6 @@ trait CreateTableAndLoadData extends Logging {
     val fileSystem = FileSystem.get(TestHbase.sparkContext.hadoopConfiguration)
     val files = fileSystem.listStatus(new Path(sparkHome))
     for (file <- files) {
-      println(file.getPath.getName)
       if (file.getPath.getName.indexOf(DefaultTableName) != -1) {
         fileSystem.delete(file.getPath, true)
       }
