@@ -18,21 +18,15 @@
 package org.apache.spark.sql.hbase
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hbase.mapreduce.HFileOutputFormat2
-import org.apache.hadoop.hbase.util.Bytes
 import org.apache.hadoop.mapreduce.Job
-import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.hbase.HBasePartitioner.HBaseRawOrdering
 import org.apache.spark.sql.hbase.execution._
 import org.apache.spark.sql.hbase.util.{BytesUtils, Util}
 import org.apache.spark.sql.types._
-import org.apache.spark.{SerializableWritable, SparkContext}
+import org.apache.spark.SparkContext
 
-import scala.collection.mutable.ArrayBuffer
-
-class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
+class BulkLoadIntoTableSuite extends QueriesSuiteBase {
   val sc: SparkContext = TestHbase.sparkContext
   val sparkHome = TestHbase.sparkContext.getSparkHome().getOrElse("./")
   if (sparkHome == null || sparkHome.isEmpty)
@@ -112,99 +106,6 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     FileSystem.get(conf).delete(new Path(tmpPath), true)
   }
 
-  test("hfile output format, delete me when ready") {
-    val splitRegex = ","
-    val conf = TestHbase.sparkContext.hadoopConfiguration
-    val inputFile = sparkHome + "/sql/hbase/src/test/resources/test.txt"
-    val family = Bytes.toBytes("cf")
-    val qualifier = Bytes.toBytes("c1")
-
-    FileSystem.get(conf).delete(new Path("./hfileoutput"), true)
-
-    val rdd = sc.textFile(inputFile, 1).mapPartitions { iter =>
-      val keyBytes = new Array[(Array[Byte], DataType)](1)
-      val valueBytes = new Array[HBaseRawType](1)
-      val bytesUtils = BytesUtils.create(IntegerType)
-
-
-      iter.map { line =>
-        val splits = line.split(splitRegex)
-        keyBytes(0) = (bytesUtils.toBytes(splits(0).toInt), IntegerType)
-        valueBytes(0) = bytesUtils.toBytes(splits(1).toInt)
-        val rowKeyData = bytesUtils.toBytes(splits(0).toInt)
-
-        (rowKeyData, valueBytes)
-      }
-    }
-
-    import org.apache.hadoop.hbase._
-    import org.apache.hadoop.hbase.io._
-
-    import scala.collection.JavaConversions._
-
-    val splitKeys = (1 to 40).filter(_ % 5 == 0).map { r =>
-      val bytesUtils = BytesUtils.create(IntegerType)
-      bytesUtils.toBytes(r)
-    }
-    //    splitKeys += (new ImmutableBytesWritableWrapper(Bytes.toBytes(100)))
-    val ordering = implicitly[Ordering[HBaseRawType]]
-    val partitioner = new HBasePartitioner(splitKeys.toArray)
-    val shuffled =
-      new ShuffledRDD[HBaseRawType, Array[HBaseRawType], Array[HBaseRawType]](rdd, partitioner)
-        .setKeyOrdering(ordering)
-
-    val bulkLoadRDD = shuffled.mapPartitions { iter =>
-      // the rdd now already sort by key, to sort by value
-      val map = new java.util.TreeSet[KeyValue](KeyValue.COMPARATOR)
-      var preKV: (HBaseRawType, Array[HBaseRawType]) = null
-      var nowKV: (HBaseRawType, Array[HBaseRawType]) = null
-      val ret = new ArrayBuffer[(ImmutableBytesWritable, KeyValue)]()
-      if (iter.hasNext) {
-        preKV = iter.next()
-        for (i <- 0 until preKV._2.size) {
-          if (preKV._2 != null) {
-            val kv = new KeyValue(preKV._1, family, qualifier, preKV._2(i))
-            map.add(kv)
-          }
-        }
-
-        while (iter.hasNext) {
-          nowKV = iter.next()
-          if (Bytes.equals(nowKV._1, preKV._1)) {
-            for (i <- 0 until nowKV._2.size) {
-              if (preKV._2 != null) {
-                val kv = new KeyValue(nowKV._1, family, qualifier, nowKV._2(i))
-                map.add(kv)
-              }
-            }
-          } else {
-            ret ++= map.iterator().map((new ImmutableBytesWritable(preKV._1), _))
-            preKV = nowKV
-            map.clear()
-            for (i <- 0 until preKV._2.size) {
-              if (preKV._2 != null) {
-                val kv = new KeyValue(nowKV._1, family, qualifier, nowKV._2(i))
-                map.add(kv)
-              }
-            }
-          }
-        }
-        ret ++= map.iterator().map((new ImmutableBytesWritable(preKV._1), _))
-        map.clear()
-        ret.iterator
-      } else {
-        Iterator.empty
-      }
-    }
-    val job = Job.getInstance(sc.hadoopConfiguration)
-    job.setOutputKeyClass(classOf[ImmutableBytesWritable])
-    job.setOutputValueClass(classOf[KeyValue])
-    job.setOutputFormatClass(classOf[HFileOutputFormat2])
-    job.getConfiguration.set("mapred.output.dir", "./hfileoutput")
-    bulkLoadRDD.saveAsNewAPIHadoopDataset(job.getConfiguration)
-    FileSystem.get(conf).delete(new Path("./hfileoutput"), true)
-  }
-
   test("load data into hbase") {
 
     val drop = "drop table testblk"
@@ -213,8 +114,6 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
       executeSql0.toRdd.collect()
     } catch {
       case e: IllegalStateException =>
-        // do not throw exception here
-        println(e.getMessage)
     }
 
     // create sql table map with hbase table and run simple sql
@@ -303,8 +202,6 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
       executeSql0.toRdd.collect()
     } catch {
       case e: IllegalStateException =>
-        // do not throw exception here
-        println(e.getMessage)
     }
 
     // create sql table map with hbase table and run simple sql
@@ -324,9 +221,6 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     executeSql2.toRdd.collect()
 
     val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadNullableData.txt'"
-
-    //val conf = TestHbase.sparkContext.hadoopConfiguration
-    //FileSystem.get(conf).delete(new Path("./hfileoutput"), true)
 
     // then load data into table
     val loadSql = "LOAD DATA LOCAL INPATH " + inputFile + " INTO TABLE testNullColumnBulkload"
@@ -379,9 +273,6 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
 
     val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadNullableData.txt'"
 
-    //val conf = TestHbase.sparkContext.hadoopConfiguration
-    //FileSystem.get(conf).delete(new Path("./hfileoutput"), true)
-
     // then load parall data into table
     val loadSql = "LOAD PARALL DATA LOCAL INPATH " + inputFile + " INTO TABLE testNullColumnBulkload"
 
@@ -401,5 +292,40 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
 
     // cleanup
     TestHbase.sql(drop)
+  }
+
+  test("load data on hbase table with more than 1 column family") {
+    createNativeHbaseTable("multi_cf_table", Seq("cf1", "cf2"))
+    // create sql table map with hbase table and run simple sql
+    val sql1 =
+      s"""CREATE TABLE testblk(col1 STRING, col2 STRING, col3 STRING, PRIMARY KEY(col1))
+          MAPPED BY (multi_cf_table, COLS=[col2=cf1.a, col3=cf2.b])"""
+        .stripMargin
+
+    val sql2 =
+      s"""select * from testblk limit 5"""
+        .stripMargin
+
+    val executeSql1 = TestHbase.executeSql(sql1)
+    executeSql1.toRdd.collect()
+
+    val executeSql2 = TestHbase.executeSql(sql2)
+    executeSql2.toRdd.collect()
+
+    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadData.txt'"
+
+    // then load parall data into table
+    val loadSql = "LOAD DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
+
+    val executeSql3 = TestHbase.executeSql(loadSql)
+    executeSql3.toRdd.collect()
+
+    checkAnswer(TestHbase.sql("select * from testblk"),
+      Row("row4", "4", "8") ::
+        Row("row5", "5", "10") ::
+        Row("row6", "6", "12") :: Nil)
+
+    // cleanup
+    TestHbase.sql("drop table testblk")
   }
 }
