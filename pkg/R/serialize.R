@@ -20,16 +20,16 @@ writeObject <- function(con, object, writeType = TRUE) {
     writeType(con, class(object))
   }
   switch(class(object),
-    integer = writeInt(con, object),
-    character = writeString(con, object),
-    logical = writeBoolean(con, object),
-    double = writeDouble(con, object),
-    numeric = writeDouble(con, object),
-    raw = writeRaw(con, object),
-    list = writeList(con, object),
-    jobj = writeString(con, object$id),
-    environment = writeEnv(con, object),
-    stop("Unsupported type for serialization"))
+         integer = writeInt(con, object),
+         character = writeString(con, object),
+         logical = writeBoolean(con, object),
+         double = writeDouble(con, object),
+         numeric = writeDouble(con, object),
+         raw = writeRaw(con, object),
+         list = writeList(con, object),
+         jobj = writeString(con, object$id),
+         environment = writeEnv(con, object),
+         stop("Unsupported type for serialization"))
 }
 
 writeString <- function(con, value) {
@@ -62,16 +62,16 @@ writeRaw <- function(con, batch) {
 
 writeType <- function(con, class) {
   type <- switch(class,
-            integer = "i",
-            character = "c",
-            logical = "b",
-            double = "d",
-            numeric = "d",
-            raw = "r",
-            list = "l",
-            jobj = "j",
-            environment = "e",
-            stop("Unsupported type for serialization"))
+                 integer = "i",
+                 character = "c",
+                 logical = "b",
+                 double = "d",
+                 numeric = "d",
+                 raw = "r",
+                 list = "l",
+                 jobj = "j",
+                 environment = "e",
+                 stop("Unsupported type for serialization"))
   writeBin(charToRaw(type), con)
 }
 

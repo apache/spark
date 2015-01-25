@@ -23,6 +23,8 @@ jobj <- function(objId) {
   if (!is.character(objId)) {
     stop("object id must be a character")
   }
+  # NOTE: We need a new env for a jobj as we can only register
+  # finalizers for environments or external references pointers.
   obj <- structure(new.env(parent = emptyenv()), class = "jobj")
   obj$id <- objId
   # Register a finalizer to remove the Java object when this reference
