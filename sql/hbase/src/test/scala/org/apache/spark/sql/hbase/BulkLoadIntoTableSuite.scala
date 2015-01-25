@@ -17,13 +17,9 @@
 
 package org.apache.spark.sql.hbase
 
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.hbase.execution._
-import org.apache.spark.sql.hbase.util.{BytesUtils, Util}
-import org.apache.spark.sql.types._
 import org.apache.spark.SparkContext
 
 class BulkLoadIntoTableSuite extends QueriesSuiteBase {
