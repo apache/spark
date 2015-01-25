@@ -1514,7 +1514,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   @deprecated("use defaultMinPartitions", "1.0.0")
   def defaultMinSplits: Int = math.min(defaultParallelism, 2)
 
-  /** Default min number of partitions for Hadoop RDDs when not given by user */
+  /** 
+   * Default min number of partitions for Hadoop RDDs when not given by user 
+   * Notice that we use math.min so the "defaultMinPartitions" cannot be higher than 2.
+   * The reasons for this are discussed in https://github.com/mesos/spark/pull/718
+   */
   def defaultMinPartitions: Int = math.min(defaultParallelism, 2)
 
   private val nextShuffleId = new AtomicInteger(0)
