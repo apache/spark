@@ -25,7 +25,10 @@ class BashOperator(BaseOperator):
 
         logging.info("Runnning command: " + bash_command)
         sp = Popen(
-            bash_command, shell=True, stdout=PIPE, stderr=STDOUT)
+            ['bash', '-c', bash_command],
+            stdout=PIPE, stderr=STDOUT)
+
+        self.sp = sp
 
         logging.info("Output:")
         for line in iter(sp.stdout.readline, ''):
@@ -35,3 +38,7 @@ class BashOperator(BaseOperator):
 
         if sp.returncode:
             raise Exception("Bash command failed")
+
+    def on_kill(self):
+        logging.info('Sending SIGTERM signal to bash subprocess')
+        self.sp.terminate()

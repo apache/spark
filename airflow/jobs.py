@@ -1,9 +1,9 @@
 from datetime import datetime
 import getpass
 import logging
+from multiprocessing import Process
 import signal
 import sys
-import threading
 from time import sleep
 
 from sqlalchemy import (
@@ -69,13 +69,9 @@ class BaseJob(Base):
             (conf.getint('misc', 'JOB_HEARTBEAT_SEC') * 2.1)
         )
 
-    def kill(self, also_clear=False):
+    def kill(self):
         session = settings.Session()
         job = session.query(BaseJob).filter(BaseJob.id==self.id).first()
-        if also_clear:
-            job.state = State.CLEAR
-        else:
-            job.state = State.FAILED
         job.end_date = datetime.now()
         try:
             self.on_kill()
@@ -84,10 +80,11 @@ class BaseJob(Base):
         session.merge(job)
         session.commit()
         session.close()
+        raise Exception("Job shut down externally.")
 
     def on_kill(self):
         '''
-        Will be called when an external kill command is received from the db
+        Will be called when an external kill command is received
         '''
         pass
 
@@ -114,11 +111,7 @@ class BaseJob(Base):
         job = session.query(BaseJob).filter(BaseJob.id==self.id).first()
 
         if job.state == State.SHUTDOWN:
-            self.kill(also_clear=False)
-            raise Exception("Task shut down externally")
-        elif job.state == State.KILL_CLEAR:
-            self.kill(also_clear=True)
-            raise Exception("Task cleared externally. KILL!")
+            self.kill()
 
         if job.latest_heartbeat:
             sleep_for = self.heartrate - (
@@ -143,14 +136,7 @@ class BaseJob(Base):
         make_transient(self)
         self.id = id_
 
-        # Run!
-        # This is enough to fail the task instance
-        def signal_handler(signum, frame):
-            logging.error("SIGINT (ctrl-c) received")
-            self.kill()
-            sys.exit()
-
-        signal.signal(signal.SIGINT, signal_handler)
+        # Run
         self._execute()
 
         # Marking the success in the DB
@@ -390,7 +376,7 @@ class LocalTaskJob(BaseJob):
         super(LocalTaskJob, self).__init__(*args, **kwargs)
 
     def _execute(self):
-        thr = threading.Thread(
+        self.process = Process(
             target=self.task_instance.run,
             kwargs={
                 'ignore_dependencies': self.ignore_dependencies,
@@ -398,12 +384,10 @@ class LocalTaskJob(BaseJob):
                 'mark_success': self.mark_success,
                 'job_id': self.id,
             })
-        self.thr = thr
 
-        thr.start()
-        while thr.is_alive():
+        self.process.start()
+        while self.process.is_alive():
             self.heartbeat()
 
     def on_kill(self):
-        self.task_instance.error(self.task_instance.execution_date)
-        self.thr.kill()
+        self.process.terminate()

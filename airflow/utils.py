@@ -24,8 +24,6 @@ class State(object):
     SHUTDOWN = "shutdown"  # External request to shut down
     FAILED = "failed"
     UP_FOR_RETRY = "up_for_retry"
-    KILL_CLEAR = "kill_clear" # used for job
-    CLEAR = "clear" # ready to be cleared
 
     @classmethod
     def color(cls, state):

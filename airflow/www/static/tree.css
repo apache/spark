@@ -31,11 +31,8 @@ rect.running {
 rect.failed {
     fill: red;
 }
-rect.kill_clear {
+rect.shutdown {
     fill: orange;
-}
-rect.clear {
-    fill: yellow;
 }
 .tooltip.in {
     opacity: 1;

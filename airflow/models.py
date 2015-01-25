@@ -7,7 +7,9 @@ import logging
 import os
 import pickle
 import re
+import signal
 import socket
+import sys
 
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey)
@@ -38,18 +40,18 @@ def clear_task_instances(tis, session):
     Clears a set of task instances, but makes sure the running ones
     get killed.
     '''
-
-    TI = TaskInstance
     job_ids = []
     for ti in tis:
         if ti.state == State.RUNNING:
             if ti.job_id:
+                ti.state = State.SHUTDOWN
                 job_ids.append(ti.job_id)
         else:
             session.delete(ti)
     if job_ids:
-        for job in session.query(TI).filter(TI.job_id.in_(job_ids)).all():
-            job.state = State.KILL_CLEAR
+        from airflow.jobs import BaseJob as BJ  # HA!
+        for job in session.query(BJ).filter(BJ.id.in_(job_ids)).all():
+            job.state = State.SHUTDOWN
 
 
 class DagBag(object):
@@ -478,7 +480,8 @@ class TaskInstance(Base):
 
     def __repr__(self):
         return (
-            "<TaskInstance: {ti.dag_id}.{ti.task_id} {ti.execution_date}>"
+            "<TaskInstance: {ti.dag_id}.{ti.task_id} "
+            "{ti.execution_date} [{ti.state}]>"
         ).format(ti=self)
 
     def ready_for_retry(self):
@@ -561,8 +564,9 @@ class TaskInstance(Base):
                 else:
                     msg = "Executing "
                 msg += "{self.task} for {self.execution_date}"
-                logging.info(msg.format(self=self))
+
             try:
+                logging.info(msg.format(self=self))
                 if not mark_success:
                     from airflow import macros
                     tables = None
@@ -582,6 +586,14 @@ class TaskInstance(Base):
                         'ti': self,
                     }
                     task_copy = copy.copy(task)
+
+                    # Setting kill signal handler
+                    def signal_handler(signum, frame):
+                        logging.error("Killing subprocess")
+                        task_copy.on_kill()
+                        raise Exception("Task received SIGTERM signal")
+                    signal.signal(signal.SIGTERM, signal_handler)
+
                     for attr in task_copy.__class__.template_fields:
                         source = getattr(task_copy, attr)
                         template = self.get_template(source)
@@ -590,7 +602,7 @@ class TaskInstance(Base):
                             template.render(**jinja_context)
                         )
                     task_copy.execute(self.execution_date)
-            except Exception as e:
+            except (Exception, StandardError, KeyboardInterrupt) as e:
                 session = settings.Session()
                 self.end_date = datetime.now()
                 self.set_duration()
@@ -794,6 +806,15 @@ class BaseOperator(Base):
             return self.dag.schedule_interval
         else:
             return self._schedule_interval
+
+    def on_kill(self):
+        '''
+        Override this method to cleanup subprocesses when a task instance
+        gets killed. Any use of the threading, subprocess or multiprocessing
+        module whithin an operator needs to be cleaned up or it will leave
+        ghost processes behind.
+        '''
+        pass
 
     def materialize_files(self):
         # Getting the content of files for template_field / template_ext
