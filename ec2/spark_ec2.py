@@ -29,6 +29,7 @@ import pipes
 import random
 import shutil
 import string
+from stat import s_IRUSR
 import subprocess
 import sys
 import tarfile
