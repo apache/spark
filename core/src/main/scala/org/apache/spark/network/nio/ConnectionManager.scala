@@ -375,16 +375,22 @@ private[nio] class ConnectionManager(
                 }
               }
             } else {
-              logInfo("Key not valid ? " + key)
+              logInfo("Key not valid ? " + key + " remote address: " + 
+                  key.channel().asInstanceOf[SocketChannel].socket
+                  .getRemoteSocketAddress().asInstanceOf[InetSocketAddress])
               throw new CancelledKeyException()
             }
           } catch {
             case e: CancelledKeyException => {
-              logInfo("key already cancelled ? " + key, e)
+              logInfo("key already cancelled ? " + key  + " remote address: " + 
+                  key.channel().asInstanceOf[SocketChannel].socket
+                  .getRemoteSocketAddress().asInstanceOf[InetSocketAddress], e)
               triggerForceCloseByException(key, e)
             }
             case e: Exception => {
-              logError("Exception processing key " + key, e)
+              logError("Exception processing key " + key  + " remote address: " + 
+                  key.channel().asInstanceOf[SocketChannel].socket
+                  .getRemoteSocketAddress().asInstanceOf[InetSocketAddress], e)
               triggerForceCloseByException(key, e)
             }
           }
