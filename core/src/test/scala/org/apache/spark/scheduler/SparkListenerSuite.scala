@@ -26,6 +26,7 @@ import org.scalatest.Matchers
 
 import org.apache.spark.{LocalSparkContext, SparkContext}
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.rpc.akka.AkkaRpcEnv
 import org.apache.spark.util.ResetSystemProperties
 
 class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers with BeforeAndAfter
@@ -273,7 +274,8 @@ class SparkListenerSuite extends FunSuite  with LocalSparkContext with Matchers 
     // Make a task whose result is larger than the akka frame size
     System.setProperty("spark.akka.frameSize", "1")
     val akkaFrameSize =
-      sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
+      sc.env.rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem.settings.
+        config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
     val result = sc.parallelize(Seq(1), 1)
       .map { x => 1.to(akkaFrameSize).toArray }
       .reduce { case (x, y) => x }

@@ -43,7 +43,7 @@ private[spark] trait ActorLogReceive {
 
     private val _receiveWithLogging = receiveWithLogging
 
-    override def isDefinedAt(o: Any): Boolean = _receiveWithLogging.isDefinedAt(o)
+    final override def isDefinedAt(o: Any): Boolean = _receiveWithLogging.isDefinedAt(o)
 
     override def apply(o: Any): Unit = {
       if (log.isDebugEnabled) {

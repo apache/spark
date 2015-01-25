@@ -17,23 +17,17 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.rpc.{RpcEnv, RpcEndpointRef, RpcEndpoint}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.ThreadStackTrace
+import org.apache.spark.{LocalSparkContext, SparkContext}
+import org.scalatest.FunSuite
 
-/**
- * Driver -> Executor message to trigger a thread dump.
- */
-private[spark] case object TriggerThreadDump
+class ExecutorActorSuite extends FunSuite with LocalSparkContext {
 
-/**
- * Actor that runs inside of executors to enable driver -> executor RPC.
- */
-private[spark]
-class ExecutorActor(override val rpcEnv: RpcEnv, executorId: String) extends RpcEndpoint {
-
-  override def receive(sender: RpcEndpointRef) = {
-    case TriggerThreadDump =>
-      sender.send(Utils.getThreadDump())
-  }
-
-}
+   test("ExecutorActor") {
+     sc = new SparkContext("local[2]", "test")
+     sc.env.rpcEnv.setupEndpoint("executor-actor", new ExecutorActor(sc.env.rpcEnv, "executor-1"))
+     val receiverRef = sc.env.rpcEnv.setupDriverEndpointRef("executor-actor")
+     val response = receiverRef.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump)
+     assert(response.size > 0)
+   }
+ }

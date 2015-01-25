@@ -18,14 +18,13 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
+import java.util.concurrent.{TimeUnit, Executors}
 import java.util.{TimerTask, Timer}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.concurrent.duration._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
-import scala.language.postfixOps
 import scala.util.Random
 
 import org.apache.spark._
@@ -142,11 +141,11 @@ private[spark] class TaskSchedulerImpl(
 
     if (!isLocal && conf.getBoolean("spark.speculation", false)) {
       logInfo("Starting speculative execution thread")
-      import sc.env.actorSystem.dispatcher
-      sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
-            SPECULATION_INTERVAL milliseconds) {
-        Utils.tryOrExit { checkSpeculatableTasks() }
-      }
+      val scheduler =
+        Executors.newScheduledThreadPool(1, Utils.namedThreadFactory("task-scheduler-speculation"))
+      scheduler.scheduleAtFixedRate(new Runnable {
+        override def run(): Unit = Utils.tryOrExit { checkSpeculatableTasks() }
+      }, SPECULATION_INTERVAL, SPECULATION_INTERVAL, TimeUnit.MILLISECONDS)
     }
   }
 

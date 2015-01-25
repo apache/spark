@@ -29,7 +29,7 @@ import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkException, SparkConf}
 
 class UtilsSuite extends FunSuite with ResetSystemProperties {
 
@@ -381,4 +381,18 @@ class UtilsSuite extends FunSuite with ResetSystemProperties {
     require(cnt === 2, "prepare should be called twice")
     require(time < 500, "preparation time should not count")
   }
+
+  test("extractHostPortFromSparkUrl") {
+    val (host, port) = Utils.extractHostPortFromSparkUrl("spark://1.2.3.4:1234")
+    assert("1.2.3.4" === host)
+    assert(1234 === port)
+  }
+
+  test("extractHostPortFromSparkUrl: a typo url") {
+    val e = intercept[SparkException] {
+      Utils.extractHostPortFromSparkUrl("spark://1.2. 3.4:1234")
+    }
+    assert("Invalid master URL: spark://1.2. 3.4:1234" === e.getMessage)
+  }
+
 }

@@ -26,8 +26,6 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.util.control.NonFatal
 
-import akka.actor.Props
-
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
@@ -81,8 +79,8 @@ private[spark] class Executor(
   }
 
   // Create an actor for receiving RPCs from the driver
-  private val executorActor = env.actorSystem.actorOf(
-    Props(new ExecutorActor(executorId)), "ExecutorActor")
+  private val executorActor = env.rpcEnv.setupEndpoint(
+    "ExecutorActor", new ExecutorActor(env.rpcEnv, executorId))
 
   // Create our ClassLoader
   // do this after SparkEnv creation so can access the SecurityManager
@@ -128,7 +126,7 @@ private[spark] class Executor(
 
   def stop() {
     env.metricsSystem.report()
-    env.actorSystem.stop(executorActor)
+    env.rpcEnv.stop(executorActor)
     isStopped = true
     threadPool.shutdown()
     if (!isLocal) {
@@ -361,10 +359,7 @@ private[spark] class Executor(
 
   def startDriverHeartbeater() {
     val interval = conf.getInt("spark.executor.heartbeatInterval", 10000)
-    val timeout = AkkaUtils.lookupTimeout(conf)
-    val retryAttempts = AkkaUtils.numRetries(conf)
-    val retryIntervalMs = AkkaUtils.retryWaitMs(conf)
-    val heartbeatReceiverRef = AkkaUtils.makeDriverRef("HeartbeatReceiver", conf, env.actorSystem)
+    val heartbeatReceiverRef = env.rpcEnv.setupDriverEndpointRef("HeartbeatReceiver")
 
     val t = new Thread() {
       override def run() {
@@ -398,8 +393,7 @@ private[spark] class Executor(
 
           val message = Heartbeat(executorId, tasksMetrics.toArray, env.blockManager.blockManagerId)
           try {
-            val response = AkkaUtils.askWithReply[HeartbeatResponse](message, heartbeatReceiverRef,
-              retryAttempts, retryIntervalMs, timeout)
+            val response = heartbeatReceiverRef.askWithReply[HeartbeatResponse](message)
             if (response.reregisterBlockManager) {
               logWarning("Told to re-register on heartbeat")
               env.blockManager.reregister()

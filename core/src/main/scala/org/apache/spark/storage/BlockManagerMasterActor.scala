@@ -17,29 +17,34 @@
 
 package org.apache.spark.storage
 
+import java.util.concurrent.{ScheduledFuture, TimeUnit, Executors}
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
 import scala.collection.JavaConversions._
-import scala.concurrent.Future
-import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 
-import akka.actor.{Actor, ActorRef, Cancellable}
-import akka.pattern.ask
-
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rpc.{RpcEnv, RpcEndpointRef, RpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
-import org.apache.spark.util.{ActorLogReceive, AkkaUtils, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * BlockManagerMasterActor is an actor on the master node to track statuses of
  * all slaves' block managers.
  */
 private[spark]
-class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus: LiveListenerBus)
-  extends Actor with ActorLogReceive with Logging {
+class BlockManagerMasterActor(override val rpcEnv: RpcEnv, val isLocal: Boolean, conf: SparkConf,
+    listenerBus: LiveListenerBus) extends RpcEndpoint with Logging {
+
+  val scheduler = Executors.newScheduledThreadPool(1,
+    Utils.namedThreadFactory("block-manager-master-actor-heartbeat-scheduler"))
+
+  implicit val executor = ExecutionContext.fromExecutor(
+    Executors.newFixedThreadPool(Runtime.getRuntime.availableProcessors(),
+      Utils.namedThreadFactory("block-manager-master-actor-ask-timeout-executor")))
 
   // Mapping from block manager id to the block manager's information.
   private val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]
@@ -50,84 +55,82 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
-  private val akkaTimeout = AkkaUtils.askTimeout(conf)
-
   val slaveTimeout = conf.getLong("spark.storage.blockManagerSlaveTimeoutMs", 120 * 1000)
 
   val checkTimeoutInterval = conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000)
 
-  var timeoutCheckingTask: Cancellable = null
+  var timeoutCheckingTask: ScheduledFuture[_] = null
 
-  override def preStart() {
-    import context.dispatcher
-    timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
-      checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
-    super.preStart()
+  override def onStart() {
+    super.onStart()
+    timeoutCheckingTask = scheduler.scheduleAtFixedRate(new Runnable {
+      override def run(): Unit = self.send(ExpireDeadHosts)
+    }, 0, checkTimeoutInterval, TimeUnit.MILLISECONDS)
   }
 
-  override def receiveWithLogging = {
+  override def receive(sender: RpcEndpointRef) = {
     case RegisterBlockManager(blockManagerId, maxMemSize, slaveActor) =>
       register(blockManagerId, maxMemSize, slaveActor)
-      sender ! true
+      sender.send(true)
 
     case UpdateBlockInfo(
       blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize) =>
-      sender ! updateBlockInfo(
-        blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize)
+      sender.send(updateBlockInfo(
+        blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize))
 
     case GetLocations(blockId) =>
-      sender ! getLocations(blockId)
+      sender.send(getLocations(blockId))
 
     case GetLocationsMultipleBlockIds(blockIds) =>
-      sender ! getLocationsMultipleBlockIds(blockIds)
+      sender.send(getLocationsMultipleBlockIds(blockIds))
 
     case GetPeers(blockManagerId) =>
-      sender ! getPeers(blockManagerId)
+      sender.send(getPeers(blockManagerId))
 
     case GetActorSystemHostPortForExecutor(executorId) =>
-      sender ! getActorSystemHostPortForExecutor(executorId)
+      sender.send(getActorSystemHostPortForExecutor(executorId))
 
     case GetMemoryStatus =>
-      sender ! memoryStatus
+      sender.send(memoryStatus)
 
     case GetStorageStatus =>
-      sender ! storageStatus
+      sender.send(storageStatus)
 
     case GetBlockStatus(blockId, askSlaves) =>
-      sender ! blockStatus(blockId, askSlaves)
+      sender.send(blockStatus(blockId, askSlaves))
 
     case GetMatchingBlockIds(filter, askSlaves) =>
-      sender ! getMatchingBlockIds(filter, askSlaves)
+      sender.send(getMatchingBlockIds(filter, askSlaves))
 
     case RemoveRdd(rddId) =>
-      sender ! removeRdd(rddId)
+      sender.send(removeRdd(rddId))
 
     case RemoveShuffle(shuffleId) =>
-      sender ! removeShuffle(shuffleId)
+      sender.send(removeShuffle(shuffleId))
 
     case RemoveBroadcast(broadcastId, removeFromDriver) =>
-      sender ! removeBroadcast(broadcastId, removeFromDriver)
+      sender.send(removeBroadcast(broadcastId, removeFromDriver))
 
     case RemoveBlock(blockId) =>
       removeBlockFromWorkers(blockId)
-      sender ! true
+      sender.send(true)
 
     case RemoveExecutor(execId) =>
       removeExecutor(execId)
-      sender ! true
+      sender.send(true)
 
     case StopBlockManagerMaster =>
-      sender ! true
+      sender.send(true)
       if (timeoutCheckingTask != null) {
-        timeoutCheckingTask.cancel()
+        timeoutCheckingTask.cancel(true)
       }
-      context.stop(self)
+      stop()
 
     case ExpireDeadHosts =>
       expireDeadHosts()
 
     case BlockManagerHeartbeat(blockManagerId) =>
-      sender ! heartbeatReceived(blockManagerId)
+      sender.send(heartbeatReceived(blockManagerId))
 
     case other =>
       logWarning("Got unknown message: " + other)
@@ -148,22 +151,20 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
 
     // Ask the slaves to remove the RDD, and put the result in a sequence of Futures.
     // The dispatcher is used as an implicit argument into the Future sequence construction.
-    import context.dispatcher
     val removeMsg = RemoveRdd(rddId)
     Future.sequence(
       blockManagerInfo.values.map { bm =>
-        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
+        bm.slaveActor.ask[Int](removeMsg)
       }.toSeq
     )
   }
 
   private def removeShuffle(shuffleId: Int): Future[Seq[Boolean]] = {
     // Nothing to do in the BlockManagerMasterActor data structures
-    import context.dispatcher
     val removeMsg = RemoveShuffle(shuffleId)
     Future.sequence(
       blockManagerInfo.values.map { bm =>
-        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Boolean]
+        bm.slaveActor.ask[Boolean](removeMsg)
       }.toSeq
     )
   }
@@ -174,14 +175,13 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
    * from the executors, but not from the driver.
    */
   private def removeBroadcast(broadcastId: Long, removeFromDriver: Boolean): Future[Seq[Int]] = {
-    import context.dispatcher
     val removeMsg = RemoveBroadcast(broadcastId, removeFromDriver)
     val requiredBlockManagers = blockManagerInfo.values.filter { info =>
       removeFromDriver || !info.blockManagerId.isDriver
     }
     Future.sequence(
       requiredBlockManagers.map { bm =>
-        bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
+        bm.slaveActor.ask[Int](removeMsg)
       }.toSeq
     )
   }
@@ -251,7 +251,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
           // Remove the block from the slave's BlockManager.
           // Doesn't actually wait for a confirmation and the message might get lost.
           // If message loss becomes frequent, we should add retry logic here.
-          blockManager.get.slaveActor.ask(RemoveBlock(blockId))(akkaTimeout)
+          blockManager.get.slaveActor.send(RemoveBlock(blockId))
         }
       }
     }
@@ -281,7 +281,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   private def blockStatus(
       blockId: BlockId,
       askSlaves: Boolean): Map[BlockManagerId, Future[Option[BlockStatus]]] = {
-    import context.dispatcher
     val getBlockStatus = GetBlockStatus(blockId)
     /*
      * Rather than blocking on the block status query, master actor should simply return
@@ -291,7 +290,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     blockManagerInfo.values.map { info =>
       val blockStatusFuture =
         if (askSlaves) {
-          info.slaveActor.ask(getBlockStatus)(akkaTimeout).mapTo[Option[BlockStatus]]
+          info.slaveActor.ask[Option[BlockStatus]](getBlockStatus)
         } else {
           Future { info.getStatus(blockId) }
         }
@@ -310,13 +309,12 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   private def getMatchingBlockIds(
       filter: BlockId => Boolean,
       askSlaves: Boolean): Future[Seq[BlockId]] = {
-    import context.dispatcher
     val getMatchingBlockIds = GetMatchingBlockIds(filter)
     Future.sequence(
       blockManagerInfo.values.map { info =>
         val future =
           if (askSlaves) {
-            info.slaveActor.ask(getMatchingBlockIds)(akkaTimeout).mapTo[Seq[BlockId]]
+            info.slaveActor.ask[Seq[BlockId]](getMatchingBlockIds)
           } else {
             Future { info.blocks.keys.filter(filter).toSeq }
           }
@@ -325,7 +323,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
     ).map(_.flatten.toSeq)
   }
 
-  private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+  private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: RpcEndpointRef) {
     val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
@@ -419,11 +417,9 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf, listenerBus
   private def getActorSystemHostPortForExecutor(executorId: String): Option[(String, Int)] = {
     for (
       blockManagerId <- blockManagerIdByExecutor.get(executorId);
-      info <- blockManagerInfo.get(blockManagerId);
-      host <- info.slaveActor.path.address.host;
-      port <- info.slaveActor.path.address.port
+      info <- blockManagerInfo.get(blockManagerId)
     ) yield {
-      (host, port)
+      (info.slaveActor.address.host, info.slaveActor.address.port)
     }
   }
 }
@@ -446,7 +442,7 @@ private[spark] class BlockManagerInfo(
     val blockManagerId: BlockManagerId,
     timeMs: Long,
     val maxMem: Long,
-    val slaveActor: ActorRef)
+    val slaveActor: RpcEndpointRef)
   extends Logging {
 
   private var _lastSeenMs: Long = timeMs

@@ -27,7 +27,7 @@ private[spark] class SimrSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     driverFilePath: String)
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with Logging {
 
   val tmpPath = new Path(driverFilePath + "_tmp")

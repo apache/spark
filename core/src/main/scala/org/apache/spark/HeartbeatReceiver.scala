@@ -17,11 +17,10 @@
 
 package org.apache.spark
 
-import akka.actor.Actor
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.rpc.{RpcEnv, RpcEndpointRef, RpcEndpoint}
 import org.apache.spark.scheduler.TaskScheduler
-import org.apache.spark.util.ActorLogReceive
+import org.apache.spark.storage.BlockManagerId
 
 /**
  * A heartbeat from executors to the driver. This is a shared message used by several internal
@@ -37,13 +36,13 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
 /**
  * Lives in the driver to receive heartbeats from executors..
  */
-private[spark] class HeartbeatReceiver(scheduler: TaskScheduler)
-  extends Actor with ActorLogReceive with Logging {
+private[spark] class HeartbeatReceiver(override val rpcEnv: RpcEnv, scheduler: TaskScheduler)
+  extends RpcEndpoint {
 
-  override def receiveWithLogging = {
+  override def receive(sender: RpcEndpointRef) = {
     case Heartbeat(executorId, taskMetrics, blockManagerId) =>
       val response = HeartbeatResponse(
         !scheduler.executorHeartbeatReceived(executorId, taskMetrics, blockManagerId))
-      sender ! response
+      sender.send(response)
   }
 }

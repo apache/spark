@@ -19,13 +19,11 @@ package org.apache.spark.scheduler.local
 
 import java.nio.ByteBuffer
 
-import akka.actor.{Actor, ActorRef, Props}
-
 import org.apache.spark.{Logging, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
+import org.apache.spark.rpc.{RpcEnv, RpcEndpointRef, RpcEndpoint}
 import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
-import org.apache.spark.util.ActorLogReceive
 
 private case class ReviveOffers()
 
@@ -41,10 +39,11 @@ private case class StopExecutor()
  * and the TaskSchedulerImpl.
  */
 private[spark] class LocalActor(
+    override val rpcEnv: RpcEnv,
     scheduler: TaskSchedulerImpl,
     executorBackend: LocalBackend,
     private val totalCores: Int)
-  extends Actor with ActorLogReceive with Logging {
+  extends RpcEndpoint with Logging {
 
   private var freeCores = totalCores
 
@@ -54,7 +53,7 @@ private[spark] class LocalActor(
   private val executor = new Executor(
     localExecutorId, localExecutorHostname, SparkEnv.get, isLocal = true)
 
-  override def receiveWithLogging = {
+  override def receive(sender: RpcEndpointRef) = {
     case ReviveOffers =>
       reviveOffers()
 
@@ -91,31 +90,30 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
   extends SchedulerBackend with ExecutorBackend {
 
   private val appId = "local-" + System.currentTimeMillis
-  var localActor: ActorRef = null
+  var localActor: RpcEndpointRef = null
 
   override def start() {
-    localActor = SparkEnv.get.actorSystem.actorOf(
-      Props(new LocalActor(scheduler, this, totalCores)),
-      "LocalBackendActor")
+    localActor = SparkEnv.get.rpcEnv.setupEndpoint("LocalBackendActor",
+      new LocalActor(SparkEnv.get.rpcEnv, scheduler, this, totalCores))
   }
 
   override def stop() {
-    localActor ! StopExecutor
+    localActor.send(StopExecutor)
   }
 
   override def reviveOffers() {
-    localActor ! ReviveOffers
+    localActor.send(ReviveOffers)
   }
 
   override def defaultParallelism() =
     scheduler.conf.getInt("spark.default.parallelism", totalCores)
 
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean) {
-    localActor ! KillTask(taskId, interruptThread)
+    localActor.send(KillTask(taskId, interruptThread))
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer) {
-    localActor ! StatusUpdate(taskId, state, serializedData)
+    localActor.send(StatusUpdate(taskId, state, serializedData))
   }
 
   override def applicationId(): String = appId

@@ -19,10 +19,11 @@ package org.apache.spark.deploy.worker
 
 import java.io._
 
+import org.apache.spark.rpc.RpcEndpointRef
+
 import scala.collection.JavaConversions._
 import scala.collection.Map
 
-import akka.actor.ActorRef
 import com.google.common.base.Charsets.UTF_8
 import com.google.common.io.Files
 import org.apache.hadoop.conf.Configuration
@@ -44,7 +45,7 @@ private[spark] class DriverRunner(
     val workDir: File,
     val sparkHome: File,
     val driverDesc: DriverDescription,
-    val worker: ActorRef,
+    val worker: RpcEndpointRef,
     val workerUrl: String)
   extends Logging {
 
@@ -98,7 +99,7 @@ private[spark] class DriverRunner(
 
         finalState = Some(state)
 
-        worker ! DriverStateChanged(driverId, state, finalException)
+        worker.send(DriverStateChanged(driverId, state, finalException))
       }
     }.start()
   }

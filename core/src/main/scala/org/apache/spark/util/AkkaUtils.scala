@@ -17,11 +17,13 @@
 
 package org.apache.spark.util
 
+import org.apache.spark.rpc.RpcAddress
+
 import scala.collection.JavaConversions.mapAsJavaMap
 import scala.concurrent.Await
 import scala.concurrent.duration.{Duration, FiniteDuration}
 
-import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
+import akka.actor.{Address, ActorRef, ActorSystem, ExtendedActorSystem}
 import akka.pattern.ask
 
 import com.typesafe.config.ConfigFactory
@@ -178,7 +180,7 @@ private[spark] object AkkaUtils extends Logging {
       message: Any,
       actor: ActorRef,
       maxAttempts: Int,
-      retryInterval: Int,
+      retryInterval: Long,
       timeout: FiniteDuration): T = {
     // TODO: Consider removing multiple attempts
     if (actor == null) {
@@ -232,5 +234,10 @@ private[spark] object AkkaUtils extends Logging {
     val timeout = AkkaUtils.lookupTimeout(conf)
     logInfo(s"Connecting to $name: $url")
     Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
+  }
+
+  def akkaAddressToRpcAddress(akkaAddress: Address): RpcAddress = {
+    // TODO How to handle that a remoteAddress doesn't have host & port
+    RpcAddress(akkaAddress.host.getOrElse("localhost"), akkaAddress.port.getOrElse(-1))
   }
 }

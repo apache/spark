@@ -36,7 +36,6 @@ import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, Sequence
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
-import akka.actor.Props
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.broadcast.Broadcast
@@ -331,8 +330,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   // Create and start the scheduler
   private[spark] var (schedulerBackend, taskScheduler) =
     SparkContext.createTaskScheduler(this, master)
-  private val heartbeatReceiver = env.actorSystem.actorOf(
-    Props(new HeartbeatReceiver(taskScheduler)), "HeartbeatReceiver")
+
+  private val heartbeatReceiver = env.rpcEnv.setupEndpoint("HeartbeatReceiver",
+      new HeartbeatReceiver(env.rpcEnv, taskScheduler))
+
   @volatile private[spark] var dagScheduler: DAGScheduler = _
   try {
     dagScheduler = new DAGScheduler(this)
@@ -421,9 +422,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         Some(Utils.getThreadDump())
       } else {
         val (host, port) = env.blockManager.master.getActorSystemHostPortForExecutor(executorId).get
-        val actorRef = AkkaUtils.makeExecutorRef("ExecutorActor", conf, host, port, env.actorSystem)
-        Some(AkkaUtils.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump, actorRef,
-          AkkaUtils.numRetries(conf), AkkaUtils.retryWaitMs(conf), AkkaUtils.askTimeout(conf)))
+        val endpointRef = env.rpcEnv.setupDriverEndpointRef("ExecutorActor")
+        Some(endpointRef.askWithReply[Array[ThreadStackTrace]](TriggerThreadDump))
       }
     } catch {
       case e: Exception =>
@@ -1245,7 +1245,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         stopped = true
         env.metricsSystem.report()
         metadataCleaner.cancel()
-        env.actorSystem.stop(heartbeatReceiver)
+        env.rpcEnv.stop(heartbeatReceiver)
         cleaner.foreach(_.stop())
         dagScheduler.stop()
         dagScheduler = null

@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy.master
 
-import akka.actor.ActorRef
-
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.curator.framework.CuratorFramework

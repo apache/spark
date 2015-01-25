@@ -20,20 +20,17 @@ package org.apache.spark.storage
 import scala.concurrent.{Await, Future}
 import scala.concurrent.ExecutionContext.Implicits.global
 
-import akka.actor._
-
 import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.AkkaUtils
 
 private[spark]
 class BlockManagerMaster(
-    var driverActor: ActorRef,
+    var driverActor: RpcEndpointRef,
     conf: SparkConf,
     isDriver: Boolean)
   extends Logging {
-  private val AKKA_RETRY_ATTEMPTS: Int = AkkaUtils.numRetries(conf)
-  private val AKKA_RETRY_INTERVAL_MS: Int = AkkaUtils.retryWaitMs(conf)
 
   val DRIVER_AKKA_ACTOR_NAME = "BlockManagerMaster"
 
@@ -46,7 +43,8 @@ class BlockManagerMaster(
   }
 
   /** Register the BlockManager's id with the driver. */
-  def registerBlockManager(blockManagerId: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
+  def registerBlockManager(blockManagerId: BlockManagerId, maxMemSize: Long,
+      slaveActor: RpcEndpointRef) {
     logInfo("Trying to register BlockManager")
     tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveActor))
     logInfo("Registered BlockManager")
@@ -218,8 +216,7 @@ class BlockManagerMaster(
    * throw a SparkException if this fails.
    */
   private def askDriverWithReply[T](message: Any): T = {
-    AkkaUtils.askWithReply(message, driverActor, AKKA_RETRY_ATTEMPTS, AKKA_RETRY_INTERVAL_MS,
-      timeout)
+    driverActor.askWithReply(message)
   }
 
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
+import org.apache.spark.rpc.RpcAddress
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
@@ -27,7 +28,7 @@ private[spark] class SparkDeploySchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     masters: Array[String])
-  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
   with AppClientListener
   with Logging {
 
@@ -79,7 +80,8 @@ private[spark] class SparkDeploySchedulerBackend(
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
       appUIAddress, sc.eventLogDir)
 
-    client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
+    val masterAddresses = masters.map(RpcAddress.fromSparkURL).toSet
+    client = new AppClient(sc.env.rpcEnv, masterAddresses, appDesc, this, conf)
     client.start()
 
     waitForRegistration()

@@ -24,7 +24,6 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.util.Properties
 
-import akka.actor._
 import com.google.common.collect.MapMaker
 
 import org.apache.spark.annotation.DeveloperApi
@@ -34,11 +33,13 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.network.nio.NioBlockTransferService
+import org.apache.spark.rpc.akka.AkkaRpcEnv
+import org.apache.spark.rpc.{RpcEndpointRef, RpcEndpoint, RpcEnv}
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.shuffle.{ShuffleMemoryManager, ShuffleManager}
 import org.apache.spark.storage._
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -53,7 +54,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
 @DeveloperApi
 class SparkEnv (
     val executorId: String,
-    val actorSystem: ActorSystem,
+    val rpcEnv: RpcEnv,
     val serializer: Serializer,
     val closureSerializer: Serializer,
     val cacheManager: CacheManager,
@@ -68,6 +69,9 @@ class SparkEnv (
     val metricsSystem: MetricsSystem,
     val shuffleMemoryManager: ShuffleMemoryManager,
     val conf: SparkConf) extends Logging {
+
+  // TODO actorSystem is used by Streaming
+  val actorSystem = rpcEnv.asInstanceOf[AkkaRpcEnv].actorSystem
 
   private[spark] var isStopped = false
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
@@ -86,7 +90,7 @@ class SparkEnv (
     blockManager.stop()
     blockManager.master.stop()
     metricsSystem.stop()
-    actorSystem.shutdown()
+    rpcEnv.stopAll()
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
     // UPDATE: In Akka 2.1.x, this hangs if there are remote actors, so we can't call it.
@@ -212,16 +216,14 @@ object SparkEnv extends Logging {
     val securityManager = new SecurityManager(conf)
 
     // Create the ActorSystem for Akka and get the port it binds to.
-    val (actorSystem, boundPort) = {
-      val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
-      AkkaUtils.createActorSystem(actorSystemName, hostname, port, conf, securityManager)
-    }
+    val actorSystemName = if (isDriver) driverActorSystemName else executorActorSystemName
+    val rpcEnv = RpcEnv.create(actorSystemName, hostname, port, conf, securityManager)
 
     // Figure out which port Akka actually bound to in case the original port is 0 or occupied.
     if (isDriver) {
-      conf.set("spark.driver.port", boundPort.toString)
+      conf.set("spark.driver.port", rpcEnv.boundPort.toString)
     } else {
-      conf.set("spark.executor.port", boundPort.toString)
+      conf.set("spark.executor.port", rpcEnv.boundPort.toString)
     }
 
     // Create an instance of the class with the given name, possibly initializing it with our conf
@@ -257,12 +259,12 @@ object SparkEnv extends Logging {
     val closureSerializer = instantiateClassFromConf[Serializer](
       "spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer")
 
-    def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
+    def registerOrLookup(name: String, endpointCreator: => RpcEndpoint): RpcEndpointRef = {
       if (isDriver) {
         logInfo("Registering " + name)
-        actorSystem.actorOf(Props(newActor), name = name)
+        rpcEnv.setupEndpoint(name, endpointCreator)
       } else {
-        AkkaUtils.makeDriverRef(name, conf, actorSystem)
+        rpcEnv.setupDriverEndpointRef(name)
       }
     }
 
@@ -274,9 +276,9 @@ object SparkEnv extends Logging {
 
     // Have to assign trackerActor after initialization as MapOutputTrackerActor
     // requires the MapOutputTracker itself
-    mapOutputTracker.trackerActor = registerOrLookup(
-      "MapOutputTracker",
-      new MapOutputTrackerMasterActor(mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
+    mapOutputTracker.trackerActor = registerOrLookup("MapOutputTracker",
+      new MapOutputTrackerMasterActor(
+        rpcEnv, mapOutputTracker.asInstanceOf[MapOutputTrackerMaster], conf))
 
     // Let the user specify short names for shuffle managers
     val shortShuffleMgrNames = Map(
@@ -298,10 +300,10 @@ object SparkEnv extends Logging {
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
-      new BlockManagerMasterActor(isLocal, conf, listenerBus)), conf, isDriver)
+      new BlockManagerMasterActor(rpcEnv, isLocal, conf, listenerBus)), conf, isDriver)
 
     // NB: blockManager is not valid until initialize() is called later.
-    val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
+    val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
       serializer, conf, mapOutputTracker, shuffleManager, blockTransferService, securityManager,
       numUsableCores)
 
@@ -348,7 +350,7 @@ object SparkEnv extends Logging {
 
     new SparkEnv(
       executorId,
-      actorSystem,
+      rpcEnv,
       serializer,
       closureSerializer,
       cacheManager,

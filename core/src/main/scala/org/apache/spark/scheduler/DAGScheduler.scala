@@ -158,11 +158,8 @@ class DAGScheduler(
       taskMetrics: Array[(Long, Int, Int, TaskMetrics)], // (taskId, stageId, stateAttempt, metrics)
       blockManagerId: BlockManagerId): Boolean = {
     listenerBus.post(SparkListenerExecutorMetricsUpdate(execId, taskMetrics))
-    implicit val timeout = Timeout(600 seconds)
-
-    Await.result(
-      blockManagerMaster.driverActor ? BlockManagerHeartbeat(blockManagerId),
-      timeout.duration).asInstanceOf[Boolean]
+    blockManagerMaster.driverActor.askWithReply[Boolean](
+      BlockManagerHeartbeat(blockManagerId), 600 seconds)
   }
 
   // Called by TaskScheduler when an executor fails.

@@ -20,42 +20,45 @@ package org.apache.spark.deploy.worker
 import java.io.File
 import java.io.IOException
 import java.text.SimpleDateFormat
+import java.util.concurrent.{ScheduledFuture, TimeUnit, Executors}
 import java.util.{UUID, Date}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{HashMap, HashSet}
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.Random
 
-import akka.actor._
-import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
-
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.util.{ActorLogReceive, AkkaUtils, SignalLogger, Utils}
+import org.apache.spark.rpc.{RpcAddress, RpcEnv, RpcEndpointRef, NetworkRpcEndpoint}
+import org.apache.spark.util.{SignalLogger, Utils}
 
-/**
-  * @param masterAkkaUrls Each url should be a valid akka url.
-  */
 private[spark] class Worker(
+    override val rpcEnv: RpcEnv,
     host: String,
     port: Int,
     webUiPort: Int,
     cores: Int,
     memory: Int,
-    masterAkkaUrls: Array[String],
+    masterAddresses: Set[RpcAddress],
     actorSystemName: String,
     actorName: String,
     workDirPath: String = null,
     val conf: SparkConf,
     val securityMgr: SecurityManager)
-  extends Actor with ActorLogReceive with Logging {
-  import context.dispatcher
+  extends NetworkRpcEndpoint with Logging {
+
+  val scheduler = Executors.newScheduledThreadPool(1,
+    Utils.namedThreadFactory("worker-scheduler"))
+
+  implicit val cleanupExecutor = ExecutionContext.fromExecutor(
+    Executors.newFixedThreadPool(1, Utils.namedThreadFactory("cleanup-thread")))
 
   Utils.checkHost(host, "Expected hostname")
   assert (port > 0)
@@ -89,8 +92,8 @@ private[spark] class Worker(
   val APP_DATA_RETENTION_SECS = conf.getLong("spark.worker.cleanup.appDataTtl", 7 * 24 * 3600)
 
   val testing: Boolean = sys.props.contains("spark.testing")
-  var master: ActorSelection = null
-  var masterAddress: Address = null
+  var master: RpcEndpointRef = null
+  var masterAddress: RpcAddress = null
   var activeMasterUrl: String = ""
   var activeMasterWebUiUrl : String = ""
   val akkaUrl = "akka.tcp://%s@%s:%s/user/%s".format(actorSystemName, host, port, actorName)
@@ -128,7 +131,7 @@ private[spark] class Worker(
   val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
   val workerSource = new WorkerSource(this)
 
-  var registrationRetryTimer: Option[Cancellable] = None
+  var registrationRetryTimer: Option[ScheduledFuture[_]] = None
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
@@ -151,14 +154,13 @@ private[spark] class Worker(
     }
   }
 
-  override def preStart() {
+  override def onStart() {
     assert(!registered)
     logInfo("Starting Spark worker %s:%d with %d cores, %s RAM".format(
       host, port, cores, Utils.megabytesToString(memory)))
     logInfo(s"Running Spark version ${org.apache.spark.SPARK_VERSION}")
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
-    context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     shuffleService.startIfEnabled()
     webUi = new WorkerWebUI(this, workDir, webUiPort)
     webUi.bind()
@@ -174,19 +176,20 @@ private[spark] class Worker(
     // activeMasterUrl it's a valid Spark url since we receive it from master.
     activeMasterUrl = url
     activeMasterWebUiUrl = uiUrl
-    master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
-    masterAddress = Master.toAkkaAddress(activeMasterUrl)
+    master = Master.toEndpointRef(rpcEnv, activeMasterUrl)
+    masterAddress = master.address
     connected = true
     // Cancel any outstanding re-registration attempts because we found a new master
-    registrationRetryTimer.foreach(_.cancel())
+    registrationRetryTimer.foreach(_.cancel(true))
     registrationRetryTimer = None
   }
 
   private def tryRegisterAllMasters() {
-    for (masterAkkaUrl <- masterAkkaUrls) {
-      logInfo("Connecting to master " + masterAkkaUrl + "...")
-      val actor = context.actorSelection(masterAkkaUrl)
-      actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+    for (masterAddress <- masterAddresses) {
+      logInfo("Connecting to master " + masterAddress + "...")
+      val actor = Master.toEndpointRef(rpcEnv, masterAddress)
+      actor.send(
+        RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort, publicAddress))
     }
   }
 
@@ -199,7 +202,7 @@ private[spark] class Worker(
     Utils.tryOrExit {
       connectionAttemptCount += 1
       if (registered) {
-        registrationRetryTimer.foreach(_.cancel())
+        registrationRetryTimer.foreach(_.cancel(true))
         registrationRetryTimer = None
       } else if (connectionAttemptCount <= TOTAL_REGISTRATION_RETRIES) {
         logInfo(s"Retrying connection to master (attempt # $connectionAttemptCount)")
@@ -224,8 +227,8 @@ private[spark] class Worker(
          * less likely scenario.
          */
         if (master != null) {
-          master ! RegisterWorker(
-            workerId, host, port, cores, memory, webUi.boundPort, publicAddress)
+          master.send(RegisterWorker(
+            workerId, host, port, cores, memory, webUi.boundPort, publicAddress))
         } else {
           // We are retrying the initial registration
           tryRegisterAllMasters()
@@ -233,10 +236,12 @@ private[spark] class Worker(
         // We have exceeded the initial registration retry threshold
         // All retries from now on should use a higher interval
         if (connectionAttemptCount == INITIAL_REGISTRATION_RETRIES) {
-          registrationRetryTimer.foreach(_.cancel())
+          registrationRetryTimer.foreach(_.cancel(true))
           registrationRetryTimer = Some {
-            context.system.scheduler.schedule(PROLONGED_REGISTRATION_RETRY_INTERVAL,
-              PROLONGED_REGISTRATION_RETRY_INTERVAL, self, ReregisterWithMaster)
+            scheduler.scheduleAtFixedRate(new Runnable {
+              override def run(): Unit = self.send(ReregisterWithMaster)
+            }, PROLONGED_REGISTRATION_RETRY_INTERVAL.toMillis,
+              PROLONGED_REGISTRATION_RETRY_INTERVAL.toMillis, TimeUnit.MILLISECONDS)
           }
         }
       } else {
@@ -255,8 +260,10 @@ private[spark] class Worker(
         tryRegisterAllMasters()
         connectionAttemptCount = 0
         registrationRetryTimer = Some {
-          context.system.scheduler.schedule(INITIAL_REGISTRATION_RETRY_INTERVAL,
-            INITIAL_REGISTRATION_RETRY_INTERVAL, self, ReregisterWithMaster)
+          scheduler.scheduleAtFixedRate(new Runnable {
+            override def run(): Unit = self.send(ReregisterWithMaster)
+          }, INITIAL_REGISTRATION_RETRY_INTERVAL.toMillis,
+            INITIAL_REGISTRATION_RETRY_INTERVAL.toMillis, TimeUnit.MILLISECONDS)
         }
       case Some(_) =>
         logInfo("Not spawning another attempt to register with the master, since there is an" +
@@ -264,20 +271,23 @@ private[spark] class Worker(
     }
   }
 
-  override def receiveWithLogging = {
+  override def receive(sender: RpcEndpointRef) = {
     case RegisteredWorker(masterUrl, masterWebUiUrl) =>
       logInfo("Successfully registered with master " + masterUrl)
       registered = true
       changeMaster(masterUrl, masterWebUiUrl)
-      context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis, self, SendHeartbeat)
+      scheduler.scheduleAtFixedRate(new Runnable {
+        override def run(): Unit = self.send(SendHeartbeat)
+      }, 0, HEARTBEAT_MILLIS, TimeUnit.MILLISECONDS)
       if (CLEANUP_ENABLED) {
         logInfo(s"Worker cleanup enabled; old application directories will be deleted in: $workDir")
-        context.system.scheduler.schedule(CLEANUP_INTERVAL_MILLIS millis,
-          CLEANUP_INTERVAL_MILLIS millis, self, WorkDirCleanup)
+        scheduler.scheduleAtFixedRate(new Runnable {
+          override def run(): Unit = self.send(WorkDirCleanup)
+        }, CLEANUP_INTERVAL_MILLIS, CLEANUP_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)
       }
 
     case SendHeartbeat =>
-      if (connected) { master ! Heartbeat(workerId) }
+      if (connected) { master.send(Heartbeat(workerId)) }
 
     case WorkDirCleanup =>
       // Spin up a separate thread (in a future) to do the dir cleanup; don't tie up worker actor
@@ -310,10 +320,10 @@ private[spark] class Worker(
 
       val execs = executors.values.
         map(e => new ExecutorDescription(e.appId, e.execId, e.cores, e.state))
-      sender ! WorkerSchedulerStateResponse(workerId, execs.toList, drivers.keys.toSeq)
+      sender.send(WorkerSchedulerStateResponse(workerId, execs.toList, drivers.keys.toSeq))
 
     case Heartbeat =>
-      logInfo(s"Received heartbeat from driver ${sender.path}")
+      logInfo(s"Received heartbeat from driver ${sender.address}")
 
     case RegisterWorkerFailed(message) =>
       if (!registered) {
@@ -355,7 +365,7 @@ private[spark] class Worker(
           manager.start()
           coresUsed += cores_
           memoryUsed += memory_
-          master ! ExecutorStateChanged(appId, execId, manager.state, None, None)
+          master.send(ExecutorStateChanged(appId, execId, manager.state, None, None))
         } catch {
           case e: Exception => {
             logError(s"Failed to launch executor $appId/$execId for ${appDesc.name}.", e)
@@ -363,14 +373,14 @@ private[spark] class Worker(
               executors(appId + "/" + execId).kill()
               executors -= appId + "/" + execId
             }
-            master ! ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
-              Some(e.toString), None)
+            master.send(ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
+              Some(e.toString), None))
           }
         }
       }
 
     case ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
-      master ! ExecutorStateChanged(appId, execId, state, message, exitStatus)
+      master.send(ExecutorStateChanged(appId, execId, state, message, exitStatus))
       val fullId = appId + "/" + execId
       if (ExecutorState.isFinished(state)) {
         executors.get(fullId) match {
@@ -437,22 +447,18 @@ private[spark] class Worker(
         case _ =>
           logDebug(s"Driver $driverId changed state to $state")
       }
-      master ! DriverStateChanged(driverId, state, exception)
+      master.send(DriverStateChanged(driverId, state, exception))
       val driver = drivers.remove(driverId).get
       finishedDrivers(driverId) = driver
       memoryUsed -= driver.driverDesc.mem
       coresUsed -= driver.driverDesc.cores
     }
 
-    case x: DisassociatedEvent if x.remoteAddress == masterAddress =>
-      logInfo(s"$x Disassociated !")
-      masterDisconnected()
-
     case RequestWorkerState =>
-      sender ! WorkerStateResponse(host, port, workerId, executors.values.toList,
+      sender.send(WorkerStateResponse(host, port, workerId, executors.values.toList,
         finishedExecutors.values.toList, drivers.values.toList,
         finishedDrivers.values.toList, activeMasterUrl, cores, memory,
-        coresUsed, memoryUsed, activeMasterWebUiUrl)
+        coresUsed, memoryUsed, activeMasterWebUiUrl))
 
     case ReregisterWithMaster =>
       reregisterWithMaster()
@@ -460,6 +466,13 @@ private[spark] class Worker(
     case ApplicationFinished(id) =>
       finishedApps += id
       maybeCleanupApplication(id)
+  }
+
+  override def onDisconnected(remoteAddress: RpcAddress): Unit = {
+    if (remoteAddress == masterAddress ) {
+      logInfo(s"$remoteAddress Disassociated !")
+      masterDisconnected()
+    }
   }
 
   private def masterDisconnected() {
@@ -485,9 +498,9 @@ private[spark] class Worker(
     "worker-%s-%s-%d".format(createDateFormat.format(new Date), host, port)
   }
 
-  override def postStop() {
+  override def onStop() {
     metricsSystem.report()
-    registrationRetryTimer.foreach(_.cancel())
+    registrationRetryTimer.foreach(_.cancel(true))
     executors.values.foreach(_.kill())
     drivers.values.foreach(_.kill())
     shuffleService.stop()
@@ -501,9 +514,9 @@ private[spark] object Worker extends Logging {
     SignalLogger.register(log)
     val conf = new SparkConf
     val args = new WorkerArguments(argStrings, conf)
-    val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
+    val rpcEnv = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
       args.memory, args.masters, args.workDir)
-    actorSystem.awaitTermination()
+    rpcEnv.awaitTermination()
   }
 
   def startSystemAndActor(
@@ -514,19 +527,19 @@ private[spark] object Worker extends Logging {
       memory: Int,
       masterUrls: Array[String],
       workDir: String,
-      workerNumber: Option[Int] = None): (ActorSystem, Int) = {
+      workerNumber: Option[Int] = None): RpcEnv = {
 
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
     val conf = new SparkConf
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
     val actorName = "Worker"
     val securityMgr = new SecurityManager(conf)
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port,
-      conf = conf, securityManager = securityMgr)
-    val masterAkkaUrls = masterUrls.map(Master.toAkkaUrl)
-    actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
-      masterAkkaUrls, systemName, actorName,  workDir, conf, securityMgr), name = actorName)
-    (actorSystem, boundPort)
+
+    val masterAddresses = masterUrls.map(RpcAddress.fromSparkURL).toSet
+    val rpcEnv = RpcEnv.create(systemName, host, port, conf = conf, securityManager = securityMgr)
+    rpcEnv.setupEndpoint(actorName, new Worker(rpcEnv, host, rpcEnv.boundPort, webUiPort, cores,
+      memory, masterAddresses, systemName, actorName,  workDir, conf, securityMgr))
+    rpcEnv
   }
 
 }
