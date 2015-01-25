@@ -198,6 +198,27 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td><code>spark.driver.extraJavaOptions</code></td>
+  <td>(none)</td>
+  <td>
+    A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.extraClassPath</code></td>
+  <td>(none)</td>
+  <td>
+    Extra classpath entries to append to the classpath of the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.extraLibraryPath</code></td>
+  <td>(none)</td>
+  <td>
+    Set a special library path to use when launching the driver JVM.
+  </td>
+</tr>
+<tr>
   <td><code>spark.executor.extraJavaOptions</code></td>
   <td>(none)</td>
   <td>
