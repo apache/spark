@@ -17,9 +17,9 @@
 
 package org.apache.spark.mllib.clustering
 
-import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.graphx._
+import org.apache.spark.mllib.clustering.PICLinalg.DMatrix
+import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.FunSuite
 
 import scala.util.Random
@@ -29,7 +29,7 @@ import scala.util.Random
  * Provides a method to run tests against a {@link SparkContext} variable that is correctly stopped
  * after each test.
  * TODO: import this from the graphx test cases package i.e. may need update to pom.xml
-*/
+ */
 trait LocalSparkContext {
   /** Runs `f` on a new SparkContext and ensures that it is stopped afterwards. */
   def withSpark[T](f: SparkContext => T) = {
@@ -50,16 +50,81 @@ trait LocalSparkContext {
  */
 class PIClusteringSuite extends FunSuite with LocalSparkContext {
 
+  import org.apache.spark.mllib.clustering.PIClusteringSuite._
+
   val PIC = PIClustering
   val LA = PICLinalg
   val RDDLA = RDDLinalg
   val A = Array
 
+  test("concentricCirclesTest") {
+    concentricCirclesTest()
+  }
+
+  def concentricCirclesTest() = {
+    val sigma = 1.0
+    val nIterations = 20
+
+    val circleSpecs = Seq(
+      // Best results for 30 points
+      CircleSpec(Point(0.0, 0.0), 0.03, .1, 3),
+      CircleSpec(Point(0.0, 0.0), 0.3, .03, 12),
+      CircleSpec(Point(0.0, 0.0), 1.0, .01, 15),
+      // Add following to get 100 points
+      CircleSpec(Point(0.0, 0.0), 1.5, .005, 30),
+      CircleSpec(Point(0.0, 0.0), 2.0, .002, 40)
+
+    )
+    val nClusters = circleSpecs.size
+    val cdata = createConcentricCirclesData(circleSpecs)
+    withSpark { sc =>
+      val vertices = new Random().shuffle(cdata.map { p =>
+        (p.label, Array(p.x, p.y))
+      })
+
+      val nVertices = vertices.length
+      val (ccenters, estCollected) = PIC.run(sc, vertices, nClusters, nIterations)
+      println(s"Cluster centers: ${ccenters.mkString(",")} " +
+        s"Estimates: ${estCollected.mkString(",")}")
+    }
+  }
+
+  test("irisData") {
+    irisData()
+  }
+
+  def irisData() = {
+    import org.apache.spark.mllib.linalg._
+    import scala.io.Source
+    val irisRaw = Source.fromFile("data/mllib/iris.data").getLines.map(_.split(","))
+    val iter: Iterator[(Array[Double], String)] = irisRaw.map { toks => (toks.slice(0, toks.length - 1).map {
+      _.toDouble
+    }, toks(toks.length - 1))
+    }
+    withSpark { sc =>
+      val irisRdd = sc.parallelize(iter.toSeq.map { case (vect, label) =>
+        (Vectors.dense(vect), label)
+      })
+      val irisVectorsRdd = irisRdd.map(_._1).cache()
+      val irisLabelsRdd = irisRdd.map(_._2)
+      val model = KMeans.train(irisVectorsRdd, 3, 10, 1)
+      val pred = model.predict(irisVectorsRdd).zip(irisLabelsRdd)
+      val predColl = pred.collect
+      irisVectorsRdd.unpersist()
+      predColl
+    }
+
+  }
+
+  def saveToMatplotLib(dmat: DMatrix, optLegend: Option[Array[String]], optLabels: Option[Array[Array[String]]]) = {
+    import breeze.plot._
+
+  }
+
   test("graphxSingleEigen") {
     graphxSingleEigen
   }
 
-  import org.apache.spark.mllib.clustering.PIClusteringSuite._
   def graphxSingleEigen() = {
 
     val (aMat, dxDat1) = createAffinityMatrix()
@@ -78,9 +143,13 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
       val edgesRddCollected = edgesRdd.collect()
       println(s"edges=${edgesRddCollected.mkString(",")}")
       val rowSums = aMat.map { vect =>
-        vect.foldLeft(0.0){ _ + _ }
+        vect.foldLeft(0.0) {
+          _ + _
+        }
       }
-      val initialVt = PIC.createInitialVector(sc, affinityRdd.map{_._1}.collect, rowSums )
+      val initialVt = PIC.createInitialVector(sc, affinityRdd.map {
+        _._1
+      }.collect, rowSums)
       val G = PIC.createGraphFromEdges(sc, edgesRdd, nVertices, Some(initialVt))
       val printVtVectors: Boolean = true
       if (printVtVectors) {
@@ -95,7 +164,7 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
         }.toArray
         println(s"graphInitialVt=${graphInitialVt.mkString(",")}\n"
           + s"initialVt=${initialVt.mkString(",")}")
-//        assert(LA.compareVectors(graphInitialVt, initialVtVect))
+        //        assert(LA.compareVectors(graphInitialVt, initialVtVect))
       }
       val (g2, norm, eigvect) = PIC.getPrincipalEigen(sc, G, nIterations)
       println(s"lambda=$norm eigvect=${eigvect.collect.mkString(",")}")
@@ -105,6 +174,7 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
   test("fifteenVerticesTest") {
     fifteenVerticesTest()
   }
+
   def fifteenVerticesTest() = {
     val vertFile = "../data/graphx/new_lr_data.15.txt"
     val sigma = 1.0
@@ -115,64 +185,21 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
       val nVertices = vertices.length
       val (ccenters, estimates) = PIC.run(sc, vertices, nClusters,
         nIterations, sigma)
-//      val collectedRdd = eigen.collect.map{_._2}
-//      println(s"DegreeMatrix:\n${LA.printMatrix(collectedRdd, nVertices, nVertices)}")
-//      println(s"Eigenvalue = $lambda EigenVectors:\n${LA.printMatrix(collectedRdd, nClusters, nVertices)}")
+      //      val collectedRdd = eigen.collect.map{_._2}
+      //      println(s"DegreeMatrix:\n${LA.printMatrix(collectedRdd, nVertices, nVertices)}")
+      //      println(s"Eigenvalue = $lambda EigenVectors:\n${LA.printMatrix(collectedRdd, nClusters, nVertices)}")
     }
   }
 
-  test("concentricCirclesTest") {
-    concentricCirclesTest()
-  }
-  def concentricCirclesTest() = {
-    val sigma = 1.0
-    val nIterations = 20
-    val circleSpecs = Seq(
-    // Best results for 30 points
-      CircleSpec(Point(0.0,0.0), 0.03, .1, 3),
-      CircleSpec(Point(0.0,0.0), 0.3, .03, 12),
-      CircleSpec(Point(0.0,0.0), 1.0, .01, 15),
-      CircleSpec(Point(0.0,0.0), 1.5, .005, 25),
-      CircleSpec(Point(0.0,0.0), 2.0, .002, 40)
+  //  test("testLinearFnGenerator") {
+  //    val PS = PolySpec
+  //    val dr = new DRange(0.0, 5.0)
+  //    val polyInfo = A(PS(3.0, 2.0, -1.0)
+  //    val noiseRatio = 0.1
+  //    val l = List(1,2,3)
+  //    l.scanLeft(
+  //  }
 
-    // DECENT
-//      CircleSpec(Point(0.0,0.0), 0.1, .1, 5),
-//      CircleSpec(Point(0.0,0.0), 1.0, .1, 15),
-//      CircleSpec(Point(0.0,0.0), 2.5, .1, 30)
-
-    // GOOD but big (90 points)
-//      CircleSpec(Point(0.0,0.0), 0.1, .1, 5),
-//      CircleSpec(Point(0.0,0.0), 1.0, .03, 25),
-//      CircleSpec(Point(0.0,0.0), 2.5, .01, 60)
-    )
-    val nClusters = circleSpecs.size
-    val cdata = createConcentricCirclesData(circleSpecs)
-    withSpark { sc =>
-      val vertices = new Random().shuffle(cdata.map { p =>
-        (p.label, Array(p.x, p.y))
-      })
-
-      val nVertices = vertices.length
-      val (ccenters, estCollected) = PIC.run(sc, vertices, nClusters, nIterations)
-      println(s"Cluster centers: ${ccenters.mkString(",")} " +
-        s"Estimates: ${estCollected.mkString(",")}")
-    }
-  }
-
-//  test("testLinearFnGenerator") {
-//    val PS = PolySpec
-//    val dr = new DRange(0.0, 5.0)
-//    val polyInfo = A(PS(3.0, 2.0, -1.0)
-//    val noiseRatio = 0.1
-//    val l = List(1,2,3)
-//    l.scanLeft(
-//  }
-
-  def printMatrix(darr: Array[Double], numRows: Int, numCols: Int): String =
-    LA.printMatrix(darr, numRows, numCols)
-
-  def printMatrix(darr: Array[Array[Double]], numRows: Int, numCols: Int): String =
-    LA.printMatrix(darr, numRows, numCols)
 }
 
 object PIClusteringSuite {
@@ -183,14 +210,17 @@ object PIClusteringSuite {
 
   case class Point(label: Long, x: Double, y: Double) {
     def this(x: Double, y: Double) = this(-1L, x, y)
+
     override def toString() = s"($label, (${pdoub(x)},${pdoub(y)}))"
   }
+
   object Point {
     def apply(x: Double, y: Double) = new Point(-1L, x, y)
   }
 
   case class CircleSpec(center: Point, radius: Double, noiseToRadiusRatio: Double,
                         nPoints: Int, uniformDistOnCircle: Boolean = true)
+
   def createConcentricCirclesData(circleSpecs: Seq[CircleSpec]) = {
     import org.apache.spark.mllib.random.StandardNormalGenerator
     val normalGen = new StandardNormalGenerator
@@ -199,9 +229,9 @@ object PIClusteringSuite {
       idStart += 1000
       val circlePoints = for (thetax <- 0 until csp.nPoints) yield {
         val theta = thetax * 2 * Math.PI / csp.nPoints
-        val (x,y) = ( csp.radius * Math.cos(theta) * (1 + normalGen.nextValue * csp.noiseToRadiusRatio),
+        val (x, y) = (csp.radius * Math.cos(theta) * (1 + normalGen.nextValue * csp.noiseToRadiusRatio),
           csp.radius * Math.sin(theta) * (1 + normalGen.nextValue * csp.noiseToRadiusRatio))
-        (Point(idStart+thetax, x,y))
+        (Point(idStart + thetax, x, y))
       }
       circlePoints
     }
@@ -211,15 +241,15 @@ object PIClusteringSuite {
   }
 
   def printPoints(points: Seq[Point]) = {
-//    val sorted = points.sortWith { case (p1, p2) =>
-//      if (LA.withinTol(p1.y-p2.y)) {
-//        p1.x <= p2.x
-//      } else {
-//        p1.y >= p2.y
-//      }
-//    }
-//    sorted.mkString("["," , ","]")
-    points.mkString("["," , ","]")
+    //    val sorted = points.sortWith { case (p1, p2) =>
+    //      if (LA.withinTol(p1.y-p2.y)) {
+    //        p1.x <= p2.x
+    //      } else {
+    //        p1.y >= p2.y
+    //      }
+    //    }
+    //    sorted.mkString("["," , ","]")
+    points.mkString("[", " , ", "]")
   }
 
   def createAffinityMatrix() = {
@@ -229,19 +259,7 @@ object PIClusteringSuite {
       A(0.8, 0.7, 0, 0.75),
       A(0.9, .5, .75, 0)
     )
-//    val asize=10
-//    val dat1 = toMat(for (ix <- 0 until asize;
-//        for cx<- 0 until asize)
-//    yield {
-//      cx match {
-//        case _ if cx < 2 => 10
-//        case _ if cx <= 7 => 0.5
-//        case _ => cx * 0.2
-//      }
-//    }, asize, asize)
-
-
-    println(s"Input mat: ${LA.printMatrix(dat1, 4,4)}")
+    println(s"Input mat: ${LA.printMatrix(dat1, 4, 4)}")
     val D = /*LA.transpose(dat1)*/ dat1.zipWithIndex.map { case (dvect, ix) =>
       val sum = dvect.foldLeft(0.0) {
         _ + _
@@ -263,8 +281,6 @@ object PIClusteringSuite {
 
   def main(args: Array[String]) {
     val pictest = new PIClusteringSuite
-//    pictest.graphxSingleEigen()
-//    pictest.fifteenVerticesTest()
     pictest.concentricCirclesTest()
   }
 }
