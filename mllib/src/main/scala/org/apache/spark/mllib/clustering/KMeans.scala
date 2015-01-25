@@ -131,7 +131,6 @@ class KMeans private (
     }
 
     // Compute squared norms and cache them.
-    val collected = data.collect()
     val norms = data.map(Vectors.norm(_, 2.0))
     norms.persist()
     val zippedData = data.zip(norms).map { case (v, norm) =>
