@@ -202,7 +202,7 @@ class DistributedLDAModel private[clustering] (
     val numTopics = k
     // Note: N_k is not needed to find the top terms, but it is needed to normalize weights
     //       to a distribution over terms.
-    val N_k: TopicCounts = state.collectTopicTotals()
+    val N_k: TopicCounts = state.globalTopicTotals()
     val topicSummary = state.graph.vertices.filter(isTermVertex)
       .mapPartitions { termVertices =>
       // For this partition, collect the most common terms for each topic in queues:

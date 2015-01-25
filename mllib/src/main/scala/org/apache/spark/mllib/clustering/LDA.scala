@@ -289,7 +289,7 @@ object LDA {
       val W = vocabSize
       val alpha = topicSmoothing
 
-      val N_k = collectTopicTotals()
+      val N_k = globalTopicTotals()
       val sendMsg: EdgeContext[TopicCounts, TokenCount, (Boolean, TopicCounts)] => Unit =
         (edgeContext) => {
           // Compute N_{wj} gamma_{wjk}
@@ -323,7 +323,7 @@ object LDA {
       graph.outerJoinVertices(docTopicDistributions) { (vid, oldDist, newDist) => newDist.get }
     }
 
-    def collectTopicTotals(): TopicCounts = {
+    def globalTopicTotals(): TopicCounts = {
       val numTopics = k
       graph.vertices.filter(isTermVertex).values.fold(BDV.zeros[Double](numTopics))(_ += _)
     }
@@ -342,7 +342,7 @@ object LDA {
       val alpha = topicSmoothing
       assert(eta > 1.0)
       assert(alpha > 1.0)
-      val N_k = collectTopicTotals()
+      val N_k = globalTopicTotals()
       val smoothed_N_k: TopicCounts = N_k + (vocabSize * (eta - 1.0))
       // Edges: Compute token log probability from phi_{wk}, theta_{kj}.
       val sendMsg: EdgeContext[TopicCounts, TokenCount, Double] => Unit = (edgeContext) => {
@@ -367,7 +367,7 @@ object LDA {
       val alpha = topicSmoothing
       // Term vertices: Compute phi_{wk}.  Use to compute prior log probability.
       // Doc vertex: Compute theta_{kj}.  Use to compute prior log probability.
-      val N_k = collectTopicTotals()
+      val N_k = globalTopicTotals()
       val smoothed_N_k: TopicCounts = N_k + (vocabSize * (eta - 1.0))
       val seqOp: (Double, (VertexId, TopicCounts)) => Double = {
         case (sumPrior: Double, vertex: (VertexId, TopicCounts)) =>
