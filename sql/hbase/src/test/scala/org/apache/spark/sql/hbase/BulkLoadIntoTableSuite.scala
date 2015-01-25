@@ -34,12 +34,12 @@ import scala.collection.mutable.ArrayBuffer
 
 class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
   val sc: SparkContext = TestHbase.sparkContext
-  val sparkHome = TestHbase.sparkContext.getSparkHome().orNull
+  val sparkHome = TestHbase.sparkContext.getSparkHome().getOrElse("./")
   if (sparkHome == null || sparkHome.isEmpty)
     logError("Spark Home is not defined; may lead to unexpected error!")
 
   // Test if we can parse 'LOAD DATA LOCAL INPATH './usr/file.txt' INTO TABLE tb1'
-  test("bulkload parser test, local file") {
+  test("bulk load parser test, local file") {
 
     val parser = new HBaseSQLParser()
     val sql = raw"LOAD PARALL DATA LOCAL INPATH './usr/file.txt' INTO TABLE tb1"
@@ -73,7 +73,7 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
   test("bulkload parser test, using delimiter") {
 
     val parser = new HBaseSQLParser()
-    val sql = raw"LOAD PARALL DATA INPATH '/usr/hdfsfile.txt' INTO TABLE tb1 FIELDS TERMINATED BY '|' "
+    val sql = raw"LOAD PARALL DATA INPATH '/usr/hdfsfile.txt' INTO TABLE tb1 FIELDS TERMINATED BY '\\|' "
 
     val plan: LogicalPlan = parser(sql)
     assert(plan != null)
@@ -83,10 +83,10 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     assert(l.inputPath.equals(raw"/usr/hdfsfile.txt"))
     assert(!l.isLocal)
     assert(l.tableName.equals("tb1"))
-    assert(l.delimiter.get.equals("|"))
+    assert(l.delimiter.get.equals(raw"\\|"))
   }
 
-  test("write data to HFile") {
+  test("write data to HFile with non-parallelized bulk loader") {
     val columns = Seq(new KeyColumn("k1", IntegerType, 0), new NonKeyColumn("v1", IntegerType, "cf1", "c1"))
     val hbaseRelation = HBaseRelation("testtablename", "hbasenamespace", "hbasetablename", columns)(TestHbase)
     val bulkLoad = BulkLoadIntoTableCommand(sparkHome + "/sql/hbase/src/test/resources/test.txt", "hbasetablename",
@@ -96,7 +96,6 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
       bytesUtils.toBytes(r)
     }
     val conf = TestHbase.sparkContext.hadoopConfiguration
-
     val job = Job.getInstance(conf)
 
     val hadoopReader = {
@@ -106,6 +105,10 @@ class BulkLoadIntoTableSuite extends HBaseIntegrationTestBase {
     }
     val tmpPath = Util.getTempFilePath(conf, hbaseRelation.tableName)
     bulkLoad.makeBulkLoadRDD(splitKeys.toArray, hadoopReader, job, tmpPath, hbaseRelation)
+    val resStatus = FileSystem.get(conf).listStatus(new Path(tmpPath)).map(_.getPath)
+    assert(resStatus.size == 2)
+    assert(resStatus.exists(_.getName.endsWith("cf1")))
+    assert(resStatus.exists(_.getName.endsWith("_SUCCESS")))
     FileSystem.get(conf).delete(new Path(tmpPath), true)
   }
 

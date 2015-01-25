@@ -233,11 +233,10 @@ case class BulkLoadIntoTableCommand(
 
 @DeveloperApi
 case class ParallelizedBulkLoadIntoTableCommand(
-                                                 inputPath: String,
-                                                 tableName: String,
-                                                 isLocal: Boolean,
-                                                 delimiter: Option[String])
-  extends RunnableCommand with SparkHadoopMapReduceUtil {
+    inputPath: String,
+    tableName: String,
+    isLocal: Boolean,
+    delimiter: Option[String]) extends RunnableCommand with SparkHadoopMapReduceUtil with Logging {
   override def run(sqlContext: SQLContext) = {
     val solvedRelation = sqlContext.catalog.lookupRelation(Seq(tableName))
     val relation: HBaseRelation = solvedRelation.asInstanceOf[Subquery]
@@ -275,7 +274,6 @@ case class ParallelizedBulkLoadIntoTableCommand(
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = shuffled.id
-    //    val outfmt = job.getOutputFormatClass
     val jobFormat = new HFileOutputFormat2
 
     if (SparkEnv.get.conf.getBoolean("spark.hadoop.validateOutputSpecs", defaultValue = true)) {
@@ -283,8 +281,8 @@ case class ParallelizedBulkLoadIntoTableCommand(
       jobFormat.checkOutputSpecs(job)
     }
 
-    val writeShard = (context: TaskContext,
-                      iter: Iterator[(HBaseRawType, Array[HBaseRawType])]) => {
+    val writeShard =
+      (context: TaskContext, iter: Iterator[(HBaseRawType, Array[HBaseRawType])]) => {
       val config = wrappedConf.value
       /* "reduce task" <split #> <attempt # = spark task #> */
       val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
@@ -334,8 +332,11 @@ case class ParallelizedBulkLoadIntoTableCommand(
       val targetPath = committer.getCommittedTaskPath(hadoopContext)
       val load = new LoadIncrementalHFiles(config)
       val htable = relation.htable
-      load.doBulkLoad(targetPath, htable)
-
+      // there maybe no target path
+      logInfo(s"written $recordsWritten records")
+      if(recordsWritten > 0) {
+        load.doBulkLoad(targetPath, htable)
+      }
       1
     }: Int
 

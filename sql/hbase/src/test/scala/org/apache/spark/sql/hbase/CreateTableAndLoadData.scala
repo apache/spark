@@ -133,15 +133,9 @@ trait CreateTableAndLoadData extends Logging {
   }
 
   def loadData(stagingTableName: String, tableName: String, loadFile: String) = {
-
     // then load data into table
-    val loadSql = s"LOAD DATA LOCAL INPATH '$loadFile' INTO TABLE $tableName"
+    val loadSql = s"LOAD PARALL DATA LOCAL INPATH '$loadFile' INTO TABLE $tableName"
     runSql(loadSql)
-
-    val query1 = s"select * from $tableName"
-
-    val result1 = runSql(query1)
-//    assert(result1.size == 3)
   }
 
   def cleanUp() = {
