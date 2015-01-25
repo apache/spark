@@ -435,13 +435,13 @@ private[parquet] class CatalystPrimitiveConverter(
 private[parquet] class CatalystPrimitiveStringConverter(parent: CatalystConverter, fieldIndex: Int)
   extends CatalystPrimitiveConverter(parent, fieldIndex) {
 
-  private var dict: Array[String] = null
+  private[this] var dict: Array[String] = null
 
   override def hasDictionarySupport: Boolean = true
 
   override def setDictionary(dictionary: Dictionary):Unit =
-    dict = (for (i <- 0 to dictionary.getMaxId)
-    yield dictionary.decodeToBinary(i).toStringUsingUTF8).toArray
+    dict = Array.tabulate(dictionary.getMaxId + 1) {dictionary.decodeToBinary(_).toStringUsingUTF8}
+
 
   override def addValueFromDictionary(dictionaryId: Int): Unit =
     parent.updateString(fieldIndex, dict(dictionaryId))
