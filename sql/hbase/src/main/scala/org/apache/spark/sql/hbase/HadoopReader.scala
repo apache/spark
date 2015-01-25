@@ -37,19 +37,23 @@ private[hbase] class HadoopReader(
     rdd.mapPartitions { iter =>
       val lineBuffer = HBaseKVHelper.createLineBuffer(relation.output)
       val keyBytes = new Array[(HBaseRawType, DataType)](relation.keyColumns.size)
-      iter.map { line =>
-        // If the last column in the text file is null, the java parser will
-        // return a String[] containing only the non-null text values.
-        // In this case we need to append another element (null) to
-        // the array returned by line.split(splitRegex).
-        val valueBytes = new Array[HBaseRawType](relation.nonKeyColumns.size)
-        var textValueArray = line.split(splitRegex)
-        if (textValueArray.length == relation.output.length - 1) {
-          textValueArray = textValueArray :+ null
+      iter.flatMap { line =>
+        if (line == "") {
+          None
+        } else {
+          // If the last column in the text file is null, the java parser will
+          // return a String[] containing only the non-null text values.
+          // In this case we need to append another element (null) to
+          // the array returned by line.split(splitRegex).
+          val valueBytes = new Array[HBaseRawType](relation.nonKeyColumns.size)
+          var textValueArray = line.split(splitRegex)
+          if (textValueArray.length == relation.output.length - 1) {
+            textValueArray = textValueArray :+ null
+          }
+          HBaseKVHelper.string2KV(textValueArray, relation, lineBuffer, keyBytes, valueBytes)
+          val rowKeyData = HBaseKVHelper.encodingRawKeyColumns(keyBytes)
+          Seq((rowKeyData, valueBytes))
         }
-        HBaseKVHelper.string2KV(textValueArray, relation, lineBuffer, keyBytes, valueBytes)
-        val rowKeyData = HBaseKVHelper.encodingRawKeyColumns(keyBytes)
-        (rowKeyData, valueBytes)
       }
     }
   }
