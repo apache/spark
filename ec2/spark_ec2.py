@@ -351,12 +351,13 @@ def launch_cluster(conn, opts, cluster_name):
         print >> stderr, "ERROR: Must provide an identity file (-i) for ssh connections."
         sys.exit(1)
 
-    if not os.path.exists(opts.identify_file):
-        print >> stderr, "ERROR: The identity file(%s) doesn't exist." % opts.identity_file
+    if not os.path.exists(opts.identity_file):
+        print >> stderr, "ERROR: The identity file '{f}' doesn't exist.".format(f=opts.identity_file)
         sys.exit(1)
 
-    if oct(os.stat(opts.identity_file).st_mode)[-3:] != "600":
-        print >> stderr, "ERROR: Must set the permissions for the private key file to 600."
+    file_mode = os.stat(opts.identity_file).st_mode
+    if not (file_mode & os.stat.S_IRUSR):
+        print >> stderr, "ERROR: Must set the permissions for the identity file to S_IRUSR."
         sys.exit(1)
 
     if opts.key_pair is None:
