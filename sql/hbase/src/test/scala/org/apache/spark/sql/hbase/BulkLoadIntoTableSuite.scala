@@ -21,6 +21,8 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.hbase.execution._
 import org.apache.spark.SparkContext
+import org.apache.spark.sql.hbase.util.BytesUtils
+import org.apache.spark.sql.types.IntegerType
 
 class BulkLoadIntoTableSuite extends QueriesSuiteBase {
   val sc: SparkContext = TestHbase.sparkContext
@@ -297,6 +299,8 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
 
     // cleanup
     TestHbase.sql("drop table testblk")
+    dropNativeHbaseTable("multi_cf_table")
+
   }
 
   test("load parall data on hbase table with more than 1 column family") {
@@ -332,5 +336,78 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
 
     // cleanup
     TestHbase.sql("drop table testblk")
+    dropNativeHbaseTable("multi_cf_table")
+  }
+
+  test("bulk load for presplit table") {
+    val splitKeys = Seq(4, 8, 12).map { x =>
+      BytesUtils.create(IntegerType).toBytes(x)
+    }
+    createNativeHbaseTable("presplit_table", Seq("cf1", "cf2"), splitKeys.toArray)
+
+    val sql1 =
+      s"""CREATE TABLE testblk(col1 INT, col2 INT, col3 STRING, PRIMARY KEY(col1))
+          MAPPED BY (presplit_table, COLS=[col2=cf1.a, col3=cf2.b])"""
+        .stripMargin
+
+    val sql2 =
+      s"""select * from testblk limit 5"""
+        .stripMargin
+
+    val executeSql1 = TestHbase.executeSql(sql1)
+    executeSql1.toRdd.collect()
+
+    val executeSql2 = TestHbase.executeSql(sql2)
+    executeSql2.toRdd.collect()
+
+    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/splitLoadData.txt'"
+
+    // then load parall data into table
+    val loadSql = "LOAD DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
+
+    val executeSql3 = TestHbase.executeSql(loadSql)
+    executeSql3.toRdd.collect()
+
+    assert(TestHbase.sql("select * from testblk").collect().size == 16)
+
+    // cleanup
+    TestHbase.sql("drop table testblk")
+    dropNativeHbaseTable("presplit_table")
+  }
+
+  test("parall bulk load for presplit table") {
+    val splitKeys = Seq(4, 8, 12).map { x =>
+      BytesUtils.create(IntegerType).toBytes(x)
+    }
+    createNativeHbaseTable("presplit_table", Seq("cf1", "cf2"), splitKeys.toArray)
+
+    val sql1 =
+      s"""CREATE TABLE testblk(col1 INT, col2 INT, col3 STRING, PRIMARY KEY(col1))
+          MAPPED BY (presplit_table, COLS=[col2=cf1.a, col3=cf2.b])"""
+        .stripMargin
+
+    val sql2 =
+      s"""select * from testblk limit 5"""
+        .stripMargin
+
+    val executeSql1 = TestHbase.executeSql(sql1)
+    executeSql1.toRdd.collect()
+
+    val executeSql2 = TestHbase.executeSql(sql2)
+    executeSql2.toRdd.collect()
+
+    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/splitLoadData.txt'"
+
+    // then load parall data into table
+    val loadSql = "LOAD PARALL DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
+
+    val executeSql3 = TestHbase.executeSql(loadSql)
+    executeSql3.toRdd.collect()
+
+    assert(TestHbase.sql("select * from testblk").collect().size == 16)
+
+    // cleanup
+    TestHbase.sql("drop table testblk")
+    dropNativeHbaseTable("presplit_table")
   }
 }

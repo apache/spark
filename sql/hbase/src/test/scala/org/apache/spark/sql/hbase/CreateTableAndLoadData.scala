@@ -73,8 +73,37 @@ trait CreateTableAndLoadData extends Logging {
     }
   }
 
-  def createTables(stagingTableName: String, tableName: String,
-                   hbaseStagingTable: String, hbaseTable: String) = {
+  def createNativeHbaseTable(
+      tableName: String,
+      families: Seq[String],
+      splitKeys: Array[HBaseRawType]) = {
+    val hbaseAdmin = TestHbase.hbaseAdmin
+    val hdesc = new HTableDescriptor(TableName.valueOf(tableName))
+    families.foreach { f => hdesc.addFamily(new HColumnDescriptor(f))}
+    try {
+      hbaseAdmin.createTable(hdesc, splitKeys)
+    } catch {
+      case e: TableExistsException =>
+        logError(s"Table already exists $tableName", e)
+    }
+  }
+
+  def dropNativeHbaseTable(tableName: String) = {
+    try {
+      val hbaseAdmin = TestHbase.hbaseAdmin
+      hbaseAdmin.disableTable(tableName)
+      hbaseAdmin.deleteTable(tableName)
+    } catch {
+      case e: TableExistsException =>
+        logError(s"Table already exists $tableName", e)
+    }
+  }
+
+  def createTables(
+      stagingTableName: String,
+      tableName: String,
+      hbaseStagingTable: String,
+      hbaseTable: String) = {
     val hbaseAdmin = TestHbase.hbaseAdmin
     if (!hbaseAdmin.tableExists(TableName.valueOf(hbaseStagingTable))) {
       createNativeHbaseTable(hbaseStagingTable, DefaultHbaseColFamilies)

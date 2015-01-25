@@ -25,9 +25,9 @@ import org.apache.spark.sql.types._
  * Helper class for scanning files stored in Hadoop - e.g., to read text file when bulk loading.
  */
 private[hbase] class HadoopReader(
-                                   @transient sc: SparkContext,
-                                   path: String,
-                                   delimiter: Option[String])(baseRelation: HBaseRelation) {
+    @transient sc: SparkContext,
+    path: String,
+    delimiter: Option[String])(baseRelation: HBaseRelation) {
   /** make RDD[(SparkImmutableBytesWritable, SparkKeyValue)] from text file. */
   private[hbase] def makeBulkLoadRDDFromTextFile = {
     val rdd = sc.textFile(path)

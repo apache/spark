@@ -35,28 +35,35 @@ class HBasePartitioner (var splitKeys: Array[HBaseRawType]) extends Partitioner 
 
   type t = HBaseRawType
 
-  def numPartitions = splitKeys.length + 1
+  lazy private val len = splitKeys.length
+
+  // For presplit table splitKeys(0) = bytes[0], to remove it,
+  // otherwise partiton 0 always be empty and
+  // we will miss the last region's date when bulk load
+  lazy private val realSplitKeys = if (splitKeys.isEmpty) splitKeys else splitKeys.tail
+
+  def numPartitions = if (len == 0) 1 else len
 
   @transient private val binarySearch: ((Array[t], t) => Int) = CollectionsUtils.makeBinarySearch[t]
 
   def getPartition(key: Any): Int = {
     val k = key.asInstanceOf[t]
     var partition = 0
-    if (splitKeys.length <= 128) {
+    if (len <= 128 && len > 0) {
       // If we have less than 128 partitions naive search
       val ordering = implicitly[Ordering[t]]
-      while (partition < splitKeys.length && ordering.gt(k, splitKeys(partition))) {
+      while (partition < realSplitKeys.length && ordering.gt(k, realSplitKeys(partition))) {
         partition += 1
       }
-    } else {
+    } else { // todo(wf): we need test this branch
       // Determine which binary search method to use only once.
-      partition = binarySearch(splitKeys, k)
+      partition = binarySearch(realSplitKeys, k)
       // binarySearch either returns the match location or -[insertion point]-1
       if (partition < 0) {
         partition = -partition - 1
       }
-      if (partition > splitKeys.length) {
-        partition = splitKeys.length
+      if (partition > realSplitKeys.length) {
+        partition = realSplitKeys.length
       }
     }
     partition

@@ -374,7 +374,7 @@ case class ParallelizedBulkLoadIntoTableCommand(
       val load = new LoadIncrementalHFiles(config)
       val htable = relation.htable
       // there maybe no target path
-      logInfo(s"written $recordsWritten records")
+      println(s"written $recordsWritten records")
       if(recordsWritten > 0) {
         load.doBulkLoad(targetPath, htable)
       }
