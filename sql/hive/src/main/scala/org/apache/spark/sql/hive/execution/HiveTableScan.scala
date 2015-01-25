@@ -22,8 +22,8 @@ import scala.collection.JavaConversions._
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
 import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
+import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils
 
 import org.apache.spark.annotation.DeveloperApi
@@ -64,7 +64,7 @@ case class HiveTableScan(
     BindReferences.bindReference(pred, relation.partitionKeys)
   }
 
-  // Create a local copy of hiveconf,so that scan specific modifications should not impact 
+  // Create a local copy of hiveconf,so that scan specific modifications should not impact
   // other queries
   @transient
   private[this] val hiveExtraConf = new HiveConf(context.hiveconf)
@@ -73,7 +73,7 @@ case class HiveTableScan(
   addColumnMetadataToConf(hiveExtraConf)
 
   @transient
-  private[this] val hadoopReader = 
+  private[this] val hadoopReader =
     new HadoopTableReader(attributes, relation, context, hiveExtraConf)
 
   private[this] def castFromString(value: String, dataType: DataType) = {
@@ -84,7 +84,7 @@ case class HiveTableScan(
     // Specifies needed column IDs for those non-partitioning columns.
     val neededColumnIDs = attributes.flatMap(relation.columnOrdinals.get).map(o => o: Integer)
 
-    HiveShim.appendReadColumns(hiveConf, neededColumnIDs, attributes.map(_.name))
+    HiveCompat.appendReadColumns(hiveConf, neededColumnIDs, attributes.map(_.name))
 
     val tableDesc = relation.tableDesc
     val deserializer = tableDesc.getDeserializerClass.newInstance

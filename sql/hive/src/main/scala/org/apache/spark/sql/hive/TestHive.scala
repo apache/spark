@@ -382,7 +382,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   protected val originalUdfs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
   // Database default may not exist in 0.13.1, create it if not exist
-  HiveShim.createDefaultDBIfNeeded(this)
+  HiveCompat.createDefaultDBIfNeeded(this)
 
   /**
    * Resets the test instance by deleting any tables that have been created.
