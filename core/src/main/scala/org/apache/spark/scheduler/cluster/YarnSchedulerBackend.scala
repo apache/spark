@@ -94,7 +94,7 @@ private[spark] abstract class YarnSchedulerBackend(
   /**
    * An actor that communicates with the ApplicationMaster.
    */
-  protected class YarnSchedulerActor extends Actor {
+  private class YarnSchedulerActor extends Actor {
     private var amActor: Option[ActorRef] = None
 
     override def preStart(): Unit = {

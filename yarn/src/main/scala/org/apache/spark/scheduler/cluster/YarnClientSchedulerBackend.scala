@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler.cluster
 
-import akka.actor.Props
-
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}

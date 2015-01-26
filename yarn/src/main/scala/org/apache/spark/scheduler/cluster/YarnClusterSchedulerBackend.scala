@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler.cluster
 
-import akka.actor.Props
-
 import org.apache.spark.SparkContext
 import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
 import org.apache.spark.scheduler.TaskSchedulerImpl
