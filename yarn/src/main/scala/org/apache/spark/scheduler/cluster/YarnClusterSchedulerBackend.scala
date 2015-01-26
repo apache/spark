@@ -31,8 +31,6 @@ private[spark] class YarnClusterSchedulerBackend(
 
   override def start() {
     super.start()
-    yarnSchedulerActor = sc.env.actorSystem.actorOf(Props(new YarnSchedulerActor(true)),
-      name = YarnSchedulerBackend.ACTOR_NAME)
     totalExpectedExecutors = DEFAULT_NUMBER_EXECUTORS
     if (System.getenv("SPARK_EXECUTOR_INSTANCES") != null) {
       totalExpectedExecutors = IntParam.unapply(System.getenv("SPARK_EXECUTOR_INSTANCES"))

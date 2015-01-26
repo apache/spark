@@ -239,12 +239,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
    * so AMActor don't monitor lifecycle of driver.
    */
   private def runAMActor(
-      securityMgr: SecurityManager,
       host: String,
       port: String,
       isDriver: Boolean): Unit = {
-    actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
-      conf = sparkConf, securityManager = securityMgr)._1
     val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
       SparkEnv.driverActorSystemName,
       host,
@@ -267,8 +264,8 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
         ApplicationMaster.EXIT_SC_NOT_INITED,
         "Timed out waiting for SparkContext.")
     } else {
-      runAMActor(securityMgr, sc.getConf.get("spark.driver.host"),
-        sc.getConf.get("spark.driver.port"), true)
+      actorSystem = sc.env.actorSystem
+      runAMActor(sc.getConf.get("spark.driver.host"), sc.getConf.get("spark.driver.port"), true)
       registerAM(sc.ui.map(_.appUIAddress).getOrElse(""), securityMgr)
       userClassThread.join()
     }
@@ -421,7 +418,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     sparkConf.set("spark.driver.host", driverHost)
     sparkConf.set("spark.driver.port", driverPort.toString)
 
-    runAMActor(securityMgr, driverHost, driverPort.toString, false)
+    actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
+      conf = sparkConf, securityManager = securityMgr)._1
+    runAMActor(driverHost, driverPort.toString, false)
   }
 
   /** Add the Yarn IP filter that is required for properly securing the UI. */
@@ -491,7 +490,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
       // we can monitor Lifecycle Events.
       driver ! "Hello"
       driver ! RegisterClusterManager
-      if (isDriver) {
+      if (!isDriver) {
         context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
       }
     }
