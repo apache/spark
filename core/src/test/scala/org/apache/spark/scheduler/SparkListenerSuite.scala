@@ -21,12 +21,11 @@ import java.util.concurrent.Semaphore
 
 import scala.collection.mutable
 
-import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext}
+import org.scalatest.{FunSuite, Matchers}
+
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.ResetSystemProperties
-
-import org.mockito.Mockito._
-import org.scalatest.{FunSuite, Matchers}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext}
 
 class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
   with ResetSystemProperties {
@@ -363,34 +362,6 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     val conf = new SparkConf().setMaster("local").setAppName("test")
       .set("spark.extraListeners", classOf[ListenerThatAcceptsSparkConf].getName + "," +
         classOf[BasicJobCounter].getName)
-    sc = new SparkContext(conf)
-    sc.listenerBus.sparkListeners.collect { case x: BasicJobCounter => x}.size should be (1)
-    sc.listenerBus.sparkListeners.collect {
-      case x: ListenerThatAcceptsSparkConf => x
-    }.size should be (1)
-  }
-
-  test("registering listeners via SPARK_EXTRA_LISTENERS") {
-    val SPARK_EXTRA_LISTENERS = classOf[ListenerThatAcceptsSparkConf].getName + "," +
-      classOf[BasicJobCounter].getName
-    val conf = spy(new SparkConf().setMaster("local").setAppName("test"))
-    when(conf.getenv("SPARK_EXTRA_LISTENERS")).thenReturn(SPARK_EXTRA_LISTENERS)
-    when(conf.clone).thenReturn(conf)  // so that our mock is still used
-    sc = new SparkContext(conf)
-    sc.listenerBus.sparkListeners.collect { case x: BasicJobCounter => x}.size should be (1)
-    sc.listenerBus.sparkListeners.collect {
-      case x: ListenerThatAcceptsSparkConf => x
-    }.size should be (1)
-  }
-
-  test("spark.extraListeners and SPARK_EXTRA_LISTENERS configurations are merged") {
-    // This test ensures that we don't accidentally change the behavior such that one setting
-    // overrides the other:
-    val SPARK_EXTRA_LISTENERS = classOf[ListenerThatAcceptsSparkConf].getName
-    val conf = spy(new SparkConf().setMaster("local").setAppName("test")
-      .set("spark.extraListeners", classOf[BasicJobCounter].getName))
-    when(conf.getenv("SPARK_EXTRA_LISTENERS")).thenReturn(SPARK_EXTRA_LISTENERS)
-    when(conf.clone).thenReturn(conf)  // so that our mock is still used
     sc = new SparkContext(conf)
     sc.listenerBus.sparkListeners.collect { case x: BasicJobCounter => x}.size should be (1)
     sc.listenerBus.sparkListeners.collect {
