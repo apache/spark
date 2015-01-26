@@ -17,10 +17,11 @@
 
 package org.apache.spark
 
+import java.util.concurrent.ConcurrentHashMap
+
 import scala.collection.JavaConverters._
 import scala.collection.mutable.LinkedHashSet
-import java.util.Map
-import java.util.concurrent.ConcurrentHashMap
+
 import org.apache.spark.serializer.KryoSerializer
 
 /**
@@ -48,7 +49,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
 
-  private[spark] val settings = new ConcurrentHashMap[String, String]()
+  private val settings = new ConcurrentHashMap[String, String]()
 
   if (loadDefaults) {
     // Load any spark.* system properties
@@ -178,8 +179,7 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Get all parameters as a list of pairs */
   def getAll: Array[(String, String)] = {
-    settings.entrySet().toArray().asInstanceOf[Array[Map.Entry[String, String]]]
-      .map(x => (x.getKey, x.getValue))
+    settings.entrySet().asScala.map(x => (x.getKey, x.getValue)).toArray
   }
 
   /** Get a parameter as an integer, falling back to a default if not set */
