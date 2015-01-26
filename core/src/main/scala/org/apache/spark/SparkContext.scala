@@ -20,6 +20,7 @@ package org.apache.spark
 import scala.language.implicitConversions
 
 import java.io._
+import java.lang.reflect.Constructor
 import java.net.URI
 import java.util.{Arrays, Properties, UUID}
 import java.util.concurrent.atomic.AtomicInteger
@@ -1502,22 +1503,33 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         (fromSparkConf ++ fromEnvVar).map(_.trim).filter(_ != "")
       }
       for (className <- listenerClassNames) {
-        val listenerClass = Class.forName(className).asInstanceOf[Class[_ <: SparkListener]]
-        val listener = try {
-          listenerClass.getConstructor(classOf[SparkConf]).newInstance(conf)
-        } catch {
-          case e: NoSuchMethodException =>
-            try {
-              listenerClass.newInstance()
-            } catch {
-              case e: NoSuchMethodException =>
-                throw new SparkException(
-                  s"$listenerClass did not have a zero-argument constructor or a" +
-                    " single-argument constructor that accepts SparkConf (is it a nested Scala class?)")
-            }
+        val constructors = {
+          val listenerClass = Class.forName(className)
+          listenerClass.getConstructors.asInstanceOf[Array[Constructor[_ <: SparkListener]]]
+        }
+        val constructorTakingSparkConf = constructors.find { c =>
+          c.getParameterTypes.sameElements(Array(classOf[SparkConf]))
+        }
+        lazy val zeroArgumentConstructor = constructors.find { c =>
+          c.getParameterTypes.isEmpty
+        }
+        val listener: SparkListener = {
+          if (constructorTakingSparkConf.isDefined) {
+            constructorTakingSparkConf.get.newInstance(conf)
+          } else if (zeroArgumentConstructor.isDefined) {
+            zeroArgumentConstructor.get.newInstance()
+          } else {
+            throw new SparkException(
+              s"$className did not have a zero-argument constructor or a" +
+                " single-argument constructor that accepts SparkConf. Note: if the class is" +
+                " defined inside of another Scala class, then its constructors may accept an" +
+                " implicit parameter that references the enclosing class; in this case, you must" +
+                " define the listener as a top-level class in order to prevent this extra" +
+                " parameter from breaking Spark's ability to find a valid constructor.")
+          }
         }
         listenerBus.addListener(listener)
-        logInfo(s"Registered listener $listenerClass")
+        logInfo(s"Registered listener $className")
       }
     } catch {
       case e: Exception =>
