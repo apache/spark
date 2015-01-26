@@ -1495,14 +1495,20 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       throw new IllegalStateException("listener bus has already been started")
     }
     // Use reflection to instantiate listeners specified via the `spark.extraListeners`
-    // configuration or the SPARK_EXTRA_LISTENERS environment variable
+    // configuration or the SPARK_EXTRA_LISTENERS environment variable. The purpose of
+    // SPARK_EXTRA_LISTENERS is to allow the execution environment to inject custom listeners
+    // without having to worry about them being overridden by user settings in SparkConf.
     try {
       val listenerClassNames: Seq[String] = {
+        // Merge configurations from both sources
         val fromSparkConf = conf.get("spark.extraListeners", "").split(',')
         val fromEnvVar = Option(conf.getenv("SPARK_EXTRA_LISTENERS")).getOrElse("").split(',')
+        // Filter out empty entries, which could occur when overriding environment variables
+        // (e.g. `export SPARK_EXTRA_LISTENERS="foo,$SPARK_EXTRA_LISTENERS`)
         (fromSparkConf ++ fromEnvVar).map(_.trim).filter(_ != "")
       }
       for (className <- listenerClassNames) {
+        // Use reflection to find the right constructor
         val constructors = {
           val listenerClass = Class.forName(className)
           listenerClass.getConstructors.asInstanceOf[Array[Constructor[_ <: SparkListener]]]
