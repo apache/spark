@@ -75,7 +75,7 @@ abstract class Attribute extends NamedExpression {
 /**
  * Used to assign a new name to a computation.
  * For example the SQL expression "1 + 1 AS a" could be represented as follows:
- *  Alias(Add(Literal(1), Literal(1), "a")()
+ *  Alias(Add(Literal(1), Literal(1)), "a")()
  *
  * @param child the computation being performed
  * @param name the name to be associated with the result of computing [[child]].
@@ -87,6 +87,49 @@ case class Alias(child: Expression, name: String)
   extends NamedExpression with trees.UnaryNode[Expression] {
 
   override type EvaluatedType = Any
+
+  override def eval(input: Row) = child.eval(input)
+
+  override def dataType = child.dataType
+  override def nullable = child.nullable
+  override def metadata: Metadata = {
+    child match {
+      case named: NamedExpression => named.metadata
+      case _ => Metadata.empty
+    }
+  }
+
+  override def toAttribute = {
+    if (resolved) {
+      AttributeReference(name, child.dataType, child.nullable, metadata)(exprId, qualifiers)
+    } else {
+      UnresolvedAttribute(name)
+    }
+  }
+
+  override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix"
+
+  override protected final def otherCopyArgs = exprId :: qualifiers :: Nil
+}
+
+/**
+ * Used to assign a new name to a computation with more than one column output, such as hive udtf.
+ * For example the SQL expression "stack(2, key, value, key, value) as (a, b)" could be represented
+ * as follows:
+ *  Alias(stack_function, Seq(a, b))()
+
+ * @param child the computation being performed
+ * @param names the names to be associated with each output of computing [[child]].
+ * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this
+ *               alias. Auto-assigned if left blank.
+ */
+case class MultiAlias(child: Expression, names: Seq[String])
+    (val exprId: ExprId = NamedExpression.newExprId, val qualifiers: Seq[String] = Nil)
+  extends NamedExpression with trees.UnaryNode[Expression] {
+
+  override type EvaluatedType = Any
+
+  override def name = names.mkString("|")
 
   override def eval(input: Row) = child.eval(input)
 

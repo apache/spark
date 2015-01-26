@@ -329,8 +329,25 @@ private[hive] case class HiveGenericUdtf(
 private[spark] object ResolveUdtfsAlias extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan) = plan transform {
     case q: LogicalPlan => q transformExpressions {
-      case Alias(udtf@HiveGenericUdtf(_, _, _), names) if names.contains("|") =>
-        Alias(udtf.copy(aliasNames = names.split("\\|")), names)()
+      case MultiAlias(udtf@HiveGenericUdtf(_, _, _), names) =>
+        MultiAlias(udtf.copy(aliasNames = names), names)()
+    }
+  }
+}
+
+/**
+ * Checks for multi alias, now multi alias only support udtfs
+ */
+object CheckMultiAlias extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transform {
+      case multiAlias @ MultiAlias(udtf, names) =>
+        assert(udtf.isInstanceOf[HiveGenericUdtf], "multi alias's child expression should be udfs")
+        assert(udtf.asInstanceOf[HiveGenericUdtf].output.size == names.size,
+          s"The number of multi aliases supplied in the AS clause does not match the number of " +
+            s"columns output by the UDTF expected ${udtf.asInstanceOf[HiveGenericUdtf].output.size}" +
+            s" aliases but got ${names.size}")
+      multiAlias
     }
   }
 }
