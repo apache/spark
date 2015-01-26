@@ -40,6 +40,10 @@ while (($#)); do
     export SPARK_SUBMIT_OPTS=$2
   elif [ "$1" = "--master" ]; then
     export MASTER=$2
+  elif [ "$1" = "--maven" ]; then
+      export SPARK_SUBMIT_MAVEN_COORDINATES=$2
+  elif [ "$1" = "--maven_repos" ]; then
+        export SPARK_SUBMIT_MAVEN_REPOS=$2
   fi
   shift
 done

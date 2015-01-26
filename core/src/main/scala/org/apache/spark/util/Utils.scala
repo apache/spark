@@ -1873,6 +1873,8 @@ private[spark] object Utils extends Logging {
   }
 }
 
+private[spark] case class MavenCoordinates(groupId: String, artifactId: String, version: String)
+
 /**
  * A utility class to redirect the child process's stdout or stderr.
  */
