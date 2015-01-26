@@ -54,7 +54,7 @@ object PIClustering {
    * @param nIterations
    * @param sigma
    * @param minAffinity
-   * @return Tuple of (Seq[(Cluster Id,Cluster Center)],
+   * @return Tuple of (Seq[(Cluster Id, Cluster Center)],
    *                   Seq[(VertexId, ClusterID Membership)]
    */
   def run(sc: SparkContext,
