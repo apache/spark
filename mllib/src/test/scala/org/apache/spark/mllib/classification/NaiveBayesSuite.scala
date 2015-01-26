@@ -95,10 +95,8 @@ class NaiveBayesSuite extends FunSuite with MLlibTestSparkContext {
       assert(closeFit(math.exp(piData(i._2)), math.exp(model.pi(i._1)), 0.05))
     }
     for (i <- modelIndex) {
-      val sortedData = thetaData(i._2).sorted
-      val sortedModel = model.theta(i._1).sorted
-      for (j <- 0 until sortedData.length) {
-        assert(closeFit(math.exp(sortedData(j)), math.exp(sortedModel(j)), 0.05))
+      for (j <- 0 until thetaData(i._2).length) {
+        assert(closeFit(math.exp(thetaData(i._2)(j)), math.exp(model.theta(i._1)(j)), 0.05))
       }
     }
   }
