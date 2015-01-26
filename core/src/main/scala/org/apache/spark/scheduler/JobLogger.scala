@@ -214,7 +214,7 @@ class JobLogger(val user: String, val logDirName: String) extends SparkListener 
     var taskStatus = "TASK_TYPE=%s".format(taskEnd.taskType)
     val taskMetrics = if (taskEnd.taskMetrics != null) taskEnd.taskMetrics else TaskMetrics.empty
     taskEnd.reason match {
-      case Success => taskStatus += " STATUS=SUCCESS"
+      case TaskSucceeded => taskStatus += " STATUS=SUCCESS"
         recordTaskMetrics(taskEnd.stageId, taskStatus, taskInfo, taskMetrics)
       case Resubmitted =>
         taskStatus += " STATUS=RESUBMITTED TID=" + taskInfo.taskId +

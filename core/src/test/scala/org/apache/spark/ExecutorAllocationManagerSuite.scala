@@ -560,14 +560,14 @@ class ExecutorAllocationManagerSuite extends FunSuite with LocalSparkContext {
 
     // Finishing all tasks running on an executor should start the remove timer for that executor
     sc.listenerBus.postToAll(SparkListenerTaskEnd(
-      0, 0, "task-type", Success, createTaskInfo(0, 0, "executor-1"), new TaskMetrics))
+      0, 0, "task-type", TaskSucceeded, createTaskInfo(0, 0, "executor-1"), new TaskMetrics))
     sc.listenerBus.postToAll(SparkListenerTaskEnd(
-      0, 0, "task-type", Success, createTaskInfo(2, 2, "executor-2"), new TaskMetrics))
+      0, 0, "task-type", TaskSucceeded, createTaskInfo(2, 2, "executor-2"), new TaskMetrics))
     assert(removeTimes(manager).size === 4)
     assert(!removeTimes(manager).contains("executor-1")) // executor-1 has not finished yet
     assert(removeTimes(manager).contains("executor-2"))
     sc.listenerBus.postToAll(SparkListenerTaskEnd(
-      0, 0, "task-type", Success, createTaskInfo(1, 1, "executor-1"), new TaskMetrics))
+      0, 0, "task-type", TaskSucceeded, createTaskInfo(1, 1, "executor-1"), new TaskMetrics))
     assert(removeTimes(manager).size === 5)
     assert(removeTimes(manager).contains("executor-1")) // executor-1 has now finished
   }

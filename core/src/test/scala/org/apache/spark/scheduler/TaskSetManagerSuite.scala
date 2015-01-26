@@ -17,7 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
 import java.util.Random
 
 import scala.collection.mutable.ArrayBuffer
@@ -174,7 +173,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
     // Tell it the task has finished
     manager.handleSuccessfulTask(0, createTaskResult(0))
-    assert(sched.endedTasks(0) === Success)
+    assert(sched.endedTasks(0) === TaskSucceeded)
     assert(sched.finishedManagers.contains(manager))
   }
 
@@ -199,13 +198,13 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     // Finish the first two tasks
     manager.handleSuccessfulTask(0, createTaskResult(0))
     manager.handleSuccessfulTask(1, createTaskResult(1))
-    assert(sched.endedTasks(0) === Success)
-    assert(sched.endedTasks(1) === Success)
+    assert(sched.endedTasks(0) === TaskSucceeded)
+    assert(sched.endedTasks(1) === TaskSucceeded)
     assert(!sched.finishedManagers.contains(manager))
 
     // Finish the last task
     manager.handleSuccessfulTask(2, createTaskResult(2))
-    assert(sched.endedTasks(2) === Success)
+    assert(sched.endedTasks(2) === TaskSucceeded)
     assert(sched.finishedManagers.contains(manager))
   }
 

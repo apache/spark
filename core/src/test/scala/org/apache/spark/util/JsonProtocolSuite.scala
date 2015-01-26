@@ -44,13 +44,13 @@ class JsonProtocolSuite extends FunSuite {
     val taskStart = SparkListenerTaskStart(111, 0, makeTaskInfo(222L, 333, 1, 444L, false))
     val taskGettingResult =
       SparkListenerTaskGettingResult(makeTaskInfo(1000L, 2000, 5, 3000L, true))
-    val taskEnd = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
+    val taskEnd = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", TaskSucceeded,
       makeTaskInfo(123L, 234, 67, 345L, false),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = false, hasOutput = false))
-    val taskEndWithHadoopInput = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", Success,
+    val taskEndWithHadoopInput = SparkListenerTaskEnd(1, 0, "ShuffleMapTask", TaskSucceeded,
       makeTaskInfo(123L, 234, 67, 345L, false),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = false))
-    val taskEndWithOutput = SparkListenerTaskEnd(1, 0, "ResultTask", Success,
+    val taskEndWithOutput = SparkListenerTaskEnd(1, 0, "ResultTask", TaskSucceeded,
       makeTaskInfo(123L, 234, 67, 345L, false),
       makeTaskMetrics(300L, 400L, 500L, 600L, 700, 800, hasHadoopInput = true, hasOutput = true))
     val jobStart = {
@@ -131,7 +131,7 @@ class JsonProtocolSuite extends FunSuite {
     val fetchMetadataFailed = new MetadataFetchFailedException(17,
       19, "metadata Fetch failed exception").toTaskEndReason
     val exceptionFailure = new ExceptionFailure(exception, None)
-    testTaskEndReason(Success)
+    testTaskEndReason(TaskSucceeded)
     testTaskEndReason(Resubmitted)
     testTaskEndReason(fetchFailed)
     testTaskEndReason(fetchMetadataFailed)
@@ -474,7 +474,7 @@ class JsonProtocolSuite extends FunSuite {
 
   private def assertEquals(reason1: TaskEndReason, reason2: TaskEndReason) {
     (reason1, reason2) match {
-      case (Success, Success) =>
+      case (TaskSucceeded, TaskSucceeded) =>
       case (Resubmitted, Resubmitted) =>
       case (r1: FetchFailed, r2: FetchFailed) =>
         assert(r1.shuffleId === r2.shuffleId)
@@ -854,7 +854,7 @@ class JsonProtocolSuite extends FunSuite {
       |  "Stage Attempt ID": 0,
       |  "Task Type": "ShuffleMapTask",
       |  "Task End Reason": {
-      |    "Reason": "Success"
+      |    "Reason": "TaskSucceeded"
       |  },
       |  "Task Info": {
       |    "Task ID": 123,
@@ -937,7 +937,7 @@ class JsonProtocolSuite extends FunSuite {
       |  "Stage Attempt ID": 0,
       |  "Task Type": "ShuffleMapTask",
       |  "Task End Reason": {
-      |    "Reason": "Success"
+      |    "Reason": "TaskSucceeded"
       |  },
       |  "Task Info": {
       |    "Task ID": 123,
@@ -1018,7 +1018,7 @@ class JsonProtocolSuite extends FunSuite {
       |  "Stage Attempt ID": 0,
       |  "Task Type": "ResultTask",
       |  "Task End Reason": {
-      |    "Reason": "Success"
+      |    "Reason": "TaskSucceeded"
       |  },
       |  "Task Info": {
       |    "Task ID": 123,

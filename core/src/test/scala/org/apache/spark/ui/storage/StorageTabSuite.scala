@@ -18,7 +18,7 @@
 package org.apache.spark.ui.storage
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.apache.spark.Success
+import org.apache.spark.TaskSucceeded
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
@@ -117,7 +117,7 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
     assert(!storageListener._rddInfoMap(2).isCached)
 
     // Task end with no updated blocks. This should not change anything.
-    bus.postToAll(SparkListenerTaskEnd(0, 0, "obliteration", Success, taskInfo, new TaskMetrics))
+    bus.postToAll(SparkListenerTaskEnd(0, 0, "obliteration", TaskSucceeded, taskInfo, new TaskMetrics))
     assert(storageListener._rddInfoMap.size === 3)
     assert(storageListener.rddInfoList.size === 0)
 
@@ -129,7 +129,7 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
       (RDDBlockId(0, 102), BlockStatus(memAndDisk, 400L, 0L, 200L)),
       (RDDBlockId(1, 20), BlockStatus(memAndDisk, 0L, 240L, 0L))
     ))
-    bus.postToAll(SparkListenerTaskEnd(1, 0, "obliteration", Success, taskInfo, metrics1))
+    bus.postToAll(SparkListenerTaskEnd(1, 0, "obliteration", TaskSucceeded, taskInfo, metrics1))
     assert(storageListener._rddInfoMap(0).memSize === 800L)
     assert(storageListener._rddInfoMap(0).diskSize === 400L)
     assert(storageListener._rddInfoMap(0).tachyonSize === 200L)
@@ -151,7 +151,7 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
       (RDDBlockId(2, 40), BlockStatus(none, 0L, 0L, 0L)), // doesn't actually exist
       (RDDBlockId(4, 80), BlockStatus(none, 0L, 0L, 0L)) // doesn't actually exist
     ))
-    bus.postToAll(SparkListenerTaskEnd(2, 0, "obliteration", Success, taskInfo, metrics2))
+    bus.postToAll(SparkListenerTaskEnd(2, 0, "obliteration", TaskSucceeded, taskInfo, metrics2))
     assert(storageListener._rddInfoMap(0).memSize === 400L)
     assert(storageListener._rddInfoMap(0).diskSize === 400L)
     assert(storageListener._rddInfoMap(0).tachyonSize === 200L)
@@ -178,13 +178,13 @@ class StorageTabSuite extends FunSuite with BeforeAndAfter {
     bus.postToAll(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
     bus.postToAll(SparkListenerStageSubmitted(stageInfo0))
     assert(storageListener.rddInfoList.size === 0)
-    bus.postToAll(SparkListenerTaskEnd(0, 0, "big", Success, taskInfo, taskMetrics0))
+    bus.postToAll(SparkListenerTaskEnd(0, 0, "big", TaskSucceeded, taskInfo, taskMetrics0))
     assert(storageListener.rddInfoList.size === 1)
     bus.postToAll(SparkListenerStageSubmitted(stageInfo1))
     assert(storageListener.rddInfoList.size === 1)
     bus.postToAll(SparkListenerStageCompleted(stageInfo0))
     assert(storageListener.rddInfoList.size === 1)
-    bus.postToAll(SparkListenerTaskEnd(1, 0, "small", Success, taskInfo1, taskMetrics1))
+    bus.postToAll(SparkListenerTaskEnd(1, 0, "small", TaskSucceeded, taskInfo1, taskMetrics1))
     assert(storageListener.rddInfoList.size === 2)
     bus.postToAll(SparkListenerStageCompleted(stageInfo1))
     assert(storageListener.rddInfoList.size === 2)
