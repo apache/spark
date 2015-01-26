@@ -138,11 +138,10 @@ private[spark] abstract class Task[T](
   }
 
   override def hashCode(): Int = {
-    val state = Seq(stageId, partitionId)
-    state.map(_.hashCode()).foldLeft(0)((a, b) => 31 * a + b)
+    31 * stageId.hashCode() + partitionId.hashCode()
   }
 
-  def canEqual(other: Any): Boolean = other.isInstanceOf[Task[T]]
+  def canEqual(other: Any): Boolean = other.isInstanceOf[Task[_]]
 
   override def equals(other: Any): Boolean = other match {
     case that: Task[_] =>

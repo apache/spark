@@ -68,4 +68,6 @@ private[spark] class ResultTask[T, U](
   override def preferredLocations: Seq[TaskLocation] = preferredLocs
 
   override def toString: String = "ResultTask(" + stageId + ", " + partitionId + ")"
+
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[ResultTask[T, U]]
 }

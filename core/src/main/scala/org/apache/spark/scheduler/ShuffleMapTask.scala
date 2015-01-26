@@ -87,4 +87,6 @@ private[spark] class ShuffleMapTask(
   override def preferredLocations: Seq[TaskLocation] = preferredLocs
 
   override def toString: String = "ShuffleMapTask(%d, %d)".format(stageId, partitionId)
+
+  override def canEqual(other: Any): Boolean = other.isInstanceOf[ShuffleMapTask]
 }
