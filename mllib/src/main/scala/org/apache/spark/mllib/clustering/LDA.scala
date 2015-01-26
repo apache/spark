@@ -228,6 +228,10 @@ object LDA {
            - Term update:
               - N_{wk} <- sum_j N_{wj} gamma_{wjk}
               - N_k <- sum_w N_{wk}
+
+    TODO: Add simplex constraints to allow alpha in (0,1).
+          See: Vorontsov and Potapenko. "Tutorial on Probabilistic Topic Modeling : Additive
+               Regularization for Stochastic Matrix Factorization." 2014.
    */
 
   /**
@@ -419,7 +423,6 @@ object LDA {
 
   /**
    * Compute bipartite term/doc graph.
-   * doc ids are shifted by vocabSize to maintain uniqueness
    */
   private def initialState(
       docs: RDD[Document],
