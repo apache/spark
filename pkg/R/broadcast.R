@@ -42,8 +42,8 @@ setGeneric("value", function(bcast) { standardGeneric("value") })
 setMethod("value",
           signature(bcast = "Broadcast"),
           function(bcast) {
-            if (exists(bcast@id, envir=.broadcastValues)) {
-              get(bcast@id, envir=.broadcastValues)
+            if (exists(bcast@id, envir = .broadcastValues)) {
+              get(bcast@id, envir = .broadcastValues)
             } else {
               NULL
             }

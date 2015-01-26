@@ -2,8 +2,7 @@
 
 getMinSplits <- function(sc, minSplits) {
   if (is.null(minSplits)) {
-    ssc <- .jcall(sc, "Lorg/apache/spark/SparkContext;", "sc")
-    defaultParallelism <- .jcall(ssc, "I", "defaultParallelism")
+    defaultParallelism <- callJMethod(sc, "defaultParallelism")
     minSplits <- min(defaultParallelism, 2)
   }
   as.integer(minSplits)
@@ -30,10 +29,9 @@ textFile <- function(sc, path, minSplits = NULL) {
   # Allow the user to have a more flexible definiton of the text file path
   path <- normalizePath(path)
   #' Convert a string vector of paths to a string containing comma separated paths
-  path <- paste(path, collapse=",")
+  path <- paste(path, collapse = ",")
 
-  jrdd <- .jcall(sc, "Lorg/apache/spark/api/java/JavaRDD;", "textFile", path,
-                 getMinSplits(sc, minSplits))
+  jrdd <- callJMethod(sc, "textFile", path, getMinSplits(sc, minSplits))
   RDD(jrdd, FALSE)
 }
 
@@ -58,10 +56,9 @@ objectFile <- function(sc, path, minSplits = NULL) {
   # Allow the user to have a more flexible definiton of the text file path
   path <- normalizePath(path)
   #' Convert a string vector of paths to a string containing comma separated paths
-  path <- paste(path, collapse=",")
+  path <- paste(path, collapse = ",")
 
-  jrdd <- .jcall(sc, "Lorg/apache/spark/api/java/JavaRDD;", "objectFile", path,
-                 getMinSplits(sc, minSplits))
+  jrdd <- callJMethod(sc, "objectFile", path, getMinSplits(sc, minSplits))
   # Assume the RDD contains serialized R objects.
   RDD(jrdd, TRUE)
 }
@@ -106,16 +103,8 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # 2-tuples of raws
   serializedSlices <- lapply(slices, serialize, connection = NULL)
 
-  javaSerializedSlices <- .jarray(lapply(serializedSlices, .jarray),
-                                  contents.class = "[B")
-
-  jrddType = "Lorg/apache/spark/api/java/JavaRDD;"
-
-  jrdd <- .jcall("edu/berkeley/cs/amplab/sparkr/RRDD",
-                 jrddType,
-                 "createRDDFromArray",
-                 sc,
-                 javaSerializedSlices)
+  jrdd <- callJStatic("edu.berkeley.cs.amplab.sparkr.RRDD",
+                      "createRDDFromArray", sc, serializedSlices)
 
   RDD(jrdd, TRUE)
 }
@@ -186,12 +175,10 @@ includePackage <- function(sc, pkg) {
 broadcast <- function(sc, object) {
   objName <- as.character(substitute(object))
   serializedObj <- serialize(object, connection = NULL, ascii = TRUE)
-  serializedObjArr <- .jcast(.jarray(serializedObj),
-                             new.class="java/lang/Object")
-  jBroadcast <- .jcall(sc, "Lorg/apache/spark/broadcast/Broadcast;",
-                       "broadcast", serializedObjArr)
 
-  id <- as.character(.jsimplify(.jcall(jBroadcast, "J", "id")))
+  jBroadcast <- callJMethod(sc, "broadcast", serializedObj)
+  id <- as.character(callJMethod(jBroadcast, "id"))
+
   Broadcast(id, object, jBroadcast, objName)
 }
 
@@ -211,8 +198,5 @@ broadcast <- function(sc, object) {
 #' checkpoint(rdd)
 #'}
 setCheckpointDir <- function(sc, dirName) {
-  ssc <- .jcall(sc, "Lorg/apache/spark/SparkContext;", "sc")
-  .jcall(ssc, "V", "setCheckpointDir", suppressWarnings(normalizePath(dirName)))
-  # NOTE: rJava doesn't check for exceptions if the return type is void
-  .jcheck()
+  invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(dirName))))
 }
