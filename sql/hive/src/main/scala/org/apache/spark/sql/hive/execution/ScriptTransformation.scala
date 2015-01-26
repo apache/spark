@@ -63,12 +63,9 @@ case class ScriptTransformation(
       // TODO a Reader SerDe will be placed here for the casting the output
       // data type into the required one
       val outputProjection = new InterpretedProjection(output.zipWithIndex.map {
-        case (attr, idx) => if (attr.dataType == StringType) {
-            BoundReference(idx, StringType, true)
-          } else {
-            Cast(BoundReference(idx, StringType, true), attr.dataType)
-          }
-        }, output)
+        case (attr, idx) if (attr.dataType == StringType) => BoundReference(idx, StringType, true)
+        case (attr, idx) => Cast(BoundReference(idx, StringType, true), attr.dataType)
+      }, output)
 
       // TODO: This should be exposed as an iterator instead of reading in all the data at once.
       val outputLines = collection.mutable.ArrayBuffer[Row]()
