@@ -21,23 +21,17 @@ import java.util.{List => JList}
 
 import org.apache.spark.api.java.JavaRDDLike
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.impl.{EdgePartition, EdgeRDDImpl}
-import org.apache.spark.rdd.RDD
 import org.apache.spark.{Partition, TaskContext}
 
 import scala.reflect.ClassTag
 
-trait JavaEdgeRDDLike [ED, VD, This <: JavaEdgeRDDLike[ED, VD, This, R],
-R <: JavaRDDLike[(PartitionID, EdgePartition[ED, VD]), R]]
+trait JavaEdgeRDDLike [ED, This <: JavaEdgeRDDLike[ED, This, R],
+R <: JavaRDDLike[(VertexId, VertexId, ED), R]]
   extends Serializable {
 
-  def edgeRDD: EdgeRDDImpl[ED, VD]
-
-  def wrapRDD(edgeRDD: RDD[(PartitionID, EdgePartition[ED, VD])]) : R
+  def edgeRDD: EdgeRDD[ED]
 
   def setName() = edgeRDD.setName("JavaEdgeRDD")
-
-  def collect(): Array[Edge[ED]] = edgeRDD.map(_.copy()).collect().asInstanceOf[Array[Edge[ED]]]
 
   def count() : JLong = edgeRDD.count()
 
@@ -45,18 +39,7 @@ R <: JavaRDDLike[(PartitionID, EdgePartition[ED, VD]), R]]
     edgeRDD.compute(part, context)
   }
 
-  def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): JavaEdgeRDD[ED2, VD]
+  def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): JavaEdgeRDD[ED2]
 
-  def reverse: JavaEdgeRDD[ED, VD]
-
-  def filter
-  (epred: EdgeTriplet[VD, ED] => Boolean,
-   vpred: (VertexId, VD) => Boolean): JavaEdgeRDD[ED, VD]
-
-  def innerJoin[ED2: ClassTag, ED3: ClassTag]
-  (other: EdgeRDD[ED2])
-  (f: (VertexId, VertexId, ED, ED2) => ED3): JavaEdgeRDD[ED3, VD]
-
-  def mapEdgePartitions[ED2: ClassTag, VD2: ClassTag]
-  (f: (PartitionID, EdgePartition[ED, VD]) => EdgePartition[ED2, VD2]): JavaEdgeRDD[ED2, VD2]
+  def reverse: JavaEdgeRDD[ED]
 }

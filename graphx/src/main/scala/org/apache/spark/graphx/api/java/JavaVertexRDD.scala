@@ -54,7 +54,7 @@ class JavaVertexRDD[VD](
     * [[org.apache.spark.graphx.api.java.JavaVertexRDD]] instance */
   def asJavaVertexRDD = JavaRDD.fromRDD(this.vertexRDD)
 
-  /** Persist RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
+  /** Persist RDDs of this VertexRDD with the default storage level (MEMORY_ONLY_SER) */
   def cache(): this.type = {
     vertices.cache()
     this
@@ -95,7 +95,7 @@ class JavaVertexRDD[VD](
     this
   }
 
-  /** Persist the RDDs of this DStream with the given storage level */
+  /** Persist the RDDs of this VertexRDD with the given storage level */
   def persist(storageLevel: StorageLevel): this.type = {
     vertices.persist(storageLevel)
     this

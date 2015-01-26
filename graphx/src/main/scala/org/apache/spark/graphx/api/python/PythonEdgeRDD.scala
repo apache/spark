@@ -24,22 +24,41 @@ import org.apache.spark.Accumulator
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.python.{PythonBroadcast, PythonRDD}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.rdd.RDD
+import org.apache.spark.graphx.Edge
+import org.apache.spark.graphx.api.java.JavaEdgeRDD
+import org.apache.spark.storage.StorageLevel
 
 private[graphx] class PythonEdgeRDD(
-    @transient parent: RDD[_],
-    command: Array[Byte],
-    envVars: JMap[String, String],
-    pythonIncludes: JList[String],
-    preservePartitioning: Boolean,
-    pythonExec: String,
-    broadcastVars: JList[Broadcast[PythonBroadcast]],
-    accumulator: Accumulator[JList[Array[Byte]]])
+     @transient parent: JavaRDD[_],
+     command: Array[Byte],
+     envVars: JMap[String, String],
+     pythonIncludes: JList[String],
+     preservePartitioning: Boolean,
+     pythonExec: String,
+     broadcastVars: JList[Broadcast[PythonBroadcast]],
+     accumulator: Accumulator[JList[Array[Byte]]],
+     targetStorageLevel: StorageLevel = StorageLevel.MEMORY_ONLY)
   extends PythonRDD (parent, command, envVars,
     pythonIncludes, preservePartitioning,
     pythonExec, broadcastVars, accumulator) {
 
-  val asJavaEdgeRDD = JavaRDD.fromRDD(parent)
+  def this(@transient parent: JavaEdgeRDD[_],
+           command: Array[Byte],
+           envVars: JMap[String, String],
+           pythonIncludes: JList[String],
+           preservePartitioning: Boolean,
+           pythonExec: String,
+           broadcastVars: JList[Broadcast[PythonBroadcast]],
+           accumulator: Accumulator[JList[Array[Byte]]],
+           targetStorageLevel : StorageLevel) = {
+    this(parent.toRDD, command, envVars, pythonIncludes,
+      preservePartitioning, pythonExec, broadcastVars, accumulator, targetStorageLevel)
+  }
+
+  val asJavaEdgeRDD = {
+    val jRDD = JavaRDD.fromRDD(this)
+    JavaEdgeRDD.apply(jRDD.asInstanceOf[JavaRDD[Edge[Array[Byte]]]])
+  }
 
   def writeToFile[T](items: java.util.Iterator[T], filename: String) {
     import scala.collection.JavaConverters._

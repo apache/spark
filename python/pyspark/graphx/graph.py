@@ -165,5 +165,5 @@ class Graph(object):
     def stronglyConnectedComponents(self, iterations):
         return
 
-    def pregel(self, initial_message, vertex_program, send_message, combine_message):
+    def Pregel(self, initial_message, vertex_program, send_message, combine_message):
         return

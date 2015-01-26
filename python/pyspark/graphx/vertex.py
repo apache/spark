@@ -159,22 +159,6 @@ class VertexRDD(object):
         """
         return self.jvertex_rdd.filter(f)
 
-    def leftJoin(self, other, numPartitions=None):
-        def dispatch(seq):
-            vbuf, wbuf = [], []
-            for (n, v) in seq:
-                if n == 1:
-                    vbuf.append(v)
-                elif n == 2:
-                    wbuf.append(v)
-            if not wbuf:
-                wbuf.append(None)
-            return [(v, w) for v in vbuf for w in wbuf]
-        vs = self.map(lambda (k, v): (k, (1, v)))
-        ws = other.map(lambda (k, v): (k, (2, v)))
-        return vs.union(ws).groupByKey(numPartitions)\
-                .flatMapValues(lambda x: dispatch(x.__iter__()))
-
     # TODO: The best way to do an innerJoin on vertex RDDs is to use the optimized inner
     # TODO: technique defined in VertexRDDImpl. This solution does not scale
     def innerJoin(self, other):

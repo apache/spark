@@ -62,24 +62,14 @@ class PyVertexRDDTestCase(unittest.TestCase):
         self.assertEqual(results, [(3, ("rxin:rxin", "student:student")),
                                    (7, ("jgonzal:jgonzal", "postdoc:postdoc"))])
 
-    def diff(self):
-        vertexData0 = self.sc.parallelize([(3, ("rxin", "student")), (7, ("jgonzal", "postdoc"))])
-        vertexData1 = self.sc.parallelize([(1, ("rxin", "student")), (2, ("jgonzal", "postdoc"))])
-        vertices0 = VertexRDD(vertexData0)
-        vertices1 = VertexRDD(vertexData1)
-        results = vertices0.diff(vertices1)
-        self.assertEqual(results, 2)
-
-    # TODO
     def innerJoin(self):
         vertexData0 = self.sc.parallelize([(3, ("rxin", "student")), (7, ("jgonzal", "postdoc"))])
         vertexData1 = self.sc.parallelize([(1, ("rxin", "student")), (2, ("jgonzal", "postdoc"))])
         vertices0 = VertexRDD(vertexData0)
         vertices1 = VertexRDD(vertexData1)
-        results = vertices0.innerJoin(vertices1)
-        self.assertEqual(results, 2)
+        results = vertices0.innerJoin(vertices1).collect()
+        self.assertEqual(results, [])
 
-    # TODO
     def leftJoin(self):
         vertexData0 = self.sc.parallelize([(3, ("rxin", "student")), (7, ("jgonzal", "postdoc"))])
         vertexData1 = self.sc.parallelize([(1, ("rxin", "student")), (2, ("jgonzal", "postdoc"))])

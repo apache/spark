@@ -56,7 +56,6 @@ private[graphx] class PythonVertexRDD(
   }
 
   val asJavaVertexRDD = {
-//    new JavaVertexRDD[Array[Byte]](parent.asInstanceOf[JavaRDD[(VertexId, Array[Byte])]])
     JavaVertexRDD(JavaRDD.fromRDD(this).asInstanceOf[JavaRDD[(VertexId, Array[Byte])]])
   }
 
