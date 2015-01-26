@@ -38,6 +38,8 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
   private var queueFullErrorMessageLogged = false
   private var started = false
 
+  private[spark] def hasBeenStarted: Boolean = started
+
   // A counter that represents the number of events produced and consumed in the queue
   private val eventLock = new Semaphore(0)
 

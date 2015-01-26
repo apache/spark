@@ -379,44 +379,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
   executorAllocationManager.foreach(_.start())
 
-  // Use reflection to instantiate listeners specified via the `spark.extraListeners` configuration
-  // or the SPARK_EXTRA_LISTENERS environment variable
-  try {
-    val listenerClassNames: Seq[String] = {
-      val fromSparkConf = conf.get("spark.extraListeners", "").split(',')
-      val fromEnvVar = Option(conf.getenv("SPARK_EXTRA_LISTENERS")).getOrElse("").split(',')
-      (fromSparkConf ++ fromEnvVar).map(_.trim).filter(_ != "")
-    }
-    for (className <- listenerClassNames) {
-      val listenerClass = Class.forName(className).asInstanceOf[Class[_ <: SparkListener]]
-      val listener = try {
-        listenerClass.getConstructor(classOf[SparkConf]).newInstance(conf)
-      } catch {
-        case e: NoSuchMethodException =>
-          try {
-            listenerClass.newInstance()
-          } catch {
-            case e: NoSuchMethodException =>
-              throw new SparkException(
-                s"$listenerClass did not have a zero-argument constructor or a" +
-                " single-argument constructor that accepts SparkConf (is it a nested Scala class?)")
-        }
-      }
-      listenerBus.addListener(listener)
-      logInfo(s"Registered listener $listenerClass")
-    }
-  } catch {
-    case e: Exception =>
-      try {
-        stop()
-      } finally {
-        throw new SparkException(s"Exception when registering SparkListener", e)
-      }
-  }
-
-  // At this point, all relevant SparkListeners have been registered, so begin releasing events
-  listenerBus.start()
-
   private[spark] val cleaner: Option[ContextCleaner] = {
     if (conf.getBoolean("spark.cleaner.referenceTracking", true)) {
       Some(new ContextCleaner(this))
@@ -426,6 +388,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
   cleaner.foreach(_.start())
 
+  setupAndStartListenerBus()
   postEnvironmentUpdate()
   postApplicationStart()
 
@@ -1520,6 +1483,53 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
+
+  /**
+   * Registers listeners specified in spark.extraListeners, then starts the listener bus.
+   * This should be called after all internal listeners have been registered with the listener bus
+   * (e.g. after the web UI and event logging listeners have been registered).
+   */
+  private def setupAndStartListenerBus(): Unit = {
+    if (listenerBus.hasBeenStarted) {
+      throw new IllegalStateException("listener bus has already been started")
+    }
+    // Use reflection to instantiate listeners specified via the `spark.extraListeners`
+    // configuration or the SPARK_EXTRA_LISTENERS environment variable
+    try {
+      val listenerClassNames: Seq[String] = {
+        val fromSparkConf = conf.get("spark.extraListeners", "").split(',')
+        val fromEnvVar = Option(conf.getenv("SPARK_EXTRA_LISTENERS")).getOrElse("").split(',')
+        (fromSparkConf ++ fromEnvVar).map(_.trim).filter(_ != "")
+      }
+      for (className <- listenerClassNames) {
+        val listenerClass = Class.forName(className).asInstanceOf[Class[_ <: SparkListener]]
+        val listener = try {
+          listenerClass.getConstructor(classOf[SparkConf]).newInstance(conf)
+        } catch {
+          case e: NoSuchMethodException =>
+            try {
+              listenerClass.newInstance()
+            } catch {
+              case e: NoSuchMethodException =>
+                throw new SparkException(
+                  s"$listenerClass did not have a zero-argument constructor or a" +
+                    " single-argument constructor that accepts SparkConf (is it a nested Scala class?)")
+            }
+        }
+        listenerBus.addListener(listener)
+        logInfo(s"Registered listener $listenerClass")
+      }
+    } catch {
+      case e: Exception =>
+        try {
+          stop()
+        } finally {
+          throw new SparkException(s"Exception when registering SparkListener", e)
+        }
+    }
+
+    listenerBus.start()
+  }
 
   /** Post the application start event */
   private def postApplicationStart() {
