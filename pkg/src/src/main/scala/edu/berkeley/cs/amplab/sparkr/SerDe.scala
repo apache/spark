@@ -8,7 +8,7 @@ import java.io.DataOutputStream
 /**
  * Utility functions to serialize, deserialize objects to / from R
  */
-object SerDeJVMR {
+object SerDe {
 
   // Type mapping from R to Java
   //
