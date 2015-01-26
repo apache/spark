@@ -93,6 +93,16 @@ case class Join(
         left.output ++ right.output
     }
   }
+
+  override def statistics: Statistics = joinType match {
+    case LeftSemi => left.statistics
+    // multiply by 10 is a guess number
+    case LeftOuter => Statistics(left.statistics.sizeInBytes * 10)
+    // multiply by 10 is a guess number
+    case RightOuter => Statistics(right.statistics.sizeInBytes * 10)
+    // multiply by 10 is a guess number
+    case _ => Statistics((left.statistics.sizeInBytes + right.statistics.sizeInBytes) * 10)
+  }
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
