@@ -11,7 +11,7 @@ import io.netty.channel.ChannelHandler.Sharable
 import io.netty.channel.ChannelHandlerContext
 import io.netty.channel.SimpleChannelInboundHandler
 
-import edu.berkeley.cs.amplab.sparkr.SerializeJavaR._
+import edu.berkeley.cs.amplab.sparkr.SerDeJVMR._
 
 /**
  * Handler for SparkRBackend
