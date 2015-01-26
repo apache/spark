@@ -98,7 +98,7 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
       val args = readArgs(numArgs, dis)
 
       val methods = cls.get.getMethods
-      val selectedMethods = methods.filter(m => m.getName() == methodName)
+      val selectedMethods = methods.filter(m => m.getName == methodName)
       if (selectedMethods.length > 0) {
         val selectedMethod = selectedMethods.filter { x => 
           matchMethod(numArgs, args, x.getParameterTypes)
@@ -151,7 +151,7 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
       val parameterType = parameterTypes(i)
       var parameterWrapperType = parameterType
 
-      if (parameterType.isPrimitive()) {
+      if (parameterType.isPrimitive) {
         parameterWrapperType = parameterType match {
           case java.lang.Integer.TYPE => classOf[java.lang.Integer]
           case java.lang.Double.TYPE => classOf[java.lang.Double]
