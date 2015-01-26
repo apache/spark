@@ -64,7 +64,8 @@ class DeterministicKafkaInputDStream[
     maxRetries: Int = 1
 ) extends InputDStream[R](ssc_) with Logging {
 
-  protected[streaming] override val checkpointData = new DeterministicKafkaInputDStreamCheckpointData
+  protected[streaming] override val checkpointData =
+    new DeterministicKafkaInputDStreamCheckpointData
 
   protected val kc = new KafkaCluster(kafkaParams)
 
