@@ -133,10 +133,9 @@ class SparkHadoopUtil extends Logging {
    * statistics are only available as of Hadoop 2.5 (see HADOOP-10688).
    * Returns None if the required method can't be found.
    */
-  private[spark] def getFSBytesReadOnThreadCallback(conf: Configuration)
-    : Option[() => Long] = {
+  private[spark] def getFSBytesReadOnThreadCallback(): Option[() => Long] = {
     try {
-      val threadStats = getFileSystemThreadStatistics(conf)
+      val threadStats = getFileSystemThreadStatistics()
       val getBytesReadMethod = getFileSystemThreadStatisticsMethod("getBytesRead")
       val f = () => threadStats.map(getBytesReadMethod.invoke(_).asInstanceOf[Long]).sum
       val baselineBytesRead = f()
@@ -156,10 +155,9 @@ class SparkHadoopUtil extends Logging {
    * statistics are only available as of Hadoop 2.5 (see HADOOP-10688).
    * Returns None if the required method can't be found.
    */
-  private[spark] def getFSBytesWrittenOnThreadCallback(conf: Configuration)
-    : Option[() => Long] = {
+  private[spark] def getFSBytesWrittenOnThreadCallback(): Option[() => Long] = {
     try {
-      val threadStats = getFileSystemThreadStatistics(conf)
+      val threadStats = getFileSystemThreadStatistics()
       val getBytesWrittenMethod = getFileSystemThreadStatisticsMethod("getBytesWritten")
       val f = () => threadStats.map(getBytesWrittenMethod.invoke(_).asInstanceOf[Long]).sum
       val baselineBytesWritten = f()
@@ -172,7 +170,7 @@ class SparkHadoopUtil extends Logging {
     }
   }
 
-  private def getFileSystemThreadStatistics(conf: Configuration): Seq[AnyRef] = {
+  private def getFileSystemThreadStatistics(): Seq[AnyRef] = {
     val stats = FileSystem.getAllStatistics()
     stats.map(Utils.invoke(classOf[Statistics], _, "getThreadStatistics"))
   }
