@@ -117,8 +117,6 @@ object SparkBuild extends PomBuild {
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
 
-  lazy val unitTest = TaskKey[Unit]("unit-test", "run all the unit tests")
-
   lazy val sharedSettings = graphSettings ++ genjavadocSettings ++ Seq (
     javaHome   := Properties.envOrNone("JAVA_HOME").map(file),
     incOptions := incOptions.value.withNameHashing(true),
@@ -126,10 +124,6 @@ object SparkBuild extends PomBuild {
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     publishMavenStyle := true,
     unidocGenjavadocVersion := "0.8",
-    (unitTest in Test) := {
-      (testQuick in Test).toTask(" * -- -l org.apache.sparktest.tags.IntegrationTest").value
-      (testQuick in Test).toTask(" * -- --scalatest-please-do-nothing --exclude-categories=org.apache.spark.sparktest.categories.IntegrationTests").value
-    },
 
     resolvers += Resolver.mavenLocal,
     otherResolvers <<= SbtPomKeys.mvnLocalRepository(dotM2 => Seq(Resolver.file("dotM2", dotM2))),
@@ -184,12 +178,12 @@ object SparkBuild extends PomBuild {
 
   // TODO: move this to its upstream project.
   override def projectDefinitions(baseDirectory: File): Seq[Project] = {
-    super.projectDefinitions(baseDirectory).map { x =>
+    val allProjs = super.projectDefinitions(baseDirectory).map { x =>
       if (projectsMap.exists(_._1 == x.id)) x.settings(projectsMap(x.id): _*)
       else x.settings(Seq[Setting[_]](): _*)
     } ++ Seq[Project](OldDeps.project)
+    allProjs.map{proj => TestSettings.setupUnitTests(proj)}
   }
-
 }
 
 object Flume {
@@ -400,9 +394,9 @@ object TestSettings {
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
-    testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
+    testOptions in Test += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
-    libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test",
+    libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test",
     // Only allow one test at a time, even across projects, since they run in the same JVM
     parallelExecution in Test := false,
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
@@ -419,5 +413,16 @@ object TestSettings {
       "-doc-title", "Spark " + version.value.replaceAll("-SNAPSHOT", "") + " ScalaDoc"
     )
   )
+
+  val UnitTest = config("unit") extend(Test)
+
+  def setupUnitTests(proj: Project): Project = {
+    proj.configs(UnitTest)
+      .settings(inConfig(UnitTest)(Defaults.testTasks): _*)
+      .settings(testOptions in UnitTest ++= Seq(
+        Tests.Argument(TestFrameworks.JUnit,"--exclude-categories=org.apache.spark.sparktest.categories.IntegrationTests"),
+        Tests.Argument(TestFrameworks.ScalaTest,"-l", "org.apache.sparktest.tags.IntegrationTest")
+      )) 
+  }
 
 }
