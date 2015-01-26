@@ -90,6 +90,9 @@ private[tree] class GiniAggregator(numClasses: Int)
       throw new IllegalArgumentException(s"GiniAggregator given label $label" +
         s" but requires label < numClasses (= $statsSize).")
     }
+    if (label < 0) {
+      throw new IllegalArgumentException(s"GiniImpurity does not support negative labels")
+    }
     allStats(offset + label.toInt) += instanceWeight
   }
 
@@ -143,6 +146,7 @@ private[tree] class GiniCalculator(stats: Array[Double]) extends ImpurityCalcula
     val lbl = label.toInt
     require(lbl < stats.length,
       s"GiniCalculator.prob given invalid label: $lbl (should be < ${stats.length}")
+    require(lbl >= 0, "GiniImpurity does not support negative labels")
     val cnt = count
     if (cnt == 0) {
       0
