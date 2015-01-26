@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.optimization
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.control.Breaks
 
 import breeze.linalg.{DenseVector => BDV, sum}
 
@@ -82,7 +81,7 @@ class GradientDescent private[mllib] (private var gradient: Gradient, private va
   /**
    * Set the convergence tolerance. Default 0.001
    * convergenceTol is a condition which decides iteration termination.
-   * If the difference between last loss and last before loss is less than convergenceTol
+   * If the difference between the current loss and the previous loss is less than convergenceTol
    * minibatch iteration will end at that point.
    */
   def setConvergenceTol(tolerance: Double): this.type = {
@@ -158,8 +157,8 @@ object GradientDescent extends Logging {
    * @param miniBatchFraction - fraction of the input data set that should be used for
    *                            one iteration of SGD. Default value 1.0.
    * @param convergenceTol - Minibatch iteration will end before numIterations
-   *                         if the difference between last solution vector and last before
-   *                         solution vector is less than this value. Default value 0.001.
+   *                         if the difference between the current loss and the previous loss
+   *                         is less than this value. Default value 0.001.
    * @return A tuple containing two elements. The first element is a column matrix containing
    *         weights for every feature, and the second element is an array containing the
    *         stochastic loss computed for every iteration.
@@ -182,8 +181,9 @@ object GradientDescent extends Logging {
     }
 
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
-    // Record history to calculate solution vector difference
-    val weightsHistory = new ArrayBuffer[Vector](numIterations)
+    // Record previous weight and current one to calculate solution vector difference
+    var previousWeights: Option[Vector] = None
+    var currentWeights: Option[Vector] = None
 
     val numExamples = data.count()
 
@@ -208,10 +208,9 @@ object GradientDescent extends Logging {
     var regVal = updater.compute(
       weights, Vectors.dense(new Array[Double](weights.size)), 0, 1, regParam)._2
 
-    // Check parameter whether current iteration is tolerate or not
-    var tolerate = false
+    var converged = false // indicates whether converged based on convergenceTol
     var i = 1
-    while (!tolerate && i <= numIterations) {
+    while (!converged && i <= numIterations) {
       val bcWeights = data.context.broadcast(weights)
       // Sample a subset (fraction miniBatchFraction) of the total data
       // compute and sum up the subgradients on this subset (this is one map-reduce)
@@ -237,10 +236,18 @@ object GradientDescent extends Logging {
           weights, Vectors.fromBreeze(gradientSum / miniBatchSize.toDouble),
           stepSize, i, regParam)
         weights = update._1
-        weightsHistory.append(weights)
         regVal = update._2
-        if (weightsHistory.length > 1) {
-          if (solutionVecDiff(weightsHistory) < convergenceTol) tolerate = true
+
+        if (i == 1) {
+          previousWeights = Some(weights)
+        } else if (i == 2) {
+          currentWeights = Some(weights)
+        } else {
+          previousWeights = currentWeights
+          currentWeights = Some(weights)
+        }
+        if (previousWeights != None && currentWeights != None) {
+          if (solutionVecDiff(previousWeights, currentWeights) < convergenceTol) converged = true
         }
       } else {
         logWarning(s"Iteration ($i/$numIterations). The size of sampled batch is zero")
@@ -268,11 +275,12 @@ object GradientDescent extends Logging {
                                     regParam, miniBatchFraction, initialWeights, 0.001)
 
   // To compare with convergence tolerance
-  def solutionVecDiff(weightsHistory: ArrayBuffer[Vector]): Double = {
-    require(weightsHistory.length > 1)
-    val lastWeight = weightsHistory.last.toBreeze
-    val lastBeforeWeight = weightsHistory(weightsHistory.length - 2).toBreeze
-    sum((lastBeforeWeight - lastWeight) :* (lastBeforeWeight - lastWeight)) / weightsHistory.length
+  def solutionVecDiff(previousWeight: Option[Vector], currentWeight: Option[Vector]): Double = {
+    require(previousWeight != None)
+    require(currentWeight != None)
+    val lastWeight = currentWeight.get.toBreeze
+    val lastBeforeWeight = previousWeight.get.toBreeze
+    sum((lastBeforeWeight - lastWeight) :* (lastBeforeWeight - lastWeight)) / lastWeight.length
   }
 
 }
