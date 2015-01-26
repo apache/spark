@@ -272,7 +272,9 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   }
 
   private def runExecutorLauncher(securityMgr: SecurityManager): Unit = {
-    waitForSparkDriver(securityMgr)
+    actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
+      conf = sparkConf, securityManager = securityMgr)._1
+    waitForSparkDriver()
     addAmIpFilter()
     registerAM(sparkConf.get("spark.driver.appUIAddress", ""), securityMgr)
 
@@ -386,7 +388,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     }
   }
 
-  private def waitForSparkDriver(securityMgr: SecurityManager): Unit = {
+  private def waitForSparkDriver(): Unit = {
     logInfo("Waiting for Spark driver to be reachable.")
     var driverUp = false
     val hostport = args.userArgs(0)
@@ -418,8 +420,6 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     sparkConf.set("spark.driver.host", driverHost)
     sparkConf.set("spark.driver.port", driverPort.toString)
 
-    actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
-      conf = sparkConf, securityManager = securityMgr)._1
     runAMActor(driverHost, driverPort.toString, false)
   }
 
