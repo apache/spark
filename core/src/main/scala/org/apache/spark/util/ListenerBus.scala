@@ -94,7 +94,7 @@ private[spark] abstract class ListenerBus[L <: AnyRef, E](name: String)
     if (started.compareAndSet(false, true)) {
       listenerThread.start()
     } else {
-      throw new IllegalStateException(name + " already started!")
+      throw new IllegalStateException(s"$name already started!")
     }
   }
 
@@ -151,7 +151,7 @@ private[spark] abstract class ListenerBus[L <: AnyRef, E](name: String)
    */
   def stop() {
     if (!started.get()) {
-      throw new IllegalStateException("Attempted to stop " + name + " that has not yet started!")
+      throw new IllegalStateException(s"Attempted to stop $name that has not yet started!")
     }
     if (stopped.compareAndSet(false, true)) {
       // Call eventLock.release() so that listenerThread will poll `null` from `eventQueue` and know
