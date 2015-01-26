@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.tree
 
 import org.scalatest.FunSuite
+
 import org.apache.spark.mllib.tree.impurity.{EntropyAggregator, GiniAggregator}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
