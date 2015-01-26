@@ -231,8 +231,18 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
     reporterThread = launchReporterThread()
   }
 
-  private def runAMActor(securityMgr: SecurityManager, host: String, port: String,
-                         isDriver: Boolean): Unit = {
+  /**
+   * Creates an actor that ApplicationMaster communicates with YarnScheduler of driver
+   * in Yarn deploy mode.
+   *
+   * If isDriver is set to true, AMActor and driver belong to same process.
+   * so AMActor don't monitor lifecycle of driver.
+   */
+  private def runAMActor(
+      securityMgr: SecurityManager,
+      host: String,
+      port: String,
+      isDriver: Boolean): Unit = {
     actorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
       conf = sparkConf, securityManager = securityMgr)._1
     val driverUrl = "akka.tcp://%s@%s:%s/user/%s".format(
@@ -469,7 +479,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   }
 
   /**
-   * Actor that communicates with the driver in client deploy mode.
+   * Actor that communicates with the driver in Yarn deploy mode.
    */
   private class AMActor(driverUrl: String, isDriver: Boolean) extends Actor {
     var driver: ActorSelection = _
