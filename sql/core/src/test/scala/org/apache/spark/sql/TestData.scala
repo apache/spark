@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.test._
@@ -178,6 +178,12 @@ object TestData {
     TimestampField(new Timestamp(i))
   })
   timestamps.registerTempTable("timestamps")
+
+  case class DateField(d: Date)
+  val dates = TestSQLContext.sparkContext.parallelize((1 to 3).map { i =>
+    DateField(Date.valueOf(s"201$i-0$i-1$i"))
+  })
+  dates.registerTempTable("dates")
 
   case class IntField(i: Int)
   // An RDD with 4 elements and 8 partitions

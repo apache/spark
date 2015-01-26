@@ -19,8 +19,6 @@ package org.apache.spark.sql
 
 import java.util.TimeZone
 
-import org.scalatest.BeforeAndAfterAll
-
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
@@ -29,19 +27,10 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext._
 
-class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
+class SQLQuerySuite extends QueryTest {
+
   // Make sure the tables are loaded.
   TestData
-
-  var origZone: TimeZone = _
-  override protected def beforeAll() {
-    origZone = TimeZone.getDefault
-    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
-  }
-
-  override protected def afterAll() {
-    TimeZone.setDefault(origZone)
-  }
 
   test("SPARK-4625 support SORT BY in SimpleSQLParser & DSL") {
     checkAnswer(
@@ -128,6 +117,10 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("SPARK-3173 Timestamp support in the parser") {
+    // change time zone to UTC,keep the origin one
+    val originZone: TimeZone = TimeZone.getDefault
+    TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
+
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time=CAST('1970-01-01 00:00:00.001' AS TIMESTAMP)"),
       Row(java.sql.Timestamp.valueOf("1970-01-01 00:00:00.001")))
@@ -153,6 +146,36 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     checkAnswer(sql(
       "SELECT time FROM timestamps WHERE time='123'"),
       Nil)
+
+    // change time zone to default one, in order not to affect other tests
+    TimeZone.setDefault(originZone)
+  }
+
+  test("SPARK-5003 Cast support date data type") {
+    checkAnswer(sql(
+      "SELECT d from dates where d = cast('2011-01-11' as date)"),
+      java.sql.Date.valueOf("2011-01-11"))
+
+    checkAnswer(sql(
+      "SELECT d from dates where d = '2012-02-12'"),
+      java.sql.Date.valueOf("2012-02-12")
+    )
+
+    checkAnswer(sql(
+      "SELECT d from dates where d > '2012-02-12' AND d < cast('2014-01-01' as date)"),
+      java.sql.Date.valueOf("2013-03-13")
+    )
+
+    checkAnswer(sql(
+      "SELECT d from dates where d IN('2012-02-12', '2013-03-13')"),
+      Row(java.sql.Date.valueOf("2012-02-12")) ::
+      Row(java.sql.Date.valueOf("2013-03-13")) :: Nil
+    )
+
+    checkAnswer(sql(
+      "SELECT d from dates where d = '2012'"),
+      Nil
+    )
   }
 
   test("index into array") {
