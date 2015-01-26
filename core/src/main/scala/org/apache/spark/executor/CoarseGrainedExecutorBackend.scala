@@ -88,10 +88,7 @@ private[spark] class CoarseGrainedExecutorBackend(
         logError(s"Driver $x disassociated! Shutting down.")
         System.exit(1)
       } else {
-        val localAddress = x.localAddress
-        val remoteAddress = x.remoteAddress
-        logWarning(s"Received irrelevant DisassociatedEvent [$localAddress]" +
-          s"${if (x.inbound) " <- " else " -> "}[$remoteAddress]")
+        logWarning(s"Received irrelevant DisassociatedEvent $x")
       }
 
     case StopExecutor =>
