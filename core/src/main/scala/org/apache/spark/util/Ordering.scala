@@ -29,12 +29,8 @@ private[spark] class NoOrdering[A] extends Ordering[A] {
   override def compare(x: A, y: A): Int = 0
 }
 
-private[spark] class KeyValueOrdering[A, B](
-  ordering1: Option[Ordering[A]], ordering2: Option[Ordering[B]]
-) extends Ordering[Product2[A, B]] {
-  private val ord1 = ordering1.getOrElse(new HashOrdering[A])
-  private val ord2 = ordering2.getOrElse(new NoOrdering[B])
-
+private[spark] class KeyValueOrdering[A, B](ord1: Ordering[A], ord2: Ordering[B])
+    extends Ordering[Product2[A, B]] {
   override def compare(x: Product2[A, B], y: Product2[A, B]): Int = {
     val c1 = ord1.compare(x._1, y._1)
     if (c1 != 0) c1 else ord2.compare(x._2, y._2)

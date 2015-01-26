@@ -18,11 +18,11 @@
 package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.{ArrayBuffer, Map => MMap}
 
 import org.apache.spark.{Logging, Partitioner, Partition, TaskContext, HashPartitioner}
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.util.KeyValueOrdering
+import org.apache.spark.util.{HashOrdering, KeyValueOrdering}
 
 /**
  * Extra functions available on RDDs of (key, value) pairs where the value is sortable through
@@ -52,23 +52,31 @@ class OrderedValueRDDFunctions[K : ClassTag,
 
     val shuffled = new ShuffledRDD[Product2[K, V], Unit, Unit](self.map{ kv => (kv, ())},
       keyPartitioner)
-      .setKeyOrdering(new KeyValueOrdering[K, V](None, Some(valueOrdering)))
+      .setKeyOrdering(new KeyValueOrdering[K, V](new HashOrdering[K], valueOrdering))
     
     new RDD[(K, Iterable[V])](shuffled) {
-      def compute(split: Partition, context: TaskContext): Iterator[(K, Iterable[V])] = 
-        new Iterator[(K, Iterable[V])] {
+      def compute(split: Partition, context: TaskContext): Iterator[(K, Iterable[V])] = {
+        val it = new Iterator[Iterable[(K, Iterable[V])]] {
           private val iter = shuffled.compute(split, context).map(_._1).buffered
 
           override def hasNext: Boolean = iter.hasNext
 
-          override def next(): (K, Iterable[V]) = {
-            val key = iter.head._1
-            val buffer = new ArrayBuffer[V]
-            while (iter.hasNext && iter.head._1 == key)
-              buffer += iter.next()._2
-            (key, buffer)
+          override def next(): Iterable[(K, Iterable[V])] = {
+            val hashCode = iter.head._1.hashCode()
+            // It doesnt look like ArrayBuffer actually specializes,
+            // but i dont see a better alternative...
+            // see https://groups.google.com/forum/#!topic/scala-user/vKeKYQIWlw8
+            val bufferMap = MMap.empty[K, ArrayBuffer[V]]
+            while (iter.hasNext && iter.head._1.hashCode() == hashCode) {
+              val (k, v) = iter.next()
+              val buffer = bufferMap.getOrElseUpdate(k, new ArrayBuffer[V])
+              buffer += v
+            }
+            bufferMap
           }
         }
+        it.flatten
+      }
 
       protected def getPartitions: Array[Partition] = shuffled.getPartitions
     }
