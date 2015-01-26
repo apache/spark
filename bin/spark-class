@@ -29,6 +29,7 @@ FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 # Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
+export SPARK_CONF_DIR="${SPARK_CONF_DIR:-"$SPARK_HOME/conf"}"
 
 . "$FWDIR"/bin/load-spark-env.sh
 
@@ -71,6 +72,8 @@ case "$1" in
   'org.apache.spark.executor.MesosExecutorBackend')
     OUR_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
     OUR_JAVA_MEM=${SPARK_EXECUTOR_MEMORY:-$DEFAULT_MEM}
+    export PYTHONPATH="$FWDIR/python:$PYTHONPATH"
+    export PYTHONPATH="$FWDIR/python/lib/py4j-0.8.2.1-src.zip:$PYTHONPATH"
     ;;
 
   # Spark submit uses SPARK_JAVA_OPTS + SPARK_SUBMIT_OPTS +
@@ -118,8 +121,8 @@ fi
 JAVA_OPTS="$JAVA_OPTS -Xms$OUR_JAVA_MEM -Xmx$OUR_JAVA_MEM"
 
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
-if [ -e "$FWDIR/conf/java-opts" ] ; then
-  JAVA_OPTS="$JAVA_OPTS `cat "$FWDIR"/conf/java-opts`"
+if [ -e "$SPARK_CONF_DIR/java-opts" ] ; then
+  JAVA_OPTS="$JAVA_OPTS `cat "$SPARK_CONF_DIR"/java-opts`"
 fi
 
 # Attention: when changing the way the JAVA_OPTS are assembled, the change must be reflected in CommandUtils.scala!
@@ -148,7 +151,7 @@ fi
 if [[ "$1" =~ org.apache.spark.tools.* ]]; then
   if test -z "$SPARK_TOOLS_JAR"; then
     echo "Failed to find Spark Tools Jar in $FWDIR/tools/target/scala-$SPARK_SCALA_VERSION/" 1>&2
-    echo "You need to build Spark before running $1." 1>&2
+    echo "You need to run \"build/sbt tools/package\" before running $1." 1>&2
     exit 1
   fi
   CLASSPATH="$CLASSPATH:$SPARK_TOOLS_JAR"

@@ -97,5 +97,7 @@ object SimpleParamsExample {
       .foreach { case Row(features: Vector, label: Double, prob: Double, prediction: Double) =>
         println("(" + features + ", " + label + ") -> prob=" + prob + ", prediction=" + prediction)
       }
+
+    sc.stop()
   }
 }

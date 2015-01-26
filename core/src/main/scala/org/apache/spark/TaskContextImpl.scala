@@ -22,13 +22,18 @@ import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerExce
 
 import scala.collection.mutable.ArrayBuffer
 
-private[spark] class TaskContextImpl(val stageId: Int,
+private[spark] class TaskContextImpl(
+    val stageId: Int,
     val partitionId: Int,
-    val attemptId: Long,
+    override val taskAttemptId: Long,
+    override val attemptNumber: Int,
     val runningLocally: Boolean = false,
     val taskMetrics: TaskMetrics = TaskMetrics.empty)
   extends TaskContext
   with Logging {
+
+  // For backwards-compatibility; this method is now deprecated as of 1.3.0.
+  override def attemptId: Long = taskAttemptId
 
   // List of callback functions to execute when the task completes.
   @transient private val onCompleteCallbacks = new ArrayBuffer[TaskCompletionListener]

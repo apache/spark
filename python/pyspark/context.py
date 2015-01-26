@@ -229,6 +229,14 @@ class SparkContext(object):
                 else:
                     SparkContext._active_spark_context = instance
 
+    def __getnewargs__(self):
+        # This method is called when attempting to pickle SparkContext, which is always an error:
+        raise Exception(
+            "It appears that you are attempting to reference SparkContext from a broadcast "
+            "variable, action, or transforamtion. SparkContext can only be used on the driver, "
+            "not in code that it run on workers. For more information, see SPARK-5063."
+        )
+
     def __enter__(self):
         """
         Enable 'with SparkContext(...) as sc: app(sc)' syntax.
@@ -319,7 +327,7 @@ class SparkContext(object):
         # Make sure we distribute data evenly if it's smaller than self.batchSize
         if "__len__" not in dir(c):
             c = list(c)    # Make it a list so we can compute its length
-        batchSize = max(1, min(len(c) // numSlices, self._batchSize))
+        batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
         serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
         serializer.dump_stream(c, tempFile)
         tempFile.close()
