@@ -22,6 +22,15 @@ from pyspark.ml.feature import HashingTF, Tokenizer
 from pyspark.ml.classification import LogisticRegression
 
 
+"""
+A simple text classification pipeline that recognizes "spark" from
+input text. This is to show how to create and configure a Spark ML
+pipeline in Python. Run with:
+
+  bin/spark-submit examples/src/main/python/ml/simple_text_classification_pipeline.py
+"""
+
+
 if __name__ == "__main__":
     sc = SparkContext(appName="SimpleTextClassificationPipeline")
     sqlCtx = SQLContext(sc)
@@ -53,5 +62,9 @@ if __name__ == "__main__":
                         (7L, "apache hadoop")])
           .map(lambda x: Row(id=x[0], text=x[1])))
 
-    for row in model.transform(test).collect():
+    prediction = model.transform(test)
+
+    prediction.registerTempTable("prediction")
+    selected = sqlCtx.sql("SELECT id, text, prediction from prediction")
+    for row in selected.collect():
         print row

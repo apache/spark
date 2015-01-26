@@ -144,7 +144,7 @@ class Pipeline(Estimator):
 
     def fit(self, dataset, params={}):
         paramMap = self._merge_params(params)
-        stages = paramMap(self.stages)
+        stages = paramMap[self.stages]
         for stage in stages:
             if not (isinstance(stage, Estimator) or isinstance(stage, Transformer)):
                 raise ValueError(
