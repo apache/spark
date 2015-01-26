@@ -137,8 +137,8 @@ class ALSModel private[ml] (
         .as(map(predictionCol))
     val outputColumns = inputColumns.map(f => $"$instanceTable.$f".as(f)) :+ prediction
     instances
-      .join(users, "left", Column(map(userCol)) === $"$userTable.id")
-      .join(items, "left", Column(map(itemCol)) === $"$itemTable.id")
+      .join(users, Column(map(userCol)) === $"$userTable.id", "left")
+      .join(items, Column(map(itemCol)) === $"$itemTable.id", "left")
       .select(outputColumns: _*)
   }
 

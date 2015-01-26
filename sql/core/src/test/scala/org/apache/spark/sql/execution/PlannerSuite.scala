@@ -132,7 +132,7 @@ class PlannerSuite extends FunSuite {
 
     val a = testData.as("a")
     val b = table("tiny").as("b")
-    val planned = a.join(b, "inner", $"a.key" === $"b.key").queryExecution.executedPlan
+    val planned = a.join(b, $"a.key" === $"b.key").queryExecution.executedPlan
 
     val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
     val shuffledHashJoins = planned.collect { case join: ShuffledHashJoin => join }

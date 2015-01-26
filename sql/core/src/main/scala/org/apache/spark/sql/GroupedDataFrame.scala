@@ -24,7 +24,10 @@ import org.apache.spark.sql.catalyst.expressions.{Literal => LiteralExpr}
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 
 
-class GroupedDataFrame(df: DataFrame, groupingExprs: Seq[Expression])
+/**
+ * A set of methods for aggregations on a [[DataFrame]], created by [[DataFrame.groupby]].
+ */
+class GroupedDataFrame protected[sql](df: DataFrame, groupingExprs: Seq[Expression])
   extends GroupedDataFrameApi {
 
   private[this] implicit def toDataFrame(aggExprs: Seq[NamedExpression]): DataFrame = {
@@ -53,6 +56,17 @@ class GroupedDataFrame(df: DataFrame, groupingExprs: Seq[Expression])
     }
   }
 
+  /**
+   * Compute aggregates by specifying a map from column name to aggregate methods.
+   * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
+   * {{{
+   *   // Selects the age of the oldest employee and the aggregate expense for each department
+   *   df.groupby("department").agg(Map(
+   *     "age" -> "max"
+   *     "sum" -> "expense"
+   *   ))
+   * }}}
+   */
   override def agg(exprs: Map[String, String]): DataFrame = {
     exprs.map { case (colName, expr) =>
       val a = strToExpr(expr)(df(colName).expr)
@@ -60,6 +74,15 @@ class GroupedDataFrame(df: DataFrame, groupingExprs: Seq[Expression])
     }.toSeq
   }
 
+  /**
+   * Compute aggregates by specifying a series of aggregate columns.
+   * The available aggregate methods are defined in [[org.apache.spark.sql.dsl]].
+   * {{{
+   *   // Selects the age of the oldest employee and the aggregate expense for each department
+   *   import org.apache.spark.sql.dsl._
+   *   df.groupby("department").agg(max($"age"), sum($"expense"))
+   * }}}
+   */
   @scala.annotation.varargs
   override def agg(expr: Column, exprs: Column*): DataFrame = {
     val aggExprs = (expr +: exprs).map(_.expr).map {
@@ -70,15 +93,31 @@ class GroupedDataFrame(df: DataFrame, groupingExprs: Seq[Expression])
     new DataFrame(df.sqlContext, Aggregate(groupingExprs, aggExprs, df.logicalPlan))
   }
 
+  /** Count the number of rows for each group. */
   override def count(): DataFrame = Seq(Alias(Count(LiteralExpr(1)), "count")())
 
+  /**
+   * Compute the average value for each numeric columns for each group. This is an alias for `avg`.
+   */
   override def mean(): DataFrame = aggregateNumericColumns(Average)
 
+  /**
+   * Compute the max value for each numeric columns for each group.
+   */
   override def max(): DataFrame = aggregateNumericColumns(Max)
 
+  /**
+   * Compute the mean value for each numeric columns for each group.
+   */
   override def avg(): DataFrame = aggregateNumericColumns(Average)
 
+  /**
+   * Compute the min value for each numeric column for each group.
+   */
   override def min(): DataFrame = aggregateNumericColumns(Min)
 
+  /**
+   * Compute the sum for each numeric columns for each group.
+   */
   override def sum(): DataFrame = aggregateNumericColumns(Sum)
 }

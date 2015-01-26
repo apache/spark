@@ -17,17 +17,19 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.api.java.JavaRDD
-
 import scala.reflect.ClassTag
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
 
 
+/**
+ * An internal interface defining the RDD-like methods for [[DataFrame]].
+ * Please use [[DataFrame]] directly, and do NOT use this.
+ */
 trait RDDApi[T] {
 
   def cache(): this.type = persist()
@@ -55,39 +57,29 @@ trait RDDApi[T] {
 }
 
 
+/**
+ * An internal interface defining data frame related methods in [[DataFrame]].
+ * Please use [[DataFrame]] directly, and do NOT use this.
+ */
 trait DataFrameSpecificApi {
 
-  /**
-   * Returns the schema of this SchemaRDD (represented by a [[StructType]]).
-   *
-   * @group schema
-   */
   def schema: StructType
 
   def printSchema(): Unit
 
-  /////////////////////////////////////////////////////////////////////////////
-  // Metadata
-  /////////////////////////////////////////////////////////////////////////////
   def dtypes: Array[(String, String)]
 
   def columns: Array[String]
 
-  def head(): Row = head(5).head
+  def head(): Row
 
   def head(n: Int): Array[Row]
-
-  def tail(n: Int = 5): Array[Row]
-
-  def show(): Unit
 
   /////////////////////////////////////////////////////////////////////////////
   // Relational operators
   /////////////////////////////////////////////////////////////////////////////
-  /** Selecting a single column */
   def apply(colName: String): Column
 
-  /** Projection */
   def apply(projection: Product): DataFrame
 
   @scala.annotation.varargs
@@ -96,14 +88,13 @@ trait DataFrameSpecificApi {
   @scala.annotation.varargs
   def select(col: String, cols: String*): DataFrame
 
-  /** Filtering */
-  def apply(condition: Column): DataFrame = filter(condition)
+  def apply(condition: Column): DataFrame
 
   def as(name: String): DataFrame
 
   def filter(condition: Column): DataFrame
 
-  def where(condition: Column): DataFrame = filter(condition)
+  def where(condition: Column): DataFrame
 
   @scala.annotation.varargs
   def groupby(cols: Column*): GroupedDataFrame
@@ -119,7 +110,7 @@ trait DataFrameSpecificApi {
   def sort(colName: String): DataFrame
 
   @scala.annotation.varargs
-  def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame = sort(sortExpr, sortExprs :_*)
+  def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame
 
   @scala.annotation.varargs
   def sort(sortExpr: Column, sortExprs: Column*): DataFrame
@@ -128,7 +119,7 @@ trait DataFrameSpecificApi {
 
   def join(right: DataFrame, joinExprs: Column): DataFrame
 
-  def join(right: DataFrame, joinType: String, joinExprs: Column): DataFrame
+  def join(right: DataFrame, joinExprs: Column, joinType: String): DataFrame
 
   def limit(n: Int): DataFrame
 
@@ -140,9 +131,7 @@ trait DataFrameSpecificApi {
 
   def sample(withReplacement: Boolean, fraction: Double, seed: Long): DataFrame
 
-  def sample(withReplacement: Boolean, fraction: Double): DataFrame = {
-    sample(withReplacement, fraction, Utils.random.nextLong)
-  }
+  def sample(withReplacement: Boolean, fraction: Double): DataFrame
 
   /////////////////////////////////////////////////////////////////////////////
   // Column mutation
@@ -189,60 +178,95 @@ trait DataFrameSpecificApi {
 }
 
 
-trait ExpressionApi[ExprType] {
-  def unary_- : ExprType
-  def unary_! : ExprType
-  def unary_~ : ExprType
+/**
+ * An internal interface defining expression APIs for [[DataFrame]].
+ * Please use [[DataFrame]] and [[Column]] directly, and do NOT use this.
+ */
+trait ExpressionApi {
 
-  def + (other: ExprType): ExprType
-  def - (other: ExprType): ExprType
-  def * (other: ExprType): ExprType
-  def / (other: ExprType): ExprType
-  def % (other: ExprType): ExprType
-  def & (other: ExprType): ExprType
-  def | (other: ExprType): ExprType
-  def ^ (other: ExprType): ExprType
+  def isComputable: Boolean
 
-  def && (other: ExprType): ExprType
-  def || (other: ExprType): ExprType
+  def unary_- : Column
+  def unary_! : Column
+  def unary_~ : Column
 
-  def < (other: ExprType): ExprType
-  def <= (other: ExprType): ExprType
-  def > (other: ExprType): ExprType
-  def >= (other: ExprType): ExprType
-  def === (other: ExprType): ExprType
-  def equalTo(other: ExprType): ExprType
-  def <=> (other: ExprType): ExprType
-  def !== (other: ExprType): ExprType
+  def + (other: Column): Column
+  def + (other: Any): Column
+  def - (other: Column): Column
+  def - (other: Any): Column
+  def * (other: Column): Column
+  def * (other: Any): Column
+  def / (other: Column): Column
+  def / (other: Any): Column
+  def % (other: Column): Column
+  def % (other: Any): Column
+  def & (other: Column): Column
+  def & (other: Any): Column
+  def | (other: Column): Column
+  def | (other: Any): Column
+  def ^ (other: Column): Column
+  def ^ (other: Any): Column
 
-  def in(list: ExprType*): ExprType
+  def && (other: Column): Column
+  def && (other: Boolean): Column
+  def || (other: Column): Column
+  def || (other: Boolean): Column
 
-  def like(other: ExprType): ExprType
-  def rlike(other: ExprType): ExprType
+  def < (other: Column): Column
+  def < (other: Any): Column
+  def <= (other: Column): Column
+  def <= (other: Any): Column
+  def > (other: Column): Column
+  def > (other: Any): Column
+  def >= (other: Column): Column
+  def >= (other: Any): Column
+  def === (other: Column): Column
+  def === (other: Any): Column
+  def equalTo(other: Column): Column
+  def equalTo(other: Any): Column
+  def <=> (other: Column): Column
+  def <=> (other: Any): Column
+  def !== (other: Column): Column
+  def !== (other: Any): Column
 
-  def contains(other: ExprType): ExprType
-  def startsWith(other: ExprType): ExprType
-  def endsWith(other: ExprType): ExprType
+  @scala.annotation.varargs
+  def in(list: Column*): Column
 
-  def substr(startPos: ExprType, len: ExprType): ExprType
-  def substring(startPos: ExprType, len: ExprType): ExprType = substr(startPos, len)
+  def like(other: Column): Column
+  def like(other: String): Column
+  def rlike(other: Column): Column
+  def rlike(other: String): Column
 
-  def isNull: ExprType
-  def isNotNull: ExprType
+  def contains(other: Column): Column
+  def contains(other: Any): Column
+  def startsWith(other: Column): Column
+  def startsWith(other: String): Column
+  def endsWith(other: Column): Column
+  def endsWith(other: String): Column
 
-  def getItem(ordinal: ExprType): ExprType
+  def substr(startPos: Column, len: Column): Column
+  def substr(startPos: Int, len: Int): Column
+
+  def isNull: Column
+  def isNotNull: Column
+
+  def getItem(ordinal: Column): Column
   def getItem(ordinal: Int): Column
-  def getField(fieldName: String): ExprType
+  def getField(fieldName: String): Column
 
-  def cast(to: DataType): ExprType
+  def cast(to: DataType): Column
 
-  def asc: ExprType
-  def desc: ExprType
+  def asc: Column
+  def desc: Column
 
-  def as(alias: String): ExprType
+  def as(alias: String): Column
 }
 
 
+/**
+ * An internal interface defining aggregation APIs for [[DataFrame]].
+ * Please use [[DataFrame]] and [[GroupedDataFrame]] directly, and do NOT use this.
+ */
 trait GroupedDataFrameApi {
 
   def agg(exprs: Map[String, String]): DataFrame

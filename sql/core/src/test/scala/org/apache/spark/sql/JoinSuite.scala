@@ -33,7 +33,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   test("equi-join is hash-join") {
     val x = testData2.as("x")
     val y = testData2.as("y")
-    val join = x.join(y, "inner", $"x.a" === $"y.a").queryExecution.analyzed
+    val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.analyzed
     val planned = planner.HashJoin(join)
     assert(planned.size === 1)
   }
@@ -176,7 +176,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
 
   test("left outer join") {
     checkAnswer(
-      upperCaseData.join(lowerCaseData, "left", $"n" === $"N"),
+      upperCaseData.join(lowerCaseData, $"n" === $"N", "left"),
       Row(1, "A", 1, "a") ::
         Row(2, "B", 2, "b") ::
         Row(3, "C", 3, "c") ::
@@ -185,7 +185,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(6, "F", null, null) :: Nil)
 
     checkAnswer(
-      upperCaseData.join(lowerCaseData, "left", $"n" === $"N" && $"n" > Literal(1)),
+      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"n" > Literal(1), "left"),
       Row(1, "A", null, null) ::
         Row(2, "B", 2, "b") ::
         Row(3, "C", 3, "c") ::
@@ -194,7 +194,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(6, "F", null, null) :: Nil)
 
     checkAnswer(
-      upperCaseData.join(lowerCaseData, "left", $"n" === $"N" && $"N" > Literal(1)),
+      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"N" > Literal(1), "left"),
       Row(1, "A", null, null) ::
         Row(2, "B", 2, "b") ::
         Row(3, "C", 3, "c") ::
@@ -203,7 +203,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(6, "F", null, null) :: Nil)
 
     checkAnswer(
-      upperCaseData.join(lowerCaseData, "left", $"n" === $"N" && $"l" > $"L"),
+      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"l" > $"L", "left"),
       Row(1, "A", 1, "a") ::
         Row(2, "B", 2, "b") ::
         Row(3, "C", 3, "c") ::
@@ -239,7 +239,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
 
   test("right outer join") {
     checkAnswer(
-      lowerCaseData.join(upperCaseData, "right", $"n" === $"N"),
+      lowerCaseData.join(upperCaseData, $"n" === $"N", "right"),
       Row(1, "a", 1, "A") ::
         Row(2, "b", 2, "B") ::
         Row(3, "c", 3, "C") ::
@@ -247,7 +247,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 5, "E") ::
         Row(null, null, 6, "F") :: Nil)
     checkAnswer(
-      lowerCaseData.join(upperCaseData, "right", $"n" === $"N" && $"n" > Literal(1)),
+      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"n" > Literal(1), "right"),
       Row(null, null, 1, "A") ::
         Row(2, "b", 2, "B") ::
         Row(3, "c", 3, "C") ::
@@ -255,7 +255,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 5, "E") ::
         Row(null, null, 6, "F") :: Nil)
     checkAnswer(
-      lowerCaseData.join(upperCaseData, "right", $"n" === $"N" && $"N" > Literal(1)),
+      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"N" > Literal(1), "right"),
       Row(null, null, 1, "A") ::
         Row(2, "b", 2, "B") ::
         Row(3, "c", 3, "C") ::
@@ -263,7 +263,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 5, "E") ::
         Row(null, null, 6, "F") :: Nil)
     checkAnswer(
-      lowerCaseData.join(upperCaseData, "right", $"n" === $"N" && $"l" > $"L"),
+      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"l" > $"L", "right"),
       Row(1, "a", 1, "A") ::
         Row(2, "b", 2, "B") ::
         Row(3, "c", 3, "C") ::
@@ -305,7 +305,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
     val right = UnresolvedRelation(Seq("right"), None)
 
     checkAnswer(
-      left.join(right, "full", $"left.N" === $"right.N"),
+      left.join(right, $"left.N" === $"right.N", "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", 3, "C") ::
@@ -314,7 +314,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, "full", ($"left.N" === $"right.N") && ($"left.N" !== Literal(3))),
+      left.join(right, ($"left.N" === $"right.N") && ($"left.N" !== Literal(3)), "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::
@@ -324,7 +324,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, "full", ($"left.N" === $"right.N") && ($"right.N" !== Literal(3))),
+      left.join(right, ($"left.N" === $"right.N") && ($"right.N" !== Literal(3)), "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::
