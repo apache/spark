@@ -95,7 +95,8 @@ private[tree] class EntropyAggregator(numClasses: Int)
         s" but requires label < numClasses (= $statsSize).")
     }
     if (label < 0) {
-      throw new IllegalArgumentException(s"Entropy does not support negative labels")
+      throw new IllegalArgumentException(s"EntropyAggregator given label $label" +
+        s"but requires label is non-negative.")
     }
     allStats(offset + label.toInt) += instanceWeight
   }
