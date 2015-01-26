@@ -115,11 +115,10 @@ class NewHadoopRDD[K, V](
       // Find a function that will return the FileSystem bytes read by this thread. Do this before
       // creating RecordReader, because RecordReader's constructor might read some bytes
       val bytesReadCallback = inputMetrics.bytesReadCallback.orElse {
-        val inputSplit = split.serializableHadoopSplit.value
-        if (inputSplit.isInstanceOf[FileSplit] || inputSplit.isInstanceOf[CombineFileSplit]) {
-          SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(conf)
-        } else {
-          None
+        split.serializableHadoopSplit.value match {
+          case _: FileSplit | _: CombineFileSplit =>
+            SparkHadoopUtil.get.getFSBytesReadOnThreadCallback(conf)
+          case _ => None
         }
       }
       inputMetrics.setBytesReadCallback(bytesReadCallback)
