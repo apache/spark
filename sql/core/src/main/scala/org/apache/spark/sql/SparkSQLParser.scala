@@ -18,12 +18,14 @@
 package org.apache.spark.sql
 
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+
 import scala.util.parsing.combinator.RegexParsers
 
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{UncacheTableCommand, CacheTableCommand, SetCommand}
+import org.apache.spark.sql.execution.{UncacheTableCommand, CacheTableCommand, SetCommand, DescribeCommand}
 import org.apache.spark.sql.types.StringType
 
 
@@ -57,12 +59,14 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
 
   protected val AS      = Keyword("AS")
   protected val CACHE   = Keyword("CACHE")
+  protected val DESCRIBE = Keyword("DESCRIBE")
+  protected val EXTENDED = Keyword("EXTENDED")
   protected val LAZY    = Keyword("LAZY")
   protected val SET     = Keyword("SET")
   protected val TABLE   = Keyword("TABLE")
   protected val UNCACHE = Keyword("UNCACHE")
 
-  override protected lazy val start: Parser[LogicalPlan] = cache | uncache | set | others
+  override protected lazy val start: Parser[LogicalPlan] = cache | uncache | set | describe | others
 
   private lazy val cache: Parser[LogicalPlan] =
     CACHE ~> LAZY.? ~ (TABLE ~> ident) ~ (AS ~> restInput).? ^^ {
@@ -78,6 +82,12 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
   private lazy val set: Parser[LogicalPlan] =
     SET ~> restInput ^^ {
       case input => SetCommandParser(input)
+    }
+
+  private lazy val describe: Parser[LogicalPlan] =
+    DESCRIBE ~> EXTENDED.? ~ ident ^^ {
+      case isExtended ~ tableIdent =>
+        DescribeCommand((UnresolvedRelation(Seq(tableIdent),None)),false)
     }
 
   private lazy val others: Parser[LogicalPlan] =
