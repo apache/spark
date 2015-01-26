@@ -18,14 +18,14 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.analysis.EliminateAnalysisOperators
-import org.apache.spark.sql.catalyst.expressions.{Literal, Expression}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 
-class BooleanSimplificationSuite extends PlanTest {
+class BooleanSimplificationSuite extends PlanTest with PredicateHelper {
 
   object Optimize extends RuleExecutor[LogicalPlan] {
     val batches =
@@ -40,11 +40,29 @@ class BooleanSimplificationSuite extends PlanTest {
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int, 'd.string)
 
-  def checkCondition(originCondition: Expression, optimizedCondition: Expression): Unit = {
-    val originQuery = testRelation.where(originCondition).analyze
-    val optimized = Optimize(originQuery)
-    val expected = testRelation.where(optimizedCondition).analyze
-    comparePlans(optimized, expected)
+  // The `foldLeft` is required to handle cases like comparing `a && (b && c)` and `(a && b) && c`
+  def compareConditions(e1: Expression, e2: Expression): Boolean = (e1, e2) match {
+    case (lhs: And, rhs: And) =>
+      val lhsSet = splitConjunctivePredicates(lhs).toSet
+      val rhsSet = splitConjunctivePredicates(rhs).toSet
+      lhsSet.foldLeft(rhsSet) { (set, e) =>
+        set.find(compareConditions(_, e)).map(set - _).getOrElse(set)
+      }.isEmpty
+
+    case (lhs: Or, rhs: Or) =>
+      val lhsSet = splitDisjunctivePredicates(lhs).toSet
+      val rhsSet = splitDisjunctivePredicates(rhs).toSet
+      lhsSet.foldLeft(rhsSet) { (set, e) =>
+        set.find(compareConditions(_, e)).map(set - _).getOrElse(set)
+      }.isEmpty
+
+    case (l, r) => l == r
+  }
+
+  def checkCondition(input: Expression, expected: Expression): Unit = {
+    val plan = testRelation.where(input).analyze
+    val actual = Optimize(plan).expressions.head
+    compareConditions(actual, expected)
   }
 
   test("a && a => a") {
@@ -72,8 +90,8 @@ class BooleanSimplificationSuite extends PlanTest {
       (((('b > 3) && ('c > 2)) ||
         (('c < 1) && ('a === 5))) ||
         (('b < 5) && ('a > 1))) && ('a === 'b)
-    checkCondition(input, expected)
 
+    checkCondition(input, expected)
   }
 
   test("(a || b || c || ...) && (a || b || d || ...) && (a || b || e || ...) ...") {
@@ -85,8 +103,8 @@ class BooleanSimplificationSuite extends PlanTest {
 
     checkCondition(('a < 2 || 'b > 3) && ('a < 2 || 'c > 5), ('b > 3 && 'c > 5) || 'a < 2)
 
-    var input: Expression = ('a === 'b || 'b > 3) && ('a === 'b || 'a > 3) && ('a === 'b || 'a < 5)
-    var expected: Expression = ('b > 3 && 'a > 3 && 'a < 5) || 'a === 'b
-    checkCondition(input, expected)
+    checkCondition(
+      ('a === 'b || 'b > 3) && ('a === 'b || 'a > 3) && ('a === 'b || 'a < 5),
+      ('b > 3 && 'a > 3 && 'a < 5) || 'a === 'b)
   }
 }

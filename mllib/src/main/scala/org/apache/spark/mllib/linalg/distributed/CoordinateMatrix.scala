@@ -69,6 +69,11 @@ class CoordinateMatrix(
     nRows
   }
 
+  /** Transposes this CoordinateMatrix. */
+  def transpose(): CoordinateMatrix = {
+    new CoordinateMatrix(entries.map(x => MatrixEntry(x.j, x.i, x.value)), numCols(), numRows())
+  }
+
   /** Converts to IndexedRowMatrix. The number of columns must be within the integer range. */
   def toIndexedRowMatrix(): IndexedRowMatrix = {
     val nl = numCols()

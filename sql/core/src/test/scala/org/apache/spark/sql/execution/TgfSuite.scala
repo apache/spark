@@ -59,7 +59,7 @@ class TgfSuite extends QueryTest {
     checkAnswer(
       inputData.generate(ExampleTGF()),
       Seq(
-        "michael is 29 years old" :: Nil,
-        "Next year, michael will be 30 years old" :: Nil))
+        Row("michael is 29 years old"),
+        Row("Next year, michael will be 30 years old")))
   }
 }

@@ -17,8 +17,9 @@
 
 package org.apache.spark.scheduler.cluster
 
+import org.apache.hadoop.yarn.util.RackResolver
+
 import org.apache.spark._
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
 
@@ -30,6 +31,6 @@ private[spark] class YarnClientClusterScheduler(sc: SparkContext) extends TaskSc
   // By default, rack is unknown
   override def getRackForHost(hostPort: String): Option[String] = {
     val host = Utils.parseHostPort(hostPort)._1
-    Option(YarnSparkHadoopUtil.lookupRack(sc.hadoopConfiguration, host))
+    Option(RackResolver.resolve(sc.hadoopConfiguration, host).getNetworkLocation)
   }
 }

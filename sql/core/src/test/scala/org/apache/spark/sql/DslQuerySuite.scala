@@ -45,28 +45,28 @@ class DslQuerySuite extends QueryTest {
   test("agg") {
     checkAnswer(
       testData2.groupBy('a)('a, sum('b)),
-      Seq((1,3),(2,3),(3,3))
+      Seq(Row(1,3), Row(2,3), Row(3,3))
     )
     checkAnswer(
       testData2.groupBy('a)('a, sum('b) as 'totB).aggregate(sum('totB)),
-      9
+      Row(9)
     )
     checkAnswer(
       testData2.aggregate(sum('b)),
-      9
+      Row(9)
     )
   }
 
   test("convert $\"attribute name\" into unresolved attribute") {
     checkAnswer(
       testData.where($"key" === 1).select($"value"),
-      Seq(Seq("1")))
+      Row("1"))
   }
 
   test("convert Scala Symbol 'attrname into unresolved attribute") {
     checkAnswer(
       testData.where('key === 1).select('value),
-      Seq(Seq("1")))
+      Row("1"))
   }
 
   test("select *") {
@@ -78,61 +78,61 @@ class DslQuerySuite extends QueryTest {
   test("simple select") {
     checkAnswer(
       testData.where('key === 1).select('value),
-      Seq(Seq("1")))
+      Row("1"))
   }
 
   test("select with functions") {
     checkAnswer(
       testData.select(sum('value), avg('value), count(1)),
-      Seq(Seq(5050.0, 50.5, 100)))
+      Row(5050.0, 50.5, 100))
 
     checkAnswer(
       testData2.select('a + 'b, 'a < 'b),
       Seq(
-        Seq(2, false),
-        Seq(3, true),
-        Seq(3, false),
-        Seq(4, false),
-        Seq(4, false),
-        Seq(5, false)))
+        Row(2, false),
+        Row(3, true),
+        Row(3, false),
+        Row(4, false),
+        Row(4, false),
+        Row(5, false)))
 
     checkAnswer(
       testData2.select(sumDistinct('a)),
-      Seq(Seq(6)))
+      Row(6))
   }
 
   test("global sorting") {
     checkAnswer(
       testData2.orderBy('a.asc, 'b.asc),
-      Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)))
+      Seq(Row(1,1), Row(1,2), Row(2,1), Row(2,2), Row(3,1), Row(3,2)))
 
     checkAnswer(
       testData2.orderBy('a.asc, 'b.desc),
-      Seq((1,2), (1,1), (2,2), (2,1), (3,2), (3,1)))
+      Seq(Row(1,2), Row(1,1), Row(2,2), Row(2,1), Row(3,2), Row(3,1)))
 
     checkAnswer(
       testData2.orderBy('a.desc, 'b.desc),
-      Seq((3,2), (3,1), (2,2), (2,1), (1,2), (1,1)))
+      Seq(Row(3,2), Row(3,1), Row(2,2), Row(2,1), Row(1,2), Row(1,1)))
 
     checkAnswer(
       testData2.orderBy('a.desc, 'b.asc),
-      Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
+      Seq(Row(3,1), Row(3,2), Row(2,1), Row(2,2), Row(1,1), Row(1,2)))
 
     checkAnswer(
       arrayData.orderBy('data.getItem(0).asc),
-      arrayData.collect().sortBy(_.data(0)).toSeq)
+      arrayData.toSchemaRDD.collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
 
     checkAnswer(
       arrayData.orderBy('data.getItem(0).desc),
-      arrayData.collect().sortBy(_.data(0)).reverse.toSeq)
+      arrayData.toSchemaRDD.collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
 
     checkAnswer(
-      mapData.orderBy('data.getItem(1).asc),
-      mapData.collect().sortBy(_.data(1)).toSeq)
+      arrayData.orderBy('data.getItem(1).asc),
+      arrayData.toSchemaRDD.collect().sortBy(_.getAs[Seq[Int]](0)(1)).toSeq)
 
     checkAnswer(
-      mapData.orderBy('data.getItem(1).desc),
-      mapData.collect().sortBy(_.data(1)).reverse.toSeq)
+      arrayData.orderBy('data.getItem(1).desc),
+      arrayData.toSchemaRDD.collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
   }
 
   test("partition wide sorting") {
@@ -147,19 +147,19 @@ class DslQuerySuite extends QueryTest {
     //    (3, 2)
     checkAnswer(
       testData2.sortBy('a.asc, 'b.asc),
-      Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)))
+      Seq(Row(1,1), Row(1,2), Row(2,1), Row(2,2), Row(3,1), Row(3,2)))
 
     checkAnswer(
       testData2.sortBy('a.asc, 'b.desc),
-      Seq((1,2), (1,1), (2,1), (2,2), (3,2), (3,1)))
+      Seq(Row(1,2), Row(1,1), Row(2,1), Row(2,2), Row(3,2), Row(3,1)))
 
     checkAnswer(
       testData2.sortBy('a.desc, 'b.desc),
-      Seq((2,1), (1,2), (1,1), (3,2), (3,1), (2,2)))
+      Seq(Row(2,1), Row(1,2), Row(1,1), Row(3,2), Row(3,1), Row(2,2)))
 
     checkAnswer(
       testData2.sortBy('a.desc, 'b.asc),
-      Seq((2,1), (1,1), (1,2), (3,1), (3,2), (2,2)))
+      Seq(Row(2,1), Row(1,1), Row(1,2), Row(3,1), Row(3,2), Row(2,2)))
   }
 
   test("limit") {
@@ -169,11 +169,11 @@ class DslQuerySuite extends QueryTest {
 
     checkAnswer(
       arrayData.limit(1),
-      arrayData.take(1).toSeq)
+      arrayData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
 
     checkAnswer(
       mapData.limit(1),
-      mapData.take(1).toSeq)
+      mapData.take(1).map(r => Row.fromSeq(r.productIterator.toSeq)))
   }
 
   test("SPARK-3395 limit distinct") {
@@ -184,8 +184,8 @@ class DslQuerySuite extends QueryTest {
       .registerTempTable("onerow")
     checkAnswer(
       sql("select * from onerow inner join testData2 on onerow.a = testData2.a"),
-      (1, 1, 1, 1) ::
-      (1, 1, 1, 2) :: Nil)
+      Row(1, 1, 1, 1) ::
+      Row(1, 1, 1, 2) :: Nil)
   }
 
   test("SPARK-3858 generator qualifiers are discarded") {
@@ -193,55 +193,55 @@ class DslQuerySuite extends QueryTest {
       arrayData.as('ad)
         .generate(Explode("data" :: Nil, 'data), alias = Some("ex"))
         .select("ex.data".attr),
-      Seq(1, 2, 3, 2, 3, 4).map(Seq(_)))
+      Seq(1, 2, 3, 2, 3, 4).map(Row(_)))
   }
 
   test("average") {
     checkAnswer(
       testData2.aggregate(avg('a)),
-      2.0)
+      Row(2.0))
 
     checkAnswer(
       testData2.aggregate(avg('a), sumDistinct('a)), // non-partial
-      (2.0, 6.0) :: Nil)
+      Row(2.0, 6.0) :: Nil)
 
     checkAnswer(
       decimalData.aggregate(avg('a)),
-      new java.math.BigDecimal(2.0))
+      Row(new java.math.BigDecimal(2.0)))
     checkAnswer(
       decimalData.aggregate(avg('a), sumDistinct('a)), // non-partial
-      (new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
+      Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
 
     checkAnswer(
       decimalData.aggregate(avg('a cast DecimalType(10, 2))),
-      new java.math.BigDecimal(2.0))
+      Row(new java.math.BigDecimal(2.0)))
     checkAnswer(
       decimalData.aggregate(avg('a cast DecimalType(10, 2)), sumDistinct('a cast DecimalType(10, 2))), // non-partial
-      (new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
+      Row(new java.math.BigDecimal(2.0), new java.math.BigDecimal(6)) :: Nil)
   }
 
   test("null average") {
     checkAnswer(
       testData3.aggregate(avg('b)),
-      2.0)
+      Row(2.0))
 
     checkAnswer(
       testData3.aggregate(avg('b), countDistinct('b)),
-      (2.0, 1) :: Nil)
+      Row(2.0, 1))
 
     checkAnswer(
       testData3.aggregate(avg('b), sumDistinct('b)), // non-partial
-      (2.0, 2.0) :: Nil)
+      Row(2.0, 2.0))
   }
 
   test("zero average") {
     checkAnswer(
       emptyTableData.aggregate(avg('a)),
-      null)
+      Row(null))
 
     checkAnswer(
       emptyTableData.aggregate(avg('a), sumDistinct('b)), // non-partial
-      (null, null) :: Nil)
+      Row(null, null))
   }
 
   test("count") {
@@ -249,28 +249,28 @@ class DslQuerySuite extends QueryTest {
 
     checkAnswer(
       testData2.aggregate(count('a), sumDistinct('a)), // non-partial
-      (6, 6.0) :: Nil)
+      Row(6, 6.0))
   }
 
   test("null count") {
     checkAnswer(
       testData3.groupBy('a)('a, count('b)),
-      Seq((1,0), (2, 1))
+      Seq(Row(1,0), Row(2, 1))
     )
 
     checkAnswer(
       testData3.groupBy('a)('a, count('a + 'b)),
-      Seq((1,0), (2, 1))
+      Seq(Row(1,0), Row(2, 1))
     )
 
     checkAnswer(
       testData3.aggregate(count('a), count('b), count(1), countDistinct('a), countDistinct('b)),
-      (2, 1, 2, 2, 1) :: Nil
+      Row(2, 1, 2, 2, 1)
     )
 
     checkAnswer(
       testData3.aggregate(count('b), countDistinct('b), sumDistinct('b)), // non-partial
-      (1, 1, 2) :: Nil
+      Row(1, 1, 2)
     )
   }
 
@@ -279,28 +279,28 @@ class DslQuerySuite extends QueryTest {
 
     checkAnswer(
       emptyTableData.aggregate(count('a), sumDistinct('a)), // non-partial
-      (0, null) :: Nil)
+      Row(0, null))
   }
 
   test("zero sum") {
     checkAnswer(
       emptyTableData.aggregate(sum('a)),
-      null)
+      Row(null))
   }
 
   test("zero sum distinct") {
     checkAnswer(
       emptyTableData.aggregate(sumDistinct('a)),
-      null)
+      Row(null))
   }
 
   test("except") {
     checkAnswer(
       lowerCaseData.except(upperCaseData),
-      (1, "a") ::
-      (2, "b") ::
-      (3, "c") ::
-      (4, "d") :: Nil)
+      Row(1, "a") ::
+      Row(2, "b") ::
+      Row(3, "c") ::
+      Row(4, "d") :: Nil)
     checkAnswer(lowerCaseData.except(lowerCaseData), Nil)
     checkAnswer(upperCaseData.except(upperCaseData), Nil)
   }
@@ -308,10 +308,10 @@ class DslQuerySuite extends QueryTest {
   test("intersect") {
     checkAnswer(
       lowerCaseData.intersect(lowerCaseData),
-      (1, "a") ::
-      (2, "b") ::
-      (3, "c") ::
-      (4, "d") :: Nil)
+      Row(1, "a") ::
+      Row(2, "b") ::
+      Row(3, "c") ::
+      Row(4, "d") :: Nil)
     checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
   }
 
@@ -321,75 +321,75 @@ class DslQuerySuite extends QueryTest {
     checkAnswer(
       // SELECT *, foo(key, value) FROM testData
       testData.select(Star(None), foo.call('key, 'value)).limit(3),
-      (1, "1", "11") :: (2, "2", "22") :: (3, "3", "33") :: Nil
+      Row(1, "1", "11") :: Row(2, "2", "22") :: Row(3, "3", "33") :: Nil
     )
   }
 
   test("sqrt") {
     checkAnswer(
       testData.select(sqrt('key)).orderBy('key asc),
-      (1 to 100).map(n => Seq(math.sqrt(n)))
+      (1 to 100).map(n => Row(math.sqrt(n)))
     )
 
     checkAnswer(
       testData.select(sqrt('value), 'key).orderBy('key asc, 'value asc),
-      (1 to 100).map(n => Seq(math.sqrt(n), n))
+      (1 to 100).map(n => Row(math.sqrt(n), n))
     )
 
     checkAnswer(
       testData.select(sqrt(Literal(null))),
-      (1 to 100).map(_ => Seq(null))
+      (1 to 100).map(_ => Row(null))
     )
   }
 
   test("abs") {
     checkAnswer(
       testData.select(abs('key)).orderBy('key asc),
-      (1 to 100).map(n => Seq(n))
+      (1 to 100).map(n => Row(n))
     )
 
     checkAnswer(
       negativeData.select(abs('key)).orderBy('key desc),
-      (1 to 100).map(n => Seq(n))
+      (1 to 100).map(n => Row(n))
     )
 
     checkAnswer(
       testData.select(abs(Literal(null))),
-      (1 to 100).map(_ => Seq(null))
+      (1 to 100).map(_ => Row(null))
     )
   }
 
   test("upper") {
     checkAnswer(
       lowerCaseData.select(upper('l)),
-      ('a' to 'd').map(c => Seq(c.toString.toUpperCase()))
+      ('a' to 'd').map(c => Row(c.toString.toUpperCase()))
     )
 
     checkAnswer(
       testData.select(upper('value), 'key),
-      (1 to 100).map(n => Seq(n.toString, n))
+      (1 to 100).map(n => Row(n.toString, n))
     )
 
     checkAnswer(
       testData.select(upper(Literal(null))),
-      (1 to 100).map(n => Seq(null))
+      (1 to 100).map(n => Row(null))
     )
   }
 
   test("lower") {
     checkAnswer(
       upperCaseData.select(lower('L)),
-      ('A' to 'F').map(c => Seq(c.toString.toLowerCase()))
+      ('A' to 'F').map(c => Row(c.toString.toLowerCase()))
     )
 
     checkAnswer(
       testData.select(lower('value), 'key),
-      (1 to 100).map(n => Seq(n.toString, n))
+      (1 to 100).map(n => Row(n.toString, n))
     )
 
     checkAnswer(
       testData.select(lower(Literal(null))),
-      (1 to 100).map(n => Seq(null))
+      (1 to 100).map(n => Row(null))
     )
   }
 }

@@ -50,13 +50,35 @@ sealed trait Vector extends Serializable {
 
   override def equals(other: Any): Boolean = {
     other match {
-      case v: Vector =>
-        util.Arrays.equals(this.toArray, v.toArray)
+      case v2: Vector => {
+        if (this.size != v2.size) return false
+        (this, v2) match {
+          case (s1: SparseVector, s2: SparseVector) =>
+            Vectors.equals(s1.indices, s1.values, s2.indices, s2.values)
+          case (s1: SparseVector, d1: DenseVector) =>
+            Vectors.equals(s1.indices, s1.values, 0 until d1.size, d1.values)
+          case (d1: DenseVector, s1: SparseVector) =>
+            Vectors.equals(0 until d1.size, d1.values, s1.indices, s1.values)
+          case (_, _) => util.Arrays.equals(this.toArray, v2.toArray)
+        }
+      }
       case _ => false
     }
   }
 
-  override def hashCode(): Int = util.Arrays.hashCode(this.toArray)
+  override def hashCode(): Int = {
+    var result: Int = size + 31
+    this.foreachActive { case (index, value) =>
+      // ignore explict 0 for comparison between sparse and dense
+      if (value != 0) {
+        result = 31 * result + index
+        // refer to {@link java.util.Arrays.equals} for hash algorithm
+        val bits = java.lang.Double.doubleToLongBits(value)
+        result = 31 * result + (bits ^ (bits >>> 32)).toInt
+      }
+    }
+    return result
+  }
 
   /**
    * Converts the instance to a breeze vector.
@@ -311,7 +333,7 @@ object Vectors {
       math.pow(sum, 1.0 / p)
     }
   }
- 
+
   /**
    * Returns the squared distance between two Vectors.
    * @param v1 first Vector.
@@ -319,8 +341,9 @@ object Vectors {
    * @return squared distance between two Vectors.
    */
   def sqdist(v1: Vector, v2: Vector): Double = {
+    require(v1.size == v2.size, "vector dimension mismatch")
     var squaredDistance = 0.0
-    (v1, v2) match { 
+    (v1, v2) match {
       case (v1: SparseVector, v2: SparseVector) =>
         val v1Values = v1.values
         val v1Indices = v1.indices
@@ -328,12 +351,12 @@ object Vectors {
         val v2Indices = v2.indices
         val nnzv1 = v1Indices.size
         val nnzv2 = v2Indices.size
-        
+
         var kv1 = 0
         var kv2 = 0
         while (kv1 < nnzv1 || kv2 < nnzv2) {
           var score = 0.0
- 
+
           if (kv2 >= nnzv2 || (kv1 < nnzv1 && v1Indices(kv1) < v2Indices(kv2))) {
             score = v1Values(kv1)
             kv1 += 1
@@ -375,7 +398,7 @@ object Vectors {
     val nnzv1 = indices.size
     val nnzv2 = v2.size
     var iv1 = if (nnzv1 > 0) indices(kv1) else -1
-   
+
     while (kv2 < nnzv2) {
       var score = 0.0
       if (kv2 != iv1) {
@@ -391,6 +414,33 @@ object Vectors {
       kv2 += 1
     }
     squaredDistance
+  }
+
+  /**
+   * Check equality between sparse/dense vectors
+   */
+  private[mllib] def equals(
+      v1Indices: IndexedSeq[Int],
+      v1Values: Array[Double],
+      v2Indices: IndexedSeq[Int],
+      v2Values: Array[Double]): Boolean = {
+    val v1Size = v1Values.size
+    val v2Size = v2Values.size
+    var k1 = 0
+    var k2 = 0
+    var allEqual = true
+    while (allEqual) {
+      while (k1 < v1Size && v1Values(k1) == 0) k1 += 1
+      while (k2 < v2Size && v2Values(k2) == 0) k2 += 1
+
+      if (k1 >= v1Size || k2 >= v2Size) {
+        return k1 >= v1Size && k2 >= v2Size // check end alignment
+      }
+      allEqual = v1Indices(k1) == v2Indices(k2) && v1Values(k1) == v2Values(k2)
+      k1 += 1
+      k2 += 1
+    }
+    allEqual
   }
 }
 

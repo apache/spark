@@ -127,7 +127,7 @@ private[sql] case object RunLengthEncoding extends CompressionScheme {
         while (from.hasRemaining) {
           columnType.extract(from, value, 0)
 
-          if (value.head == currentValue.head) {
+          if (value(0) == currentValue(0)) {
             currentRun += 1
           } else {
             // Writes current run

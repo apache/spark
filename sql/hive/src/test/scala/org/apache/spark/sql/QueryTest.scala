@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.util._
  * So, we duplicate this code here.
  */
 class QueryTest extends PlanTest {
+
   /**
    * Runs the plan and makes sure the answer contains all of the keywords, or the
    * none of keywords are listed in the answer
@@ -56,17 +57,20 @@ class QueryTest extends PlanTest {
    * @param rdd the [[SchemaRDD]] to be executed
    * @param expectedAnswer the expected result, can either be an Any, Seq[Product], or Seq[ Seq[Any] ].
    */
-  protected def checkAnswer(rdd: SchemaRDD, expectedAnswer: Any): Unit = {
-    val convertedAnswer = expectedAnswer match {
-      case s: Seq[_] if s.isEmpty => s
-      case s: Seq[_] if s.head.isInstanceOf[Product] &&
-        !s.head.isInstanceOf[Seq[_]] => s.map(_.asInstanceOf[Product].productIterator.toIndexedSeq)
-      case s: Seq[_] => s
-      case singleItem => Seq(Seq(singleItem))
+  protected def checkAnswer(rdd: SchemaRDD, expectedAnswer: Seq[Row]): Unit = {
+    val isSorted = rdd.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
+    def prepareAnswer(answer: Seq[Row]): Seq[Row] = {
+      // Converts data to types that we can do equality comparison using Scala collections.
+      // For BigDecimal type, the Scala type has a better definition of equality test (similar to
+      // Java's java.math.BigDecimal.compareTo).
+      val converted: Seq[Row] = answer.map { s =>
+        Row.fromSeq(s.toSeq.map {
+          case d: java.math.BigDecimal => BigDecimal(d)
+          case o => o
+        })
+      }
+      if (!isSorted) converted.sortBy(_.toString) else converted
     }
-
-    val isSorted = rdd.logicalPlan.collect { case s: logical.Sort => s}.nonEmpty
-    def prepareAnswer(answer: Seq[Any]) = if (!isSorted) answer.sortBy(_.toString) else answer
     val sparkAnswer = try rdd.collect().toSeq catch {
       case e: Exception =>
         fail(
@@ -74,11 +78,12 @@ class QueryTest extends PlanTest {
             |Exception thrown while executing query:
             |${rdd.queryExecution}
             |== Exception ==
-            |${stackTraceToString(e)}
+            |$e
+            |${org.apache.spark.sql.catalyst.util.stackTraceToString(e)}
           """.stripMargin)
     }
 
-    if(prepareAnswer(convertedAnswer) != prepareAnswer(sparkAnswer)) {
+    if (prepareAnswer(expectedAnswer) != prepareAnswer(sparkAnswer)) {
       fail(s"""
         |Results do not match for query:
         |${rdd.logicalPlan}
@@ -88,11 +93,22 @@ class QueryTest extends PlanTest {
         |${rdd.queryExecution.executedPlan}
         |== Results ==
         |${sideBySide(
-            s"== Correct Answer - ${convertedAnswer.size} ==" +:
-              prepareAnswer(convertedAnswer).map(_.toString),
-            s"== Spark Answer - ${sparkAnswer.size} ==" +:
-              prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
+        s"== Correct Answer - ${expectedAnswer.size} ==" +:
+          prepareAnswer(expectedAnswer).map(_.toString),
+        s"== Spark Answer - ${sparkAnswer.size} ==" +:
+          prepareAnswer(sparkAnswer).map(_.toString)).mkString("\n")}
       """.stripMargin)
     }
   }
+
+  protected def checkAnswer(rdd: SchemaRDD, expectedAnswer: Row): Unit = {
+    checkAnswer(rdd, Seq(expectedAnswer))
+  }
+
+  def sqlTest(sqlString: String, expectedAnswer: Seq[Row])(implicit sqlContext: SQLContext): Unit = {
+    test(sqlString) {
+      checkAnswer(sqlContext.sql(sqlString), expectedAnswer)
+    }
+  }
+
 }
