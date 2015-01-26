@@ -43,18 +43,9 @@ private[spark] class Executor(
     executorId: String,
     executorHostname: String,
     env: SparkEnv,
-    conf: SparkConf,
     isLocal: Boolean = false)
   extends Logging
 {
-
-  def this(executorId: String,
-      slaveHostname: String,
-      env: SparkEnv,
-      isLocal: Boolean = false) = {
-    this(executorId, slaveHostname, env, env.conf, isLocal)
-  }
-
   logInfo(s"Starting executor ID $executorId on host $executorHostname")
 
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
@@ -63,6 +54,8 @@ private[spark] class Executor(
   private val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
+
+  private val conf = env.conf
 
   @volatile private var isStopped = false
 
