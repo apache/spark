@@ -21,11 +21,11 @@ import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
 
 import scala.collection.mutable
 
+import org.mockito.Mockito._
 import org.scalatest.concurrent.Timeouts
-import org.scalatest.{BeforeAndAfter, FunSuiteLike}
+import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.hadoop.mapred.{TaskAttemptID, JobConf, TaskAttemptContext, OutputCommitter}
-import org.mockito.Mockito._
 
 import org.apache.spark._
 import org.apache.spark.executor.{TaskMetrics}
@@ -37,7 +37,7 @@ import org.apache.spark.rdd.FakeOutputCommitter
  * messages back to the DAG scheduler.
  */
 class OutputCommitCoordinatorSuite
-    extends FunSuiteLike
+    extends FunSuite
     with BeforeAndAfter
     with LocalSparkContext
     with Timeouts {
@@ -69,7 +69,7 @@ class OutputCommitCoordinatorSuite
 
       private def execTasks(taskSet: TaskSet, attemptNumber: Int) {
         var taskIndex = 0
-        taskSet.tasks.foreach(t => {
+        taskSet.tasks.foreach { t =>
           val tid = newTaskId
           val taskInfo = new TaskInfo(tid, taskIndex, 0, System.currentTimeMillis, "0",
             "localhost", TaskLocality.NODE_LOCAL, false)
@@ -87,7 +87,7 @@ class OutputCommitCoordinatorSuite
               dagSchedulerEventProcessLoop.post(new CompletionEvent(t, new ExceptionFailure(e,
                 Option.empty[TaskMetrics]), 1, accumUpdates, taskInfo, new TaskMetrics))
           }
-        })
+        }
       }
     }
 
@@ -136,6 +136,7 @@ class OutputCommitCoordinatorSuite
       }
     }
 
+    // Need this otherwise the entire test suite attempts to be serialized
     @throws(classOf[IOException])
     private def writeObject(out: ObjectOutputStream) {}
 
@@ -171,6 +172,6 @@ class OutputCommitCoordinatorSuite
   test("If commit fails, if task is retried it should not be locked, and will succeed.") {
     val rdd = sc.parallelize(Seq(1), 1)
     sc.runJob(rdd, new FailFirstTimeCommittingFunction)
-    assert(accum.value == 1)
+    assert(accum.value === 1)
   }
 }

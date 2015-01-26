@@ -108,8 +108,8 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
     val cmtr = getOutputCommitter()
     if (cmtr.needsTaskCommit(taCtxt)) {
       val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
-      val conf = SparkEnv.get.conf
-      val canCommit: Boolean = outputCommitCoordinator.canCommit(jobID, splitID, attemptID)
+      val canCommit = outputCommitCoordinator.canCommit(jobID,
+        taID.value.getTaskID().getId(), splitID, attemptID)
       if (canCommit) {
         try {
           cmtr.commitTask(taCtxt)

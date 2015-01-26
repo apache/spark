@@ -20,6 +20,8 @@ package org.apache.spark
 import java.io.File
 import java.net.Socket
 
+import org.apache.spark.scheduler.OutputCommitCoordinator.OutputCommitCoordinatorActor
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.util.Properties
@@ -350,8 +352,8 @@ object SparkEnv extends Logging {
 
     val outputCommitCoordinator = new OutputCommitCoordinator(conf)
     val outputCommitCoordinatorActor = registerOrLookup("OutputCommitCoordinator",
-      OutputCommitCoordinator.createActor(outputCommitCoordinator))
-    outputCommitCoordinator.coordinatorActor = Some(outputCommitCoordinatorActor)
+      new OutputCommitCoordinatorActor(outputCommitCoordinator))
+    outputCommitCoordinator.initialize(outputCommitCoordinatorActor, isDriver)
 
     new SparkEnv(
       executorId,
