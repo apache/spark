@@ -231,7 +231,7 @@ class Analyzer(catalog: Catalog,
   object CheckMultiAlias extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan => q transformExpressions {
-        case multiAlias @ MultiAlias(generator, names) if generator.isInstanceOf[Generator]=>
+        case multiAlias @ MultiAlias(generator, names) if generator.isInstanceOf[Generator] =>
           assert(generator.asInstanceOf[Generator].output.size == names.size,
             s"The number of multi aliases supplied in the AS clause does not match the number of" +
               s" columns output by the Generator expected" +
