@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils.getContextOrSparkClassLoader
+import org.apache.spark.sql.catalyst.errors.TreeNodeException
 
 /* Implicit conversions */
 import scala.collection.JavaConversions._
@@ -331,23 +332,6 @@ private[spark] object ResolveUdtfsAlias extends Rule[LogicalPlan] {
     case q: LogicalPlan => q transformExpressions {
       case MultiAlias(udtf@HiveGenericUdtf(_, _, _), names) =>
         MultiAlias(udtf.copy(aliasNames = names), names)()
-    }
-  }
-}
-
-/**
- * Checks for multi alias, now multi alias only support udtfs
- */
-object CheckMultiAlias extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressions {
-      case multiAlias @ MultiAlias(udtf, names) =>
-        assert(udtf.isInstanceOf[HiveGenericUdtf], "multi alias's child expression should be udfs")
-        assert(udtf.asInstanceOf[HiveGenericUdtf].output.size == names.size,
-          s"The number of multi aliases supplied in the AS clause does not match the number of" +
-            s" columns output by the UDTF expected" +
-            s" ${udtf.asInstanceOf[HiveGenericUdtf].output.size} aliases but got ${names.size}")
-        multiAlias
     }
   }
 }

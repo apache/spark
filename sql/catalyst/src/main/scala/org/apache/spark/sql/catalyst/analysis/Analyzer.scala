@@ -50,12 +50,7 @@ class Analyzer(catalog: Catalog,
   /**
    * Override to provide additional rules for the "Resolution" batch.
    */
-  val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
-
-  /**
-   * Override to provide additional rules for the "Check Analysis" batch.
-   */
-  val extendedCheckRules: Seq[Rule[LogicalPlan]] = Nil
+  val extendedRules: Seq[Rule[LogicalPlan]] = Nil
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("MultiInstanceRelations", Once,
@@ -72,11 +67,12 @@ class Analyzer(catalog: Catalog,
       UnresolvedHavingClauseAttributes ::
       TrimGroupingAliases ::
       typeCoercionRules ++
-      extendedResolutionRules : _*),
+      extendedRules : _*),
     Batch("Check Analysis", Once,
       CheckResolution ::
       CheckAggregation ::
-      extendedCheckRules.toList : _*),
+      CheckMultiAlias ::
+      Nil: _*),
     Batch("AnalysisOperators", fixedPoint,
       EliminateAnalysisOperators)
   )
@@ -225,6 +221,25 @@ class Analyzer(catalog: Catalog,
           }
 
           aggregatePlan
+      }
+    }
+  }
+
+  /**
+   * Checks for multi alias, multi alias only support generator
+   */
+  object CheckMultiAlias extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case q: LogicalPlan => q transformExpressions {
+        case multiAlias @ MultiAlias(generator, names) if generator.isInstanceOf[Generator]=>
+          assert(generator.asInstanceOf[Generator].output.size == names.size,
+            s"The number of multi aliases supplied in the AS clause does not match the number of" +
+              s" columns output by the Generator expected" +
+              s" ${generator.asInstanceOf[Generator].output.size} aliases but got ${names.size}")
+          multiAlias
+        case multiAlias @ MultiAlias(child, _) =>
+          throw new TreeNodeException(plan,
+            s"MultiAlias's child expression $child should be Generator")
       }
     }
   }
