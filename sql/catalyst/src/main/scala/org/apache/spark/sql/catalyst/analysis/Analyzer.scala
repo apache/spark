@@ -419,6 +419,8 @@ class Analyzer(catalog: Catalog,
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case Project(Seq(Alias(g: Generator, _)), child) =>
         Generate(g, join = false, outer = false, None, child)
+      case Project(Seq(MultiAlias(g: Generator, _)), child) =>
+        Generate(g, join = false, outer = false, None, child)
     }
   }
 }
