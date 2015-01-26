@@ -118,7 +118,13 @@ class DataFrame protected[sql](
   }
 
   /** Left here for compatibility reasons. */
+  @deprecated("1.3.0", "use toDataFrame")
   def toSchemaRDD: DataFrame = this
+
+  /**
+   * Return the object itself. Used to force an implicit conversion from RDD to DataFrame in Scala.
+   */
+  def toDF: DataFrame = this
 
   /** Return the schema of this [[DataFrame]]. */
   override def schema: StructType = queryExecution.analyzed.schema
@@ -501,7 +507,7 @@ class DataFrame protected[sql](
 
   /**
    * Registers this RDD as a temporary table using the given name.  The lifetime of this temporary
-   * table is tied to the [[SQLContext]] that was used to create this SchemaRDD.
+   * table is tied to the [[SQLContext]] that was used to create this DataFrame.
    *
    * @group schema
    */
@@ -510,9 +516,9 @@ class DataFrame protected[sql](
   }
 
   /**
-   * Saves the contents of this [[DataFrame]] as a parquet file, preserving the schema. Files that
-   * are written out using this method can be read back in as a [[DataFrame]] using the `parquetFile`
-   * function.
+   * Saves the contents of this [[DataFrame]] as a parquet file, preserving the schema.
+   * Files that are written out using this method can be read back in as a [[DataFrame]]
+   * using the `parquetFile` function in [[SQLContext]].
    */
   override def saveAsParquetFile(path: String): Unit = {
     sqlContext.executePlan(WriteToFile(path, logicalPlan)).toRdd
@@ -520,10 +526,10 @@ class DataFrame protected[sql](
 
   /**
    * :: Experimental ::
-   * Creates a table from the the contents of this SchemaRDD.  This will fail if the table already
+   * Creates a table from the the contents of this DataFrame.  This will fail if the table already
    * exists.
    *
-   * Note that this currently only works with SchemaRDDs that are created from a HiveContext as
+   * Note that this currently only works with DataFrame that are created from a HiveContext as
    * there is no notion of a persisted catalog in a standard SQL context.  Instead you can write
    * an RDD out to a parquet file, and then register that file as a table.  This "table" can then
    * be the target of an `insertInto`.
