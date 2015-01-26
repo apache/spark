@@ -7,7 +7,9 @@ import logging
 import os
 import pickle
 import re
+import signal
 import socket
+import sys
 
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey)
@@ -31,6 +33,25 @@ if 'mysql' in SQL_ALCHEMY_CONN:
     LongText = LONGTEXT
 else:
     LongText = Text
+
+
+def clear_task_instances(tis, session):
+    '''
+    Clears a set of task instances, but makes sure the running ones
+    get killed.
+    '''
+    job_ids = []
+    for ti in tis:
+        if ti.state == State.RUNNING:
+            if ti.job_id:
+                ti.state = State.SHUTDOWN
+                job_ids.append(ti.job_id)
+        else:
+            session.delete(ti)
+    if job_ids:
+        from airflow.jobs import BaseJob as BJ  # HA!
+        for job in session.query(BJ).filter(BJ.id.in_(job_ids)).all():
+            job.state = State.SHUTDOWN
 
 
 class DagBag(object):
@@ -242,14 +263,17 @@ class TaskInstance(Base):
     try_number = Column(Integer)
     hostname = Column(String(1000))
     unixname = Column(String(1000))
+    job_id = Column(Integer)
 
-    def __init__(self, task, execution_date):
+    def __init__(self, task, execution_date, job=None):
         self.dag_id = task.dag_id
         self.task_id = task.task_id
         self.execution_date = execution_date
         self.task = task
         self.try_number = 1
         self.unixname = getpass.getuser()
+        if job:
+            self.job_id = job.id
 
     def command(
             self,
@@ -456,7 +480,8 @@ class TaskInstance(Base):
 
     def __repr__(self):
         return (
-            "<TaskInstance: {ti.dag_id}.{ti.task_id} {ti.execution_date}>"
+            "<TaskInstance: {ti.dag_id}.{ti.task_id} "
+            "{ti.execution_date} [{ti.state}]>"
         ).format(ti=self)
 
     def ready_for_retry(self):
@@ -484,13 +509,14 @@ class TaskInstance(Base):
             force=False,  # Disregards previous successes
             mark_success=False,  # Don't run the task, act as if it succeeded
             test_mode=False,  # Doesn't record success or failure in the DB
-            ):
+            job_id=None,):
         """
         Runs the task instnace.
         """
         task = self.task
         session = settings.Session()
         self.refresh_from_db(session)
+        self.job_id = job_id
         iso = datetime.now().isoformat()
         self.hostname = socket.gethostname()
 
@@ -538,8 +564,9 @@ class TaskInstance(Base):
                 else:
                     msg = "Executing "
                 msg += "{self.task} for {self.execution_date}"
-                logging.info(msg.format(self=self))
+
             try:
+                logging.info(msg.format(self=self))
                 if not mark_success:
                     from airflow import macros
                     tables = None
@@ -559,6 +586,14 @@ class TaskInstance(Base):
                         'ti': self,
                     }
                     task_copy = copy.copy(task)
+
+                    # Setting kill signal handler
+                    def signal_handler(signum, frame):
+                        logging.error("Killing subprocess")
+                        task_copy.on_kill()
+                        raise Exception("Task received SIGTERM signal")
+                    signal.signal(signal.SIGTERM, signal_handler)
+
                     for attr in task_copy.__class__.template_fields:
                         source = getattr(task_copy, attr)
                         template = self.get_template(source)
@@ -567,7 +602,7 @@ class TaskInstance(Base):
                             template.render(**jinja_context)
                         )
                     task_copy.execute(self.execution_date)
-            except Exception as e:
+            except (Exception, StandardError, KeyboardInterrupt) as e:
                 session = settings.Session()
                 self.end_date = datetime.now()
                 self.set_duration()
@@ -711,7 +746,7 @@ class BaseOperator(Base):
     task_type = Column(String(20))
     start_date = Column(DateTime())
     end_date = Column(DateTime())
-    depends_on_past = Column(Integer)
+    depends_on_past = Column(Integer())
 
     __mapper_args__ = {
         'polymorphic_on': task_type,
@@ -772,6 +807,15 @@ class BaseOperator(Base):
         else:
             return self._schedule_interval
 
+    def on_kill(self):
+        '''
+        Override this method to cleanup subprocesses when a task instance
+        gets killed. Any use of the threading, subprocess or multiprocessing
+        module whithin an operator needs to be cleaned up or it will leave
+        ghost processes behind.
+        '''
+        pass
+
     def materialize_files(self):
         # Getting the content of files for template_field / template_ext
         for field in self.template_fields:
@@ -828,7 +872,7 @@ class BaseOperator(Base):
         qry = qry.filter(TI.task_id.in_(tasks))
 
         count = qry.count()
-        qry.delete(synchronize_session='fetch')
+        clear_task_instances(qry, session)
 
         session.commit()
         session.close()
@@ -1119,12 +1163,12 @@ class DAG(Base):
                 "{ti_list}\n\n"
                 "Are you sure? (yes/no): ").format(**locals())
             if utils.ask_yesno(question):
-                tis.delete()
+                clear_task_instances(tis, session)
             else:
                 count = 0
                 print("Bail. Nothing was cleared.")
         else:
-            tis.delete()
+            clear_task_instances(tis, session)
 
         session.commit()
         session.close()

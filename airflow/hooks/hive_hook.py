@@ -121,6 +121,7 @@ class HiveHook(BaseHook):
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT)
         all_err = ''
+        self.sp = sp
         for line in iter(sp.stdout.readline, ''):
             logging.info(line.strip())
         sp.wait()
@@ -157,3 +158,10 @@ class HiveHook(BaseHook):
         table, we recommend using signal tables.
         '''
         return max(self.get_partitions(schema, table_name))
+
+    def kill(self):
+        if hasattr(self, 'sp'):
+            print(self.sp.poll())
+            if self.sp.poll() is None:
+                print("Killing the Hive job")
+                self.sp.kill()

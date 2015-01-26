@@ -36,3 +36,6 @@ class HiveOperator(BaseOperator):
     def execute(self, execution_date):
         logging.info('Executing: ' + self.hql)
         self.hook.run_cli(hql=self.hql)
+
+    def on_kill(self):
+        self.hook.kill()

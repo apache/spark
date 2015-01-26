@@ -109,7 +109,12 @@ def run(args):
         executor = DEFAULT_EXECUTOR
         executor.start()
         print("Sending run command to executor.")
-        executor.queue_command(ti.key, ti.command(pickle_id=pickle_id))
+        cmd = ti.command(
+            force=args.force,
+            mark_success=args.mark_success,
+            ignore_dependencies=args.ignore_dependencies,
+            pickle_id=pickle_id)
+        executor.queue_command(ti.key, cmd)
         executor.end()
 
 
@@ -249,7 +254,7 @@ def worker(args):
 
 
 def initdb(args):
-
+    print("DB: " + conf.get('core', 'SQL_ALCHEMY_CONN'))
     if raw_input(
             "This will drop exisiting tables if they exist. "
             "Proceed? (y/n)").upper() == "Y":
@@ -291,6 +296,8 @@ def initdb(args):
                 host='localhost', 
                 schema='default', port=10000))
         session.commit()
+    else:
+        print("Bail.")
 
 
 if __name__ == '__main__':
