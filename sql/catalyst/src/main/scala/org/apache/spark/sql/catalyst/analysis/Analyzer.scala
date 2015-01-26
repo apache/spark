@@ -50,7 +50,12 @@ class Analyzer(catalog: Catalog,
   /**
    * Override to provide additional rules for the "Resolution" batch.
    */
-  val extendedRules: Seq[Rule[LogicalPlan]] = Nil
+  val extendedResolutionRules: Seq[Rule[LogicalPlan]] = Nil
+
+  /**
+   * Override to provide additional rules for the "Check Analysis" batch.
+   */
+  val extendedCheckRules: Seq[Rule[LogicalPlan]] = Nil
 
   lazy val batches: Seq[Batch] = Seq(
     Batch("MultiInstanceRelations", Once,
@@ -67,10 +72,11 @@ class Analyzer(catalog: Catalog,
       UnresolvedHavingClauseAttributes ::
       TrimGroupingAliases ::
       typeCoercionRules ++
-      extendedRules : _*),
+      extendedResolutionRules : _*),
     Batch("Check Analysis", Once,
-      CheckResolution,
-      CheckAggregation),
+      CheckResolution ::
+      CheckAggregation ::
+      extendedCheckRules.toList : _*),
     Batch("AnalysisOperators", fixedPoint,
       EliminateAnalysisOperators)
   )
