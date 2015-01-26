@@ -69,6 +69,11 @@ object Literal {
    * data type is not supported by SparkSQL.
    */
   protected[sql] def anyToLiteral(literal: Any): Column = {
+    // If the literal is a symbol, convert it into a Column.
+    if (literal.isInstanceOf[Symbol]) {
+      return dsl.symbolToColumn(literal.asInstanceOf[Symbol])
+    }
+
     val literalExpr = literal match {
       case v: Int => LiteralExpr(v, IntegerType)
       case v: Long => LiteralExpr(v, LongType)

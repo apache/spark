@@ -821,7 +821,7 @@ class JsonSuite extends QueryTest {
 
     val schemaRDD1 = applySchema(rowRDD1, schema1)
     schemaRDD1.registerTempTable("applySchema1")
-    val schemaRDD2 = schemaRDD1.toSchemaRDD
+    val schemaRDD2 = schemaRDD1.toDF
     val result = schemaRDD2.toJSON.collect()
     assert(result(0) == "{\"f1\":1,\"f2\":\"A1\",\"f3\":true,\"f4\":[\"1\",\" A1\",\" true\",\" null\"]}")
     assert(result(3) == "{\"f1\":4,\"f2\":\"D4\",\"f3\":true,\"f4\":[\"4\",\" D4\",\" true\",\" 2147483644\"],\"f5\":2147483644}")
@@ -842,7 +842,7 @@ class JsonSuite extends QueryTest {
 
     val schemaRDD3 = applySchema(rowRDD2, schema2)
     schemaRDD3.registerTempTable("applySchema2")
-    val schemaRDD4 = schemaRDD3.toSchemaRDD
+    val schemaRDD4 = schemaRDD3.toDF
     val result2 = schemaRDD4.toJSON.collect()
 
     assert(result2(1) == "{\"f1\":{\"f11\":2,\"f12\":false},\"f2\":{\"B2\":null}}")
