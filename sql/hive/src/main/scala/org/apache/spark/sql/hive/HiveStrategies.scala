@@ -229,7 +229,7 @@ private[hive] trait HiveStrategies {
             ExecutedCommand(
               DescribeHiveTableCommand(t, describe.output, describe.isExtended)) :: Nil
           case o: LogicalPlan =>
-            ExecutedCommand(RunnableDescribeCommand(planLater(o), describe.output)) :: Nil
+            ExecutedCommand(RunnableDescribeCommand(o, describe.isExtended)) :: Nil
         }
 
       case _ => Nil

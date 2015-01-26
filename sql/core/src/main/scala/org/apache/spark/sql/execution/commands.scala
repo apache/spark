@@ -172,11 +172,11 @@ case class UncacheTableCommand(tableName: String) extends RunnableCommand {
  */
 @DeveloperApi
 case class DescribeCommand(
-    logicalPlan: LogicalPlan,
+    table: LogicalPlan,
     isExtended: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    val plan = sqlContext.executePlan(logicalPlan).analyzed
+    val plan = sqlContext.executePlan(table).analyzed
     plan.output.map(field => Row(field.name, field.dataType.toString, null))
   }
 
