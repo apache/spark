@@ -106,6 +106,19 @@ class HiveContext(sc: SparkContext) extends SQLContext(sc) {
   }
 
   /**
+   *
+   * @return All tables for given catalog
+   */
+  override def showTables(): Array[String] = catalog.showTables(None)
+
+  /**
+   *
+   * @param databaseName the name of database to retrieve tables for
+   * @return the list of tables for given database
+   */
+  def showTables(databaseName: String): Array[String] = catalog.showTables(Some(databaseName))
+
+  /**
    * Analyzes the given table in the current database to generate statistics, which will be
    * used in query optimizations.
    *

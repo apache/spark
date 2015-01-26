@@ -456,6 +456,19 @@ private[hive] class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with
   override def unregisterTable(tableIdentifier: Seq[String]): Unit = ???
 
   override def unregisterAllTables() = {}
+
+  // Necessary helper method so showTables can return Array[String] vs List
+  private def convertToArray(tables: java.util.List[String]): Array[String] = {
+    tables.toArray(new Array[String](tables.length))
+  }
+
+  override def showTables(databaseName: Option[String]): Array[String] = {
+    val dbName = if ( !caseSensitive ) databaseName.map(_.toLowerCase) else databaseName
+    dbName match {
+      case Some(dbName) => convertToArray(client.getAllTables(dbName))
+      case None => convertToArray(client.getAllTables)
+    }
+  }
 }
 
 /**
