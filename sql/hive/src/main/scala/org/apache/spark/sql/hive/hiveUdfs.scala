@@ -339,15 +339,15 @@ private[spark] object ResolveUdtfsAlias extends Rule[LogicalPlan] {
  * Checks for multi alias, now multi alias only support udtfs
  */
 object CheckMultiAlias extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressions {
       case multiAlias @ MultiAlias(udtf, names) =>
         assert(udtf.isInstanceOf[HiveGenericUdtf], "multi alias's child expression should be udfs")
         assert(udtf.asInstanceOf[HiveGenericUdtf].output.size == names.size,
-          s"The number of multi aliases supplied in the AS clause does not match the number of " +
-            s"columns output by the UDTF expected ${udtf.asInstanceOf[HiveGenericUdtf].output.size}" +
-            s" aliases but got ${names.size}")
-      multiAlias
+          s"The number of multi aliases supplied in the AS clause does not match the number of" +
+            s" columns output by the UDTF expected" +
+            s" ${udtf.asInstanceOf[HiveGenericUdtf].output.size} aliases but got ${names.size}")
+        multiAlias
     }
   }
 }
