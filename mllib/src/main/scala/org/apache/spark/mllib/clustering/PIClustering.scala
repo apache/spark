@@ -106,10 +106,6 @@ object PIClustering {
     val pointsMap = Map(points: _*)
     val estCollected = estimates.collect.sortBy(_._1)
     if (logger.isDebugEnabled) {
-      //      val clusters = estCollected.map(_._2)
-      //      logger.debug(s"Cluster Estimates: ${estCollected.mkString(",")} "
-      //      val counts = Map(estCollected:_*).groupBy(_._1).mapValues(_.size)
-      //        + s" Counts: ${counts.mkString(",")}")
       logger.debug(s"Cluster Estimates: ${estCollected.mkString(",")}")
     }
     (ccs, estCollected)
