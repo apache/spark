@@ -154,7 +154,7 @@ private[spark] object SerDeUtil extends Logging {
         val obj = unpickle.loads(row)
         if (batched) {
           obj match {
-            case array: Array[Any] => array.toList
+            case array: Array[Any] => array.toSeq
             case _ => obj.asInstanceOf[JArrayList[_]].asScala
           }
         } else {
