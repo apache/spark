@@ -36,12 +36,11 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
 
     if (objId == "SparkRHandler") {
       methodName match {
-        case "stopBackend" => {
+        case "stopBackend" =>
           writeInt(dos, 0)
           writeType(dos, "void")
           server.close()
-        }
-        case "rm" => {
+        case "rm" =>
           try {
             val t = readObjectType(dis)
             assert(t == 'c')
@@ -50,13 +49,11 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
             writeInt(dos, 0)
             writeObject(dos, null)
           } catch {
-            case e: Exception => {
+            case e: Exception =>
               System.err.println(s"Removing $objId failed with " + e)
               e.printStackTrace()
               writeInt(dos, -1)
-            }
           }
-        }
         case _ => dos.writeInt(-1)
       }
     } else {
@@ -92,10 +89,9 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
       } else {
         JVMObjectTracker.get(objId) match {
           case None => throw new IllegalArgumentException("Object not found " + objId)
-          case Some(o) => {
+          case Some(o) =>
             cls = Some(o.getClass)
             obj = o
-          }
         }
       }
 
@@ -127,11 +123,10 @@ class SparkRBackendHandler(server: SparkRBackend) extends SimpleChannelInboundHa
         throw new IllegalArgumentException("invalid method " + methodName + " for object " + objId)
       }
     } catch {
-      case e: Exception => {
+      case e: Exception =>
         System.err.println(s"$methodName on $objId failed with " + e)
         e.printStackTrace()
         writeInt(dos, -1)
-      }
     }
   }
 

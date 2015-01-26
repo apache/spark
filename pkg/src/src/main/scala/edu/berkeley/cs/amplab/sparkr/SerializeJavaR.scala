@@ -124,7 +124,7 @@ object SerializeJavaR {
 
       val valuesType = readObjectType(in)
       val valuesLen = readInt(in)
-      val values = (0 until len).map(_ => readTypedObject(in, valuesType))
+      val values = (0 until valuesLen).map(_ => readTypedObject(in, valuesType))
       mapAsJavaMap(keys.zip(values).toMap)
     } else {
       new java.util.HashMap[Object, Object]()
@@ -165,61 +165,49 @@ object SerializeJavaR {
       writeType(dos, "void")
     } else {
       value.getClass.getName match {
-        case "java.lang.String" => {
+        case "java.lang.String" =>
           writeType(dos, "character")
           writeString(dos, value.asInstanceOf[String])
-        }
-        case "long" | "java.lang.Long" => {
+        case "long" | "java.lang.Long" =>
           writeType(dos, "double")
           writeDouble(dos, value.asInstanceOf[Long].toDouble)
-        }
-        case "double" | "java.lang.Double" => {
+        case "double" | "java.lang.Double" =>
           writeType(dos, "double")
           writeDouble(dos, value.asInstanceOf[Double])
-        }
-        case "int" | "java.lang.Integer" => {
+        case "int" | "java.lang.Integer" =>
           writeType(dos, "integer")
           writeInt(dos, value.asInstanceOf[Int])
-        }
-        case "boolean" | "java.lang.Boolean" => {
+        case "boolean" | "java.lang.Boolean" =>
           writeType(dos, "logical")
           writeBoolean(dos, value.asInstanceOf[Boolean])
-        }
-        case "[B" => {
+        case "[B" =>
           writeType(dos, "raw")
           writeBytes(dos, value.asInstanceOf[Array[Byte]])
-        }
         // TODO: Types not handled right now include
         // byte, char, short, float
 
         // Handle arrays
-        case "[Ljava.lang.String;" => {
+        case "[Ljava.lang.String;" =>
           writeType(dos, "list")
           writeStringArr(dos, value.asInstanceOf[Array[String]])
-        }
-        case "[I" => {
+        case "[I" =>
           writeType(dos, "list")
           writeIntArr(dos, value.asInstanceOf[Array[Int]])
-        }
-        case "[J" => {
+        case "[J" =>
           writeType(dos, "list")
           writeDoubleArr(dos, value.asInstanceOf[Array[Long]].map(_.toDouble))
-        }
-        case "[D" => {
+        case "[D" =>
           writeType(dos, "list")
           writeDoubleArr(dos, value.asInstanceOf[Array[Double]])
-        }
-        case "[Z" => {
+        case "[Z" =>
           writeType(dos, "list")
           writeBooleanArr(dos, value.asInstanceOf[Array[Boolean]])
-        }
-        case "[[B" => {
+        case "[[B" =>
           writeType(dos, "list")
           writeBytesArr(dos, value.asInstanceOf[Array[Array[Byte]]])
-        }
-        case _ => {
+        case otherName =>
           // Handle array of objects
-          if (value.getClass.getName.startsWith("[L")) {
+          if (otherName.startsWith("[L")) {
             val objArr = value.asInstanceOf[Array[Object]]
             writeType(dos, "list")
             writeType(dos, "jobj")
@@ -229,7 +217,6 @@ object SerializeJavaR {
             writeType(dos, "jobj")
             writeJObj(dos, value)
           }
-        }
       }
     }
   }

@@ -88,11 +88,10 @@ object SparkRBackend {
       sparkRBackend.init(args(0).toInt)
       sparkRBackend.run()
     } catch {
-      case e: IOException => {
+      case e: IOException =>
         System.err.println("Server shutting down: failed with exception ", e)
         sparkRBackend.close()
         System.exit(0)
-      }
     }
     System.exit(0)
   }
