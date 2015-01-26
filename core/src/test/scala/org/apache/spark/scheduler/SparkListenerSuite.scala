@@ -383,6 +383,21 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with Matchers
     }.size should be (1)
   }
 
+  test("spark.extraListeners and SPARK_EXTRA_LISTENERS configurations are merged") {
+    // This test ensures that we don't accidentally change the behavior such that one setting
+    // overrides the other:
+    val SPARK_EXTRA_LISTENERS = classOf[ListenerThatAcceptsSparkConf].getName
+    val conf = spy(new SparkConf().setMaster("local").setAppName("test")
+      .set("spark.extraListeners", classOf[BasicJobCounter].getName))
+    when(conf.getenv("SPARK_EXTRA_LISTENERS")).thenReturn(SPARK_EXTRA_LISTENERS)
+    when(conf.clone).thenReturn(conf)  // so that our mock is still used
+    sc = new SparkContext(conf)
+    sc.listenerBus.sparkListeners.collect { case x: BasicJobCounter => x}.size should be (1)
+    sc.listenerBus.sparkListeners.collect {
+      case x: ListenerThatAcceptsSparkConf => x
+    }.size should be (1)
+  }
+
   /**
    * Assert that the given list of numbers has an average that is greater than zero.
    */
