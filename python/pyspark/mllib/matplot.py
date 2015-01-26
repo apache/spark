@@ -1,67 +1,105 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 import numpy as np
 import matplotlib.pyplot as plt
 
 class Plot:
-  def plotCircles(self):
-    # LABELS=self.getLabels()
+
+  def __init__(self):
+    self.colors = ['b', 'g', 'r', 'y', 'm', 'c']
+
+  def plotInputCircles(self, subplot = None):
+    myplt = subplot if subplot else plt
     (labels,x,y) = ([], [], [])
     for (label, (xx,yy)) in self.getCirclePoints():
        labels.append(int(label))
        x.append(float(xx))
        y.append(float(yy))
 
-    colors = ['b', 'g', 'r','y','w', 'm']
-    norm = plt.normalize()
-    norm.autoscale(x)
-    # norm.autoscale(y)
+    myplt.set_title('Labeled Input Data',fontsize='medium')
+    myplt.set_xlabel('X',fontsize='small')
+    myplt.set_ylabel('Y',fontsize='small')
+    myplt.set_xlim([-2.5,2.5])
+    # norm = plt.normalize()
+    # norm.autoscale(x)
     for (plabel, x, y) in zip(labels,x, y):
-        xcolor = colors[-1 + int(plabel / 1000)]
-        lines = plt.plot(x, y, 'x',markersize=3,color=xcolor)
-        plt.annotate(str(plabel),xy=(x,y), xytext= (-5,5),
+        xcolor = self.colors[-1 + int(plabel / 1000)]
+        myplt.plot(x, y, 'x',markersize=3,color=xcolor)
+        myplt.annotate(str(plabel),xy=(x,y), xytext= (-5,5),
                      textcoords='offset points',
                 arrowprops=dict(facecolor=xcolor, shrink=0.01),
                 horizontalalignment='right', verticalalignment='bottom',
-                fontsize=6
-              )
-        # plt.plot(x, y, 'o', markersize=1,color=colors[-1 + (plabel / 1000)], label= '%s' %plabel )
-        # plt.plot(x, y)
-        # plt.plot(x, y, color='y') # , markersize=1, label= '%s' %plabel )
+                fontsize=6)
 
-    plt.show()
-    plt.savefig('inputs.png')
+    myplt.tick_params(axis='both', which='major', labelsize=8)
+    myplt.tick_params(axis='both', which='minor', labelsize=6)
+    # for tick in myplt.xaxis.get_major_ticks():
+    #  tick.label.set_fontsize(8)
 
-  def plotOutputs(self):
+    if not subplot:
+      myplt.show()
+      myplt.savefig('inputs.png')
+
+  def plotOutputs(self, subplot = None):
+    myplt = subplot if subplot else plt
     (labels,locs,clusters) = ([], [], [])
     (centers_sorted, out_points) = self.getOutputPoints()
     center_index_to_magnitude_map = {cx : cm for (cx,(cm,cloc)) in centers_sorted}
     for ((label, loc), cluster) in out_points:
        labels.append(label)
-       locs.append(loc)
+       locs.append(loc[0])
        clusters.append(cluster)
 
-    colors = ['b', 'g', 'r','y','c', 'm']
+    myplt.set_title('Output Pseudo Eigenvector',fontsize='medium')
+    myplt.set_xlabel('Ordinal of Input Data',fontsize='small')
+    myplt.set_ylabel('PseudoEigenvector Vti',fontsize='small')
     markers = ['s', '+', 'x','8','D', '*']
-    norm = plt.normalize()
-    norm.autoscale(locs)
-    # norm.autoscale(y)
     for (ix, (plabel, loc, cluster)) in enumerate(zip(labels,locs, clusters)):
-        xcolor = colors[-1 + int(plabel / 1000)]
+    # for (ix, (plabel, loc, cluster)) in enumerate([(1000,0.11255703573044015,4),(1001,0.11258575254117632,4)]):
+        xcolor = self.colors[-1 + int(plabel / 1000)]
         clusterx = center_index_to_magnitude_map[cluster]
         xmarker = markers[clusterx]
-        lines = plt.plot(ix, loc, xmarker,markersize=3,color=xcolor)
-        plt.yscale('linear')
-        plt.annotate(str(plabel),xy=(ix,loc), xytext= (-5,5),
-                     textcoords='offset points',
-                arrowprops=dict(facecolor=xcolor, shrink=0.01),
-                horizontalalignment='right', verticalalignment='bottom',
-                fontsize=6
-              )
-        # plt.plot(x, y, 'o', markersize=1,color=colors[-1 + (plabel / 1000)], label= '%s' %plabel )
-        # plt.plot(x, y)
-        # plt.plot(x, y, color='y') # , markersize=1, label= '%s' %plabel )
+        myplt.plot(ix, loc, xmarker,markersize=3,color=xcolor)
+        # myplt.annotate(str(plabel),xy=(ix,loc), xytext= (-5,5),
+        #              textcoords='offset points',
+        #         arrowprops=dict(facecolor=xcolor, shrink=0.01),
+        #         horizontalalignment='right', verticalalignment='bottom',
+        #         fontsize=6)
 
+    myplt.tick_params(axis='both', which='major', labelsize=8)
+    myplt.tick_params(axis='both', which='minor', labelsize=6)
+
+    if not subplot:
+      myplt.show()
+      myplt.savefig('outputs.png')
+
+  def plotInputsAndOutputs(self):
+    fig = plt.figure()
+    fig.suptitle('Power Iteration Clustering Inputs And Outputs',fontsize='large')
+    ax = fig.add_subplot(211)
+    self.plotInputCircles(ax)
+    ax = fig.add_subplot(212)
+    # x = np.linspace(-2.5,2.5,100)
+    # ax.plot(x, np.cos(x))
+    self.plotOutputs(ax)
+    plt.subplots_adjust(hspace=0.30) #  , wspace=0.1 )
     plt.show()
-    plt.savefig('outputs.png')
+    plt.savefig('inputsAndOutputs.png')
 
   def getCirclePoints(self):
     fillInLabelsHere=[(1000, (0.026055,0.000000)) , (1001, (-0.015593,0.023425)) , (1002, (-0.012923,-0.024027)) , (2000, (0.300923,0.000000)) , (2001, (0.270132,0.148135)) , (2002, (0.157354,0.261961)) , (2003, (0.000000,0.287528)) , (2004, (-0.163370,0.250285)) , (2005, (-0.257946,0.153550)) , (2006, (-0.290993,0.000000)) , (2007, (-0.241891,-0.148736)) , (2008, (-0.152099,-0.273338)) , (2009, (-0.000000,-0.313627)) , (2010, (0.140641,-0.269290)) , (2011, (0.267766,-0.145981)) , (3000, (1.000656,0.000000)) , (3001, (0.917339,0.413769)) , (3002, (0.664959,0.738677)) , (3003, (0.305250,0.931993)) , (3004, (-0.103926,0.988312)) , (3005, (-0.495637,0.866338)) , (3006, (-0.813345,0.578460)) , (3007, (-0.994044,0.205409)) , (3008, (-0.970741,-0.209993)) , (3009, (-0.812726,-0.587868)) , (3010, (-0.502153,-0.867390)) , (3011, (-0.105587,-1.000996)) , (3012, (0.309040,-0.939486)) , (3013, (0.676942,-0.740258)) , (3014, (0.922195,-0.403860)) , (4000, (1.500370,0.000000)) , (4001, (1.455509,0.372520)) , (4002, (1.313174,0.724842)) , (4003, (1.103429,1.023959)) , (4004, (0.808768,1.264479)) , (4005, (0.463024,1.435827)) , (4006, (0.093931,1.489670)) , (4007, (-0.282205,1.468860)) , (4008, (-0.641969,1.357055)) , (4009, (-0.960632,1.153854)) , (4010, (-1.208709,0.881284)) , (4011, (-1.398515,0.558539)) , (4012, (-1.480977,0.186267)) , (4013, (-1.466877,-0.188276)) , (4014, (-1.384225,-0.551507)) , (4015, (-1.210292,-0.878939)) , (4016, (-0.954331,-1.158034)) , (4017, (-0.637888,-1.365072)) , (4018, (-0.281502,-1.485258)) , (4019, (0.093529,-1.517232)) , (4020, (0.462337,-1.435428)) , (4021, (0.802200,-1.273476)) , (4022, (1.088346,-1.022671)) , (4023, (1.303522,-0.726381)) , (4024, (1.441486,-0.376954)) , (5000, (2.006090,0.000000)) , (5001, (1.975017,0.312498)) , (5002, (1.903007,0.616796)) , (5003, (1.779725,0.906926)) , (5004, (1.615806,1.176478)) , (5005, (1.418842,1.412193)) , (5006, (1.176238,1.618327)) , (5007, (0.907240,1.778774)) , (5008, (0.616737,1.907389)) , (5009, (0.312334,1.972686)) , (5010, (0.000000,2.003958)) , (5011, (-0.312175,1.978076)) , (5012, (-0.617802,1.906119)) , (5013, (-0.910539,1.783043)) , (5014, (-1.176869,1.610774)) , (5015, (-1.413218,1.413486)) , (5016, (-1.612863,1.172439)) , (5017, (-1.777011,0.909389)) , (5018, (-1.897253,0.618963)) , (5019, (-1.973228,0.312265)) , (5020, (-1.997124,0.000000)) , (5021, (-1.972173,-0.312524)) , (5022, (-1.904784,-0.617654)) , (5023, (-1.784558,-0.908745)) , (5024, (-1.618230,-1.172448)) , (5025, (-1.417072,-1.417323)) , (5026, (-1.173193,-1.611568)) , (5027, (-0.906398,-1.779951)) , (5028, (-0.619644,-1.903364)) , (5029, (-0.314077,-1.973233)) , (5030, (-0.000000,-2.001369)) , (5031, (0.312326,-1.985733)) , (5032, (0.617108,-1.897669)) , (5033, (0.905477,-1.784064)) , (5034, (1.178242,-1.623806)) , (5035, (1.410244,-1.418794)) , (5036, (1.625406,-1.176519)) , (5037, (1.774561,-0.906173)) , (5038, (1.897196,-0.618358)) , (5039, (1.969360,-0.311903))]
@@ -76,5 +114,6 @@ class Plot:
     return (centers_sorted_ix, opoints)
 
 if __name__ == '__main__':
-    Plot().plotCircles()
-    Plot().plotOutputs()
+    # Plot().plotInputCircles()
+    # Plot().plotOutputs()
+    Plot().plotInputsAndOutputs()
