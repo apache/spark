@@ -115,9 +115,19 @@ object CommandUtils extends Logging {
     val userClassPath = command.classPathEntries ++ Seq(classPath)
 
     val javaVersion = System.getProperty("java.version")
-    val permGenOpt = if (!javaVersion.startsWith("1.8")) Some("-XX:MaxPermSize=128m") else None
+
+    val javaOpts = workerLocalOpts ++ command.javaOpts
+
+    val permGenOpt =
+      if (!javaVersion.startsWith("1.8") && !javaOpts.exists(_.startsWith("-XX:MaxPermSize="))) {
+        // do not specify -XX:MaxPermSize if it was already specified by user
+        Some("-XX:MaxPermSize=128m")
+      } else {
+        None
+      }
+
     Seq("-cp", userClassPath.filterNot(_.isEmpty).mkString(File.pathSeparator)) ++
-      permGenOpt ++ workerLocalOpts ++ command.javaOpts ++ memoryOpts
+      permGenOpt ++ javaOpts ++ memoryOpts
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
