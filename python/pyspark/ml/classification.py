@@ -46,6 +46,7 @@ class LogisticRegressionModel(Transformer):
     """
 
     def __init__(self, java_model):
+        super(LogisticRegressionModel, self).__init__()
         self._java_model = java_model
 
     def transform(self, dataset, params={}):

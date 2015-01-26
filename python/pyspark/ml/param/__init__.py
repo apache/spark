@@ -68,9 +68,3 @@ class Params(Identifiable):
         map = self.paramMap.copy()
         map.update(params)
         return map
-
-    def _transfer_params_to_java(self, params, java_obj):
-        map = self._merge_params(params)
-        for param in self.params():
-            if param in map:
-                java_obj.set(param.name, map[param])
