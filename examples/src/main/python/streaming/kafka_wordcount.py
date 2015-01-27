@@ -39,7 +39,7 @@ from pyspark.streaming.kafka import KafkaUtils
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print >> sys.stderr, "Usage: network_wordcount.py <zk> <topic>"
+        print >> sys.stderr, "Usage: kafka_wordcount.py <zk> <topic>"
         exit(-1)
 
     sc = SparkContext(appName="PythonStreamingKafkaWordCount")
