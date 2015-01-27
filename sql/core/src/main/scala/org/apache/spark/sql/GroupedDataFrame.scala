@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import scala.language.implicitConversions
-import scala.collection.JavaConverters._
 import scala.collection.JavaConversions._
 
 import org.apache.spark.sql.catalyst.expressions._
@@ -77,6 +76,21 @@ class GroupedDataFrame protected[sql](df: DataFrame, groupingExprs: Seq[Expressi
   }
 
   /**
+   * Compute aggregates by specifying a map from column name to aggregate methods.
+   * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
+   * {{{
+   *   // Selects the age of the oldest employee and the aggregate expense for each department
+   *   df.groupby("department").agg(Map(
+   *     "age" -> "max"
+   *     "sum" -> "expense"
+   *   ))
+   * }}}
+   */
+  def agg(exprs: java.util.Map[String, String]): DataFrame = {
+    agg(exprs.toMap)
+  }
+
+  /**
    * Compute aggregates by specifying a series of aggregate columns.
    * The available aggregate methods are defined in [[org.apache.spark.sql.dsl]].
    * {{{
@@ -122,9 +136,4 @@ class GroupedDataFrame protected[sql](df: DataFrame, groupingExprs: Seq[Expressi
    * Compute the sum for each numeric columns for each group.
    */
   override def sum(): DataFrame = aggregateNumericColumns(Sum)
-
-  //// For Python API
-  private[sql] def agg(exprs: java.util.Map[String, String]): DataFrame = {
-    agg(exprs.toMap)
-  }
 }

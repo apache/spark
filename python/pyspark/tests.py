@@ -873,7 +873,7 @@ class SQLTests(ReusedPySparkTestCase):
         d = [Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})]
         rdd = self.sc.parallelize(d)
         df = self.sqlCtx.inferSchema(rdd)
-        row = df.first()
+        row = df.head()
         self.assertEqual(1, len(row.l))
         self.assertEqual(1, row.l[0].a)
         self.assertEqual("2", row.d["key"].d)
@@ -899,7 +899,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual([None, ""], df.map(lambda r: r.s).collect())
         df.registerTempTable("test")
         result = self.sqlCtx.sql("SELECT l[0].a from test where d['key'].d = '2'")
-        self.assertEqual(1, result.first()[0])
+        self.assertEqual(1, result.head()[0])
 
         df2 = self.sqlCtx.inferSchema(rdd, 1.0)
         self.assertEqual(df.schema(), df2.schema())
@@ -907,13 +907,13 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual([None, ""], df2.map(lambda r: r.s).collect())
         df2.registerTempTable("test2")
         result = self.sqlCtx.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
-        self.assertEqual(1, result.first()[0])
+        self.assertEqual(1, result.head()[0])
 
     def test_struct_in_map(self):
         d = [Row(m={Row(i=1): Row(s="")})]
         rdd = self.sc.parallelize(d)
         df = self.sqlCtx.inferSchema(rdd)
-        k, v = df.first().m.items()[0]
+        k, v = df.head().m.items()[0]
         self.assertEqual(1, k.i)
         self.assertEqual("", v.s)
 
@@ -923,7 +923,7 @@ class SQLTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize([row])
         df = self.sqlCtx.inferSchema(rdd)
         df.registerTempTable("test")
-        row = self.sqlCtx.sql("select l, d from test").first()
+        row = self.sqlCtx.sql("select l, d from test").head()
         self.assertEqual(1, row.asDict()["l"][0].a)
         self.assertEqual(1.0, row.asDict()['d']['key'].c)
 
@@ -936,7 +936,7 @@ class SQLTests(ReusedPySparkTestCase):
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), ExamplePointUDT)
         df.registerTempTable("labeled_point")
-        point = self.sqlCtx.sql("SELECT point FROM labeled_point").first().point
+        point = self.sqlCtx.sql("SELECT point FROM labeled_point").head().point
         self.assertEqual(point, ExamplePoint(1.0, 2.0))
 
     def test_apply_schema_with_udt(self):
@@ -946,7 +946,8 @@ class SQLTests(ReusedPySparkTestCase):
         schema = StructType([StructField("label", DoubleType(), False),
                              StructField("point", ExamplePointUDT(), False)])
         df = self.sqlCtx.applySchema(rdd, schema)
-        point = df.first().point
+        # TODO: test collect with UDT
+        point = df.rdd.first().point
         self.assertEquals(point, ExamplePoint(1.0, 2.0))
 
     def test_parquet_with_udt(self):
@@ -957,11 +958,11 @@ class SQLTests(ReusedPySparkTestCase):
         output_dir = os.path.join(self.tempdir.name, "labeled_point")
         df0.saveAsParquetFile(output_dir)
         df1 = self.sqlCtx.parquetFile(output_dir)
-        point = df1.first().point
+        point = df1.head().point
         self.assertEquals(point, ExamplePoint(1.0, 2.0))
 
     def test_column_operators(self):
-        from pyspark.sql import Column
+        from pyspark.sql import Column, LongType
         ci = self.df.key
         cs = self.df.value
         c = ci == cs
@@ -974,8 +975,9 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(all(isinstance(c, Column) for c in cbit))
         css = cs.like('a'), cs.rlike('a'), cs.asc(), cs.desc(), cs.startswith('a'), cs.endswith('a')
         self.assertTrue(all(isinstance(c, Column) for c in css))
+        self.assertTrue(isinstance(ci.cast(LongType()), Column))
 
-    def test_column(self):
+    def test_column_select(self):
         df = self.df
         self.assertEqual(self.testData, df.select("*").collect())
         self.assertEqual(self.testData, df.select(df.key, df.value).collect())

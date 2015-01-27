@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql
 
+import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
+import scala.collection.JavaConverters._
 import scala.collection.JavaConversions._
 
 import java.util.{ArrayList, List => JList}
@@ -570,17 +572,17 @@ class DataFrame protected[sql](
   ////////////////////////////////////////////////////////////////////////////
   // for Python API
   ////////////////////////////////////////////////////////////////////////////
-  private[sql] def select(cols: java.util.List[Column]): DataFrame = {
-    select(cols:_*)
-  }
-  private[sql] def groupby(cols: java.util.List[Column]): GroupedDataFrame = {
-    groupby(cols:_*)
+  /**
+   * A helpful function for Py4j, convert a list of Column to an array
+   */
+  protected[sql] def toColumnArray(cols: JList[Column]): Array[Column] = {
+    cols.toList.toArray
   }
 
   /**
-   * Converts a JavaRDD to a PythonRDD. It is used by pyspark.
+   * Converts a JavaRDD to a PythonRDD.
    */
-  private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
+  protected[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val fieldTypes = schema.fields.map(_.dataType)
     val jrdd = this.rdd.map(EvaluatePython.rowToArray(_, fieldTypes)).toJavaRDD()
     SerDeUtil.javaToPython(jrdd)
@@ -588,7 +590,7 @@ class DataFrame protected[sql](
   /**
    * Serializes the Array[Row] returned by collect(), using the same format as javaToPython.
    */
-  private[sql] def collectToPython: JList[Array[Byte]] = {
+  protected[sql] def collectToPython: JList[Array[Byte]] = {
     val fieldTypes = schema.fields.map(_.dataType)
     val pickle = new Pickler
     new ArrayList[Array[Byte]](collect().map { row =>
