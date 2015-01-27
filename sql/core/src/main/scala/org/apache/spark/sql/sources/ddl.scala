@@ -18,32 +18,32 @@
 package org.apache.spark.sql.sources
 
 import scala.language.implicitConversions
-import scala.util.parsing.combinator.syntactical.StandardTokenParsers
-import scala.util.parsing.combinator.PackratParsers
 
 import org.apache.spark.Logging
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.execution.RunnableCommand
-import org.apache.spark.util.Utils
+import org.apache.spark.sql.{SchemaRDD, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.SqlLexical
+import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
+import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
+
 
 /**
  * A parser for foreign DDL commands.
  */
-private[sql] class DDLParser extends StandardTokenParsers with PackratParsers with Logging {
+private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
 
-  def apply(input: String): Option[LogicalPlan] = {
-    phrase(ddl)(new lexical.Scanner(input)) match {
-      case Success(r, x) => Some(r)
-      case x =>
-        logDebug(s"Not recognized as DDL: $x")
-        None
+  def apply(input: String, exceptionOnError: Boolean): Option[LogicalPlan] = {
+    try {
+      Some(apply(input))
+    } catch {
+      case _ if !exceptionOnError => None
+      case x: Throwable => throw x
     }
   }
 
   def parseType(input: String): DataType = {
+    lexical.initialize(reservedWords)
     phrase(dataType)(new lexical.Scanner(input)) match {
       case Success(r, x) => r
       case x =>
@@ -51,11 +51,9 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
     }
   }
 
-  protected case class Keyword(str: String)
 
-  protected implicit def asParser(k: Keyword): Parser[String] =
-    lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
-
+  // Keyword is a convention with AbstractSparkSQLParser, which will scan all of the `Keyword`
+  // properties via reflection the class in runtime for constructing the SqlLexical object
   protected val CREATE = Keyword("CREATE")
   protected val TEMPORARY = Keyword("TEMPORARY")
   protected val TABLE = Keyword("TABLE")
@@ -80,33 +78,26 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
   protected val MAP = Keyword("MAP")
   protected val STRUCT = Keyword("STRUCT")
 
-  // Use reflection to find the reserved words defined in this class.
-  protected val reservedWords =
-    this.getClass
-      .getMethods
-      .filter(_.getReturnType == classOf[Keyword])
-      .map(_.invoke(this).asInstanceOf[Keyword].str)
-
-  override val lexical = new SqlLexical(reservedWords)
-
   protected lazy val ddl: Parser[LogicalPlan] = createTable
 
+  protected def start: Parser[LogicalPlan] = ddl
+
   /**
-   * `CREATE TEMPORARY TABLE avroTable
+   * `CREATE [TEMPORARY] TABLE avroTable
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    * or
-   * `CREATE TEMPORARY TABLE avroTable(intField int, stringField string...)
+   * `CREATE [TEMPORARY] TABLE avroTable(intField int, stringField string...)
    * USING org.apache.spark.sql.avro
    * OPTIONS (path "../hive/src/test/resources/data/files/episodes.avro")`
    */
   protected lazy val createTable: Parser[LogicalPlan] =
   (
-    CREATE ~ TEMPORARY ~ TABLE ~> ident
+    (CREATE ~> TEMPORARY.? <~ TABLE) ~ ident
       ~ (tableCols).? ~ (USING ~> className) ~ (OPTIONS ~> options) ^^ {
-      case tableName ~ columns ~ provider ~ opts =>
+      case temp ~ tableName ~ columns ~ provider ~ opts =>
         val userSpecifiedSchema = columns.flatMap(fields => Some(StructType(fields)))
-        CreateTableUsing(tableName, userSpecifiedSchema, provider, opts)
+        CreateTableUsing(tableName, userSpecifiedSchema, provider, temp.isDefined, opts)
     }
   )
 
@@ -162,10 +153,10 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
 
   protected lazy val structType: Parser[DataType] =
     (STRUCT ~> "<" ~> repsep(structField, ",") <~ ">" ^^ {
-    case fields => new StructType(fields)
+    case fields => StructType(fields)
     }) |
     (STRUCT ~> "<>" ^^ {
-      case fields => new StructType(Nil)
+      case fields => StructType(Nil)
     })
 
   private[sql] lazy val dataType: Parser[DataType] =
@@ -175,13 +166,12 @@ private[sql] class DDLParser extends StandardTokenParsers with PackratParsers wi
     primitiveType
 }
 
-private[sql] case class CreateTableUsing(
-    tableName: String,
-    userSpecifiedSchema: Option[StructType],
-    provider: String,
-    options: Map[String, String]) extends RunnableCommand {
-
-  def run(sqlContext: SQLContext) = {
+object ResolvedDataSource {
+  def apply(
+      sqlContext: SQLContext,
+      userSpecifiedSchema: Option[StructType],
+      provider: String,
+      options: Map[String, String]): ResolvedDataSource = {
     val loader = Utils.getContextOrSparkClassLoader
     val clazz: Class[_] = try loader.loadClass(provider) catch {
       case cnf: java.lang.ClassNotFoundException =>
@@ -199,22 +189,43 @@ private[sql] case class CreateTableUsing(
               .asInstanceOf[org.apache.spark.sql.sources.SchemaRelationProvider]
               .createRelation(sqlContext, new CaseInsensitiveMap(options), schema)
           case _ =>
-            sys.error(s"${clazz.getCanonicalName} should extend SchemaRelationProvider.")
+            sys.error(s"${clazz.getCanonicalName} does not allow user-specified schemas.")
         }
       }
       case None => {
         clazz.newInstance match {
-          case dataSource: org.apache.spark.sql.sources.RelationProvider  =>
+          case dataSource: org.apache.spark.sql.sources.RelationProvider =>
             dataSource
               .asInstanceOf[org.apache.spark.sql.sources.RelationProvider]
               .createRelation(sqlContext, new CaseInsensitiveMap(options))
           case _ =>
-            sys.error(s"${clazz.getCanonicalName} should extend RelationProvider.")
+            sys.error(s"A schema needs to be specified when using ${clazz.getCanonicalName}.")
         }
       }
     }
 
-    sqlContext.baseRelationToSchemaRDD(relation).registerTempTable(tableName)
+    new ResolvedDataSource(clazz, relation)
+  }
+}
+
+private[sql] case class ResolvedDataSource(provider: Class[_], relation: BaseRelation)
+
+private[sql] case class CreateTableUsing(
+    tableName: String,
+    userSpecifiedSchema: Option[StructType],
+    provider: String,
+    temporary: Boolean,
+    options: Map[String, String]) extends Command
+
+private [sql] case class CreateTempTableUsing(
+    tableName: String,
+    userSpecifiedSchema: Option[StructType],
+    provider: String,
+    options: Map[String, String])  extends RunnableCommand {
+
+  def run(sqlContext: SQLContext) = {
+    val resolved = ResolvedDataSource(sqlContext, userSpecifiedSchema, provider, options)
+    new SchemaRDD(sqlContext, LogicalRelation(resolved.relation)).registerTempTable(tableName)
     Seq.empty
   }
 }

@@ -115,7 +115,7 @@ if which git &>/dev/null; then
     unset GITREV
 fi
 
-if ! which $MVN &>/dev/null; then
+if ! which "$MVN" &>/dev/null; then
     echo -e "Could not locate Maven command: '$MVN'."
     echo -e "Specify the Maven command with the --mvn flag"
     exit -1;
@@ -171,13 +171,16 @@ cd "$SPARK_HOME"
 
 export MAVEN_OPTS="-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m"
 
-BUILD_COMMAND="$MVN clean package -DskipTests $@"
+# Store the command as an array because $MVN variable might have spaces in it.
+# Normal quoting tricks don't work.
+# See: http://mywiki.wooledge.org/BashFAQ/050
+BUILD_COMMAND=("$MVN" clean package -DskipTests $@)
 
 # Actually build the jar
 echo -e "\nBuilding with..."
-echo -e "\$ $BUILD_COMMAND\n"
+echo -e "\$ ${BUILD_COMMAND[@]}\n"
 
-${BUILD_COMMAND}
+"${BUILD_COMMAND[@]}"
 
 # Make directories
 rm -rf "$DISTDIR"

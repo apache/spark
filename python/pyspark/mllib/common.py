@@ -18,7 +18,7 @@
 import py4j.protocol
 from py4j.protocol import Py4JJavaError
 from py4j.java_gateway import JavaObject
-from py4j.java_collections import MapConverter, ListConverter, JavaArray, JavaList
+from py4j.java_collections import ListConverter, JavaArray, JavaList
 
 from pyspark import RDD, SparkContext
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
@@ -70,9 +70,7 @@ def _py2java(sc, obj):
         obj = _to_java_object_rdd(obj)
     elif isinstance(obj, SparkContext):
         obj = obj._jsc
-    elif isinstance(obj, dict):
-        obj = MapConverter().convert(obj, sc._gateway._gateway_client)
-    elif isinstance(obj, (list, tuple)):
+    elif isinstance(obj, list) and (obj or isinstance(obj[0], JavaObject)):
         obj = ListConverter().convert(obj, sc._gateway._gateway_client)
     elif isinstance(obj, JavaObject):
         pass
