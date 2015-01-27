@@ -16,8 +16,7 @@
  */
 package org.apache.spark.mllib.kernels
 
-import breeze.linalg.{DenseVector}
-import org.apache.spark.annotation.DeveloperApi
+import breeze.linalg.DenseVector
 import org.apache.spark.mllib.linalg
 import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.mllib.linalg._
@@ -29,7 +28,7 @@ import org.apache.spark.rdd.RDD
  */
 abstract class SVMKernel[T] extends Kernel with Logging with Serializable {
 
-  def buildKernelMatrixasRDD(mappedData: RDD[(Int, LabeledPoint)],
+  def buildKernelMatrixasRDD(mappedData: RDD[(Long, LabeledPoint)],
                              length: Long): KernelMatrix[T]
 
 }
@@ -50,9 +49,9 @@ object SVMKernel extends Logging with Serializable{
    * @return An (Int, LabeledPoint) Key-Value RDD indexed
    *         from 0 to data.count() - 1
    * */
-  def indexedRDD(data: RDD[LabeledPoint]): RDD[(Int, LabeledPoint)] = {
+  def indexedRDD[T](data: RDD[T]): RDD[(Long, T)] = {
     val sc = data.context
-    val i = sc.accumulator(-1, "Raw Data Index")
+    val i: org.apache.spark.Accumulator[Long] = sc.accumulator(-1, "Raw Data Index")
 
     data.map((point) => {
       i+=1
@@ -72,10 +71,10 @@ object SVMKernel extends Logging with Serializable{
    * @return An [[SVMKernelMatrix]] object.
    *
    * */
-  def buildSVMKernelMatrix(mappedData: RDD[(Int, LabeledPoint)],
+  def buildSVMKernelMatrix(mappedData: RDD[(Long, LabeledPoint)],
                            length: Long,
                            eval: (linalg.Vector, linalg.Vector) =>  Double):
-  KernelMatrix[RDD[((Int, Int), Double)]] = {
+  KernelMatrix[RDD[((Long, Long), Double)]] = {
 
     logInfo("Constructing key-value representation of kernel matrix.")
     logInfo("Dimension: " + length + " x " + length)
@@ -100,12 +99,12 @@ trait KernelMatrix[T] extends Serializable{
   def getKernelMatrix(): T = this.kernel
 }
 
-class SVMKernelMatrix(protected override val kernel: RDD[((Int, Int), Double)],
+class SVMKernelMatrix(protected override val kernel: RDD[((Long, Long), Double)],
                       private val dimension: Long,
-                      private val labels: RDD[(Int, Double)])
-  extends KernelMatrix[RDD[((Int, Int), Double)]] with Logging with Serializable {
+                      private val labels: RDD[(Long, Double)])
+  extends KernelMatrix[RDD[((Long, Long), Double)]] with Logging with Serializable {
 
-  override def getKernelMatrix():RDD[((Int, Int), Double)] = this.kernel
+  override def getKernelMatrix():RDD[((Long, Long), Double)] = this.kernel
 
   /**
    * Defines a function value which
@@ -123,7 +122,7 @@ class SVMKernelMatrix(protected override val kernel: RDD[((Int, Int), Double)],
         //multiply with v
         var sum = kernel.context.accumulator(0.00, "Multiplication product, vector")
         row.foreach((rownum) => {
-          sum += rownum._2*vbr.value(rownum._1._2)
+          sum += rownum._2*vbr.value(rownum._1._2.toInt)
         })
         sum.value
       })
@@ -184,7 +183,7 @@ class SVMKernelMatrix(protected override val kernel: RDD[((Int, Int), Double)],
         val eigenvalue = decomposition._1(i)
         var acc = 0.0
         datapoint._2._2.foreach((p) =>
-          acc += (p._2 * eigenvector(p._1._2)/Math.sqrt(eigenvalue))
+          acc += (p._2 * eigenvector(p._1._2.toInt)/Math.sqrt(eigenvalue))
         )
         acc
       }

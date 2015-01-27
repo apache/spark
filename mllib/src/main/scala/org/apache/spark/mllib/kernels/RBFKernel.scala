@@ -29,7 +29,7 @@ import org.apache.spark.rdd.RDD
  */
 
 class RBFKernel(private var bandwidth: Double)
-  extends SVMKernel[RDD[((Int, Int), Double)]] with Logging with Serializable {
+  extends SVMKernel[RDD[((Long, Long), Double)]] with Logging with Serializable {
 
   def setBandwidth(d: Double): Unit = {
     this.bandwidth = d
@@ -40,9 +40,9 @@ class RBFKernel(private var bandwidth: Double)
     Math.exp(-1*Math.pow(Vectors.norm(diff, 2.0), 2)/(2*Math.pow(bandwidth, 2)))
   }
 
-  override def buildKernelMatrixasRDD(mappedData: RDD[(Int, LabeledPoint)],
+  override def buildKernelMatrixasRDD(mappedData: RDD[(Long, LabeledPoint)],
                                       length: Long):
-  KernelMatrix[RDD[((Int, Int), Double)]] =
+  KernelMatrix[RDD[((Long, Long), Double)]] =
     SVMKernel.buildSVMKernelMatrix(mappedData, length, this.evaluate)
 
 }

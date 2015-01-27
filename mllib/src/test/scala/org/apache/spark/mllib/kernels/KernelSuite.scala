@@ -81,4 +81,22 @@ class KernelSuite extends FunSuite with MLlibTestSparkContext {
     assert(mappedFeaturesrbf.filter((point) => point.features.size == 5).count() == 100)
 
   }
+
+  test("Testing optimal bandwidth calculation on Gaussian Kernel"){
+    val nPoints = 100
+
+    // NOTE: Intercept should be small for generating equal 0s and 1s
+    val A = 0.01
+    val B = -1.5
+    val C = 1.0
+
+    val testData = SVMSuite.generateSVMInput(A, Array[Double](B, C), nPoints, 42)
+
+    val testRDD = sc.parallelize(testData, 2)
+    val newtestRDD = testRDD.map((p) => p.features)
+    newtestRDD.cache()
+    val kern = new GaussianDensityKernel()
+    kern.optimalBandwidth(newtestRDD)
+    assert(kern.eval(newtestRDD.first()) != Double.NaN)
+  }
 }

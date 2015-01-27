@@ -14,34 +14,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.mllib.kernels
 
 import org.apache.spark.Logging
-import org.apache.spark.mllib.linalg
+import org.apache.spark.mllib.linalg.{DenseVector, Vectors, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
 /**
- * Standard Polynomial SVM Kernel
- * of the form K(Xi,Xj) = (Xi^T * Xj + d)^r
+ * Trait defining the basic behavior
+ * of a Kernel density estimator
  */
-class PolynomialKernel(private var degree: Int,
-                       private var offset: Double)
-  extends SVMKernel[RDD[((Long, Long), Double)]] with Logging with Serializable{
+trait KernelEstimator extends Logging {
 
-  def setDegree(d: Int): Unit = {
-    this.degree = d
-  }
+  protected def R(r: Int, N: Long, pilot: breeze.linalg.Vector[Double],
+                  kernel: RDD[((Long, Long), Vector)]): breeze.linalg.Vector[Double]
 
-  def setOffset(o: Int): Unit = {
-    this.offset = o
-  }
 
-  override def evaluate(x: linalg.Vector, y: linalg.Vector): Double =
-    Math.pow(x.toBreeze dot y.toBreeze + this.offset, this.degree)
+  /**
+   * Calculate the AMISE (Asymptotic Mean Integrated Square Error)
+   * optimal bandwidth assignment by 'solve the equation plug in method'
+   **/
+  def optimalBandwidth(data: RDD[Vector]): Unit
 
-  override def buildKernelMatrixasRDD(mappedData: RDD[(Long, LabeledPoint)],
-                                      length: Long):
-  KernelMatrix[RDD[((Long, Long), Double)]] =
-    SVMKernel.buildSVMKernelMatrix(mappedData, length, this.evaluate)
 }

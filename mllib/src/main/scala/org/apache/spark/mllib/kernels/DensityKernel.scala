@@ -17,6 +17,7 @@
 package org.apache.spark.mllib.kernels
 
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
 
 /**
@@ -24,17 +25,15 @@ import org.apache.spark.rdd.RDD
  * implement various Multivariate Density
  * Kernels.
  */
-trait DensityKernel extends Kernel with Serializable{
+trait DensityKernel extends Kernel with Serializable  {
 
   def eval(x: Vector):Double
 
   override def evaluate(x: Vector, y: Vector): Double =
     this.eval(Vectors.fromBreeze(x.toBreeze.-=(y.toBreeze)))
 
-  /**
-   * Calculates the AMISE (Asymptotic Mean Integrated Square Error)
-   * optimal bandwidth assignment by 'solve the equation plug in method'
-   **/
-  protected def optimalBandwidth(data: RDD[Vector]): Vector
+  protected def derivative(n: Int, x: Double): Double
 
+  protected val mu: Double
+  protected val r: Double
 }
