@@ -1838,7 +1838,7 @@ class DataFrame(object):
         department = sqlContext.parquetFile("...")
 
         people.filter(people.age > 30).join(department, people.deptId == department.id)) \
-          .groupby(department.name, "gender").agg({"salary": "avg", "age": "max"})
+          .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
     """
 
     def __init__(self, jdf, sql_ctx):
@@ -2178,13 +2178,13 @@ class DataFrame(object):
 
     where = filter
 
-    def groupby(self, *cols):
+    def groupBy(self, *cols):
         """ Group the [[DataFrame]] using the specified columns,
         so we can run aggregation on them. See :class:`GroupedDataFrame`
         for all the available aggregate functions::
 
-            df.groupby(df.department).avg()
-            df.groupby("department", "gender").agg({
+            df.groupBy(df.department).avg()
+            df.groupBy("department", "gender").agg({
                 "salary": "avg",
                 "age":    "max",
             })
@@ -2194,16 +2194,16 @@ class DataFrame(object):
         else:
             cols = [c._jc for c in cols]
         jcols = ListConverter().convert(cols, self._sc._gateway._gateway_client)
-        jdf = self._jdf.groupby(self._jdf.toColumnArray(jcols))
+        jdf = self._jdf.groupBy(self._jdf.toColumnArray(jcols))
         return GroupedDataFrame(jdf, self.sql_ctx)
 
     def agg(self, *exprs):
         """ Aggregate on the entire [[DataFrame]] without groups
-        (shorthand for df.groupby.agg())::
+        (shorthand for df.groupBy.agg())::
 
             df.agg({"age": "max", "salary": "avg"})
         """
-        return self.groupby().agg(*exprs)
+        return self.groupBy().agg(*exprs)
 
     def unionAll(self, other):
         """ Return a new DataFrame containing union of rows in this
@@ -2266,7 +2266,7 @@ class GroupedDataFrame(object):
 
     """
     A set of methods for aggregations on a :class:`DataFrame`,
-    created by DataFrame.groupby().
+    created by DataFrame.groupBy().
     """
 
     def __init__(self, jdf, sql_ctx):

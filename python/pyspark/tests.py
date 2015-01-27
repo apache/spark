@@ -986,7 +986,7 @@ class SQLTests(ReusedPySparkTestCase):
     def test_aggregator(self):
         from pyspark.sql import Aggregator as Agg
         df = self.df
-        g = df.groupby()
+        g = df.groupBy()
         self.assertEqual([99, 100], sorted(g.agg({'key': 'max', 'value': 'count'}).collect()[0]))
         self.assertEqual([Row(**{"AVG(key#0)": 49.5})], g.mean().collect())
         # self.assertEqual((0, '100'), tuple(g.agg(Agg.first(df.key), Agg.last(df.value)).first()))

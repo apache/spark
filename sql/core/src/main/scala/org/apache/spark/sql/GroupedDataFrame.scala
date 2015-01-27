@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 
 
 /**
- * A set of methods for aggregations on a [[DataFrame]], created by [[DataFrame.groupby]].
+ * A set of methods for aggregations on a [[DataFrame]], created by [[DataFrame.groupBy]].
  */
 class GroupedDataFrame protected[sql](df: DataFrame, groupingExprs: Seq[Expression])
   extends GroupedDataFrameApi {
@@ -62,7 +62,7 @@ class GroupedDataFrame protected[sql](df: DataFrame, groupingExprs: Seq[Expressi
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
    * {{{
    *   // Selects the age of the oldest employee and the aggregate expense for each department
-   *   df.groupby("department").agg(Map(
+   *   df.groupBy("department").agg(Map(
    *     "age" -> "max"
    *     "sum" -> "expense"
    *   ))
@@ -80,7 +80,7 @@ class GroupedDataFrame protected[sql](df: DataFrame, groupingExprs: Seq[Expressi
    * The available aggregate methods are `avg`, `max`, `min`, `sum`, `count`.
    * {{{
    *   // Selects the age of the oldest employee and the aggregate expense for each department
-   *   df.groupby("department").agg(Map(
+   *   df.groupBy("department").agg(Map(
    *     "age" -> "max"
    *     "sum" -> "expense"
    *   ))
@@ -96,7 +96,7 @@ class GroupedDataFrame protected[sql](df: DataFrame, groupingExprs: Seq[Expressi
    * {{{
    *   // Selects the age of the oldest employee and the aggregate expense for each department
    *   import org.apache.spark.sql.dsl._
-   *   df.groupby("department").agg(max($"age"), sum($"expense"))
+   *   df.groupBy("department").agg(max($"age"), sum($"expense"))
    * }}}
    */
   @scala.annotation.varargs

@@ -77,7 +77,7 @@ import org.apache.spark.util.Utils
  *
  *   people.filter("age" > 30)
  *     .join(department, people("deptId") === department("id"))
- *     .groupby(department("name"), "gender")
+ *     .groupBy(department("name"), "gender")
  *     .agg(avg(people("salary")), max(people("age")))
  * }}}
  */
@@ -331,17 +331,17 @@ class DataFrame protected[sql](
    *
    * {{{
    *   // Compute the average for all numeric columns grouped by department.
-   *   df.groupby($"department").avg()
+   *   df.groupBy($"department").avg()
    *
    *   // Compute the max age and average salary, grouped by department and gender.
-   *   df.groupby($"department", $"gender").agg(Map(
+   *   df.groupBy($"department", $"gender").agg(Map(
    *     "salary" -> "avg",
    *     "age" -> "max"
    *   ))
    * }}}
    */
   @scala.annotation.varargs
-  override def groupby(cols: Column*): GroupedDataFrame = {
+  override def groupBy(cols: Column*): GroupedDataFrame = {
     new GroupedDataFrame(this, cols.map(_.expr))
   }
 
@@ -349,22 +349,22 @@ class DataFrame protected[sql](
    * Group the [[DataFrame]] using the specified columns, so we can run aggregation on them.
    * See [[GroupedDataFrame]] for all the available aggregate functions.
    *
-   * This is a variant of groupby that can only group by existing columns using column names
+   * This is a variant of groupBy that can only group by existing columns using column names
    * (i.e. cannot construct expressions).
    *
    * {{{
    *   // Compute the average for all numeric columns grouped by department.
-   *   df.groupby("department").avg()
+   *   df.groupBy("department").avg()
    *
    *   // Compute the max age and average salary, grouped by department and gender.
-   *   df.groupby($"department", $"gender").agg(Map(
+   *   df.groupBy($"department", $"gender").agg(Map(
    *     "salary" -> "avg",
    *     "age" -> "max"
    *   ))
    * }}}
    */
   @scala.annotation.varargs
-  override def groupby(col1: String, cols: String*): GroupedDataFrame = {
+  override def groupBy(col1: String, cols: String*): GroupedDataFrame = {
     val colNames: Seq[String] = col1 +: cols
     new GroupedDataFrame(this, colNames.map(colName => resolve(colName)))
   }
@@ -372,23 +372,23 @@ class DataFrame protected[sql](
   /**
    * Aggregate on the entire [[DataFrame]] without groups.
    * {{
-   *   // df.agg(...) is a shorthand for df.groupby().agg(...)
+   *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg(Map("age" -> "max", "salary" -> "avg"))
-   *   df.groupby().agg(Map("age" -> "max", "salary" -> "avg"))
+   *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
    * }}
    */
-  override def agg(exprs: Map[String, String]): DataFrame = groupby().agg(exprs)
+  override def agg(exprs: Map[String, String]): DataFrame = groupBy().agg(exprs)
 
   /**
    * Aggregate on the entire [[DataFrame]] without groups.
    * {{
-   *   // df.agg(...) is a shorthand for df.groupby().agg(...)
+   *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
    *   df.agg(max($"age"), avg($"salary"))
-   *   df.groupby().agg(max($"age"), avg($"salary"))
+   *   df.groupBy().agg(max($"age"), avg($"salary"))
    * }}
    */
   @scala.annotation.varargs
-  override def agg(expr: Column, exprs: Column*): DataFrame = groupby().agg(expr, exprs :_*)
+  override def agg(expr: Column, exprs: Column*): DataFrame = groupBy().agg(expr, exprs :_*)
 
   /**
    * Return a new [[DataFrame]] by taking the first `n` rows. The difference between this function
@@ -484,7 +484,14 @@ class DataFrame protected[sql](
   /**
    * Return the number of rows in the [[DataFrame]].
    */
-  override def count(): Long = groupby().count().rdd.collect().head.getLong(0)
+  override def count(): Long = groupBy().count().rdd.collect().head.getLong(0)
+
+  /**
+   * Return a new [[DataFrame]] that has exactly `numPartitions` partitions.
+   */
+  override def repartition(numPartitions: Int): DataFrame = {
+    sqlContext.applySchema(rdd.repartition(numPartitions), schema)
+  }
 
   override def persist(): this.type = {
     sqlContext.cacheQuery(this)

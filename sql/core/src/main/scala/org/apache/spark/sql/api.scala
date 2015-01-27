@@ -54,6 +54,7 @@ trait RDDApi[T] {
 
   def count(): Long
 
+  def repartition(numPartitions: Int): DataFrame
 }
 
 
@@ -97,10 +98,10 @@ trait DataFrameSpecificApi {
   def where(condition: Column): DataFrame
 
   @scala.annotation.varargs
-  def groupby(cols: Column*): GroupedDataFrame
+  def groupBy(cols: Column*): GroupedDataFrame
 
   @scala.annotation.varargs
-  def groupby(col1: String, cols: String*): GroupedDataFrame
+  def groupBy(col1: String, cols: String*): GroupedDataFrame
 
   def agg(exprs: Map[String, String]): DataFrame
 

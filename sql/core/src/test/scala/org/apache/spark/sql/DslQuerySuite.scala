@@ -42,11 +42,11 @@ class DslQuerySuite extends QueryTest {
 
   test("agg") {
     checkAnswer(
-      testData2.groupby("a").agg($"a", sum($"b")),
+      testData2.groupBy("a").agg($"a", sum($"b")),
       Seq(Row(1,3), Row(2,3), Row(3,3))
     )
     checkAnswer(
-      testData2.groupby("a").agg($"a", sum($"b").as("totB")).agg(sum('totB)),
+      testData2.groupBy("a").agg($"a", sum($"b").as("totB")).agg(sum('totB)),
       Row(9)
     )
     checkAnswer(
@@ -205,12 +205,12 @@ class DslQuerySuite extends QueryTest {
 
   test("null count") {
     checkAnswer(
-      testData3.groupby('a).agg('a, count('b)),
+      testData3.groupBy('a).agg('a, count('b)),
       Seq(Row(1,0), Row(2, 1))
     )
 
     checkAnswer(
-      testData3.groupby('a).agg('a, count('a + 'b)),
+      testData3.groupBy('a).agg('a, count('a + 'b)),
       Seq(Row(1,0), Row(2, 1))
     )
 
