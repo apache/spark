@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime, timedelta
 import dateutil.parser
 import json
@@ -593,13 +594,14 @@ class Airflow(BaseView):
         task_id = request.args.get('task_id')
         dag = dagbag.dags[dag_id]
         task = dag.get_task(task_id)
+        task = copy.deepcopy(task)
+        task.materialize_files()
 
         special_attrs = {
             'sql': SqlLexer,
             'hql': SqlLexer,
             'bash_command': BashLexer,
         }
-        special_exts = ['.hql', '.sql', '.sh', '.bash']
         attributes = []
         for attr_name in dir(task):
             if not attr_name.startswith('_'):
@@ -615,15 +617,6 @@ class Airflow(BaseView):
         for attr_name in special_attrs:
             if hasattr(task, attr_name):
                 source = getattr(task, attr_name)
-                if any([source.endswith(ext) for ext in special_exts]):
-                    filepath = dag.folder + '/' + source
-                    try:
-                        f = open(filepath, 'r')
-                        source = f.read()
-                        f.close()
-                    except Exception as e:
-                        logging.error(e)
-                        source = getattr(task, attr_name)
                 special_attrs_rendered[attr_name] = highlight(
                     source,
                     special_attrs[attr_name](),  # Lexer call

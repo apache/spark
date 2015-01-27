@@ -825,14 +825,12 @@ class BaseOperator(Base):
         # Getting the content of files for template_field / template_ext
         for field in self.template_fields:
             content = getattr(self, field)
-            for ext in self.template_ext:
-                if content.endswith(ext):
-
-                    env = self.dag.get_template_env()
-                    template = env.get_template(content)
-                    f = open(template.filename, 'r')
-                    setattr(self, field, f.read())
-                    f.close()
+            if any([content.endswith(ext) for ext in self.template_ext]):
+                env = self.dag.get_template_env()
+                template = env.get_template(content)
+                f = open(template.filename, 'r')
+                setattr(self, field, f.read())
+                f.close()
 
     @property
     def upstream_list(self):
