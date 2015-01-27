@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, Cast, Literal, Pred
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.{QueryTest, SQLConf, SchemaRDD}
+
 /**
  * A test suite that tests Parquet filter2 API based filter pushdown optimization.
  *
@@ -93,12 +94,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
 
   test("filter pushdown - short") {
     withParquetRDD((1 to 4).map(i => Tuple1(Option(i.toShort)))) { implicit rdd =>
-      
       checkFilterPredicate(Cast('_1, IntegerType) === 1, classOf[Eq   [_]], 1)
       checkFilterPredicate(Cast('_1, IntegerType) !== 1, classOf[NotEq[_]], (2 to 4).map(Row.apply(_)))
       
       checkFilterPredicate(Cast('_1, IntegerType) < 2,  classOf[Lt  [_]], 1)
-      checkFilterPredicate(Cast('_1, IntegerType)  > 3,  classOf[Gt  [_]], 4)
+      checkFilterPredicate(Cast('_1, IntegerType) > 3,  classOf[Gt  [_]], 4)
       checkFilterPredicate(Cast('_1, IntegerType) <= 1, classOf[LtEq[_]], 1)
       checkFilterPredicate(Cast('_1, IntegerType) >= 4, classOf[GtEq[_]], 4)
       
@@ -113,7 +113,6 @@ class ParquetFilterSuite extends QueryTest with ParquetTest {
         classOf[Operators.And], 3)
       checkFilterPredicate(Cast('_1, IntegerType) < 2 || Cast('_1, IntegerType) > 3, 
         classOf[Operators.Or],  Seq(Row(1), Row(4)))
-      
     }
   }
 
