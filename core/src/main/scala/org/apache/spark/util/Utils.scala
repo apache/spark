@@ -370,6 +370,104 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Download `in` to `tempFile`, then move it to `destFile`.
+   *
+   * If `destFile` already exists:
+   *   - no-op if its contents equal those of `sourceFile`,
+   *   - throw an exception if `fileOverwrite` is false,
+   *   - attempt to overwrite it otherwise.
+   *
+   * @param url URL that `sourceFile` originated from, for logging purposes.
+   * @param in InputStream to download.
+   * @param tempFile File path to download `in` to.
+   * @param destFile File path to move `tempFile` to.
+   * @param fileOverwrite Whether to delete/overwrite an existing `destFile` that does not match
+   *                      `sourceFile`
+   */
+  private def downloadFile(
+      url: String,
+      in: InputStream,
+      tempFile: File,
+      destFile: File,
+      fileOverwrite: Boolean): Unit = {
+
+    try {
+      val out = new FileOutputStream(tempFile)
+      Utils.copyStream(in, out, closeStreams = true)
+      copyFile(url, tempFile, destFile, fileOverwrite, removeSourceFile = true)
+    } finally {
+      // Catch-all for the couple of cases where for some reason we didn't move `tempFile` to
+      // `destFile`.
+      if (tempFile.exists()) {
+        tempFile.delete()
+      }
+    }
+  }
+
+  /**
+   * Copy `sourceFile` to `destFile`.
+   *
+   * If `destFile` already exists:
+   *   - no-op if its contents equal those of `sourceFile`,
+   *   - throw an exception if `fileOverwrite` is false,
+   *   - attempt to overwrite it otherwise.
+   *
+   * @param url URL that `sourceFile` originated from, for logging purposes.
+   * @param sourceFile File path to copy/move from.
+   * @param destFile File path to copy/move to.
+   * @param fileOverwrite Whether to delete/overwrite an existing `destFile` that does not match
+   *                      `sourceFile`
+   * @param removeSourceFile Whether to remove `sourceFile` after / as part of moving/copying it to
+   *                         `destFile`.
+   */
+  private def copyFile(
+      url: String,
+      sourceFile: File,
+      destFile: File,
+      fileOverwrite: Boolean,
+      removeSourceFile: Boolean = false): Unit = {
+
+    if (destFile.exists) {
+      if (!Files.equal(sourceFile, destFile)) {
+        if (fileOverwrite) {
+          logInfo(
+            s"File $destFile exists and does not match contents of $url, replacing it with $url"
+          )
+          if (!destFile.delete()) {
+            throw new SparkException(
+              "Failed to delete %s while attempting to overwrite it with %s".format(
+                destFile.getAbsolutePath,
+                sourceFile.getAbsolutePath
+              )
+            )
+          }
+        } else {
+          throw new SparkException(
+            s"File $destFile exists and does not match contents of $url")
+        }
+      } else {
+        // Do nothing if the file contents are the same, i.e. this file has been copied
+        // previously.
+        logInfo(
+          "%s has been previously copied to %s".format(
+            sourceFile.getAbsolutePath,
+            destFile.getAbsolutePath
+          )
+        )
+        return
+      }
+    }
+
+    // The file does not exist in the target directory. Copy or move it there.
+    if (removeSourceFile) {
+      Files.move(sourceFile, destFile)
+    } else {
+      logInfo(s"Copying ${sourceFile.getAbsolutePath} to ${destFile.getAbsolutePath}")
+      Files.copy(sourceFile, destFile)
+    }
+  }
+
+  /**
    * Download a file requested by the executor. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
    *
@@ -402,67 +500,17 @@ private[spark] object Utils extends Logging {
         uc.setReadTimeout(timeout)
         uc.connect()
         val in = uc.getInputStream()
-        val out = new FileOutputStream(tempFile)
-        Utils.copyStream(in, out, true)
-        if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
-          if (fileOverwrite) {
-            targetFile.delete()
-            logInfo(("File %s exists and does not match contents of %s, " +
-              "replacing it with %s").format(targetFile, url, url))
-          } else {
-            tempFile.delete()
-            throw new SparkException(
-              "File " + targetFile + " exists and does not match contents of" + " " + url)
-          }
-        }
-        Files.move(tempFile, targetFile)
-      case "file" | null =>
+        downloadFile(url, in, tempFile, targetFile, fileOverwrite)
+      case "file" =>
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
         val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
-        var shouldCopy = true
-        if (targetFile.exists) {
-          if (!Files.equal(sourceFile, targetFile)) {
-            if (fileOverwrite) {
-              targetFile.delete()
-              logInfo(("File %s exists and does not match contents of %s, " +
-                "replacing it with %s").format(targetFile, url, url))
-            } else {
-              throw new SparkException(
-                "File " + targetFile + " exists and does not match contents of" + " " + url)
-            }
-          } else {
-            // Do nothing if the file contents are the same, i.e. this file has been copied
-            // previously.
-            logInfo(sourceFile.getAbsolutePath + " has been previously copied to "
-              + targetFile.getAbsolutePath)
-            shouldCopy = false
-          }
-        }
-
-        if (shouldCopy) {
-          // The file does not exist in the target directory. Copy it there.
-          logInfo("Copying " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
-          Files.copy(sourceFile, targetFile)
-        }
+        copyFile(url, sourceFile, targetFile, fileOverwrite)
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
         val fs = getHadoopFileSystem(uri)
         val in = fs.open(new Path(uri))
-        val out = new FileOutputStream(tempFile)
-        Utils.copyStream(in, out, true)
-        if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
-          if (fileOverwrite) {
-            targetFile.delete()
-            logInfo(("File %s exists and does not match contents of %s, " +
-              "replacing it with %s").format(targetFile, url, url))
-          } else {
-            tempFile.delete()
-            throw new SparkException(
-              "File " + targetFile + " exists and does not match contents of" + " " + url)
-          }
-        }
-        Files.move(tempFile, targetFile)
+        downloadFile(url, in, tempFile, targetFile, fileOverwrite)
     }
     // Decompress the file if it's a .tar or .tar.gz
     if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {
@@ -1556,19 +1604,29 @@ private[spark] object Utils extends Logging {
 /**
  * A utility class to redirect the child process's stdout or stderr.
  */
-private[spark] class RedirectThread(in: InputStream, out: OutputStream, name: String)
+private[spark] class RedirectThread(
+    in: InputStream,
+    out: OutputStream,
+    name: String,
+    propagateEof: Boolean = false)
   extends Thread(name) {
 
   setDaemon(true)
   override def run() {
     scala.util.control.Exception.ignoring(classOf[IOException]) {
       // FIXME: We copy the stream on the level of bytes to avoid encoding problems.
-      val buf = new Array[Byte](1024)
-      var len = in.read(buf)
-      while (len != -1) {
-        out.write(buf, 0, len)
-        out.flush()
-        len = in.read(buf)
+      try {
+        val buf = new Array[Byte](1024)
+        var len = in.read(buf)
+        while (len != -1) {
+          out.write(buf, 0, len)
+          out.flush()
+          len = in.read(buf)
+        }
+      } finally {
+        if (propagateEof) {
+          out.close()
+        }
       }
     }
   }

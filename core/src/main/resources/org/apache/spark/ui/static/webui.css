@@ -120,6 +120,16 @@ pre {
   border: none;
 }
 
+.version {
+  line-height: 30px;
+  vertical-align: bottom;
+  font-size: 12px;
+  padding: 0;
+  margin: 0;
+  font-weight: bold;
+  color: #777;
+}
+
 .tooltip {
  font-weight: normal;
 }

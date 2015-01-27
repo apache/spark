@@ -20,7 +20,7 @@ package org.apache.spark.tools
 import java.util.concurrent.{CountDownLatch, Executors}
 import java.util.concurrent.atomic.AtomicLong
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.util.Utils
 import org.apache.spark.executor.ShuffleWriteMetrics
@@ -48,11 +48,12 @@ object StoragePerfTester {
     val writeData = "1" * recordLength
     val executor = Executors.newFixedThreadPool(numMaps)
 
-    System.setProperty("spark.shuffle.compress", "false")
-    System.setProperty("spark.shuffle.sync", "true")
+    val conf = new SparkConf()
+      .set("spark.shuffle.compress", "false")
+      .set("spark.shuffle.sync", "true")
 
     // This is only used to instantiate a BlockManager. All thread scheduling is done manually.
-    val sc = new SparkContext("local[4]", "Write Tester")
+    val sc = new SparkContext("local[4]", "Write Tester", conf)
     val blockManager = sc.env.blockManager
 
     def writeOutputBytes(mapId: Int, total: AtomicLong) = {
