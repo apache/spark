@@ -677,7 +677,7 @@ private[master] class Master(
       }
     }
 
-    if (!conf.getBoolean("spark.executor.multiPerWorker", false)) {
+    if (!conf.getBoolean("spark.executor.multiPerWorker", true)) {
       startSingleExecutorPerWorker()
     } else {
       startMultiExecutorsPerWorker()
