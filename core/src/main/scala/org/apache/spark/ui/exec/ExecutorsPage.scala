@@ -56,6 +56,7 @@ private[ui] class ExecutorsPage(
     val diskUsed = storageStatusList.map(_.diskUsed).sum
     val execInfo = for (statusId <- 0 until storageStatusList.size) yield getExecInfo(statusId)
     val execInfoSorted = execInfo.sortBy(_.id)
+    val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
 
     val execTable =
       <table class={UIUtils.TABLE_CLASS_STRIPED}>
@@ -80,11 +81,11 @@ private[ui] class ExecutorsPage(
               Shuffle Write
             </span>
           </th>
-          <th class="sorttable_nosort">Logs</th>
+          {if (logsExist) <th class="sorttable_nosort">Logs</th> else Seq.empty}
           {if (threadDumpEnabled) <th class="sorttable_nosort">Thread Dump</th> else Seq.empty}
         </thead>
         <tbody>
-          {execInfoSorted.map(execRow)}
+          {execInfoSorted.map(execRow(_, logsExist))}
         </tbody>
       </table>
 
@@ -109,7 +110,7 @@ private[ui] class ExecutorsPage(
   }
 
   /** Render an HTML row representing an executor */
-  private def execRow(info: ExecutorSummaryInfo): Seq[Node] = {
+  private def execRow(info: ExecutorSummaryInfo, logsExist: Boolean): Seq[Node] = {
     val maximumMemory = info.maxMemory
     val memoryUsed = info.memoryUsed
     val diskUsed = info.diskUsed
@@ -140,13 +141,19 @@ private[ui] class ExecutorsPage(
       <td sorttable_customkey={info.totalShuffleWrite.toString}>
         {Utils.bytesToString(info.totalShuffleWrite)}
       </td>
-      <td>
       {
-        info.executorLogs.map(entry => {
-          <div><a href={s"${entry._2}"}>{entry._1}</a></div>
-        })
+        if (logsExist) {
+          <td>
+            {info.executorLogs.map { entry => {
+            <div>
+              <a href={s"${entry._2}"}>
+                {entry._1}
+              </a>
+            </div>}
+            }}
+          </td>
+        }
       }
-      </td>
       {
         if (threadDumpEnabled) {
           val encodedId = URLEncoder.encode(info.id, "UTF-8")

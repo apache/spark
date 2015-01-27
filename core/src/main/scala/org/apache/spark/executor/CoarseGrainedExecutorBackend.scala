@@ -53,7 +53,7 @@ private[spark] class CoarseGrainedExecutorBackend(
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
   }
 
-  def extractLogUrls : Map[String, String] = {
+  def extractLogUrls: Map[String, String] = {
     val prefix = "SPARK_LOG_URL_"
     sys.env.filterKeys(_.startsWith(prefix))
       .map(e => (e._1.substring(prefix.length).toLowerCase, e._2))
