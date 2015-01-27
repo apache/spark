@@ -290,7 +290,6 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
       "--master", "local",
-      "--conf", "spark.ui.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -305,7 +304,6 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "--name", "testApp",
       "--master", "local-cluster[2,1,512]",
       "--jars", jarsString,
-      "--conf", "spark.ui.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -475,6 +473,7 @@ object JarCreationTest extends Logging {
     if (result.nonEmpty) {
       throw new Exception("Could not load user class from jar:\n" + result(0))
     }
+    sc.stop()
   }
 }
 
@@ -500,5 +499,6 @@ object SimpleApplicationTest {
           s"Master had $config=$masterValue but executor had $config=$executorValue")
       }
     }
+    sc.stop()
   }
 }
