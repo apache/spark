@@ -824,7 +824,25 @@ class Airflow(BaseView):
         upstream = request.args.get('upstream') == "true"
         downstream = request.args.get('downstream') == "true"
 
-        if action == 'clear':
+        if action == "run":
+            from airflow.executors import DEFAULT_EXECUTOR as executor
+            from airflow.executors import CeleryExecutor
+            if not isinstance(executor, CeleryExecutor):
+                flash("Only works with the CeleryExecutor, sorry", "error")
+                return redirect(origin)
+            force = request.args.get('force') == "true"
+            deps = request.args.get('deps') == "true"
+            ti = models.TaskInstance(task=task, execution_date=execution_date)
+            executor.start()
+            executor.queue_task_instance(
+                ti, force=force, ignore_dependencies=deps)
+            executor.heartbeat()
+            flash(
+                "Sent {} to the message queue, "
+                "it should start any moment now.".format(ti))
+            return redirect(origin)
+
+        elif action == 'clear':
             future = request.args.get('future') == "true"
             past = request.args.get('past') == "true"
 

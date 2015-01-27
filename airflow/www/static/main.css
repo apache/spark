@@ -15,6 +15,9 @@ td>span.glyphicon{
     padding-left: 3px;
     padding-top: 3px;
 }
+button.btn {
+    border: 1px solid black;
+}
 span.status_square {
     width:10px;
     height:10px;
