@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst
 
 import java.math.BigInteger
-import java.sql.{ Date, Timestamp}
+import java.sql.{Date, Timestamp}
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.sql.catalyst.expressions.Row

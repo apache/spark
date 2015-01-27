@@ -22,7 +22,6 @@ import java.sql.{Date, Timestamp}
 import scala.collection.immutable.HashSet
 
 import org.scalactic.TripleEqualsSupport.Spread
-
 import org.scalatest.FunSuite
 import org.scalatest.Matchers._
 
