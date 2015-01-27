@@ -26,6 +26,7 @@ import scala.io.Source
 import com.google.common.base.Charsets
 import org.eclipse.jetty.server.{Request, Server}
 import org.eclipse.jetty.server.handler.AbstractHandler
+import org.eclipse.jetty.util.thread.QueuedThreadPool
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion, Logging, SparkConf}
 import org.apache.spark.util.Utils
@@ -52,6 +53,9 @@ private[spark] abstract class SubmitRestServer(host: String, requestedPort: Int,
 
   private def doStart(startPort: Int): (Server, Int) = {
     val server = new Server(new InetSocketAddress(host, requestedPort))
+    val threadPool = new QueuedThreadPool
+    threadPool.setDaemon(true)
+    server.setThreadPool(threadPool)
     server.setHandler(handler)
     server.start()
     val boundPort = server.getConnectors()(0).getLocalPort
