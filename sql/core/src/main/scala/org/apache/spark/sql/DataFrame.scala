@@ -590,17 +590,7 @@ class DataFrame protected[sql](
    */
   protected[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val fieldTypes = schema.fields.map(_.dataType)
-    val jrdd = this.rdd.map(EvaluatePython.rowToArray(_, fieldTypes)).toJavaRDD()
+    val jrdd = rdd.map(EvaluatePython.rowToArray(_, fieldTypes)).toJavaRDD()
     SerDeUtil.javaToPython(jrdd)
-  }
-  /**
-   * Serializes the Array[Row] returned by collect(), using the same format as javaToPython.
-   */
-  protected[sql] def collectToPython: JList[Array[Byte]] = {
-    val fieldTypes = schema.fields.map(_.dataType)
-    val pickle = new Pickler
-    new ArrayList[Array[Byte]](collect().map { row =>
-      EvaluatePython.rowToArray(row, fieldTypes)
-    }.grouped(100).map(batched => pickle.dumps(batched.toArray)).toIterable)
   }
 }

@@ -1973,7 +1973,7 @@ class DataFrame(object):
         [Row(field1=1, field2=u'row1'), ..., Row(field1=3, field2=u'row3')]
         """
         with SCCallSiteSync(self._sc) as css:
-            bytesInJava = self._jdf.collectToPython().iterator()
+            bytesInJava = self._jdf.javaToPython().collect().iterator()
         cls = _create_cls(self.schema())
         tempFile = NamedTemporaryFile(delete=False, dir=self._sc._temp_dir)
         tempFile.close()
@@ -1997,14 +1997,14 @@ class DataFrame(object):
         return self.limit(num).collect()
 
     def map(self, f):
+        """ Return a new RDD by applying a function to each Row, it's a
+        shorthand for df.rdd.map()
+        """
         return self.rdd.map(f)
 
-    # Convert each object in the RDD to a Row with the right class
-    # for this DataFrame, so that fields can be accessed as attributes.
     def mapPartitions(self, f, preservesPartitioning=False):
         """
-        Return a new RDD by applying a function to each partition of this RDD,
-        while tracking the index of the original partition.
+        Return a new RDD by applying a function to each partition.
 
         >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
         >>> def f(iterator): yield 1
@@ -2013,21 +2013,28 @@ class DataFrame(object):
         """
         return self.rdd.mapPartitions(f, preservesPartitioning)
 
-    # We override the default cache/persist/checkpoint behavior
-    # as we want to cache the underlying DataFrame object in the JVM,
-    # not the PythonRDD checkpointed by the super class
     def cache(self):
+        """ Persist with the default storage level (C{MEMORY_ONLY_SER}).
+        """
         self.is_cached = True
         self._jdf.cache()
         return self
 
     def persist(self, storageLevel=StorageLevel.MEMORY_ONLY_SER):
+        """ Set the storage level to persist its values across operations
+        after the first time it is computed. This can only be used to assign
+        a new storage level if the RDD does not have a storage level set yet.
+        If no storage level is specified defaults to (C{MEMORY_ONLY_SER}).
+        """
         self.is_cached = True
         javaStorageLevel = self._sc._getJavaStorageLevel(storageLevel)
         self._jdf.persist(javaStorageLevel)
         return self
 
     def unpersist(self, blocking=True):
+        """ Mark it as non-persistent, and remove all blocks for it from
+        memory and disk.
+        """
         self.is_cached = False
         self._jdf.unpersist(blocking)
         return self
@@ -2036,10 +2043,12 @@ class DataFrame(object):
     #     rdd = self._jdf.coalesce(numPartitions, shuffle, None)
     #     return DataFrame(rdd, self.sql_ctx)
 
-    # def repartition(self, numPartitions):
-    #     rdd = self._jdf.repartition(numPartitions, None)
-    #     return DataFrame(rdd, self.sql_ctx)
-    #
+    def repartition(self, numPartitions):
+        """ Return a new :class:`DataFrame` that has exactly `numPartitions`
+        partitions.
+        """
+        rdd = self._jdf.repartition(numPartitions, None)
+        return DataFrame(rdd, self.sql_ctx)
 
     def sample(self, withReplacement, fraction, seed=None):
         """
@@ -2359,11 +2368,11 @@ def _scalaMethod(name):
     """ Translate operators into methodName in Scala
 
     For example:
-    >>> scalaMethod('+')
+    >>> _scalaMethod('+')
     '$plus'
-    >>> scalaMethod('>=')
+    >>> _scalaMethod('>=')
     '$greater$eq'
-    >>> scalaMethod('cast')
+    >>> _scalaMethod('cast')
     'cast'
     """
     return ''.join(SCALA_METHOD_MAPPINGS.get(c, c) for c in name)
