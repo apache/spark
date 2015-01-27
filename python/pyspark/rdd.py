@@ -817,7 +817,8 @@ class RDD(object):
 
     def treeAggregate(self, zeroValue, seqOp, combOp, depth=2):
         """
-        Aggregates the elements of this RDD in a multi-level tree pattern.
+        Aggregates the elements of this RDD in a multi-level tree
+        pattern.
 
         :param depth: suggested depth of the tree (default: 2)
 

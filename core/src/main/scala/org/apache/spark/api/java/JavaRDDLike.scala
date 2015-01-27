@@ -351,13 +351,13 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Reduces the elements of this RDD in a multi-level tree pattern.
    *
-   * @param depth suggested depth of the tree (default: 2)
-   * @see [[reduce]]
+   * @param depth suggested depth of the tree
+   * @see [[org.apache.spark.api.java.JavaRDDLike#reduce]]
    */
   def treeReduce(f: JFunction2[T, T, T], depth: Int): T = rdd.treeReduce(f, depth)
 
   /**
-   * [[treeReduce]] with suggested depth 2.
+   * [[org.apache.spark.api.java.JavaRDDLike#treeReduce]] with suggested depth 2.
    */
   def treeReduce(f: JFunction2[T, T, T]): T = treeReduce(f, 2)
 
@@ -386,22 +386,24 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Aggregates the elements of this RDD in a multi-level tree pattern.
    *
    * @param depth suggested depth of the tree
-   * @see [[aggregate]]
+   * @see [[org.apache.spark.api.java.JavaRDDLike#aggregate]]
    */
-  def treeAggregate[U](zeroValue: U)(
+  def treeAggregate[U](
+      zeroValue: U,
       seqOp: JFunction2[U, T, U],
       combOp: JFunction2[U, U, U],
       depth: Int): U = {
-    rdd.treeAggregate(zeroValue)(seqOp, combOp, depth)
+    rdd.treeAggregate(zeroValue)(seqOp, combOp, depth)(fakeClassTag[U])
   }
 
   /**
-   * [[treeAggregate]] with suggested depth 2.
+   * [[org.apache.spark.api.java.JavaRDDLike#treeAggregate]] with suggested depth 2.
    */
-  def treeAggregate[U](zeroValue: U)(
+  def treeAggregate[U](
+      zeroValue: U,
       seqOp: JFunction2[U, T, U],
       combOp: JFunction2[U, U, U]): U = {
-    rdd.treeAggregate(zeroValue)(seqOp, combOp, 2)
+    treeAggregate(zeroValue, seqOp, combOp, 2)
   }
 
   /**
