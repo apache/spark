@@ -17,8 +17,7 @@
 
 from pyspark.sql import inherit_doc
 from pyspark.ml import JavaTransformer
-from pyspark.ml.param import Param
-from pyspark.ml.param.shared import HasInputCol, HasOutputCol
+from pyspark.ml.param.shared import HasInputCol, HasOutputCol, HasNumFeatures
 
 
 @inherit_doc
@@ -33,23 +32,11 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
 
 
 @inherit_doc
-class HashingTF(JavaTransformer, HasInputCol, HasOutputCol):
+class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
 
     def __init__(self):
         super(HashingTF, self).__init__()
-        #: param for number of features
-        self.numFeatures = Param(self, "numFeatures", "number of features", 1 << 18)
 
     @property
     def _java_class(self):
         return "org.apache.spark.ml.feature.HashingTF"
-
-    def setNumFeatures(self, value):
-        self.paramMap[self.numFeatures] = value
-        return self
-
-    def getNumFeatures(self):
-        if self.numFeatures in self.paramMap:
-            return self.paramMap[self.numFeatures]
-        else:
-            return self.numFeatures.defaultValue

@@ -90,7 +90,8 @@ if __name__ == "__main__":
         ("labelCol", "label column name", "'label'"),
         ("predictionCol", "prediction column name", "'prediction'"),
         ("inputCol", "input column name", "'input'"),
-        ("outputCol", "output column name", "'output'")]
+        ("outputCol", "output column name", "'output'"),
+        ("numFeatures", "number of features", "1 << 18")]
     code = []
     for name, doc, defaultValue in shared:
         code.append(_gen_param_code(name, doc, defaultValue))

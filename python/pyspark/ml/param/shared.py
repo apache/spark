@@ -228,3 +228,33 @@ class HasOutputCol(Params):
             return self.paramMap[self.outputCol]
         else:
             return self.outputCol.defaultValue
+
+
+class HasNumFeatures(Params):
+    """
+    Params with numFeatures.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    numFeatures = Param(Params._dummy(), "numFeatures", "number of features", 1 << 18)
+
+    def __init__(self):
+        super(HasNumFeatures, self).__init__()
+        #: param for number of features
+        self.numFeatures = Param(self, "numFeatures", "number of features", 1 << 18)
+
+    def setNumFeatures(self, value):
+        """
+        Sets the value of :py:attr:`numFeatures`.
+        """
+        self.paramMap[self.numFeatures] = value
+        return self
+
+    def getNumFeatures(self):
+        """
+        Gets the value of numFeatures or its default value.
+        """
+        if self.numFeatures in self.paramMap:
+            return self.paramMap[self.numFeatures]
+        else:
+            return self.numFeatures.defaultValue

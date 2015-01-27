@@ -36,7 +36,7 @@ class Param(object):
         self.defaultValue = defaultValue
 
     def __str__(self):
-        return str(self.parent) + "_" + self.name
+        return str(self.parent) + "-" + self.name
 
     def __repr__(self):
         return "Param(parent=%r, name=%r, doc=%r, defaultValue=%r)" % \
