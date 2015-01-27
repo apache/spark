@@ -225,6 +225,11 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>org.apache.ivy</groupId>
+      <artifactId>ivy</artifactId>
+      <version>2.4.0</version>
+    </dependency>
+    <dependency>
       <groupId>org.tachyonproject</groupId>
       <artifactId>tachyon-client</artifactId>
       <version>0.5.0</version>

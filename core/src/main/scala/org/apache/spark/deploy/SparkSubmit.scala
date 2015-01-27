@@ -21,10 +21,19 @@ import java.io.{File, PrintStream}
 import java.lang.reflect.{Modifier, InvocationTargetException}
 import java.net.URL
 
+import org.apache.ivy.Ivy
+import org.apache.ivy.core.module.descriptor.{DefaultDependencyDescriptor, DefaultModuleDescriptor}
+import org.apache.ivy.core.module.id.ModuleRevisionId
+import org.apache.ivy.core.report.ResolveReport
+import org.apache.ivy.core.resolve.ResolveOptions
+import org.apache.ivy.core.retrieve.RetrieveOptions
+import org.apache.ivy.core.settings.IvySettings
+import org.apache.ivy.plugins.resolver.IBiblioResolver
+
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
 import org.apache.spark.executor.ExecutorURLClassLoader
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MavenCoordinate, Utils}
 
 /**
  * Main gateway of launching a Spark application.
@@ -55,6 +64,12 @@ object SparkSubmit {
   private val PYSPARK_SHELL = "pyspark-shell"
 
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
+
+  // Directories for caching downloads through ivy and storing the jars when maven coordinates are
+  // supplied to spark-submit
+  // TODO: Take these as arguments? For example, on AWS /mnt/ is a better location.
+  private val IVY_CACHE = new File("ivy/cache")
+  private val MAVEN_JARS = new File("ivy/jars")
 
   // Exposed for testing
   private[spark] var exitFn: () => Unit = () => System.exit(-1)
@@ -167,6 +182,16 @@ object SparkSubmit {
 
     // Special flag to avoid deprecation warnings at the client
     sysProps("SPARK_SUBMIT") = "true"
+
+    // Resolve maven dependencies if there are any and add classpath to jars
+    val resolvedMavenCoordinates = resolveMavenCoordinates(args.maven, args.maven_repos)
+    if (!resolvedMavenCoordinates.trim.isEmpty) {
+      if (args.jars == null || args.jars.trim.isEmpty) {
+        args.jars = resolvedMavenCoordinates
+      } else {
+        args.jars += s",$resolvedMavenCoordinates"
+      }
+    }
 
     // A list of rules to map each argument to system properties or command-line options in
     // each deploy mode; we iterate through these below
@@ -428,6 +453,73 @@ object SparkSubmit {
                       .flatMap(_.split(","))
                       .mkString(",")
     if (merged == "") null else merged
+  }
+
+  private def resolveMavenCoordinates(coordinates: String, remoteRepos: String): String = {
+    if (coordinates == null || coordinates.trim.isEmpty) {
+      ""
+    } else {
+      val artifacts = coordinates.split(",").map { p =>
+        val splits = p.split(":")
+        require(splits.length == 3, s"Provided Maven Coordinates must be in the form " +
+          s"'groupId:artifactId:version'. The coordinate provided is: $p")
+        new MavenCoordinate(splits(0), splits(1), splits(2))
+      }
+      // create an ivy instance
+      val ivySettings: IvySettings = new IvySettings
+      ivySettings.setDefaultCache(IVY_CACHE)
+
+      // the biblio resolver resolves POM declared dependencies
+      val br: IBiblioResolver = new IBiblioResolver
+      br.setM2compatible(true)
+      br.setUsepoms(true)
+      br.setName("central")
+      ivySettings.addResolver(br)
+      // add any other remote repositories other than maven central
+      if (remoteRepos != null && !remoteRepos.trim.isEmpty) {
+        remoteRepos.split(",").foreach { repo =>
+          val brr: IBiblioResolver = new IBiblioResolver
+          brr.setM2compatible(true)
+          brr.setUsepoms(true)
+          brr.setRoot(repo)
+          ivySettings.addResolver(brr)
+        }
+      }
+      ivySettings.setDefaultResolver(br.getName)
+
+      val ivy = Ivy.newInstance(ivySettings)
+      // Set resolve options to download transitive dependencies as well
+      val ro = new ResolveOptions
+      ro.setTransitive(true)
+      ro.setDownload(true)
+      // A Module descriptor must be specified. Entries are dummy strings
+      val md = DefaultModuleDescriptor.newDefaultInstance(
+        ModuleRevisionId.newInstance("org.apache.spark", "spark-submit-envelope", "1.0"))
+
+      artifacts.foreach { mvn =>
+        val ri = ModuleRevisionId.newInstance(mvn.groupId, mvn.artifactId, mvn.version)
+        val dd = new DefaultDependencyDescriptor(ri, false, false)
+        dd.addDependencyConfiguration("default", "default")
+        md.addDependency(dd)
+      }
+      // resolve dependencies
+      val rr: ResolveReport = ivy.resolve(md, ro)
+      if (rr.hasError) {
+        throw new RuntimeException(rr.getAllProblemMessages.toString)
+      }
+      // retrieve all resolved dependencies
+      val m = rr.getModuleDescriptor
+      ivy.retrieve(m.getModuleRevisionId,
+        MAVEN_JARS.getAbsolutePath + "/[artifact](-[classifier]).[ext]",
+        new RetrieveOptions().setConfs(Array("default")))
+
+      // output downloaded jars to classpath (will append to jars). The name of the jar is given
+      // after a `!` by Ivy.
+      rr.getArtifacts.toArray.map { case artifactInfo =>
+        val artifactString = artifactInfo.toString
+        MAVEN_JARS.getAbsolutePath + "/" + artifactString.drop(artifactString.lastIndexOf("!") + 1)
+      }.mkString(",")
+    }
   }
 }
 
