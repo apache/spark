@@ -174,7 +174,8 @@ class Pipeline(Estimator):
                 else:  # must be an Estimator
                     model = stage.fit(dataset, paramMap)
                     transformers.append(model)
-                    dataset = model.transform(dataset, paramMap)
+                    if i < indexOfLastEstimator:
+                        dataset = model.transform(dataset, paramMap)
             else:
                 transformers.append(stage)
         return PipelineModel(transformers)
