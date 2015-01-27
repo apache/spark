@@ -64,7 +64,10 @@ class AdaGradUpdater(
     val grad = gradient.toBreeze
     val g2 = grad :* grad
     this.synchronized {
-      BLAS.axpy(if (rho > 0D && rho < 1D) rho else 1D, Vectors.fromBreeze(g2), etaSum)
+      if (rho > 0D && rho < 1D) {
+        BLAS.scal(rho, etaSum)
+      }
+      BLAS.axpy(1D, Vectors.fromBreeze(g2), etaSum)
     }
 
     for (i <- 0 until grad.length) {

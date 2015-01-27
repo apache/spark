@@ -40,7 +40,8 @@ trait MnistDatasetSuite extends MLlibTestSparkContext {
     val minstData = minstReader.drop(dropN).take(size).map { case m@MinstItem(label, data) =>
       assert(label < 10)
       val y = BDV.zeros[Double](10)
-      y(label) = 1
+      y := 0.1 / y.length
+      y(label) += 0.9
       val x = m.binaryVector
       (x, Vectors.fromBreeze(y))
     }
