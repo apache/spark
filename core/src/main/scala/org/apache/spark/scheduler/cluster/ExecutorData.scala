@@ -31,7 +31,7 @@ import akka.actor.{Address, ActorRef}
 private[cluster] class ExecutorData(
    val executorActor: ActorRef,
    val executorAddress: Address,
-   val executorHost: String ,
+   override val executorHost: String,
    var freeCores: Int,
-   val totalCores: Int
-)
+   override val totalCores: Int
+) extends ExecutorInfo(executorHost, totalCores)

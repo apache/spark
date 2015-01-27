@@ -17,11 +17,11 @@
 
 package org.apache.spark.mllib.tree.model
 
-import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.linalg.Vector
 
 /**
  * :: Experimental ::

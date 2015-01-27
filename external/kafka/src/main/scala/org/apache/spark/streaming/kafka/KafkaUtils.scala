@@ -70,11 +70,12 @@ object KafkaUtils {
       topics: Map[String, Int],
       storageLevel: StorageLevel
     ): ReceiverInputDStream[(K, V)] = {
-    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, storageLevel)
+    val walEnabled = ssc.conf.getBoolean("spark.streaming.receiver.writeAheadLog.enable", false)
+    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, walEnabled, storageLevel)
   }
 
   /**
-   * Create an input stream that pulls messages form a Kafka Broker.
+   * Create an input stream that pulls messages from a Kafka Broker.
    * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
    * @param jssc      JavaStreamingContext object
    * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..)
@@ -92,14 +93,13 @@ object KafkaUtils {
   }
 
   /**
-   * Create an input stream that pulls messages form a Kafka Broker.
+   * Create an input stream that pulls messages from a Kafka Broker.
    * @param jssc      JavaStreamingContext object
    * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..).
    * @param groupId   The group id for this consumer.
    * @param topics    Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    *                  in its own thread.
    * @param storageLevel RDD storage level.
-   *
    */
   def createStream(
       jssc: JavaStreamingContext,
@@ -113,7 +113,7 @@ object KafkaUtils {
   }
 
   /**
-   * Create an input stream that pulls messages form a Kafka Broker.
+   * Create an input stream that pulls messages from a Kafka Broker.
    * @param jssc      JavaStreamingContext object
    * @param keyTypeClass Key type of RDD
    * @param valueTypeClass value type of RDD

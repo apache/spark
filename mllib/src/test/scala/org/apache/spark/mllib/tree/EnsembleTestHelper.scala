@@ -19,7 +19,7 @@ package org.apache.spark.mllib.tree
 
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.model.WeightedEnsembleModel
+import org.apache.spark.mllib.tree.model.TreeEnsembleModel
 import org.apache.spark.util.StatCounter
 
 import scala.collection.mutable
@@ -48,7 +48,7 @@ object EnsembleTestHelper {
   }
 
   def validateClassifier(
-      model: WeightedEnsembleModel,
+      model: TreeEnsembleModel,
       input: Seq[LabeledPoint],
       requiredAccuracy: Double) {
     val predictions = input.map(x => model.predict(x.features))
@@ -60,17 +60,27 @@ object EnsembleTestHelper {
       s"validateClassifier calculated accuracy $accuracy but required $requiredAccuracy.")
   }
 
+  /**
+   * Validates a tree ensemble model for regression.
+   */
   def validateRegressor(
-      model: WeightedEnsembleModel,
+      model: TreeEnsembleModel,
       input: Seq[LabeledPoint],
-      requiredMSE: Double) {
+      required: Double,
+      metricName: String = "mse") {
     val predictions = input.map(x => model.predict(x.features))
-    val squaredError = predictions.zip(input).map { case (prediction, expected) =>
-      val err = prediction - expected.label
-      err * err
-    }.sum
-    val mse = squaredError / input.length
-    assert(mse <= requiredMSE, s"validateRegressor calculated MSE $mse but required $requiredMSE.")
+    val errors = predictions.zip(input.map(_.label)).map { case (prediction, label) =>
+      prediction - label
+    }
+    val metric = metricName match {
+      case "mse" =>
+        errors.map(err => err * err).sum / errors.size
+      case "mae" =>
+        errors.map(math.abs).sum / errors.size
+    }
+
+    assert(metric <= required,
+      s"validateRegressor calculated $metricName $metric but required $required.")
   }
 
   def generateOrderedLabeledPoints(numFeatures: Int, numInstances: Int): Array[LabeledPoint] = {

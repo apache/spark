@@ -1,6 +1,6 @@
 ---
 layout: global
-title: Machine Learning Library (MLlib)
+title: Machine Learning Library (MLlib) Programming Guide
 ---
 
 MLlib is Spark's scalable machine learning library consisting of common learning algorithms and utilities,
@@ -16,8 +16,9 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
   * random data generation  
 * [Classification and regression](mllib-classification-regression.html)
   * [linear models (SVMs, logistic regression, linear regression)](mllib-linear-methods.html)
-  * [decision trees](mllib-decision-tree.html)
   * [naive Bayes](mllib-naive-bayes.html)
+  * [decision trees](mllib-decision-tree.html)
+  * [ensembles of trees](mllib-ensembles.html) (Random Forests and Gradient-Boosted Trees)
 * [Collaborative filtering](mllib-collaborative-filtering.html)
   * alternating least squares (ALS)
 * [Clustering](mllib-clustering.html)
@@ -33,6 +34,21 @@ filtering, dimensionality reduction, as well as underlying optimization primitiv
 MLlib is under active development.
 The APIs marked `Experimental`/`DeveloperApi` may change in future releases, 
 and the migration guide below will explain all changes between releases.
+
+# spark.ml: high-level APIs for ML pipelines
+
+Spark 1.2 includes a new package called `spark.ml`, which aims to provide a uniform set of
+high-level APIs that help users create and tune practical machine learning pipelines.
+It is currently an alpha component, and we would like to hear back from the community about
+how it fits real-world use cases and how it could be improved.
+
+Note that we will keep supporting and adding features to `spark.mllib` along with the
+development of `spark.ml`.
+Users should be comfortable using `spark.mllib` features and expect more features coming.
+Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
+to `spark.ml`.
+
+See the **[spark.ml programming guide](ml-guide.html)** for more information on this package.
 
 # Dependencies
 
@@ -59,6 +75,32 @@ To use MLlib in Python, you will need [NumPy](http://www.numpy.org) version 1.4 
 ---
 
 # Migration Guide
+
+## From 1.1 to 1.2
+
+The only API changes in MLlib v1.2 are in
+[`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree),
+which continues to be an experimental API in MLlib 1.2:
+
+1. *(Breaking change)* The Scala API for classification takes a named argument specifying the number
+of classes.  In MLlib v1.1, this argument was called `numClasses` in Python and
+`numClassesForClassification` in Scala.  In MLlib v1.2, the names are both set to `numClasses`.
+This `numClasses` parameter is specified either via
+[`Strategy`](api/scala/index.html#org.apache.spark.mllib.tree.configuration.Strategy)
+or via [`DecisionTree`](api/scala/index.html#org.apache.spark.mllib.tree.DecisionTree)
+static `trainClassifier` and `trainRegressor` methods.
+
+2. *(Breaking change)* The API for
+[`Node`](api/scala/index.html#org.apache.spark.mllib.tree.model.Node) has changed.
+This should generally not affect user code, unless the user manually constructs decision trees
+(instead of using the `trainClassifier` or `trainRegressor` methods).
+The tree `Node` now includes more information, including the probability of the predicted label
+(for classification).
+
+3. Printing methods' output has changed.  The `toString` (Scala/Java) and `__repr__` (Python) methods used to print the full model; they now print a summary.  For the full model, use `toDebugString`.
+
+Examples in the Spark distribution and examples in the
+[Decision Trees Guide](mllib-decision-tree.html#examples) have been updated accordingly.
 
 ## From 1.0 to 1.1
 

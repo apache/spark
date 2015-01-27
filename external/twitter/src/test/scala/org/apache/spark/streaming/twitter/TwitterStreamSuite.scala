@@ -17,13 +17,23 @@
 
 package org.apache.spark.streaming.twitter
 
-import org.apache.spark.streaming.{StreamingContext, TestSuiteBase}
-import org.apache.spark.storage.StorageLevel
-import twitter4j.auth.{NullAuthorization, Authorization}
-import org.apache.spark.streaming.dstream.ReceiverInputDStream
-import twitter4j.Status
 
-class TwitterStreamSuite extends TestSuiteBase {
+import org.scalatest.{BeforeAndAfter, FunSuite}
+import twitter4j.Status
+import twitter4j.auth.{NullAuthorization, Authorization}
+
+import org.apache.spark.Logging
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.dstream.ReceiverInputDStream
+
+class TwitterStreamSuite extends FunSuite with BeforeAndAfter with Logging {
+
+  val batchDuration = Seconds(1)
+
+  private val master: String = "local[2]"
+
+  private val framework: String = this.getClass.getSimpleName
 
   test("twitter input stream") {
     val ssc = new StreamingContext(master, framework, batchDuration)

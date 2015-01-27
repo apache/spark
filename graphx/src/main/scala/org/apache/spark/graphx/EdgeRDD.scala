@@ -17,6 +17,7 @@
 
 package org.apache.spark.graphx
 
+import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.spark.Dependency
@@ -36,16 +37,16 @@ import org.apache.spark.graphx.impl.EdgeRDDImpl
  * edge to provide the triplet view. Shipping of the vertex attributes is managed by
  * `impl.ReplicatedVertexView`.
  */
-abstract class EdgeRDD[ED, VD](
+abstract class EdgeRDD[ED](
     @transient sc: SparkContext,
     @transient deps: Seq[Dependency[_]]) extends RDD[Edge[ED]](sc, deps) {
 
-  private[graphx] def partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])]
+  private[graphx] def partitionsRDD: RDD[(PartitionID, EdgePartition[ED, VD])] forSome { type VD }
 
   override protected def getPartitions: Array[Partition] = partitionsRDD.partitions
 
   override def compute(part: Partition, context: TaskContext): Iterator[Edge[ED]] = {
-    val p = firstParent[(PartitionID, EdgePartition[ED, VD])].iterator(part, context)
+    val p = firstParent[(PartitionID, EdgePartition[ED, _])].iterator(part, context)
     if (p.hasNext) {
       p.next._2.iterator.map(_.copy())
     } else {
@@ -60,19 +61,14 @@ abstract class EdgeRDD[ED, VD](
    * @param f the function from an edge to a new edge value
    * @return a new EdgeRDD containing the new edge values
    */
-  def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): EdgeRDD[ED2, VD]
+  def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): EdgeRDD[ED2]
 
   /**
    * Reverse all the edges in this RDD.
    *
    * @return a new EdgeRDD containing all the edges reversed
    */
-  def reverse: EdgeRDD[ED, VD]
-
-  /** Removes all edges but those matching `epred` and where both vertices match `vpred`. */
-  def filter(
-      epred: EdgeTriplet[VD, ED] => Boolean,
-      vpred: (VertexId, VD) => Boolean): EdgeRDD[ED, VD]
+  def reverse: EdgeRDD[ED]
 
   /**
    * Inner joins this EdgeRDD with another EdgeRDD, assuming both are partitioned using the same
@@ -84,15 +80,8 @@ abstract class EdgeRDD[ED, VD](
    *         with values supplied by `f`
    */
   def innerJoin[ED2: ClassTag, ED3: ClassTag]
-      (other: EdgeRDD[ED2, _])
-      (f: (VertexId, VertexId, ED, ED2) => ED3): EdgeRDD[ED3, VD]
-
-  private[graphx] def mapEdgePartitions[ED2: ClassTag, VD2: ClassTag](
-      f: (PartitionID, EdgePartition[ED, VD]) => EdgePartition[ED2, VD2]): EdgeRDD[ED2, VD2]
-
-  /** Replaces the edge partitions while preserving all other properties of the EdgeRDD. */
-  private[graphx] def withPartitionsRDD[ED2: ClassTag, VD2: ClassTag](
-      partitionsRDD: RDD[(PartitionID, EdgePartition[ED2, VD2])]): EdgeRDD[ED2, VD2]
+      (other: EdgeRDD[ED2])
+      (f: (VertexId, VertexId, ED, ED2) => ED3): EdgeRDD[ED3]
 
   /**
    * Changes the target storage level while preserving all other properties of the
@@ -101,7 +90,7 @@ abstract class EdgeRDD[ED, VD](
    * This does not actually trigger a cache; to do this, call
    * [[org.apache.spark.graphx.EdgeRDD#cache]] on the returned EdgeRDD.
    */
-  private[graphx] def withTargetStorageLevel(targetStorageLevel: StorageLevel): EdgeRDD[ED, VD]
+  private[graphx] def withTargetStorageLevel(targetStorageLevel: StorageLevel): EdgeRDD[ED]
 }
 
 object EdgeRDD {
@@ -111,7 +100,7 @@ object EdgeRDD {
    * @tparam ED the edge attribute type
    * @tparam VD the type of the vertex attributes that may be joined with the returned EdgeRDD
    */
-  def fromEdges[ED: ClassTag, VD: ClassTag](edges: RDD[Edge[ED]]): EdgeRDD[ED, VD] = {
+  def fromEdges[ED: ClassTag, VD: ClassTag](edges: RDD[Edge[ED]]): EdgeRDDImpl[ED, VD] = {
     val edgePartitions = edges.mapPartitionsWithIndex { (pid, iter) =>
       val builder = new EdgePartitionBuilder[ED, VD]
       iter.foreach { e =>
@@ -128,8 +117,8 @@ object EdgeRDD {
    * @tparam ED the edge attribute type
    * @tparam VD the type of the vertex attributes that may be joined with the returned EdgeRDD
    */
-  def fromEdgePartitions[ED: ClassTag, VD: ClassTag](
-      edgePartitions: RDD[(Int, EdgePartition[ED, VD])]): EdgeRDD[ED, VD] = {
+  private[graphx] def fromEdgePartitions[ED: ClassTag, VD: ClassTag](
+      edgePartitions: RDD[(Int, EdgePartition[ED, VD])]): EdgeRDDImpl[ED, VD] = {
     new EdgeRDDImpl(edgePartitions)
   }
 }

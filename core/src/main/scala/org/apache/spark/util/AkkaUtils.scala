@@ -53,7 +53,7 @@ private[spark] object AkkaUtils extends Logging {
     val startService: Int => (ActorSystem, Int) = { actualPort =>
       doCreateActorSystem(name, host, actualPort, conf, securityManager)
     }
-    Utils.startServiceOnPort(port, startService, name)
+    Utils.startServiceOnPort(port, startService, conf, name)
   }
 
   private def doCreateActorSystem(
@@ -65,7 +65,7 @@ private[spark] object AkkaUtils extends Logging {
 
     val akkaThreads   = conf.getInt("spark.akka.threads", 4)
     val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
-    val akkaTimeout = conf.getInt("spark.akka.timeout", 100)
+    val akkaTimeout = conf.getInt("spark.akka.timeout", conf.getInt("spark.network.timeout", 120))
     val akkaFrameSize = maxFrameSizeBytes(conf)
     val akkaLogLifecycleEvents = conf.getBoolean("spark.akka.logLifecycleEvents", false)
     val lifecycleEvents = if (akkaLogLifecycleEvents) "on" else "off"
@@ -89,7 +89,7 @@ private[spark] object AkkaUtils extends Logging {
     }
     val requireCookie = if (isAuthOn) "on" else "off"
     val secureCookie = if (isAuthOn) secretKey else ""
-    logDebug("In createActorSystem, requireCookie is: " + requireCookie)
+    logDebug(s"In createActorSystem, requireCookie is: $requireCookie")
 
     val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String]).withFallback(
       ConfigFactory.parseString(
@@ -134,9 +134,16 @@ private[spark] object AkkaUtils extends Logging {
     Duration.create(conf.getLong("spark.akka.lookupTimeout", 30), "seconds")
   }
 
+  private val AKKA_MAX_FRAME_SIZE_IN_MB = Int.MaxValue / 1024 / 1024
+
   /** Returns the configured max frame size for Akka messages in bytes. */
   def maxFrameSizeBytes(conf: SparkConf): Int = {
-    conf.getInt("spark.akka.frameSize", 10) * 1024 * 1024
+    val frameSizeInMB = conf.getInt("spark.akka.frameSize", 10)
+    if (frameSizeInMB > AKKA_MAX_FRAME_SIZE_IN_MB) {
+      throw new IllegalArgumentException(
+        s"spark.akka.frameSize should not be greater than $AKKA_MAX_FRAME_SIZE_IN_MB MB")
+    }
+    frameSizeInMB * 1024 * 1024
   }
 
   /** Space reserved for extra data in an Akka message besides serialized task or task result. */
@@ -175,8 +182,8 @@ private[spark] object AkkaUtils extends Logging {
       timeout: FiniteDuration): T = {
     // TODO: Consider removing multiple attempts
     if (actor == null) {
-      throw new SparkException("Error sending message as actor is null " +
-        "[message = " + message + "]")
+      throw new SparkException(s"Error sending message [message = $message]" +
+        " as actor is null ")
     }
     var attempts = 0
     var lastException: Exception = null
@@ -193,13 +200,13 @@ private[spark] object AkkaUtils extends Logging {
         case ie: InterruptedException => throw ie
         case e: Exception =>
           lastException = e
-          logWarning("Error sending message in " + attempts + " attempts", e)
+          logWarning(s"Error sending message [message = $message] in $attempts attempts", e)
       }
       Thread.sleep(retryInterval)
     }
 
     throw new SparkException(
-      "Error sending message [message = " + message + "]", lastException)
+      s"Error sending message [message = $message]", lastException)
   }
 
   def makeDriverRef(name: String, conf: SparkConf, actorSystem: ActorSystem): ActorRef = {

@@ -133,6 +133,8 @@ class FramedSerializer(Serializer):
 
     def _write_with_length(self, obj, stream):
         serialized = self.dumps(obj)
+        if len(serialized) > (1 << 31):
+            raise ValueError("can not serialize object larger than 2G")
         write_int(len(serialized), stream)
         if self._only_write_strings:
             stream.write(str(serialized))
@@ -179,6 +181,10 @@ class BatchedSerializer(Serializer):
     def _batched(self, iterator):
         if self.batchSize == self.UNLIMITED_BATCH_SIZE:
             yield list(iterator)
+        elif hasattr(iterator, "__len__") and hasattr(iterator, "__getslice__"):
+            n = len(iterator)
+            for i in xrange(0, n, self.batchSize):
+                yield iterator[i: i + self.batchSize]
         else:
             items = []
             count = 0
@@ -450,9 +456,9 @@ class CompressedSerializer(FramedSerializer):
     """
     Compress the serialized data
     """
-
     def __init__(self, serializer):
         FramedSerializer.__init__(self)
+        assert isinstance(serializer, FramedSerializer), "serializer must be a FramedSerializer"
         self.serializer = serializer
 
     def dumps(self, obj):
@@ -460,6 +466,9 @@ class CompressedSerializer(FramedSerializer):
 
     def loads(self, obj):
         return self.serializer.loads(zlib.decompress(obj))
+
+    def __eq__(self, other):
+        return isinstance(other, CompressedSerializer) and self.serializer == other.serializer
 
 
 class UTF8Deserializer(Serializer):
@@ -486,6 +495,9 @@ class UTF8Deserializer(Serializer):
             return
         except EOFError:
             return
+
+    def __eq__(self, other):
+        return isinstance(other, UTF8Deserializer) and self.use_unicode == other.use_unicode
 
 
 def read_long(stream):
@@ -517,3 +529,8 @@ def write_int(value, stream):
 def write_with_length(obj, stream):
     write_int(len(obj), stream)
     stream.write(obj)
+
+
+if __name__ == '__main__':
+    import doctest
+    doctest.testmod()

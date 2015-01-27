@@ -151,8 +151,15 @@ object PartialAggregation {
         val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
           case e: Expression if partialEvaluations.contains(new TreeNodeRef(e)) =>
             partialEvaluations(new TreeNodeRef(e)).finalEvaluation
-          case e: Expression if namedGroupingExpressions.contains(e) =>
-            namedGroupingExpressions(e).toAttribute
+
+          case e: Expression =>
+            // Should trim aliases around `GetField`s. These aliases are introduced while
+            // resolving struct field accesses, because `GetField` is not a `NamedExpression`.
+            // (Should we just turn `GetField` into a `NamedExpression`?)
+            namedGroupingExpressions
+              .get(e.transform { case Alias(g: GetField, _) => g })
+              .map(_.toAttribute)
+              .getOrElse(e)
         }).asInstanceOf[Seq[NamedExpression]]
 
         val partialComputation =
@@ -188,7 +195,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       logDebug(s"Considering join on: $condition")
       // Find equi-join predicates that can be evaluated before the join, and thus can be used
       // as join keys.
-      val (joinPredicates, otherPredicates) = 
+      val (joinPredicates, otherPredicates) =
         condition.map(splitConjunctivePredicates).getOrElse(Nil).partition {
           case EqualTo(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
             (canEvaluate(l, right) && canEvaluate(r, left)) => true
@@ -203,7 +210,7 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
       val rightKeys = joinKeys.map(_._2)
 
       if (joinKeys.nonEmpty) {
-        logDebug(s"leftKeys:${leftKeys} | rightKeys:${rightKeys}")
+        logDebug(s"leftKeys:$leftKeys | rightKeys:$rightKeys")
         Some((joinType, leftKeys, rightKeys, otherPredicates.reduceOption(And), left, right))
       } else {
         None

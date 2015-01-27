@@ -20,8 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.trees
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.types.{DataType, FractionalType, IntegralType, NumericType, NativeType}
-import org.apache.spark.sql.catalyst.util.Metadata
+import org.apache.spark.sql.types._
 
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>
@@ -154,6 +153,25 @@ abstract class Expression extends TreeNode[Expression] {
   }
 
   /**
+   * Evaluation helper function for 1 Fractional children expression.
+   * if the expression result is null, the evaluation result should be null.
+   */
+  @inline
+  protected final def f1(i: Row, e1: Expression, f: ((Fractional[Any], Any) => Any)): Any  = {
+    val evalE1 = e1.eval(i: Row)
+    if(evalE1 == null) {
+      null
+    } else {
+      e1.dataType match {
+        case ft: FractionalType =>
+          f.asInstanceOf[(Fractional[ft.JvmType], ft.JvmType) => ft.JvmType](
+            ft.fractional, evalE1.asInstanceOf[ft.JvmType])
+        case other => sys.error(s"Type $other does not support fractional operations")
+      }
+    }
+  }
+
+  /**
    * Evaluation helper function for 2 Integral children expressions. Those expressions are
    * supposed to be in the same data type, and also the return type.
    * Either one of the expressions result is null, the evaluation result should be null.
@@ -185,6 +203,28 @@ abstract class Expression extends TreeNode[Expression] {
               i.asIntegral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
         }
+      }
+    }
+  }
+
+  /**
+   * Evaluation helper function for 1 Integral children expression.
+   * if the expression result is null, the evaluation result should be null.
+   */
+  @inline
+  protected final def i1(i: Row, e1: Expression, f: ((Integral[Any], Any) => Any)): Any  = {
+    val evalE1 = e1.eval(i)
+    if(evalE1 == null) {
+      null
+    } else {
+      e1.dataType match {
+        case i: IntegralType =>
+          f.asInstanceOf[(Integral[i.JvmType], i.JvmType) => i.JvmType](
+            i.integral, evalE1.asInstanceOf[i.JvmType])
+        case i: FractionalType =>
+          f.asInstanceOf[(Integral[i.JvmType], i.JvmType) => i.JvmType](
+            i.asIntegral, evalE1.asInstanceOf[i.JvmType])
+        case other => sys.error(s"Type $other does not support numeric operations")
       }
     }
   }
@@ -243,6 +283,17 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
+}
 
-
+// TODO Semantically we probably not need GroupExpression
+// All we need is holding the Seq[Expression], and ONLY used in doing the
+// expressions transformation correctly. Probably will be removed since it's
+// not like a real expressions.
+case class GroupExpression(children: Seq[Expression]) extends Expression {
+  self: Product =>
+  type EvaluatedType = Seq[Any]
+  override def eval(input: Row): EvaluatedType = ???
+  override def nullable = false
+  override def foldable = false
+  override def dataType = ???
 }

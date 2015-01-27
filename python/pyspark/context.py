@@ -29,7 +29,7 @@ from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, \
-    PairDeserializer, CompressedSerializer, AutoBatchedSerializer, NoOpSerializer
+    PairDeserializer, AutoBatchedSerializer, NoOpSerializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 from pyspark.traceback_utils import CallSite, first_spark_call
@@ -229,6 +229,14 @@ class SparkContext(object):
                 else:
                     SparkContext._active_spark_context = instance
 
+    def __getnewargs__(self):
+        # This method is called when attempting to pickle SparkContext, which is always an error:
+        raise Exception(
+            "It appears that you are attempting to reference SparkContext from a broadcast "
+            "variable, action, or transforamtion. SparkContext can only be used on the driver, "
+            "not in code that it run on workers. For more information, see SPARK-5063."
+        )
+
     def __enter__(self):
         """
         Enable 'with SparkContext(...) as sc: app(sc)' syntax.
@@ -289,12 +297,29 @@ class SparkContext(object):
 
     def parallelize(self, c, numSlices=None):
         """
-        Distribute a local Python collection to form an RDD.
+        Distribute a local Python collection to form an RDD. Using xrange
+        is recommended if the input represents a range for performance.
 
-        >>> sc.parallelize(range(5), 5).glom().collect()
-        [[0], [1], [2], [3], [4]]
+        >>> sc.parallelize([0, 2, 3, 4, 6], 5).glom().collect()
+        [[0], [2], [3], [4], [6]]
+        >>> sc.parallelize(xrange(0, 6, 2), 5).glom().collect()
+        [[], [0], [], [2], [4]]
         """
-        numSlices = numSlices or self.defaultParallelism
+        numSlices = int(numSlices) if numSlices is not None else self.defaultParallelism
+        if isinstance(c, xrange):
+            size = len(c)
+            if size == 0:
+                return self.parallelize([], numSlices)
+            step = c[1] - c[0] if size > 1 else 1
+            start0 = c[0]
+
+            def getStart(split):
+                return start0 + (split * size / numSlices) * step
+
+            def f(split, iterator):
+                return xrange(getStart(split), getStart(split + 1), step)
+
+            return self.parallelize([], numSlices).mapPartitionsWithIndex(f)
         # Calling the Java parallelize() method with an ArrayList is too slow,
         # because it sends O(n) Py4J commands.  As an alternative, serialized
         # objects are written to a file and loaded through textFile().
@@ -302,7 +327,7 @@ class SparkContext(object):
         # Make sure we distribute data evenly if it's smaller than self.batchSize
         if "__len__" not in dir(c):
             c = list(c)    # Make it a list so we can compute its length
-        batchSize = max(1, min(len(c) // numSlices, self._batchSize))
+        batchSize = max(1, min(len(c) // numSlices, self._batchSize or 1024))
         serializer = BatchedSerializer(self._unbatched_serializer, batchSize)
         serializer.dump_stream(c, tempFile)
         tempFile.close()
@@ -390,7 +415,7 @@ class SparkContext(object):
 
     def binaryFiles(self, path, minPartitions=None):
         """
-        :: Experimental ::
+        .. note:: Experimental
 
         Read a directory of binary files from HDFS, a local file system
         (available on all nodes), or any Hadoop-supported file system URI
@@ -407,7 +432,7 @@ class SparkContext(object):
 
     def binaryRecords(self, path, recordLength):
         """
-        :: Experimental ::
+        .. note:: Experimental
 
         Load data from a flat binary file, assuming each record is a set of numbers
         with the specified numerical format (see ByteBuffer), and the number of
@@ -607,14 +632,7 @@ class SparkContext(object):
         object for reading it in distributed functions. The variable will
         be sent to each cluster only once.
         """
-        ser = CompressedSerializer(PickleSerializer())
-        # pass large object by py4j is very slow and need much memory
-        tempFile = NamedTemporaryFile(delete=False, dir=self._temp_dir)
-        ser.dump_stream([value], tempFile)
-        tempFile.close()
-        jbroadcast = self._jvm.PythonRDD.readBroadcastFromFile(self._jsc, tempFile.name)
-        return Broadcast(jbroadcast.id(), None, jbroadcast,
-                         self._pickled_broadcast_vars, tempFile.name)
+        return Broadcast(self, value, self._pickled_broadcast_vars)
 
     def accumulator(self, value, accum_param=None):
         """

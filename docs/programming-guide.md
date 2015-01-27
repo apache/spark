@@ -117,6 +117,8 @@ The first thing a Spark program must do is to create a [SparkContext](api/scala/
 how to access a cluster. To create a `SparkContext` you first need to build a [SparkConf](api/scala/index.html#org.apache.spark.SparkConf) object
 that contains information about your application.
 
+Only one SparkContext may be active per JVM.  You must `stop()` the active SparkContext before creating a new one.
+
 {% highlight scala %}
 val conf = new SparkConf().setAppName(appName).setMaster(master)
 new SparkContext(conf)
@@ -911,7 +913,7 @@ for details.
 </tr>
 <tr>
   <td> <b>cogroup</b>(<i>otherDataset</i>, [<i>numTasks</i>]) </td>
-  <td> When called on datasets of type (K, V) and (K, W), returns a dataset of (K, Iterable&lt;V&gt;, Iterable&lt;W&gt;) tuples. This operation is also called <code>groupWith</code>. </td>
+  <td> When called on datasets of type (K, V) and (K, W), returns a dataset of (K, (Iterable&lt;V&gt;, Iterable&lt;W&gt;)) tuples. This operation is also called <code>groupWith</code>. </td>
 </tr>
 <tr>
   <td> <b>cartesian</b>(<i>otherDataset</i>) </td>
@@ -931,6 +933,12 @@ for details.
   <td> <b>repartition</b>(<i>numPartitions</i>) </td>
   <td> Reshuffle the data in the RDD randomly to create either more or fewer partitions and balance it across them.
     This always shuffles all data over the network. </td>
+</tr>
+<tr>
+  <td> <b>repartitionAndSortWithinPartitions</b>(<i>partitioner</i>) </td>
+  <td> Repartition the RDD according to the given partitioner and, within each resulting partition,
+  sort records by their keys. This is more efficient than calling <code>repartition</code> and then sorting within 
+  each partition because it can push the sorting down into the shuffle machinery. </td>
 </tr>
 </table>
 
@@ -1131,7 +1139,7 @@ method. The code below shows this:
 
 {% highlight scala %}
 scala> val broadcastVar = sc.broadcast(Array(1, 2, 3))
-broadcastVar: spark.Broadcast[Array[Int]] = spark.Broadcast(b5c40191-a864-4c7d-b9bf-d87e1a4e787c)
+broadcastVar: org.apache.spark.broadcast.Broadcast[Array[Int]] = Broadcast(0)
 
 scala> broadcastVar.value
 res0: Array[Int] = Array(1, 2, 3)
@@ -1175,7 +1183,7 @@ Accumulators are variables that are only "added" to through an associative opera
 therefore be efficiently supported in parallel. They can be used to implement counters (as in
 MapReduce) or sums. Spark natively supports accumulators of numeric types, and programmers
 can add support for new types. If accumulators are created with a name, they will be
-displayed in Spark's UI. This can can be useful for understanding the progress of 
+displayed in Spark's UI. This can be useful for understanding the progress of 
 running stages (NOTE: this is not yet supported in Python).
 
 An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks
@@ -1300,6 +1308,40 @@ class VectorAccumulatorParam(AccumulatorParam):
 vecAccum = sc.accumulator(Vector(...), VectorAccumulatorParam())
 {% endhighlight %}
 
+</div>
+
+</div>
+
+For accumulator updates performed inside <b>actions only</b>, Spark guarantees that each task's update to the accumulator 
+will only be applied once, i.e. restarted tasks will not update the value. In transformations, users should be aware 
+of that each task's update may be applied more than once if tasks or job stages are re-executed.
+
+Accumulators do not change the lazy evaluation model of Spark. If they are being updated within an operation on an RDD, their value is only updated once that RDD is computed as part of an action. Consequently, accumulator updates are not guaranteed to be executed when made within a lazy transformation like `map()`. The below code fragment demonstrates this property:
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
+{% highlight scala %}
+val acc = sc.accumulator(0)
+data.map(x => acc += x; f(x))
+// Here, acc is still 0 because no actions have cause the `map` to be computed.
+{% endhighlight %}
+</div>
+
+<div data-lang="java"  markdown="1">
+{% highlight java %}
+Accumulator<Integer> accum = sc.accumulator(0);
+data.map(x -> accum.add(x); f(x););
+// Here, accum is still 0 because no actions have cause the `map` to be computed.
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+{% highlight python %}
+accum = sc.accumulator(0)
+data.map(lambda x => acc.add(x); f(x))
+# Here, acc is still 0 because no actions have cause the `map` to be computed.
+{% endhighlight %}
 </div>
 
 </div>

@@ -17,14 +17,13 @@
 
 package org.apache.spark.deploy.history
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.util.Utils
 
 /**
  * Command-line parser for the master.
  */
-private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]) {
-  private var logDir: String = null
+private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]) extends Logging {
   private var propertiesFile: String = null
 
   parse(args.toList)
@@ -32,7 +31,8 @@ private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]
   private def parse(args: List[String]): Unit = {
     args match {
       case ("--dir" | "-d") :: value :: tail =>
-        logDir = value
+        logWarning("Setting log directory through the command line is deprecated as of " +
+          "Spark 1.1.0. Please set this through spark.history.fs.logDirectory instead.")
         conf.set("spark.history.fs.logDirectory", value)
         System.setProperty("spark.history.fs.logDirectory", value)
         parse(tail)
@@ -78,9 +78,10 @@ private[spark] class HistoryServerArguments(conf: SparkConf, args: Array[String]
       |                                     (default 50)
       |FsHistoryProvider options:
       |
-      |  spark.history.fs.logDirectory      Directory where app logs are stored (required)
-      |  spark.history.fs.updateInterval    How often to reload log data from storage (in seconds,
-      |                                     default 10)
+      |  spark.history.fs.logDirectory      Directory where app logs are stored
+      |                                     (default: file:/tmp/spark-events)
+      |  spark.history.fs.updateInterval    How often to reload log data from storage
+      |                                     (in seconds, default: 10)
       |""".stripMargin)
     System.exit(exitCode)
   }

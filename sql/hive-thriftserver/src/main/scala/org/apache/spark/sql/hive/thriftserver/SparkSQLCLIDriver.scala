@@ -272,8 +272,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
           if (sessionState.getIsVerbose) {
             out.println(cmd)
           }
-
           val rc = driver.run(cmd)
+          val end = System.currentTimeMillis()
+          val timeTaken:Double = (end - start) / 1000.0
+
           ret = rc.getResponseCode
           if (ret != 0) {
             console.printError(rc.getErrorMessage())
@@ -309,12 +311,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             ret = cret
           }
 
-          val end = System.currentTimeMillis()
-          if (end > start) {
-            val timeTaken:Double = (end - start) / 1000.0
-            console.printInfo(s"Time taken: $timeTaken seconds", null)
-          }
-
+          console.printInfo(s"Time taken: $timeTaken seconds", null)
           // Destroy the driver to release all the locks.
           driver.destroy()
         } else {
