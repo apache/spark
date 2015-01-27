@@ -4,7 +4,7 @@
 {% block body %}
     {{ super() }}
     <h2>{{ title }}</h2>
-    <div class="panel">
+    <div>
         {% for attr, value in special_attrs_rendered.items() %}
             <h4>Attribute: {{ attr }}</h4>
             {{ value|safe }}
