@@ -2043,10 +2043,12 @@ class DataFrame(object):
     #     rdd = self._jdf.coalesce(numPartitions, shuffle, None)
     #     return DataFrame(rdd, self.sql_ctx)
 
-    # def repartition(self, numPartitions):
-    #     rdd = self._jdf.repartition(numPartitions, None)
-    #     return DataFrame(rdd, self.sql_ctx)
-    #
+    def repartition(self, numPartitions):
+        """ Return a new :class:`DataFrame` that has exactly `numPartitions`
+        partitions.
+        """
+        rdd = self._jdf.repartition(numPartitions, None)
+        return DataFrame(rdd, self.sql_ctx)
 
     def sample(self, withReplacement, fraction, seed=None):
         """
