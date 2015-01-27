@@ -33,7 +33,7 @@ function gatherSparkSubmitOpts() {
   while (($#)); do
     case "$1" in
       --master | --deploy-mode | --class | --name | --jars | --maven | --py-files | --files | \
-      --conf | --maven_repos | --properties-file | --driver-memory | --driver-java-options | \
+      --conf | --maven-repos | --properties-file | --driver-memory | --driver-java-options | \
       --driver-library-path | --driver-class-path | --executor-memory | --driver-cores | \
       --total-executor-cores | --executor-cores | --queue | --num-executors | --archives)
         if [[ $# -lt 2 ]]; then

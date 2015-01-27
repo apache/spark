@@ -51,7 +51,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
   var jars: String = null
   var maven: String = null
-  var maven_repos: String = null
+  var mavenRepos: String = null
   var verbose: Boolean = false
   var isPython: Boolean = false
   var pyFiles: String = null
@@ -227,7 +227,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |  childArgs               [${childArgs.mkString(" ")}]
     |  jars                    $jars
     |  maven                   $maven
-    |  maven_repos             $maven_repos
+    |  maven-repos             $mavenRepos
     |  verbose                 $verbose
     |
     |Spark properties used, including those specified through
@@ -338,8 +338,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         maven = value
         parse(tail)
 
-      case ("--maven_repos") :: value :: tail =>
-        maven_repos = value
+      case ("--maven-repos") :: value :: tail =>
+        mavenRepos = value
         parse(tail)
 
       case ("--conf" | "-c") :: value :: tail =>
@@ -395,9 +395,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |  --maven                     Comma-separated list of maven coordinates of jars to include
         |                              on the driver and executor classpaths. Will search the local
         |                              maven repo, then maven central and any additional remote
-        |                              repositories given by --maven_repos.
-        |  --maven_repos               Supply additional remote repositories to search for the
-        |                              maven coordinates given with --maven.
+        |                              repositories given by --maven-repos. The format for the
+        |                              coordinates should be groupId:artifactId:version.
+        |  --maven-repos               Supply additional remote repositories as a comma-delimited
+        |                              list to search for the maven coordinates given with --maven.
         |  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place
         |                              on the PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working

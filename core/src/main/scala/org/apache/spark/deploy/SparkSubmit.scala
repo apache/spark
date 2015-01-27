@@ -22,13 +22,15 @@ import java.lang.reflect.{Modifier, InvocationTargetException}
 import java.net.URL
 
 import org.apache.ivy.Ivy
-import org.apache.ivy.core.module.descriptor.{DefaultDependencyDescriptor, DefaultModuleDescriptor}
-import org.apache.ivy.core.module.id.ModuleRevisionId
+import org.apache.ivy.ant.IvyDependencyExclude
+import org.apache.ivy.core.module.descriptor.{DefaultExcludeRule, DefaultDependencyDescriptor, DefaultModuleDescriptor}
+import org.apache.ivy.core.module.id.{ModuleId, ArtifactId, ModuleRevisionId}
 import org.apache.ivy.core.report.ResolveReport
 import org.apache.ivy.core.resolve.ResolveOptions
 import org.apache.ivy.core.retrieve.RetrieveOptions
 import org.apache.ivy.core.settings.IvySettings
-import org.apache.ivy.plugins.resolver.IBiblioResolver
+import org.apache.ivy.plugins.matcher.GlobPatternMatcher
+import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
@@ -184,7 +186,7 @@ object SparkSubmit {
     sysProps("SPARK_SUBMIT") = "true"
 
     // Resolve maven dependencies if there are any and add classpath to jars
-    val resolvedMavenCoordinates = resolveMavenCoordinates(args.maven, args.maven_repos)
+    val resolvedMavenCoordinates = resolveMavenCoordinates(args.maven, args.mavenRepos)
     if (!resolvedMavenCoordinates.trim.isEmpty) {
       if (args.jars == null || args.jars.trim.isEmpty) {
         args.jars = resolvedMavenCoordinates
@@ -475,24 +477,41 @@ object SparkSubmit {
       // create an ivy instance
       val ivySettings: IvySettings = new IvySettings
       ivySettings.setDefaultCache(IVY_CACHE)
+      // create a pattern matcher
+      ivySettings.addMatcher(new GlobPatternMatcher)
 
       // the biblio resolver resolves POM declared dependencies
       val br: IBiblioResolver = new IBiblioResolver
       br.setM2compatible(true)
       br.setUsepoms(true)
       br.setName("central")
-      ivySettings.addResolver(br)
+
+      // We need a chain resolver if we want to check multiple repositories
+      val cr = new ChainResolver
+      cr.setName("list")
+      cr.add(br)
+
+      // Add an exclusion rule for Spark
+      val sparkArtifacts = new ArtifactId(new ModuleId("org.apache.spark", "*"), "*", "*", "*")
+      val sparkDependencyExcludeRule =
+        new DefaultExcludeRule(sparkArtifacts, ivySettings.getMatcher("glob"), null)
+      sparkDependencyExcludeRule.addConfiguration("default")
+
       // add any other remote repositories other than maven central
       if (remoteRepos != null && !remoteRepos.trim.isEmpty) {
+        var i = 1
         remoteRepos.split(",").foreach { repo =>
           val brr: IBiblioResolver = new IBiblioResolver
           brr.setM2compatible(true)
           brr.setUsepoms(true)
           brr.setRoot(repo)
-          ivySettings.addResolver(brr)
+          brr.setName(s"repo-$i")
+          cr.add(brr)
+          i += 1
         }
       }
-      ivySettings.setDefaultResolver(br.getName)
+      ivySettings.addResolver(cr)
+      ivySettings.setDefaultResolver(cr.getName)
 
       val ivy = Ivy.newInstance(ivySettings)
       // Set resolve options to download transitive dependencies as well
@@ -503,12 +522,15 @@ object SparkSubmit {
       val md = DefaultModuleDescriptor.newDefaultInstance(
         ModuleRevisionId.newInstance("org.apache.spark", "spark-submit-envelope", "1.0"))
 
+      md.addExcludeRule(sparkDependencyExcludeRule)
+
       artifacts.foreach { mvn =>
         val ri = ModuleRevisionId.newInstance(mvn.groupId, mvn.artifactId, mvn.version)
         val dd = new DefaultDependencyDescriptor(ri, false, false)
         dd.addDependencyConfiguration("default", "default")
         md.addDependency(dd)
       }
+
       // resolve dependencies
       val rr: ResolveReport = ivy.resolve(md, ro)
       if (rr.hasError) {
@@ -521,10 +543,12 @@ object SparkSubmit {
         new RetrieveOptions().setConfs(Array("default")))
 
       // output downloaded jars to classpath (will append to jars). The name of the jar is given
-      // after a `!` by Ivy.
+      // after a `!` by Ivy. It also sometimes contains (bundle) after .jar. Remove that as well.
       rr.getArtifacts.toArray.map { case artifactInfo =>
         val artifactString = artifactInfo.toString
-        MAVEN_JARS.getAbsolutePath + "/" + artifactString.drop(artifactString.lastIndexOf("!") + 1)
+        val jarName = artifactString.drop(artifactString.lastIndexOf("!") + 1)
+        MAVEN_JARS.getAbsolutePath + "/" +
+          jarName.substring(0, jarName.lastIndexOf(".jar") + 4)
       }.mkString(",")
     }
   }
