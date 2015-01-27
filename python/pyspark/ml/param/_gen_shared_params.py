@@ -42,25 +42,42 @@ def _gen_param_code(name, doc, defaultValue):
     :param defaultValue: string representation of the param
     :return: code string
     """
-    upperCamelName = name[0].upper() + name[1:]
-    return """class Has%s(Params):
+    # TODO: How to correctly inherit instance attributes?
+    template = '''class Has$Name(Params):
+    """
+    Params with $name.
+    """
+
+    # a placeholder to make it appear in the generated doc
+    $name = Param(Params._dummy(), "$name", "$doc", $defaultValue)
 
     def __init__(self):
-        super(Has%s, self).__init__()
-        #: %s
-        self.%s = Param(self, "%s", "%s", %s)
+        super(Has$Name, self).__init__()
+        #: param for $doc
+        self.$name = Param(self, "$name", "$doc", $defaultValue)
 
-    def set%s(self, value):
-        self.paramMap[self.%s] = value
+    def set$Name(self, value):
+        """
+        Sets the value of :py:attr:`$name`.
+        """
+        self.paramMap[self.$name] = value
         return self
 
-    def get%s(self):
-        if self.%s in self.paramMap:
-            return self.paramMap[self.%s]
+    def get$Name(self):
+        """
+        Gets the value of $name or its default value.
+        """
+        if self.$name in self.paramMap:
+            return self.paramMap[self.$name]
         else:
-            return self.%s.defaultValue""" % (
-        upperCamelName, upperCamelName, doc, name, name, doc, defaultValue, upperCamelName, name,
-        upperCamelName, name, name, name)
+            return self.$name.defaultValue'''
+
+    upperCamelName = name[0].upper() + name[1:]
+    return template \
+        .replace("$name", name) \
+        .replace("$Name", upperCamelName) \
+        .replace("$doc", doc) \
+        .replace("$defaultValue", defaultValue)
 
 if __name__ == "__main__":
     print header

@@ -39,7 +39,8 @@ class Param(object):
         return str(self.parent) + "_" + self.name
 
     def __repr__(self):
-        return str(self.parent) + "_" + self.name
+        return "Param(parent=%r, name=%r, doc=%r, defaultValue=%r)" % \
+               (self.parent, self.name, self.doc, self.defaultValue)
 
 
 class Params(Identifiable):
@@ -69,3 +70,12 @@ class Params(Identifiable):
         paramMap = self.paramMap.copy()
         paramMap.update(params)
         return paramMap
+
+    @staticmethod
+    def _dummy():
+        """
+        Returns a dummy Params instance used as a placeholder to generate docs.
+        """
+        dummy = Params()
+        dummy.uid = "undefined"
+        return dummy
