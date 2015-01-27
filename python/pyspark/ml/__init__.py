@@ -221,7 +221,7 @@ class JavaWrapper(Params):
         :param java_obj: Java object to receive the params
         """
         paramMap = self._merge_params(params)
-        for param in self.params():
+        for param in self.params:
             if param in paramMap:
                 java_obj.set(param.name, paramMap[param])
 

@@ -55,13 +55,15 @@ class Params(Identifiable):
         #: embedded param map
         self.paramMap = {}
 
+    @property
     def params(self):
         """
         Returns all params. The default implementation uses
         :py:func:`dir` to get all attributes of type
         :py:class:`Param`.
         """
-        return filter(lambda x: isinstance(x, Param), map(lambda x: getattr(self, x), dir(self)))
+        return filter(lambda attr: isinstance(attr, Param),
+                      [getattr(self, x) for x in dir(self) if x != "params"])
 
     def _merge_params(self, params):
         paramMap = self.paramMap.copy()
