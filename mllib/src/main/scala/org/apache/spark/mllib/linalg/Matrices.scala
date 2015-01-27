@@ -376,8 +376,8 @@ class SparseMatrix(
    * @param numRows number of rows
    * @param numCols number of columns
    * @param colPtrs the index corresponding to the start of a new column
-   * @param rowIndices the row index of the entry. They must be in strictly increasing order for each
-   *                   column
+   * @param rowIndices the row index of the entry. They must be in strictly increasing
+   *                   order for each column
    * @param values non-zero matrix entries in column major
    */
   def this(
