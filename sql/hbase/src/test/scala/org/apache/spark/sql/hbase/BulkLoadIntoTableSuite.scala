@@ -38,9 +38,9 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
 
     val plan: LogicalPlan = parser(sql)
     assert(plan != null)
-    assert(plan.isInstanceOf[ParallelizedBulkLoadIntoTableCommand])
+    assert(plan.isInstanceOf[BulkLoadIntoTableCommand])
 
-    val l = plan.asInstanceOf[ParallelizedBulkLoadIntoTableCommand]
+    val l = plan.asInstanceOf[BulkLoadIntoTableCommand]
     assert(l.inputPath.equals(raw"./usr/file.txt"))
     assert(l.isLocal)
     assert(l.tableName.equals("tb1"))
@@ -54,9 +54,9 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
 
     val plan: LogicalPlan = parser(sql)
     assert(plan != null)
-    assert(plan.isInstanceOf[ParallelizedBulkLoadIntoTableCommand])
+    assert(plan.isInstanceOf[BulkLoadIntoTableCommand])
 
-    val l = plan.asInstanceOf[ParallelizedBulkLoadIntoTableCommand]
+    val l = plan.asInstanceOf[BulkLoadIntoTableCommand]
     assert(l.inputPath.equals(raw"/usr/hdfsfile.txt"))
     assert(!l.isLocal)
     assert(l.tableName.equals("tb1"))
@@ -69,9 +69,9 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
 
     val plan: LogicalPlan = parser(sql)
     assert(plan != null)
-    assert(plan.isInstanceOf[ParallelizedBulkLoadIntoTableCommand])
+    assert(plan.isInstanceOf[BulkLoadIntoTableCommand])
 
-    val l = plan.asInstanceOf[ParallelizedBulkLoadIntoTableCommand]
+    val l = plan.asInstanceOf[BulkLoadIntoTableCommand]
     assert(l.inputPath.equals(raw"/usr/hdfsfile.txt"))
     assert(!l.isLocal)
     assert(l.tableName.equals("tb1"))
