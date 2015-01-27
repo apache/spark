@@ -20,9 +20,10 @@ package org.apache.spark.sql.execution
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.types.StringType
 import org.apache.spark.sql.{SchemaRDD, SQLConf, SQLContext}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.expressions.{Row, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Row, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
@@ -171,10 +172,16 @@ case class UncacheTableCommand(tableName: String) extends RunnableCommand {
  */
 @DeveloperApi
 case class DescribeCommand(
-    child: SparkPlan,
-    override val output: Seq[Attribute]) extends RunnableCommand {
+    table: LogicalPlan,
+    isExtended: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    child.output.map(field => Row(field.name, field.dataType.toString, null))
+    val plan = sqlContext.executePlan(table).analyzed
+    plan.output.map(field => Row(field.name, field.dataType.toString, null))
   }
+
+  override val output: Seq[Attribute] = Seq(
+    AttributeReference("col_name", StringType, nullable = false)(),
+    AttributeReference("data_type", StringType, nullable = false)(),
+    AttributeReference("comment", StringType, nullable = true)())
 }
