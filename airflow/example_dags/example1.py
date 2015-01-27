@@ -24,14 +24,14 @@ for i in range(9):
     i = str(i)
     task = BashOperator(
         task_id='runme_'+i,
-        bash_command='sleep 60',
+        bash_command='echo "{{ task_instance_key_str }}"',
         default_args=args)
     task.set_downstream(run_this)
     dag.add_task(task)
 
 task = BashOperator(
     task_id='also_run_this',
-    bash_command='ls -l',
+    bash_command='echo "{{ macros.uuid.uuid1() }}"',
     default_args=args)
 dag.add_task(task)
 task.set_downstream(run_this_last)

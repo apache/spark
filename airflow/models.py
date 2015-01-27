@@ -573,10 +573,14 @@ class TaskInstance(Base):
                     if 'tables' in task.params:
                         tables = task.params['tables']
                     ds = self.execution_date.isoformat()[:10]
+                    ds_nodash = ds.replace('-', '')
+                    ti_key_str = "{task.dag_id}__{task.task_id}__{ds_nodash}"
+                    ti_key_str = ti_key_str.format(**locals())
+
                     jinja_context = {
                         'dag': task.dag,
                         'ds': ds,
-                        'ds_nodash': ds.replace('-', ''),
+                        'ds_nodash': ds_nodash,
                         'execution_date': self.execution_date,
                         'macros': macros,
                         'params': task.params,
@@ -584,6 +588,7 @@ class TaskInstance(Base):
                         'task': task,
                         'task_instance': self,
                         'ti': self,
+                        'task_instance_key_str': ti_key_str
                     }
                     task_copy = copy.copy(task)
 
