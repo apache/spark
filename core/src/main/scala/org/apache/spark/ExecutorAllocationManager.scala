@@ -158,7 +158,7 @@ private[spark] class ExecutorAllocationManager(
         "shuffle service. You may enable this through spark.shuffle.service.enabled.")
     }
     if (tasksPerExecutor == 0) {
-      throw new SparkException("spark.executor.cores must not be less than spark.task.cpus.cores")
+      throw new SparkException("spark.executor.cores must not be less than spark.task.cpus.")
     }
   }
 
