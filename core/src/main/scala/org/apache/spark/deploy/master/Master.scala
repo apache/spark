@@ -529,12 +529,20 @@ private[master] class Master(
    * two executors on the same worker).
    */
   private def canUse(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
-    worker.memoryFree >= app.desc.memoryPerExecutorMB && !worker.hasExecutor(app) &&
-    worker.coresFree > 0
+    val enoughResources = worker.memoryFree >= app.desc.memoryPerExecutorMB && worker.coresFree > 0
+    val allowMultipleExecutors = app.desc.maxCorePerExecutor.isDefined || !worker.hasExecutor(app)
+    allowMultipleExecutors && enoughResources
   }
 
-  // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
-  // in the queue, then the second app, etc.
+  /**
+   * This functions starts only one executor on each worker.
+   * 
+   * It travers the available worker list. In spreadOutApps mode, it allocates at most
+   * 1 core and app.desc.memoryPerExecutorMB megabytes memory and tracks the resource allocation 
+   * in a 1-d array for each visit; Otherwise, it allocates 1 core and app.desc.memoryPerExecutorMB 
+   * megabytes to each executor but starts as many executors as possible (limited by the worker 
+   * resources) for each visit.
+   */
   private def startSingleExecutorPerWorker() {
     if (spreadOutApps) {
       // Try to spread out each app among all the nodes, until it has all its cores
@@ -587,16 +595,17 @@ private[master] class Master(
    * It traverses the available worker list. In spreadOutApps mode, it allocates at most
    * spark.executor.maxCoreNumPerExecutor cores (can be less than it when the worker does not have 
    * enough cores or the demand is less than it) and app.desc.memoryPerExecutorMB megabytes memory 
-   * and tracks the resource allocation in a 2d array for each visit; Otherwise, it uses up all 
-   * available resources of a worker for each visit.
+   * and tracks the resource allocation in a 2d array for each visit; Otherwise, it allocates at
+   * most spark.executor.maxCoreNumPerExecutor cores and app.desc.memoryPerExecutorMB megabytes 
+   * to each executor but starts as many executors as possible (limited by the worker resources) for
+   * each visit.
    */
   private def startMultiExecutorsPerWorker() {
     if (spreadOutApps) {
       for (app <- waitingApps if app.coresLeft > 0) {
         val memoryPerExecutor = app.desc.memoryPerExecutorMB
         val usableWorkers = workers.filter(_.state == WorkerState.ALIVE).
-          filter(worker => worker.coresFree > 0 && worker.memoryFree >= memoryPerExecutor).toArray.
-          sortBy(_.memoryFree / memoryPerExecutor).reverse
+          filter(canUse(app, _)).toArray.sortBy(_.memoryFree / memoryPerExecutor).reverse
         val maxCoreNumPerExecutor = app.desc.maxCorePerExecutor.get
         // get the maximum number of executors we can assign
         var leftExecutorNumToAssign = usableWorkers.map(_.memoryFree / memoryPerExecutor).sum
