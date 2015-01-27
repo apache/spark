@@ -127,7 +127,8 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
         throw new CommitDeniedException(msg, jobID, splitID, attemptID)
       }
     } else {
-      val msg: String = s"No need to commit output of task because needsTaskCommit=false: ${taID.value}"
+      val msg: String = s"No need to commit output of task"
+        + " because needsTaskCommit=false: ${taID.value}"
       logInfo(msg)
       throw new CommitDeniedException(msg, jobID, splitID, attemptID)
     }

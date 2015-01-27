@@ -29,3 +29,4 @@ class CommitDeniedException(msg: String, jobID: Int, splitID: Int, attemptID: In
   extends Exception(msg) {
   def toTaskEndReason(): TaskEndReason = new TaskCommitDenied(jobID, splitID, attemptID)
 }
+
