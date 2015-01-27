@@ -23,7 +23,8 @@ from pyspark.ml.param.shared import HasInputCol, HasOutputCol, HasNumFeatures
 @inherit_doc
 class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     """
-    A tokenizer that converts the input string to lowercase and then splits it by white spaces.
+    A tokenizer that converts the input string to lowercase and then
+    splits it by white spaces.
 
     >>> from pyspark.sql import Row
     >>> dataset = sqlCtx.inferSchema(sc.parallelize([Row(text="a b c")]))
@@ -47,7 +48,8 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
 @inherit_doc
 class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
     """
-    Maps a sequence of terms to their term frequencies using the hashing trick.
+    Maps a sequence of terms to their term frequencies using the
+    hashing trick.
 
     >>> from pyspark.sql import Row
     >>> dataset = sqlCtx.inferSchema(sc.parallelize([Row(words=["a", "b", "c"])]))
