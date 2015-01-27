@@ -455,6 +455,13 @@ object SparkSubmit {
     if (merged == "") null else merged
   }
 
+  /**
+   * Resolves any dependencies that were supplied through maven coordinates
+   * @param coordinates Comma-delimited string of maven coordinates
+   * @param remoteRepos Comma-delimited string of remote repositories other than maven central
+   * @return The comma-delimited path to the jars of the given maven artifacts including their
+   *         transitive dependencies
+   */
   private def resolveMavenCoordinates(coordinates: String, remoteRepos: String): String = {
     if (coordinates == null || coordinates.trim.isEmpty) {
       ""

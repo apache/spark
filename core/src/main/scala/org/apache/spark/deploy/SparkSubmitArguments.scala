@@ -227,6 +227,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |  childArgs               [${childArgs.mkString(" ")}]
     |  jars                    $jars
     |  maven                   $maven
+    |  maven_repos             $maven_repos
     |  verbose                 $verbose
     |
     |Spark properties used, including those specified through

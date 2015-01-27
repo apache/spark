@@ -1873,6 +1873,12 @@ private[spark] object Utils extends Logging {
   }
 }
 
+/**
+ * Represents a Maven Coordinate
+ * @param groupId the groupId of the coordinate
+ * @param artifactId the artifactId of the coordinate
+ * @param version the version of the coordinate
+ */
 private[spark] case class MavenCoordinate(groupId: String, artifactId: String, version: String)
 
 /**
