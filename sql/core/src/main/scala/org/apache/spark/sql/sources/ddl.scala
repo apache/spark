@@ -17,13 +17,15 @@
 
 package org.apache.spark.sql.sources
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+
 import scala.language.implicitConversions
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.{SchemaRDD, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
-import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.execution.{DescribeCommand, RunnableCommand}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -59,6 +61,8 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
   protected val TABLE = Keyword("TABLE")
   protected val USING = Keyword("USING")
   protected val OPTIONS = Keyword("OPTIONS")
+  protected val DESCRIBE = Keyword("DESCRIBE")
+  protected val EXTENDED = Keyword("EXTENDED")
 
   // Data types.
   protected val STRING = Keyword("STRING")
@@ -80,7 +84,7 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
 
   protected lazy val ddl: Parser[LogicalPlan] = createTable
 
-  protected def start: Parser[LogicalPlan] = ddl
+  protected def start: Parser[LogicalPlan] = ddl | describe
 
   /**
    * `CREATE [TEMPORARY] TABLE avroTable
@@ -164,6 +168,13 @@ private[sql] class DDLParser extends AbstractSparkSQLParser with Logging {
     mapType |
     structType |
     primitiveType
+
+  private lazy val describe: Parser[LogicalPlan] =
+    DESCRIBE ~> EXTENDED.? ~ rep1sep(ident, ".") ^^ {
+      case isExtended ~ tableIdent =>
+        DescribeCommand((UnresolvedRelation(tableIdent,None)),false)
+    }
+
 }
 
 object ResolvedDataSource {
