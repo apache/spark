@@ -231,7 +231,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   }
 
   private def validateKillArguments(): Unit = {
-    if (!master.startsWith("spark://") || deployMode != "cluster") {
+    if (!isStandaloneCluster) {
       SparkSubmit.printErrorAndExit("Killing drivers is only supported in standalone cluster mode")
     }
     if (driverToKill == null) {
@@ -240,13 +240,17 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   }
 
   private def validateStatusRequestArguments(): Unit = {
-    if (!master.startsWith("spark://") || deployMode != "cluster") {
+    if (!isStandaloneCluster) {
       SparkSubmit.printErrorAndExit(
         "Requesting driver statuses is only supported in standalone cluster mode")
     }
     if (driverToRequestStatusFor == null) {
       SparkSubmit.printErrorAndExit("Please specify a driver to request status for")
     }
+  }
+
+  def isStandaloneCluster: Boolean = {
+    master.startsWith("spark://") && deployMode == "cluster"
   }
 
   override def toString = {

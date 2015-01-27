@@ -135,8 +135,6 @@ private[spark] class StandaloneRestServerHandler(
     // Translate all fields to the relevant Spark properties
     val conf = new SparkConf(false)
       .setAll(sparkProperties)
-      // Use the actual master URL instead of the one that refers to this REST server
-      // Otherwise, once the driver is launched it will contact with the wrong server
       .set("spark.master", masterUrl)
       .set("spark.app.name", appName)
     jars.foreach { j => conf.set("spark.jars", j) }

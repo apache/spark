@@ -118,10 +118,9 @@ object SparkSubmit {
    */
   private def submit(args: SparkSubmitArguments): Unit = {
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
-    val isStandaloneCluster = args.master.startsWith("spark://") && args.deployMode == "cluster"
     // In standalone cluster mode, use the stable application submission REST protocol.
     // Otherwise, just call the main method of the child class.
-    if (isStandaloneCluster) {
+    if (args.isStandaloneCluster) {
       // NOTE: since we mutate the values of some configs in `prepareSubmitEnvironment`, we
       // must update the corresponding fields in the original SparkSubmitArguments to reflect
       // these changes.
@@ -146,7 +145,7 @@ object SparkSubmit {
    */
   private[spark] def prepareSubmitEnvironment(args: SparkSubmitArguments)
       : (Seq[String], Seq[String], Map[String, String], String) = {
-    // Environment needed to launch the child main class
+    // Return values
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
     val sysProps = new HashMap[String, String]()
@@ -158,7 +157,7 @@ object SparkSubmit {
       case m if m.startsWith("spark") => STANDALONE
       case m if m.startsWith("mesos") => MESOS
       case m if m.startsWith("local") => LOCAL
-      case _ => printErrorAndExit("Master must start with yarn, spark, mesos, local, or rest"); -1
+      case _ => printErrorAndExit("Master must start with yarn, spark, mesos or local"); -1
     }
 
     // Set the deploy mode; default is client mode
