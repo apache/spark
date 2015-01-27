@@ -11,6 +11,7 @@ pyspark.ml module
     :members:
     :undoc-members:
     :show-inheritance:
+    :inherited-members:
 
 pyspark.ml.param module
 -----------------------
@@ -19,6 +20,7 @@ pyspark.ml.param module
     :members:
     :undoc-members:
     :show-inheritance:
+    :inherited-members:
 
 pyspark.ml.feature module
 -------------------------
@@ -27,6 +29,7 @@ pyspark.ml.feature module
     :members:
     :undoc-members:
     :show-inheritance:
+    :inherited-members:
 
 pyspark.ml.classification module
 --------------------------------
@@ -34,5 +37,5 @@ pyspark.ml.classification module
 .. automodule:: pyspark.ml.classification
     :members:
     :undoc-members:
-    :inherited-members:
     :show-inheritance:
+    :inherited-members:

@@ -50,11 +50,10 @@ class Params(Identifiable):
 
     __metaclass__ = ABCMeta
 
-    #: Internal param map.
-    paramMap = {}
-
     def __init__(self):
         super(Params, self).__init__()
+        #: embedded param map
+        self.paramMap = {}
 
     def params(self):
         """
@@ -65,6 +64,6 @@ class Params(Identifiable):
         return filter(lambda x: isinstance(x, Param), map(lambda x: getattr(self, x), dir(self)))
 
     def _merge_params(self, params):
-        map = self.paramMap.copy()
-        map.update(params)
-        return map
+        paramMap = self.paramMap.copy()
+        paramMap.update(params)
+        return paramMap
