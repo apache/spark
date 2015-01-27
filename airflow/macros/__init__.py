@@ -2,6 +2,7 @@ from random import random
 from datetime import datetime, timedelta
 import time
 import hive
+import uuid
 
 
 def ds_add(ds, days):
