@@ -371,17 +371,19 @@ object Vectors {
           squaredDistance += score * score
         }
 
-      case (v1: SparseVector, v2: DenseVector) if v1.indices.length / v1.size < 0.5 =>
+      case (v1: SparseVector, v2: DenseVector) =>
         squaredDistance = sqdist(v1, v2)
 
-      case (v1: DenseVector, v2: SparseVector) if v2.indices.length / v2.size < 0.5 =>
+      case (v1: DenseVector, v2: SparseVector) =>
         squaredDistance = sqdist(v2, v1)
 
-      // When a SparseVector is approximately dense, we treat it as a DenseVector
       case (v1, v2) =>
-        squaredDistance = v1.toArray.zip(v2.toArray).foldLeft(0.0){ (distance, elems) =>
-          val score = elems._1 - elems._2
-          distance + score * score
+        var kv = 0
+        val nnzv = v1.size
+        while (kv < nnzv) {
+          var score = v1(kv) - v2(kv)
+          squaredDistance += score * score
+          kv += 1
         }
     }
     squaredDistance
