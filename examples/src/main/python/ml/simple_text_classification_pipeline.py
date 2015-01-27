@@ -34,6 +34,8 @@ pipeline in Python. Run with:
 if __name__ == "__main__":
     sc = SparkContext(appName="SimpleTextClassificationPipeline")
     sqlCtx = SQLContext(sc)
+
+    # Prepare training documents, which are labeled.
     LabeledDocument = Row('id', 'text', 'label')
     training = sqlCtx.inferSchema(
         sc.parallelize([(0L, "a b c d e spark", 1.0),
@@ -42,6 +44,7 @@ if __name__ == "__main__":
                         (3L, "hadoop mapreduce", 0.0)])
           .map(lambda x: LabeledDocument(*x)))
 
+    # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
     tokenizer = Tokenizer() \
         .setInputCol("text") \
         .setOutputCol("words")
@@ -54,8 +57,10 @@ if __name__ == "__main__":
     pipeline = Pipeline() \
         .setStages([tokenizer, hashingTF, lr])
 
+    # Fit the pipeline to training documents.
     model = pipeline.fit(training)
 
+    # Prepare test documents, which are unlabeled.
     Document = Row('id', 'text')
     test = sqlCtx.inferSchema(
         sc.parallelize([(4L, "spark i j k"),
@@ -64,9 +69,11 @@ if __name__ == "__main__":
                         (7L, "apache hadoop")])
           .map(lambda x: Document(*x)))
 
+    # Make predictions on test documents and print columns of interest.
     prediction = model.transform(test)
-
     prediction.registerTempTable("prediction")
     selected = sqlCtx.sql("SELECT id, text, prediction from prediction")
     for row in selected.collect():
         print row
+
+    sc.stop()
