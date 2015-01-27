@@ -226,6 +226,22 @@ See the [configuration page](configuration.html) for information on Spark config
     The final total amount of memory allocated is the maximum value between executor memory plus memoryOverhead, and overhead fraction (1.07) plus the executor memory.
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.shuffle.service.cpu</code></td>
+  <td>1</td>
+  <td>
+    The amount of CPU that the Mesos coarse grained scheduler will request for launching the shuffle service. The shuffle service is launched on each slave.
+    This will only apply if shuffle service is enabled and is running under coarse grained mode.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.shuffle.service.mem</code></td>
+  <td>1024</td>
+  <td>
+    The amount of memory that Mesos coarse grained scheduler will request for launching the shuffle service. The shuffle service is launched on each slave.
+    This will only apply if shuffle service is enabled and is running under coarse grained mode.
+  </td>
+</tr>
 </table>
 
 # Troubleshooting and Debugging
