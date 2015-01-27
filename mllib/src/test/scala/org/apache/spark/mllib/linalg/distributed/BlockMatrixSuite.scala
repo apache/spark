@@ -23,24 +23,13 @@ import breeze.linalg.{DenseMatrix => BDM}
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-// Input values for the tests
-private object BlockMatrixSuite {
+class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
+
   val m = 5
   val n = 4
   val rowPerPart = 2
   val colPerPart = 2
-  val numRowBlocks = 3
-  val numColBlocks = 2
-}
-
-class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
-
-  val m = BlockMatrixSuite.m
-  val n = BlockMatrixSuite.n
-  val rowPerPart = BlockMatrixSuite.rowPerPart
-  val colPerPart = BlockMatrixSuite.colPerPart
-  val numRowBlocks = BlockMatrixSuite.numRowBlocks
-  val numColBlocks = BlockMatrixSuite.numColBlocks
+  val numPartitions = 3
   var gridBasedMat: BlockMatrix = _
   type SubMatrix = ((Int, Int), Matrix)
 
@@ -54,14 +43,58 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
       new SubMatrix((1, 1), new DenseMatrix(2, 2, Array(1.0, 2.0, 0.0, 1.0))),
       new SubMatrix((2, 1), new DenseMatrix(1, 2, Array(1.0, 5.0))))
 
-    gridBasedMat = new BlockMatrix(sc.parallelize(entries, 2), numRowBlocks, numColBlocks,
-      rowPerPart, colPerPart)
+    gridBasedMat = new BlockMatrix(sc.parallelize(entries, numPartitions), rowPerPart, colPerPart)
   }
 
-  test("size and frobenius norm") {
+  test("size") {
     assert(gridBasedMat.numRows() === m)
     assert(gridBasedMat.numCols() === n)
-    assert(gridBasedMat.normFro() === 7.0)
+  }
+
+  test("grid partitioner partitioning") {
+    val partitioner = gridBasedMat.partitioner
+    assert(partitioner.getPartition((0, 0)) === 0)
+    assert(partitioner.getPartition((0, 1)) === 0)
+    assert(partitioner.getPartition((1, 0)) === 1)
+    assert(partitioner.getPartition((1, 1)) === 1)
+    assert(partitioner.getPartition((2, 0)) === 2)
+    assert(partitioner.getPartition((2, 1)) === 2)
+    assert(partitioner.getPartition((1, 0, 1)) === 1)
+    assert(partitioner.getPartition((2, 0, 0)) === 2)
+
+    val part2 = new GridPartitioner(10, 20, 10)
+    assert(part2.getPartition((0, 0)) === 0)
+    assert(part2.getPartition((0, 1)) === 0)
+    assert(part2.getPartition((0, 6)) === 2)
+    assert(part2.getPartition((3, 7)) === 2)
+    assert(part2.getPartition((3, 8)) === 4)
+    assert(part2.getPartition((3, 13)) === 6)
+    assert(part2.getPartition((9, 14)) === 7)
+    assert(part2.getPartition((9, 15)) === 7)
+    assert(part2.getPartition((9, 19)) === 9)
+
+    intercept[IllegalArgumentException] {
+      part2.getPartition((-1, 0))
+    }
+
+    intercept[IllegalArgumentException] {
+      part2.getPartition((10, 0))
+    }
+
+    intercept[IllegalArgumentException] {
+      part2.getPartition((9, 20))
+    }
+
+    val part3 = new GridPartitioner(20, 10, 10)
+    assert(part3.getPartition((0, 0)) === 0)
+    assert(part3.getPartition((1, 0)) === 0)
+    assert(part3.getPartition((6, 0)) === 1)
+    assert(part3.getPartition((7, 3)) === 1)
+    assert(part3.getPartition((8, 3)) === 2)
+    assert(part3.getPartition((13, 3)) === 3)
+    assert(part3.getPartition((14, 9)) === 8)
+    assert(part3.getPartition((15, 9)) === 8)
+    assert(part3.getPartition((19, 9)) === 9)
   }
 
   test("toBreeze and toLocalMatrix") {

@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.linalg.distributed
 
 import breeze.linalg.{DenseMatrix => BDM}
+import org.apache.spark.util.Utils
 
 import org.apache.spark.{Logging, Partitioner}
 import org.apache.spark.mllib.linalg._
@@ -39,16 +40,17 @@ private[mllib] class GridPartitioner(
     val numRowBlocks: Int,
     val numColBlocks: Int,
     suggestedNumPartitions: Int) extends Partitioner {
+  private val totalBlocks = numRowBlocks.toLong * numColBlocks
   // Having the number of partitions greater than the number of sub matrices does not help
-  override val numPartitions = math.min(suggestedNumPartitions, numRowBlocks * numColBlocks)
+  override val numPartitions = math.min(suggestedNumPartitions, totalBlocks).toInt
 
-  val totalBlocks = numRowBlocks.toLong * numColBlocks
-  // Gives the number of blocks that need to be in each partition
-  val targetNumBlocksPerPartition = math.ceil(totalBlocks * 1.0 / numPartitions).toInt
+  private val blockLengthsPerPartition = findOptimalBlockLengths
   // Number of neighboring blocks to take in each row
-  val numRowBlocksPerPartition = math.ceil(numRowBlocks * 1.0 / targetNumBlocksPerPartition).toInt
+  private val numRowBlocksPerPartition = blockLengthsPerPartition._1
   // Number of neighboring blocks to take in each column
-  val numColBlocksPerPartition = math.ceil(numColBlocks * 1.0 / targetNumBlocksPerPartition).toInt
+  private val numColBlocksPerPartition = blockLengthsPerPartition._2
+  // Number of rows of partitions
+  private val blocksPerRow = math.ceil(numRowBlocks * 1.0 / numRowBlocksPerPartition).toInt
 
   /**
    * Returns the index of the partition the SubMatrix belongs to. Tries to achieve block wise
@@ -73,11 +75,54 @@ private[mllib] class GridPartitioner(
 
   /** Partitions sub-matrices as blocks with neighboring sub-matrices. */
   private def getPartitionId(blockRowIndex: Int, blockColIndex: Int): Int = {
+    require(0 <= blockRowIndex && blockRowIndex < numRowBlocks, "The blockRowIndex in the key " +
+      s"must be in the range 0 <= blockRowIndex < numRowBlocks. blockRowIndex: $blockRowIndex," +
+      s"numRowBlocks: $numRowBlocks")
+    require(0 <= blockRowIndex && blockColIndex < numColBlocks, "The blockColIndex in the key " +
+      s"must be in the range 0 <= blockRowIndex < numColBlocks. blockColIndex: $blockColIndex, " +
+      s"numColBlocks: $numColBlocks")
     // Coordinates of the block
     val i = blockRowIndex / numRowBlocksPerPartition
     val j = blockColIndex / numColBlocksPerPartition
-    val blocksPerRow = math.ceil(numRowBlocks * 1.0 / numRowBlocksPerPartition).toInt
-    j * blocksPerRow + i
+    // The mod shouldn't be required but is added as a guarantee for possible corner cases
+    Utils.nonNegativeMod(j * blocksPerRow + i, numPartitions)
+  }
+
+  /** Tries to calculate the optimal number of blocks that should be in each partition. */
+  private def findOptimalBlockLengths: (Int, Int) = {
+    // Gives the optimal number of blocks that need to be in each partition
+    val targetNumBlocksPerPartition = math.ceil(totalBlocks * 1.0 / numPartitions).toInt
+    // Number of neighboring blocks to take in each row
+    var m = math.ceil(math.sqrt(targetNumBlocksPerPartition)).toInt
+    // Number of neighboring blocks to take in each column
+    var n = math.ceil(targetNumBlocksPerPartition * 1.0 / m).toInt
+    // Try to make m and n close to each other while making sure that we don't exceed the number
+    // of partitions
+    var numBlocksForRows = math.ceil(numRowBlocks * 1.0 / m)
+    var numBlocksForCols = math.ceil(numColBlocks * 1.0 / n)
+    while ((numBlocksForRows * numBlocksForCols > numPartitions) && (m * n != 0)) {
+      if (numRowBlocks <= numColBlocks) {
+        m += 1
+        n = math.ceil(targetNumBlocksPerPartition * 1.0 / m).toInt
+      } else {
+        n += 1
+        m = math.ceil(targetNumBlocksPerPartition * 1.0 / n).toInt
+      }
+      numBlocksForRows = math.ceil(numRowBlocks * 1.0 / m)
+      numBlocksForCols = math.ceil(numColBlocks * 1.0 / n)
+    }
+    // If a good partitioning scheme couldn't be found, set the side with the smaller dimension to
+    // 1 and the other to the number of targetNumBlocksPerPartition
+    if (m * n == 0) {
+      if (numRowBlocks <= numColBlocks) {
+        m = 1
+        n = targetNumBlocksPerPartition
+      } else {
+        n = 1
+        m = targetNumBlocksPerPartition
+      }
+    }
+    (m, n)
   }
 
   /** Checks whether the partitioners have the same characteristics */
@@ -148,8 +193,6 @@ class BlockMatrix(
   private[mllib] var partitioner: GridPartitioner =
     new GridPartitioner(numRowBlocks, numColBlocks, rdd.partitions.length)
 
-
-
   /** Returns the dimensions of the matrix. */
   private def getDim: (Long, Long) = {
     val (rows, cols) = rdd.map { case ((blockRowIndex, blockColIndex), mat) =>
@@ -177,9 +220,11 @@ class BlockMatrix(
       s"Int.MaxValue. Currently numRows: ${numRows()}")
     require(numCols() < Int.MaxValue, "The number of columns of this matrix should be less than " +
       s"Int.MaxValue. Currently numCols: ${numCols()}")
+    require(numRows() * numCols() < Int.MaxValue, "The length of the values array must be " +
+      s"less than Int.MaxValue. Currently numRows * numCols: ${numRows() * numCols()}")
     val nRows = numRows().toInt
     val nCols = numCols().toInt
-    val mem = nRows.toLong * nCols / 125000
+    val mem = nRows * nCols / 125000
     if (mem > 500) logWarning(s"Storing this matrix will require $mem MB of memory!")
 
     val parts = rdd.collect()
@@ -187,17 +232,9 @@ class BlockMatrix(
     parts.foreach { case ((blockRowIndex, blockColIndex), block) =>
       val rowOffset = blockRowIndex * rowsPerBlock
       val colOffset = blockColIndex * colsPerBlock
-      var j = 0
-      val mat = block.toArray
-      while (j < block.numCols) {
-        var i = 0
-        val indStart = (j + colOffset) * nRows + rowOffset
-        val matStart = j * block.numRows
-        while (i < block.numRows) {
-          values(indStart + i) = mat(matStart + i)
-          i += 1
-        }
-        j += 1
+      block.foreachActive { (i, j, v) =>
+        val indexOffset = (j + colOffset) * nRows + rowOffset + i
+        values(indexOffset) = v
       }
     }
     new DenseMatrix(nRows, nCols, values)
