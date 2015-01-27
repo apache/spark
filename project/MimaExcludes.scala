@@ -60,8 +60,8 @@ object MimaExcludes {
               "org.apache.spark.mllib.linalg.Matrix.transpose"),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.DenseMatrix.transposeMultiply"),
-            ProblemFilters.exclude[MissingMethodProblem](
-              "org.apache.spark.mllib.linalg.Matrix.isTrans_="),
+            ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.linalg.Matrix." +
+                "org$apache$spark$mllib$linalg$Matrix$_setter_$isTransposed_="),
             ProblemFilters.exclude[MissingMethodProblem](
               "org.apache.spark.mllib.linalg.Matrix.isTransposed"),
             ProblemFilters.exclude[MissingMethodProblem](

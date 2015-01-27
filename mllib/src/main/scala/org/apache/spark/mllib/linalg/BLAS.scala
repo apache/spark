@@ -261,9 +261,7 @@ private[spark] object BLAS extends Serializable with Logging {
    * @param A the matrix A that will be left multiplied to B. Size of m x k.
    * @param B the matrix B that will be left multiplied by A. Size of k x n.
    * @param beta a scalar that can be used to scale matrix C.
-   * @param C the resulting matrix C. Size of m x n. C.isTransposed must be false. In other words,
-   *          C cannot be the product of a `transpose()` call, or be converted from a transposed
-   *          Breeze Matrix using `Matrices.fromBreeze()`.
+   * @param C the resulting matrix C. Size of m x n. C.isTransposed must be false.
    */
   def gemm(
       alpha: Double,

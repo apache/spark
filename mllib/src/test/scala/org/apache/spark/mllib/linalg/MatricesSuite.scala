@@ -22,6 +22,9 @@ import java.util.Random
 import org.mockito.Mockito.when
 import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar._
+import scala.collection.mutable.{Map => MutableMap}
+
+import org.apache.spark.mllib.util.TestingUtils._
 
 class MatricesSuite extends FunSuite {
   test("dense matrix construction") {
@@ -32,7 +35,6 @@ class MatricesSuite extends FunSuite {
     assert(mat.numRows === m)
     assert(mat.numCols === n)
     assert(mat.values.eq(values), "should not copy data")
-    assert(mat.toArray.eq(values), "toArray should not copy data")
   }
 
   test("dense matrix construction with wrong dimension") {
@@ -181,7 +183,7 @@ class MatricesSuite extends FunSuite {
     assert(sA(2, 1) === sAT(1, 2))
 
     assert(!dA.toArray.eq(dAT.toArray), "has to have a new array")
-    assert(dA.toArray.eq(dAT.transpose.toArray), "should not copy array")
+    assert(dA.values.eq(dAT.transpose.asInstanceOf[DenseMatrix].values), "should not copy array")
 
     assert(dAT.toSparse().toBreeze === sATexpected.toBreeze)
     assert(sAT.toDense().toBreeze === dATexpected.toBreeze)
@@ -198,29 +200,27 @@ class MatricesSuite extends FunSuite {
     val sp = new SparseMatrix(m, n, colPtrs, rowIndices, values)
     val dn = new DenseMatrix(m, n, allValues)
 
-    val dnMap = scala.collection.mutable.Map[(Int, Int), Double]()
+    val dnMap = MutableMap[(Int, Int), Double]()
     dn.foreachActive { (i, j, value) =>
       dnMap.put((i, j), value)
     }
     assert(dnMap.size === 6)
-    assert(dnMap.get(0, 0) === Some(1.0))
-    assert(dnMap.get(1, 0) === Some(2.0))
-    assert(dnMap.get(2, 0) === Some(0.0))
-    assert(dnMap.get(0, 1) === Some(0.0))
-    assert(dnMap.get(1, 1) === Some(4.0))
-    assert(dnMap.get(2, 1) === Some(5.0))
+    assert(dnMap(0, 0) === 1.0)
+    assert(dnMap(1, 0) === 2.0)
+    assert(dnMap(2, 0) === 0.0)
+    assert(dnMap(0, 1) === 0.0)
+    assert(dnMap(1, 1) === 4.0)
+    assert(dnMap(2, 1) === 5.0)
 
-    val spMap = scala.collection.mutable.Map[Int, Double]()
-    var cnt = 0
+    val spMap = MutableMap[(Int, Int), Double]()
     sp.foreachActive { (i, j, value) =>
-      spMap.put(cnt, value)
-      cnt += 1
+      spMap.put((i, j), value)
     }
     assert(spMap.size === 4)
-    assert(spMap.get(0) === Some(1.0))
-    assert(spMap.get(1) === Some(2.0))
-    assert(spMap.get(2) === Some(4.0))
-    assert(spMap.get(3) === Some(5.0))
+    assert(spMap(0, 0) === 1.0)
+    assert(spMap(1, 0) === 2.0)
+    assert(spMap(1, 1) === 4.0)
+    assert(spMap(2, 1) === 5.0)
   }
 
   test("horzcat, vertcat, eye, speye") {
@@ -267,8 +267,8 @@ class MatricesSuite extends FunSuite {
     assert(deHorz2.numCols === 0)
     assert(deHorz2.toArray.length === 0)
 
-    assert(deHorz1.toBreeze.toDenseMatrix === spHorz2.toBreeze.toDenseMatrix)
-    assert(spHorz2.toBreeze === spHorz3.toBreeze)
+    assert(deHorz1 ~== spHorz2.asInstanceOf[SparseMatrix].toDense absTol 1e-15)
+    assert(spHorz2 ~== spHorz3 absTol 1e-15)
     assert(spHorz(0, 0) === 1.0)
     assert(spHorz(2, 1) === 5.0)
     assert(spHorz(0, 2) === 1.0)
@@ -290,10 +290,10 @@ class MatricesSuite extends FunSuite {
     val spHorz3T = Matrices.horzcat(Array(deMat1TT, spMat2))
     val deHorz1T = Matrices.horzcat(Array(deMat1TT, deMat2))
 
-    assert(deHorz1T.toBreeze === deHorz1.toBreeze)
-    assert(spHorzT.toBreeze === spHorz.toBreeze)
-    assert(spHorz2T.toBreeze === spHorz2.toBreeze)
-    assert(spHorz3T.toBreeze === spHorz3.toBreeze)
+    assert(deHorz1T ~== deHorz1 absTol 1e-15)
+    assert(spHorzT ~== spHorz absTol 1e-15)
+    assert(spHorz2T ~== spHorz2 absTol 1e-15)
+    assert(spHorz3T ~== spHorz3 absTol 1e-15)
 
     intercept[IllegalArgumentException] {
       Matrices.horzcat(Array(spMat1, spMat3))
@@ -321,8 +321,8 @@ class MatricesSuite extends FunSuite {
     assert(deVert2.numCols === 0)
     assert(deVert2.toArray.length === 0)
 
-    assert(deVert1.toBreeze.toDenseMatrix === spVert2.toBreeze.toDenseMatrix)
-    assert(spVert2.toBreeze === spVert3.toBreeze)
+    assert(deVert1 ~== spVert2.asInstanceOf[SparseMatrix].toDense absTol 1e-15)
+    assert(spVert2 ~== spVert3 absTol 1e-15)
     assert(spVert(0, 0) === 1.0)
     assert(spVert(2, 1) === 5.0)
     assert(spVert(3, 0) === 1.0)
@@ -340,10 +340,10 @@ class MatricesSuite extends FunSuite {
     val spVert2T = Matrices.vertcat(Array(spMat1TT, deMat3))
     val spVert3T = Matrices.vertcat(Array(deMat1TT, spMat3))
 
-    assert(deVert1T.toBreeze === deVert1.toBreeze)
-    assert(spVertT.toBreeze === spVert.toBreeze)
-    assert(spVert2T.toBreeze === spVert2.toBreeze)
-    assert(spVert3T.toBreeze === spVert3.toBreeze)
+    assert(deVert1T ~== deVert1 absTol 1e-15)
+    assert(spVertT ~== spVert absTol 1e-15)
+    assert(spVert2T ~== spVert2 absTol 1e-15)
+    assert(spVert3T ~== spVert3 absTol 1e-15)
 
     intercept[IllegalArgumentException] {
       Matrices.vertcat(Array(spMat1, spMat2))
