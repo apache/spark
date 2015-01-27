@@ -294,7 +294,7 @@ class DataFrame protected[sql](
    *   // The following are equivalent:
    *   peopleDf.filter($"age" > 15)
    *   peopleDf.where($"age" > 15)
-   *   peopleDf($"age > 15)
+   *   peopleDf($"age" > 15)
    * }}}
    */
   override def filter(condition: Column): DataFrame = {
@@ -307,7 +307,7 @@ class DataFrame protected[sql](
    *   // The following are equivalent:
    *   peopleDf.filter($"age" > 15)
    *   peopleDf.where($"age" > 15)
-   *   peopleDf($"age > 15)
+   *   peopleDf($"age" > 15)
    * }}}
    */
   override def where(condition: Column): DataFrame = filter(condition)
@@ -318,7 +318,7 @@ class DataFrame protected[sql](
    *   // The following are equivalent:
    *   peopleDf.filter($"age" > 15)
    *   peopleDf.where($"age" > 15)
-   *   peopleDf($"age > 15)
+   *   peopleDf($"age" > 15)
    * }}}
    */
   override def apply(condition: Column): DataFrame = filter(condition)
