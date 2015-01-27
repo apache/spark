@@ -377,14 +377,17 @@ object Vectors {
       case (v1: DenseVector, v2: SparseVector) =>
         squaredDistance = sqdist(v2, v1)
 
-      case (v1, v2) =>
+      case (DenseVector(vv1), DenseVector(vv2)) =>
         var kv = 0
-        val nnzv = v1.size
-        while (kv < nnzv) {
-          var score = v1(kv) - v2(kv)
+        val sz = vv1.size
+        while (kv < sz) {
+          val score = vv1(kv) - vv2(kv)
           squaredDistance += score * score
           kv += 1
         }
+      case _ =>
+        throw new IllegalArgumentException("Do not support vector type " + v1.getClass +
+          " and " + v2.getClass)
     }
     squaredDistance
   }
