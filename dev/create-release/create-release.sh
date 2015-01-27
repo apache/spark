@@ -122,8 +122,14 @@ if [[ ! "$@" =~ --package-only ]]; then
   for file in $(find . -type f)
   do
     echo $GPG_PASSPHRASE | gpg --passphrase-fd 0 --output $file.asc --detach-sig --armour $file;
-    gpg --print-md MD5 $file > $file.md5;
-    gpg --print-md SHA1 $file > $file.sha1
+    if [ $(command -v md5) ]; then
+      # Available on OS X; -q to keep only hash
+      md5 -q $file > $file.md5
+    else
+      # Available on Linux; cut to keep only hash
+      md5sum $file | cut -f1 -d' ' > $file.md5
+    fi
+    shasum -a 1 $file | cut -f1 -d' ' > $file.sha1
   done
 
   nexus_upload=$NEXUS_ROOT/deployByRepositoryId/$staged_repo_id
