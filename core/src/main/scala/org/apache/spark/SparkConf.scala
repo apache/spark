@@ -53,8 +53,9 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   if (loadDefaults) {
     // Load any spark.* system properties
-    for ((k, v) <- System.getProperties.asScala if k.startsWith("spark.")) {
-      set(k, v)
+    val propNames = System.getProperties.stringPropertyNames().asScala
+    for (k <- propNames if k.startsWith("spark.")) {
+      set(k, System.getProperty(k))
     }
   }
 
