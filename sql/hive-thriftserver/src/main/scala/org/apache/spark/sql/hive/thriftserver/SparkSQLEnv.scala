@@ -49,7 +49,6 @@ private[hive] object SparkSQLEnv extends Logging {
       sparkContext = new SparkContext(sparkConf)
       sparkContext.addSparkListener(new StatsReportListener())
       hiveContext = new HiveContext(sparkContext)
-
       if (log.isDebugEnabled) {
         hiveContext.hiveconf.getAllProperties.toSeq.sorted.foreach { case (k, v) =>
           logDebug(s"HiveConf var: $k=$v")
