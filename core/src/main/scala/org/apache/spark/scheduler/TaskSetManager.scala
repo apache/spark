@@ -646,6 +646,9 @@ private[spark] class TaskSetManager(
             s"${ef.className} (${ef.description}) [duplicate $dupCount]")
         }
 
+      case e: TaskCommitDenied =>
+        logWarning(failureReason)
+
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
         logWarning(failureReason)
 
@@ -657,7 +660,7 @@ private[spark] class TaskSetManager(
       put(info.executorId, clock.getTime())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
     addPendingTask(index)
-    if (!isZombie && state != TaskState.KILLED) {
+    if (!isZombie && state != TaskState.KILLED && !reason.isInstanceOf[TaskCommitDenied]) {
       assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {

@@ -17,16 +17,15 @@
 
 package org.apache.spark.scheduler
 
-import java.util.concurrent.{ExecutorService, TimeUnit, Executors, ConcurrentHashMap}
+import java.util.concurrent.{ExecutorService, TimeUnit, ConcurrentHashMap}
 
 import scala.collection.{Map => ScalaImmutableMap}
-import scala.collection.concurrent.{Map => ScalaConcurrentMap}
 import scala.collection.convert.decorateAsScala._
 
 import akka.actor.{ActorRef, Actor}
 
 import org.apache.spark.{SparkConf, Logging}
-import org.apache.spark.util.{AkkaUtils, ActorLogReceive}
+import org.apache.spark.util.{Utils, AkkaUtils, ActorLogReceive}
 
 private[spark] sealed trait OutputCommitCoordinationMessage
 
@@ -119,7 +118,7 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
     coordinatorActor = Some(actor)
     executorRequestHandlingThreadPool = {
       if (isDriver) {
-        Some(Executors.newFixedThreadPool(4))
+        Some(Utils.newDaemonFixedThreadPool(8, "OutputCommitCoordinator"))
       } else {
         None
       }
@@ -174,8 +173,15 @@ private[spark] class OutputCommitCoordinator(conf: SparkConf) extends Logging {
       task: TaskId,
       partId: PartitionId,
       attempt: TaskAttemptId): Unit = {
-    executorRequestHandlingThreadPool.foreach(_.submit(
-      new AskCommitRunnable(requester, this, stage, task, partId, attempt)))
+    executorRequestHandlingThreadPool match {
+      case Some(threadPool) =>
+        threadPool.submit(new AskCommitRunnable(requester, this, stage, task, partId, attempt))
+      case None =>
+        logWarning("Got a request to commit output, but the OutputCommitCoordinator was already" +
+          " shut down. Request is being denied.")
+        requester ! false
+    }
+
   }
 
   private def handleTaskCompletion(

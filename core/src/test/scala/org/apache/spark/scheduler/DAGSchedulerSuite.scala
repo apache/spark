@@ -20,11 +20,10 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.{ArrayBuffer, HashSet, HashMap, Map}
 import scala.language.reflectiveCalls
 
+import org.mockito.Mockito.mock
 import org.scalatest.{BeforeAndAfter, FunSuiteLike}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
-
-import org.mockito.Mockito.mock
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD

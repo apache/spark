@@ -122,10 +122,14 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
           }
         }
       } else {
-        logInfo(s"$taID: Not committed because DAGScheduler did not authorize commit")
+        val msg: String = s"$taID: Not committed because the driver did not authorize commit"
+        logInfo(msg)
+        throw new CommitDeniedException(msg, jobID, splitID, attemptID)
       }
     } else {
-      logInfo(s"No need to commit output of task because needsTaskCommit=false: ${taID.value}")
+      val msg: String = s"No need to commit output of task because needsTaskCommit=false: ${taID.value}"
+      logInfo(msg)
+      throw new CommitDeniedException(msg, jobID, splitID, attemptID)
     }
   }
 
