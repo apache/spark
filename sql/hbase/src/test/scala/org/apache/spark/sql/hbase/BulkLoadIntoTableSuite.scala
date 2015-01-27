@@ -30,6 +30,10 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
   if (sparkHome == null || sparkHome.isEmpty)
     logError("Spark Home is not defined; may lead to unexpected error!")
 
+//  test("a") {
+//    val a =
+//  }
+
   // Test if we can parse 'LOAD DATA LOCAL INPATH './usr/file.txt' INTO TABLE tb1'
   test("bulk load parser test, local file") {
 
@@ -203,12 +207,12 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
     val sqlResult = TestHbase.sql("select * from testNullColumnBulkload")
     val rows = sqlResult.collect()
     assert(rows.length == 3, s"load parall data with null column values into hbase")
-    assert(rows(0)(1).asInstanceOf[String].isEmpty, s"load parall data into hbase test failed to select empty-string col1 value")
-    assert(rows(1)(2).asInstanceOf[String].isEmpty, s"load parall data into hbase test failed to select empty-string col2 value")
+    assert(rows(0)(1) == null, s"load parall data into hbase test failed to select empty-string col1 value")
+    assert(rows(1)(2) == null, s"load parall data into hbase test failed to select empty-string col2 value")
     assert(rows(2)(3) == null, s"load parall data into hbase test failed to select null col3 value")
     checkAnswer(sqlResult,
-      Row("row1", "", "8", "101") ::
-        Row("row2", "2", "", "102") ::
+      Row("row1", null, "8", "101") ::
+        Row("row2", "2", null, "102") ::
         Row("row3", "3", "10", null) :: Nil)
 
     // cleanup
@@ -254,12 +258,12 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
     val sqlResult = TestHbase.sql("select * from testNullColumnBulkload")
     val rows = sqlResult.collect()
     assert(rows.length == 3, s"load parall data with null column values into hbase")
-    assert(rows(0)(1).asInstanceOf[String].isEmpty, s"load parall data into hbase test failed to select empty-string col1 value")
-    assert(rows(1)(2).asInstanceOf[String].isEmpty, s"load parall data into hbase test failed to select empty-string col2 value")
+    assert(rows(0)(1) == null, s"load parall data into hbase test failed to select empty-string col1 value")
+    assert(rows(1)(2) == null, s"load parall data into hbase test failed to select empty-string col2 value")
     assert(rows(2)(3) == null, s"load parall data into hbase test failed to select null col3 value")
     checkAnswer(sqlResult,
-      Row("row1", "", "8", "101") ::
-        Row("row2", "2", "", "102") ::
+      Row("row1", null, "8", "101") ::
+        Row("row2", "2", null, "102") ::
         Row("row3", "3", "10", null) :: Nil)
 
     // cleanup
