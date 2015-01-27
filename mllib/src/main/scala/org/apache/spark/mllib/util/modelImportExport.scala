@@ -20,7 +20,6 @@ package org.apache.spark.mllib.util
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 
-
 /**
  * :: DeveloperApi ::
  *
@@ -50,7 +49,7 @@ trait Exportable {
 object Exportable {
 
   /** Current version of model import/export format. */
-  val version: String = "1.0"
+  val latestVersion: String = "1.0"
 
 }
 
@@ -73,12 +72,5 @@ trait Importable[Model <: Exportable] {
    * @return  Model instance
    */
   def load(sc: SparkContext, path: String): Model
-
-}
-
-object Importable {
-
-  /** Current version of model import/export format. */
-  val version: String = Exportable.version
 
 }

@@ -30,6 +30,7 @@ import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.util.Utils
 
 object LogisticRegressionSuite {
 
@@ -481,7 +482,7 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     val tempDir = Utils.createTempDir()
     val path = tempDir.toURI.toString
 
-    // Save model
+    // Save model, load it back, and compare.
     model.save(sc, path)
     val sameModel = LogisticRegressionModel.load(sc, path)
     assert(model.weights == sameModel.weights)
@@ -489,12 +490,11 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     assert(sameModel.getThreshold.isEmpty)
     Utils.deleteRecursively(tempDir)
 
-    // Save model with threshold
+    // Save model with threshold.
     model.setThreshold(0.7)
     model.save(sc, path)
     val sameModel2 = LogisticRegressionModel.load(sc, path)
     assert(model.getThreshold.get == sameModel2.getThreshold.get)
-
     Utils.deleteRecursively(tempDir)
   }
 

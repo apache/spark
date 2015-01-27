@@ -23,10 +23,10 @@ import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.linalg.{DenseVector, Vector}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
-import org.apache.spark.mllib.util.{DataValidators, MLUtils}
-import org.apache.spark.mllib.util.{Importable, DataValidators, Exportable}
+import org.apache.spark.mllib.util.{DataValidators, Exportable, Importable, MLUtils}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext, SchemaRDD}
+
 
 /**
  * Classification model trained using Multinomial/Binary Logistic Regression.
@@ -143,8 +143,8 @@ class LogisticRegressionModel (
     import sqlContext._
     // TODO: Do we need to use a SELECT statement to make the column ordering deterministic?
     // Create JSON metadata.
-    val metadata =
-      LogisticRegressionModel.Metadata(clazz = this.getClass.getName, version = Exportable.version)
+    val metadata = LogisticRegressionModel.Metadata(
+      clazz = this.getClass.getName, version = Exportable.latestVersion)
     val metadataRDD: SchemaRDD = sc.parallelize(Seq(metadata))
     metadataRDD.toJSON.saveAsTextFile(path + "/metadata")
     // Create Parquet data.
@@ -155,6 +155,10 @@ class LogisticRegressionModel (
 }
 
 object LogisticRegressionModel extends Importable[LogisticRegressionModel] {
+
+  private case class Metadata(clazz: String, version: String)
+
+  private case class Data(weights: Vector, intercept: Double, threshold: Option[Double])
 
   override def load(sc: SparkContext, path: String): LogisticRegressionModel = {
     val sqlContext = new SQLContext(sc)
@@ -169,7 +173,7 @@ object LogisticRegressionModel extends Importable[LogisticRegressionModel] {
       case Row(clazz: String, version: String) =>
         assert(clazz == classOf[LogisticRegressionModel].getName, s"LogisticRegressionModel.load" +
           s" was given model file with metadata specifying a different model class: $clazz")
-        assert(version == Importable.version, // only 1 version exists currently
+        assert(version == Exportable.latestVersion, // only 1 version exists currently
           s"LogisticRegressionModel.load did not recognize model format version: $version")
     }
 
@@ -191,10 +195,6 @@ object LogisticRegressionModel extends Importable[LogisticRegressionModel] {
     }
     lr
   }
-
-  private case class Metadata(clazz: String, version: String)
-
-  private case class Data(weights: Vector, intercept: Double, threshold: Option[Double])
 
 }
 
