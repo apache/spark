@@ -112,15 +112,17 @@ object SparkSubmit {
    * Second, we use this launch environment to invoke the main method of the child
    * main class.
    *
-   * Note that standalone cluster mode is an exception in that we do not invoke the
-   * main method of a child class. Instead, we pass the submit parameters directly to
-   * a REST client, which will submit the application using the stable REST protocol.
+   * As of Spark 1.3, a stable REST-based application submission gateway is introduced.
+   * If this is enabled, then we will run standalone cluster mode by passing the submit
+   * parameters directly to a REST client, which will submit the application using the
+   * REST protocol instead.
    */
   private def submit(args: SparkSubmitArguments): Unit = {
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
-    // In standalone cluster mode, use the stable application submission REST protocol.
-    // Otherwise, just call the main method of the child class.
-    if (args.isStandaloneCluster) {
+    val restKey = "spark.submit.rest.enabled"
+    val restEnabled = args.sparkProperties.get(restKey).getOrElse("false").toBoolean
+    if (args.isStandaloneCluster && restEnabled) {
+      printStream.println("Running standalone cluster mode using the stable REST protocol.")
       // NOTE: since we mutate the values of some configs in `prepareSubmitEnvironment`, we
       // must update the corresponding fields in the original SparkSubmitArguments to reflect
       // these changes.

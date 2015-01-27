@@ -124,11 +124,14 @@ private[spark] class Master(
 
   // Alternative application submission gateway that is stable across Spark versions
   private val restServerEnabled = conf.getBoolean("spark.master.rest.enabled", true)
-  private val restServerPort = conf.getInt("spark.master.rest.port", 17077)
-  private val restServer = new StandaloneRestServer(this, host, restServerPort)
-  if (restServerEnabled) {
-    restServer.start()
-  }
+  private val restServer =
+    if (restServerEnabled) {
+      val port = conf.getInt("spark.master.rest.port", 17077)
+      Some(new StandaloneRestServer(this, host, port))
+    } else {
+      None
+    }
+  private val restServerBoundPort = restServer.map(_.start())
 
   override def preStart() {
     logInfo("Starting Spark master at " + masterUrl)
@@ -183,7 +186,7 @@ private[spark] class Master(
       recoveryCompletionTask.cancel()
     }
     webUi.stop()
-    restServer.stop()
+    restServer.foreach(_.stop())
     masterMetricsSystem.stop()
     applicationMetricsSystem.stop()
     persistenceEngine.close()
@@ -431,7 +434,9 @@ private[spark] class Master(
     }
 
     case RequestMasterState => {
-      sender ! MasterStateResponse(host, port, workers.toArray, apps.toArray, completedApps.toArray,
+      sender ! MasterStateResponse(
+        host, port, restServerBoundPort,
+        workers.toArray, apps.toArray, completedApps.toArray,
         drivers.toArray, completedDrivers.toArray, state)
     }
 

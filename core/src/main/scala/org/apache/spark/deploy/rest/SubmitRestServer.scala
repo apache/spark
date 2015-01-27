@@ -41,10 +41,12 @@ private[spark] abstract class SubmitRestServer(host: String, requestedPort: Int,
   protected val handler: SubmitRestServerHandler
   private var _server: Option[Server] = None
 
-  def start(): Unit = {
+  /** Start the server and return the bound port. */
+  def start(): Int = {
     val (server, boundPort) = Utils.startServiceOnPort[Server](requestedPort, doStart, conf)
     _server = Some(server)
     logInfo(s"Started REST server for submitting applications on port $boundPort")
+    boundPort
   }
 
   def stop(): Unit = {
