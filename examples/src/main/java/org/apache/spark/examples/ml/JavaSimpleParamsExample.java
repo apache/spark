@@ -48,7 +48,7 @@ public class JavaSimpleParamsExample {
 
     // Prepare training data.
     // We use LabeledPoint, which is a JavaBean.  Spark SQL can convert RDDs of JavaBeans
-    // into SchemaRDDs, where it uses the bean metadata to infer the schema.
+    // into DataFrames, where it uses the bean metadata to infer the schema.
     List<LabeledPoint> localTraining = Lists.newArrayList(
       new LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
       new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),

@@ -458,6 +458,11 @@ class DataFrame protected[sql](
    */
   override def head(): Row = head(1).head
 
+  /**
+   * Return the first row. Alias for head().
+   */
+  override def first(): Row = head()
+
   override def map[R: ClassTag](f: Row => R): RDD[R] = {
     rdd.map(f)
   }

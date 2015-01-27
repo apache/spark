@@ -34,11 +34,11 @@ class DslQuerySuite extends QueryTest {
       testData.collect().toSeq)
   }
 
-//  test("repartition") {
-//    checkAnswer(
-//      testData.select('key).repartition(10).select('key),
-//      testData.select('key).collect().toSeq)
-//  }
+  test("repartition") {
+    checkAnswer(
+      testData.select('key).repartition(10).select('key),
+      testData.select('key).collect().toSeq)
+  }
 
   test("agg") {
     checkAnswer(
@@ -266,15 +266,15 @@ class DslQuerySuite extends QueryTest {
     checkAnswer(lowerCaseData.intersect(upperCaseData), Nil)
   }
 
-//  test("udf") {
-//    val foo = (a: Int, b: String) => a.toString + b
-//
-//    checkAnswer(
-//      // SELECT *, foo(key, value) FROM testData
-//      testData.select(Star(None), foo.call('key, 'value)).limit(3),
-//      Row(1, "1", "11") :: Row(2, "2", "22") :: Row(3, "3", "33") :: Nil
-//    )
-//  }
+  test("udf") {
+    val foo = (a: Int, b: String) => a.toString + b
+
+    checkAnswer(
+      // SELECT *, foo(key, value) FROM testData
+      testData.select($"*", callUDF(foo, 'key, 'value)).limit(3),
+      Row(1, "1", "11") :: Row(2, "2", "22") :: Row(3, "3", "33") :: Nil
+    )
+  }
 
   test("sqrt") {
     checkAnswer(

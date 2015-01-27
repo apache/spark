@@ -41,7 +41,7 @@ object SimpleParamsExample {
 
     // Prepare training data.
     // We use LabeledPoint, which is a case class.  Spark SQL can convert RDDs of Java Beans
-    // into SchemaRDDs, where it uses the bean metadata to infer the schema.
+    // into DataFrames, where it uses the bean metadata to infer the schema.
     val training = sparkContext.parallelize(Seq(
       LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
       LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),

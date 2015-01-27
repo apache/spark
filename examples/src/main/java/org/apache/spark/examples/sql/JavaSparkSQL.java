@@ -80,7 +80,7 @@ public class JavaSparkSQL {
     // SQL can be run over RDDs that have been registered as tables.
     DataFrame teenagers = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
 
-    // The results of SQL queries are SchemaRDDs and support all the normal RDD operations.
+    // The results of SQL queries are DataFrames and support all the normal RDD operations.
     // The columns of a row in the result can be accessed by ordinal.
     List<String> teenagerNames = teenagers.toJavaRDD().map(new Function<Row, String>() {
       @Override
@@ -93,12 +93,12 @@ public class JavaSparkSQL {
     }
 
     System.out.println("=== Data source: Parquet File ===");
-    // JavaSchemaRDDs can be saved as parquet files, maintaining the schema information.
+    // DataFrames can be saved as parquet files, maintaining the schema information.
     schemaPeople.saveAsParquetFile("people.parquet");
 
     // Read in the parquet file created above.
     // Parquet files are self-describing so the schema is preserved.
-    // The result of loading a parquet file is also a JavaSchemaRDD.
+    // The result of loading a parquet file is also a DataFrame.
     DataFrame parquetFile = sqlCtx.parquetFile("people.parquet");
 
     //Parquet files can also be registered as tables and then used in SQL statements.
@@ -119,7 +119,7 @@ public class JavaSparkSQL {
     // A JSON dataset is pointed by path.
     // The path can be either a single text file or a directory storing text files.
     String path = "examples/src/main/resources/people.json";
-    // Create a JavaSchemaRDD from the file(s) pointed by path
+    // Create a DataFrame from the file(s) pointed by path
     DataFrame peopleFromJsonFile = sqlCtx.jsonFile(path);
 
     // Because the schema of a JSON dataset is automatically inferred, to write queries,
@@ -130,13 +130,13 @@ public class JavaSparkSQL {
     //  |-- age: IntegerType
     //  |-- name: StringType
 
-    // Register this JavaSchemaRDD as a table.
+    // Register this DataFrame as a table.
     peopleFromJsonFile.registerTempTable("people");
 
     // SQL statements can be run by using the sql methods provided by sqlCtx.
     DataFrame teenagers3 = sqlCtx.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
 
-    // The results of SQL queries are JavaSchemaRDDs and support all the normal RDD operations.
+    // The results of SQL queries are DataFrame and support all the normal RDD operations.
     // The columns of a row in the result can be accessed by ordinal.
     teenagerNames = teenagers3.toJavaRDD().map(new Function<Row, String>() {
       @Override
@@ -146,14 +146,14 @@ public class JavaSparkSQL {
       System.out.println(name);
     }
 
-    // Alternatively, a JavaSchemaRDD can be created for a JSON dataset represented by
+    // Alternatively, a DataFrame can be created for a JSON dataset represented by
     // a RDD[String] storing one JSON object per string.
     List<String> jsonData = Arrays.asList(
           "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
     JavaRDD<String> anotherPeopleRDD = ctx.parallelize(jsonData);
     DataFrame peopleFromJsonRDD = sqlCtx.jsonRDD(anotherPeopleRDD.rdd());
 
-    // Take a look at the schema of this new JavaSchemaRDD.
+    // Take a look at the schema of this new DataFrame.
     peopleFromJsonRDD.printSchema();
     // The schema of anotherPeople is ...
     // root

@@ -54,6 +54,8 @@ trait RDDApi[T] {
 
   def count(): Long
 
+  def first(): T
+
   def repartition(numPartitions: Int): DataFrame
 }
 
