@@ -246,7 +246,7 @@ class RowMatrix(
         val G = computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
         EigenValueDecomposition.symmetricEigs(v => G * v, n, k, tol, maxIter)
       case SVDMode.LocalLAPACK =>
-        //breeze (v0.10) svd latent constraint, 7 * n * n + 4 * n < Int.MaxValue
+        // breeze (v0.10) svd latent constraint, 7 * n * n + 4 * n < Int.MaxValue
         require(n < 17515, s"$n exceeds the breeze svd capability")
         val G = computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
         val brzSvd.SVD(uFull: BDM[Double], sigmaSquaresFull: BDV[Double], _) = brzSvd(G)
