@@ -232,8 +232,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   }
 
   /**
-   * Creates an actor that ApplicationMaster communicates with YarnScheduler of driver
-   * in Yarn deploy mode.
+   * Create an actor that communicates with the driver.
    *
    * If isDriver is set to true, AMActor and driver belong to same process.
    * so AMActor don't monitor lifecycle of driver.
@@ -478,7 +477,7 @@ private[spark] class ApplicationMaster(args: ApplicationMasterArguments,
   }
 
   /**
-   * Actor that communicates with the driver in Yarn deploy mode.
+   * An actor that communicates with the driver's scheduler backend.
    */
   private class AMActor(driverUrl: String, isDriver: Boolean) extends Actor {
     var driver: ActorSelection = _
