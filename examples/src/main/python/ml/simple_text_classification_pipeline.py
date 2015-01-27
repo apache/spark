@@ -34,12 +34,13 @@ pipeline in Python. Run with:
 if __name__ == "__main__":
     sc = SparkContext(appName="SimpleTextClassificationPipeline")
     sqlCtx = SQLContext(sc)
+    LabeledDocument = Row('id', 'text', 'label')
     training = sqlCtx.inferSchema(
         sc.parallelize([(0L, "a b c d e spark", 1.0),
                         (1L, "b d", 0.0),
                         (2L, "spark f g h", 1.0),
                         (3L, "hadoop mapreduce", 0.0)])
-          .map(lambda x: Row(id=x[0], text=x[1], label=x[2])))
+          .map(lambda x: LabeledDocument(*x)))
 
     tokenizer = Tokenizer() \
         .setInputCol("text") \
@@ -55,12 +56,13 @@ if __name__ == "__main__":
 
     model = pipeline.fit(training)
 
+    Document = Row('id', 'text')
     test = sqlCtx.inferSchema(
         sc.parallelize([(4L, "spark i j k"),
                         (5L, "l m n"),
                         (6L, "mapreduce spark"),
                         (7L, "apache hadoop")])
-          .map(lambda x: Row(id=x[0], text=x[1])))
+          .map(lambda x: Document(*x)))
 
     prediction = model.transform(test)
 
