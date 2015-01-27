@@ -578,9 +578,19 @@ private[master] class Master(
     }
   }
 
+  /**
+   * This functions starts multiple executors on each worker.
+   * It first calculates the maximum number of executors we can allocate to the application in this 
+   * scheduling moment according to the free memory space on each worker, then tries to allocate executors
+   * on each worker according to the user-specified spark.executor.maxCoreNumPerExecutor.
+   * 
+   * It traverses the available worker list. In spreadOutApps mode, it allocates at most
+   * spark.executor.maxCoreNumPerExecutor cores (can be less than it when the worker does not have enough 
+   * cores or the demand is less than it) and app.desc.memoryPerExecutorMB megabytes memory and tracks the 
+   * resource allocation in a 2d array for each visit; Otherwise, it uses up all available resources of a worker 
+   * for each visit.
+   */
   private def startMultiExecutorsPerWorker() {
-    // allow user to run multiple executors in the same worker
-    // (within the same worker JVM process)
     if (spreadOutApps) {
       for (app <- waitingApps if app.coresLeft > 0) {
         val memoryPerExecutor = app.desc.memoryPerExecutorMB
@@ -588,30 +598,24 @@ private[master] class Master(
           filter(worker => worker.coresFree > 0 && worker.memoryFree >= memoryPerExecutor).toArray.
           sortBy(_.memoryFree / memoryPerExecutor).reverse
         val maxCoreNumPerExecutor = app.desc.maxCorePerExecutor.get
-        // get the maximum total number of executors we can assign
-        var maxLeftExecutorsToAssign = usableWorkers.map(_.memoryFree / memoryPerExecutor).sum
+        // get the maximum number of executors we can assign
+        var leftExecutorNumToAssign = usableWorkers.map(_.memoryFree / memoryPerExecutor).sum
         var maxCoresLeft = app.coresLeft
         val numUsable = usableWorkers.length
-        // Number of cores of each executor assigned to each worker
+        // 2D array to track the number of cores of each executor assigned to each worker
         val assigned = Array.fill[ListBuffer[Int]](numUsable)(new ListBuffer[Int])
         val assignedSum = Array.fill[Int](numUsable)(0)
         var pos = 0
-        val noEnoughMemoryWorkers = new HashSet[Int]
-        while (maxLeftExecutorsToAssign > 0 && noEnoughMemoryWorkers.size < numUsable) {
+        while (leftExecutorNumToAssign > 0) {
           if (usableWorkers(pos).coresFree - assignedSum(pos) > 0) {
             val coreToAssign = math.min(math.min(usableWorkers(pos).coresFree - assignedSum(pos),
               maxCoreNumPerExecutor), maxCoresLeft)
-            if (usableWorkers(pos).memoryFree >=
-              app.desc.memoryPerExecutorMB * (assigned(pos).length + 1)) {
-              maxLeftExecutorsToAssign -= coreToAssign
+            if (usableWorkers(pos).memoryFree >= memoryPerExecutor * (assigned(pos).length + 1)) {
+              leftExecutorNumToAssign -= 1
               assigned(pos) += coreToAssign
               assignedSum(pos) += coreToAssign
               maxCoresLeft -= coreToAssign
             }
-          }
-          if (usableWorkers(pos).memoryFree < app.desc.memoryPerExecutorMB *
-            (assigned(pos).length + 1)) {
-            noEnoughMemoryWorkers += pos
           }
           pos = (pos + 1) % numUsable
         }
