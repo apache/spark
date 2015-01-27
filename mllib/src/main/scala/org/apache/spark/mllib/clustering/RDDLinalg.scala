@@ -19,23 +19,25 @@ package org.apache.spark.mllib.clustering
 
 import org.apache.spark.graphx.{EdgeRDD, Edge, VertexId}
 import org.apache.spark.mllib.clustering.{PICLinalg => LA}
+import breeze.linalg.{DenseVector => BDV}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.{Partitioner, SparkContext}
 import org.apache.spark.mllib.clustering.PICLinalg._
 import scala.util.Random
 
 object RDDLinalg {
+
   val DefaultMinNormAccel: Double = 1e-11
 
   val DefaultIterations: Int = 20
     val calcEigenDiffs = true
 
   def getPrincipalEigen(sc: SparkContext,
-                        vectRdd: RDD[IndexedVector],
+                        vectRdd: RDD[IndexeBDV[Double]],
                         rddSize: Option[Int] = None,
                         nIterations: Int = DefaultIterations,
                         minNormAccel: Double = DefaultMinNormAccel
-                         ): (Double, DVector) = {
+                         ): (Double, BDV[Double]) = {
 
     vectRdd.cache()
     val rowMajorRdd = vectRdd.map(identity) // Linalg.transpose(vectRdd)
@@ -64,7 +66,7 @@ object RDDLinalg {
       eigenRdd = rowMajorRdd.mapPartitions { piter =>
         val localEigenRdd = bcEigenRdd.value
         piter.map { case (ix, dvect) =>
-          val d = LA.dot(dvect, localEigenRdd.map(_._2).toArray)
+          val d = LA.dot(dvect, new BDV(localEigenRdd.map(_._2).toArray))
           println(s"localEigenRdd($ix)=$d (from ${dvect.mkString(",")} "
             + s" and ${localEigenRdd.map(_._2).mkString(",")})")
           (ix, d)
@@ -97,14 +99,14 @@ object RDDLinalg {
     }
     vectRdd.unpersist()
 
-    //      val darr = new DVector(numVects)
+    //      val darr = new BDV[Double](numVects)
     val eigenVect = eigenRddCollected.map(_._2).toArray
     val pdiff = eigenRddCollectedPrior.zip(eigenVect).foldLeft(0.0) { case (sum, (e1v, e2v)) =>
       sum + Math.abs(e1v - e2v)
     }
     assert(LA.withinTol(pdiff),
       s"Why is the prior eigenValue not nearly equal to present one:  diff=$pdiff")
-    val lambda = LA.dot(vectRdd.take(1)(0)._2, eigenVect) / eigenVect(0)
+    val lambda = LA.dot(vectRdd.take(1)(0)._2, new BDV(eigenVect)) / eigenVect(0)
     //      assert(withinTol(lambdaRatio - 1.0),
     //        "According to A *X = lambda * X we should have (A *X / X) ratio  = lambda " +
     //          s"but that did not happen: instead ratio=$lambdaRatio")
@@ -112,10 +114,10 @@ object RDDLinalg {
     //    println(s"eigenRdd: ${collectedEigenRdd.mkString(",")}")
     //      System.arraycopy(collectedEigenRdd, 0, darr, 0, darr.length)
     //      (cnorm, darr)
-    (lambda, eigenVect)
+    (lambda, new BDV(eigenVect))
   }
 
-  def transpose(indexedRdd: RDD[IndexedVector]) = {
+  def transpose(indexedRdd: RDD[IndexeBDV[Double]]) = {
     val nVertices = indexedRdd.count.toInt
     val ColsPartitioner = new Partitioner() {
       override def numPartitions: Int = nVertices
@@ -139,8 +141,8 @@ object RDDLinalg {
     columnsRdd
   }
 
-  def subtractProjection(sc: SparkContext, vectorsRdd: RDD[IndexedVector], vect: DVector):
-  RDD[IndexedVector] = {
+  def subtractProjection(sc: SparkContext, vectorsRdd: RDD[IndexeBDV[Double]], vect: BDV[Double]):
+  RDD[IndexeBDV[Double]] = {
     val bcVect = sc.broadcast(vect)
     val subVectRdd = vectorsRdd.mapPartitions { iter =>
       val localVect = bcVect.value
@@ -161,17 +163,16 @@ object RDDLinalg {
 
   val printInputMatrix: Boolean = false
 
-  def eigens(sc: SparkContext, matrixRdd: RDD[IndexedVector], nClusters: Int,
+  def eigens(sc: SparkContext, matrixRdd: RDD[IndexeBDV[Double]], nClusters: Int,
              nPowerIterations: Int) = {
     val lambdas = new Array[Double](nClusters)
     val eigens = new Array[RDD[Array[Double]]](nClusters)
     var deflatedRdd = matrixRdd.map(identity) // Clone the original matrix
     val nVertices = deflatedRdd.count.toInt
     if (printInputMatrix) {
-      val collectedMatrixRdd = matrixRdd.collect
+//      val collectedMatrixRdd = matrixRdd.collect
       println(s"Degrees Matrix:\n${
-        LA.printMatrix(collectedMatrixRdd.map(_._2),
-          nVertices, nVertices)
+        printMatrix(matrixRdd, nVertices, nVertices)
       }")
     }
     for (ex <- 0 until nClusters) {
@@ -182,11 +183,9 @@ object RDDLinalg {
       deflatedRdd = subtractProjection(sc, deflatedRdd, eigen)
       //      deflatedRdd = sc.parallelize(deflatedRddCollected, nVertices)
       if (printDeflatedRdd) {
-        val deflatedRddCollected = deflatedRdd.collect
+//        val deflatedRddCollected = deflatedRdd.collect
         println(s"EigensRemovedRDDCollected=\n${
-          LA.printMatrix(deflatedRddCollected.map {
-            _._2
-          }, nVertices, nVertices)
+          printMatrix(deflatedRdd, nVertices, nVertices)
         }")
       }
       val arrarr = new Array[Array[Double]](1)
@@ -202,6 +201,11 @@ object RDDLinalg {
 
   def printVertices(vertices: Array[(VertexId, Double)]) = {
     vertices.map { case (vid, dval) => s"($vid,$dval)"}.mkString(" , ")
+  }
+
+  def printMatrix(denseVectorRDD: RDD[LabeledVector], i: Int, i1: Int) = {
+    denseVectorRDD.collect.map{
+          case (vid, dvect) => dvect.toArray}.flatten
   }
 
   def printMatrixFromEdges(edgesRdd: EdgeRDD[_]) = {

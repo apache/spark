@@ -22,20 +22,30 @@ import org.apache.spark.SparkContext
 import org.apache.spark.graphx._
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
+import breeze.linalg.{DenseVector => BDV}
 
+/**
+ * Implements the scalable graph clustering algorithm Power Iteration Clustering (see
+ * www.icml2010.org/papers/387.pdf).  From the abstract:
+ *
+ * The input data is first transformed to a normalized Affinity Matrix via Gaussian pairwise
+ * distance calculations. Power iteration is then used to find a dimensionality-reduced
+ * representation.  The resulting pseudo-eigenvector provides effective clustering - as
+ * performed by Parallel KMeans.
+ */
 object PIClustering {
 
   private val logger = Logger.getLogger(getClass.getName())
-  type DVector = Array[Double]
+//  type BDV[Double] = BDV[Double]
 
   type DEdge = Edge[Double]
-  type LabeledPoint = (VertexId, DVector)
+  type LabeledPoint = (VertexId, BDV[Double])
 
   type Points = Seq[LabeledPoint]
 
   type DGraph = Graph[Double, Double]
 
-  type IndexedVector = (Long, DVector)
+  type IndexedVector[Double] = (Long, BDV[Double])
 
   val DefaultMinNormChange: Double = 1e-11
 
@@ -202,31 +212,12 @@ object PIClustering {
     (outG, vnorm, outG.vertices)
   }
 
-  def scalarDot(d1: DVector, d2: DVector) = {
-    Math.sqrt(d1.zip(d2).foldLeft(0.0) { case (sum, (d1v, d2v)) =>
-      sum + d1v * d2v
-    })
-  }
-
-  def vectorDot(d1: DVector, d2: DVector) = {
-    d1.zip(d2).map { case (d1v, d2v) =>
-      d1v * d2v
-    }
-  }
-
-  def normVect(d1: DVector, d2: DVector) = {
-    val scaldot = scalarDot(d1, d2)
-    vectorDot(d1, d2).map {
-      _ / scaldot
-    }
-  }
-
   def readVerticesfromFile(verticesFile: String): Points = {
 
     import scala.io.Source
     val vertices = Source.fromFile(verticesFile).getLines.map { l =>
       val toks = l.split("\t")
-      val arr = toks.slice(1, toks.length).map(_.toDouble)
+      val arr = Vectors.dense(toks.slice(1, toks.length).map(_.toDouble)).asInstanceOf[BDV]
       (toks(0).toLong, arr)
     }.toSeq
     if (logger.isDebugEnabled) {
@@ -235,8 +226,8 @@ object PIClustering {
     vertices
   }
 
-  def gaussianDist(c1arr: DVector, c2arr: DVector, sigma: Double) = {
-    val c1c2 = c1arr.zip(c2arr)
+  def gaussianDist(c1arr: BDV[Double], c2arr: BDV[Double], sigma: Double) = {
+    val c1c2 = c1arr.toArray.zip(c2arr.toArray)
     val dist = Math.exp((-0.5 / Math.pow(sigma, 2.0)) * c1c2.foldLeft(0.0) {
       case (dist: Double, (c1: Double, c2: Double)) =>
         dist + Math.pow(c1 - c2, 2)
@@ -244,11 +235,11 @@ object PIClustering {
     dist
   }
 
-  def createSparseEdgesRdd(sc: SparkContext, wRdd: RDD[IndexedVector],
+  def createSparseEdgesRdd(sc: SparkContext, wRdd: RDD[IndexedVector[Double]],
                            minAffinity: Double = DefaultMinAffinity) = {
     val labels = wRdd.map { case (vid, vect) => vid}.collect
     val edgesRdd = wRdd.flatMap { case (vid, vect) =>
-      for ((dval, ix) <- vect.zipWithIndex
+      for ((dval, ix) <- vect.toArray.zipWithIndex
            if Math.abs(dval) >= minAffinity)
       yield Edge(vid, labels(ix), dval)
     }
@@ -258,9 +249,9 @@ object PIClustering {
   def createNormalizedAffinityMatrix(sc: SparkContext, points: Points, sigma: Double) = {
     val nVertices = points.length
     val affinityRddNotNorm = sc.parallelize({
-      val ivect = new Array[IndexedVector](nVertices)
+      val ivect = new Array[IndexedVector[Double]](nVertices)
       for (i <- 0 until points.size) {
-        ivect(i) = new IndexedVector(points(i)._1, new DVector(nVertices))
+        ivect(i) = new IndexedVector(points(i)._1, BDV(nVertices))
         for (j <- 0 until points.size) {
           val dist = if (i != j) {
             gaussianDist(points(i)._2, points(j)._2, sigma)
@@ -276,8 +267,7 @@ object PIClustering {
     }, nVertices)
     if (logger.isDebugEnabled) {
       logger.debug(s"Affinity:\n${
-        LA.printMatrix(affinityRddNotNorm.collect.map(_._2._2),
-          nVertices, nVertices)
+        RDDLA.printMatrix(affinityRddNotNorm.map_._2), nVertices, nVertices)
       }")
     }
     val rowSums = affinityRddNotNorm.map { case (ix, (vid, vect)) =>
@@ -292,17 +282,17 @@ object PIClustering {
       })
     }
     if (logger.isDebugEnabled) {
-      logger.debug(s"W:\n${LA.printMatrix(similarityRdd.collect.map(_._2), nVertices, nVertices)}")
+      logger.debug(s"W:\n${RDDLA.printMatrix(similarityRdd, nVertices, nVertices)}")
     }
     (similarityRdd, materializedRowSums)
   }
 
-  def norm(vect: DVector): Double = {
+  def norm(vect: BDV[Double]): Double = {
     Math.sqrt(vect.foldLeft(0.0) { case (sum, dval) => sum + Math.pow(dval, 2)})
   }
 
-  def printMatrix(darr: Array[DVector], numRows: Int, numCols: Int): String = {
-    val flattenedArr = darr.zipWithIndex.foldLeft(new DVector(numRows * numCols)) {
+  def printMatrix(darr: Array[BDV[Double]], numRows: Int, numCols: Int): String = {
+    val flattenedArr = darr.zipWithIndex.foldLeft(BDV[Double](numRows * numCols)) {
       case (flatarr, (row, indx)) =>
         System.arraycopy(row, 0, flatarr, indx * numCols, numCols)
         flatarr
@@ -310,7 +300,7 @@ object PIClustering {
     printMatrix(flattenedArr, numRows, numCols)
   }
 
-  def printMatrix(darr: DVector, numRows: Int, numCols: Int): String = {
+  def printMatrix(darr: BDV[Double], numRows: Int, numCols: Int): String = {
     val stride = (darr.length / numCols)
     val sb = new StringBuilder
     def leftJust(s: String, len: Int) = {
@@ -326,8 +316,8 @@ object PIClustering {
     sb.toString
   }
 
-  def printVect(dvect: DVector) = {
-    dvect.mkString(",")
+  def printVect(dvect: BDV[Double]) = {
+    dvect.toArray.mkString(",")
   }
 
 }

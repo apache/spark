@@ -19,35 +19,10 @@ package org.apache.spark.mllib.clustering
 
 import org.apache.spark.graphx._
 import org.apache.spark.mllib.clustering.PICLinalg.DMatrix
-import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.FunSuite
 
 import scala.util.Random
 
-
-/**
- * Provides a method to run tests against a {@link SparkContext} variable that is correctly stopped
- * after each test.
- * TODO: import this from the graphx test cases package i.e. may need update to pom.xml
- */
-trait LocalSparkContext {
-  /** Runs `f` on a new SparkContext and ensures that it is stopped afterwards. */
-  def withSpark[T](f: SparkContext => T) = {
-    val conf = new SparkConf()
-    GraphXUtils.registerKryoClasses(conf)
-    val sc = new SparkContext("local", "test", conf)
-    try {
-      f(sc)
-    } finally {
-      sc.stop()
-    }
-  }
-}
-
-/**
- * SpectralClusteringWithGraphxSuite
- *
- */
 class PIClusteringSuite extends FunSuite with LocalSparkContext {
 
   import org.apache.spark.mllib.clustering.PIClusteringSuite._
@@ -95,6 +70,7 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
 
   def irisData() = {
     import org.apache.spark.mllib.linalg._
+
     import scala.io.Source
     val irisRaw = Source.fromFile("data/mllib/iris.data").getLines.map(_.split(","))
     val iter: Iterator[(Array[Double], String)] = irisRaw.map { toks => (toks.slice(0, toks.length - 1).map {
@@ -113,11 +89,6 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
       irisVectorsRdd.unpersist()
       predColl
     }
-
-  }
-
-  def saveToMatplotLib(dmat: DMatrix, optLegend: Option[Array[String]], optLabels: Option[Array[Array[String]]]) = {
-    import breeze.plot._
 
   }
 
@@ -196,8 +167,6 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
   //    val dr = new DRange(0.0, 5.0)
   //    val polyInfo = A(PS(3.0, 2.0, -1.0)
   //    val noiseRatio = 0.1
-  //    val l = List(1,2,3)
-  //    l.scanLeft(
   //  }
 
 }
@@ -241,14 +210,6 @@ object PIClusteringSuite {
   }
 
   def printPoints(points: Seq[Point]) = {
-    //    val sorted = points.sortWith { case (p1, p2) =>
-    //      if (LA.withinTol(p1.y-p2.y)) {
-    //        p1.x <= p2.x
-    //      } else {
-    //        p1.y >= p2.y
-    //      }
-    //    }
-    //    sorted.mkString("["," , ","]")
     points.mkString("[", " , ", "]")
   }
 
@@ -260,7 +221,7 @@ object PIClusteringSuite {
       A(0.9, .5, .75, 0)
     )
     println(s"Input mat: ${LA.printMatrix(dat1, 4, 4)}")
-    val D = /*LA.transpose(dat1)*/ dat1.zipWithIndex.map { case (dvect, ix) =>
+    val D = dat1.zipWithIndex.map { case (dvect, ix) =>
       val sum = dvect.foldLeft(0.0) {
         _ + _
       }
@@ -277,6 +238,10 @@ object PIClusteringSuite {
     val DxDat1 = LA.mult(D, dat1)
     print(s"D * Dat1 =\n ${LA.printMatrix(DxDat1)}")
     (dat1, DxDat1)
+  }
+
+  def saveToMatplotLib(dmat: DMatrix, optLegend: Option[Array[String]], optLabels: Option[Array[Array[String]]]) = {
+
   }
 
   def main(args: Array[String]) {
