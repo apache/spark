@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}

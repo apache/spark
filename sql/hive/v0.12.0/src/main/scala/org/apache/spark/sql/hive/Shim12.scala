@@ -41,7 +41,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.{TypeInfo, TypeInfoFactory}
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.mapred.InputFormat
 
-import org.apache.spark.sql.types.{Date, Decimal, DecimalType}
+import org.apache.spark.sql.types.{Decimal, DecimalType}
 
 case class HiveFunctionWrapper(functionClassName: String) extends java.io.Serializable {
   // for Serialization
@@ -160,7 +160,7 @@ private[hive] object HiveShim {
     if (value == null) null else new hadoopIo.BytesWritable(value.asInstanceOf[Array[Byte]])
 
   def getDateWritable(value: Any): hiveIo.DateWritable =
-    if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[Date].toDays)
+    if (value == null) null else new hiveIo.DateWritable(value.asInstanceOf[Int])
 
   def getTimestampWritable(value: Any): hiveIo.TimestampWritable =
     if (value == null) {

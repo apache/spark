@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
 
 import scala.collection.immutable.HashSet
 
@@ -303,7 +303,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   test("data type casting") {
 
     val sd = "1970-01-01"
-    val d = Date(sd)
+    val d = Date.valueOf(sd)
     val zts = sd + " 00:00:00"
     val sts = sd + " 00:00:02"
     val nts = sts + ".1"
@@ -321,7 +321,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     checkEvaluation(Cast(Literal(1.toDouble) cast TimestampType, DoubleType), 1.toDouble)
 
     checkEvaluation(Cast(Literal(sd) cast DateType, StringType), sd)
-    checkEvaluation(Cast(Literal(d) cast StringType, DateType), d)
+    checkEvaluation(Cast(Literal(d) cast StringType, DateType), 0)
     checkEvaluation(Cast(Literal(nts) cast TimestampType, StringType), nts)
     checkEvaluation(Cast(Literal(ts) cast StringType, TimestampType), ts)
     // all convert to string type to check
@@ -379,8 +379,8 @@ class ExpressionEvaluationSuite extends FunSuite {
   }
 
   test("date") {
-    val d1 = Date("1970-01-01")
-    val d2 = Date("1970-01-02")
+    val d1 = DateUtils.fromJavaDate(Date.valueOf("1970-01-01"))
+    val d2 = DateUtils.fromJavaDate(Date.valueOf("1970-01-02"))
     checkEvaluation(Literal(d1) < Literal(d2), true)
   }
 
@@ -460,7 +460,7 @@ class ExpressionEvaluationSuite extends FunSuite {
   }
 
   test("date casting") {
-    val d = Date("1970-01-01")
+    val d = Date.valueOf("1970-01-01")
     checkEvaluation(Cast(Literal(d), ShortType), null)
     checkEvaluation(Cast(Literal(d), IntegerType), null)
     checkEvaluation(Cast(Literal(d), LongType), null)
@@ -476,7 +476,6 @@ class ExpressionEvaluationSuite extends FunSuite {
     val millis = 15 * 1000 + 2
     val seconds = millis * 1000 + 2
     val ts = new Timestamp(millis)
-    val ts1 = new Timestamp(15 * 1000)  // a timestamp without the milliseconds part
     val tss = new Timestamp(seconds)
     checkEvaluation(Cast(ts, ShortType), 15)
     checkEvaluation(Cast(ts, IntegerType), 15)

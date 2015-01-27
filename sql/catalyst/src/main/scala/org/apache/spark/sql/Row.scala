@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import org.apache.spark.sql.types.DateUtils
+
 import scala.util.hashing.MurmurHash3
 
 import org.apache.spark.sql.catalyst.expressions.GenericRow
@@ -252,7 +254,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getDate(i: Int): java.sql.Date = apply(i).asInstanceOf[java.sql.Date]
+  def getDate(i: Int): java.sql.Date = DateUtils.toJavaDate(getInt(i))
 
   /**
    * Returns the value at position i of array type as a Scala Seq.

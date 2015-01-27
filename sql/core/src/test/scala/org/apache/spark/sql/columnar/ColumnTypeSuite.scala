@@ -64,7 +64,7 @@ class ColumnTypeSuite extends FunSuite with Logging {
     checkActualSize(FLOAT,     Float.MaxValue,    4)
     checkActualSize(BOOLEAN,   true,              1)
     checkActualSize(STRING,    "hello",           4 + "hello".getBytes("utf-8").length)
-    checkActualSize(DATE,      Date(0L),          4)
+    checkActualSize(DATE,      0,                 4)
     checkActualSize(TIMESTAMP, new Timestamp(0L), 12)
 
     val binary = Array.fill[Byte](4)(0: Byte)
