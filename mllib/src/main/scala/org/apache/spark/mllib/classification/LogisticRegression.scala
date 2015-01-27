@@ -17,13 +17,16 @@
 
 package org.apache.spark.mllib.classification
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.linalg.{DenseVector, Vector}
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.util.{DataValidators, MLUtils}
+import org.apache.spark.mllib.util.{Importable, DataValidators, Exportable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{Row, SQLContext, SchemaRDD}
 
 /**
  * Classification model trained using Multinomial/Binary Logistic Regression.
@@ -42,7 +45,8 @@ class LogisticRegressionModel (
     override val intercept: Double,
     val numFeatures: Int,
     val numClasses: Int)
-  extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
+  extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable
+  with Exportable {
 
   def this(weights: Vector, intercept: Double) = this(weights, intercept, weights.size, 2)
 
@@ -59,6 +63,13 @@ class LogisticRegressionModel (
     this.threshold = Some(threshold)
     this
   }
+
+  /**
+   * :: Experimental ::
+   * Returns the threshold (if any) used for converting raw prediction scores into 0/1 predictions.
+   */
+  @Experimental
+  def getThreshold: Option[Double] = threshold
 
   /**
    * :: Experimental ::
@@ -126,6 +137,65 @@ class LogisticRegressionModel (
       bestClass.toDouble
     }
   }
+
+  override def save(sc: SparkContext, path: String): Unit = {
+    val sqlContext = new SQLContext(sc)
+    import sqlContext._
+    // TODO: Do we need to use a SELECT statement to make the column ordering deterministic?
+    // Create JSON metadata.
+    val metadata =
+      LogisticRegressionModel.Metadata(clazz = this.getClass.getName, version = Exportable.version)
+    val metadataRDD: SchemaRDD = sc.parallelize(Seq(metadata))
+    metadataRDD.toJSON.saveAsTextFile(path + "/metadata")
+    // Create Parquet data.
+    val data = LogisticRegressionModel.Data(weights, intercept, threshold)
+    val dataRDD: SchemaRDD = sc.parallelize(Seq(data))
+    dataRDD.saveAsParquetFile(path + "/data")
+  }
+}
+
+object LogisticRegressionModel extends Importable[LogisticRegressionModel] {
+
+  override def load(sc: SparkContext, path: String): LogisticRegressionModel = {
+    val sqlContext = new SQLContext(sc)
+    import sqlContext._
+
+    // Load JSON metadata.
+    val metadataRDD = sqlContext.jsonFile(path + "/metadata")
+    val metadataArray = metadataRDD.select("clazz".attr, "version".attr).take(1)
+    assert(metadataArray.size == 1,
+      s"Unable to load LogisticRegressionModel metadata from: ${path + "/metadata"}")
+    metadataArray(0) match {
+      case Row(clazz: String, version: String) =>
+        assert(clazz == classOf[LogisticRegressionModel].getName, s"LogisticRegressionModel.load" +
+          s" was given model file with metadata specifying a different model class: $clazz")
+        assert(version == Importable.version, // only 1 version exists currently
+          s"LogisticRegressionModel.load did not recognize model format version: $version")
+    }
+
+    // Load Parquet data.
+    val dataRDD = sqlContext.parquetFile(path + "/data")
+    val dataArray = dataRDD.select("weights".attr, "intercept".attr, "threshold".attr).take(1)
+    assert(dataArray.size == 1,
+      s"Unable to load LogisticRegressionModel data from: ${path + "/data"}")
+    val data = dataArray(0)
+    assert(data.size == 3, s"Unable to load LogisticRegressionModel data from: ${path + "/data"}")
+    val lr = data match {
+      case Row(weights: Vector, intercept: Double, _) =>
+        new LogisticRegressionModel(weights, intercept)
+    }
+    if (data.isNullAt(2)) {
+      lr.clearThreshold()
+    } else {
+      lr.setThreshold(data.getDouble(2))
+    }
+    lr
+  }
+
+  private case class Metadata(clazz: String, version: String)
+
+  private case class Data(weights: Vector, intercept: Double, threshold: Option[Double])
+
 }
 
 /**

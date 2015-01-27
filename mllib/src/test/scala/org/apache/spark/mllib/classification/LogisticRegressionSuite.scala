@@ -18,6 +18,8 @@
 package org.apache.spark.mllib.classification
 
 import scala.util.control.Breaks._
+import org.apache.spark.util.Utils
+
 import scala.util.Random
 import scala.collection.JavaConversions._
 
@@ -407,16 +409,16 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
      *
      * First of all, using the following scala code to save the data into `path`.
      *
-     *    testRDD.map(x => x.label+ ", " + x.features(0) + ", " + x.features(1) + ", " +
-     *      x.features(2) + ", " + x.features(3)).saveAsTextFile("path")
+     * testRDD.map(x => x.label+ ", " + x.features(0) + ", " + x.features(1) + ", " +
+     * x.features(2) + ", " + x.features(3)).saveAsTextFile("path")
      *
      * Using the following R code to load the data and train the model using glmnet package.
      *
-     *    library("glmnet")
-     *    data <- read.csv("path", header=FALSE)
-     *    label = factor(data$V1)
-     *    features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
-     *    weights = coef(glmnet(features,label, family="multinomial", alpha = 0, lambda = 0))
+     * library("glmnet")
+     * data <- read.csv("path", header=FALSE)
+     * label = factor(data$V1)
+     * features = as.matrix(data.frame(data$V2, data$V3, data$V4, data$V5))
+     * weights = coef(glmnet(features,label, family="multinomial", alpha = 0, lambda = 0))
      *
      * The model weights of mutinomial logstic regression in R have `K` set of linear predictors
      * for `K` classes classification problem; however, only `K-1` set is required if the first
@@ -425,25 +427,25 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
      * weights. The mathematical discussion and proof can be found here:
      * http://en.wikipedia.org/wiki/Multinomial_logistic_regression
      *
-     *    weights1 = weights$`1` - weights$`0`
-     *    weights2 = weights$`2` - weights$`0`
+     * weights1 = weights$`1` - weights$`0`
+     * weights2 = weights$`2` - weights$`0`
      *
-     *    > weights1
-     *    5 x 1 sparse Matrix of class "dgCMatrix"
-     *                    s0
-     *             2.6228269
-     *    data.V2 -0.5837166
-     *    data.V3  0.9285260
-     *    data.V4 -0.3783612
-     *    data.V5 -0.8123411
-     *    > weights2
-     *    5 x 1 sparse Matrix of class "dgCMatrix"
-     *                     s0
-     *             4.11197445
-     *    data.V2 -0.16918650
-     *    data.V3 -0.81104784
-     *    data.V4 -0.06463799
-     *    data.V5 -0.29198337
+     * > weights1
+     * 5 x 1 sparse Matrix of class "dgCMatrix"
+     * s0
+     * 2.6228269
+     * data.V2 -0.5837166
+     * data.V3  0.9285260
+     * data.V4 -0.3783612
+     * data.V5 -0.8123411
+     * > weights2
+     * 5 x 1 sparse Matrix of class "dgCMatrix"
+     * s0
+     * 4.11197445
+     * data.V2 -0.16918650
+     * data.V3 -0.81104784
+     * data.V4 -0.06463799
+     * data.V5 -0.29198337
      */
 
     val weightsR = Vectors.dense(Array(
@@ -459,7 +461,41 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext with M
     // very steep curve in logistic function so that when we draw samples from distribution, it's
     // very easy to assign to another labels. However, this prediction result is consistent to R.
     validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData, 0.47)
+  }
 
+  test("model export/import") {
+    val nPoints = 20
+    val A = 2.0
+    val B = -1.5
+
+    val testData = LogisticRegressionSuite.generateLogisticInput(A, B, nPoints, 42)
+    val testRDD = sc.parallelize(testData, 2)
+    testRDD.cache()
+
+    val lr = new LogisticRegressionWithLBFGS().setIntercept(true)
+    lr.optimizer.setNumIterations(1)
+    val model = lr.run(testRDD)
+    model.clearThreshold()
+    assert(model.getThreshold.isEmpty)
+
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+
+    // Save model
+    model.save(sc, path)
+    val sameModel = LogisticRegressionModel.load(sc, path)
+    assert(model.weights == sameModel.weights)
+    assert(model.intercept == sameModel.intercept)
+    assert(sameModel.getThreshold.isEmpty)
+    Utils.deleteRecursively(tempDir)
+
+    // Save model with threshold
+    model.setThreshold(0.7)
+    model.save(sc, path)
+    val sameModel2 = LogisticRegressionModel.load(sc, path)
+    assert(model.getThreshold.get == sameModel2.getThreshold.get)
+
+    Utils.deleteRecursively(tempDir)
   }
 
 }
