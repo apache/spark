@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.sql import SchemaRDD, inherit_doc
-from pyspark.ml import JavaEstimator, Transformer, _jvm
+from pyspark.sql import inherit_doc
+from pyspark.ml import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,\
     HasRegParam
 
@@ -40,7 +40,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
 
 @inherit_doc
-class LogisticRegressionModel(Transformer):
+class LogisticRegressionModel(JavaModel):
     """
     Model fitted by LogisticRegression.
     """
@@ -49,8 +49,6 @@ class LogisticRegressionModel(Transformer):
         super(LogisticRegressionModel, self).__init__()
         self._java_model = java_model
 
-    def transform(self, dataset, params={}):
-        # TODO: handle params here.
-        return SchemaRDD(self._java_model.transform(
-            dataset._jschema_rdd,
-            _jvm().org.apache.spark.ml.param.ParamMap()), dataset.sql_ctx)
+    @property
+    def _java_class(self):
+        return "org.apache.spark.ml.classification.LogisticRegressionModel"

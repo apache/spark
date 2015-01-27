@@ -102,6 +102,18 @@ class Transformer(PipelineStage):
 
 
 @inherit_doc
+class Model(Transformer):
+    """
+    Abstract class for models fitted by :py:class:`Estimator`s.
+    """
+
+    ___metaclass__ = ABCMeta
+
+    def __init__(self):
+        super(Model, self).__init__()
+
+
+@inherit_doc
 class Pipeline(Estimator):
     """
     A simple pipeline, which acts as an estimator. A Pipeline consists
@@ -169,7 +181,7 @@ class Pipeline(Estimator):
 
 
 @inherit_doc
-class PipelineModel(Transformer):
+class PipelineModel(Model):
     """
     Represents a compiled pipeline with transformers and fitted models.
     """
@@ -204,9 +216,9 @@ class JavaWrapper(Params):
         """
         raise NotImplementedError
 
-    def _create_java_obj(self):
+    def _java_obj(self):
         """
-        Creates a new Java object and returns its reference.
+        Returns or creates a Java object.
         """
         java_obj = _jvm()
         for name in self._java_class.split("."):
@@ -230,6 +242,13 @@ class JavaWrapper(Params):
         Returns an empty Java ParamMap reference.
         """
         return _jvm().org.apache.spark.ml.param.ParamMap()
+
+    def _create_java_param_map(self, params, java_obj):
+        paramMap = self._empty_java_param_map()
+        for param, value in params.items():
+            if param.parent is self:
+                paramMap.put(java_obj.getParam(param.name), value)
+        return paramMap
 
 
 @inherit_doc
@@ -259,7 +278,7 @@ class JavaEstimator(Estimator, JavaWrapper):
         :param params: additional params (overwriting embedded values)
         :return: fitted Java model
         """
-        java_obj = self._create_java_obj()
+        java_obj = self._java_obj()
         self._transfer_params_to_java(params, java_obj)
         return java_obj.fit(dataset._jschema_rdd, self._empty_java_param_map())
 
@@ -281,7 +300,24 @@ class JavaTransformer(Transformer, JavaWrapper):
         super(JavaTransformer, self).__init__()
 
     def transform(self, dataset, params={}):
-        java_obj = self._create_java_obj()
-        self._transfer_params_to_java(params, java_obj)
-        return SchemaRDD(java_obj.transform(dataset._jschema_rdd, self._empty_java_param_map()),
+        java_obj = self._java_obj()
+        self._transfer_params_to_java({}, java_obj)
+        java_param_map = self._create_java_param_map(params, java_obj)
+        return SchemaRDD(java_obj.transform(dataset._jschema_rdd, java_param_map),
                          dataset.sql_ctx)
+
+
+@inherit_doc
+class JavaModel(JavaTransformer):
+    """
+    Base class for :py:class:`Model`s that wrap Java/Scala
+    implementations.
+    """
+
+    __metaclass__ = ABCMeta
+
+    def __init__(self):
+        super(JavaTransformer, self).__init__()
+
+    def _java_obj(self):
+        return self._java_model

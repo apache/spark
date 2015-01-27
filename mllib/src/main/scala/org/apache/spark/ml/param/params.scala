@@ -293,7 +293,6 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
     new ParamMap(this.map ++ other.map)
   }
 
-
   /**
    * Adds all parameters from the input param map into this param map.
    */
