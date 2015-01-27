@@ -63,13 +63,13 @@ object DataTypeUtils {
                                    offset: Int,
                                    length: => Int,
                                    dt: DataType): Unit = {
-    if (src == null) {
+    if (src == null || src.isEmpty) {
       row.setNullAt(index)
       return
     }
     dt match {
       case StringType => row.setString(index, BytesUtils.toString(src, offset, length))
-      case IntegerType => row.setInt(index, BytesUtils.toInt(src, offset))
+      case IntegerType => row.setInt(index, BytesUtils.toInt(src, offset)) 
       case BooleanType => row.setBoolean(index, BytesUtils.toBoolean(src, offset))
       case ByteType => row.setByte(index, BytesUtils.toByte(src, offset))
       case DoubleType => row.setDouble(index, BytesUtils.toDouble(src, offset))

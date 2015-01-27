@@ -108,16 +108,22 @@ object HBaseKVHelper {
   }
 
   private def string2Bytes(v: String, bu: BytesUtils): Array[Byte] = {
-    bu.dataType match {
-      // todo: handle some complex types
-      case BooleanType => bu.toBytes(v.toBoolean)
-      case ByteType => bu.toBytes(v)
-      case DoubleType => bu.toBytes(v.toDouble)
-      case FloatType => bu.toBytes(v.toFloat)
-      case IntegerType => bu.toBytes(v.toInt)
-      case LongType => bu.toBytes(v.toLong)
-      case ShortType => bu.toBytes(v.toShort)
-      case StringType => bu.toBytes(v)
+    v match {
+      case "" => new Array[Byte](0)
+      case null => new Array[Byte](0)
+      case _ => {
+        bu.dataType match {
+          // todo: handle some complex types
+          case BooleanType => bu.toBytes(v.toBoolean)
+          case ByteType => bu.toBytes(v)
+          case DoubleType => bu.toBytes(v.toDouble)
+          case FloatType => bu.toBytes(v.toFloat)
+          case IntegerType => bu.toBytes(v.toInt)
+          case LongType => bu.toBytes(v.toLong)
+          case ShortType => bu.toBytes(v.toShort)
+          case StringType => bu.toBytes(v)
+        }
+      }
     }
   }
 

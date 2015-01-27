@@ -47,8 +47,8 @@ private[hbase] class HadoopReader(
           // the array returned by line.split(splitRegex).
           val valueBytes = new Array[HBaseRawType](relation.nonKeyColumns.size)
           var textValueArray = line.split(splitRegex)
-          if (textValueArray.length == relation.output.length - 1) {
-            textValueArray = textValueArray :+ null
+          while (textValueArray.length < relation.output.length) {
+            textValueArray = textValueArray :+ ""
           }
           HBaseKVHelper.string2KV(textValueArray, relation, lineBuffer, keyBytes, valueBytes)
           val rowKeyData = HBaseKVHelper.encodingRawKeyColumns(keyBytes)
