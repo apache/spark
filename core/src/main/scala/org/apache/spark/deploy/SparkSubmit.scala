@@ -22,7 +22,6 @@ import java.lang.reflect.{Modifier, InvocationTargetException}
 import java.net.URL
 
 import org.apache.ivy.Ivy
-import org.apache.ivy.ant.IvyDependencyExclude
 import org.apache.ivy.core.module.descriptor.{DefaultExcludeRule, DefaultDependencyDescriptor, DefaultModuleDescriptor}
 import org.apache.ivy.core.module.id.{ModuleId, ArtifactId, ModuleRevisionId}
 import org.apache.ivy.core.report.ResolveReport
@@ -69,14 +68,15 @@ object SparkSubmit {
 
   // Directories for caching downloads through ivy and storing the jars when maven coordinates are
   // supplied to spark-submit
-  // TODO: Take these as arguments? For example, on AWS /mnt/ is a better location.
-  private val IVY_CACHE = new File("ivy/cache")
-  private val MAVEN_JARS = new File("ivy/jars")
+  private var IVY_CACHE: File = null
+  private var MAVEN_JARS: File = null
 
   // Exposed for testing
   private[spark] var exitFn: () => Unit = () => System.exit(-1)
   private[spark] var printStream: PrintStream = System.err
+
   private[spark] def printWarning(str: String) = printStream.println("Warning: " + str)
+
   private[spark] def printErrorAndExit(str: String) = {
     printStream.println("Error: " + str)
     printStream.println("Run with --help for usage help or --verbose for debug output")
@@ -94,13 +94,13 @@ object SparkSubmit {
 
   /**
    * @return a tuple containing
-   *           (1) the arguments for the child process,
-   *           (2) a list of classpath entries for the child,
-   *           (3) a list of system properties and env vars, and
-   *           (4) the main class for the child
+   *         (1) the arguments for the child process,
+   *         (2) a list of classpath entries for the child,
+   *         (3) a list of system properties and env vars, and
+   *         (4) the main class for the child
    */
   private[spark] def createLaunchEnv(args: SparkSubmitArguments)
-      : (ArrayBuffer[String], ArrayBuffer[String], Map[String, String], String) = {
+  : (ArrayBuffer[String], ArrayBuffer[String], Map[String, String], String) = {
 
     // Values to return
     val childArgs = new ArrayBuffer[String]()
@@ -147,7 +147,7 @@ object SparkSubmit {
       if (!Utils.classIsLoadable("org.apache.spark.deploy.yarn.Client") && !Utils.isTesting) {
         printErrorAndExit(
           "Could not load YARN classes. " +
-          "This copy of Spark may not have been compiled with YARN support.")
+            "This copy of Spark may not have been compiled with YARN support.")
       }
     }
 
@@ -186,6 +186,8 @@ object SparkSubmit {
     sysProps("SPARK_SUBMIT") = "true"
 
     // Resolve maven dependencies if there are any and add classpath to jars
+    IVY_CACHE = new File(s"${args.ivyRepoPath}/cache")
+    MAVEN_JARS = new File(s"${args.ivyRepoPath}/jars")
     val resolvedMavenCoordinates = resolveMavenCoordinates(args.maven, args.mavenRepos)
     if (!resolvedMavenCoordinates.trim.isEmpty) {
       if (args.jars == null || args.jars.trim.isEmpty) {
@@ -203,6 +205,7 @@ object SparkSubmit {
       OptionAssigner(args.master, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.master"),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
       OptionAssigner(args.jars, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars"),
+      OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
         sysProp = "spark.driver.memory"),
       OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
@@ -214,6 +217,7 @@ object SparkSubmit {
 
       // Standalone cluster only
       OptionAssigner(args.jars, STANDALONE, CLUSTER, sysProp = "spark.jars"),
+      OptionAssigner(args.ivyRepoPath, STANDALONE, CLUSTER, sysProp = "spark.jars.ivy"),
       OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, clOption = "--memory"),
       OptionAssigner(args.driverCores, STANDALONE, CLUSTER, clOption = "--cores"),
 
@@ -252,18 +256,26 @@ object SparkSubmit {
       if (isUserJar(args.primaryResource)) {
         childClasspath += args.primaryResource
       }
-      if (args.jars != null) { childClasspath ++= args.jars.split(",") }
-      if (args.childArgs != null) { childArgs ++= args.childArgs }
+      if (args.jars != null) {
+        childClasspath ++= args.jars.split(",")
+      }
+      if (args.childArgs != null) {
+        childArgs ++= args.childArgs
+      }
     }
 
 
     // Map all arguments to command-line options or system properties for our chosen mode
     for (opt <- options) {
       if (opt.value != null &&
-          (deployMode & opt.deployMode) != 0 &&
-          (clusterManager & opt.clusterManager) != 0) {
-        if (opt.clOption != null) { childArgs += (opt.clOption, opt.value) }
-        if (opt.sysProp != null) { sysProps.put(opt.sysProp, opt.value) }
+        (deployMode & opt.deployMode) != 0 &&
+        (clusterManager & opt.clusterManager) != 0) {
+        if (opt.clOption != null) {
+          childArgs +=(opt.clOption, opt.value)
+        }
+        if (opt.sysProp != null) {
+          sysProps.put(opt.sysProp, opt.value)
+        }
       }
     }
 
@@ -286,7 +298,7 @@ object SparkSubmit {
         childArgs += "--supervise"
       }
       childArgs += "launch"
-      childArgs += (args.master, args.primaryResource, args.mainClass)
+      childArgs +=(args.master, args.primaryResource, args.mainClass)
       if (args.childArgs != null) {
         childArgs ++= args.childArgs
       }
@@ -296,11 +308,11 @@ object SparkSubmit {
     if (isYarnCluster) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       if (args.primaryResource != SPARK_INTERNAL) {
-        childArgs += ("--jar", args.primaryResource)
+        childArgs +=("--jar", args.primaryResource)
       }
-      childArgs += ("--class", args.mainClass)
+      childArgs +=("--class", args.mainClass)
       if (args.childArgs != null) {
-        args.childArgs.foreach { arg => childArgs += ("--arg", arg) }
+        args.childArgs.foreach { arg => childArgs +=("--arg", arg)}
       }
     }
 
@@ -341,11 +353,11 @@ object SparkSubmit {
   }
 
   private def launch(
-      childArgs: ArrayBuffer[String],
-      childClasspath: ArrayBuffer[String],
-      sysProps: Map[String, String],
-      childMainClass: String,
-      verbose: Boolean = false) {
+                      childArgs: ArrayBuffer[String],
+                      childClasspath: ArrayBuffer[String],
+                      sysProps: Map[String, String],
+                      childMainClass: String,
+                      verbose: Boolean = false) {
     if (verbose) {
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
@@ -452,8 +464,8 @@ object SparkSubmit {
    */
   private[spark] def mergeFileLists(lists: String*): String = {
     val merged = lists.filter(_ != null)
-                      .flatMap(_.split(","))
-                      .mkString(",")
+      .flatMap(_.split(","))
+      .mkString(",")
     if (merged == "") null else merged
   }
 

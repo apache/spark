@@ -52,6 +52,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var jars: String = null
   var maven: String = null
   var mavenRepos: String = null
+  var ivyRepoPath: String = null
   var verbose: Boolean = false
   var isPython: Boolean = false
   var pyFiles: String = null
@@ -125,6 +126,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
       .orNull
     name = Option(name).orElse(sparkProperties.get("spark.app.name")).orNull
     jars = Option(jars).orElse(sparkProperties.get("spark.jars")).orNull
+    ivyRepoPath = Option(ivyRepoPath)
+      .orElse(sparkProperties.get("spark.jars.ivy")).orElse(Option("ivy/")).get
     deployMode = Option(deployMode).orElse(env.get("DEPLOY_MODE")).orNull
     numExecutors = Option(numExecutors)
       .getOrElse(sparkProperties.get("spark.executor.instances").orNull)
@@ -228,6 +231,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |  jars                    $jars
     |  maven                   $maven
     |  maven-repos             $mavenRepos
+    |  ivy-repo                $ivyRepoPath
     |  verbose                 $verbose
     |
     |Spark properties used, including those specified through
@@ -342,6 +346,10 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         mavenRepos = value
         parse(tail)
 
+      case ("--ivy-repo") :: value :: tail =>
+        ivyRepoPath = Utils.resolveURIs(value)
+        parse(tail)
+
       case ("--conf" | "-c") :: value :: tail =>
         value.split("=", 2).toSeq match {
           case Seq(k, v) => sparkProperties(k) = v
@@ -399,6 +407,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |                              coordinates should be groupId:artifactId:version.
         |  --maven-repos               Supply additional remote repositories as a comma-delimited
         |                              list to search for the maven coordinates given with --maven.
+        |  --ivy-repo                  The path to use to cache jars downloaded using maven
+        |                              coordinates. The default is $PWD/ivy
         |  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place
         |                              on the PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working
