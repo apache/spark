@@ -35,7 +35,10 @@ sealed trait Matrix extends Serializable {
   def numCols: Int
 
   /** Flag that keeps track whether the matrix is transposed or not. False by default. */
-  private[linalg] var isTransposed = false
+  private[mllib] var isTrans = false
+
+  /** Returns whether the matrix is transposed or not. */
+  def isTransposed: Boolean = isTrans
 
   /** Converts to a dense array in column major. */
   def toArray: Array[Double]
@@ -89,11 +92,10 @@ sealed trait Matrix extends Serializable {
    * Applies a function `f` to all the active elements of dense and sparse matrix.
    *
    * @param f the function takes three parameters where the first two parameters are the row
-   *          and column indices respectively with the type `Int`, the third parameter is
-   *          the corresponding array index, and the final parameter is the corresponding
-   *          value in the matrix with type `Double`.
+   *          and column indices respectively with the type `Int`, and the final parameter is the
+   *          corresponding value in the matrix with type `Double`.
    */
-  private[spark] def foreachActive(f: (Int, Int, Int, Double) => Unit)
+  private[spark] def foreachActive(f: (Int, Int, Double) => Unit)
 }
 
 /**
@@ -178,11 +180,11 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
 
   override def transpose: Matrix = {
     val transposedMatrix = new DenseMatrix(numCols, numRows, values)
-    transposedMatrix.isTransposed = !isTransposed
+    transposedMatrix.isTrans = !isTransposed
     transposedMatrix
   }
 
-  private[spark] override def foreachActive(f: (Int, Int, Int, Double) => Unit): Unit = {
+  private[spark] override def foreachActive(f: (Int, Int, Double) => Unit): Unit = {
     if (!isTransposed) {
       // outer loop over columns
       var j = 0
@@ -190,7 +192,7 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
         var i = 0
         while (i < numRows) {
           val ind = index(i, j)
-          f(i, j, ind, values(ind))
+          f(i, j, values(ind))
           i += 1
         }
         j += 1
@@ -202,7 +204,7 @@ class DenseMatrix(val numRows: Int, val numCols: Int, val values: Array[Double])
         var j = 0
         while (j < numCols) {
           val ind = index(i, j)
-          f(i, j, ind, values(ind))
+          f(i, j, values(ind))
           j += 1
         }
         i += 1
@@ -430,17 +432,17 @@ class SparseMatrix(
 
   override def transpose: Matrix = {
     val transposedMatrix = new SparseMatrix(numCols, numRows, colPtrs, rowIndices, values)
-    transposedMatrix.isTransposed = !isTransposed
+    transposedMatrix.isTrans = !isTransposed
     transposedMatrix
   }
 
-  private[spark] override def foreachActive(f: (Int, Int, Int, Double) => Unit): Unit = {
+  private[spark] override def foreachActive(f: (Int, Int, Double) => Unit): Unit = {
     if (!isTransposed) {
       var j = 0
       while (j < numCols) {
         var idx = colPtrs(j)
         while (idx < colPtrs(j + 1)) {
-          f(rowIndices(idx), j, idx, values(idx))
+          f(rowIndices(idx), j, values(idx))
           idx += 1
         }
         j += 1
@@ -451,7 +453,7 @@ class SparseMatrix(
         var idx = colPtrs(i)
         while (idx < colPtrs(i + 1)) {
           val j = rowIndices(idx)
-          f(i, j, idx, values(idx))
+          f(i, j, values(idx))
           idx += 1
         }
         i += 1
@@ -676,7 +678,7 @@ object Matrices {
     breeze match {
       case dm: BDM[Double] =>
         val mat = new DenseMatrix(dm.rows, dm.cols, dm.data)
-        mat.isTransposed = dm.isTranspose
+        mat.isTrans = dm.isTranspose
         mat
       case sm: BSM[Double] =>
         // There is no isTranspose flag for sparse matrices in Breeze
@@ -803,14 +805,16 @@ object Matrices {
         mat match {
           case spMat: SparseMatrix =>
             val data = new Array[(Int, Int, Double)](spMat.values.length)
-            spMat.foreachActive { (i, j, index, v) =>
-              data(index) = (i, j + startCol, v)
+            var cnt = 0
+            spMat.foreachActive { (i, j, v) =>
+              data(cnt) = (i, j + startCol, v)
+              cnt += 1
             }
             startCol += nCols
             data
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
-            dnMat.foreachActive { (i, j, index, v) =>
+            dnMat.foreachActive { (i, j, v) =>
               if (v != 0.0) {
                 data.append((i, j + startCol, v))
               }
@@ -856,7 +860,7 @@ object Matrices {
       matrices.foreach { mat =>
         var j = 0
         val nRows = mat.numRows
-        mat.foreachActive { (i, j, index, v) =>
+        mat.foreachActive { (i, j, v) =>
           val indStart = j * numRows + startRow
           allValues(indStart + i) = v
         }
@@ -870,14 +874,16 @@ object Matrices {
         mat match {
           case spMat: SparseMatrix =>
             val data = new Array[(Int, Int, Double)](spMat.values.length)
-            spMat.foreachActive { (i, j, index, v) =>
-              data(index) = (i + startRow, j, v)
+            var cnt = 0
+            spMat.foreachActive { (i, j, v) =>
+              data(cnt) = (i + startRow, j, v)
+              cnt += 1
             }
             startRow += nRows
             data
           case dnMat: DenseMatrix =>
             val data = new ArrayBuffer[(Int, Int, Double)]()
-            dnMat.foreachActive { (i, j, index, v) =>
+            dnMat.foreachActive { (i, j, v) =>
               if (v != 0.0) {
                 data.append((i + startRow, j, v))
               }

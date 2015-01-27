@@ -261,7 +261,9 @@ private[spark] object BLAS extends Serializable with Logging {
    * @param A the matrix A that will be left multiplied to B. Size of m x k.
    * @param B the matrix B that will be left multiplied by A. Size of k x n.
    * @param beta a scalar that can be used to scale matrix C.
-   * @param C the resulting matrix C. Size of m x n.
+   * @param C the resulting matrix C. Size of m x n. C.isTransposed must be false. In other words,
+   *          C cannot be the product of a `transpose()` call, or be converted from a transposed
+   *          Breeze Matrix using `Matrices.fromBreeze()`.
    */
   def gemm(
       alpha: Double,
@@ -269,6 +271,8 @@ private[spark] object BLAS extends Serializable with Logging {
       B: DenseMatrix,
       beta: Double,
       C: DenseMatrix): Unit = {
+    require(!C.isTransposed,
+      "The matrix C cannot be the product of a transpose() call. C.isTransposed must be false.")
     if (alpha == 0.0) {
       logDebug("gemm: alpha is equal to 0. Returning C.")
     } else {
@@ -293,8 +297,8 @@ private[spark] object BLAS extends Serializable with Logging {
       B: DenseMatrix,
       beta: Double,
       C: DenseMatrix): Unit = {
-    val tAstr = if (!A.isTransposed) "N" else "T"
-    val tBstr = if (!B.isTransposed) "N" else "T"
+    val tAstr = if (A.isTransposed) "T" else "N"
+    val tBstr = if (B.isTransposed) "T" else "N"
     val lda = if (!A.isTransposed) A.numRows else A.numCols
     val ldb = if (!B.isTransposed) B.numRows else B.numCols
 
@@ -463,7 +467,7 @@ private[spark] object BLAS extends Serializable with Logging {
       x: DenseVector,
       beta: Double,
       y: DenseVector): Unit =  {
-    val tStrA = if (!A.isTransposed) "N" else "T"
+    val tStrA = if (A.isTransposed) "T" else "N"
     val mA = if (!A.isTransposed) A.numRows else A.numCols
     val nA = if (!A.isTransposed) A.numCols else A.numRows
     nativeBLAS.dgemv(tStrA, mA, nA, alpha, A.values, mA, x.values, 1, beta,

@@ -199,7 +199,7 @@ class MatricesSuite extends FunSuite {
     val dn = new DenseMatrix(m, n, allValues)
 
     val dnMap = scala.collection.mutable.Map[(Int, Int), Double]()
-    dn.foreachActive { (i, j, index, value) =>
+    dn.foreachActive { (i, j, value) =>
       dnMap.put((i, j), value)
     }
     assert(dnMap.size === 6)
@@ -211,8 +211,10 @@ class MatricesSuite extends FunSuite {
     assert(dnMap.get(2, 1) === Some(5.0))
 
     val spMap = scala.collection.mutable.Map[Int, Double]()
-    sp.foreachActive { (i, j, index, value) =>
-      spMap.put(index, value)
+    var cnt = 0
+    sp.foreachActive { (i, j, value) =>
+      spMap.put(cnt, value)
+      cnt += 1
     }
     assert(spMap.size === 4)
     assert(spMap.get(0) === Some(1.0))
