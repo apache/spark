@@ -167,6 +167,29 @@ class FsHistoryProviderSuite extends FunSuite with BeforeAndAfter with Matchers 
     list.size should be (1)
   }
 
+  test("history file is renamed from inprogress to completed") {
+    val conf = new SparkConf()
+      .set("spark.history.fs.logDirectory", testDir.getAbsolutePath())
+      .set("spark.testing", "true")
+    val provider = new FsHistoryProvider(conf)
+
+    val logFile1 = new File(testDir, "app1" + EventLoggingListener.IN_PROGRESS)
+    writeFile(logFile1, true, None,
+      SparkListenerApplicationStart("app1", Some("app1"), 1L, "test"),
+      SparkListenerApplicationEnd(2L)
+    )
+    provider.checkForLogs()
+    val appListBeforeRename = provider.getListing()
+    appListBeforeRename.size should be (1)
+    appListBeforeRename.head.logPath should endWith(EventLoggingListener.IN_PROGRESS)
+
+    logFile1.renameTo(new File(testDir, "app1"))
+    provider.checkForLogs()
+    val appListAfterRename = provider.getListing()
+    appListAfterRename.size should be (1)
+    appListAfterRename.head.logPath should not endWith(EventLoggingListener.IN_PROGRESS)
+  }
+
   private def writeFile(file: File, isNewFormat: Boolean, codec: Option[CompressionCodec],
     events: SparkListenerEvent*) = {
     val out =

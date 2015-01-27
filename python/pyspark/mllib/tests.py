@@ -120,6 +120,18 @@ class VectorTests(PySparkTestCase):
         dv = DenseVector(v)
         self.assertTrue(dv.array.dtype == 'float64')
 
+    def test_sparse_vector_indexing(self):
+        sv = SparseVector(4, {1: 1, 3: 2})
+        self.assertEquals(sv[0], 0.)
+        self.assertEquals(sv[3], 2.)
+        self.assertEquals(sv[1], 1.)
+        self.assertEquals(sv[2], 0.)
+        self.assertEquals(sv[-1], 2)
+        self.assertEquals(sv[-2], 0)
+        self.assertEquals(sv[-4], 0)
+        for ind in [4, -5, 7.8]:
+            self.assertRaises(ValueError, sv.__getitem__, ind)
+
 
 class ListTests(PySparkTestCase):
 
@@ -128,7 +140,7 @@ class ListTests(PySparkTestCase):
     as NumPy arrays.
     """
 
-    def test_clustering(self):
+    def test_kmeans(self):
         from pyspark.mllib.clustering import KMeans
         data = [
             [0, 1.1],
@@ -139,6 +151,21 @@ class ListTests(PySparkTestCase):
         clusters = KMeans.train(self.sc.parallelize(data), 2, initializationMode="k-means||")
         self.assertEquals(clusters.predict(data[0]), clusters.predict(data[1]))
         self.assertEquals(clusters.predict(data[2]), clusters.predict(data[3]))
+
+    def test_kmeans_deterministic(self):
+        from pyspark.mllib.clustering import KMeans
+        X = range(0, 100, 10)
+        Y = range(0, 100, 10)
+        data = [[x, y] for x, y in zip(X, Y)]
+        clusters1 = KMeans.train(self.sc.parallelize(data),
+                                 3, initializationMode="k-means||", seed=42)
+        clusters2 = KMeans.train(self.sc.parallelize(data),
+                                 3, initializationMode="k-means||", seed=42)
+        centers1 = clusters1.centers
+        centers2 = clusters2.centers
+        for c1, c2 in zip(centers1, centers2):
+            # TODO: Allow small numeric difference.
+            self.assertTrue(array_equal(c1, c2))
 
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes

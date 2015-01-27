@@ -73,6 +73,11 @@ class CoordinateMatrixSuite extends FunSuite with MLlibTestSparkContext {
     assert(mat.toBreeze() === expected)
   }
 
+  test("transpose") {
+    val transposed = mat.transpose()
+    assert(mat.toBreeze().t === transposed.toBreeze())
+  }
+
   test("toIndexedRowMatrix") {
     val indexedRowMatrix = mat.toIndexedRowMatrix()
     val expected = BDM(
