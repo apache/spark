@@ -946,8 +946,7 @@ class SQLTests(ReusedPySparkTestCase):
         schema = StructType([StructField("label", DoubleType(), False),
                              StructField("point", ExamplePointUDT(), False)])
         df = self.sqlCtx.applySchema(rdd, schema)
-        # TODO: test collect with UDT
-        point = df.rdd.first().point
+        point = df.head().point
         self.assertEquals(point, ExamplePoint(1.0, 2.0))
 
     def test_parquet_with_udt(self):
@@ -984,11 +983,12 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual([Row(value='1')], df.where(df.key == 1).select(df.value).collect())
 
     def test_aggregator(self):
-        from pyspark.sql import Aggregator as Agg
         df = self.df
         g = df.groupBy()
         self.assertEqual([99, 100], sorted(g.agg({'key': 'max', 'value': 'count'}).collect()[0]))
         self.assertEqual([Row(**{"AVG(key#0)": 49.5})], g.mean().collect())
+        # TODO(davies): fix aggregators
+        from pyspark.sql import Aggregator as Agg
         # self.assertEqual((0, '100'), tuple(g.agg(Agg.first(df.key), Agg.last(df.value)).first()))
 
 
