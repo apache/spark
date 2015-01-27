@@ -82,15 +82,15 @@ class ReceivedBlockTrackerSuite
     receivedBlockTracker.allocateBlocksToBatch(2)
     receivedBlockTracker.getBlocksOfBatchAndStream(2, streamId) shouldBe empty
 
-    // Verify that batch 2 cannot be allocated again
-    intercept[SparkException] {
-      receivedBlockTracker.allocateBlocksToBatch(2)
-    }
+    // Verify that older batches have no operation on batch allocation,
+    // will return the same blocks as previously allocated.
+    receivedBlockTracker.allocateBlocksToBatch(1)
+    receivedBlockTracker.getBlocksOfBatchAndStream(1, streamId) shouldEqual blockInfos
 
-    // Verify that older batches cannot be allocated again
-    intercept[SparkException] {
-      receivedBlockTracker.allocateBlocksToBatch(1)
-    }
+    blockInfos.map(receivedBlockTracker.addBlock)
+    receivedBlockTracker.allocateBlocksToBatch(2)
+    receivedBlockTracker.getBlocksOfBatchAndStream(2, streamId) shouldBe empty
+    receivedBlockTracker.getUnallocatedBlocks(streamId) shouldEqual blockInfos
   }
 
   test("block addition, block to batch allocation and cleanup with write ahead log") {
@@ -186,14 +186,14 @@ class ReceivedBlockTrackerSuite
     tracker4.getBlocksOfBatchAndStream(batchTime1, streamId) shouldBe empty  // should be cleaned
     tracker4.getBlocksOfBatchAndStream(batchTime2, streamId) shouldEqual blockInfos2
   }
-  
+
   test("enabling write ahead log but not setting checkpoint dir") {
     conf.set("spark.streaming.receiver.writeAheadLog.enable", "true")
     intercept[SparkException] {
       createTracker(setCheckpointDir = false)
     }
   }
-  
+
   test("setting checkpoint dir but not enabling write ahead log") {
     // When WAL config is not set, log manager should not be enabled
     val tracker1 = createTracker(setCheckpointDir = true)

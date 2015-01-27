@@ -15,19 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.jobs
+package org.apache.spark.mllib.tree
+
+import org.scalatest.FunSuite
+
+import org.apache.spark.mllib.tree.impurity.{EntropyAggregator, GiniAggregator}
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 /**
- * Names of the CSS classes corresponding to each type of task detail. Used to allow users
- * to optionally show/hide columns.
- *
- * If new optional metrics are added here, they should also be added to the end of webui.css
- * to have the style set to "display: none;" by default.
+ * Test suites for [[GiniAggregator]] and [[EntropyAggregator]].
  */
-private[spark] object TaskDetailsClassNames {
-  val SCHEDULER_DELAY = "scheduler_delay"
-  val TASK_DESERIALIZATION_TIME = "deserialization_time"
-  val SHUFFLE_READ_BLOCKED_TIME = "fetch_wait_time"
-  val RESULT_SERIALIZATION_TIME = "serialization_time"
-  val GETTING_RESULT_TIME = "getting_result_time"
+class ImpuritySuite extends FunSuite with MLlibTestSparkContext {
+  test("Gini impurity does not support negative labels") {
+    val gini = new GiniAggregator(2)
+    intercept[IllegalArgumentException] {
+      gini.update(Array(0.0, 1.0, 2.0), 0, -1, 0.0)
+    }
+  }
+
+  test("Entropy does not support negative labels") {
+    val entropy = new EntropyAggregator(2)
+    intercept[IllegalArgumentException] {
+      entropy.update(Array(0.0, 1.0, 2.0), 0, -1, 0.0)
+    }
+  }
 }
