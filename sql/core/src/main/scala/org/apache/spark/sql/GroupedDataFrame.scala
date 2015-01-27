@@ -18,6 +18,8 @@
 package org.apache.spark.sql
 
 import scala.language.implicitConversions
+import scala.collection.JavaConverters._
+import scala.collection.JavaConversions._
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => LiteralExpr}
@@ -120,4 +122,9 @@ class GroupedDataFrame protected[sql](df: DataFrame, groupingExprs: Seq[Expressi
    * Compute the sum for each numeric columns for each group.
    */
   override def sum(): DataFrame = aggregateNumericColumns(Sum)
+
+  //// For Python API
+  private[sql] def agg(exprs: java.util.Map[String, String]): DataFrame = {
+    agg(exprs.toMap)
+  }
 }

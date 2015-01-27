@@ -19,11 +19,17 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
+import scala.collection.JavaConversions._
+
+import java.util.{ArrayList, List => JList}
 
 import com.fasterxml.jackson.core.JsonFactory
+import net.razorvine.pickle.Pickler
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
@@ -31,7 +37,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => LiteralExpr}
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.LogicalRDD
+import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
 import org.apache.spark.sql.json.JsonRDD
 import org.apache.spark.sql.types.{NumericType, StructType}
 import org.apache.spark.util.Utils
@@ -559,5 +565,34 @@ class DataFrame protected[sql](
       val jsonFactory = new JsonFactory()
       iter.map(JsonRDD.rowToJSON(rowSchema, jsonFactory))
     }
+  }
+
+  ////////////////////////////////////////////////////////////////////////////
+  // for Python API
+  ////////////////////////////////////////////////////////////////////////////
+  private[sql] def select(cols: java.util.List[Column]): DataFrame = {
+    select(cols:_*)
+  }
+  private[sql] def groupby(cols: java.util.List[Column]): GroupedDataFrame = {
+    groupby(cols:_*)
+  }
+
+  /**
+   * Converts a JavaRDD to a PythonRDD. It is used by pyspark.
+   */
+  private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
+    val fieldTypes = schema.fields.map(_.dataType)
+    val jrdd = this.rdd.map(EvaluatePython.rowToArray(_, fieldTypes)).toJavaRDD()
+    SerDeUtil.javaToPython(jrdd)
+  }
+  /**
+   * Serializes the Array[Row] returned by collect(), using the same format as javaToPython.
+   */
+  private[sql] def collectToPython: JList[Array[Byte]] = {
+    val fieldTypes = schema.fields.map(_.dataType)
+    val pickle = new Pickler
+    new ArrayList[Array[Byte]](collect().map { row =>
+      EvaluatePython.rowToArray(row, fieldTypes)
+    }.grouped(100).map(batched => pickle.dumps(batched.toArray)).toIterable)
   }
 }
