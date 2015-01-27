@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql
 
-import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
-import scala.collection.JavaConverters._
 import scala.collection.JavaConversions._
 
 import java.util.{ArrayList, List => JList}
@@ -443,10 +441,6 @@ class DataFrame protected[sql](
   override def addColumn(colName: String, col: Column): DataFrame = {
     select(Column("*"), col.as(colName))
   }
-
-  override def removeColumn(colName: String, col: Column): DataFrame = ???
-
-  override def updateColumn(colName: String, col: Column): DataFrame = ???
 
   /**
    * Return the first `n` rows.
