@@ -85,7 +85,7 @@ follows:
     </td>
   </tr>
   <tr>
-    <td>spark.history.fs.updateInterval</td>
+    <td>spark.history.fs.interval.seconds</td>
     <td>10</td>
     <td>
       The period, in seconds, at which information displayed by this history server is updated.
@@ -142,6 +142,29 @@ follows:
       <code>spark.ui.view.acls</code> when the application was run will also have authorization
       to view that application. 
       If disabled, no access control checks are made. 
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.cleaner.enable</td>
+    <td>false</td>
+    <td>
+      Specifies whether the History Server should periodically clean up event logs from storage.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.cleaner.interval.seconds</td>
+    <td>86400</td>
+    <td>
+      How often the job history cleaner checks for files to delete, in seconds. Defaults to 864000 (one day).
+      Files are only deleted if they are older than spark.history.fs.cleaner.maxAge.seconds.
+    </td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.cleaner.maxAge.seconds</td>
+    <td>604800</td>
+    <td>
+      Job history files older than this many seconds will be deleted when the history cleaner runs.
+      Defaults to 604800 (1 week).
     </td>
   </tr>
 </table>
