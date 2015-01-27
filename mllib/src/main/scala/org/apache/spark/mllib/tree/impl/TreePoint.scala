@@ -86,7 +86,7 @@ private[tree] object TreePoint {
     var featureIndex = 0
     while (featureIndex < numFeatures) {
       arr(featureIndex) = findBin(featureIndex, labeledPoint, featureArity(featureIndex),
-        isUnordered(featureIndex), bins)
+        bins)
       featureIndex += 1
     }
     new TreePoint(labeledPoint.label, arr)
@@ -96,14 +96,12 @@ private[tree] object TreePoint {
    * Find bin for one (labeledPoint, feature).
    *
    * @param featureArity  0 for continuous features; number of categories for categorical features.
-   * @param isUnorderedFeature  (only applies if feature is categorical)
    * @param bins   Bins for features, of size (numFeatures, numBins).
    */
   private def findBin(
       featureIndex: Int,
       labeledPoint: LabeledPoint,
       featureArity: Int,
-      isUnorderedFeature: Boolean,
       bins: Array[Array[Bin]]): Int = {
 
     /**
