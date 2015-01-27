@@ -39,7 +39,7 @@ import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, BlockDeviceType, EBSBlockDeviceType
 from boto import ec2
 
-DEFAULT_SPARK_VERSION = "1.2.0"
+DEFAULT_SPARK_VERSION = "1.2.1"
 SPARK_EC2_DIR = os.path.dirname(os.path.realpath(__file__))
 
 MESOS_SPARK_EC2_BRANCH = "v4"
@@ -217,6 +217,7 @@ def get_spark_shark_version(opts):
         "1.1.0": "1.1.0",
         "1.1.1": "1.1.1",
         "1.2.0": "1.2.0",
+        "1.2.1": "1.2.1",
     }
     version = opts.spark_version.replace("v", "")
     if version not in spark_shark_map:
