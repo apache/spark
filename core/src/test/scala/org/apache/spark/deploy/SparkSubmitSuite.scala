@@ -138,7 +138,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
+    val (childArgs, classpath, sysProps, mainClass) = prepareSubmitEnvironment(appArgs)
     val childArgsStr = childArgs.mkString(" ")
     childArgsStr should include ("--class org.SomeClass")
     childArgsStr should include ("--executor-memory 5g")
@@ -177,7 +177,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
+    val (childArgs, classpath, sysProps, mainClass) = prepareSubmitEnvironment(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
     mainClass should be ("org.SomeClass")
     classpath should have length (4)
@@ -197,33 +197,6 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     sysProps("spark.shuffle.spill") should be ("false")
   }
 
-  test("handles standalone cluster mode") {
-    val clArgs = Seq(
-      "--deploy-mode", "cluster",
-      "--master", "spark://h:p",
-      "--class", "org.SomeClass",
-      "--supervise",
-      "--driver-memory", "4g",
-      "--driver-cores", "5",
-      "--conf", "spark.shuffle.spill=false",
-      "thejar.jar",
-      "arg1", "arg2")
-    val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
-    val childArgsStr = childArgs.mkString(" ")
-    childArgsStr should startWith ("--memory 4g --cores 5 --supervise")
-    childArgsStr should include regex ("launch spark://h:p .*thejar.jar org.SomeClass arg1 arg2")
-    mainClass should be ("org.apache.spark.deploy.Client")
-    classpath should have size (0)
-    sysProps should have size (5)
-    sysProps.keys should contain ("SPARK_SUBMIT")
-    sysProps.keys should contain ("spark.master")
-    sysProps.keys should contain ("spark.app.name")
-    sysProps.keys should contain ("spark.jars")
-    sysProps.keys should contain ("spark.shuffle.spill")
-    sysProps("spark.shuffle.spill") should be ("false")
-  }
-
   test("handles standalone client mode") {
     val clArgs = Seq(
       "--deploy-mode", "client",
@@ -236,7 +209,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
+    val (childArgs, classpath, sysProps, mainClass) = prepareSubmitEnvironment(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
     mainClass should be ("org.SomeClass")
     classpath should have length (1)
@@ -258,7 +231,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
-    val (childArgs, classpath, sysProps, mainClass) = createLaunchEnv(appArgs)
+    val (childArgs, classpath, sysProps, mainClass) = prepareSubmitEnvironment(appArgs)
     childArgs.mkString(" ") should be ("arg1 arg2")
     mainClass should be ("org.SomeClass")
     classpath should have length (1)
@@ -278,7 +251,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "thejar.jar",
       "arg1", "arg2")
     val appArgs = new SparkSubmitArguments(clArgs)
-    val (_, _, sysProps, mainClass) = createLaunchEnv(appArgs)
+    val (_, _, sysProps, mainClass) = prepareSubmitEnvironment(appArgs)
     sysProps("spark.executor.memory") should be ("5g")
     sysProps("spark.master") should be ("yarn-cluster")
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
@@ -291,6 +264,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "--name", "testApp",
       "--master", "local",
       "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -306,6 +280,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "--master", "local-cluster[2,1,512]",
       "--jars", jarsString,
       "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -324,7 +299,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "--files", files,
       "thejar.jar")
     val appArgs = new SparkSubmitArguments(clArgs)
-    val sysProps = SparkSubmit.createLaunchEnv(appArgs)._3
+    val sysProps = SparkSubmit.prepareSubmitEnvironment(appArgs)._3
     appArgs.jars should be (Utils.resolveURIs(jars))
     appArgs.files should be (Utils.resolveURIs(files))
     sysProps("spark.jars") should be (Utils.resolveURIs(jars + ",thejar.jar"))
@@ -339,7 +314,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "thejar.jar"
     )
     val appArgs2 = new SparkSubmitArguments(clArgs2)
-    val sysProps2 = SparkSubmit.createLaunchEnv(appArgs2)._3
+    val sysProps2 = SparkSubmit.prepareSubmitEnvironment(appArgs2)._3
     appArgs2.files should be (Utils.resolveURIs(files))
     appArgs2.archives should be (Utils.resolveURIs(archives))
     sysProps2("spark.yarn.dist.files") should be (Utils.resolveURIs(files))
@@ -352,7 +327,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "mister.py"
     )
     val appArgs3 = new SparkSubmitArguments(clArgs3)
-    val sysProps3 = SparkSubmit.createLaunchEnv(appArgs3)._3
+    val sysProps3 = SparkSubmit.prepareSubmitEnvironment(appArgs3)._3
     appArgs3.pyFiles should be (Utils.resolveURIs(pyFiles))
     sysProps3("spark.submit.pyFiles") should be (
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
@@ -377,7 +352,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "thejar.jar"
     )
     val appArgs = new SparkSubmitArguments(clArgs)
-    val sysProps = SparkSubmit.createLaunchEnv(appArgs)._3
+    val sysProps = SparkSubmit.prepareSubmitEnvironment(appArgs)._3
     sysProps("spark.jars") should be(Utils.resolveURIs(jars + ",thejar.jar"))
     sysProps("spark.files") should be(Utils.resolveURIs(files))
 
@@ -394,7 +369,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "thejar.jar"
     )
     val appArgs2 = new SparkSubmitArguments(clArgs2)
-    val sysProps2 = SparkSubmit.createLaunchEnv(appArgs2)._3
+    val sysProps2 = SparkSubmit.prepareSubmitEnvironment(appArgs2)._3
     sysProps2("spark.yarn.dist.files") should be(Utils.resolveURIs(files))
     sysProps2("spark.yarn.dist.archives") should be(Utils.resolveURIs(archives))
 
@@ -409,7 +384,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "mister.py"
     )
     val appArgs3 = new SparkSubmitArguments(clArgs3)
-    val sysProps3 = SparkSubmit.createLaunchEnv(appArgs3)._3
+    val sysProps3 = SparkSubmit.prepareSubmitEnvironment(appArgs3)._3
     sysProps3("spark.submit.pyFiles") should be(
       PythonRunner.formatPaths(Utils.resolveURIs(pyFiles)).mkString(","))
   }
@@ -425,7 +400,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       val appArgs = new SparkSubmitArguments(args, Map("SPARK_CONF_DIR" -> path))
       assert(appArgs.propertiesFile != null)
       assert(appArgs.propertiesFile.startsWith(path))
-      appArgs.executorMemory should  be ("2.3g")
+      appArgs.executorMemory should be ("2.3g")
     }
   }
 

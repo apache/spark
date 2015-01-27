@@ -1127,6 +1127,7 @@
               <spark.testing>1</spark.testing>
               <spark.ui.enabled>false</spark.ui.enabled>
               <spark.ui.showConsoleProgress>false</spark.ui.showConsoleProgress>
+              <spark.master.rest.enabled>false</spark.master.rest.enabled>
               <spark.executor.extraClassPath>${test_classpath}</spark.executor.extraClassPath>
               <spark.driver.allowMultipleContexts>true</spark.driver.allowMultipleContexts>
             </systemProperties>

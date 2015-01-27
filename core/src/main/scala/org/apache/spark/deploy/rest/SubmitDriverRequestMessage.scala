@@ -30,7 +30,7 @@ import org.apache.spark.util.JsonProtocol
 private[spark] abstract class SubmitDriverRequestField extends SubmitRestProtocolField
 private[spark] object SubmitDriverRequestField
   extends SubmitRestProtocolFieldCompanion[SubmitDriverRequestField] {
-  case object ACTION extends SubmitDriverRequestField
+  case object ACTION extends SubmitDriverRequestField with ActionField
   case object CLIENT_SPARK_VERSION extends SubmitDriverRequestField
   case object MESSAGE extends SubmitDriverRequestField
   case object APP_NAME extends SubmitDriverRequestField
@@ -39,17 +39,32 @@ private[spark] object SubmitDriverRequestField
   case object JARS extends SubmitDriverRequestField
   case object FILES extends SubmitDriverRequestField
   case object PY_FILES extends SubmitDriverRequestField
-  case object DRIVER_MEMORY extends SubmitDriverRequestField
-  case object DRIVER_CORES extends SubmitDriverRequestField
+  case object DRIVER_MEMORY extends SubmitDriverRequestField with MemoryField
+  case object DRIVER_CORES extends SubmitDriverRequestField with NumericField
   case object DRIVER_EXTRA_JAVA_OPTIONS extends SubmitDriverRequestField
   case object DRIVER_EXTRA_CLASS_PATH extends SubmitDriverRequestField
   case object DRIVER_EXTRA_LIBRARY_PATH extends SubmitDriverRequestField
-  case object SUPERVISE_DRIVER extends SubmitDriverRequestField // standalone cluster mode only
-  case object EXECUTOR_MEMORY extends SubmitDriverRequestField
-  case object TOTAL_EXECUTOR_CORES extends SubmitDriverRequestField
-  case object APP_ARGS extends SubmitDriverRequestField
-  case object SPARK_PROPERTIES extends SubmitDriverRequestField
-  case object ENVIRONMENT_VARIABLES extends SubmitDriverRequestField
+  case object SUPERVISE_DRIVER extends SubmitDriverRequestField with BooleanField
+  case object EXECUTOR_MEMORY extends SubmitDriverRequestField with MemoryField
+  case object TOTAL_EXECUTOR_CORES extends SubmitDriverRequestField with NumericField
+
+  // Special fields that should not be set directly
+  case object APP_ARGS extends SubmitDriverRequestField {
+    override def validateValue(v: String): Unit = {
+      validateFailed(v, "Use message.appendAppArg(arg) instead")
+    }
+  }
+  case object SPARK_PROPERTIES extends SubmitDriverRequestField {
+    override def validateValue(v: String): Unit = {
+      validateFailed(v, "Use message.setSparkProperty(k, v) instead")
+    }
+  }
+  case object ENVIRONMENT_VARIABLES extends SubmitDriverRequestField {
+    override def validateValue(v: String): Unit = {
+      validateFailed(v, "Use message.setEnvironmentVariable(k, v) instead")
+    }
+  }
+
   override val requiredFields = Seq(ACTION, CLIENT_SPARK_VERSION, APP_NAME, APP_RESOURCE)
   override val optionalFields = Seq(MESSAGE, MAIN_CLASS, JARS, FILES, PY_FILES, DRIVER_MEMORY,
     DRIVER_CORES, DRIVER_EXTRA_JAVA_OPTIONS, DRIVER_EXTRA_CLASS_PATH, DRIVER_EXTRA_LIBRARY_PATH,
@@ -89,12 +104,18 @@ private[spark] class SubmitDriverRequestMessage extends SubmitRestProtocolMessag
     val appArgsJson = JArray(appArgs.map(JString).toList)
     val sparkPropertiesJson = JsonProtocol.mapToJson(sparkProperties)
     val environmentVariablesJson = JsonProtocol.mapToJson(environmentVariables)
-    val allFields = otherFields ++ List(
-      (APP_ARGS.toString, appArgsJson),
-      (SPARK_PROPERTIES.toString, sparkPropertiesJson),
-      (ENVIRONMENT_VARIABLES.toString, environmentVariablesJson)
-    )
-    JObject(allFields)
+    val jsonFields = new ArrayBuffer[JField]
+    jsonFields ++= otherFields
+    if (appArgs.nonEmpty) {
+      jsonFields += JField(APP_ARGS.toString, appArgsJson)
+    }
+    if (sparkProperties.nonEmpty) {
+      jsonFields += JField(SPARK_PROPERTIES.toString, sparkPropertiesJson)
+    }
+    if (environmentVariables.nonEmpty) {
+      jsonFields += JField(ENVIRONMENT_VARIABLES.toString, environmentVariablesJson)
+    }
+    JObject(jsonFields.toList)
   }
 }
 

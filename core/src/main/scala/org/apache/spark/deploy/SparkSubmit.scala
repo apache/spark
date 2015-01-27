@@ -91,7 +91,7 @@ object SparkSubmit {
   /**
    * Kill an existing driver using the stable REST protocol. Standalone cluster mode only.
    */
-  private[spark] def kill(args: SparkSubmitArguments): Unit = {
+  private def kill(args: SparkSubmitArguments): Unit = {
     new StandaloneRestClient().killDriver(args.master, args.driverToKill)
   }
 
@@ -99,7 +99,7 @@ object SparkSubmit {
    * Request the status of an existing driver using the stable REST protocol.
    * Standalone cluster mode only.
    */
-  private[spark] def requestStatus(args: SparkSubmitArguments): Unit = {
+  private def requestStatus(args: SparkSubmitArguments): Unit = {
     new StandaloneRestClient().requestDriverStatus(args.master, args.driverToRequestStatusFor)
   }
 
@@ -116,7 +116,36 @@ object SparkSubmit {
    * main method of a child class. Instead, we pass the submit parameters directly to
    * a REST client, which will submit the application using the stable REST protocol.
    */
-  private[spark] def submit(args: SparkSubmitArguments): Unit = {
+  private def submit(args: SparkSubmitArguments): Unit = {
+    val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
+    val isStandaloneCluster = args.master.startsWith("spark://") && args.deployMode == "cluster"
+    // In standalone cluster mode, use the stable application submission REST protocol.
+    // Otherwise, just call the main method of the child class.
+    if (isStandaloneCluster) {
+      // NOTE: since we mutate the values of some configs in `prepareSubmitEnvironment`, we
+      // must update the corresponding fields in the original SparkSubmitArguments to reflect
+      // these changes.
+      args.sparkProperties.clear()
+      args.sparkProperties ++= sysProps
+      sysProps.get("spark.jars").foreach { args.jars = _ }
+      sysProps.get("spark.files").foreach { args.files = _ }
+      new StandaloneRestClient().submitDriver(args)
+    } else {
+      runMain(childArgs, childClasspath, sysProps, childMainClass)
+    }
+  }
+
+  /**
+   * Prepare the environment for submitting an application.
+   * This returns a 4-tuple:
+   *   (1) the arguments for the child process,
+   *   (2) a list of classpath entries for the child,
+   *   (3) a list of system properties and env vars, and
+   *   (4) the main class for the child
+   * Exposed for testing.
+   */
+  private[spark] def prepareSubmitEnvironment(args: SparkSubmitArguments)
+      : (Seq[String], Seq[String], Map[String, String], String) = {
     // Environment needed to launch the child main class
     val childArgs = new ArrayBuffer[String]()
     val childClasspath = new ArrayBuffer[String]()
@@ -247,9 +276,6 @@ object SparkSubmit {
         sysProp = "spark.files")
     )
 
-    val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
-    val isStandaloneCluster = clusterManager == STANDALONE && deployMode == CLUSTER
-
     // In client mode, launch the application main class directly
     // In addition, add the main application jar and any added jars (if any) to the classpath
     if (deployMode == CLIENT) {
@@ -274,6 +300,7 @@ object SparkSubmit {
     // Add the application jar automatically so the user doesn't have to call sc.addJar
     // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
     // For python files, the primary resource is already distributed as a regular file
+    val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
     if (!isYarnCluster && !args.isPython) {
       var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
       if (isUserJar(args.primaryResource)) {
@@ -327,19 +354,7 @@ object SparkSubmit {
       sysProps("spark.submit.pyFiles") = formattedPyFiles
     }
 
-    // In standalone cluster mode, use the stable application submission REST protocol.
-    // Otherwise, just call the main method of the child class.
-    if (isStandaloneCluster) {
-      // NOTE: since we mutate the values of some configs in this method, we must update the
-      // corresponding fields in the original SparkSubmitArguments to reflect these changes.
-      args.sparkProperties.clear()
-      args.sparkProperties ++= sysProps
-      sysProps.get("spark.jars").foreach { args.jars = _ }
-      sysProps.get("spark.files").foreach { args.files = _ }
-      new StandaloneRestClient().submitDriver(args)
-    } else {
-      runMain(childArgs, childClasspath, sysProps, childMainClass)
-    }
+    (childArgs, childClasspath, sysProps, childMainClass)
   }
 
   /**
@@ -349,8 +364,8 @@ object SparkSubmit {
    * this main class may not necessarily be the one provided by the user.
    */
   private def runMain(
-      childArgs: ArrayBuffer[String],
-      childClasspath: ArrayBuffer[String],
+      childArgs: Seq[String],
+      childClasspath: Seq[String],
       sysProps: Map[String, String],
       childMainClass: String,
       verbose: Boolean = false) {

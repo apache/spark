@@ -23,7 +23,7 @@ package org.apache.spark.deploy.rest
 private[spark] abstract class KillDriverRequestField extends SubmitRestProtocolField
 private[spark] object KillDriverRequestField
   extends SubmitRestProtocolFieldCompanion[KillDriverRequestField] {
-  case object ACTION extends KillDriverRequestField
+  case object ACTION extends KillDriverRequestField with ActionField
   case object CLIENT_SPARK_VERSION extends KillDriverRequestField
   case object MESSAGE extends KillDriverRequestField
   case object DRIVER_ID extends KillDriverRequestField

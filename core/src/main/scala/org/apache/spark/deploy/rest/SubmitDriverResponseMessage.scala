@@ -23,10 +23,10 @@ package org.apache.spark.deploy.rest
 private[spark] abstract class SubmitDriverResponseField extends SubmitRestProtocolField
 private[spark] object SubmitDriverResponseField
   extends SubmitRestProtocolFieldCompanion[SubmitDriverResponseField] {
-  case object ACTION extends SubmitDriverResponseField
+  case object ACTION extends SubmitDriverResponseField with ActionField
   case object SERVER_SPARK_VERSION extends SubmitDriverResponseField
   case object MESSAGE extends SubmitDriverResponseField
-  case object SUCCESS extends SubmitDriverResponseField
+  case object SUCCESS extends SubmitDriverResponseField with BooleanField
   case object DRIVER_ID extends SubmitDriverResponseField
   override val requiredFields = Seq(ACTION, SERVER_SPARK_VERSION, MESSAGE, SUCCESS)
   override val optionalFields = Seq(DRIVER_ID)

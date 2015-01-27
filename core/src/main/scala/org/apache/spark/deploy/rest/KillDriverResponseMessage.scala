@@ -23,13 +23,13 @@ package org.apache.spark.deploy.rest
 private[spark] abstract class KillDriverResponseField extends SubmitRestProtocolField
 private[spark] object KillDriverResponseField
   extends SubmitRestProtocolFieldCompanion[KillDriverResponseField] {
-  case object ACTION extends KillDriverResponseField
+  case object ACTION extends KillDriverResponseField with ActionField
   case object SERVER_SPARK_VERSION extends KillDriverResponseField
   case object MESSAGE extends KillDriverResponseField
   case object DRIVER_ID extends KillDriverResponseField
-  case object SUCCESS extends KillDriverResponseField
-  override val requiredFields = Seq(ACTION, SERVER_SPARK_VERSION, MESSAGE, DRIVER_ID, SUCCESS)
-  override val optionalFields = Seq.empty
+  case object SUCCESS extends KillDriverResponseField with BooleanField
+  override val requiredFields = Seq(ACTION, SERVER_SPARK_VERSION, DRIVER_ID, SUCCESS)
+  override val optionalFields = Seq(MESSAGE)
 }
 
 /**

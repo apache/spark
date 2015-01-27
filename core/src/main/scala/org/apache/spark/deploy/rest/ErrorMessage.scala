@@ -22,7 +22,7 @@ package org.apache.spark.deploy.rest
  */
 private[spark] abstract class ErrorField extends SubmitRestProtocolField
 private[spark] object ErrorField extends SubmitRestProtocolFieldCompanion[ErrorField] {
-  case object ACTION extends ErrorField
+  case object ACTION extends ErrorField with ActionField
   case object SERVER_SPARK_VERSION extends ErrorField
   case object MESSAGE extends ErrorField
   override val requiredFields = Seq(ACTION, SERVER_SPARK_VERSION, MESSAGE)

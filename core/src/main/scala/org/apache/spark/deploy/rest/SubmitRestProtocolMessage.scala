@@ -18,40 +18,13 @@
 package org.apache.spark.deploy.rest
 
 import scala.collection.Map
-import scala.collection.mutable
+import scala.collection.JavaConversions._
 
 import org.json4s.jackson.JsonMethods._
 import org.json4s.JsonAST._
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.Logging
 import org.apache.spark.util.Utils
-
-/**
- * A field used in a SubmitRestProtocolMessage.
- * There are a few special fields:
- *   - ACTION entirely specifies the type of the message and is required in all messages
- *   - MESSAGE contains arbitrary messages and is common, but not required, in all messages
- *   - CLIENT_SPARK_VERSION is required in all messages sent from the client
- *   - SERVER_SPARK_VERSION is required in all messages sent from the server
- */
-private[spark] abstract class SubmitRestProtocolField
-private[spark] object SubmitRestProtocolField {
-  def isActionField(field: String): Boolean = field == "ACTION"
-  def isSparkVersionField(field: String): Boolean = field.endsWith("_SPARK_VERSION")
-  def isMessageField(field: String): Boolean = field == "MESSAGE"
-}
-
-/**
- * All possible values of the ACTION field in a SubmitRestProtocolMessage.
- */
-private[spark] object SubmitRestProtocolAction extends Enumeration {
-  type SubmitRestProtocolAction = Value
-  val SUBMIT_DRIVER_REQUEST, SUBMIT_DRIVER_RESPONSE = Value
-  val KILL_DRIVER_REQUEST, KILL_DRIVER_RESPONSE = Value
-  val DRIVER_STATUS_REQUEST, DRIVER_STATUS_RESPONSE = Value
-  val ERROR = Value
-}
-import SubmitRestProtocolAction.SubmitRestProtocolAction
 
 /**
  * A general message exchanged in the stable application submission REST protocol.
@@ -63,19 +36,18 @@ import SubmitRestProtocolAction.SubmitRestProtocolAction
  */
 private[spark] abstract class SubmitRestProtocolMessage(
     action: SubmitRestProtocolAction,
-    actionField: SubmitRestProtocolField,
+    actionField: ActionField,
     requiredFields: Seq[SubmitRestProtocolField]) {
 
-  import SubmitRestProtocolField._
-
-  private val fields = new mutable.HashMap[SubmitRestProtocolField, String]
+  // Maintain the insert order for converting to JSON later
+  private val fields = new java.util.LinkedHashMap[SubmitRestProtocolField, String]
   val className = Utils.getFormattedClassName(this)
 
   // Set the action field
-  fields(actionField) = action.toString
+  fields.put(actionField, action.toString)
 
   /** Return all fields currently set in this message. */
-  def getFields: Map[SubmitRestProtocolField, String] = fields
+  def getFields: Map[SubmitRestProtocolField, String] = fields.toMap
 
   /** Return the value of the given field. If the field is not present, return null. */
   def getField(key: SubmitRestProtocolField): String = getFieldOption(key).orNull
@@ -88,14 +60,12 @@ private[spark] abstract class SubmitRestProtocolMessage(
   }
 
   /** Return the value of the given field as an option. */
-  def getFieldOption(key: SubmitRestProtocolField): Option[String] = fields.get(key)
+  def getFieldOption(key: SubmitRestProtocolField): Option[String] = Option(fields.get(key))
 
   /** Assign the given value to the field, overriding any existing value. */
   def setField(key: SubmitRestProtocolField, value: String): this.type = {
-    if (key == actionField) {
-      throw new SparkException("Setting the ACTION field is only allowed during instantiation.")
-    }
-    fields(key) = value
+    key.validateValue(value)
+    fields.put(key, value)
     this
   }
 
@@ -133,19 +103,10 @@ private[spark] abstract class SubmitRestProtocolMessage(
 
   /**
    * Return a JObject that represents the JSON form of this message.
-   * This orders the fields by ACTION (first) < SERVER_SPARK_VERSION < MESSAGE < * (last)
-   * and ignores fields with null values.
+   * This ignores fields with null values.
    */
   protected def toJsonObject: JObject = {
-    val sortedFields = fields.toSeq.sortBy { case (k, _) =>
-      k.toString match {
-        case x if isActionField(x) => 0
-        case x if isSparkVersionField(x) => 1
-        case x if isMessageField(x) => 2
-        case _ => 3
-      }
-    }
-    val jsonFields = sortedFields
+    val jsonFields = fields.toSeq
       .filter { case (_, v) => v != null }
       .map { case (k, v) => JField(k.toString, JString(v)) }
       .toList
@@ -167,7 +128,7 @@ private[spark] object SubmitRestProtocolMessage {
     val action = getAction(jsonObject).getOrElse {
       throw new IllegalArgumentException(s"ACTION not found in message:\n$json")
     }
-    SubmitRestProtocolAction.withName(action) match {
+    SubmitRestProtocolAction.fromString(action) match {
       case SUBMIT_DRIVER_REQUEST => SubmitDriverRequestMessage.fromJsonObject(jsonObject)
       case SUBMIT_DRIVER_RESPONSE => SubmitDriverResponseMessage.fromJsonObject(jsonObject)
       case KILL_DRIVER_REQUEST => KillDriverRequestMessage.fromJsonObject(jsonObject)
@@ -185,28 +146,6 @@ private[spark] object SubmitRestProtocolMessage {
     jsonObject.obj
       .collect { case JField(k, JString(v)) if isActionField(k) => v }
       .headOption
-  }
-}
-
-/**
- * Common methods used by companion objects of SubmitRestProtocolField's subclasses.
- * This keeps track of all fields that belong to this object in order to reconstruct
- * the fields from their names.
- */
-private[spark] trait SubmitRestProtocolFieldCompanion[FieldType <: SubmitRestProtocolField] {
-  val requiredFields: Seq[FieldType]
-  val optionalFields: Seq[FieldType]
-
-  // Listing of all fields indexed by the field's string representation
-  private lazy val allFieldsMap: Map[String, FieldType] = {
-    (requiredFields ++ optionalFields).map { f => (f.toString, f) }.toMap
-  }
-
-  /** Return the appropriate SubmitRestProtocolField from its string representation. */
-  def fromString(field: String): FieldType = {
-    allFieldsMap.get(field).getOrElse {
-      throw new IllegalArgumentException(s"Unknown field $field")
-    }
   }
 }
 

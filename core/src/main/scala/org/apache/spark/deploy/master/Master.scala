@@ -123,9 +123,12 @@ private[spark] class Master(
   }
 
   // Alternative application submission gateway that is stable across Spark versions
+  private val restServerEnabled = conf.getBoolean("spark.master.rest.enabled", true)
   private val restServerPort = conf.getInt("spark.master.rest.port", 17077)
   private val restServer = new StandaloneRestServer(this, host, restServerPort)
-  restServer.start()
+  if (restServerEnabled) {
+    restServer.start()
+  }
 
   override def preStart() {
     logInfo("Starting Spark master at " + masterUrl)

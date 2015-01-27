@@ -23,11 +23,11 @@ package org.apache.spark.deploy.rest
 private[spark] abstract class DriverStatusResponseField extends SubmitRestProtocolField
 private[spark] object DriverStatusResponseField
   extends SubmitRestProtocolFieldCompanion[DriverStatusResponseField] {
-  case object ACTION extends DriverStatusResponseField
+  case object ACTION extends DriverStatusResponseField with ActionField
   case object SERVER_SPARK_VERSION extends DriverStatusResponseField
   case object MESSAGE extends DriverStatusResponseField
   case object DRIVER_ID extends DriverStatusResponseField
-  case object SUCCESS extends DriverStatusResponseField
+  case object SUCCESS extends DriverStatusResponseField with BooleanField
   // Standalone specific fields
   case object DRIVER_STATE extends DriverStatusResponseField
   case object WORKER_ID extends DriverStatusResponseField
