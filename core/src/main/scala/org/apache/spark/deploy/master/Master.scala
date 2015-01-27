@@ -524,9 +524,7 @@ private[master] class Master(
   }
 
   /**
-   * Can an app use the given worker? True if the worker has enough memory and we haven't already
-   * launched an executor for the app on it (right now the standalone backend doesn't like having
-   * two executors on the same worker).
+   * Can an app use the given worker?
    */
   private def canUse(app: ApplicationInfo, worker: WorkerInfo): Boolean = {
     val enoughResources = worker.memoryFree >= app.desc.memoryPerExecutorMB && worker.coresFree > 0
