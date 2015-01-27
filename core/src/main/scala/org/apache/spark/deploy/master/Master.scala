@@ -581,14 +581,14 @@ private[master] class Master(
   /**
    * This functions starts multiple executors on each worker.
    * It first calculates the maximum number of executors we can allocate to the application in this 
-   * scheduling moment according to the free memory space on each worker, then tries to allocate executors
-   * on each worker according to the user-specified spark.executor.maxCoreNumPerExecutor.
+   * scheduling moment according to the free memory space on each worker, then tries to allocate 
+   * executors on each worker according to the user-specified spark.executor.maxCoreNumPerExecutor.
    * 
    * It traverses the available worker list. In spreadOutApps mode, it allocates at most
-   * spark.executor.maxCoreNumPerExecutor cores (can be less than it when the worker does not have enough 
-   * cores or the demand is less than it) and app.desc.memoryPerExecutorMB megabytes memory and tracks the 
-   * resource allocation in a 2d array for each visit; Otherwise, it uses up all available resources of a worker 
-   * for each visit.
+   * spark.executor.maxCoreNumPerExecutor cores (can be less than it when the worker does not have 
+   * enough cores or the demand is less than it) and app.desc.memoryPerExecutorMB megabytes memory 
+   * and tracks the resource allocation in a 2d array for each visit; Otherwise, it uses up all 
+   * available resources of a worker for each visit.
    */
   private def startMultiExecutorsPerWorker() {
     if (spreadOutApps) {
