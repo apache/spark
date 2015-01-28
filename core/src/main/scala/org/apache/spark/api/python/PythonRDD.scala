@@ -67,17 +67,16 @@ private[spark] class PythonRDD(
       envVars += ("SPARK_REUSE_WORKER" -> "1")
     }
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
+    // Whether is the worker released into idle pool
+    var released = false
 
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = new WriterThread(env, worker, split, context)
 
-    var complete_cleanly = false
     context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
       writerThread.join()
-      if (reuse_worker && complete_cleanly) {
-        env.releasePythonWorker(pythonExec, envVars.toMap, worker)
-      } else {
+      if (!released) {
         try {
           worker.close()
         } catch {
@@ -146,7 +145,10 @@ private[spark] class PythonRDD(
                 accumulator += Collections.singletonList(update)
               }
               if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
-                complete_cleanly = true
+                if (reuse_worker) {
+                  env.releasePythonWorker(pythonExec, envVars.toMap, worker)
+                  released = true
+                }
               }
               null
           }
