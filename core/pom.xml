@@ -246,10 +246,6 @@
           <artifactId>commons-httpclient</artifactId>
         </exclusion>
         <exclusion>
-          <groupId>oro</groupId>
-          <artifactId>oro</artifactId>
-        </exclusion>
-        <exclusion>
           <groupId>commons-vfs</groupId>
           <artifactId>commons-vfs</artifactId>
         </exclusion>
