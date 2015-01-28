@@ -25,7 +25,7 @@ import org.apache.spark.sql.test.TestSQLContext._
 
 import scala.language.postfixOps
 
-class DslQuerySuite extends QueryTest {
+class DataFrameSuite extends QueryTest {
   import org.apache.spark.sql.TestData._
 
   test("table scan") {
@@ -276,71 +276,5 @@ class DslQuerySuite extends QueryTest {
     )
   }
 
-  test("sqrt") {
-    checkAnswer(
-      testData.select(sqrt('key)).orderBy('key asc),
-      (1 to 100).map(n => Row(math.sqrt(n)))
-    )
 
-    checkAnswer(
-      testData.select(sqrt('value), 'key).orderBy('key asc, 'value asc),
-      (1 to 100).map(n => Row(math.sqrt(n), n))
-    )
-
-    checkAnswer(
-      testData.select(sqrt(Literal(null))),
-      (1 to 100).map(_ => Row(null))
-    )
-  }
-
-  test("abs") {
-    checkAnswer(
-      testData.select(abs('key)).orderBy('key asc),
-      (1 to 100).map(n => Row(n))
-    )
-
-    checkAnswer(
-      negativeData.select(abs('key)).orderBy('key desc),
-      (1 to 100).map(n => Row(n))
-    )
-
-    checkAnswer(
-      testData.select(abs(Literal(null))),
-      (1 to 100).map(_ => Row(null))
-    )
-  }
-
-  test("upper") {
-    checkAnswer(
-      lowerCaseData.select(upper('l)),
-      ('a' to 'd').map(c => Row(c.toString.toUpperCase))
-    )
-
-    checkAnswer(
-      testData.select(upper('value), 'key),
-      (1 to 100).map(n => Row(n.toString, n))
-    )
-
-    checkAnswer(
-      testData.select(upper(Literal(null))),
-      (1 to 100).map(n => Row(null))
-    )
-  }
-
-  test("lower") {
-    checkAnswer(
-      upperCaseData.select(lower('L)),
-      ('A' to 'F').map(c => Row(c.toString.toLowerCase))
-    )
-
-    checkAnswer(
-      testData.select(lower('value), 'key),
-      (1 to 100).map(n => Row(n.toString, n))
-    )
-
-    checkAnswer(
-      testData.select(lower(Literal(null))),
-      (1 to 100).map(n => Row(null))
-    )
-  }
 }
