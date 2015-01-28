@@ -85,7 +85,7 @@ class BinaryClassificationMetrics(
    * NOT (precision, recall), with (0.0, 1.0) prepended to it.
    * @see http://en.wikipedia.org/wiki/Precision_and_recall
    */
-  def pr(): RDD[(Double, Double)] = {
+  def rp(): RDD[(Double, Double)] = {
     val prCurve = createCurve(Recall, Precision)
     val sc = confusions.context
     val first = sc.makeRDD(Seq((0.0, 1.0)), 1)
@@ -95,7 +95,7 @@ class BinaryClassificationMetrics(
   /**
    * Computes the area under the precision-recall curve.
    */
-  def areaUnderPR(): Double = AreaUnderCurve.of(pr())
+  def areaUnderPR(): Double = AreaUnderCurve.of(rp())
 
   /**
    * Returns the (threshold, F-Measure) curve.
