@@ -53,6 +53,7 @@ package object dsl {
   def last(e: Column): Column = Last(e.expr)
   def min(e: Column): Column = Min(e.expr)
   def max(e: Column): Column = Max(e.expr)
+
   def upper(e: Column): Column = Upper(e.expr)
   def lower(e: Column): Column = Lower(e.expr)
   def sqrt(e: Column): Column = Sqrt(e.expr)
