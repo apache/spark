@@ -74,7 +74,7 @@ class KafkaUtils(object):
             # TODO: use --jar once it also work on driver
             if not e.message or 'call a package' in e.message:
                 print "No kafka package, please put the assembly jar into classpath:"
-                print " $ bin/submit --driver-class-path external/kafka-assembly/target/" + \
+                print " $ bin/spark-submit --driver-class-path external/kafka-assembly/target/" + \
                       "scala-*/spark-streaming-kafka-assembly-*.jar"
             raise e
         ser = PairDeserializer(NoOpSerializer(), NoOpSerializer())

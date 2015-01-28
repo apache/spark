@@ -19,12 +19,9 @@
  Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
  Usage: network_wordcount.py <zk> <topic>
 
- To run this on your local machine, you need to setup Kafka and create a producer first
-     $ bin/zookeeper-server-start.sh config/zookeeper.properties
-     $ bin/kafka-server-start.sh config/server.properties
-     $ bin/kafka-topics.sh --create --zookeeper localhost:2181 --partitions 1 --topic test
-     $ bin/kafka-console-producer.sh --broker-list localhost:9092 --topic test
-
+ To run this on your local machine, you need to setup Kafka and create a producer first, see
+ http://kafka.apache.org/documentation.html#quickstart
+ 
  and then run the example
     `$ bin/spark-submit --driver-class-path external/kafka-assembly/target/scala-*/\
       spark-streaming-kafka-assembly-*.jar examples/src/main/python/streaming/kafka_wordcount.py \
@@ -39,7 +36,7 @@ from pyspark.streaming.kafka import KafkaUtils
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        print >> sys.stderr, "Usage: network_wordcount.py <zk> <topic>"
+        print >> sys.stderr, "Usage: kafka_wordcount.py <zk> <topic>"
         exit(-1)
 
     sc = SparkContext(appName="PythonStreamingKafkaWordCount")
