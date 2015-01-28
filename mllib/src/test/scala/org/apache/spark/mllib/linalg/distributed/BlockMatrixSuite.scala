@@ -33,19 +33,18 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
   val colPerPart = 2
   val numPartitions = 3
   var gridBasedMat: BlockMatrix = _
-  type SubMatrix = ((Int, Int), Matrix)
 
   override def beforeAll() {
     super.beforeAll()
 
-    val entries: Seq[SubMatrix] = Seq(
-      new SubMatrix((0, 0), new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 2.0))),
-      new SubMatrix((0, 1), new DenseMatrix(2, 2, Array(0.0, 1.0, 0.0, 0.0))),
-      new SubMatrix((1, 0), new DenseMatrix(2, 2, Array(3.0, 0.0, 1.0, 1.0))),
-      new SubMatrix((1, 1), new DenseMatrix(2, 2, Array(1.0, 2.0, 0.0, 1.0))),
-      new SubMatrix((2, 1), new DenseMatrix(1, 2, Array(1.0, 5.0))))
+    val blocks: Seq[((Int, Int), Matrix)] = Seq(
+      ((0, 0), new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 2.0))),
+      ((0, 1), new DenseMatrix(2, 2, Array(0.0, 1.0, 0.0, 0.0))),
+      ((1, 0), new DenseMatrix(2, 2, Array(3.0, 0.0, 1.0, 1.0))),
+      ((1, 1), new DenseMatrix(2, 2, Array(1.0, 2.0, 0.0, 1.0))),
+      ((2, 1), new DenseMatrix(1, 2, Array(1.0, 5.0))))
 
-    gridBasedMat = new BlockMatrix(sc.parallelize(entries, numPartitions), rowPerPart, colPerPart)
+    gridBasedMat = new BlockMatrix(sc.parallelize(blocks, numPartitions), rowPerPart, colPerPart)
   }
 
   test("size") {
