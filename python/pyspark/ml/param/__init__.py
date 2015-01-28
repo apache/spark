@@ -19,7 +19,7 @@ from abc import ABCMeta
 
 from pyspark.ml.util import Identifiable
 
-__all__ = ["Param"]
+__all__ = ['Param', 'Params']
 
 
 class Param(object):

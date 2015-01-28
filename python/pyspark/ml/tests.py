@@ -32,7 +32,7 @@ else:
 
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 from pyspark.sql import SchemaRDD
-from pyspark.ml import Transformer, Estimator, Model, Pipeline
+from pyspark.ml import Transformer, Estimator, Pipeline
 from pyspark.ml.param import Param
 
 
@@ -76,7 +76,7 @@ class MockEstimator(Estimator):
         return model
 
 
-class MockModel(MockTransformer, Model):
+class MockModel(MockTransformer, Transformer):
 
     def __init__(self):
         super(MockModel, self).__init__()

@@ -15,10 +15,12 @@
 # limitations under the License.
 #
 
-from pyspark.sql import inherit_doc
-from pyspark.ml import JavaEstimator, JavaModel
+from pyspark.ml.util import JavaEstimator, JavaModel, inherit_doc
 from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,\
     HasRegParam
+
+
+__all__ = ['LogisticRegression', 'LogisticRegressionModel']
 
 
 @inherit_doc
@@ -43,31 +45,16 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     >>> print model.transform(test1).first().prediction
     1.0
     """
-
-    def __init__(self):
-        super(LogisticRegression, self).__init__()
-
-    @property
-    def _java_class(self):
-        return "org.apache.spark.ml.classification.LogisticRegression"
+    _java_class = "org.apache.spark.ml.classification.LogisticRegression"
 
     def _create_model(self, java_model):
         return LogisticRegressionModel(java_model)
 
 
-@inherit_doc
 class LogisticRegressionModel(JavaModel):
     """
     Model fitted by LogisticRegression.
     """
-
-    def __init__(self, java_model):
-        super(LogisticRegressionModel, self).__init__()
-        self._java_model = java_model
-
-    @property
-    def _java_class(self):
-        return "org.apache.spark.ml.classification.LogisticRegressionModel"
 
 
 if __name__ == "__main__":
