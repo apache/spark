@@ -33,7 +33,6 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Literal => LiteralExpr}
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.{LogicalRDD, EvaluatePython}
@@ -249,7 +248,7 @@ class DataFrame protected[sql](
     require(projection.productArity >= 1)
     select(projection.productIterator.map {
       case c: Column => c
-      case o: Any => new Column(Some(sqlContext), None, LiteralExpr(o))
+      case o: Any => new Column(Some(sqlContext), None, Literal(o))
     }.toSeq :_*)
   }
 
@@ -394,7 +393,7 @@ class DataFrame protected[sql](
    * Returns a new [[DataFrame]] by taking the first `n` rows. The difference between this function
    * and `head` is that `head` returns an array while `limit` returns a new [[DataFrame]].
    */
-  override def limit(n: Int): DataFrame = Limit(LiteralExpr(n), logicalPlan)
+  override def limit(n: Int): DataFrame = Limit(Literal(n), logicalPlan)
 
   /**
    * Returns a new [[DataFrame]] containing union of rows in this frame and another frame.
