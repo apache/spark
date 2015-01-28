@@ -48,10 +48,15 @@
       <artifactId>slf4j-api</artifactId>
       <scope>provided</scope>
     </dependency>
+    <!--
+      Promote Guava to "compile" so that maven-shade-plugin picks it up (for packaging the Optional
+      class exposed in the Java API). The plugin will then remove this dependency from the published
+      pom, so that Guava does not pollute the client's compilation classpath.
+    -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <scope>provided</scope>
+      <scope>compile</scope>
     </dependency>
 
     <!-- Test dependencies -->
@@ -96,13 +101,16 @@
           </execution>
         </executions>
       </plugin>
-      <!-- Disable relocation in the shade plugin invocation. -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
-          <shadeTestJar>true</shadeTestJar>
-          <relocations combine.self="override" />
+          <shadedArtifactAttached>false</shadedArtifactAttached>
+          <artifactSet>
+            <includes>
+              <include>com.google.guava:guava</include>
+            </includes>
+          </artifactSet>
         </configuration>
       </plugin>
     </plugins>

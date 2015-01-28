@@ -106,16 +106,6 @@
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
     </dependency>
-    <!--
-      Promote Guava to "compile" so that maven-shade-plugin picks it up (for packaging the Optional
-      class exposed in the Java API). The plugin will then remove this dependency from the published
-      pom, so that Guava does not pollute the client's compilation classpath.
-    -->
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <scope>compile</scope>
-    </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-lang3</artifactId>
@@ -371,20 +361,6 @@
             </configuration>
           </execution>
         </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-shade-plugin</artifactId>
-        <configuration>
-          <shadedArtifactAttached>false</shadedArtifactAttached>
-          <artifactSet>
-            <includes>
-              <include>com.google.guava:guava</include>
-              <include>org.apache.spark:spark-network-common_${scala.binary.version}</include>
-              <include>org.apache.spark:spark-network-shuffle_${scala.binary.version}</include>
-            </includes>
-          </artifactSet>
-        </configuration>
       </plugin>
     </plugins>
 
