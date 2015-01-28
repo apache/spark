@@ -22,11 +22,10 @@ import scala.annotation.varargs
 import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
-import org.apache.spark.sql.SchemaRDD
-import org.apache.spark.sql.api.java.JavaSchemaRDD
-import org.apache.spark.sql.catalyst.analysis.Star
-import org.apache.spark.sql.catalyst.expressions.ScalaUdf
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql._
+import org.apache.spark.sql.dsl._
+import org.apache.spark.sql.types._
 
 /**
  * :: AlphaComponent ::
@@ -42,7 +41,7 @@ abstract class Transformer extends PipelineStage with Params {
    * @return transformed dataset
    */
   @varargs
-  def transform(dataset: SchemaRDD, paramPairs: ParamPair[_]*): SchemaRDD = {
+  def transform(dataset: DataFrame, paramPairs: ParamPair[_]*): DataFrame = {
     val map = new ParamMap()
     paramPairs.foreach(map.put(_))
     transform(dataset, map)
@@ -54,30 +53,7 @@ abstract class Transformer extends PipelineStage with Params {
    * @param paramMap additional parameters, overwrite embedded params
    * @return transformed dataset
    */
-  def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD
-
-  // Java-friendly versions of transform.
-
-  /**
-   * Transforms the dataset with optional parameters.
-   * @param dataset input datset
-   * @param paramPairs optional list of param pairs, overwrite embedded params
-   * @return transformed dataset
-   */
-  @varargs
-  def transform(dataset: JavaSchemaRDD, paramPairs: ParamPair[_]*): JavaSchemaRDD = {
-    transform(dataset.schemaRDD, paramPairs: _*).toJavaSchemaRDD
-  }
-
-  /**
-   * Transforms the dataset with provided parameter map as additional parameters.
-   * @param dataset input dataset
-   * @param paramMap additional parameters, overwrite embedded params
-   * @return transformed dataset
-   */
-  def transform(dataset: JavaSchemaRDD, paramMap: ParamMap): JavaSchemaRDD = {
-    transform(dataset.schemaRDD, paramMap).toJavaSchemaRDD
-  }
+  def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame
 }
 
 /**
@@ -119,11 +95,10 @@ private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, O
     StructType(outputFields)
   }
 
-  override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
+  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     transformSchema(dataset.schema, paramMap, logging = true)
-    import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
-    val udf = ScalaUdf(this.createTransformFunc(map), outputDataType, Seq(map(inputCol).attr))
-    dataset.select(Star(None), udf as map(outputCol))
+    dataset.select($"*", callUDF(
+      this.createTransformFunc(map), outputDataType, Column(map(inputCol))).as(map(outputCol)))
   }
 }

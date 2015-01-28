@@ -99,11 +99,13 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   override def runSqlHive(sql: String): Seq[String] = super.runSqlHive(rewritePaths(sql))
 
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
-    new this.QueryExecution { val logical = plan }
+    new this.QueryExecution(plan)
 
   /** Fewer partitions to speed up testing. */
-  override private[spark] def numShufflePartitions: Int =
-    getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+  protected[sql] override lazy val conf: SQLConf = new SQLConf {
+    override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+  }
 
   /**
    * Returns the value of specified environmental variable as a [[java.io.File]] after checking
@@ -148,8 +150,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   val describedTable = "DESCRIBE (\\w+)".r
 
-  protected[hive] class HiveQLQueryExecution(hql: String) extends this.QueryExecution {
-    lazy val logical = HiveQl.parseSql(hql)
+  protected[hive] class HiveQLQueryExecution(hql: String)
+    extends this.QueryExecution(HiveQl.parseSql(hql)) {
     def hiveExec() = runSqlHive(hql)
     override def toString = hql + "\n" + super.toString
   }
@@ -157,7 +159,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   /**
    * Override QueryExecution with special debug workflow.
    */
-  abstract class QueryExecution extends super.QueryExecution {
+  class QueryExecution(logicalPlan: LogicalPlan)
+    extends super.QueryExecution(logicalPlan) {
     override lazy val analyzed = {
       val describedTables = logical match {
         case HiveNativeCommand(describedTable(tbl)) => tbl :: Nil
@@ -395,6 +398,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
       clearCache()
       loadedTables.clear()
+      catalog.cachedDataSourceTables.invalidateAll()
       catalog.client.getAllTables("default").foreach { t =>
         logDebug(s"Deleting table $t")
         val table = catalog.client.getTable("default", t)

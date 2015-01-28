@@ -21,12 +21,12 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{SQLContext, SchemaRDD}
+import org.apache.spark.sql.{SQLContext, DataFrame}
 
 class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
 
   @transient var sqlContext: SQLContext = _
-  @transient var dataset: SchemaRDD = _
+  @transient var dataset: DataFrame = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -36,34 +36,28 @@ class LogisticRegressionSuite extends FunSuite with MLlibTestSparkContext {
   }
 
   test("logistic regression") {
-    val sqlContext = this.sqlContext
-    import sqlContext._
     val lr = new LogisticRegression
     val model = lr.fit(dataset)
     model.transform(dataset)
-      .select('label, 'prediction)
+      .select("label", "prediction")
       .collect()
   }
 
   test("logistic regression with setters") {
-    val sqlContext = this.sqlContext
-    import sqlContext._
     val lr = new LogisticRegression()
       .setMaxIter(10)
       .setRegParam(1.0)
     val model = lr.fit(dataset)
     model.transform(dataset, model.threshold -> 0.8) // overwrite threshold
-      .select('label, 'score, 'prediction)
+      .select("label", "score", "prediction")
       .collect()
   }
 
   test("logistic regression fit and transform with varargs") {
-    val sqlContext = this.sqlContext
-    import sqlContext._
     val lr = new LogisticRegression
     val model = lr.fit(dataset, lr.maxIter -> 10, lr.regParam -> 1.0)
     model.transform(dataset, model.threshold -> 0.8, model.scoreCol -> "probability")
-      .select('label, 'probability, 'prediction)
+      .select("label", "probability", "prediction")
       .collect()
   }
 }

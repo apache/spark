@@ -22,8 +22,7 @@ import java.text.{DateFormat, SimpleDateFormat}
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
-import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.catalyst.types.decimal.Decimal
+import org.apache.spark.sql.types._
 
 /** Cast the child expression to the target data type. */
 case class Cast(child: Expression, dataType: DataType) extends UnaryExpression with Logging {
@@ -408,7 +407,8 @@ case class Cast(child: Expression, dataType: DataType) extends UnaryExpression w
     val casts = from.fields.zip(to.fields).map {
       case (fromField, toField) => cast(fromField.dataType, toField.dataType)
     }
-    buildCast[Row](_, row => Row(row.zip(casts).map {
+    // TODO: This is very slow!
+    buildCast[Row](_, row => Row(row.toSeq.zip(casts).map {
       case (v, cast) => if (v == null) null else cast(v)
     }: _*))
   }
