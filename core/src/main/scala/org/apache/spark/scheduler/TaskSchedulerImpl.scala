@@ -168,7 +168,7 @@ private[spark] class TaskSchedulerImpl(
             if (!hasLaunchedTask) {
               logWarning("Initial job has not accepted any resources; " +
                 "check your cluster UI to ensure that workers are registered " +
-                "and have sufficient memory")
+                "and have sufficient resources")
             } else {
               this.cancel()
             }
