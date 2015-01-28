@@ -60,8 +60,8 @@ private[mllib] trait Layer extends Serializable {
 
   def backward(input: SM, delta: SM): (SM, SV) = {
     val gradWeight = SDM.zeros(numOut, numIn)
-    BLAS.gemm(false, true, 1.0, delta,
-      new SDM(input.numRows, input.numCols, input.toArray), 1.0, gradWeight)
+    val inputT = new SDM(input.numRows, input.numCols, input.toArray).transpose.asInstanceOf[SDM]
+    BLAS.gemm(1.0, delta, inputT, 1.0, gradWeight)
 
     val brzDelta = new BDM(delta.numRows, delta.numCols, delta.toArray)
     val gradBias = brzSum(brzDelta, BrzAxis._1)
@@ -76,8 +76,8 @@ private[mllib] trait Layer extends Serializable {
   }
 
   def previousError(input: SM, previousLayer: Layer, currentDelta: SM): SM = {
-    val preDelta = weight.transposeMultiply(
-      new SDM(currentDelta.numRows, currentDelta.numCols, currentDelta.toArray))
+    val preDelta = weight.transpose.multiply(new SDM(currentDelta.numRows,
+      currentDelta.numCols, currentDelta.toArray))
     previousLayer.computeNeuronPrimitive(preDelta, input)
     preDelta
   }

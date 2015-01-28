@@ -51,8 +51,7 @@ class RBM(
   require(dropoutRate >= 0 && dropoutRate < 1)
   @transient protected lazy val rand: Random = new JDKRandomGenerator()
   @transient protected[mllib] lazy val visibleLayer: Layer = {
-    val brzWeight = weight.toBreeze.toDenseMatrix
-    new ReLuLayer(new SDM(weight.numCols, weight.numRows, brzWeight.t.toArray), visibleBias)
+    new ReLuLayer(weight.transpose, visibleBias)
   }
 
   @transient protected[mllib] lazy val hiddenLayer: Layer = {
@@ -138,11 +137,12 @@ class RBM(
       }
     }
 
+
     val gradWeight = SDM.zeros(weight.numRows, weight.numCols)
-    BLAS.gemm(false, true, 1.0, hKMean,
-      new SDM(vKMean.numRows, vKMean.numCols, vKMean.toArray), 1.0, gradWeight)
-    BLAS.gemm(false, true, -1.0, h1Mean,
-      new SDM(input.numRows, input.numCols, input.toArray), 1.0, gradWeight)
+    BLAS.gemm(1.0, hKMean, new SDM(vKMean.numRows, vKMean.numCols,
+      vKMean.toArray).transpose.asInstanceOf[SDM], 1.0, gradWeight)
+    BLAS.gemm(-1.0, h1Mean, new SDM(input.numRows, input.numCols,
+      input.toArray).transpose.asInstanceOf[SDM], 1.0, gradWeight)
 
     val diffVisible: BM[Double] = vKMean.toBreeze - input.toBreeze
     val gradVisibleBias = Vectors.fromBreeze(brzSum(diffVisible.toDenseMatrix, BrzAxis._1))
