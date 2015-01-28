@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.feature
 
 import org.apache.spark.Logging
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.rdd.RDDFunctions._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
@@ -26,7 +26,7 @@ import org.apache.spark.rdd.RDD
 
 /**
  * :: Experimental ::
- * Standardizes features by removing the mean and scaling to unit variance using column summary
+ * Standardizes features by removing the mean and scaling to unit standard deviation using column summary
  * statistics on the samples in the training set.
  *
  * @param withMean False by default. Centers the data with mean before scaling. It will build a
@@ -53,7 +53,7 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
     val summary = data.treeAggregate(new MultivariateOnlineSummarizer)(
       (aggregator, data) => aggregator.add(data),
       (aggregator1, aggregator2) => aggregator1.merge(aggregator2))
-    new StandardScalerModel(summary.mean, summary.variance, withMean, withStd)
+    new StandardScalerModel(summary.variance, summary.mean, withStd, withMean)
   }
 }
 
@@ -61,30 +61,36 @@ class StandardScaler(withMean: Boolean, withStd: Boolean) extends Logging {
  * :: Experimental ::
  * Represents a StandardScaler model that can transform vectors.
  *
- * @param mean column mean values
  * @param variance column variance values
- * @param withMean whether to center the data before scaling
+ * @param mean column mean values
  * @param withStd whether to scale the data to have unit standard deviation
+ * @param withMean whether to center the data before scaling
  */
 @Experimental
 class StandardScalerModel (
-    val mean: Vector,
     val variance: Vector,
-    var withMean: Boolean,
-    var withStd: Boolean) extends VectorTransformer {
+    val mean: Vector,
+    var withStd: Boolean,
+    var withMean: Boolean) extends VectorTransformer {
 
-  require(mean.size == variance.size)
-
-  def this(mean: Vector, variance: Vector) {
-    this(mean, variance, false, true)
+  def this(variance: Vector, mean: Vector) {
+    this(variance, mean, withStd = variance != null, withMean = mean != null)
+    require(this.withStd || this.withMean, "at least one of variance or mean vectors must be provided")
+    if (this.withStd && this.withMean) require(mean.size == variance.size, "mean and variance vectors must have equal size if both are provided")
   }
 
+  def this(variance: Vector) = this(variance, null)
+
+  @DeveloperApi
   def setWithMean(withMean: Boolean): this.type = {
+    require(!(withMean && this.mean == null),"cannot set withMean to true while mean is null")
     this.withMean = withMean
     this
   }
 
+  @DeveloperApi
   def setWithStd(withStd: Boolean): this.type = {
+    require(!(withStd && this.variance == null), "cannot set withStd to true while variance is null")
     this.withStd = withStd
     this
   }
@@ -108,8 +114,8 @@ class StandardScalerModel (
    * Applies standardization transformation on a vector.
    *
    * @param vector Vector to be standardized.
-   * @return Standardized vector. If the variance of a column is zero, it will return default `0.0`
-   *         for the column with zero variance.
+   * @return Standardized vector. If the standard deviation of a column is zero, it will return default `0.0`
+   *         for the column with zero standard deviation.
    */
   override def transform(vector: Vector): Vector = {
     require(mean.size == vector.size)

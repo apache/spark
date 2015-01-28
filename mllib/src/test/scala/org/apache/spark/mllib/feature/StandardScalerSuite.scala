@@ -72,9 +72,9 @@ class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
     val model2 = standardizer2.fit(dataRDD)
     val model3 = standardizer3.fit(dataRDD)
 
-    val equivalentModel1 = new StandardScalerModel(model1.mean, model1.variance, true, true)
-    val equivalentModel2 = new StandardScalerModel(model2.mean, model2.variance)
-    val equivalentModel3 = new StandardScalerModel(model3.mean, model3.variance, true, false)
+    val equivalentModel1 = new StandardScalerModel(model1.variance, model1.mean)
+    val equivalentModel2 = new StandardScalerModel(model2.variance, model2.mean, true, false)
+    val equivalentModel3 = new StandardScalerModel(model3.variance, model3.mean, false, true)
 
     val data1 = denseData.map(equivalentModel1.transform)
     val data2 = denseData.map(equivalentModel2.transform)
@@ -205,10 +205,9 @@ class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
     val model2 = standardizer2.fit(dataRDD)
     val model3 = standardizer3.fit(dataRDD)
 
-    val equivalentModel1 = new StandardScalerModel(model1.mean, model1.variance, true, true)
-    val equivalentModel2 = new StandardScalerModel(model2.mean, model2.variance)
-    val equivalentModel3 = new StandardScalerModel(model3.mean, model3.variance, true, false)
-
+    val equivalentModel1 = new StandardScalerModel(model1.variance, model1.mean)
+    val equivalentModel2 = new StandardScalerModel(model2.variance, model2.mean, true, false)
+    val equivalentModel3 = new StandardScalerModel(model3.variance, model3.mean, false, true)
 
     val data2 = sparseData.map(equivalentModel2.transform)
 
@@ -301,9 +300,9 @@ class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
     val model2 = standardizer2.fit(dataRDD)
     val model3 = standardizer3.fit(dataRDD)
 
-    val equivalentModel1 = new StandardScalerModel(model1.mean, model1.variance, true, true)
-    val equivalentModel2 = new StandardScalerModel(model2.mean, model2.variance, true, false)
-    val equivalentModel3 = new StandardScalerModel(model3.mean, model3.variance, false, true)
+    val equivalentModel1 = new StandardScalerModel(model1.variance, model1.mean)
+    val equivalentModel2 = new StandardScalerModel(model2.variance, model2.mean, true, false)
+    val equivalentModel3 = new StandardScalerModel(model3.variance, model3.mean, false, true)
 
     val data1 = constantData.map(equivalentModel1.transform)
     val data2 = constantData.map(equivalentModel2.transform)
@@ -339,5 +338,31 @@ class StandardScalerSuite extends FunSuite with MLlibTestSparkContext {
       "The variance is zero, so the transformed result should be 0.0")
     assert(data3.forall(_.toArray.forall(_ == 0.0)),
       "The variance is zero, so the transformed result should be 0.0")
+  }
+
+  test("StandardScalerModel argument nulls are properly handled") {
+
+    withClue("model needs at least one of variance or mean vectors") {
+      intercept[IllegalArgumentException] {
+        val model = new StandardScalerModel(null, null)
+      }
+    }
+    withClue("model needs variance to set withStd to true") {
+      intercept[IllegalArgumentException] {
+        val model = new StandardScalerModel(null, Vectors.dense(0.0))
+        model.setWithStd(true)
+      }
+    }
+    withClue("model needs mean to set withMean to true") {
+      intercept[IllegalArgumentException] {
+        val model = new StandardScalerModel(Vectors.dense(0.0), null)
+        model.setWithMean(true)
+      }
+    }
+    withClue("model needs variance and mean vectors to be equal size when both are provided") {
+      intercept[IllegalArgumentException] {
+        val model = new StandardScalerModel(Vectors.dense(0.0), Vectors.dense(0.0,1.0))
+      }
+    }
   }
 }

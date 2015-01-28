@@ -271,6 +271,8 @@ val data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 
 val scaler1 = new StandardScaler().fit(data.map(x => x.features))
 val scaler2 = new StandardScaler(withMean = true, withStd = true).fit(data.map(x => x.features))
+// scaler3 is an identical model to scaler2, and will produce identical transformations
+val scaler3 = new StandardScalerModel(scaler2.variance, scaler2.mean)
 
 // data1 will be unit variance.
 val data1 = data.map(x => (x.label, scaler1.transform(x.features)))
@@ -294,6 +296,9 @@ features = data.map(lambda x: x.features)
 
 scaler1 = StandardScaler().fit(features)
 scaler2 = StandardScaler(withMean=True, withStd=True).fit(features)
+# scaler3 is an identical model to scaler2, and will produce identical transformations
+scaler3 = StandardScalerModel(scaler2.variance, scaler2.mean)
+
 
 # data1 will be unit variance.
 data1 = label.zip(scaler1.transform(features))
