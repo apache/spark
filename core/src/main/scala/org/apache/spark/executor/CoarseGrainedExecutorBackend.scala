@@ -96,6 +96,7 @@ private[spark] class CoarseGrainedExecutorBackend(
       executor.stop()
       context.stop(self)
       context.system.shutdown()
+      SparkEnv.get.blockManager.diskBlockManager.stop()
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {

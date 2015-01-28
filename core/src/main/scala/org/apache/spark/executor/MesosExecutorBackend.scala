@@ -108,7 +108,7 @@ private[spark] class MesosExecutorBackend
 
   override def frameworkMessage(d: ExecutorDriver, data: Array[Byte]) {}
 
-  override def shutdown(d: ExecutorDriver) {}
+  override def shutdown(d: ExecutorDriver) {SparkEnv.get.blockManager.diskBlockManager.stop()}
 }
 
 /**
