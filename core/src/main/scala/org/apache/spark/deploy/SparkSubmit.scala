@@ -186,9 +186,8 @@ object SparkSubmit {
     sysProps("SPARK_SUBMIT") = "true"
 
     // Resolve maven dependencies if there are any and add classpath to jars
-    IVY_CACHE = new File(s"${args.ivyRepoPath}/cache")
-    MAVEN_JARS = new File(s"${args.ivyRepoPath}/jars")
-    val resolvedMavenCoordinates = resolveMavenCoordinates(args.maven, args.mavenRepos)
+    val resolvedMavenCoordinates =
+      resolveMavenCoordinates(args.maven, args.mavenRepos, args.ivyRepoPath)
     if (!resolvedMavenCoordinates.trim.isEmpty) {
       if (args.jars == null || args.jars.trim.isEmpty) {
         args.jars = resolvedMavenCoordinates
@@ -476,7 +475,10 @@ object SparkSubmit {
    * @return The comma-delimited path to the jars of the given maven artifacts including their
    *         transitive dependencies
    */
-  private def resolveMavenCoordinates(coordinates: String, remoteRepos: String): String = {
+  private def resolveMavenCoordinates(
+      coordinates: String,
+      remoteRepos: String,
+      ivyPath: String): String = {
     if (coordinates == null || coordinates.trim.isEmpty) {
       ""
     } else {
@@ -486,9 +488,15 @@ object SparkSubmit {
           s"'groupId:artifactId:version'. The coordinate provided is: $p")
         new MavenCoordinate(splits(0), splits(1), splits(2))
       }
-      // create an ivy instance
+      // set ivy settings for location of cache
       val ivySettings: IvySettings = new IvySettings
-      ivySettings.setDefaultCache(IVY_CACHE)
+      if (ivyPath == null || ivyPath.trim.length == 0) {
+        MAVEN_JARS = new File(ivySettings.getDefaultIvyUserDir, "jars")
+      } else {
+        ivySettings.setDefaultCache(new File(ivyPath, "cache"))
+        MAVEN_JARS = new File(ivyPath, "jars")
+      }
+
       // create a pattern matcher
       ivySettings.addMatcher(new GlobPatternMatcher)
 
