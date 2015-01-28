@@ -101,7 +101,9 @@ class QueryTest extends PlanTest {
     }
   }
 
-  /** Asserts that a given SchemaRDD will be executed using the given number of cached results. */
+  /**
+   * Asserts that a given [[DataFrame]] will be executed using the given number of cached results.
+   */
   def assertCached(query: DataFrame, numCachedTables: Int = 1): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
     val cachedData = planWithCaching collect {

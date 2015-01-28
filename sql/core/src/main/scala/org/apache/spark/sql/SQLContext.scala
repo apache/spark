@@ -51,7 +51,6 @@ import org.apache.spark.util.Utils
 @AlphaComponent
 class SQLContext(@transient val sparkContext: SparkContext)
   extends org.apache.spark.Logging
-  with CacheManager
   with Serializable {
 
   self =>
@@ -117,12 +116,57 @@ class SQLContext(@transient val sparkContext: SparkContext)
     case _ =>
   }
 
+  protected[sql] val cacheManager = new CacheManager(this)
+
   /**
-   * Creates a SchemaRDD from an RDD of case classes.
+   * A collection of methods that are considered experimental, but can be used to hook into
+   * the query planner for advanced functionalities.
+   */
+  val experimental: ExperimentalMethods = new ExperimentalMethods(this)
+
+  /**
+   * A collection of methods for registering user-defined functions (UDF).
+   *
+   * The following example registers a Scala closure as UDF:
+   * {{{
+   *   sqlContext.udf.register("myUdf", (arg1: Int, arg2: String) => arg2 + arg1)
+   * }}}
+   *
+   * The following example registers a UDF in Java:
+   * {{{
+   *   sqlContext.udf().register("myUDF",
+   *     new UDF2<Integer, String, String>() {
+   *       @Override
+   *       public String call(Integer arg1, String arg2) {
+   *         return arg2 + arg1;
+   *       }
+   *     }, DataTypes.StringType);
+   * }}}
+   *
+   * Or, to use Java 8 lambda syntax:
+   * {{{
+   *   sqlContext.udf().register("myUDF",
+   *     (Integer arg1, String arg2) -> arg2 + arg1),
+   *     DataTypes.StringType);
+   * }}}
+   */
+  val udf: UDFRegistration = new UDFRegistration(this)
+
+  /** Returns true if the table is currently cached in-memory. */
+  def isCached(tableName: String): Boolean = cacheManager.isCached(tableName)
+
+  /** Caches the specified table in-memory. */
+  def cacheTable(tableName: String): Unit = cacheManager.cacheTable(tableName)
+
+  /** Removes the specified table from the in-memory cache. */
+  def uncacheTable(tableName: String): Unit = cacheManager.uncacheTable(tableName)
+
+  /**
+   * Creates a DataFrame from an RDD of case classes.
    *
    * @group userf
    */
-  implicit def createSchemaRDD[A <: Product: TypeTag](rdd: RDD[A]): DataFrame = {
+  implicit def createDataFrame[A <: Product: TypeTag](rdd: RDD[A]): DataFrame = {
     SparkPlan.currentContext.set(self)
     val attributeSeq = ScalaReflection.attributesFor[A]
     val schema = StructType.fromAttributes(attributeSeq)
@@ -133,7 +177,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   /**
    * Convert a [[BaseRelation]] created for external data sources into a [[DataFrame]].
    */
-  def baseRelationToSchemaRDD(baseRelation: BaseRelation): DataFrame = {
+  def baseRelationToDataFrame(baseRelation: BaseRelation): DataFrame = {
     new DataFrame(this, LogicalRelation(baseRelation))
   }
 
@@ -155,13 +199,13 @@ class SQLContext(@transient val sparkContext: SparkContext)
    *  val people =
    *    sc.textFile("examples/src/main/resources/people.txt").map(
    *      _.split(",")).map(p => Row(p(0), p(1).trim.toInt))
-   *  val peopleSchemaRDD = sqlContext. applySchema(people, schema)
-   *  peopleSchemaRDD.printSchema
+   *  val dataFrame = sqlContext. applySchema(people, schema)
+   *  dataFrame.printSchema
    *  // root
    *  // |-- name: string (nullable = false)
    *  // |-- age: integer (nullable = true)
    *
-   *    peopleSchemaRDD.registerTempTable("people")
+   *  dataFrame.registerTempTable("people")
    *  sqlContext.sql("select name from people").collect.foreach(println)
    * }}}
    *
@@ -169,7 +213,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
    */
   @DeveloperApi
   def applySchema(rowRDD: RDD[Row], schema: StructType): DataFrame = {
-    // TODO: use MutableProjection when rowRDD is another SchemaRDD and the applied
+    // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val logicalPlan = LogicalRDD(schema.toAttributes, rowRDD)(self)
     new DataFrame(this, logicalPlan)
@@ -309,12 +353,12 @@ class SQLContext(@transient val sparkContext: SparkContext)
    * @group userf
    */
   def dropTempTable(tableName: String): Unit = {
-    tryUncacheQuery(table(tableName))
+    cacheManager.tryUncacheQuery(table(tableName))
     catalog.unregisterTable(Seq(tableName))
   }
 
   /**
-   * Executes a SQL query using Spark, returning the result as a SchemaRDD.  The dialect that is
+   * Executes a SQL query using Spark, returning the result as a [[DataFrame]]. The dialect that is
    * used for SQL parsing can be configured with 'spark.sql.dialect'.
    *
    * @group userf
@@ -327,43 +371,9 @@ class SQLContext(@transient val sparkContext: SparkContext)
     }
   }
 
-  /** Returns the specified table as a SchemaRDD */
+  /** Returns the specified table as a [[DataFrame]]. */
   def table(tableName: String): DataFrame =
     new DataFrame(this, catalog.lookupRelation(Seq(tableName)))
-
-  /**
-   * A collection of methods that are considered experimental, but can be used to hook into
-   * the query planner for advanced functionalities.
-   */
-  val experimental: ExperimentalMethods = new ExperimentalMethods(this)
-
-  /**
-   * A collection of methods for registering user-defined functions (UDF).
-   *
-   * The following example registers a Scala closure as UDF:
-   * {{{
-   *   sqlContext.udf.register("myUdf", (arg1: Int, arg2: String) => arg2 + arg1)
-   * }}}
-   *
-   * The following example registers a UDF in Java:
-   * {{{
-   *   sqlContext.udf().register("myUDF",
-   *     new UDF2<Integer, String, String>() {
-   *       @Override
-   *       public String call(Integer arg1, String arg2) {
-   *         return arg2 + arg1;
-   *       }
-   *     }, DataTypes.StringType);
-   * }}}
-   *
-   * Or, to use Java 8 lambda syntax:
-   * {{{
-   *   sqlContext.udf().register("myUDF",
-   *     (Integer arg1, String arg2) -> arg2 + arg1),
-   *     DataTypes.StringType);
-   * }}}
-   */
-  val udf: UDFRegistration = new UDFRegistration(this)
 
   protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext: SparkContext = self.sparkContext
@@ -455,7 +465,7 @@ class SQLContext(@transient val sparkContext: SparkContext)
   protected class QueryExecution(val logical: LogicalPlan) {
 
     lazy val analyzed: LogicalPlan = ExtractPythonUdfs(analyzer(logical))
-    lazy val withCachedData: LogicalPlan = useCachedData(analyzed)
+    lazy val withCachedData: LogicalPlan = cacheManager.useCachedData(analyzed)
     lazy val optimizedPlan: LogicalPlan = optimizer(withCachedData)
 
     // TODO: Don't just pick the first one...

@@ -32,7 +32,7 @@ class CrossValidatorSuite extends FunSuite with MLlibTestSparkContext {
   override def beforeAll(): Unit = {
     super.beforeAll()
     val sqlContext = new SQLContext(sc)
-    dataset = sqlContext.createSchemaRDD(
+    dataset = sqlContext.createDataFrame(
       sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2))
   }
 

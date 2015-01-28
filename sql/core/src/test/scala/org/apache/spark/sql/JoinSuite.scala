@@ -59,7 +59,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("join operator selection") {
-    clearCache()
+    cacheManager.clearCache()
 
     Seq(
       ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
@@ -93,7 +93,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("broadcasted hash join operator selection") {
-    clearCache()
+    cacheManager.clearCache()
     sql("CACHE TABLE testData")
 
     Seq(
@@ -384,7 +384,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("broadcasted left semi join operator selection") {
-    clearCache()
+    cacheManager.clearCache()
     sql("CACHE TABLE testData")
     val tmp = conf.autoBroadcastJoinThreshold
 

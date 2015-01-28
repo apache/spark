@@ -496,17 +496,17 @@ class DataFrame protected[sql](
   }
 
   override def persist(): this.type = {
-    sqlContext.cacheQuery(this)
+    sqlContext.cacheManager.cacheQuery(this)
     this
   }
 
   override def persist(newLevel: StorageLevel): this.type = {
-    sqlContext.cacheQuery(this, None, newLevel)
+    sqlContext.cacheManager.cacheQuery(this, None, newLevel)
     this
   }
 
   override def unpersist(blocking: Boolean): this.type = {
-    sqlContext.tryUncacheQuery(this, blocking)
+    sqlContext.cacheManager.tryUncacheQuery(this, blocking)
     this
   }
 

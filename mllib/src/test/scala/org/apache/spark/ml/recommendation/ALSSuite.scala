@@ -350,7 +350,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       numItemBlocks: Int = 3,
       targetRMSE: Double = 0.05): Unit = {
     val sqlContext = this.sqlContext
-    import sqlContext.createSchemaRDD
+    import sqlContext.createDataFrame
     val als = new ALS()
       .setRank(rank)
       .setRegParam(regParam)
