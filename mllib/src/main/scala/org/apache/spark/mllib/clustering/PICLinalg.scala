@@ -22,14 +22,17 @@ import org.apache.spark.mllib.linalg.Vectors
 import scala.reflect.ClassTag
 import scala.util.Random
 import breeze.linalg.{DenseVector => BDV,DenseMatrix => BDM}
+import scala.language.existentials
+import scala.language.implicitConversions
 
 /**
- * PICLinalg
+ * Linear Algebra helper routines associated with the PIClustering implementation
  *
  */
-
 object PICLinalg {
 
+  import breeze.linalg.DenseVector._
+  import breeze.linalg.DenseMatrix._
   type DMatrix = BDM[Double]
 
   type LabeledVector = (Long, BDV[Double])
@@ -38,67 +41,16 @@ object PICLinalg {
 
   type Vertices = Seq[LabeledVector]
 
-//  implicit def arrayToVect(darr: Array[Double]): BDV[Double] = new BDV(darr)
   implicit def bdvToSeq[T](vect: BDV[T])(implicit ct: ClassTag[T]): Seq[T] = vect.toArray.toSeq
-  implicit def bdvToArray[T](vect: BDV[T])(implicit ct: ClassTag[T]): Array[T] = vect.toArray
-//  implicit def arrayToSeq(arr: Array[Double]) = Predef.doubleArrayOps(arr)
-  def add(v1: BDV[Double], v2: BDV[Double]) =
-    v1.zip(v2).map { x => x._1 + x._2}
 
-  def norm(darr: Array[Double]): Double = {
-    Math.sqrt(darr.foldLeft(0.0) { case (sum, dval) => sum + Math.pow(dval, 2)})
-  }
-
-  def norm(darr: BDV[Double]): Double = {
-    darr.norm(2)
-  }
-
-//
-//
-//  // Implicits to convert between Breeze DenseVector's and Arrays
-//  implicit def arrToSeq[T](arr: Array[T]): Seq[T] = arr.toSeq
-////  implicit def arrayToBDV(darr: Array[Double]): BDV[Double]
-////    = Vectors.dense(darr).asInstanceOf[BDV[Double]]
-////  implicit def bdvToArray[T](vect: BDV[T])(implicit ct: ClassTag[T]): Array[T] = vect.toArray
-////  implicit def bdvToSeq[T](vect: BDV[T])(implicit ct: ClassTag[T]): Seq[T] = vect.toArray.toSeq
-//
-//  def add(v1: BDV[Double], v2: BDV[Double]) =
-//    v1.zip(v2).map { x => x._1 + x._2}
-
-  def mult(v1: BDV[Double], d: Double) = {
-    v1 * d
-  }
-
-  def mult(v1: BDV[Double], v2: BDV[Double]) = {
-    v1 * v2
-  }
-
-  def multColByRow(v1: BDV[Double], v2: BDV[Double]) = {
-    val mat = v1 * v2.t
-    mat
-  }
 
   def norm(vect: BDV[Double]): Double = {
-    vect.norm
-  }
-
-//  def norm(darr: Array[Double]): Double = {
-//    Math.sqrt(darr.foldLeft(0.0) { case (sum, dval) => sum + Math.pow(dval, 2)})
-//  }
-
-  def manhattanNorm(vect: BDV[Double]): Double = {
-    vect.norm(1)
+    Vectors.norm(Vectors.fromBreeze(vect),2.0)
   }
 
   def dot(v1: BDV[Double], v2: BDV[Double]) : Double = {
     v1.dot(v2)
   }
-
-  def onesVector(len: Int): BDV[Double] = {
-    BDV.ones(len)
-  }
-
-  val calcEigenDiffs = true
 
   def withinTol(d: Double, tol: Double = DefaultTolerance) = Math.abs(d) <= tol
 
@@ -112,15 +64,15 @@ object PICLinalg {
     }
   }
 
-  def transpose(mat: DMatrix) = {
-    mat.t
-  }
-
   def printMatrix(mat: BDM[Double]): String
   = printMatrix(mat, mat.rows, mat.cols)
 
   def printMatrix(mat: BDM[Double], numRows: Int, numCols: Int): String = {
     printMatrix(mat.toArray, numRows, numCols)
+  }
+
+  def printMatrix(vectors: Array[BDV[Double]]) : String = {
+    printMatrix(vectors.map{_.toArray}.flatten, vectors.length, vectors.length)
   }
 
   def printMatrix(vect: Array[Double], numRows: Int, numCols: Int): String = {
@@ -185,12 +137,13 @@ object PICLinalg {
         cnorm = makeNonZero(norm(eigen))
         eigen = eigen.map(_ / cnorm)
       }
-      val signum = Math.signum(dot(mat(0), eigen))
-      val lambda = dot(mat(0), eigen) / eigen(0)
+      val matDotEigen = mat(::,0) dot eigen
+      val signum = Math.signum(matDotEigen)
+      val lambda = matDotEigen / eigen(0)
       eigen = eigen.map(_ * signum)
       println(s"lambda=$lambda eigen=${printVector(eigen)}")
       if (expLambda.toArray.length > 0) {
-        val compareVect = eigen.zip(expdat(k)).map { case (a, b) => a / b}
+        val compareVect = eigen.toArray.zip(expdat(::,k)).map { case (a, b) => a / b}
         println(s"Ratio  to expected: lambda=${lambda / expLambda(k)} " +
           s"Vect=${compareVect.mkString("[", ",", "]")}")
       }
@@ -216,11 +169,8 @@ object PICLinalg {
   }
 
   def deflate(mat: DMatrix, lambda: Double, eigen: BDV[Double]) = {
-    //        mat = mat.map(subtractProjection(_, mult(eigen, lambda)))
     val eigT = eigen
     val projected = (eigen * eigen.t) * lambda
-    //        println(s"projected matrix:\n${printMatrix(projected,
-    //          eigen.length, eigen.length)}")
     val matOut = mat - projected
     println(s"Updated matrix:\n${
       printMatrix(mat,
@@ -234,29 +184,12 @@ object PICLinalg {
     outMat
   }
 
-  //    def mult(mat: DMatrix, vect: BDV[Double]): DMatrix  = {
-  //      val outMat = mat.map { m =>
-  //        mult(m, vect)
-  //      }
-  //      outMat
-  //    }
-  //
-  //    def mult(vect: BDV[Double], mat: DMatrix): DMatrix = {
-  //      for {d <- vect.zip(transpose(mat)) }
-  //        yield mult(d._2, d._1)
-  //    }
-
   def scale(mat: DMatrix, d: Double): DMatrix = {
     mat * d
   }
 
-  def transpose(vector: BDV[Double]) = {
-    vector.map { d => Array(d)}
-  }
-
-  def toMat(dvect: Array[Double], ncols: Int) = {
-    val m = dvect.toSeq.grouped(ncols).map(_.toArray)
-    m
+  def matToCols(mat: DMatrix) = {
+    mat.toArray.grouped(mat.cols)
   }
 
   def schurComplement(mat: DMatrix, lambda: Double, eigen: BDV[Double]) = {
@@ -273,9 +206,10 @@ object PICLinalg {
       printMatrix(numerat2,
         eigen.length, eigen.length)
     }")
-    val denom1 = eigT  *  mat
+    val denom1 = eig  *  mat
     val denom2 = denom1 * eigen
-    val denom = denom2.toArray(0)
+    val denomTmp = denom2.toArray
+    val denom = denomTmp(0)
     println(s"denom is $denom")
     val projMat = scale(numerat2, 1.0 / denom)
     println(s"Updated matrix:\n${
