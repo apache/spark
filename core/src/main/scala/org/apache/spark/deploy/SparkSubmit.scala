@@ -91,10 +91,10 @@ object SparkSubmit {
 
   /**
    * @return a tuple containing
-   *          (1) the arguments for the child process,
-   *          (2) a list of classpath entries for the child,
-   *          (3) a list of system properties and env vars, and
-   *          (4) the main class for the child
+   *           (1) the arguments for the child process,
+   *           (2) a list of classpath entries for the child,
+   *           (3) a list of system properties and env vars, and
+   *           (4) the main class for the child
    */
   private[spark] def createLaunchEnv(args: SparkSubmitArguments)
       : (ArrayBuffer[String], ArrayBuffer[String], Map[String, String], String) = {
@@ -252,26 +252,18 @@ object SparkSubmit {
       if (isUserJar(args.primaryResource)) {
         childClasspath += args.primaryResource
       }
-      if (args.jars != null) {
-        childClasspath ++= args.jars.split(",")
-      }
-      if (args.childArgs != null) {
-        childArgs ++= args.childArgs
-      }
+      if (args.jars != null) { childClasspath ++= args.jars.split(",") }
+      if (args.childArgs != null) { childArgs ++= args.childArgs }
     }
 
 
     // Map all arguments to command-line options or system properties for our chosen mode
     for (opt <- options) {
       if (opt.value != null &&
-        (deployMode & opt.deployMode) != 0 &&
-        (clusterManager & opt.clusterManager) != 0) {
-        if (opt.clOption != null) {
-          childArgs +=(opt.clOption, opt.value)
-        }
-        if (opt.sysProp != null) {
-          sysProps.put(opt.sysProp, opt.value)
-        }
+          (deployMode & opt.deployMode) != 0 &&
+          (clusterManager & opt.clusterManager) != 0) {
+        if (opt.clOption != null) { childArgs +=(opt.clOption, opt.value) }
+        if (opt.sysProp != null) { sysProps.put(opt.sysProp, opt.value) }
       }
     }
 
@@ -308,7 +300,7 @@ object SparkSubmit {
       }
       childArgs += ("--class", args.mainClass)
       if (args.childArgs != null) {
-        args.childArgs.foreach { arg => childArgs += ("--arg", arg)}
+        args.childArgs.foreach { arg => childArgs += ("--arg", arg) }
       }
     }
 
