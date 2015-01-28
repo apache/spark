@@ -64,6 +64,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
   }
   
+  test("describe like query a table") {
+    loadTestTable("src")
+    sql("desc src").registerTempTable("mydesc")
+    assert(sql("select count(1) from mydesc").collect()(0)(0) == 2)
+  }
+  
   createQueryTest("! operator",
     """
       |SELECT a FROM (

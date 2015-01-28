@@ -54,13 +54,8 @@ private[hive] case object NativePlaceholder extends Command
  */
 case class DescribeCommand(
     table: LogicalPlan,
-    isExtended: Boolean) extends Command {
-  override def output = Seq(
-    // Column names are based on Hive.
-    AttributeReference("col_name", StringType, nullable = false)(),
-    AttributeReference("data_type", StringType, nullable = false)(),
-    AttributeReference("comment", StringType, nullable = false)())
-}
+    override val output: Seq[Attribute],
+    isExtended: Boolean) extends Command 
 
 /** Provides a mapping from HiveQL statements to catalyst logical plans and expression trees. */
 private[hive] object HiveQl {
@@ -509,7 +504,11 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 // TODO: Actually, a user may mean tableName.columnName. Need to resolve this issue.
                 val tableIdent = extractTableIdent(nameParts.head)
                 DescribeCommand(
-                  UnresolvedRelation(tableIdent, None), extended.isDefined)
+                  UnresolvedRelation(tableIdent, None),
+                  Seq(AttributeReference("col_name", StringType, nullable = false)(),
+                      AttributeReference("data_type", StringType, nullable = false)(),
+                      AttributeReference("comment", StringType, nullable = false)()),
+                      extended.isDefined)
               case Token(".", dbName :: tableName :: colName :: Nil) =>
                 // It is describing a column with the format like "describe db.table column".
                 NativePlaceholder
@@ -517,6 +516,9 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 // It is describing a table with the format like "describe table".
                 DescribeCommand(
                   UnresolvedRelation(Seq(tableName.getText), None),
+                  Seq(AttributeReference("col_name", StringType, nullable = false)(),
+                      AttributeReference("data_type", StringType, nullable = false)(),
+                      AttributeReference("comment", StringType, nullable = false)()),
                   extended.isDefined)
             }
           }
