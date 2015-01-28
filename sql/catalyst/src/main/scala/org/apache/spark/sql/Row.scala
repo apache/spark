@@ -252,7 +252,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getDate(i: Int): java.sql.Date = DateUtils.toJavaDate(getInt(i))
+  def getDate(i: Int): java.sql.Date = apply(i).asInstanceOf[java.sql.Date]
 
   /**
    * Returns the value at position i of array type as a Scala Seq.
