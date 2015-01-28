@@ -14,31 +14,32 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.graphx.api.java
 
-package org.apache.spark.streaming;
+import java.lang.{Long => JLong}
+import java.util.{List => JList}
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.junit.After;
-import org.junit.Before;
+import org.apache.spark.api.java.JavaRDDLike
+import org.apache.spark.graphx._
+import org.apache.spark.{Partition, TaskContext}
 
-public abstract class LocalJavaStreamingContext {
+import scala.reflect.ClassTag
 
-        protected transient JavaStreamingContext ssc;
+trait JavaEdgeRDDLike [ED, This <: JavaEdgeRDDLike[ED, This, R],
+R <: JavaRDDLike[(VertexId, VertexId, ED), R]]
+  extends Serializable {
 
-    @Before
-    public void setUp() {
-        SparkConf conf = new SparkConf()
-            .setMaster("local[2]")
-            .setAppName("test")
-            .set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock");
-        ssc = new JavaStreamingContext(conf, new Duration(1000));
-        ssc.checkpoint("checkpoint");
-    }
+  def edgeRDD: EdgeRDD[ED]
 
-    @After
-    public void tearDown() {
-        ssc.stop();
-        ssc = null;
-    }
+  def setName() = edgeRDD.setName("JavaEdgeRDD")
+
+  def count() : JLong = edgeRDD.count()
+
+  def compute(part: Partition, context: TaskContext): Iterator[Edge[ED]] = {
+    edgeRDD.compute(part, context)
+  }
+
+  def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): JavaEdgeRDD[ED2]
+
+  def reverse: JavaEdgeRDD[ED]
 }

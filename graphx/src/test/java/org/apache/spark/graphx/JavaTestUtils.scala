@@ -14,31 +14,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.spark.graphx
 
-package org.apache.spark.streaming;
+import org.apache.spark.api.java.JavaSparkContext
+import java.util.{List => JList}
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.junit.After;
-import org.junit.Before;
 
-public abstract class LocalJavaStreamingContext {
+import org.apache.spark.graphx.api.java.JavaVertexRDD
 
-        protected transient JavaStreamingContext ssc;
+import scala.reflect.ClassTag
 
-    @Before
-    public void setUp() {
-        SparkConf conf = new SparkConf()
-            .setMaster("local[2]")
-            .setAppName("test")
-            .set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock");
-        ssc = new JavaStreamingContext(conf, new Duration(1000));
-        ssc.checkpoint("checkpoint");
-    }
+object JavaTestUtils {
 
-    @After
-    public void tearDown() {
-        ssc.stop();
-        ssc = null;
-    }
+  def attachVertexRDD[VD](
+    ssc: JavaSparkContext,
+    data: JList[Tuple2[Long, VD]],
+    numPartitions: Int) = {
+
+    implicit val cm: ClassTag[VD] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[VD]]
+
+    val vertices = ssc.parallelize(data)
+    new JavaVertexRDD(vertices)
+  }
+
 }

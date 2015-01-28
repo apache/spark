@@ -44,7 +44,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.{BoundedPriorityQueue, Utils}
 import org.apache.spark.util.collection.OpenHashMap
 import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, BernoulliCellSampler,
-  SamplingUtils}
+SamplingUtils}
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
@@ -1378,7 +1378,7 @@ abstract class RDD[T: ClassTag](
   def toDebugString: String = {
     // Get a debug description of an rdd without its children
     def debugSelf (rdd: RDD[_]): Seq[String] = {
-      import Utils.bytesToString
+      import org.apache.spark.util.Utils.bytesToString
 
       val persistence = if (storageLevel != StorageLevel.NONE) storageLevel.description else ""
       val storageInfo = rdd.context.getRDDStorageInfo.filter(_.id == rdd.id).map(info =>

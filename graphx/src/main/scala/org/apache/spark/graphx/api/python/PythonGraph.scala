@@ -15,30 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming;
+package org.apache.spark.graphx.api.python
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.junit.After;
-import org.junit.Before;
+import org.apache.spark.annotation.DeveloperApi
 
-public abstract class LocalJavaStreamingContext {
+@DeveloperApi
+private[graphx] class PythonGraph (
+    @transient val vertexRDD: PythonVertexRDD,
+    @transient val edgeRDD: PythonEdgeRDD)
+//  extends Graph[Array[Byte], Array[Byte]] with Serializable {
+    extends Serializable {
 
-        protected transient JavaStreamingContext ssc;
+  val vertices = vertexRDD.asJavaVertexRDD
+  val edges = edgeRDD.asJavaEdgeRDD
+  val asJavaGraph = (vertices, edges)
 
-    @Before
-    public void setUp() {
-        SparkConf conf = new SparkConf()
-            .setMaster("local[2]")
-            .setAppName("test")
-            .set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock");
-        ssc = new JavaStreamingContext(conf, new Duration(1000));
-        ssc.checkpoint("checkpoint");
-    }
-
-    @After
-    public void tearDown() {
-        ssc.stop();
-        ssc = null;
-    }
 }
+

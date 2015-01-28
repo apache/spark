@@ -170,6 +170,9 @@ export CLASSPATH
 # the driver JVM itself. Instead of handling this complexity in Bash, we launch a separate JVM
 # to prepare the launch environment of this driver JVM.
 
+export JAVA_OPTS+=" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"
+echo $JAVA_OPTS
+
 if [ -n "$SPARK_SUBMIT_BOOTSTRAP_DRIVER" ]; then
   # This is used only if the properties file actually contains these special configs
   # Export the environment variables needed by SparkSubmitDriverBootstrapper

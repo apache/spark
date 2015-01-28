@@ -85,7 +85,7 @@ object PartitionStrategy {
   }
 
   /**
-   * Assigns edges to partitions using only the source vertex ID, colocating edges with the same
+   * Assigns edges to partitions using only the source vertex ID, collocating edges with the same
    * source.
    */
   case object EdgePartition1D extends PartitionStrategy {
@@ -98,7 +98,7 @@ object PartitionStrategy {
 
   /**
    * Assigns edges to partitions by hashing the source and destination vertex IDs, resulting in a
-   * random vertex cut that colocates all same-direction edges between two vertices.
+   * random vertex cut that collocates all same-direction edges between two vertices.
    */
   case object RandomVertexCut extends PartitionStrategy {
     override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
