@@ -33,7 +33,8 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.ExplainCommand
-import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable}
+import org.apache.spark.sql.hive.execution.{HiveNativeCommand, DropTable, AnalyzeTable,
+  HiveScriptIOSchema}
 import org.apache.spark.sql.types._
 
 /* Implicit conversions */
@@ -646,7 +647,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 (List(AttributeReference("key", StringType)(),
                   AttributeReference("value", StringType)()), true)
             }
-            
+
             val (inputRowFormat, inputSerdeClass, inputSerdeProps) = inputSerdeClause match {
               case Token("TOK_SERDEPROPS", props) :: Nil =>
                 (props.map { case Token(name, Token(value, Nil) :: Nil) => (name, value) },
@@ -662,7 +663,7 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 (Nil, serde, tableprops)
               case Nil => (Nil, "", Nil)
             }
-            
+
             val (outputRowFormat, outputSerdeClass, outputSerdeProps) = outputSerdeClause match {
               case Token("TOK_SERDEPROPS", props) :: Nil =>
                 (props.map { case Token(name, Token(value, Nil) :: Nil) => (name, value) },
@@ -678,13 +679,13 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 (Nil, serde, tableprops)
               case Nil => (Nil, "", Nil)
             }
- 
+
             val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
 
-            val schema = logical.ScriptInputOutputSchema(
+            val schema = Some(HiveScriptIOSchema(
               inputRowFormat, outputRowFormat,
               inputSerdeClass, outputSerdeClass,
-              inputSerdeProps, outputSerdeProps, schemaLess)
+              inputSerdeProps, outputSerdeProps, schemaLess))
 
             Some(
               logical.ScriptTransformation(

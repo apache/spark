@@ -19,13 +19,14 @@ package org.apache.spark.sql.hive
 
 import java.util.{ArrayList => JArrayList}
 import java.util.Properties
+import java.rmi.server.UID
 
 import scala.collection.JavaConversions._
 import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.NullWritable
+import org.apache.hadoop.io.{NullWritable, Writable}
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal}
@@ -39,6 +40,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.primitive.{HiveDecimalObjec
 import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, ObjectInspector}
 import org.apache.hadoop.hive.serde2.{Deserializer, ColumnProjectionUtils}
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
+import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable
 import org.apache.hadoop.{io => hadoopIo}
 
 import org.apache.spark.Logging
@@ -395,7 +397,24 @@ private[hive] object HiveShim {
       Decimal(hdoi.getPrimitiveJavaObject(data).bigDecimalValue(), hdoi.precision(), hdoi.scale())
     }
   }
+
+  implicit def prepareWritable(shimW: ShimWritable): Writable = {
+    shimW.writable match {
+      case w: AvroGenericRecordWritable =>
+        w.setRecordReaderID(new UID())
+      case _ =>
+    } 
+    shimW.writable
+  }
 }
+
+/*
+ * Bug introdiced in hive-0.13. AvroGenericRecordWritable has a member recordReaderID that
+ * is needed to initialize before serialization.
+ * Fix it through wrapper.
+ */
+case class ShimWritable(writable: Writable)
+
 
 /*
  * Bug introdiced in hive-0.13. FileSinkDesc is serilizable, but its member path is not.

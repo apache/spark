@@ -38,7 +38,9 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveShim}
+import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.hive.{HiveContext, HiveInspectors, HiveShim, ShimWritable}
+import org.apache.spark.sql.hive.HiveShim._
 import org.apache.spark.util.Utils
 
 
@@ -59,16 +61,10 @@ case class ScriptTransformation(
     script: String,
     output: Seq[Attribute],
     child: SparkPlan,
-    ioschema: ScriptInputOutputSchema)(@transient sc: HiveContext)
-  extends UnaryNode with HiveInspectors {
+    ioschema: HiveScriptIOSchema)(@transient sc: HiveContext)
+  extends UnaryNode {
 
   override def otherCopyArgs = sc :: Nil
-
-  val defaultFormat = Map(("TOK_TABLEROWFORMATFIELD", "\t"),
-                          ("TOK_TABLEROWFORMATLINES", "\n"))
-
-  val inputRowFormatMap = ioschema.inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
-  val outputRowFormatMap = ioschema.outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
 
   def execute() = {
     child.execute().mapPartitions { iter =>
@@ -79,37 +75,7 @@ case class ScriptTransformation(
       val outputStream = proc.getOutputStream
       val reader = new BufferedReader(new InputStreamReader(inputStream))
  
-      val outputSerde: AbstractSerDe = if (ioschema.outputSerdeClass != "") {
-        val trimed_class = ioschema.outputSerdeClass.split("'")(1) 
-        Utils.classForName(trimed_class)
-          .newInstance.asInstanceOf[AbstractSerDe]
-      } else {
-        null
-      }
- 
-      if (outputSerde != null) {
-        val columns = output.map { case aref: AttributeReference => aref.name }
-          .mkString(",")
-        val columnTypes = output.map { case aref: AttributeReference =>
-          aref.dataType.toTypeInfo.getTypeName()
-        }.mkString(",")
-
-        var propsMap = ioschema.outputSerdeProps.map(kv => {
-          (kv._1.split("'")(1), kv._2.split("'")(1))
-        }).toMap + (serdeConstants.LIST_COLUMNS -> columns)
-        propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypes)
-
-        val properties = new Properties()
-        properties.putAll(propsMap)
- 
-        outputSerde.initialize(null, properties)
-      }
-
-      val outputSoi = if (outputSerde != null) {
-        outputSerde.getObjectInspector().asInstanceOf[StructObjectInspector]
-      } else {
-        null
-      }
+      val (outputSerde, outputSoi) = ioschema.initOutputSerDe(output)
 
       val iterator: Iterator[Row] = new Iterator[Row] with HiveInspectors {
         var cacheRow: Row = null
@@ -170,11 +136,11 @@ case class ScriptTransformation(
  
             if (!ioschema.schemaLess) {
               new GenericRow(
-                prevLine.split(outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
+                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"))
                 .asInstanceOf[Array[Any]])
             } else {
               new GenericRow(
-                prevLine.split(outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
+                prevLine.split(ioschema.outputRowFormatMap("TOK_TABLEROWFORMATFIELD"), 2)
                 .asInstanceOf[Array[Any]])
             }
           } else {
@@ -188,61 +154,21 @@ case class ScriptTransformation(
         }
       }
 
-      val inputSerde: AbstractSerDe = if (ioschema.inputSerdeClass != "") {
-        val trimed_class = ioschema.inputSerdeClass.split("'")(1)
-        Utils.classForName(trimed_class)
-          .newInstance.asInstanceOf[AbstractSerDe]
-      } else {
-        null
-      }
- 
-      if (inputSerde != null) {
-        val columns = input.map { case e: NamedExpression => e.name }.mkString(",")
-        val columnTypes = input.map { case e: NamedExpression =>
-          e.dataType.toTypeInfo.getTypeName() 
-        }.mkString(",")
- 
-        var propsMap = ioschema.inputSerdeProps.map(kv => {
-          (kv._1.split("'")(1), kv._2.split("'")(1))
-        }).toMap + (serdeConstants.LIST_COLUMNS -> columns)
-        propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypes)
-
-        val properties = new Properties()
-        properties.putAll(propsMap)
-        inputSerde.initialize(null, properties)
-      }
-      
-      val inputSoi = if (inputSerde != null) {
-        val fieldNames = input.map { case e: NamedExpression => e.name }
-        val fieldObjectInspectors = input.map { case e: NamedExpression =>
-          toInspector(e.dataType)
-        }
-        ObjectInspectorFactory
-          .getStandardStructObjectInspector(fieldNames, fieldObjectInspectors)
-          .asInstanceOf[ObjectInspector]
-      } else {
-        null
-      }
-
+      val (inputSerde, inputSoi) = ioschema.initInputSerDe(input)
       val dataOutputStream = new DataOutputStream(outputStream)
       val outputProjection = new InterpretedProjection(input, child.output)
+
       iter
         .map(outputProjection)
         .foreach { row =>
           if (inputSerde == null) {
-            val data = row.mkString("", inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
-            inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
+            val data = row.mkString("", ioschema.inputRowFormatMap("TOK_TABLEROWFORMATFIELD"),
+            ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES")).getBytes("utf-8")
  
             outputStream.write(data)
           } else {
-            val writable = inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi)
-            if (writable.isInstanceOf[AvroGenericRecordWritable] && HiveShim.version == "0.13.1") {
-              // setRecordReaderID only in 0.13.1, so use reflection API to call it
-              val ref = runtimeMirror(getClass.getClassLoader).reflect(
-                writable.asInstanceOf[AvroGenericRecordWritable])
-              val method = ref.symbol.typeSignature.member(newTermName("setRecordReaderID"))
-              ref.reflectMethod(method.asMethod)(new UID())
-            }
+            val writable = new ShimWritable(
+              inputSerde.serialize(row.asInstanceOf[GenericRow].values, inputSoi))
             writable.write(dataOutputStream)
           }
         }
@@ -251,3 +177,102 @@ case class ScriptTransformation(
     }
   }
 }
+
+/**
+ * The wrapper class of Hive input and output schema properties
+ *
+ */
+case class HiveScriptIOSchema (
+    inputRowFormat: Seq[(String, String)],
+    outputRowFormat: Seq[(String, String)],
+    inputSerdeClass: String,
+    outputSerdeClass: String,
+    inputSerdeProps: Seq[(String, String)],
+    outputSerdeProps: Seq[(String, String)],
+    schemaLess: Boolean) extends ScriptInputOutputSchema with HiveInspectors {
+
+  val defaultFormat = Map(("TOK_TABLEROWFORMATFIELD", "\t"),
+                          ("TOK_TABLEROWFORMATLINES", "\n"))
+
+  val inputRowFormatMap = inputRowFormat.toMap.withDefault((k) => defaultFormat(k))
+  val outputRowFormatMap = outputRowFormat.toMap.withDefault((k) => defaultFormat(k))
+
+  
+  def initInputSerDe(input: Seq[Expression]): (AbstractSerDe, ObjectInspector) = {
+    val (columns, columnTypes) = parseAttrs(input)
+    val serde = initSerDe(inputSerdeClass, columns, columnTypes, inputSerdeProps)
+    (serde, initInputSoi(serde, columns, columnTypes))
+  }
+
+  def initOutputSerDe(output: Seq[Attribute]): (AbstractSerDe, StructObjectInspector) = {
+    val (columns, columnTypes) = parseAttrs(output)
+    val serde = initSerDe(outputSerdeClass, columns, columnTypes, outputSerdeProps)
+    (serde, initOutputputSoi(serde))
+  }
+
+  def parseAttrs(attrs: Seq[Expression]): (Seq[String], Seq[DataType]) = {
+                                                
+    val columns = attrs.map {
+      case aref: AttributeReference => aref.name
+      case e: NamedExpression => e.name
+      case _ => null
+    }
+ 
+    val columnTypes = attrs.map {
+      case aref: AttributeReference => aref.dataType
+      case e: NamedExpression => e.dataType
+      case _ =>  null
+    }
+
+    (columns, columnTypes)
+  }
+ 
+  def initSerDe(serdeClassName: String, columns: Seq[String],
+    columnTypes: Seq[DataType], serdeProps: Seq[(String, String)]): AbstractSerDe = {
+
+    val serde: AbstractSerDe = if (serdeClassName != "") {
+      val trimed_class = serdeClassName.split("'")(1)
+      Utils.classForName(trimed_class)
+        .newInstance.asInstanceOf[AbstractSerDe]
+    } else {
+      null
+    }
+
+    if (serde != null) {
+      val columnTypesNames = columnTypes.map(_.toTypeInfo.getTypeName()).mkString(",")
+
+      var propsMap = serdeProps.map(kv => {
+        (kv._1.split("'")(1), kv._2.split("'")(1))
+      }).toMap + (serdeConstants.LIST_COLUMNS -> columns.mkString(","))
+      propsMap = propsMap + (serdeConstants.LIST_COLUMN_TYPES -> columnTypesNames)
+    
+      val properties = new Properties()
+      properties.putAll(propsMap)
+      serde.initialize(null, properties)
+    }
+
+    serde
+  }
+
+  def initInputSoi(inputSerde: AbstractSerDe, columns: Seq[String], columnTypes: Seq[DataType])
+    : ObjectInspector = {
+
+    if (inputSerde != null) {
+      val fieldObjectInspectors = columnTypes.map(toInspector(_))
+      ObjectInspectorFactory
+        .getStandardStructObjectInspector(columns, fieldObjectInspectors)
+        .asInstanceOf[ObjectInspector]
+    } else {
+      null
+    }
+  }
+ 
+  def initOutputputSoi(outputSerde: AbstractSerDe): StructObjectInspector = {
+    if (outputSerde != null) {
+      outputSerde.getObjectInspector().asInstanceOf[StructObjectInspector]
+    } else {
+      null
+    }
+  }
+}
+

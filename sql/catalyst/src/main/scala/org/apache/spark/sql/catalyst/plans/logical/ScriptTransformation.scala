@@ -32,17 +32,11 @@ case class ScriptTransformation(
     script: String,
     output: Seq[Attribute],
     child: LogicalPlan,
-    ioschema: ScriptInputOutputSchema) extends UnaryNode
+    ioschema: Option[ScriptInputOutputSchema]) extends UnaryNode
 
 /**
  * The wrapper class of input and output schema properties for transforming with script.
  *
  */
-case class ScriptInputOutputSchema(
-    inputRowFormat: Seq[(String, String)],
-    outputRowFormat: Seq[(String, String)],
-    inputSerdeClass: String,
-    outputSerdeClass: String,
-    inputSerdeProps: Seq[(String, String)],
-    outputSerdeProps: Seq[(String, String)],
-    schemaLess: Boolean)
+trait ScriptInputOutputSchema
+
