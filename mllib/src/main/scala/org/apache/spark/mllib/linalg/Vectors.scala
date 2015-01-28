@@ -85,7 +85,7 @@ sealed trait Vector extends Serializable {
   /**
    * Converts the instance to a breeze vector.
    */
-  private[mllib] def toBreeze: BV[Double]
+  private[spark] def toBreeze: BV[Double]
 
   /**
    * Gets the value of the ith element.
@@ -284,7 +284,7 @@ object Vectors {
   /**
    * Creates a vector instance from a breeze vector.
    */
-  private[mllib] def fromBreeze(breezeVector: BV[Double]): Vector = {
+  private[spark] def fromBreeze(breezeVector: BV[Double]): Vector = {
     breezeVector match {
       case v: BDV[Double] =>
         if (v.offset == 0 && v.stride == 1 && v.length == v.data.length) {
@@ -483,7 +483,7 @@ class DenseVector(val values: Array[Double]) extends Vector {
 
   override def toArray: Array[Double] = values
 
-  private[mllib] override def toBreeze: BV[Double] = new BDV[Double](values)
+  private[spark] override def toBreeze: BV[Double] = new BDV[Double](values)
 
   override def apply(i: Int): Double = values(i)
 
@@ -543,7 +543,7 @@ class SparseVector(
     new SparseVector(size, indices.clone(), values.clone())
   }
 
-  private[mllib] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+  private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
   private[spark] override def foreachActive(f: (Int, Double) => Unit) = {
     var i = 0

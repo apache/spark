@@ -198,7 +198,7 @@ object LBFGS extends Logging {
    * CostFun implements Breeze's DiffFunction[T], which returns the loss and gradient
    * at a particular point (weights). It's used in Breeze's convex optimization routines.
    */
-  private class CostFun(
+  private[spark] class CostFun(
     data: RDD[(Double, Vector)],
     gradient: Gradient,
     updater: Updater,

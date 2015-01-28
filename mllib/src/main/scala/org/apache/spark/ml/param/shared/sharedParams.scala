@@ -44,6 +44,43 @@ trait HasRegParam extends Params {
 
 /**
  * :: DeveloperApi ::
+ * Trait for shared param elasticNetParam.
+ */
+@DeveloperApi
+trait HasElasticNetParam extends HasRegParam {
+
+  /**
+   * param for elastic net regularization parameter
+   * @group param
+   */
+  final val elasticNetParam: DoubleParam =
+    new DoubleParam(this, "elasticNetParam", "the ElasticNet mixing parameter")
+
+  /** @group getParam */
+  def getElasticNetParam: Double = getOrDefault(elasticNetParam)
+}
+
+/**
+ * :: DeveloperApi ::
+ * Trait for shared param tol.
+ */
+@DeveloperApi
+trait HasTol extends Params {
+
+  /**
+   * param for the convergence tolerance in the iterative algorithms;
+   * smaller value will lead to higher accuracy with the cost of more iterations
+   * @group param
+   */
+  final val tol: DoubleParam =
+    new DoubleParam(this, "tol", "the convergence tolerance for iterative algorithms")
+
+  /** @group getParam */
+  def getTol: Double = getOrDefault(tol)
+}
+
+/**
+ * :: DeveloperApi ::
  * Trait for shared param maxIter.
  */
 @DeveloperApi
