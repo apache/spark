@@ -53,6 +53,7 @@ from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, External
 from pyspark.sql import SQLContext, IntegerType, Row, ArrayType, StructType, StructField, \
     UserDefinedType, DoubleType
 from pyspark import shuffle
+from pyspark.profiler import BasicProfiler
 
 _have_scipy = False
 _have_numpy = False
@@ -743,16 +744,12 @@ class ProfilerTests(PySparkTestCase):
         self.sc = SparkContext('local[4]', class_name, conf=conf)
 
     def test_profiler(self):
+        self.do_computation()
 
-        def heavy_foo(x):
-            for i in range(1 << 20):
-                x = 1
-        rdd = self.sc.parallelize(range(100))
-        rdd.foreach(heavy_foo)
-        profiles = self.sc._profile_stats
-        self.assertEqual(1, len(profiles))
-        id, acc, _ = profiles[0]
-        stats = acc.value
+        profilers = self.sc.profiler_collector.profilers
+        self.assertEqual(1, len(profilers))
+        id, profiler, _ = profilers[0]
+        stats = profiler.stats()
         self.assertTrue(stats is not None)
         width, stat_list = stats.get_print_list([])
         func_names = [func_name for fname, n, func_name in stat_list]
@@ -762,6 +759,31 @@ class ProfilerTests(PySparkTestCase):
         d = tempfile.gettempdir()
         self.sc.dump_profiles(d)
         self.assertTrue("rdd_%d.pstats" % id in os.listdir(d))
+
+    def test_custom_profiler(self):
+        class TestCustomProfiler(BasicProfiler):
+            def show(self, id):
+                self.result = "Custom formatting"
+
+        self.sc.profiler_collector.profiler_cls = TestCustomProfiler
+
+        self.do_computation()
+
+        profilers = self.sc.profiler_collector.profilers
+        self.assertEqual(1, len(profilers))
+        _, profiler, _ = profilers[0]
+        self.assertTrue(isinstance(profiler, TestCustomProfiler))
+
+        self.sc.show_profiles()
+        self.assertEqual("Custom formatting", profiler.result)
+
+    def do_computation(self):
+        def heavy_foo(x):
+            for i in range(1 << 20):
+                x = 1
+
+        rdd = self.sc.parallelize(range(100))
+        rdd.foreach(heavy_foo)
 
 
 class ExamplePointUDT(UserDefinedType):
