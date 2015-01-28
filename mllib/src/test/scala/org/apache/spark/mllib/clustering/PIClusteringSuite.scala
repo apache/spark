@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.clustering
 
+import org.apache.log4j.Logger
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.graphx._
 import org.apache.spark.mllib.clustering.PICLinalg.DMatrix
@@ -26,6 +27,8 @@ import org.scalatest.FunSuite
 import scala.util.Random
 
 class PIClusteringSuite extends FunSuite with LocalSparkContext {
+
+  val logger = Logger.getLogger(getClass.getName)
 
   import org.apache.spark.mllib.clustering.PIClusteringSuite._
 
@@ -37,6 +40,7 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
   test("concentricCirclesTest") {
     concentricCirclesTest()
   }
+
 
   def concentricCirclesTest() = {
     val sigma = 1.0
@@ -63,33 +67,13 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
       val (ccenters, estCollected) = PIC.run(sc, vertices, nClusters, nIterations)
       println(s"Cluster centers: ${ccenters.mkString(",")} " +
         s"\nEstimates: ${estCollected.mkString("[", ",", "]")}")
-      assert(ccenters.size == circleSpecs.length,"Did not get correct number of centers")
-      val clustGroupsList = estCollected.groupBy{ case ((vid, eigenV), clustNum) =>
-        clustNum
-      }.mapValues{
-        _.map{ case ((vid, eigenV), clustNum) =>
-        (vid, clustNum)
-      }}.toList.sortBy(_._1)
+      assert(ccenters.size == circleSpecs.length, "Did not get correct number of centers")
 
-
-      val ccentersOrdered = ccenters.sortBy(-1.0 * _._2(0))
-
-//      val joinedGroups = ccentersOrdered.(clustGroupsList.toMap)
-//
-//      val clustValids = clustGroupsList.map{ case (clustNum, vidEigensList) =>
-//        (clustNum, vidEigensList.size, vidEigensList.map{ (_._1 / 1000).toLong }}
-//      assert(clustGroups.map{_._2.size} == circleSpecs.map{ p => p.nPoints },
-//        "Incorrect match on clusterGroupsSize")
-//      val matchedCentersAndPoints = ccentersOrdered.map{ case (groupId, loc) => groupId}.zip(clustGroups)
-//      assert(matchedCentersAndPoints.map{_._2.size} == circleSpecs.map{ p => p.nPoints },
-//        "Incorrect match on clusterGroupsSize
-//
-//      assert(estCollected == circleSpecs.length,"Did not get correct number of centers")
     }
   }
 
-  def join[T <: Comparable[T]](a: Map[T,_], b: Map[T,_]) = {
-    (a.toSeq++b.toSeq).groupBy(_._1).mapValues(_.map(_._2).toList)
+  def join[T <: Comparable[T]](a: Map[T, _], b: Map[T, _]) = {
+    (a.toSeq ++ b.toSeq).groupBy(_._1).mapValues(_.map(_._2).toList)
   }
 
   ignore("irisData") {
