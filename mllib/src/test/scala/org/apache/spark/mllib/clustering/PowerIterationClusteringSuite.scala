@@ -19,25 +19,23 @@ package org.apache.spark.mllib.clustering
 
 import breeze.linalg.{DenseVector => BDV}
 import org.apache.log4j.Logger
-import org.apache.spark.graphx._
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.scalatest.FunSuite
 
 import scala.util.Random
 
-class PIClusteringSuite extends FunSuite with LocalSparkContext {
+class PowerIterationClusteringSuite extends FunSuite with MLlibTestSparkContext {
 
   val logger = Logger.getLogger(getClass.getName)
 
-  import org.apache.spark.mllib.clustering.PIClusteringSuite._
+  import org.apache.spark.mllib.clustering.PowerIterationClusteringSuite._
 
-  val PIC = PIClustering
+  val PIC = PowerIterationClustering
   val A = Array
 
   test("concentricCirclesTest") {
     concentricCirclesTest()
   }
-
 
   def concentricCirclesTest() = {
     val sigma = 1.0
@@ -55,23 +53,22 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
 
     val nClusters = circleSpecs.size
     val cdata = createConcentricCirclesData(circleSpecs)
-    withSpark { sc =>
-      val vertices = new Random().shuffle(cdata.map { p =>
-        (p.label, new BDV(Array(p.x, p.y)))
-      })
+    val vertices = new Random().shuffle(cdata.map { p =>
+      (p.label, new BDV(Array(p.x, p.y)))
+    })
 
-      val nVertices = vertices.length
-      val (ccenters, estCollected) = PIC.run(sc, vertices, nClusters, nIterations)
-      logger.info(s"Cluster centers: ${ccenters.mkString(",")} " +
-        s"\nEstimates: ${estCollected.mkString("[", ",", "]")}")
-      assert(ccenters.size == circleSpecs.length, "Did not get correct number of centers")
+    val nVertices = vertices.length
+    val G = PIC.createGaussianAffinityMatrix(sc, vertices)
+    val (ccenters, estCollected) = PIC.run(sc, G, nClusters, nIterations)
+    logger.info(s"Cluster centers: ${ccenters.mkString(",")} " +
+      s"\nEstimates: ${estCollected.mkString("[", ",", "]")}")
+    assert(ccenters.size == circleSpecs.length, "Did not get correct number of centers")
 
-    }
   }
 
 }
 
-object PIClusteringSuite {
+object PowerIterationClusteringSuite {
   val logger = Logger.getLogger(getClass.getName)
   val A = Array
 
@@ -115,26 +112,7 @@ object PIClusteringSuite {
   }
 
   def main(args: Array[String]) {
-    val pictest = new PIClusteringSuite
+    val pictest = new PowerIterationClusteringSuite
     pictest.concentricCirclesTest()
-  }
-}
-
-/**
- * Provides a method to run tests against a {@link SparkContext} variable that is correctly stopped
- * after each test.
- * TODO: import this from the graphx test cases package i.e. may need update to pom.xml
- */
-trait LocalSparkContext {
-  /** Runs `f` on a new SparkContext and ensures that it is stopped afterwards. */
-  def withSpark[T](f: SparkContext => T) = {
-    val conf = new SparkConf()
-    GraphXUtils.registerKryoClasses(conf)
-    val sc = new SparkContext("local", "test", conf)
-    try {
-      f(sc)
-    } finally {
-      sc.stop()
-    }
   }
 }

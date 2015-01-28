@@ -35,7 +35,7 @@ import scala.language.existentials
  * representation.  The resulting pseudo-eigenvector provides effective clustering - as
  * performed by Parallel KMeans.
  */
-object PIClustering {
+object PowerIterationClustering {
 
   private val logger = Logger.getLogger(getClass.getName())
 
@@ -44,32 +44,32 @@ object PIClustering {
   type DGraph = Graph[Double, Double]
   type IndexedVector[Double] = (Long, BDV[Double])
 
-  // Terminate iteration when norm changes by less than this value
-  private[mllib] val DefaultMinNormChange: Double = 1e-11
 
-  // Default σ for Gaussian Distance calculations
-  private[mllib] val DefaultSigma = 1.0
+  // Terminate iteration when norm changes by less than this value
+  private[mllib] val defaultMinNormChange: Double = 1e-11
+
+    // Default sigma for Gaussian Distance calculations
+  private[mllib] val defaultSigma = 1.0
 
   // Default number of iterations for PIC loop
-  private[mllib] val DefaultIterations: Int = 20
+  private[mllib] val defaultIterations: Int = 20
 
   // Default minimum affinity between points - lower than this it is considered
   // zero and no edge will be created
-  private[mllib] val DefaultMinAffinity = 1e-11
+  private[mllib] val defaultMinAffinity = 1e-11
 
   // Do not allow divide by zero: change to this value instead
-  val DefaultDivideByZeroVal: Double = 1e-15
+  val defaultDivideByZeroVal: Double = 1e-15
 
   // Default number of runs by the KMeans.run() method
-  val DefaultKMeansRuns = 10
+  val defaultKMeansRuns = 10
 
   /**
    *
    * Run a Power Iteration Clustering
    *
    * @param sc  Spark Context
-   * @param points  Input Points in format of [(VertexId,(x,y)]
-   *                where VertexId is a Long
+   * @param G   Affinity Matrix in a Sparse Graph structure
    * @param nClusters  Number of clusters to create
    * @param nIterations Number of iterations of the PIC algorithm
    *                    that calculates primary PseudoEigenvector and Eigenvalue
@@ -83,30 +83,13 @@ object PIClustering {
    *         Seq[(VertexId, ClusterID Membership)]
    */
   def run(sc: SparkContext,
-          points: Points,
+          G: Graph[Double, Double],
           nClusters: Int,
-          nIterations: Int = DefaultIterations,
-          sigma: Double = DefaultSigma,
-          minAffinity: Double = DefaultMinAffinity,
-          nRuns: Int = DefaultKMeansRuns)
+          nIterations: Int = defaultIterations,
+          sigma: Double = defaultSigma,
+          minAffinity: Double = defaultMinAffinity,
+          nRuns: Int = defaultKMeansRuns)
   : (Seq[(Int, Vector)], Seq[((VertexId, Vector), Int)]) = {
-    val vidsRdd = sc.parallelize(points.map(_._1).sorted)
-    val nVertices = points.length
-
-    val (wRdd, rowSums) = createNormalizedAffinityMatrix(sc, points, sigma)
-    val initialVt = createInitialVector(sc, points.map(_._1), rowSums)
-    if (logger.isDebugEnabled) {
-      logger.debug(s"Vt(0)=${
-        printVector(new BDV(initialVt.map {
-          _._2
-        }.toArray))
-      }")
-    }
-    val edgesRdd = createSparseEdgesRdd(sc, wRdd, minAffinity)
-    val G = createGraphFromEdges(sc, edgesRdd, points.size, Some(initialVt))
-    if (logger.isDebugEnabled) {
-      logger.debug(printMatrixFromEdges(G.edges))
-    }
     val (gUpdated, lambda, vt) = getPrincipalEigen(sc, G, nIterations)
     // TODO: avoid local collect and then sc.parallelize.
     val localVt = vt.collect.sortBy(_._1)
@@ -140,36 +123,43 @@ object PIClustering {
   }
 
   /**
-   * Read Points from an input file in the following format:
-   * Vertex1Id Coord11 Coord12 CoordX13 .. Coord1D
-   * Vertex2Id Coord21 Coord22 CoordX23 .. Coord2D
-   * ..
-   * VertexNId CoordN1 CoordN2 CoordN23 .. CoordND
    *
-   * Where N is the number of observations, each a D-dimension point
+   * Create an affinity matrix
    *
-   * E.g.
-   *
-   * 19	1.8035177495	0.7460582552	0.2361611395	-0.8645567427	-0.8613062
-   * 10	0.5534111111	1.0456386879	1.7045663273	0.7281759816	1.0807487792
-   * 911	1.200749626	1.8962364439	2.5117192131	-0.4034737281	-0.9069696484
-   *
-   * Which represents three 5-dimensional input Points with VertexIds 19,10, and 911
-   * @param verticesFile Local filesystem path to the Points input file
-   * @return Set of Vertices in format appropriate for consumption by the PIC algorithm
+   * @param sc  Spark Context
+   * @param points  Input Points in format of [(VertexId,(x,y)]
+   *                where VertexId is a Long
+   * @param sigma   Sigma for Gaussian distribution calculation according to
+   *                [1/2 *sqrt(pi*sigma)] exp (- (x-y)**2 / 2sigma**2
+   * @param minAffinity  Minimum Affinity between two Points in the input dataset: below
+   *                     this threshold the affinity will be considered "close to" zero and
+   *                     no Edge will be created between those Points in the sparse matrix
+   * @return Tuple of (Seq[(Cluster Id,Cluster Center)],
+   *         Seq[(VertexId, ClusterID Membership)]
    */
-  def readVerticesfromFile(verticesFile: String): Points = {
+  def createGaussianAffinityMatrix(sc: SparkContext,
+                                   points: Points,
+                                   sigma: Double = defaultSigma,
+                                   minAffinity: Double = defaultMinAffinity)
+  : Graph[Double, Double] = {
+    val vidsRdd = sc.parallelize(points.map(_._1).sorted)
+    val nVertices = points.length
 
-    import scala.io.Source
-    val vertices = Source.fromFile(verticesFile).getLines.map { l =>
-      val toks = l.split("\t")
-      val arr = new BDV(toks.slice(1, toks.length).map(_.toDouble))
-      (toks(0).toLong, arr)
-    }.toSeq
+    val (wRdd, rowSums) = createNormalizedAffinityMatrix(sc, points, sigma)
+    val initialVt = createInitialVector(sc, points.map(_._1), rowSums)
     if (logger.isDebugEnabled) {
-      logger.debug(s"Read in ${vertices.length} from $verticesFile")
+      logger.debug(s"Vt(0)=${
+        printVector(new BDV(initialVt.map {
+          _._2
+        }.toArray))
+      }")
     }
-    vertices
+    val edgesRdd = createSparseEdgesRdd(sc, wRdd, minAffinity)
+    val G = createGraphFromEdges(sc, edgesRdd, points.size, Some(initialVt))
+    if (logger.isDebugEnabled) {
+      logger.debug(printMatrixFromEdges(G.edges))
+    }
+    G
   }
 
   /**
@@ -205,7 +195,7 @@ object PIClustering {
    */
   def getPrincipalEigen(sc: SparkContext,
                         G: DGraph,
-                        nIterations: Int = DefaultIterations,
+                        nIterations: Int = defaultIterations,
                         optMinNormChange: Option[Double] = None
                          ): (DGraph, Double, VertexRDD[Double]) = {
 
@@ -312,7 +302,7 @@ object PIClustering {
    * @return
    */
   private[mllib] def createSparseEdgesRdd(sc: SparkContext, wRdd: RDD[IndexedVector[Double]],
-                                          minAffinity: Double = DefaultMinAffinity) = {
+                                          minAffinity: Double = defaultMinAffinity) = {
     val labels = wRdd.map { case (vid, vect) => vid}.collect
     val edgesRdd = wRdd.flatMap { case (vid, vect) =>
       for ((dval, ix) <- vect.toArray.zipWithIndex
@@ -387,7 +377,7 @@ object PIClustering {
 
   }
 
-  private[mllib] def makeNonZero(dval: Double, tol: Double = DefaultDivideByZeroVal) = {
+  private[mllib] def makeNonZero(dval: Double, tol: Double = defaultDivideByZeroVal) = {
     if (Math.abs(dval) < tol) {
       Math.signum(dval) * tol
     } else {
