@@ -539,7 +539,9 @@ private[spark] object Utils extends Logging {
 
   private def copyRecursive(source: File, dest: File): Unit = {
     if (source.isDirectory) {
-      dest.mkdir()
+      if (!dest.mkdir()) {
+        throw new IOException(s"Failed to create directory ${dest.getPath}")
+      }
       val subfiles = source.listFiles()
       subfiles.foreach(f => copyRecursive(f, new File(dest, f.getName)))
     } else {
@@ -593,8 +595,7 @@ private[spark] object Utils extends Logging {
       case _ =>
         val fs = getHadoopFileSystem(uri, hadoopConf)
         val path = new Path(uri)
-        fetchHcfsFile(path, new File(targetDir, path.getName), fs, conf, securityMgr, hadoopConf,
-          fileOverwrite)
+        fetchHcfsFile(path, new File(targetDir, path.getName), fs, conf, hadoopConf, fileOverwrite)
     }
   }
 
@@ -606,15 +607,14 @@ private[spark] object Utils extends Logging {
       targetDir: File,
       fs: FileSystem,
       conf: SparkConf,
-      securityMgr: SecurityManager,
       hadoopConf: Configuration,
       fileOverwrite: Boolean): Unit = {
     targetDir.mkdir()
     fs.listStatus(path).foreach { fileStatus =>
       val innerPath = fileStatus.getPath
-      if (fileStatus.isDirectory) {
-        fetchHcfsFile(innerPath, new File(targetDir, innerPath.getName), fs, conf, securityMgr,
-          hadoopConf, fileOverwrite)
+      if (fileStatus.isDir) {
+        fetchHcfsFile(innerPath, new File(targetDir, innerPath.getName), fs, conf, hadoopConf,
+          fileOverwrite)
       } else {
         val in = fs.open(innerPath)
         val targetFile = new File(targetDir, innerPath.getName)

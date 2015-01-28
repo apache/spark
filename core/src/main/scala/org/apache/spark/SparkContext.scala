@@ -34,7 +34,7 @@ import scala.reflect.{ClassTag, classTag}
 import akka.actor.Props
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
   FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat,
@@ -1008,7 +1008,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     addFile(path, false)
   }
 
-    /**
+  /**
    * Add a file to be downloaded with this Spark job on every node.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
