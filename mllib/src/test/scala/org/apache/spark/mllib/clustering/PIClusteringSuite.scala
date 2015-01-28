@@ -65,7 +65,7 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
 
       val nVertices = vertices.length
       val (ccenters, estCollected) = PIC.run(sc, vertices, nClusters, nIterations)
-      println(s"Cluster centers: ${ccenters.mkString(",")} " +
+      logger.info(s"Cluster centers: ${ccenters.mkString(",")} " +
         s"\nEstimates: ${estCollected.mkString("[", ",", "]")}")
       assert(ccenters.size == circleSpecs.length, "Did not get correct number of centers")
 
@@ -108,6 +108,7 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
 }
 
 object PIClusteringSuite {
+  val logger = Logger.getLogger(getClass.getName)
   val LA = PICLinalg
   val A = Array
 
@@ -141,7 +142,7 @@ object PIClusteringSuite {
       circlePoints
     }
     val points = circles.flatten.sortBy(_.label)
-    println(printPoints(points))
+    logger.info(printPoints(points))
     points
   }
 
@@ -158,7 +159,7 @@ object PIClusteringSuite {
     )
 
     val aMat = new BDM(dat1.length, dat1.length, dat1.flatten)
-    println(s"Input mat: ${LA.printMatrix(dat1.flatten, 4, 4)}")
+    logger.info(s"Input mat: ${LA.printMatrix(dat1.flatten, 4, 4)}")
     val Darrarr = dat1.toArray.zipWithIndex.map { case (dvect, ix) =>
       val sum = dvect.foldLeft(0.0) {
         _ + _
