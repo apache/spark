@@ -73,9 +73,7 @@ object SparkSubmit {
   // Exposed for testing
   private[spark] var exitFn: () => Unit = () => System.exit(-1)
   private[spark] var printStream: PrintStream = System.err
-
   private[spark] def printWarning(str: String) = printStream.println("Warning: " + str)
-
   private[spark] def printErrorAndExit(str: String) = {
     printStream.println("Error: " + str)
     printStream.println("Run with --help for usage help or --verbose for debug output")
@@ -93,13 +91,13 @@ object SparkSubmit {
 
   /**
    * @return a tuple containing
-   *         (1) the arguments for the child process,
-   *         (2) a list of classpath entries for the child,
-   *         (3) a list of system properties and env vars, and
-   *         (4) the main class for the child
+   *          (1) the arguments for the child process,
+   *          (2) a list of classpath entries for the child,
+   *          (3) a list of system properties and env vars, and
+   *          (4) the main class for the child
    */
   private[spark] def createLaunchEnv(args: SparkSubmitArguments)
-  : (ArrayBuffer[String], ArrayBuffer[String], Map[String, String], String) = {
+      : (ArrayBuffer[String], ArrayBuffer[String], Map[String, String], String) = {
 
     // Values to return
     val childArgs = new ArrayBuffer[String]()
@@ -146,7 +144,7 @@ object SparkSubmit {
       if (!Utils.classIsLoadable("org.apache.spark.deploy.yarn.Client") && !Utils.isTesting) {
         printErrorAndExit(
           "Could not load YARN classes. " +
-            "This copy of Spark may not have been compiled with YARN support.")
+          "This copy of Spark may not have been compiled with YARN support.")
       }
     }
 
@@ -296,7 +294,7 @@ object SparkSubmit {
         childArgs += "--supervise"
       }
       childArgs += "launch"
-      childArgs +=(args.master, args.primaryResource, args.mainClass)
+      childArgs += (args.master, args.primaryResource, args.mainClass)
       if (args.childArgs != null) {
         childArgs ++= args.childArgs
       }
@@ -306,11 +304,11 @@ object SparkSubmit {
     if (isYarnCluster) {
       childMainClass = "org.apache.spark.deploy.yarn.Client"
       if (args.primaryResource != SPARK_INTERNAL) {
-        childArgs +=("--jar", args.primaryResource)
+        childArgs += ("--jar", args.primaryResource)
       }
-      childArgs +=("--class", args.mainClass)
+      childArgs += ("--class", args.mainClass)
       if (args.childArgs != null) {
-        args.childArgs.foreach { arg => childArgs +=("--arg", arg)}
+        args.childArgs.foreach { arg => childArgs += ("--arg", arg)}
       }
     }
 
@@ -462,8 +460,8 @@ object SparkSubmit {
    */
   private[spark] def mergeFileLists(lists: String*): String = {
     val merged = lists.filter(_ != null)
-      .flatMap(_.split(","))
-      .mkString(",")
+                      .flatMap(_.split(","))
+                      .mkString(",")
     if (merged == "") null else merged
   }
 }
