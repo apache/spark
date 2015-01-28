@@ -51,6 +51,13 @@ class SVMModel (
 
   /**
    * :: Experimental ::
+   * Returns the threshold (if any) used for converting raw prediction scores into 0/1 predictions.
+   */
+  @Experimental
+  def getThreshold: Option[Double] = threshold
+
+  /**
+   * :: Experimental ::
    * Clears the threshold so that `predict` will output raw prediction scores.
    */
   @Experimental
