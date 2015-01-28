@@ -110,7 +110,7 @@ sealed trait Vector extends Serializable {
 
 /**
  * User-defined type for [[Vector]] which allows easy interaction with SQL
- * via [[org.apache.spark.sql.SchemaRDD]].
+ * via [[org.apache.spark.sql.DataFrame]].
  */
 private[spark] class VectorUDT extends UserDefinedType[Vector] {
 
