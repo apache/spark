@@ -105,6 +105,16 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   def checkpoint(): Unit
 
   /**
+   * Return whether this Graph has been checkpointed or not
+   */
+  def isCheckpointed: Boolean
+
+  /**
+   * Gets the name of the files to which this Graph was checkpointed
+   */
+  def getCheckpointFiles: Seq[String]
+
+  /**
    * Uncaches both vertices and edges of this graph. This is useful in iterative algorithms that
    * build a new graph in each iteration.
    */
