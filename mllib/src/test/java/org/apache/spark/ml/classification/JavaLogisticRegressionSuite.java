@@ -26,7 +26,7 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.SchemaRDD;
+import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
@@ -34,7 +34,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
 
   private transient JavaSparkContext jsc;
   private transient SQLContext jsql;
-  private transient SchemaRDD dataset;
+  private transient DataFrame dataset;
 
   @Before
   public void setUp() {
@@ -55,7 +55,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegression lr = new LogisticRegression();
     LogisticRegressionModel model = lr.fit(dataset);
     model.transform(dataset).registerTempTable("prediction");
-    SchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
+    DataFrame predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
     predictions.collectAsList();
   }
 
@@ -67,7 +67,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
     LogisticRegressionModel model = lr.fit(dataset);
     model.transform(dataset, model.threshold().w(0.8)) // overwrite threshold
       .registerTempTable("prediction");
-    SchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
+    DataFrame predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
     predictions.collectAsList();
   }
 

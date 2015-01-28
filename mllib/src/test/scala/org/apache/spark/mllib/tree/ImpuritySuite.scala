@@ -15,26 +15,28 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.plans
+package org.apache.spark.mllib.tree
 
-object JoinType {
-  def apply(typ: String): JoinType = typ.toLowerCase.replace("_", "") match {
-    case "inner" => Inner
-    case "outer" | "full" | "fullouter" => FullOuter
-    case "leftouter" | "left" => LeftOuter
-    case "rightouter" | "right" => RightOuter
-    case "leftsemi" => LeftSemi
+import org.scalatest.FunSuite
+
+import org.apache.spark.mllib.tree.impurity.{EntropyAggregator, GiniAggregator}
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+
+/**
+ * Test suites for [[GiniAggregator]] and [[EntropyAggregator]].
+ */
+class ImpuritySuite extends FunSuite with MLlibTestSparkContext {
+  test("Gini impurity does not support negative labels") {
+    val gini = new GiniAggregator(2)
+    intercept[IllegalArgumentException] {
+      gini.update(Array(0.0, 1.0, 2.0), 0, -1, 0.0)
+    }
+  }
+
+  test("Entropy does not support negative labels") {
+    val entropy = new EntropyAggregator(2)
+    intercept[IllegalArgumentException] {
+      entropy.update(Array(0.0, 1.0, 2.0), 0, -1, 0.0)
+    }
   }
 }
-
-sealed abstract class JoinType
-
-case object Inner extends JoinType
-
-case object LeftOuter extends JoinType
-
-case object RightOuter extends JoinType
-
-case object FullOuter extends JoinType
-
-case object LeftSemi extends JoinType

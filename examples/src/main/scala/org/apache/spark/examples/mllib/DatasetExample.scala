@@ -28,10 +28,10 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext, SchemaRDD}
+import org.apache.spark.sql.{Row, SQLContext, DataFrame}
 
 /**
- * An example of how to use [[org.apache.spark.sql.SchemaRDD]] as a Dataset for ML. Run with
+ * An example of how to use [[org.apache.spark.sql.DataFrame]] as a Dataset for ML. Run with
  * {{{
  * ./bin/run-example org.apache.spark.examples.mllib.DatasetExample [options]
  * }}}
@@ -47,7 +47,7 @@ object DatasetExample {
     val defaultParams = Params()
 
     val parser = new OptionParser[Params]("DatasetExample") {
-      head("Dataset: an example app using SchemaRDD as a Dataset for ML.")
+      head("Dataset: an example app using DataFrame as a Dataset for ML.")
       opt[String]("input")
         .text(s"input path to dataset")
         .action((x, c) => c.copy(input = x))
@@ -80,20 +80,20 @@ object DatasetExample {
     }
     println(s"Loaded ${origData.count()} instances from file: ${params.input}")
 
-    // Convert input data to SchemaRDD explicitly.
-    val schemaRDD: SchemaRDD = origData
-    println(s"Inferred schema:\n${schemaRDD.schema.prettyJson}")
-    println(s"Converted to SchemaRDD with ${schemaRDD.count()} records")
+    // Convert input data to DataFrame explicitly.
+    val df: DataFrame = origData.toDF
+    println(s"Inferred schema:\n${df.schema.prettyJson}")
+    println(s"Converted to DataFrame with ${df.count()} records")
 
-    // Select columns, using implicit conversion to SchemaRDD.
-    val labelsSchemaRDD: SchemaRDD = origData.select('label)
-    val labels: RDD[Double] = labelsSchemaRDD.map { case Row(v: Double) => v }
+    // Select columns, using implicit conversion to DataFrames.
+    val labelsDf: DataFrame = origData.select("label")
+    val labels: RDD[Double] = labelsDf.map { case Row(v: Double) => v }
     val numLabels = labels.count()
     val meanLabel = labels.fold(0.0)(_ + _) / numLabels
     println(s"Selected label column with average value $meanLabel")
 
-    val featuresSchemaRDD: SchemaRDD = origData.select('features)
-    val features: RDD[Vector] = featuresSchemaRDD.map { case Row(v: Vector) => v }
+    val featuresDf: DataFrame = origData.select("features")
+    val features: RDD[Vector] = featuresDf.map { case Row(v: Vector) => v }
     val featureSummary = features.aggregate(new MultivariateOnlineSummarizer())(
       (summary, feat) => summary.add(feat),
       (sum1, sum2) => sum1.merge(sum2))
@@ -103,13 +103,13 @@ object DatasetExample {
     tmpDir.deleteOnExit()
     val outputDir = new File(tmpDir, "dataset").toString
     println(s"Saving to $outputDir as Parquet file.")
-    schemaRDD.saveAsParquetFile(outputDir)
+    df.saveAsParquetFile(outputDir)
 
     println(s"Loading Parquet file with UDT from $outputDir.")
     val newDataset = sqlContext.parquetFile(outputDir)
 
     println(s"Schema from Parquet: ${newDataset.schema.prettyJson}")
-    val newFeatures = newDataset.select('features).map { case Row(v: Vector) => v }
+    val newFeatures = newDataset.select("features").map { case Row(v: Vector) => v }
     val newFeaturesSummary = newFeatures.aggregate(new MultivariateOnlineSummarizer())(
       (summary, feat) => summary.add(feat),
       (sum1, sum2) => sum1.merge(sum2))
