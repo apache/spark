@@ -148,7 +148,7 @@ class ALSModel private[ml] (
 }
 
 private object ALSModel {
-  /** Case class to convert factors to SchemaRDDs */
+  /** Case class to convert factors to [[DataFrame]]s */
   private case class Factor(id: Int, features: Seq[Float])
 }
 

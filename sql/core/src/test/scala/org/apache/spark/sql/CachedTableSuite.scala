@@ -51,17 +51,17 @@ class CachedTableSuite extends QueryTest {
   }
 
   test("unpersist an uncached table will not raise exception") {
-    assert(None == lookupCachedData(testData))
+    assert(None == cacheManager.lookupCachedData(testData))
     testData.unpersist(true)
-    assert(None == lookupCachedData(testData))
+    assert(None == cacheManager.lookupCachedData(testData))
     testData.unpersist(false)
-    assert(None == lookupCachedData(testData))
+    assert(None == cacheManager.lookupCachedData(testData))
     testData.persist()
-    assert(None != lookupCachedData(testData))
+    assert(None != cacheManager.lookupCachedData(testData))
     testData.unpersist(true)
-    assert(None == lookupCachedData(testData))
+    assert(None == cacheManager.lookupCachedData(testData))
     testData.unpersist(false)
-    assert(None == lookupCachedData(testData))
+    assert(None == cacheManager.lookupCachedData(testData))
   }
 
   test("cache table as select") {

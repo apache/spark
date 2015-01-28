@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
+import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.columnar.InMemoryRelation
 import org.apache.spark.storage.StorageLevel
@@ -32,9 +33,10 @@ private case class CachedData(plan: LogicalPlan, cachedRepresentation: InMemoryR
  * results when subsequent queries are executed.  Data is cached using byte buffers stored in an
  * InMemoryRelation.  This relation is automatically substituted query plans that return the
  * `sameResult` as the originally cached query.
+ *
+ * Internal to Spark SQL.
  */
-private[sql] trait CacheManager {
-  self: SQLContext =>
+private[sql] class CacheManager(sqlContext: SQLContext) extends Logging {
 
   @transient
   private val cachedData = new scala.collection.mutable.ArrayBuffer[CachedData]
@@ -43,13 +45,13 @@ private[sql] trait CacheManager {
   private val cacheLock = new ReentrantReadWriteLock
 
   /** Returns true if the table is currently cached in-memory. */
-  def isCached(tableName: String): Boolean = lookupCachedData(table(tableName)).nonEmpty
+  def isCached(tableName: String): Boolean = lookupCachedData(sqlContext.table(tableName)).nonEmpty
 
   /** Caches the specified table in-memory. */
-  def cacheTable(tableName: String): Unit = cacheQuery(table(tableName), Some(tableName))
+  def cacheTable(tableName: String): Unit = cacheQuery(sqlContext.table(tableName), Some(tableName))
 
   /** Removes the specified table from the in-memory cache. */
-  def uncacheTable(tableName: String): Unit = uncacheQuery(table(tableName))
+  def uncacheTable(tableName: String): Unit = uncacheQuery(sqlContext.table(tableName))
 
   /** Acquires a read lock on the cache for the duration of `f`. */
   private def readLock[A](f: => A): A = {
@@ -91,15 +93,15 @@ private[sql] trait CacheManager {
         CachedData(
           planToCache,
           InMemoryRelation(
-            conf.useCompression,
-            conf.columnBatchSize,
+            sqlContext.conf.useCompression,
+            sqlContext.conf.columnBatchSize,
             storageLevel,
             query.queryExecution.executedPlan,
             tableName))
     }
   }
 
-  /** Removes the data for the given SchemaRDD from the cache */
+  /** Removes the data for the given [[DataFrame]] from the cache */
   private[sql] def uncacheQuery(query: DataFrame, blocking: Boolean = true): Unit = writeLock {
     val planToCache = query.queryExecution.analyzed
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
@@ -108,7 +110,7 @@ private[sql] trait CacheManager {
     cachedData.remove(dataIndex)
   }
 
-  /** Tries to remove the data for the given SchemaRDD from the cache if it's cached */
+  /** Tries to remove the data for the given [[DataFrame]] from the cache if it's cached */
   private[sql] def tryUncacheQuery(
       query: DataFrame,
       blocking: Boolean = true): Boolean = writeLock {
@@ -122,7 +124,7 @@ private[sql] trait CacheManager {
     found
   }
 
-  /** Optionally returns cached data for the given SchemaRDD */
+  /** Optionally returns cached data for the given [[DataFrame]] */
   private[sql] def lookupCachedData(query: DataFrame): Option[CachedData] = readLock {
     lookupCachedData(query.queryExecution.analyzed)
   }

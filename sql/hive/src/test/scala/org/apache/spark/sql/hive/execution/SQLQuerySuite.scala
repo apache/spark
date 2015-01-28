@@ -222,7 +222,7 @@ class SQLQuerySuite extends QueryTest {
       sql("SELECT distinct key FROM src order by key").collect().toSeq)
   }
 
-  test("SPARK-4963 SchemaRDD sample on mutable row return wrong result") {
+  test("SPARK-4963 DataFrame sample on mutable row return wrong result") {
     sql("SELECT * FROM src WHERE key % 2 = 0")
       .sample(withReplacement = false, fraction = 0.3)
       .registerTempTable("sampled")

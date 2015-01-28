@@ -37,8 +37,8 @@ object TestSQLContext
   }
 
   /**
-   * Turn a logical plan into a SchemaRDD. This should be removed once we have an easier way to
-   * construct SchemaRDD directly out of local data without relying on implicits.
+   * Turn a logical plan into a [[DataFrame]]. This should be removed once we have an easier way to
+   * construct [[DataFrame]] directly out of local data without relying on implicits.
    */
   protected[sql] implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
     new DataFrame(this, plan)

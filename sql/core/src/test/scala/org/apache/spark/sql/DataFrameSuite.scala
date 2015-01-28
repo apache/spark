@@ -118,19 +118,19 @@ class DataFrameSuite extends QueryTest {
 
     checkAnswer(
       arrayData.orderBy('data.getItem(0).asc),
-      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
+      arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(0)).toSeq)
 
     checkAnswer(
       arrayData.orderBy('data.getItem(0).desc),
-      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
+      arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(0)).reverse.toSeq)
 
     checkAnswer(
       arrayData.orderBy('data.getItem(1).asc),
-      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(1)).toSeq)
+      arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(1)).toSeq)
 
     checkAnswer(
       arrayData.orderBy('data.getItem(1).desc),
-      arrayData.toDF.collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
+      arrayData.toDataFrame.collect().sortBy(_.getAs[Seq[Int]](0)(1)).reverse.toSeq)
   }
 
   test("limit") {
