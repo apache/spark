@@ -2508,15 +2508,14 @@ class Column(DataFrame):
 
 
 def _aggregate_func(name):
-    """ Creat a function for aggregator by name"""
+    """ Create a function for aggregator by name"""
     def _(col):
         sc = SparkContext._active_spark_context
         if isinstance(col, Column):
             jcol = col._jc
         else:
             jcol = _create_column_from_name(col)
-        # FIXME: can not access dsl.min/max ...
-        jc = getattr(sc._jvm.org.apache.spark.sql.dsl(), name)(jcol)
+        jc = getattr(sc._jvm.org.apache.spark.sql.api.java.dsl, name)(jcol)
         return Column(jc)
     return staticmethod(_)
 
