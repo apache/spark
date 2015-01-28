@@ -20,7 +20,7 @@
 
 # Preserve the user's CWD so that relative paths are passed correctly to 
 #+ the underlying Python script.
-SPARK_EC2_DIR="$(dirname $0)"
+SPARK_EC2_DIR="$(dirname "$0")"
 
 PYTHONPATH="${SPARK_EC2_DIR}/third_party/boto-2.4.1.zip/boto-2.4.1:$PYTHONPATH" \
     python "${SPARK_EC2_DIR}/spark_ec2.py" "$@"
