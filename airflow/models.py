@@ -9,7 +9,6 @@ import pickle
 import re
 import signal
 import socket
-import sys
 
 from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey)
@@ -581,7 +580,9 @@ class TaskInstance(Base):
                         'dag': task.dag,
                         'ds': ds,
                         'ds_nodash': ds_nodash,
+                        'end_date': ds,
                         'execution_date': self.execution_date,
+                        'latest_date': ds,
                         'macros': macros,
                         'params': task.params,
                         'tables': tables,
@@ -590,6 +591,10 @@ class TaskInstance(Base):
                         'ti': self,
                         'task_instance_key_str': ti_key_str
                     }
+                    if hasattr(self, 'task') and hasattr(self.task, 'dag'):
+                        if self.task.dag.user_defined_macros:
+                            jinja_context.update(
+                                self.task.dag.user_defined_macros)
                     task_copy = copy.copy(task)
 
                     # Setting kill signal handler
@@ -1018,6 +1023,8 @@ class DAG(Base):
         Note that jinja/airflow includes the path of your DAG file by
         default
     :type template_searchpath: string or list of stings
+    :param user_defined_macros: a dictionary of macros that will be merged
+    :type user_defined_macros: dict
     """
 
     __tablename__ = "dag"
@@ -1032,7 +1039,8 @@ class DAG(Base):
             schedule_interval=timedelta(days=1),
             start_date=None, end_date=None, parallelism=0,
             full_filepath=None, executor=DEFAULT_EXECUTOR,
-            template_searchpath=None):
+            template_searchpath=None,
+            user_defined_macros=None):
 
         self.tasks = []
         utils.validate_key(dag_id)
@@ -1046,6 +1054,7 @@ class DAG(Base):
         if isinstance(template_searchpath, basestring):
             template_searchpath = [template_searchpath]
         self.template_searchpath = template_searchpath
+        self.user_defined_macros = user_defined_macros
 
     def __repr__(self):
         return "<DAG: {self.dag_id}>".format(self=self)
@@ -1102,11 +1111,20 @@ class DAG(Base):
         self.start_date = start_date
 
     def get_template_env(self):
+        '''
+        Returns a jinja2 Environment while taking into account the DAGs
+        template_searchpath and user_define_ macros
+        '''
         searchpath = [self.folder]
         if self.template_searchpath:
             searchpath += self.template_searchpath
 
-        return jinja2.Environment(loader=jinja2.FileSystemLoader(searchpath))
+        env = jinja2.Environment(
+            loader=jinja2.FileSystemLoader(searchpath),
+            extensions=["jinja2.ext.do"])
+        env.globals.update(self.user_defined_macros)
+
+        return env
 
     def set_dependency(self, upstream_task_id, downstream_task_id):
         """
