@@ -106,16 +106,6 @@
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
     </dependency>
-    <!--
-      Promote Guava to "compile" so that maven-shade-plugin picks it up (for packaging the Optional
-      class exposed in the Java API). The plugin will then remove this dependency from the published
-      pom, so that Guava does not pollute the client's compilation classpath.
-    -->
-    <dependency>
-      <groupId>com.google.guava</groupId>
-      <artifactId>guava</artifactId>
-      <scope>compile</scope>
-    </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-lang3</artifactId>
@@ -350,44 +340,6 @@
           <verbose>true</verbose>
         </configuration>
       </plugin>
-      <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-shade-plugin</artifactId>
-        <executions>
-          <execution>
-            <phase>package</phase>
-            <goals>
-              <goal>shade</goal>
-            </goals>
-            <configuration>
-              <shadedArtifactAttached>false</shadedArtifactAttached>
-              <artifactSet>
-                <includes>
-                  <include>com.google.guava:guava</include>
-                </includes>
-              </artifactSet>
-              <filters>
-                <!-- See comment in the guava dependency declaration above. -->
-                <filter>
-                  <artifact>com.google.guava:guava</artifact>
-                  <includes>
-                    <include>com/google/common/base/Absent*</include>
-                    <include>com/google/common/base/Function</include>
-                    <include>com/google/common/base/Optional*</include>
-                    <include>com/google/common/base/Present*</include>
-                    <include>com/google/common/base/Supplier</include>
-                  </includes>
-                </filter>
-              </filters>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <!--
-        Copy guava to the build directory. This is needed to make the SPARK_PREPEND_CLASSES
-        option work in compute-classpath.sh, since it would put the non-shaded Spark classes in
-        the runtime classpath.
-      -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-dependency-plugin</artifactId>

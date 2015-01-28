@@ -161,7 +161,7 @@ object TestData {
     TestSQLContext.sparkContext.parallelize(
       NullStrings(1, "abc") ::
       NullStrings(2, "ABC") ::
-      NullStrings(3, null) :: Nil)
+      NullStrings(3, null) :: Nil).toDF
   nullStrings.registerTempTable("nullStrings")
 
   case class TableName(tableName: String)

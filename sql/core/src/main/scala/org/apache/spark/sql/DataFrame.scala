@@ -230,9 +230,12 @@ class DataFrame protected[sql](
   /**
    * Selecting a single column and return it as a [[Column]].
    */
-  override def apply(colName: String): Column = {
-    val expr = resolve(colName)
-    new Column(Some(sqlContext), Some(Project(Seq(expr), logicalPlan)), expr)
+  override def apply(colName: String): Column = colName match {
+    case "*" =>
+      Column("*")
+    case _ =>
+      val expr = resolve(colName)
+      new Column(Some(sqlContext), Some(Project(Seq(expr), logicalPlan)), expr)
   }
 
   /**

@@ -252,7 +252,10 @@ class Column(
   /**
    * Equality test with an expression that is safe for null values.
    */
-  override def <=> (other: Column): Column = EqualNullSafe(expr, other.expr)
+  override def <=> (other: Column): Column = other match {
+    case null => EqualNullSafe(expr, Literal.anyToLiteral(null).expr)
+    case _ => EqualNullSafe(expr, other.expr)
+  }
 
   /**
    * Equality test with a literal value that is safe for null values.
