@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 
-from pyspark.ml.util import JavaTransformer, inherit_doc
 from pyspark.ml.param.shared import HasInputCol, HasOutputCol, HasNumFeatures
-
+from pyspark.ml.util import inherit_doc
+from pyspark.ml.wrapper import JavaTransformer
 
 __all__ = ['Tokenizer', 'HashingTF']
 
@@ -33,9 +33,9 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     >>> tokenizer = Tokenizer() \
             .setInputCol("text") \
             .setOutputCol("words")
-    >>> print tokenizer.transform(dataset).first()
+    >>> print tokenizer.transform(dataset).head()
     Row(text=u'a b c', words=[u'a', u'b', u'c'])
-    >>> print tokenizer.transform(dataset, {tokenizer.outputCol: "tokens"}).first()
+    >>> print tokenizer.transform(dataset, {tokenizer.outputCol: "tokens"}).head()
     Row(text=u'a b c', tokens=[u'a', u'b', u'c'])
     """
 
@@ -54,10 +54,10 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
             .setNumFeatures(10) \
             .setInputCol("words") \
             .setOutputCol("features")
-    >>> print hashingTF.transform(dataset).first().features
+    >>> print hashingTF.transform(dataset).head().features
     (10,[7,8,9],[1.0,1.0,1.0])
     >>> params = {hashingTF.numFeatures: 5, hashingTF.outputCol: "vector"}
-    >>> print hashingTF.transform(dataset, params).first().vector
+    >>> print hashingTF.transform(dataset, params).head().vector
     (5,[2,3,4],[1.0,1.0,1.0])
     """
 

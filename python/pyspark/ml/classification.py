@@ -15,7 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.ml.util import JavaEstimator, JavaModel, inherit_doc
+from pyspark.ml.util import inherit_doc
+from pyspark.ml.wrapper import JavaEstimator, JavaModel
 from pyspark.ml.param.shared import HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,\
     HasRegParam
 
@@ -39,10 +40,10 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
             .setRegParam(0.01)
     >>> model = lr.fit(dataset)
     >>> test0 = sqlCtx.inferSchema(sc.parallelize([Row(features=Vectors.dense(-1.0))]))
-    >>> print model.transform(test0).first().prediction
+    >>> print model.transform(test0).head().prediction
     0.0
     >>> test1 = sqlCtx.inferSchema(sc.parallelize([Row(features=Vectors.sparse(1, [0], [1.0]))]))
-    >>> print model.transform(test1).first().prediction
+    >>> print model.transform(test1).head().prediction
     1.0
     """
     _java_class = "org.apache.spark.ml.classification.LogisticRegression"
