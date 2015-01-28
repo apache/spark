@@ -146,7 +146,7 @@ class FramedSerializer(Serializer):
         length = read_int(stream)
         if length == SpecialLengths.END_OF_DATA_SECTION:
             raise EOFError
-        if length == SpecialLengths.NULL:
+        elif length == SpecialLengths.NULL:
             return None
         obj = stream.read(length)
         if len(obj) < length:
