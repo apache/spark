@@ -50,8 +50,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
   var name: String = null
   var childArgs: ArrayBuffer[String] = new ArrayBuffer[String]()
   var jars: String = null
-  var maven: String = null
-  var mavenRepos: String = null
+  var packages: String = null
+  var repositories: String = null
   var ivyRepoPath: String = null
   var verbose: Boolean = false
   var isPython: Boolean = false
@@ -228,8 +228,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     |  name                    $name
     |  childArgs               [${childArgs.mkString(" ")}]
     |  jars                    $jars
-    |  maven                   $maven
-    |  maven-repos             $mavenRepos
+    |  packages                $packages
+    |  repositories            $repositories
     |  verbose                 $verbose
     |
     |Spark properties used, including those specified through
@@ -336,12 +336,12 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         jars = Utils.resolveURIs(value)
         parse(tail)
 
-      case ("--maven") :: value :: tail =>
-        maven = value
+      case ("--packages") :: value :: tail =>
+        packages = value
         parse(tail)
 
-      case ("--maven-repos") :: value :: tail =>
-        mavenRepos = value
+      case ("--repositories") :: value :: tail =>
+        repositories = value
         parse(tail)
 
       case ("--conf" | "-c") :: value :: tail =>
@@ -394,13 +394,13 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |  --name NAME                 A name of your application.
         |  --jars JARS                 Comma-separated list of local jars to include on the driver
         |                              and executor classpaths.
-        |  --maven                     Comma-separated list of maven coordinates of jars to include
+        |  --packages                  Comma-separated list of maven coordinates of jars to include
         |                              on the driver and executor classpaths. Will search the local
         |                              maven repo, then maven central and any additional remote
-        |                              repositories given by --maven-repos. The format for the
+        |                              repositories given by --repositories. The format for the
         |                              coordinates should be groupId:artifactId:version.
-        |  --maven-repos               Supply additional remote repositories as a comma-delimited
-        |                              list to search for the maven coordinates given with --maven.
+        |  --repositories              Comma-separated list of additional remote repositories to
+        |                              search for the maven coordinates given with --packages.
         |  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place
         |                              on the PYTHONPATH for Python apps.
         |  --files FILES               Comma-separated list of files to be placed in the working

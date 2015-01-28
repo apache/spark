@@ -22,19 +22,23 @@ import java.lang.reflect.{Modifier, InvocationTargetException}
 import java.net.URL
 
 import org.apache.ivy.Ivy
-import org.apache.ivy.core.module.descriptor.{DefaultExcludeRule, DefaultDependencyDescriptor, DefaultModuleDescriptor}
+import org.apache.ivy.ant.AntMessageLogger
+import org.apache.ivy.core.LogOptions
+import org.apache.ivy.core.module.descriptor._
 import org.apache.ivy.core.module.id.{ModuleId, ArtifactId, ModuleRevisionId}
 import org.apache.ivy.core.report.ResolveReport
-import org.apache.ivy.core.resolve.ResolveOptions
+import org.apache.ivy.core.resolve.{IvyNode, ResolveOptions}
 import org.apache.ivy.core.retrieve.RetrieveOptions
-import org.apache.ivy.core.settings.IvySettings
+import org.apache.ivy.core.settings.{IvyVariableContainerImpl, IvySettings}
 import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.resolver.{ChainResolver, IBiblioResolver}
+import org.apache.ivy.util.DefaultMessageLogger
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
 
+import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorURLClassLoader
-import org.apache.spark.util.{MavenCoordinate, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Main gateway of launching a Spark application.
@@ -65,11 +69,6 @@ object SparkSubmit {
   private val PYSPARK_SHELL = "pyspark-shell"
 
   private val CLASS_NOT_FOUND_EXIT_STATUS = 101
-
-  // Directories for caching downloads through ivy and storing the jars when maven coordinates are
-  // supplied to spark-submit
-  private var IVY_CACHE: File = null
-  private var MAVEN_JARS: File = null
 
   // Exposed for testing
   private[spark] var exitFn: () => Unit = () => System.exit(-1)
@@ -187,7 +186,7 @@ object SparkSubmit {
 
     // Resolve maven dependencies if there are any and add classpath to jars
     val resolvedMavenCoordinates =
-      resolveMavenCoordinates(args.maven, args.mavenRepos, args.ivyRepoPath)
+      SparkSubmitUtils.resolveMavenCoordinates(args.packages, args.repositories, args.ivyRepoPath)
     if (!resolvedMavenCoordinates.trim.isEmpty) {
       if (args.jars == null || args.jars.trim.isEmpty) {
         args.jars = resolvedMavenCoordinates
@@ -352,11 +351,11 @@ object SparkSubmit {
   }
 
   private def launch(
-                      childArgs: ArrayBuffer[String],
-                      childClasspath: ArrayBuffer[String],
-                      sysProps: Map[String, String],
-                      childMainClass: String,
-                      verbose: Boolean = false) {
+      childArgs: ArrayBuffer[String],
+      childClasspath: ArrayBuffer[String],
+      sysProps: Map[String, String],
+      childMainClass: String,
+      verbose: Boolean = false) {
     if (verbose) {
       printStream.println(s"Main class:\n$childMainClass")
       printStream.println(s"Arguments:\n${childArgs.mkString("\n")}")
@@ -467,18 +466,36 @@ object SparkSubmit {
       .mkString(",")
     if (merged == "") null else merged
   }
+}
+
+/** Provides utility functions to be used inside SparkSubmit. */
+private[spark] object SparkSubmitUtils extends Logging {
+
+  // Directories for caching downloads through ivy and storing the jars when maven coordinates are
+  // supplied to spark-submit
+  private var PACKAGES_DIRECTORY: File = null
+
+  /**
+   * Represents a Maven Coordinate
+   * @param groupId the groupId of the coordinate
+   * @param artifactId the artifactId of the coordinate
+   * @param version the version of the coordinate
+   */
+  private[spark] case class MavenCoordinate(groupId: String, artifactId: String, version: String)
 
   /**
    * Resolves any dependencies that were supplied through maven coordinates
    * @param coordinates Comma-delimited string of maven coordinates
    * @param remoteRepos Comma-delimited string of remote repositories other than maven central
+   * @param ivyPath The path to the local ivy repository
    * @return The comma-delimited path to the jars of the given maven artifacts including their
    *         transitive dependencies
    */
-  private def resolveMavenCoordinates(
+  private[spark] def resolveMavenCoordinates(
       coordinates: String,
       remoteRepos: String,
-      ivyPath: String): String = {
+      ivyPath: String,
+      isTest: Boolean = false): String = {
     if (coordinates == null || coordinates.trim.isEmpty) {
       ""
     } else {
@@ -486,16 +503,26 @@ object SparkSubmit {
         val splits = p.split(":")
         require(splits.length == 3, s"Provided Maven Coordinates must be in the form " +
           s"'groupId:artifactId:version'. The coordinate provided is: $p")
+        require(splits(0) != null && splits(0).trim.nonEmpty, s"The groupId cannot be null or " +
+          s"be whitespace. The groupId provided is: ${splits(0)}")
+        require(splits(1) != null && splits(1).trim.nonEmpty, s"The artifactId cannot be null or " +
+          s"be whitespace. The artifactId provided is: ${splits(1)}")
+        require(splits(2) != null && splits(2).trim.nonEmpty, s"The version cannot be null or " +
+          s"be whitespace. The version provided is: ${splits(2)}")
         new MavenCoordinate(splits(0), splits(1), splits(2))
       }
+      // Default configuration name for ivy
+      val conf = "default"
       // set ivy settings for location of cache
       val ivySettings: IvySettings = new IvySettings
-      if (ivyPath == null || ivyPath.trim.length == 0) {
-        MAVEN_JARS = new File(ivySettings.getDefaultIvyUserDir, "jars")
+      if (ivyPath == null || ivyPath.trim.isEmpty) {
+        PACKAGES_DIRECTORY = new File(ivySettings.getDefaultIvyUserDir, "jars")
       } else {
         ivySettings.setDefaultCache(new File(ivyPath, "cache"))
-        MAVEN_JARS = new File(ivyPath, "jars")
+        PACKAGES_DIRECTORY = new File(ivyPath, "jars")
       }
+      logInfo(s"Ivy Default Cache set to: ${ivySettings.getDefaultCache.getAbsolutePath}")
+      logInfo(s"The jars for the packages stored in: $PACKAGES_DIRECTORY")
 
       // create a pattern matcher
       ivySettings.addMatcher(new GlobPatternMatcher)
@@ -515,10 +542,10 @@ object SparkSubmit {
       val sparkArtifacts = new ArtifactId(new ModuleId("org.apache.spark", "*"), "*", "*", "*")
       val sparkDependencyExcludeRule =
         new DefaultExcludeRule(sparkArtifacts, ivySettings.getMatcher("glob"), null)
-      sparkDependencyExcludeRule.addConfiguration("default")
+      sparkDependencyExcludeRule.addConfiguration(conf)
 
       // add any other remote repositories other than maven central
-      if (remoteRepos != null && !remoteRepos.trim.isEmpty) {
+      if (remoteRepos != null && remoteRepos.trim.nonEmpty) {
         var i = 1
         remoteRepos.split(",").foreach { repo =>
           val brr: IBiblioResolver = new IBiblioResolver
@@ -527,47 +554,63 @@ object SparkSubmit {
           brr.setRoot(repo)
           brr.setName(s"repo-$i")
           cr.add(brr)
+          logInfo(s"$repo added as a remote repository with the name: ${brr.getName}")
           i += 1
         }
       }
       ivySettings.addResolver(cr)
       ivySettings.setDefaultResolver(cr.getName)
-
       val ivy = Ivy.newInstance(ivySettings)
       // Set resolve options to download transitive dependencies as well
-      val ro = new ResolveOptions
-      ro.setTransitive(true)
-      ro.setDownload(true)
+      val resolveOptions = new ResolveOptions
+      resolveOptions.setTransitive(true)
+      val retrieveOptions = new RetrieveOptions
+      // Turn downloading and logging off for testing
+      if (isTest) {
+        resolveOptions.setDownload(false)
+        resolveOptions.setLog(LogOptions.LOG_QUIET)
+        retrieveOptions.setLog(LogOptions.LOG_QUIET)
+      } else {
+        resolveOptions.setDownload(true)
+      }
+
       // A Module descriptor must be specified. Entries are dummy strings
       val md = DefaultModuleDescriptor.newDefaultInstance(
         ModuleRevisionId.newInstance("org.apache.spark", "spark-submit-envelope", "1.0"))
+      md.setDefaultConf(conf)
 
       md.addExcludeRule(sparkDependencyExcludeRule)
 
       artifacts.foreach { mvn =>
         val ri = ModuleRevisionId.newInstance(mvn.groupId, mvn.artifactId, mvn.version)
         val dd = new DefaultDependencyDescriptor(ri, false, false)
-        dd.addDependencyConfiguration("default", "default")
+        dd.addDependencyConfiguration(conf, conf)
+        logInfo(s"${dd.getDependencyId} added as a dependency")
         md.addDependency(dd)
       }
 
       // resolve dependencies
-      val rr: ResolveReport = ivy.resolve(md, ro)
+      val rr: ResolveReport = ivy.resolve(md, resolveOptions)
       if (rr.hasError) {
         throw new RuntimeException(rr.getAllProblemMessages.toString)
+      }
+      // Log the callers for each dependency
+      rr.getDependencies.toArray.foreach { case dependency: IvyNode =>
+        logInfo(s"$dependency will be retrieved as a dependency for:")
+        dependency.getAllCallers.foreach (caller => logInfo(s"\t$caller"))
       }
       // retrieve all resolved dependencies
       val m = rr.getModuleDescriptor
       ivy.retrieve(m.getModuleRevisionId,
-        MAVEN_JARS.getAbsolutePath + "/[artifact](-[classifier]).[ext]",
-        new RetrieveOptions().setConfs(Array("default")))
+        PACKAGES_DIRECTORY.getAbsolutePath + "/[artifact](-[classifier]).[ext]",
+        retrieveOptions.setConfs(Array(conf)))
 
       // output downloaded jars to classpath (will append to jars). The name of the jar is given
-      // after a `!` by Ivy. It also sometimes contains (bundle) after .jar. Remove that as well.
-      rr.getArtifacts.toArray.map { case artifactInfo =>
+      // after a '!' by Ivy. It also sometimes contains (bundle) after '.jar'. Remove that as well.
+      rr.getArtifacts.toArray.map { case artifactInfo: MDArtifact =>
         val artifactString = artifactInfo.toString
         val jarName = artifactString.drop(artifactString.lastIndexOf("!") + 1)
-        MAVEN_JARS.getAbsolutePath + "/" +
+        PACKAGES_DIRECTORY.getAbsolutePath + "/" +
           jarName.substring(0, jarName.lastIndexOf(".jar") + 4)
       }.mkString(",")
     }
