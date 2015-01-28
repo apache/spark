@@ -48,6 +48,8 @@ package object dsl {
   def countDistinct(expr: Column, exprs: Column*): Column =
     CountDistinct((expr +: exprs).map(_.expr))
 
+  def approxCountDistinct(e: Column, rsd: Double = 0.05): Column =
+    ApproxCountDistinct(e.expr, rsd)
   def avg(e: Column): Column = Average(e.expr)
   def first(e: Column): Column = First(e.expr)
   def last(e: Column): Column = Last(e.expr)
