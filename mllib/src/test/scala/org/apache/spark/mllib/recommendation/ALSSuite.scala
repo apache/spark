@@ -215,7 +215,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext {
    * @param samplingRate what fraction of the user-product pairs are known
    * @param matchThreshold max difference allowed to consider a predicted rating correct
    * @param implicitPrefs flag to test implicit feedback
-   * @param bulkPredict flag to test bulk prediciton
+   * @param bulkPredict flag to test bulk predicition
    * @param negativeWeights whether the generated data can contain negative values
    * @param numUserBlocks number of user blocks to partition users into
    * @param numProductBlocks number of product blocks to partition products into

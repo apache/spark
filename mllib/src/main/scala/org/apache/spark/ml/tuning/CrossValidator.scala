@@ -24,7 +24,7 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml._
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -64,7 +64,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
   def setEvaluator(value: Evaluator): this.type = set(evaluator, value)
   def setNumFolds(value: Int): this.type = set(numFolds, value)
 
-  override def fit(dataset: SchemaRDD, paramMap: ParamMap): CrossValidatorModel = {
+  override def fit(dataset: DataFrame, paramMap: ParamMap): CrossValidatorModel = {
     val map = this.paramMap ++ paramMap
     val schema = dataset.schema
     transformSchema(dataset.schema, paramMap, logging = true)
@@ -74,7 +74,7 @@ class CrossValidator extends Estimator[CrossValidatorModel] with CrossValidatorP
     val epm = map(estimatorParamMaps)
     val numModels = epm.size
     val metrics = new Array[Double](epm.size)
-    val splits = MLUtils.kFold(dataset, map(numFolds), 0)
+    val splits = MLUtils.kFold(dataset.rdd, map(numFolds), 0)
     splits.zipWithIndex.foreach { case ((training, validation), splitIndex) =>
       val trainingDataset = sqlCtx.applySchema(training, schema).cache()
       val validationDataset = sqlCtx.applySchema(validation, schema).cache()
@@ -117,7 +117,7 @@ class CrossValidatorModel private[ml] (
     val bestModel: Model[_])
   extends Model[CrossValidatorModel] with CrossValidatorParams {
 
-  override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
+  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
     bestModel.transform(dataset, paramMap)
   }
 

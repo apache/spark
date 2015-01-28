@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.sql.Timestamp
 
 import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.dsl._
 import org.apache.spark.sql.test._
 
 /* Implicits */
@@ -29,11 +30,11 @@ case class TestData(key: Int, value: String)
 
 object TestData {
   val testData = TestSQLContext.sparkContext.parallelize(
-    (1 to 100).map(i => TestData(i, i.toString))).toSchemaRDD
+    (1 to 100).map(i => TestData(i, i.toString))).toDF
   testData.registerTempTable("testData")
 
   val negativeData = TestSQLContext.sparkContext.parallelize(
-    (1 to 100).map(i => TestData(-i, (-i).toString))).toSchemaRDD
+    (1 to 100).map(i => TestData(-i, (-i).toString))).toDF
   negativeData.registerTempTable("negativeData")
 
   case class LargeAndSmallInts(a: Int, b: Int)
@@ -44,7 +45,7 @@ object TestData {
       LargeAndSmallInts(2147483645, 1) ::
       LargeAndSmallInts(2, 2) ::
       LargeAndSmallInts(2147483646, 1) ::
-      LargeAndSmallInts(3, 2) :: Nil).toSchemaRDD
+      LargeAndSmallInts(3, 2) :: Nil).toDF
   largeAndSmallInts.registerTempTable("largeAndSmallInts")
 
   case class TestData2(a: Int, b: Int)
@@ -55,7 +56,7 @@ object TestData {
       TestData2(2, 1) ::
       TestData2(2, 2) ::
       TestData2(3, 1) ::
-      TestData2(3, 2) :: Nil, 2).toSchemaRDD
+      TestData2(3, 2) :: Nil, 2).toDF
   testData2.registerTempTable("testData2")
 
   case class DecimalData(a: BigDecimal, b: BigDecimal)
@@ -67,7 +68,7 @@ object TestData {
       DecimalData(2, 1) ::
       DecimalData(2, 2) ::
       DecimalData(3, 1) ::
-      DecimalData(3, 2) :: Nil).toSchemaRDD
+      DecimalData(3, 2) :: Nil).toDF
   decimalData.registerTempTable("decimalData")
 
   case class BinaryData(a: Array[Byte], b: Int)
@@ -77,17 +78,17 @@ object TestData {
       BinaryData("22".getBytes(), 5) ::
       BinaryData("122".getBytes(), 3) ::
       BinaryData("121".getBytes(), 2) ::
-      BinaryData("123".getBytes(), 4) :: Nil).toSchemaRDD
+      BinaryData("123".getBytes(), 4) :: Nil).toDF
   binaryData.registerTempTable("binaryData")
 
   case class TestData3(a: Int, b: Option[Int])
   val testData3 =
     TestSQLContext.sparkContext.parallelize(
       TestData3(1, None) ::
-      TestData3(2, Some(2)) :: Nil).toSchemaRDD
+      TestData3(2, Some(2)) :: Nil).toDF
   testData3.registerTempTable("testData3")
 
-  val emptyTableData = logical.LocalRelation('a.int, 'b.int)
+  val emptyTableData = logical.LocalRelation($"a".int, $"b".int)
 
   case class UpperCaseData(N: Int, L: String)
   val upperCaseData =
@@ -97,7 +98,7 @@ object TestData {
       UpperCaseData(3, "C") ::
       UpperCaseData(4, "D") ::
       UpperCaseData(5, "E") ::
-      UpperCaseData(6, "F") :: Nil).toSchemaRDD
+      UpperCaseData(6, "F") :: Nil).toDF
   upperCaseData.registerTempTable("upperCaseData")
 
   case class LowerCaseData(n: Int, l: String)
@@ -106,7 +107,7 @@ object TestData {
       LowerCaseData(1, "a") ::
       LowerCaseData(2, "b") ::
       LowerCaseData(3, "c") ::
-      LowerCaseData(4, "d") :: Nil).toSchemaRDD
+      LowerCaseData(4, "d") :: Nil).toDF
   lowerCaseData.registerTempTable("lowerCaseData")
 
   case class ArrayData(data: Seq[Int], nestedData: Seq[Seq[Int]])
@@ -200,6 +201,6 @@ object TestData {
     TestSQLContext.sparkContext.parallelize(
       ComplexData(Map(1 -> "1"), TestData(1, "1"), Seq(1), true)
         :: ComplexData(Map(2 -> "2"), TestData(2, "2"), Seq(2), false)
-        :: Nil).toSchemaRDD
+        :: Nil).toDF
   complexData.registerTempTable("complexData")
 }

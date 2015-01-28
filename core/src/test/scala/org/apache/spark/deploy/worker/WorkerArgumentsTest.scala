@@ -43,7 +43,7 @@ class WorkerArgumentsTest extends FunSuite {
       }
 
       override def clone: SparkConf = {
-        new MySparkConf().setAll(settings)
+        new MySparkConf().setAll(getAll)
       }
     }
     val conf = new MySparkConf()
@@ -62,7 +62,7 @@ class WorkerArgumentsTest extends FunSuite {
       }
 
       override def clone: SparkConf = {
-        new MySparkConf().setAll(settings)
+        new MySparkConf().setAll(getAll)
       }
     }
     val conf = new MySparkConf()
