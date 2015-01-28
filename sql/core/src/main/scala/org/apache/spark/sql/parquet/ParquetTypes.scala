@@ -23,8 +23,11 @@ import scala.collection.mutable.ArrayBuffer
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
 import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
+import org.apache.hadoop.util.ReflectionUtils
+
 import parquet.format.converter.ParquetMetadataConverter
 import parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
 import parquet.hadoop.util.ContextUtil
@@ -469,10 +472,19 @@ private[parquet] object ParquetTypesConverter extends Logging {
       throw new IllegalArgumentException(s"Incorrectly formatted Parquet metadata path $origPath")
     }
     val path = origPath.makeQualified(fs)
+    
+    // filter the input files by the custom filter class
+    val filterClass = configuration.get.getClass(NewFileInputFormat.PATHFILTER_CLASS,
+      null, classOf[PathFilter])
+    val statuses = if (filterClass != null) {
+      val filterOpt = ReflectionUtils.newInstance(filterClass, conf)
+      fs.globStatus(path, filterOpt)
+    } else {
+      fs.globStatus(path)
+    }
 
     val children =
-      fs
-        .globStatus(path)
+      statuses       
         .flatMap { status => if(status.isDir) fs.listStatus(status.getPath) else List(status) }
         .filterNot { status =>
           val name = status.getPath.getName
