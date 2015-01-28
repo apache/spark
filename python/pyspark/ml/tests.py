@@ -31,12 +31,12 @@ else:
     import unittest
 
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
-from pyspark.sql import SchemaRDD
-from pyspark.ml import Transformer, Estimator, Model, Pipeline
+from pyspark.sql import DataFrame
 from pyspark.ml.param import Param
+from pyspark.ml.pipeline import Transformer, Estimator, Pipeline
 
 
-class MockDataset(SchemaRDD):
+class MockDataset(DataFrame):
 
     def __init__(self):
         self.index = 0
@@ -76,7 +76,7 @@ class MockEstimator(Estimator):
         return model
 
 
-class MockModel(MockTransformer, Model):
+class MockModel(MockTransformer, Transformer):
 
     def __init__(self):
         super(MockModel, self).__init__()

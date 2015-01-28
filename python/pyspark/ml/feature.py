@@ -15,9 +15,11 @@
 # limitations under the License.
 #
 
-from pyspark.sql import inherit_doc
-from pyspark.ml import JavaTransformer
 from pyspark.ml.param.shared import HasInputCol, HasOutputCol, HasNumFeatures
+from pyspark.ml.util import inherit_doc
+from pyspark.ml.wrapper import JavaTransformer
+
+__all__ = ['Tokenizer', 'HashingTF']
 
 
 @inherit_doc
@@ -31,18 +33,13 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol):
     >>> tokenizer = Tokenizer() \
             .setInputCol("text") \
             .setOutputCol("words")
-    >>> print tokenizer.transform(dataset).first()
+    >>> print tokenizer.transform(dataset).head()
     Row(text=u'a b c', words=[u'a', u'b', u'c'])
-    >>> print tokenizer.transform(dataset, {tokenizer.outputCol: "tokens"}).first()
+    >>> print tokenizer.transform(dataset, {tokenizer.outputCol: "tokens"}).head()
     Row(text=u'a b c', tokens=[u'a', u'b', u'c'])
     """
 
-    def __init__(self):
-        super(Tokenizer, self).__init__()
-
-    @property
-    def _java_class(self):
-        return "org.apache.spark.ml.feature.Tokenizer"
+    _java_class = "org.apache.spark.ml.feature.Tokenizer"
 
 
 @inherit_doc
@@ -57,19 +54,14 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures):
             .setNumFeatures(10) \
             .setInputCol("words") \
             .setOutputCol("features")
-    >>> print hashingTF.transform(dataset).first().features
+    >>> print hashingTF.transform(dataset).head().features
     (10,[7,8,9],[1.0,1.0,1.0])
     >>> params = {hashingTF.numFeatures: 5, hashingTF.outputCol: "vector"}
-    >>> print hashingTF.transform(dataset, params).first().vector
+    >>> print hashingTF.transform(dataset, params).head().vector
     (5,[2,3,4],[1.0,1.0,1.0])
     """
 
-    def __init__(self):
-        super(HashingTF, self).__init__()
-
-    @property
-    def _java_class(self):
-        return "org.apache.spark.ml.feature.HashingTF"
+    _java_class = "org.apache.spark.ml.feature.HashingTF"
 
 
 if __name__ == "__main__":

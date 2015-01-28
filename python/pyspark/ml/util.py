@@ -15,21 +15,16 @@
 # limitations under the License.
 #
 
-import uuid
 
-
-class Identifiable(object):
-    """
-    Object with a unique ID.
-    """
-
-    def __init__(self):
-        #: A unique id for the object. The default implementation
-        #: concatenates the class name, "-", and 8 random hex chars.
-        self.uid = type(self).__name__ + "-" + uuid.uuid4().hex[:8]
-
-    def __str__(self):
-        return self.uid
-
-    def __repr__(self):
-        return str(self)
+def inherit_doc(cls):
+    for name, func in vars(cls).items():
+        # only inherit docstring for public functions
+        if name.startswith("_"):
+            continue
+        if not func.__doc__:
+            for parent in cls.__bases__:
+                parent_func = getattr(parent, name, None)
+                if parent_func and getattr(parent_func, "__doc__", None):
+                    func.__doc__ = parent_func.__doc__
+                    break
+    return cls
