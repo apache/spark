@@ -57,11 +57,11 @@ case class AlterDropColCommand(tableName: String, columnName: String) extends Ru
 
 @DeveloperApi
 case class AlterAddColCommand(
-  tableName: String,
-  colName: String,
-  colType: String,
-  colFamily: String,
-  colQualifier: String) extends RunnableCommand {
+                               tableName: String,
+                               colName: String,
+                               colType: String,
+                               colFamily: String,
+                               colQualifier: String) extends RunnableCommand {
 
   def run(sqlContext: SQLContext): Seq[Row] = {
     val context = sqlContext.asInstanceOf[HBaseSQLContext]
@@ -157,33 +157,33 @@ case class InsertValueIntoTableCommand(tableName: String, valueSeq: Seq[String])
 
 @DeveloperApi
 case class BulkLoadIntoTableCommand(
-  inputPath: String,
-  tableName: String,
-  isLocal: Boolean,
-  delimiter: Option[String],
-  parallel: Boolean)
-    extends RunnableCommand
-    with SparkHadoopMapReduceUtil
-    with Logging {
+                                     inputPath: String,
+                                     tableName: String,
+                                     isLocal: Boolean,
+                                     delimiter: Option[String],
+                                     parallel: Boolean)
+  extends RunnableCommand
+  with SparkHadoopMapReduceUtil
+  with Logging {
 
   override def run(sqlContext: SQLContext) = {
-    val solvedRelation = sqlContext.catalog.lookupRelation(Seq(tableName))
-    val relation: HBaseRelation = solvedRelation.asInstanceOf[Subquery]
+    @transient val solvedRelation = sqlContext.catalog.lookupRelation(Seq(tableName))
+    @transient val relation: HBaseRelation = solvedRelation.asInstanceOf[Subquery]
       .child.asInstanceOf[LogicalRelation]
       .relation.asInstanceOf[HBaseRelation]
-    val hbContext = sqlContext.asInstanceOf[HBaseSQLContext]
+    @transient val hbContext = sqlContext.asInstanceOf[HBaseSQLContext]
 
     // tmp path for storing HFile
-    val tmpPath = Util.getTempFilePath(hbContext.configuration, relation.tableName)
-    val job = new Job(hbContext.configuration)
+    @transient val tmpPath = Util.getTempFilePath(hbContext.configuration, relation.tableName)
+    @transient val job = new Job(hbContext.configuration)
     job.setOutputKeyClass(classOf[ImmutableBytesWritable])
     job.setOutputValueClass(classOf[KeyValue])
     job.setOutputFormatClass(classOf[HFileOutputFormat2])
     job.getConfiguration.set("mapreduce.output.fileoutputformat.outputdir", tmpPath)
 
-    val conf = job.getConfiguration
+    @transient val conf = job.getConfiguration
 
-    val hadoopReader = if (isLocal) {
+    @transient val hadoopReader = if (isLocal) {
       val fs = FileSystem.getLocal(conf)
       val pathString = fs.pathToFile(new Path(inputPath)).getCanonicalPath
       new HadoopReader(hbContext.sparkContext, pathString, delimiter)(relation)
@@ -191,27 +191,27 @@ case class BulkLoadIntoTableCommand(
       new HadoopReader(hbContext.sparkContext, inputPath, delimiter)(relation)
     }
 
-    val splitKeys = relation.getRegionStartKeys.toArray
-    val wrappedConf = new SerializableWritable(conf)
+    @transient val splitKeys = relation.getRegionStartKeys.toArray
+    @transient val wrappedConf = new SerializableWritable(conf)
 
-    val rdd = hadoopReader.makeBulkLoadRDDFromTextFile
-    val partitioner = new HBasePartitioner(splitKeys)
-    val ordering = Ordering[HBaseRawType]
-    val shuffled =
+    @transient val rdd = hadoopReader.makeBulkLoadRDDFromTextFile
+    @transient val partitioner = new HBasePartitioner(splitKeys)
+    @transient val ordering = Ordering[HBaseRawType]
+    @transient val shuffled =
       new HBaseShuffledRDD(rdd, partitioner, relation.partitions).setKeyOrdering(ordering)
 
-    val formatter = new SimpleDateFormat("yyyyMMddHHmm")
-    val jobtrackerID = formatter.format(new Date())
-    val stageId = shuffled.id
-    val jobFormat = new HFileOutputFormat2
+    @transient val formatter = new SimpleDateFormat("yyyyMMddHHmm")
+    @transient val jobtrackerID = formatter.format(new Date())
+    @transient val stageId = shuffled.id
+    @transient val jobFormat = new HFileOutputFormat2
 
     if (SparkEnv.get.conf.getBoolean("spark.hadoop.validateOutputSpecs", defaultValue = true)) {
       // FileOutputFormat ignores the filesystem parameter
       jobFormat.checkOutputSpecs(job)
     }
 
-    val par = parallel
-    val writeShard =
+    @transient val par = parallel
+    @transient val writeShard =
       (context: TaskContext, iter: Iterator[(HBaseRawType, Array[HBaseRawType])]) => {
         val config = wrappedConf.value
         /* "reduce task" <split #> <attempt # = spark task #> */
@@ -272,9 +272,9 @@ case class BulkLoadIntoTableCommand(
         1
       }: Int
 
-    val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = true, 0, 0)
-    val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
-    val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
+    @transient val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = true, 0, 0)
+    @transient val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
+    @transient val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
     jobCommitter.setupJob(jobTaskContext)
     logDebug(s"Starting doBulkLoad on table ${relation.htable.getName} ...")
     hbContext.sparkContext.runJob(shuffled, writeShard)
@@ -292,3 +292,4 @@ case class BulkLoadIntoTableCommand(
 
   override def output = Nil
 }
+
