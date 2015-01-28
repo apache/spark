@@ -34,7 +34,7 @@ a given dataset, the algorithm returns the best clustering result).
 * *initializationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged. 
 
-[Power Iteration Clustering]{'mllib-clustering-pic.md'} that uses the Power Iteration method combined with KMeans clustering to 
+[Power Iteration Clustering](mllib-clustering-pic.md) that uses the Power Iteration method combined with KMeans clustering to 
 cluster points based on a Gaussian measure of the input data pairwise similarity.
 
 ### Examples
