@@ -143,7 +143,7 @@ object MovieLensALS {
 
     // Evaluate the model.
     // TODO: Create an evaluator to compute RMSE.
-    val mse = predictions.select('rating, 'prediction)
+    val mse = predictions.select("rating", "prediction").rdd
       .flatMap { case Row(rating: Float, prediction: Float) =>
         val err = rating.toDouble - prediction
         val err2 = err * err

@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.hive.execution
 
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.dsl._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.Row
 
 import org.apache.spark.util.Utils
 
@@ -82,10 +83,10 @@ class HiveTableScanSuite extends HiveComparisonTest {
     sql("create table spark_4959 (col1 string)")
     sql("""insert into table spark_4959 select "hi" from src limit 1""")
     table("spark_4959").select(
-      'col1.as('CaseSensitiveColName),
-      'col1.as('CaseSensitiveColName2)).registerTempTable("spark_4959_2")
+      'col1.as("CaseSensitiveColName"),
+      'col1.as("CaseSensitiveColName2")).registerTempTable("spark_4959_2")
 
-    assert(sql("select CaseSensitiveColName from spark_4959_2").first() === Row("hi"))
-    assert(sql("select casesensitivecolname from spark_4959_2").first() === Row("hi"))
+    assert(sql("select CaseSensitiveColName from spark_4959_2").head() === Row("hi"))
+    assert(sql("select casesensitivecolname from spark_4959_2").head() === Row("hi"))
   }
 }

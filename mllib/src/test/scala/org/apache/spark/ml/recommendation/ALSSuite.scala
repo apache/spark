@@ -350,7 +350,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       numItemBlocks: Int = 3,
       targetRMSE: Double = 0.05): Unit = {
     val sqlContext = this.sqlContext
-    import sqlContext.{createSchemaRDD, symbolToUnresolvedAttribute}
+    import sqlContext.createSchemaRDD
     val als = new ALS()
       .setRank(rank)
       .setRegParam(regParam)
@@ -360,7 +360,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     val alpha = als.getAlpha
     val model = als.fit(training)
     val predictions = model.transform(test)
-      .select('rating, 'prediction)
+      .select("rating", "prediction")
       .map { case Row(rating: Float, prediction: Float) =>
         (rating.toDouble, prediction.toDouble)
       }

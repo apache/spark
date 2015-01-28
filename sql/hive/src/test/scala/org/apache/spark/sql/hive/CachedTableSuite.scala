@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.columnar.{InMemoryColumnarTableScan, InMemoryRelation}
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{QueryTest, SchemaRDD}
+import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.storage.RDDBlockId
 
 class CachedTableSuite extends QueryTest {
@@ -28,7 +28,7 @@ class CachedTableSuite extends QueryTest {
    * Throws a test failed exception when the number of cached tables differs from the expected
    * number.
    */
-  def assertCached(query: SchemaRDD, numCachedTables: Int = 1): Unit = {
+  def assertCached(query: DataFrame, numCachedTables: Int = 1): Unit = {
     val planWithCaching = query.queryExecution.withCachedData
     val cachedData = planWithCaching collect {
       case cached: InMemoryRelation => cached
