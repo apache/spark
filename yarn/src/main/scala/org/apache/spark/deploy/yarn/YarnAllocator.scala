@@ -63,7 +63,9 @@ private[yarn] class YarnAllocator(
   import YarnAllocator._
 
   // RackResolver logs an INFO message whenever it resolves a rack, which is way too often.
-  Logger.getLogger(classOf[RackResolver]).setLevel(Level.WARN)
+  if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
+    Logger.getLogger(classOf[RackResolver]).setLevel(Level.WARN)
+  }
 
   // Visible for testing.
   val allocatedHostToContainersMap =
