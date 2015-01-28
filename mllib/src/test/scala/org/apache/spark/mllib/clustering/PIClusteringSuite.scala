@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.clustering
 
+import breeze.linalg.{DenseVector => BDV}
 import org.apache.log4j.Logger
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.graphx._
-import org.apache.spark.mllib.clustering.PICLinalg.DMatrix
-import breeze.linalg.{DenseMatrix => BDM, DenseVector => BDV}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.scalatest.FunSuite
 
 import scala.util.Random
@@ -33,8 +32,6 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
   import org.apache.spark.mllib.clustering.PIClusteringSuite._
 
   val PIC = PIClustering
-  val LA = PICLinalg
-  val RDDLA = RDDLinalg
   val A = Array
 
   test("concentricCirclesTest") {
@@ -72,44 +69,10 @@ class PIClusteringSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  def join[T <: Comparable[T]](a: Map[T, _], b: Map[T, _]) = {
-    (a.toSeq ++ b.toSeq).groupBy(_._1).mapValues(_.map(_._2).toList)
-  }
-
-  ignore("irisData") {
-    irisData()
-  }
-
-  def irisData() = {
-    import org.apache.spark.mllib.linalg._
-
-    import scala.io.Source
-    val irisRaw = Source.fromFile("data/mllib/iris.data").getLines.map(_.split(","))
-    val iter: Iterator[(Array[Double], String)] = irisRaw.map { toks => (toks.slice(0, toks.length - 1).map {
-      _.toDouble
-    }, toks(toks.length - 1))
-    }
-    withSpark { sc =>
-      val irisRdd = sc.parallelize(iter.toSeq.map { case (vect, label) =>
-        (Vectors.dense(vect), label)
-      })
-      val irisVectorsRdd = irisRdd.map(_._1).cache()
-      val irisLabelsRdd = irisRdd.map(_._2)
-      val model = KMeans.train(irisVectorsRdd, 3, 10, 1)
-      val pred = model.predict(irisVectorsRdd).zip(irisLabelsRdd)
-      val predColl = pred.collect
-      irisVectorsRdd.unpersist()
-      predColl
-    }
-
-  }
-
-
 }
 
 object PIClusteringSuite {
   val logger = Logger.getLogger(getClass.getName)
-  val LA = PICLinalg
   val A = Array
 
   def pdoub(d: Double) = f"$d%1.6f"
@@ -135,7 +98,8 @@ object PIClusteringSuite {
       idStart += 1000
       val circlePoints = for (thetax <- 0 until csp.nPoints) yield {
         val theta = thetax * 2 * Math.PI / csp.nPoints
-        val (x, y) = (csp.radius * Math.cos(theta) * (1 + normalGen.nextValue * csp.noiseToRadiusRatio),
+        val (x, y) = (csp.radius * Math.cos(theta)
+          * (1 + normalGen.nextValue * csp.noiseToRadiusRatio),
           csp.radius * Math.sin(theta) * (1 + normalGen.nextValue * csp.noiseToRadiusRatio))
         (Point(idStart + thetax, x, y))
       }
@@ -148,40 +112,6 @@ object PIClusteringSuite {
 
   def printPoints(points: Seq[Point]) = {
     points.mkString("[", " , ", "]")
-  }
-
-  def createAffinityMatrix() = {
-    val dat1 = A(
-      A(0.0, 0.4, 0.8, 0.9),
-      A(0.4, 0.0, 0.7, 0.5),
-      A(0.8, 0.7, 0.0, 0.75),
-      A(0.9, 0.5, 0.75, 0.0)
-    )
-
-    val aMat = new BDM(dat1.length, dat1.length, dat1.flatten)
-    logger.info(s"Input mat: ${LA.printMatrix(dat1.flatten, 4, 4)}")
-    val Darrarr = dat1.toArray.zipWithIndex.map { case (dvect, ix) =>
-      val sum = dvect.foldLeft(0.0) {
-        _ + _
-      }
-      dvect.zipWithIndex.map { case (d, dx) =>
-        if (ix == dx) {
-          1.0 / sum
-        } else {
-          0.0
-        }
-      }
-    }
-    val D = new BDM(dat1.length, dat1(0).length, Darrarr.flatten)
-    print(s"D =\n ${LA.printMatrix(D.toArray, D.rows, D.cols)}")
-
-    val DxDat1: BDM[Double] = D * aMat
-    print(s"D * Dat1 =\n ${LA.printMatrix(DxDat1)}")
-    (aMat, DxDat1)
-  }
-
-  def saveToMatplotLib(dmat: DMatrix, optLegend: Option[Array[String]], optLabels: Option[Array[Array[String]]]) = {
-
   }
 
   def main(args: Array[String]) {
