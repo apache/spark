@@ -2065,7 +2065,7 @@ class RDD(object):
         The iterator will consume as much memory as the largest partition in this RDD.
         >>> rdd = sc.parallelize(range(10))
         >>> [x for x in rdd.toLocalIterator()]
-        [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+        [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
         """
         partitions = xrange(self.getNumPartitions())
         for partition in partitions:
