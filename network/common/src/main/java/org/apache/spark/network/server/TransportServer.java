@@ -100,8 +100,7 @@ public class TransportServer implements Closeable {
       }
     });
 
-    channelFuture = bootstrap.bind(new InetSocketAddress(portToBind));
-    channelFuture.syncUninterruptibly();
+    bindRightPort(portToBind);
 
     port = ((InetSocketAddress) channelFuture.channel().localAddress()).getPort();
     logger.debug("Shuffle server started on port :" + port);
@@ -122,5 +121,31 @@ public class TransportServer implements Closeable {
     }
     bootstrap = null;
   }
+  private void bindRightPort(int portToBind) {
+    int maxPortRetries = conf.portMaxRetries();
 
+    for (int i = 0; i <= maxPortRetries; i++) {
+      int tryPort = -1;
+      if (0 == portToBind) {
+        tryPort = 0;
+      } else {
+        tryPort = ((portToBind + i - 1024) % (65536 - 1024)) + 1024;
+      }
+      try {
+        channelFuture = bootstrap.bind(new InetSocketAddress(tryPort));
+        channelFuture.syncUninterruptibly();
+        return;
+      } catch (Exception e) {
+        logger.warn("Netty service could not bind on port " + tryPort +
+          ". Attempting the next port.");
+        if (i >= maxPortRetries) {
+          logger.error(e.getMessage() + ": Netty server failed after "
+            + maxPortRetries + " retries.");
+
+          // If it can't find a right port, it should exit directly.
+          System.exit(-1);
+        }
+      }
+    }
+  }
 }
