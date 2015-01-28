@@ -128,7 +128,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
 #'
 #'  sc <- sparkR.init()
 #'  # Include the matrix library we will be using
-#'  includePackage(Matrix)
+#'  includePackage(sc, Matrix)
 #'
 #'  generateSparse <- function(x) {
 #'    sparseMatrix(i=c(1, 2, 3), j=c(1, 2, 3), x=c(1, 2, 3))
