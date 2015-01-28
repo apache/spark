@@ -927,4 +927,44 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       mutableDependencies += dep
     }
   }
+
+  test("nested RDDs are not supported (SPARK-5063)") {
+    val rdd: RDD[Int] = sc.parallelize(1 to 100)
+    val rdd2: RDD[Int] = sc.parallelize(1 to 100)
+    val thrown = intercept[SparkException] {
+      val nestedRDD: RDD[RDD[Int]] = rdd.mapPartitions { x => Seq(rdd2.map(x => x)).iterator }
+      nestedRDD.count()
+    }
+    assert(thrown.getMessage.contains("SPARK-5063"))
+  }
+
+  test("actions cannot be performed inside of transformations (SPARK-5063)") {
+    val rdd: RDD[Int] = sc.parallelize(1 to 100)
+    val rdd2: RDD[Int] = sc.parallelize(1 to 100)
+    val thrown = intercept[SparkException] {
+      rdd.map(x => x * rdd2.count).collect()
+    }
+    assert(thrown.getMessage.contains("SPARK-5063"))
+  }
+
+  test("cannot run actions after SparkContext has been stopped (SPARK-5063)") {
+    val existingRDD = sc.parallelize(1 to 100)
+    sc.stop()
+    val thrown = intercept[IllegalStateException] {
+      existingRDD.count()
+    }
+    assert(thrown.getMessage.contains("shutdown"))
+  }
+
+  test("cannot call methods on a stopped SparkContext (SPARK-5063)") {
+    sc.stop()
+    def assertFails(block: => Any): Unit = {
+      val thrown = intercept[IllegalStateException] {
+        block
+      }
+      assert(thrown.getMessage.contains("stopped"))
+    }
+    assertFails { sc.parallelize(1 to 100) }
+    assertFails { sc.textFile("/nonexistent-path") }
+  }
 }

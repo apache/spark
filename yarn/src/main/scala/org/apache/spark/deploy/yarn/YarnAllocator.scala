@@ -60,7 +60,6 @@ private[yarn] class YarnAllocator(
 
   import YarnAllocator._
 
-  // These two complementary data structures are locked on allocatedHostToContainersMap.
   // Visible for testing.
   val allocatedHostToContainersMap =
     new HashMap[String, collection.mutable.Set[ContainerId]]
@@ -355,20 +354,18 @@ private[yarn] class YarnAllocator(
         }
       }
 
-      allocatedHostToContainersMap.synchronized {
-        if (allocatedContainerToHostMap.containsKey(containerId)) {
-          val host = allocatedContainerToHostMap.get(containerId).get
-          val containerSet = allocatedHostToContainersMap.get(host).get
+      if (allocatedContainerToHostMap.containsKey(containerId)) {
+        val host = allocatedContainerToHostMap.get(containerId).get
+        val containerSet = allocatedHostToContainersMap.get(host).get
 
-          containerSet.remove(containerId)
-          if (containerSet.isEmpty) {
-            allocatedHostToContainersMap.remove(host)
-          } else {
-            allocatedHostToContainersMap.update(host, containerSet)
-          }
-
-          allocatedContainerToHostMap.remove(containerId)
+        containerSet.remove(containerId)
+        if (containerSet.isEmpty) {
+          allocatedHostToContainersMap.remove(host)
+        } else {
+          allocatedHostToContainersMap.update(host, containerSet)
         }
+
+        allocatedContainerToHostMap.remove(containerId)
       }
     }
   }
