@@ -276,7 +276,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   test("date row") {
     checkAnswer(sql(
       """select cast("2015-01-28" as date) from testData limit 1"""),
-      Row(DateUtils.fromJavaDate(java.sql.Date.valueOf("2015-01-28")))
+      Row(java.sql.Date.valueOf("2015-01-28"))
     )
   }
 

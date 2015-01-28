@@ -66,6 +66,7 @@ trait ScalaReflection {
         }.toArray)
     case (d: BigDecimal, _) => Decimal(d)
     case (d: java.math.BigDecimal, _) => Decimal(d)
+    case (d: java.sql.Date, _) => DateUtils.fromJavaDate(d)
     case (other, _) => other
   }
 
@@ -79,6 +80,7 @@ trait ScalaReflection {
     }
     case (r: Row, s: StructType) => convertRowToScala(r, s)
     case (d: Decimal, _: DecimalType) => d.toJavaBigDecimal
+    case (i: Int, DateType) => DateUtils.toJavaDate(i)
     case (other, _) => other
   }
 
