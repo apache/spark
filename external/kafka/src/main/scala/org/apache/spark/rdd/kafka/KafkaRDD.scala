@@ -34,8 +34,6 @@ import kafka.utils.VerifiableProperties
 /** A batch-oriented interface for consuming from Kafka.
   * Starting and ending offsets are specified in advance,
   * so that you can control exactly-once semantics.
-  * For an easy interface to Kafka-managed offsets,
-  *  see {@link org.apache.spark.rdd.kafka.KafkaCluster}
   * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
   * configuration parameters</a>.
   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
@@ -44,17 +42,20 @@ import kafka.utils.VerifiableProperties
   *   range of offsets for a given Kafka topic/partition
   * @param messageHandler function for translating each message into the desired type
   */
+private[spark]
 class KafkaRDD[
   K: ClassTag,
   V: ClassTag,
   U <: Decoder[_]: ClassTag,
   T <: Decoder[_]: ClassTag,
-  R: ClassTag](
+  R: ClassTag] private[spark] (
     sc: SparkContext,
-    val kafkaParams: Map[String, String],
-    val batch: Array[KafkaRDDPartition],
+    kafkaParams: Map[String, String],
+    private[spark] val batch: Array[KafkaRDDPartition],
     messageHandler: MessageAndMetadata[K, V] => R
-  ) extends RDD[R](sc, Nil) with Logging {
+  ) extends RDD[R](sc, Nil) with Logging with HasOffsetRanges {
+
+  def offsetRanges: Array[OffsetRange] = batch.asInstanceOf[Array[OffsetRange]]
 
   override def getPartitions: Array[Partition] = batch.asInstanceOf[Array[Partition]]
 
@@ -160,6 +161,7 @@ class KafkaRDD[
 
 }
 
+private[spark]
 object KafkaRDD {
   import KafkaCluster.LeaderOffset
 

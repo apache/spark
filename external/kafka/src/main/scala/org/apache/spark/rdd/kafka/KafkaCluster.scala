@@ -32,6 +32,7 @@ import kafka.consumer.{ConsumerConfig, SimpleConsumer}
   *   Requires "metadata.broker.list" or "bootstrap.servers" to be set with Kafka broker(s),
   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form
   */
+private[spark]
 class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   import KafkaCluster.{Err, LeaderOffset}
 
@@ -297,6 +298,7 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   }
 }
 
+private[spark]
 object KafkaCluster {
   type Err = ArrayBuffer[Throwable]
 

@@ -17,66 +17,54 @@
 
 package org.apache.spark.rdd.kafka
 
-import org.apache.spark.Partition
+/** Represents a range of offsets from a single Kafka TopicAndPartition */
+trait OffsetRange {
+  /** kafka topic name */
+  def topic: String
 
-/** @param topic kafka topic name
-  * @param partition kafka partition id
-  * @param fromOffset inclusive starting offset
-  * @param untilOffset exclusive ending offset
-  * @param host preferred kafka host, i.e. the leader at the time the rdd was created
-  * @param port preferred kafka host's port
-  */
-private[spark]
-class KafkaRDDPartition(
-  override val index: Int,
+  /** kafka partition id */
+  def partition: Int
+
+  /** inclusive starting offset */
+  def fromOffset: Long
+
+  /** exclusive ending offset */
+  def untilOffset: Long
+
+  /** preferred kafka host, i.e. the leader at the time of creation */
+  def host: String
+
+  /** preferred kafka host's port */
+  def port: Int
+}
+
+/** Something that has a collection of OffsetRanges */
+trait HasOffsetRanges {
+  def offsetRanges: Array[OffsetRange]
+}
+
+private class OffsetRangeImpl(
   override val topic: String,
   override val partition: Int,
   override val fromOffset: Long,
   override val untilOffset: Long,
   override val host: String,
   override val port: Int
-) extends Partition with OffsetRange {
-  def toTuple: (Int, String, Int, Long, Long, String, Int) = (
-    index,
-    topic,
-    partition,
-    fromOffset,
-    untilOffset,
-    host,
-    port
-  )
+) extends OffsetRange
 
-}
-
-private[spark]
-object KafkaRDDPartition {
+object OffsetRange {
   def apply(
-    index: Int,
     topic: String,
     partition: Int,
     fromOffset: Long,
     untilOffset: Long,
     host: String,
-    port: Int
-  ): KafkaRDDPartition = new KafkaRDDPartition(
-    index,
-    topic,
-    partition,
-    fromOffset,
-    untilOffset,
-    host,
-    port
-  )
-
-  def apply(tuple: (Int, String, Int, Long, Long, String, Int)): KafkaRDDPartition = {
-    new KafkaRDDPartition(
-      tuple._1,
-      tuple._2,
-      tuple._3,
-      tuple._4,
-      tuple._5,
-      tuple._6,
-      tuple._7
-    )
-  }
+    port: Int): OffsetRange =
+    new OffsetRangeImpl(
+      topic,
+      partition,
+      fromOffset,
+      untilOffset,
+      host,
+      port)
 }

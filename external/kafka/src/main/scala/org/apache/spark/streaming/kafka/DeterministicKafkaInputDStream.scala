@@ -51,6 +51,7 @@ import org.apache.spark.streaming.dstream._
   * @param messageHandler function for translating each message into the desired type
   * @param maxRetries maximum number of times in a row to retry getting leaders' offsets
   */
+private[streaming]
 class DeterministicKafkaInputDStream[
   K: ClassTag,
   V: ClassTag,
@@ -61,7 +62,7 @@ class DeterministicKafkaInputDStream[
     val kafkaParams: Map[String, String],
     val fromOffsets: Map[TopicAndPartition, Long],
     messageHandler: MessageAndMetadata[K, V] => R,
-    maxRetries: Int = 1
+    maxRetries: Int
 ) extends InputDStream[R](ssc_) with Logging {
 
   protected[streaming] override val checkpointData =
