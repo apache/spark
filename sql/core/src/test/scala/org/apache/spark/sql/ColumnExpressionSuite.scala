@@ -33,7 +33,7 @@ class ColumnExpressionSuite extends QueryTest {
 
   ignore("star qualified by data frame object") {
     // This is not yet supported.
-    val df = testData.toDF
+    val df = testData.toDataFrame
     checkAnswer(df.select(df("*")), df.collect().toSeq)
   }
 
@@ -106,13 +106,13 @@ class ColumnExpressionSuite extends QueryTest {
 
   test("isNull") {
     checkAnswer(
-      nullStrings.toDF.where($"s".isNull),
+      nullStrings.toDataFrame.where($"s".isNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) eq null))
   }
 
   test("isNotNull") {
     checkAnswer(
-      nullStrings.toDF.where($"s".isNotNull),
+      nullStrings.toDataFrame.where($"s".isNotNull),
       nullStrings.collect().toSeq.filter(r => r.getString(1) ne null))
   }
 

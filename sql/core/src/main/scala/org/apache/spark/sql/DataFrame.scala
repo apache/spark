@@ -106,7 +106,7 @@ class DataFrame protected[sql](
    * An implicit conversion function internal to this class for us to avoid doing
    * "new DataFrame(...)" everywhere.
    */
-  private[this] implicit def toDataFrame(logicalPlan: LogicalPlan): DataFrame = {
+  private implicit def logicalPlanToDataFrame(logicalPlan: LogicalPlan): DataFrame = {
     new DataFrame(sqlContext, logicalPlan, true)
   }
 
@@ -130,7 +130,7 @@ class DataFrame protected[sql](
   /**
    * Return the object itself. Used to force an implicit conversion from RDD to DataFrame in Scala.
    */
-  def toDF: DataFrame = this
+  def toDataFrame: DataFrame = this
 
   /** Return the schema of this [[DataFrame]]. */
   override def schema: StructType = queryExecution.analyzed.schema
