@@ -20,7 +20,7 @@ package org.apache.spark.sql.test
 import scala.language.implicitConversions
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{SchemaRDD, SQLConf, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /** A SQLContext that can be used for local testing. */
@@ -40,8 +40,8 @@ object TestSQLContext
    * Turn a logical plan into a SchemaRDD. This should be removed once we have an easier way to
    * construct SchemaRDD directly out of local data without relying on implicits.
    */
-  protected[sql] implicit def logicalPlanToSparkQuery(plan: LogicalPlan): SchemaRDD = {
-    new SchemaRDD(this, plan)
+  protected[sql] implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
+    new DataFrame(this, plan)
   }
 
 }

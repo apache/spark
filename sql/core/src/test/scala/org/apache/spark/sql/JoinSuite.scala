@@ -20,19 +20,20 @@ package org.apache.spark.sql
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.TestData._
+import org.apache.spark.sql.dsl._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.test.TestSQLContext._
+
 
 class JoinSuite extends QueryTest with BeforeAndAfterEach {
   // Ensures tables are loaded.
   TestData
 
   test("equi-join is hash-join") {
-    val x = testData2.as('x)
-    val y = testData2.as('y)
-    val join = x.join(y, Inner, Some("x.a".attr === "y.a".attr)).queryExecution.analyzed
+    val x = testData2.as("x")
+    val y = testData2.as("y")
+    val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.analyzed
     val planned = planner.HashJoin(join)
     assert(planned.size === 1)
   }
@@ -105,17 +106,16 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("multiple-key equi-join is hash-join") {
-    val x = testData2.as('x)
-    val y = testData2.as('y)
-    val join = x.join(y, Inner,
-      Some("x.a".attr === "y.a".attr && "x.b".attr === "y.b".attr)).queryExecution.analyzed
+    val x = testData2.as("x")
+    val y = testData2.as("y")
+    val join = x.join(y, ($"x.a" === $"y.a") && ($"x.b" === $"y.b")).queryExecution.analyzed
     val planned = planner.HashJoin(join)
     assert(planned.size === 1)
   }
 
   test("inner join where, one match per row") {
     checkAnswer(
-      upperCaseData.join(lowerCaseData, Inner).where('n === 'N),
+      upperCaseData.join(lowerCaseData).where('n === 'N),
       Seq(
         Row(1, "A", 1, "a"),
         Row(2, "B", 2, "b"),
@@ -126,7 +126,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
 
   test("inner join ON, one match per row") {
     checkAnswer(
-      upperCaseData.join(lowerCaseData, Inner, Some('n === 'N)),
+      upperCaseData.join(lowerCaseData, $"n" === $"N"),
       Seq(
         Row(1, "A", 1, "a"),
         Row(2, "B", 2, "b"),
@@ -136,10 +136,10 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("inner join, where, multiple matches") {
-    val x = testData2.where('a === 1).as('x)
-    val y = testData2.where('a === 1).as('y)
+    val x = testData2.where($"a" === Literal(1)).as("x")
+    val y = testData2.where($"a" === Literal(1)).as("y")
     checkAnswer(
-      x.join(y).where("x.a".attr === "y.a".attr),
+      x.join(y).where($"x.a" === $"y.a"),
       Row(1,1,1,1) ::
       Row(1,1,1,2) ::
       Row(1,2,1,1) ::
@@ -148,22 +148,21 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("inner join, no matches") {
-    val x = testData2.where('a === 1).as('x)
-    val y = testData2.where('a === 2).as('y)
+    val x = testData2.where($"a" === Literal(1)).as("x")
+    val y = testData2.where($"a" === Literal(2)).as("y")
     checkAnswer(
-      x.join(y).where("x.a".attr === "y.a".attr),
+      x.join(y).where($"x.a" === $"y.a"),
       Nil)
   }
 
   test("big inner join, 4 matches per row") {
     val bigData = testData.unionAll(testData).unionAll(testData).unionAll(testData)
-    val bigDataX = bigData.as('x)
-    val bigDataY = bigData.as('y)
+    val bigDataX = bigData.as("x")
+    val bigDataY = bigData.as("y")
 
     checkAnswer(
-      bigDataX.join(bigDataY).where("x.key".attr === "y.key".attr),
-      testData.flatMap(
-        row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
+      bigDataX.join(bigDataY).where($"x.key" === $"y.key"),
+      testData.rdd.flatMap(row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
   }
 
   test("cartisian product join") {
@@ -177,7 +176,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
 
   test("left outer join") {
     checkAnswer(
-      upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N)),
+      upperCaseData.join(lowerCaseData, $"n" === $"N", "left"),
       Row(1, "A", 1, "a") ::
         Row(2, "B", 2, "b") ::
         Row(3, "C", 3, "c") ::
@@ -186,7 +185,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(6, "F", null, null) :: Nil)
 
     checkAnswer(
-      upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N && 'n > 1)),
+      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"n" > Literal(1), "left"),
       Row(1, "A", null, null) ::
         Row(2, "B", 2, "b") ::
         Row(3, "C", 3, "c") ::
@@ -195,7 +194,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(6, "F", null, null) :: Nil)
 
     checkAnswer(
-      upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N && 'N > 1)),
+      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"N" > Literal(1), "left"),
       Row(1, "A", null, null) ::
         Row(2, "B", 2, "b") ::
         Row(3, "C", 3, "c") ::
@@ -204,7 +203,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(6, "F", null, null) :: Nil)
 
     checkAnswer(
-      upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N && 'l > 'L)),
+      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"l" > $"L", "left"),
       Row(1, "A", 1, "a") ::
         Row(2, "B", 2, "b") ::
         Row(3, "C", 3, "c") ::
@@ -240,7 +239,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
 
   test("right outer join") {
     checkAnswer(
-      lowerCaseData.join(upperCaseData, RightOuter, Some('n === 'N)),
+      lowerCaseData.join(upperCaseData, $"n" === $"N", "right"),
       Row(1, "a", 1, "A") ::
         Row(2, "b", 2, "B") ::
         Row(3, "c", 3, "C") ::
@@ -248,7 +247,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 5, "E") ::
         Row(null, null, 6, "F") :: Nil)
     checkAnswer(
-      lowerCaseData.join(upperCaseData, RightOuter, Some('n === 'N && 'n > 1)),
+      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"n" > Literal(1), "right"),
       Row(null, null, 1, "A") ::
         Row(2, "b", 2, "B") ::
         Row(3, "c", 3, "C") ::
@@ -256,7 +255,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 5, "E") ::
         Row(null, null, 6, "F") :: Nil)
     checkAnswer(
-      lowerCaseData.join(upperCaseData, RightOuter, Some('n === 'N && 'N > 1)),
+      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"N" > Literal(1), "right"),
       Row(null, null, 1, "A") ::
         Row(2, "b", 2, "B") ::
         Row(3, "c", 3, "C") ::
@@ -264,7 +263,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 5, "E") ::
         Row(null, null, 6, "F") :: Nil)
     checkAnswer(
-      lowerCaseData.join(upperCaseData, RightOuter, Some('n === 'N && 'l > 'L)),
+      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"l" > $"L", "right"),
       Row(1, "a", 1, "A") ::
         Row(2, "b", 2, "B") ::
         Row(3, "c", 3, "C") ::
@@ -299,14 +298,14 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("full outer join") {
-    upperCaseData.where('N <= 4).registerTempTable("left")
-    upperCaseData.where('N >= 3).registerTempTable("right")
+    upperCaseData.where('N <= Literal(4)).registerTempTable("left")
+    upperCaseData.where('N >= Literal(3)).registerTempTable("right")
 
     val left = UnresolvedRelation(Seq("left"), None)
     val right = UnresolvedRelation(Seq("right"), None)
 
     checkAnswer(
-      left.join(right, FullOuter, Some("left.N".attr === "right.N".attr)),
+      left.join(right, $"left.N" === $"right.N", "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", 3, "C") ::
@@ -315,7 +314,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, FullOuter, Some(("left.N".attr === "right.N".attr) && ("left.N".attr !== 3))),
+      left.join(right, ($"left.N" === $"right.N") && ($"left.N" !== Literal(3)), "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::
@@ -325,7 +324,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, FullOuter, Some(("left.N".attr === "right.N".attr) && ("right.N".attr !== 3))),
+      left.join(right, ($"left.N" === $"right.N") && ($"right.N" !== Literal(3)), "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::
