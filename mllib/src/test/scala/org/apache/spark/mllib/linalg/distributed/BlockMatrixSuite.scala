@@ -120,6 +120,20 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
     }
   }
 
+  test("toCoordinateMatrix") {
+    val coordMat = gridBasedMat.toCoordinateMatrix()
+    assert(coordMat.numRows() === m)
+    assert(coordMat.numCols() === n)
+    assert(coordMat.toBreeze() === gridBasedMat.toBreeze())
+  }
+
+  test("toIndexedRowMatrix") {
+    val rowMat = gridBasedMat.toIndexedRowMatrix()
+    assert(rowMat.numRows() === m)
+    assert(rowMat.numCols() === n)
+    assert(rowMat.toBreeze() === gridBasedMat.toBreeze())
+  }
+
   test("toBreeze and toLocalMatrix") {
     val expected = BDM(
       (1.0, 0.0, 0.0, 0.0),

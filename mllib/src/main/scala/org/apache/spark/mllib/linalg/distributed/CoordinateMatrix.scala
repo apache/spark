@@ -21,8 +21,7 @@ import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Matrix, SparseMatrix, Vectors}
 
 /**
  * :: Experimental ::
@@ -96,6 +95,43 @@ class CoordinateMatrix(
    */
   def toRowMatrix(): RowMatrix = {
     toIndexedRowMatrix().toRowMatrix()
+  }
+
+  /** Converts to BlockMatrix. */
+  def toBlockMatrix(rowsPerBlock: Int, colsPerBlock: Int): BlockMatrix = {
+    val m = numRows()
+    val n = numCols()
+    val numRowBlocks = math.ceil(m.toDouble / rowsPerBlock).toInt
+    val numColBlocks = math.ceil(n.toDouble / colsPerBlock).toInt
+    val partitioner = GridPartitioner(numRowBlocks, numColBlocks, entries.partitions.length)
+
+    val blocks: RDD[((Int, Int), Matrix)] = entries.map { entry =>
+      val blockRowIndex = (entry.i / rowsPerBlock).toInt
+      val blockColIndex = (entry.j / colsPerBlock).toInt
+
+      val rowId = entry.i % rowsPerBlock
+      val colId = entry.j % colsPerBlock
+
+      ((blockRowIndex, blockColIndex), (rowId.toInt, colId.toInt, entry.value))
+    }.groupByKey(partitioner).map { case ((blockRowIndex, blockColIndex), entry) =>
+      val effRows =
+        if (blockRowIndex == numRowBlocks - 1) {
+          val modulo = m % rowsPerBlock
+          if (modulo != 0) modulo else rowsPerBlock
+        } else {
+          rowsPerBlock
+        }
+      val effCols =
+        if (blockColIndex == numColBlocks - 1) {
+          val modulo = n % colsPerBlock
+          if (modulo != 0) modulo else colsPerBlock
+        } else {
+          colsPerBlock
+        }
+      ((blockRowIndex.toInt, blockColIndex.toInt),
+        SparseMatrix.fromCOO(effRows.toInt, effCols.toInt, entry))
+    }
+    new BlockMatrix(blocks, rowsPerBlock, colsPerBlock, m, n)
   }
 
   /** Determines the size by computing the max row/column index. */

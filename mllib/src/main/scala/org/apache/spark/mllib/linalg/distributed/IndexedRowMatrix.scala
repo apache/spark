@@ -24,6 +24,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.SingularValueDecomposition
 
+import java.util.Arrays
+
 /**
  * :: Experimental ::
  * Represents a row of [[org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix]].
@@ -73,6 +75,11 @@ class IndexedRowMatrix(
    */
   def toRowMatrix(): RowMatrix = {
     new RowMatrix(rows.map(_.vector), 0L, nCols)
+  }
+
+  /** Converts to BlockMatrix. */
+  def toBlockMatrix(rowsPerBlock: Int, colsPerBlock: Int): BlockMatrix = {
+    toCoordinateMatrix().toBlockMatrix(rowsPerBlock, colsPerBlock)
   }
 
   /**

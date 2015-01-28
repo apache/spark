@@ -100,4 +100,11 @@ class CoordinateMatrixSuite extends FunSuite with MLlibTestSparkContext {
       Vectors.dense(0.0, 9.0, 0.0, 0.0))
     assert(rows === expected)
   }
+
+  test("toBlockMatrix") {
+    val blockMat = mat.toBlockMatrix(2, 2)
+    assert(blockMat.numRows() === m)
+    assert(blockMat.numCols() === n)
+    assert(blockMat.toBreeze() === mat.toBreeze())
+  }
 }
