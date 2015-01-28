@@ -20,12 +20,7 @@ package org.apache.spark.sql.hive.execution
 import java.io.{BufferedReader, InputStreamReader}
 import java.io.{DataInputStream, DataOutputStream, EOFException}
 import java.util.Properties
-import java.rmi.server.UID
 
-import scala.reflect.runtime.universe.{runtimeMirror, newTermName}
-
-import org.apache.hadoop.io.Writable
-import org.apache.hadoop.hive.serde2.avro.AvroGenericRecordWritable
 import org.apache.hadoop.hive.serde.serdeConstants
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.Serializer
