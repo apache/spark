@@ -140,16 +140,36 @@ object PIClustering {
   }
 
   /**
-   * Creates an initial Vt(0) used within the first iteration of the PIC
+   * Read Points from an input file in the following format:
+   * Vertex1Id Coord11 Coord12 CoordX13 .. Coord1D
+   * Vertex2Id Coord21 Coord22 CoordX23 .. Coord2D
+   * ..
+   * VertexNId CoordN1 CoordN2 CoordN23 .. CoordND
+   *
+   * Where N is the number of observations, each a D-dimension point
+   *
+   * E.g.
+   *
+   * 19	1.8035177495	0.7460582552	0.2361611395	-0.8645567427	-0.8613062
+   * 10	0.5534111111	1.0456386879	1.7045663273	0.7281759816	1.0807487792
+   * 911	1.200749626	1.8962364439	2.5117192131	-0.4034737281	-0.9069696484
+   *
+   * Which represents three 5-dimensional input Points with VertexIds 19,10, and 911
+   * @param verticesFile Local filesystem path to the Points input file
+   * @return Set of Vertices in format appropriate for consumption by the PIC algorithm
    */
-  private[mllib] def createInitialVector(sc: SparkContext,
-                                         labels: Seq[VertexId],
-                                         rowSums: Seq[Double]) = {
-    val volume = rowSums.fold(0.0) {
-      _ + _
+  def readVerticesfromFile(verticesFile: String): Points = {
+
+    import scala.io.Source
+    val vertices = Source.fromFile(verticesFile).getLines.map { l =>
+      val toks = l.split("\t")
+      val arr = new BDV(toks.slice(1, toks.length).map(_.toDouble))
+      (toks(0).toLong, arr)
+    }.toSeq
+    if (logger.isDebugEnabled) {
+      logger.debug(s"Read in ${vertices.length} from $verticesFile")
     }
-    val initialVt = labels.zip(rowSums.map(_ / volume))
-    initialVt
+    vertices
   }
 
   /**
@@ -248,36 +268,16 @@ object PIClustering {
   }
 
   /**
-   * Read Points from an input file in the following format:
-   * Vertex1Id Coord11 Coord12 CoordX13 .. Coord1D
-   * Vertex2Id Coord21 Coord22 CoordX23 .. Coord2D
-   * ..
-   * VertexNId CoordN1 CoordN2 CoordN23 .. CoordND
-   *
-   * Where N is the number of observations, each a D-dimension point
-   *
-   * E.g.
-   *
-   * 19	1.8035177495	0.7460582552	0.2361611395	-0.8645567427	-0.8613062
-   * 10	0.5534111111	1.0456386879	1.7045663273	0.7281759816	1.0807487792
-   * 911	1.200749626	1.8962364439	2.5117192131	-0.4034737281	-0.9069696484
-   *
-   * Which represents three 5-dimensional input Points with VertexIds 19,10, and 911
-   * @param verticesFile Local filesystem path to the Points input file
-   * @return Set of Vertices in format appropriate for consumption by the PIC algorithm
+   * Creates an initial Vt(0) used within the first iteration of the PIC
    */
-  def readVerticesfromFile(verticesFile: String): Points = {
-
-    import scala.io.Source
-    val vertices = Source.fromFile(verticesFile).getLines.map { l =>
-      val toks = l.split("\t")
-      val arr = new BDV(toks.slice(1, toks.length).map(_.toDouble))
-      (toks(0).toLong, arr)
-    }.toSeq
-    if (logger.isDebugEnabled) {
-      logger.debug(s"Read in ${vertices.length} from $verticesFile")
+  private[mllib] def createInitialVector(sc: SparkContext,
+                                         labels: Seq[VertexId],
+                                         rowSums: Seq[Double]) = {
+    val volume = rowSums.fold(0.0) {
+      _ + _
     }
-    vertices
+    val initialVt = labels.zip(rowSums.map(_ / volume))
+    initialVt
   }
 
   /**
@@ -387,7 +387,7 @@ object PIClustering {
 
   }
 
-  def makeNonZero(dval: Double, tol: Double = DefaultDivideByZeroVal) = {
+  private[mllib] def makeNonZero(dval: Double, tol: Double = DefaultDivideByZeroVal) = {
     if (Math.abs(dval) < tol) {
       Math.signum(dval) * tol
     } else {
@@ -398,9 +398,8 @@ object PIClustering {
   private[mllib] def printMatrix(mat: BDM[Double]): String
   = printMatrix(mat, mat.rows, mat.cols)
 
-  private[mllib] def printMatrix(mat: BDM[Double], numRows: Int, numCols: Int): String = {
-    printMatrix(mat.toArray, numRows, numCols)
-  }
+  private[mllib] def printMatrix(mat: BDM[Double], numRows: Int, numCols: Int): String
+  = printMatrix(mat.toArray, numRows, numCols)
 
   private[mllib] def printMatrix(vectors: Array[BDV[Double]]): String = {
     printMatrix(vectors.map {
