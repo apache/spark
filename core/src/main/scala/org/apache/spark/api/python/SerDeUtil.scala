@@ -153,7 +153,10 @@ private[spark] object SerDeUtil extends Logging {
       iter.flatMap { row =>
         val obj = unpickle.loads(row)
         if (batched) {
-          obj.asInstanceOf[JArrayList[_]].asScala
+          obj match {
+            case array: Array[Any] => array.toSeq
+            case _ => obj.asInstanceOf[JArrayList[_]].asScala
+          }
         } else {
           Seq(obj)
         }
