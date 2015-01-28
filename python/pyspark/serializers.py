@@ -487,7 +487,7 @@ class UTF8Deserializer(Serializer):
         length = read_int(stream)
         if length == SpecialLengths.END_OF_DATA_SECTION:
             raise EOFError
-        if length == SpecialLengths.NULL:
+        elif length == SpecialLengths.NULL:
             return None
         s = stream.read(length)
         return s.decode("utf-8") if self.use_unicode else s
