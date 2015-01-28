@@ -488,6 +488,10 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
         extended != None)
 
     case Token("TOK_DESCTABLE", describeArgs) =>
+      val attrs = Seq(AttributeReference("col_name", StringType, nullable = false)(),
+        AttributeReference("data_type", StringType, nullable = false)(),
+        AttributeReference("comment", StringType, nullable = false)())
+
       // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
       val Some(tableType) :: formatted :: extended :: pretty :: Nil =
         getClauses(Seq("TOK_TABTYPE", "FORMATTED", "EXTENDED", "PRETTY"), describeArgs)
@@ -504,22 +508,14 @@ https://cwiki.apache.org/confluence/display/Hive/Enhanced+Aggregation%2C+Cube%2C
                 // TODO: Actually, a user may mean tableName.columnName. Need to resolve this issue.
                 val tableIdent = extractTableIdent(nameParts.head)
                 DescribeCommand(
-                  UnresolvedRelation(tableIdent, None),
-                  Seq(AttributeReference("col_name", StringType, nullable = false)(),
-                      AttributeReference("data_type", StringType, nullable = false)(),
-                      AttributeReference("comment", StringType, nullable = false)()),
-                      extended.isDefined)
+                  UnresolvedRelation(tableIdent, None), attrs, extended.isDefined)
               case Token(".", dbName :: tableName :: colName :: Nil) =>
                 // It is describing a column with the format like "describe db.table column".
                 NativePlaceholder
               case tableName =>
                 // It is describing a table with the format like "describe table".
                 DescribeCommand(
-                  UnresolvedRelation(Seq(tableName.getText), None),
-                  Seq(AttributeReference("col_name", StringType, nullable = false)(),
-                      AttributeReference("data_type", StringType, nullable = false)(),
-                      AttributeReference("comment", StringType, nullable = false)()),
-                  extended.isDefined)
+                  UnresolvedRelation(Seq(tableName.getText), None), attrs, extended.isDefined)
             }
           }
           // All other cases.

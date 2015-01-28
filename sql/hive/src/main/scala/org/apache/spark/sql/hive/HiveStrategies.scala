@@ -222,8 +222,7 @@ private[hive] trait HiveStrategies {
   case class HiveCommandStrategy(context: HiveContext) extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case describe: DescribeCommand =>
-        val logical = describe.table
-        val resolvedTable = context.executePlan(logical).analyzed
+        val resolvedTable = context.executePlan(describe.table).analyzed
         resolvedTable match {
           case t: MetastoreRelation =>
             ExecutedCommand(
