@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Timestamp, Date}
-
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
 
 
 package object dsl {
@@ -59,37 +57,30 @@ package object dsl {
   def sqrt(e: Column): Column = Sqrt(e.expr)
   def abs(e: Column): Column = Abs(e.expr)
 
+  /**
+   * Creates a [[Column]] of literal value.
+   */
+  def lit(literal: Any): Column = new Column(literal match {
+    case v: Boolean => Literal(v, BooleanType)
+    case v: Byte => Literal(v, ByteType)
+    case v: Short => Literal(v, ShortType)
+    case v: Int => Literal(v, IntegerType)
+    case v: Long => Literal(v, LongType)
+    case v: Float => Literal(v, FloatType)
+    case v: Double => Literal(v, DoubleType)
+    case v: String => Literal(v, StringType)
+    case v: BigDecimal => Literal(Decimal(v), DecimalType.Unlimited)
+    case v: java.math.BigDecimal => Literal(Decimal(v), DecimalType.Unlimited)
+    case v: Decimal => Literal(v, DecimalType.Unlimited)
+    case v: java.sql.Timestamp => Literal(v, TimestampType)
+    case v: java.sql.Date => Literal(v, DateType)
+    case v: Array[Byte] => Literal(v, BinaryType)
+    case null => Literal(null, NullType)
+    case _ =>
+      throw new RuntimeException("Unsupported literal type " + literal.getClass + " " + literal)
+  })
+
   // scalastyle:off
-
-  object literals {
-
-    implicit def booleanToLiteral(b: Boolean): Column = Literal(b)
-
-    implicit def byteToLiteral(b: Byte): Column = Literal(b)
-
-    implicit def shortToLiteral(s: Short): Column = Literal(s)
-
-    implicit def intToLiteral(i: Int): Column = Literal(i)
-
-    implicit def longToLiteral(l: Long): Column = Literal(l)
-
-    implicit def floatToLiteral(f: Float): Column = Literal(f)
-
-    implicit def doubleToLiteral(d: Double): Column = Literal(d)
-
-    implicit def stringToLiteral(s: String): Column = Literal(s)
-
-    implicit def dateToLiteral(d: Date): Column = Literal(d)
-
-    implicit def bigDecimalToLiteral(d: BigDecimal): Column = Literal(d.underlying())
-
-    implicit def bigDecimalToLiteral(d: java.math.BigDecimal): Column = Literal(d)
-
-    implicit def timestampToLiteral(t: Timestamp): Column = Literal(t)
-
-    implicit def binaryToLiteral(a: Array[Byte]): Column = Literal(a)
-  }
-
 
   /* Use the following code to generate:
   (0 to 22).map { x =>

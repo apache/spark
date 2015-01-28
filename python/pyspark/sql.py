@@ -931,7 +931,7 @@ def _parse_schema_abstract(s):
 
 def _infer_schema_type(obj, dataType):
     """
-    Fill the dataType with types infered from obj
+    Fill the dataType with types inferred from obj
 
     >>> schema = _parse_schema_abstract("a b c d")
     >>> row = (1, 1.0, "str", datetime.date(2014, 10, 10))
@@ -2216,7 +2216,7 @@ class DataFrame(object):
         """
         return DataFrame(self._jdf.intersect(other._jdf), self.sql_ctx)
 
-    def Except(self, other):
+    def subtract(self, other):
         """ Return a new [[DataFrame]] containing rows in this frame
         but not in another frame.
 

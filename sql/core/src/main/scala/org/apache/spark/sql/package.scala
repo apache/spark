@@ -38,4 +38,11 @@ package object sql {
    */
   @DeveloperApi
   protected[sql] type Strategy = org.apache.spark.sql.catalyst.planning.GenericStrategy[SparkPlan]
+
+  /** Converts $"col name" into an [[Column]]. */
+//  implicit class StringToColumn(val sc: StringContext) extends AnyVal {
+//    def $(args: Any*): ColumnName = {
+//      new ColumnName(sc.s(args :_*))
+//    }
+//  }
 }

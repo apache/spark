@@ -26,10 +26,11 @@ import org.apache.spark.sql.json.JsonRDD.{compatibleType, enforceCorrectType}
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Literal, QueryTest, Row, SQLConf}
+import org.apache.spark.sql.{QueryTest, Row, SQLConf}
 
 class JsonSuite extends QueryTest {
   import org.apache.spark.sql.json.TestJsonData._
+
   TestJsonData
 
   test("Type promotion") {
@@ -464,8 +465,8 @@ class JsonSuite extends QueryTest {
     // in the Project.
     checkAnswer(
       jsonDF.
-        where('num_str > Literal(BigDecimal("92233720368547758060"))).
-        select(('num_str + Literal(1.2)).as("num")),
+        where('num_str > BigDecimal("92233720368547758060")).
+        select(('num_str + 1.2).as("num")),
       Row(new java.math.BigDecimal("92233720368547758061.2"))
     )
 
