@@ -117,19 +117,10 @@ object SparkSubmit {
    * parameters directly to a REST client, which will submit the application using the
    * REST protocol instead.
    */
-  private def submit(args: SparkSubmitArguments): Unit = {
+  private[spark] def submit(args: SparkSubmitArguments): Unit = {
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
-    val restKey = "spark.submit.rest.enabled"
-    val restEnabled = args.sparkProperties.get(restKey).getOrElse("false").toBoolean
-    if (args.isStandaloneCluster && restEnabled) {
+    if (args.isStandaloneCluster && args.isRestEnabled) {
       printStream.println("Running standalone cluster mode using the stable REST protocol.")
-      // NOTE: since we mutate the values of some configs in `prepareSubmitEnvironment`, we
-      // must update the corresponding fields in the original SparkSubmitArguments to reflect
-      // these changes.
-      args.sparkProperties.clear()
-      args.sparkProperties ++= sysProps
-      sysProps.get("spark.jars").foreach { args.jars = _ }
-      sysProps.get("spark.files").foreach { args.files = _ }
       new StandaloneRestClient().submitDriver(args)
     } else {
       runMain(childArgs, childClasspath, sysProps, childMainClass)
@@ -159,7 +150,7 @@ object SparkSubmit {
       case m if m.startsWith("spark") => STANDALONE
       case m if m.startsWith("mesos") => MESOS
       case m if m.startsWith("local") => LOCAL
-      case _ => printErrorAndExit("Master must start with yarn, spark, mesos or local"); -1
+      case _ => printErrorAndExit("Master must start with yarn, spark, mesos, or local"); -1
     }
 
     // Set the deploy mode; default is client mode
@@ -249,6 +240,8 @@ object SparkSubmit {
 
       // Standalone cluster only
       OptionAssigner(args.jars, STANDALONE, CLUSTER, sysProp = "spark.jars"),
+      OptionAssigner(args.driverMemory, STANDALONE, CLUSTER, clOption = "--memory"),
+      OptionAssigner(args.driverCores, STANDALONE, CLUSTER, clOption = "--cores"),
 
       // Yarn client only
       OptionAssigner(args.queue, YARN, CLIENT, sysProp = "spark.yarn.queue"),
@@ -296,6 +289,20 @@ object SparkSubmit {
           (clusterManager & opt.clusterManager) != 0) {
         if (opt.clOption != null) { childArgs += (opt.clOption, opt.value) }
         if (opt.sysProp != null) { sysProps.put(opt.sysProp, opt.value) }
+      }
+    }
+
+    // In standalone-cluster mode, use Client as a wrapper around the user class
+    // Note that we won't actually launch this class if we're using the stable REST protocol
+    if (args.isStandaloneCluster && !args.isRestEnabled) {
+      childMainClass = "org.apache.spark.deploy.Client"
+      if (args.supervise) {
+        childArgs += "--supervise"
+      }
+      childArgs += "launch"
+      childArgs += (args.master, args.primaryResource, args.mainClass)
+      if (args.childArgs != null) {
+        childArgs ++= args.childArgs
       }
     }
 
@@ -356,14 +363,24 @@ object SparkSubmit {
       sysProps("spark.submit.pyFiles") = formattedPyFiles
     }
 
+    // NOTE: If we are using the REST gateway, we will use the original arguments directly.
+    // Since we mutate the values of some configs in this method, we must update the
+    // corresponding fields in the original SparkSubmitArguments to reflect these changes.
+    if (args.isStandaloneCluster && args.isRestEnabled) {
+      args.sparkProperties.clear()
+      args.sparkProperties ++= sysProps
+      sysProps.get("spark.jars").foreach { args.jars = _ }
+      sysProps.get("spark.files").foreach { args.files = _ }
+    }
+
     (childArgs, childClasspath, sysProps, childMainClass)
   }
 
   /**
    * Run the main method of the child class using the provided launch environment.
    *
-   * Depending on the deploy mode, cluster manager, and the type of the application,
-   * this main class may not necessarily be the one provided by the user.
+   * Note that this main class will not be the one provided by the user if we're
+   * running cluster deploy mode or python applications.
    */
   private def runMain(
       childArgs: Seq[String],

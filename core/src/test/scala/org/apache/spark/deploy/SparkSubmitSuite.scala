@@ -197,6 +197,33 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
     sysProps("spark.shuffle.spill") should be ("false")
   }
 
+  test("handles standalone cluster mode") {
+    val clArgs = Seq(
+      "--deploy-mode", "cluster",
+      "--master", "spark://h:p",
+      "--class", "org.SomeClass",
+      "--supervise",
+      "--driver-memory", "4g",
+      "--driver-cores", "5",
+      "--conf", "spark.shuffle.spill=false",
+      "thejar.jar",
+      "arg1", "arg2")
+    val appArgs = new SparkSubmitArguments(clArgs)
+    val (childArgs, classpath, sysProps, mainClass) = prepareSubmitEnvironment(appArgs)
+    val childArgsStr = childArgs.mkString(" ")
+    childArgsStr should startWith ("--memory 4g --cores 5 --supervise")
+    childArgsStr should include regex ("launch spark://h:p .*thejar.jar org.SomeClass arg1 arg2")
+    mainClass should be ("org.apache.spark.deploy.Client")
+    classpath should have size (0)
+    sysProps should have size (5)
+    sysProps.keys should contain ("SPARK_SUBMIT")
+    sysProps.keys should contain ("spark.master")
+    sysProps.keys should contain ("spark.app.name")
+    sysProps.keys should contain ("spark.jars")
+    sysProps.keys should contain ("spark.shuffle.spill")
+    sysProps("spark.shuffle.spill") should be ("false")
+  }
+
   test("handles standalone client mode") {
     val clArgs = Seq(
       "--deploy-mode", "client",
@@ -279,6 +306,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "--master", "local-cluster[2,1,512]",
       "--jars", jarsString,
       "--conf", "spark.ui.enabled=false",
+      "--conf", "spark.master.rest.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
