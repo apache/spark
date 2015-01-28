@@ -15,24 +15,12 @@
 # limitations under the License.
 #
 
-import uuid
 from abc import ABCMeta
 
+from pyspark.ml.util import Identifiable
+
+
 __all__ = ['Param', 'Params']
-
-
-class Identifiable(object):
-    """
-    Object with a unique ID.
-    """
-
-    def __init__(self):
-        #: A unique id for the object. The default implementation
-        #: concatenates the class name, "-", and 8 random hex chars.
-        self.uid = type(self).__name__ + "-" + uuid.uuid4().hex[:8]
-
-    def __repr__(self):
-        return self.uid
 
 
 class Param(object):

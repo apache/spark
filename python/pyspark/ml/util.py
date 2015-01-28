@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import uuid
+
 
 def inherit_doc(cls):
     for name, func in vars(cls).items():
@@ -28,3 +30,17 @@ def inherit_doc(cls):
                     func.__doc__ = parent_func.__doc__
                     break
     return cls
+
+
+class Identifiable(object):
+    """
+    Object with a unique ID.
+    """
+
+    def __init__(self):
+        #: A unique id for the object. The default implementation
+        #: concatenates the class name, "-", and 8 random hex chars.
+        self.uid = type(self).__name__ + "-" + uuid.uuid4().hex[:8]
+
+    def __repr__(self):
+        return self.uid
