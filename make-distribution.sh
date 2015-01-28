@@ -32,6 +32,10 @@ SPARK_HOME="$(cd "`dirname "$0"`"; pwd)"
 DISTDIR="$SPARK_HOME/dist"
 
 SPARK_TACHYON=false
+TACHYON_VERSION="0.5.0"
+TACHYON_TGZ="tachyon-${TACHYON_VERSION}-bin.tar.gz"
+TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/${TACHYON_TGZ}"
+
 MAKE_TGZ=false
 NAME=none
 MVN="$SPARK_HOME/build/mvn"
@@ -93,7 +97,7 @@ done
 
 if [ -z "$JAVA_HOME" ]; then
   # Fall back on JAVA_HOME from rpm, if found
-  if which rpm &>/dev/null; then
+  if [ $(command -v  rpm) ]; then
     RPM_JAVA_HOME=$(rpm -E %java_home 2>/dev/null)
     if [ "$RPM_JAVA_HOME" != "%java_home" ]; then
       JAVA_HOME=$RPM_JAVA_HOME
@@ -107,7 +111,7 @@ if [ -z "$JAVA_HOME" ]; then
   exit -1
 fi
 
-if which git &>/dev/null; then
+if [ $(command -v git) ]; then
     GITREV=$(git rev-parse --short HEAD 2>/dev/null || :)
     if [ ! -z $GITREV ]; then
 	 GITREVSTRING=" (git revision $GITREV)"
@@ -115,14 +119,15 @@ if which git &>/dev/null; then
     unset GITREV
 fi
 
-if ! which "$MVN" &>/dev/null; then
+
+if [ ! $(command -v $MVN) ] ; then
     echo -e "Could not locate Maven command: '$MVN'."
     echo -e "Specify the Maven command with the --mvn flag"
     exit -1;
 fi
 
-VERSION=$(mvn help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
-SPARK_HADOOP_VERSION=$(mvn help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
+VERSION=$($MVN help:evaluate -Dexpression=project.version 2>/dev/null | grep -v "INFO" | tail -n 1)
+SPARK_HADOOP_VERSION=$($MVN help:evaluate -Dexpression=hadoop.version $@ 2>/dev/null\
     | grep -v "INFO"\
     | tail -n 1)
 SPARK_HIVE=$($MVN help:evaluate -Dexpression=project.activeProfiles -pl sql/hive $@ 2>/dev/null\
@@ -225,16 +230,22 @@ cp -r "$SPARK_HOME/ec2" "$DISTDIR"
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then
-  TACHYON_VERSION="0.5.0"
-  TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/tachyon-${TACHYON_VERSION}-bin.tar.gz"
-
   TMPD=`mktemp -d 2>/dev/null || mktemp -d -t 'disttmp'`
 
   pushd $TMPD > /dev/null
   echo "Fetching tachyon tgz"
-  wget "$TACHYON_URL"
 
-  tar xf "tachyon-${TACHYON_VERSION}-bin.tar.gz"
+  TACHYON_DL="${TACHYON_TGZ}.part"
+  if [ $(command -v curl) ]; then
+    curl --silent -k -L "${TACHYON_URL}" > "${TACHYON_DL}" && mv "${TACHYON_DL}" "${TACHYON_TGZ}"
+  elif [ $(command -v wget) ]; then
+    wget --quiet "${TACHYON_URL}" -O "${TACHYON_DL}" && mv "${TACHYON_DL}" "${TACHYON_TGZ}"
+  else
+    printf "You do not have curl or wget installed. please install Tachyon manually.\n"
+    exit -1
+  fi
+
+  tar xzf "${TACHYON_TGZ}"
   cp "tachyon-${TACHYON_VERSION}/core/target/tachyon-${TACHYON_VERSION}-jar-with-dependencies.jar" "$DISTDIR/lib"
   mkdir -p "$DISTDIR/tachyon/src/main/java/tachyon/web"
   cp -r "tachyon-${TACHYON_VERSION}"/{bin,conf,libexec} "$DISTDIR/tachyon"
