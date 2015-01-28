@@ -88,8 +88,6 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Ea
     val taskScheduler = EasyMock.createMock(classOf[TaskSchedulerImpl])
 
     val listenerBus = EasyMock.createMock(classOf[LiveListenerBus])
-    listenerBus.post(SparkListenerExecutorAdded("s1", new ExecutorInfo("host1", 2)))
-    EasyMock.replay(listenerBus)
 
     val sc = EasyMock.createMock(classOf[SparkContext])
     EasyMock.expect(sc.executorMemory).andReturn(100).anyTimes()
@@ -99,26 +97,30 @@ class MesosSchedulerBackendSuite extends FunSuite with LocalSparkContext with Ea
     EasyMock.expect(sc.listenerBus).andReturn(listenerBus)
     EasyMock.replay(sc)
 
-    val minMem = MemoryUtils.calculateTotalMemory(sc).toInt
+    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
+
+    val minMem = MemoryUtils.calculateTotalMemory(sc)
     val minCpu = 4
+
+    listenerBus.post(SparkListenerExecutorAdded("s1", new ExecutorInfo("host1", minCpu - backend.executorCores)))
+    EasyMock.replay(listenerBus)
 
     val mesosOffers = new java.util.ArrayList[Offer]
     mesosOffers.add(createOffer(1, minMem, minCpu))
     mesosOffers.add(createOffer(2, minMem - 1, minCpu))
     mesosOffers.add(createOffer(3, minMem, minCpu))
 
-    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
 
     val expectedWorkerOffers = new ArrayBuffer[WorkerOffer](2)
     expectedWorkerOffers.append(new WorkerOffer(
       mesosOffers.get(0).getSlaveId.getValue,
       mesosOffers.get(0).getHostname,
-      2
+      minCpu - backend.executorCores
     ))
     expectedWorkerOffers.append(new WorkerOffer(
       mesosOffers.get(2).getSlaveId.getValue,
       mesosOffers.get(2).getHostname,
-      2
+      minCpu - backend.executorCores
     ))
     val taskDesc = new TaskDescription(1L, 0, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
     EasyMock.expect(taskScheduler.resourceOffers(EasyMock.eq(expectedWorkerOffers))).andReturn(Seq(Seq(taskDesc)))
