@@ -262,7 +262,7 @@ object SparkSubmit {
       if (opt.value != null &&
           (deployMode & opt.deployMode) != 0 &&
           (clusterManager & opt.clusterManager) != 0) {
-        if (opt.clOption != null) { childArgs +=(opt.clOption, opt.value) }
+        if (opt.clOption != null) { childArgs += (opt.clOption, opt.value) }
         if (opt.sysProp != null) { sysProps.put(opt.sysProp, opt.value) }
       }
     }
