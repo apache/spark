@@ -21,6 +21,7 @@ import java.util.TimeZone
 
 import org.scalatest.BeforeAndAfterAll
 
+import org.apache.spark.sql.dsl._
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._
@@ -28,6 +29,7 @@ import org.apache.spark.sql.types._
 /* Implicits */
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.test.TestSQLContext._
+
 
 class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   // Make sure the tables are loaded.
@@ -381,8 +383,6 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("big inner join, 4 matches per row") {
-
-
     checkAnswer(
       sql(
         """
@@ -396,7 +396,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
           |   SELECT * FROM testData UNION ALL
           |   SELECT * FROM testData) y
           |WHERE x.key = y.key""".stripMargin),
-      testData.flatMap(
+      testData.rdd.flatMap(
         row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
   }
 
@@ -742,7 +742,7 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
   }
 
   test("metadata is propagated correctly") {
-    val person = sql("SELECT * FROM person")
+    val person: DataFrame = sql("SELECT * FROM person")
     val schema = person.schema
     val docKey = "doc"
     val docValue = "first name"
@@ -751,14 +751,14 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
       .build()
     val schemaWithMeta = new StructType(Array(
       schema("id"), schema("name").copy(metadata = metadata), schema("age")))
-    val personWithMeta = applySchema(person, schemaWithMeta)
-    def validateMetadata(rdd: SchemaRDD): Unit = {
+    val personWithMeta = applySchema(person.rdd, schemaWithMeta)
+    def validateMetadata(rdd: DataFrame): Unit = {
       assert(rdd.schema("name").metadata.getString(docKey) == docValue)
     }
     personWithMeta.registerTempTable("personWithMeta")
-    validateMetadata(personWithMeta.select('name))
-    validateMetadata(personWithMeta.select("name".attr))
-    validateMetadata(personWithMeta.select('id, 'name))
+    validateMetadata(personWithMeta.select($"name"))
+    validateMetadata(personWithMeta.select($"name"))
+    validateMetadata(personWithMeta.select($"id", $"name"))
     validateMetadata(sql("SELECT * FROM personWithMeta"))
     validateMetadata(sql("SELECT id, name FROM personWithMeta"))
     validateMetadata(sql("SELECT * FROM personWithMeta JOIN salary ON id = personId"))

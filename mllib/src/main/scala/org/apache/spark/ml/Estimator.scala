@@ -21,7 +21,7 @@ import scala.annotation.varargs
 
 import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param.{ParamMap, ParamPair, Params}
-import org.apache.spark.sql.SchemaRDD
+import org.apache.spark.sql.DataFrame
 
 /**
  * :: AlphaComponent ::
@@ -38,7 +38,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage with Params {
    * @return fitted model
    */
   @varargs
-  def fit(dataset: SchemaRDD, paramPairs: ParamPair[_]*): M = {
+  def fit(dataset: DataFrame, paramPairs: ParamPair[_]*): M = {
     val map = new ParamMap().put(paramPairs: _*)
     fit(dataset, map)
   }
@@ -50,7 +50,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage with Params {
    * @param paramMap parameter map
    * @return fitted model
    */
-  def fit(dataset: SchemaRDD, paramMap: ParamMap): M
+  def fit(dataset: DataFrame, paramMap: ParamMap): M
 
   /**
    * Fits multiple models to the input data with multiple sets of parameters.
@@ -61,7 +61,7 @@ abstract class Estimator[M <: Model[M]] extends PipelineStage with Params {
    * @param paramMaps an array of parameter maps
    * @return fitted models, matching the input parameter maps
    */
-  def fit(dataset: SchemaRDD, paramMaps: Array[ParamMap]): Seq[M] = {
+  def fit(dataset: DataFrame, paramMaps: Array[ParamMap]): Seq[M] = {
     paramMaps.map(fit(dataset, _))
   }
 }

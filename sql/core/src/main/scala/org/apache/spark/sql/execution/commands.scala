@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{SchemaRDD, SQLConf, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Row, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -137,7 +137,9 @@ case class CacheTableCommand(
     isLazy: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    plan.foreach(p => new SchemaRDD(sqlContext, p).registerTempTable(tableName))
+    plan.foreach { logicalPlan =>
+      sqlContext.registerRDDAsTable(new DataFrame(sqlContext, logicalPlan), tableName)
+    }
     sqlContext.cacheTable(tableName)
 
     if (!isLazy) {
@@ -159,7 +161,7 @@ case class CacheTableCommand(
 case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    sqlContext.table(tableName).unpersist()
+    sqlContext.table(tableName).unpersist(blocking = false)
     Seq.empty[Row]
   }
 

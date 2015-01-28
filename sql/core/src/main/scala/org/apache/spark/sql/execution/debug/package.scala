@@ -22,7 +22,7 @@ import scala.collection.mutable.HashSet
 import org.apache.spark.{AccumulatorParam, Accumulator, SparkContext}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.SparkContext._
-import org.apache.spark.sql.{SchemaRDD, Row}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
 import org.apache.spark.sql.types._
 
@@ -42,7 +42,7 @@ package object debug {
    * Augments SchemaRDDs with debug methods.
    */
   @DeveloperApi
-  implicit class DebugQuery(query: SchemaRDD) {
+  implicit class DebugQuery(query: DataFrame) {
     def debug(): Unit = {
       val plan = query.queryExecution.executedPlan
       val visited = new collection.mutable.HashSet[TreeNodeRef]()

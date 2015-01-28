@@ -32,12 +32,13 @@ import parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf}
+import org.apache.spark.sql.dsl._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.types.DecimalType
-import org.apache.spark.sql.{QueryTest, SQLConf, SchemaRDD}
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
 // with an empty configuration (it is after all not intended to be used in this way?)
@@ -97,11 +98,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
   }
 
   test("fixed-length decimals") {
-    def makeDecimalRDD(decimal: DecimalType): SchemaRDD =
+    def makeDecimalRDD(decimal: DecimalType): DataFrame =
       sparkContext
         .parallelize(0 to 1000)
         .map(i => Tuple1(i / 100.0))
-        .select('_1 cast decimal)
+        .select($"_1" cast decimal as "abcd")
 
     for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
       withTempPath { dir =>

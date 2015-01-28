@@ -52,7 +52,7 @@ class InsertIntoHiveTableSuite extends QueryTest {
     // Make sure the table has been updated.
     checkAnswer(
       sql("SELECT * FROM createAndInsertTest"),
-      testData.toSchemaRDD.collect().toSeq ++ testData.toSchemaRDD.collect().toSeq
+      testData.toDF.collect().toSeq ++ testData.toDF.collect().toSeq
     )
 
     // Now overwrite.

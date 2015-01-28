@@ -53,7 +53,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     val resultsFile = File.createTempFile("test-submit", ".txt")
     val numbers = Seq(1, 2, 3)
     val size = 500
-    val driverId = submitApp(resultsFile, numbers, size)
+    val driverId = submitApplication(resultsFile, numbers, size)
     waitUntilFinished(driverId)
     validateResult(resultsFile, numbers, size)
   }
@@ -68,7 +68,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     val resultsFile = File.createTempFile("test-kill", ".txt")
     val numbers = Seq(1, 2, 3)
     val size = 500
-    val driverId = submitApp(resultsFile, numbers, size)
+    val driverId = submitApplication(resultsFile, numbers, size)
     val killResponse = client.killDriver(masterRestUrl, driverId)
     val killSuccess = killResponse.getFieldNotNull(KillDriverResponseField.SUCCESS)
     waitUntilFinished(driverId)
@@ -90,6 +90,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
   /**
    * Start a local cluster containing one Master and a few Workers.
    * Do not use org.apache.spark.deploy.LocalCluster here because we want the REST URL.
+   * Return the Master's REST URL to which applications should be submitted.
    */
   private def startLocalCluster(): String = {
     val conf = new SparkConf(false)
@@ -111,10 +112,8 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     masterRestUrl
   }
 
-  /**
-   * Submit an application through the stable gateway and return the corresponding driver ID.
-   */
-  private def submitApp(resultsFile: File, numbers: Seq[Int], size: Int): String = {
+  /** Submit the StandaloneRestApp and return the corresponding driver ID. */
+  private def submitApplication(resultsFile: File, numbers: Seq[Int], size: Int): String = {
     val appArgs = Seq(resultsFile.getAbsolutePath) ++ numbers.map(_.toString) ++ Seq(size.toString)
     val commandLineArgs = Array(
       "--deploy-mode", "cluster",
@@ -129,10 +128,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     submitResponse.getFieldNotNull(SubmitDriverResponseField.DRIVER_ID)
   }
 
-  /**
-   * Wait until the given driver has finished running,
-   * up to the specified maximum number of seconds.
-   */
+  /** Wait until the given driver has finished running up to the specified timeout. */
   private def waitUntilFinished(driverId: String, maxSeconds: Int = 10): Unit = {
     var finished = false
     val expireTime = System.currentTimeMillis + maxSeconds * 1000
@@ -189,11 +185,11 @@ private object StandaloneRestProtocolSuite {
 
   /**
    * Return a list of class files compiled for StandaloneRestApp.
-   * This includes all the anonymous classes used in StandaloneRestApp#main.
+   * This includes all the anonymous classes used in the application.
    */
   private def getClassFiles: Seq[File] = {
-    val clazz = StandaloneRestApp.getClass
     val className = Utils.getFormattedClassName(StandaloneRestApp)
+    val clazz = StandaloneRestApp.getClass
     val basePath = clazz.getProtectionDomain.getCodeSource.getLocation.toURI.getPath
     val baseDir = new File(basePath + "/" + pathPrefix)
     baseDir.listFiles().filter(_.getName.contains(className))
@@ -202,22 +198,21 @@ private object StandaloneRestProtocolSuite {
 
 /**
  * Sample application to be submitted to the cluster using the stable gateway.
- * All relevant classes will be packaged into a jar dynamically and submitted to the cluster.
+ * All relevant classes will be packaged into a jar at run time.
  */
 object StandaloneRestApp {
   // Usage: [path to results file] [num1] [num2] [num3] [rddSize]
   // The first line of the results file should be (num1 + num2 + num3)
   // The second line should be (rddSize / 2) + 1
   def main(args: Array[String]) {
-    assert(args.size == 5)
+    assert(args.size == 5, s"Expected exactly 5 arguments: ${args.mkString(",")}")
     val resultFile = new File(args(0))
     val writer = new PrintWriter(resultFile)
     try {
-      val firstLine = args(1).toInt + args(2).toInt + args(3).toInt
-      val rddSize = args(4).toInt
       val conf = new SparkConf()
       val sc = new SparkContext(conf)
-      val secondLine = sc.parallelize(1 to rddSize)
+      val firstLine = args(1).toInt + args(2).toInt + args(3).toInt
+      val secondLine = sc.parallelize(1 to args(4).toInt)
         .map { i => (i / 2, i) }
         .reduceByKey(_ + _)
         .count()

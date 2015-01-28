@@ -74,13 +74,12 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
             <ul class="unstyled">
               <li><strong>URL:</strong> {state.uri}</li>
               {
-                state.stableUri
-                  .map { uri =>
-                    <li>
-                      <strong>Stable URL:</strong> {uri}
-                      <span class="stable-uri"> (for standalone cluster mode in Spark 1.3+)</span>
-                    </li> }
-                  .getOrElse { Seq.empty }
+                state.stableUri.map { uri =>
+                  <li>
+                    <strong>Stable URL:</strong> {uri}
+                    <span class="stable-uri"> (for standalone cluster mode in Spark 1.3+)</span>
+                  </li>
+                }.getOrElse { Seq.empty }
               }
               <li><strong>Workers:</strong> {state.workers.size}</li>
               <li><strong>Cores:</strong> {state.workers.map(_.cores).sum} Total,

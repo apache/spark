@@ -292,6 +292,18 @@ object SparkSubmit {
       }
     }
 
+    // Add the application jar automatically so the user doesn't have to call sc.addJar
+    // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
+    // For python files, the primary resource is already distributed as a regular file
+    val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
+    if (!isYarnCluster && !args.isPython) {
+      var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
+      if (isUserJar(args.primaryResource)) {
+        jars = jars ++ Seq(args.primaryResource)
+      }
+      sysProps.put("spark.jars", jars.mkString(","))
+    }
+
     // In standalone-cluster mode, use Client as a wrapper around the user class
     // Note that we won't actually launch this class if we're using the stable REST protocol
     if (args.isStandaloneCluster && !args.isRestEnabled) {
@@ -304,18 +316,6 @@ object SparkSubmit {
       if (args.childArgs != null) {
         childArgs ++= args.childArgs
       }
-    }
-
-    // Add the application jar automatically so the user doesn't have to call sc.addJar
-    // For YARN cluster mode, the jar is already distributed on each node as "app.jar"
-    // For python files, the primary resource is already distributed as a regular file
-    val isYarnCluster = clusterManager == YARN && deployMode == CLUSTER
-    if (!isYarnCluster && !args.isPython) {
-      var jars = sysProps.get("spark.jars").map(x => x.split(",").toSeq).getOrElse(Seq.empty)
-      if (isUserJar(args.primaryResource)) {
-        jars = jars ++ Seq(args.primaryResource)
-      }
-      sysProps.put("spark.jars", jars.mkString(","))
     }
 
     // In yarn-cluster mode, use yarn.Client as a wrapper around the user class

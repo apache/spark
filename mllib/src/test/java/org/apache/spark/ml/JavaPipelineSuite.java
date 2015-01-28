@@ -26,7 +26,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.feature.StandardScaler;
-import org.apache.spark.sql.SchemaRDD;
+import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.SQLContext;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
@@ -37,7 +37,7 @@ public class JavaPipelineSuite {
 
   private transient JavaSparkContext jsc;
   private transient SQLContext jsql;
-  private transient SchemaRDD dataset;
+  private transient DataFrame dataset;
 
   @Before
   public void setUp() {
@@ -65,7 +65,7 @@ public class JavaPipelineSuite {
       .setStages(new PipelineStage[] {scaler, lr});
     PipelineModel model = pipeline.fit(dataset);
     model.transform(dataset).registerTempTable("prediction");
-    SchemaRDD predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
+    DataFrame predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
     predictions.collectAsList();
   }
 }
