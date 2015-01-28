@@ -1,3 +1,4 @@
+import copy
 from datetime import datetime
 import getpass
 import logging
@@ -192,8 +193,10 @@ class MasterJob(BaseJob):
             self.heartbeat()
             dagbag.collect_dags(only_if_updated=True)
             dags = [dagbag.dags[dag_id]] if dag_id else dagbag.dags.values()
+            paused_dag_ids = dagbag.paused_dags()
             for dag in dags:
-
+                if dag.dag_id in paused_dag_ids:
+                    continue
                 logging.info(
                     "Getting latest instance "
                     "for all task in dag " + dag.dag_id)

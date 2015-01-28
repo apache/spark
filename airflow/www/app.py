@@ -1105,14 +1105,19 @@ class UserModelView(LoginMixin, ModelView):
 mv = UserModelView(models.User, Session, name="Users", category="Admin")
 admin.add_view(mv)
 
+class DagModelView(ModelView):
+    column_list = ('dag_id', 'is_paused')
+mv = DagModelView(
+    models.DAG, Session, name="Pause DAGs", category="Admin")
+admin.add_view(mv)
 
 class ReloadTaskView(BaseView):
     @expose('/')
     def index(self):
         logging.info("Reloading the dags")
         dagbag.collect_dags()
+        dagbag.merge_dags()
         return redirect(url_for('index'))
-
 admin.add_view(ReloadTaskView(name='Reload DAGs', category="Admin"))
 
 
