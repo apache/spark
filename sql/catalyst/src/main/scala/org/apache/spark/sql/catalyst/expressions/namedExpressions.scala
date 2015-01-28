@@ -77,6 +77,9 @@ abstract class Attribute extends NamedExpression {
  * For example the SQL expression "1 + 1 AS a" could be represented as follows:
  *  Alias(Add(Literal(1), Literal(1), "a")()
  *
+ * Note that exprId and qualifiers are in a separate parameter list because
+ * we only pattern match on child and name.
+ *
  * @param child the computation being performed
  * @param name the name to be associated with the result of computing [[child]].
  * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this

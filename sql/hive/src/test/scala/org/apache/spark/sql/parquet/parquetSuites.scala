@@ -177,81 +177,81 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
     test(s"ordering of the partitioning columns $table") {
       checkAnswer(
         sql(s"SELECT p, stringField FROM $table WHERE p = 1"),
-        Seq.fill(10)((1, "part-1"))
+        Seq.fill(10)(Row(1, "part-1"))
       )
 
       checkAnswer(
         sql(s"SELECT stringField, p FROM $table WHERE p = 1"),
-        Seq.fill(10)(("part-1", 1))
+        Seq.fill(10)(Row("part-1", 1))
       )
     }
 
     test(s"project the partitioning column $table") {
       checkAnswer(
         sql(s"SELECT p, count(*) FROM $table group by p"),
-        (1, 10) ::
-        (2, 10) ::
-        (3, 10) ::
-        (4, 10) ::
-        (5, 10) ::
-        (6, 10) ::
-        (7, 10) ::
-        (8, 10) ::
-        (9, 10) ::
-        (10, 10) :: Nil
+        Row(1, 10) ::
+          Row(2, 10) ::
+          Row(3, 10) ::
+          Row(4, 10) ::
+          Row(5, 10) ::
+          Row(6, 10) ::
+          Row(7, 10) ::
+          Row(8, 10) ::
+          Row(9, 10) ::
+          Row(10, 10) :: Nil
       )
     }
 
     test(s"project partitioning and non-partitioning columns $table") {
       checkAnswer(
         sql(s"SELECT stringField, p, count(intField) FROM $table GROUP BY p, stringField"),
-        ("part-1", 1, 10) ::
-        ("part-2", 2, 10) ::
-        ("part-3", 3, 10) ::
-        ("part-4", 4, 10) ::
-        ("part-5", 5, 10) ::
-        ("part-6", 6, 10) ::
-        ("part-7", 7, 10) ::
-        ("part-8", 8, 10) ::
-        ("part-9", 9, 10) ::
-        ("part-10", 10, 10) :: Nil
+        Row("part-1", 1, 10) ::
+          Row("part-2", 2, 10) ::
+          Row("part-3", 3, 10) ::
+          Row("part-4", 4, 10) ::
+          Row("part-5", 5, 10) ::
+          Row("part-6", 6, 10) ::
+          Row("part-7", 7, 10) ::
+          Row("part-8", 8, 10) ::
+          Row("part-9", 9, 10) ::
+          Row("part-10", 10, 10) :: Nil
       )
     }
 
     test(s"simple count $table") {
       checkAnswer(
         sql(s"SELECT COUNT(*) FROM $table"),
-        100)
+        Row(100))
     }
 
     test(s"pruned count $table") {
       checkAnswer(
         sql(s"SELECT COUNT(*) FROM $table WHERE p = 1"),
-        10)
+        Row(10))
     }
 
     test(s"non-existant partition $table") {
       checkAnswer(
         sql(s"SELECT COUNT(*) FROM $table WHERE p = 1000"),
-        0)
+        Row(0))
     }
 
     test(s"multi-partition pruned count $table") {
       checkAnswer(
         sql(s"SELECT COUNT(*) FROM $table WHERE p IN (1,2,3)"),
-        30)
+        Row(30))
     }
 
     test(s"non-partition predicates $table") {
       checkAnswer(
         sql(s"SELECT COUNT(*) FROM $table WHERE intField IN (1,2,3)"),
-        30)
+        Row(30))
     }
 
     test(s"sum $table") {
       checkAnswer(
         sql(s"SELECT SUM(intField) FROM $table WHERE intField IN (1,2,3) AND p = 1"),
-        1 + 2 + 3)
+        Row(1 + 2 + 3))
     }
 
     test(s"hive udfs $table") {
@@ -266,6 +266,6 @@ abstract class ParquetPartitioningTest extends QueryTest with BeforeAndAfterAll 
   test("non-part select(*)") {
     checkAnswer(
       sql("SELECT COUNT(*) FROM normal_parquet"),
-      10)
+      Row(10))
   }
 }

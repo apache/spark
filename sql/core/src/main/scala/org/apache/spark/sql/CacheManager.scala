@@ -80,7 +80,7 @@ private[sql] trait CacheManager {
    * the in-memory columnar representation of the underlying table is expensive.
    */
   private[sql] def cacheQuery(
-      query: SchemaRDD,
+      query: DataFrame,
       tableName: Option[String] = None,
       storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = writeLock {
     val planToCache = query.queryExecution.analyzed
@@ -100,7 +100,7 @@ private[sql] trait CacheManager {
   }
 
   /** Removes the data for the given SchemaRDD from the cache */
-  private[sql] def uncacheQuery(query: SchemaRDD, blocking: Boolean = true): Unit = writeLock {
+  private[sql] def uncacheQuery(query: DataFrame, blocking: Boolean = true): Unit = writeLock {
     val planToCache = query.queryExecution.analyzed
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
     require(dataIndex >= 0, s"Table $query is not cached.")
@@ -110,7 +110,7 @@ private[sql] trait CacheManager {
 
   /** Tries to remove the data for the given SchemaRDD from the cache if it's cached */
   private[sql] def tryUncacheQuery(
-      query: SchemaRDD,
+      query: DataFrame,
       blocking: Boolean = true): Boolean = writeLock {
     val planToCache = query.queryExecution.analyzed
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
@@ -123,7 +123,7 @@ private[sql] trait CacheManager {
   }
 
   /** Optionally returns cached data for the given SchemaRDD */
-  private[sql] def lookupCachedData(query: SchemaRDD): Option[CachedData] = readLock {
+  private[sql] def lookupCachedData(query: DataFrame): Option[CachedData] = readLock {
     lookupCachedData(query.queryExecution.analyzed)
   }
 

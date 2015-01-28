@@ -341,21 +341,25 @@ private[hive] trait HiveInspectors {
       (o: Any) => new HiveVarchar(o.asInstanceOf[String], o.asInstanceOf[String].size)
 
     case _: JavaHiveDecimalObjectInspector =>
-      (o: Any) => HiveShim.createDecimal(o.asInstanceOf[Decimal].toBigDecimal.underlying())
+      (o: Any) => HiveShim.createDecimal(o.asInstanceOf[Decimal].toJavaBigDecimal)
 
     case soi: StandardStructObjectInspector =>
       val wrappers = soi.getAllStructFieldRefs.map(ref => wrapperFor(ref.getFieldObjectInspector))
       (o: Any) => {
-        val struct = soi.create()
-        (soi.getAllStructFieldRefs, wrappers, o.asInstanceOf[Row]).zipped.foreach {
-          (field, wrapper, data) => soi.setStructFieldData(struct, field, wrapper(data))
+        if (o != null) {
+          val struct = soi.create()
+          (soi.getAllStructFieldRefs, wrappers, o.asInstanceOf[Row].toSeq).zipped.foreach {
+            (field, wrapper, data) => soi.setStructFieldData(struct, field, wrapper(data))
+          }
+          struct
+        } else {
+          null
         }
-        struct
       }
 
     case loi: ListObjectInspector =>
       val wrapper = wrapperFor(loi.getListElementObjectInspector)
-      (o: Any) => seqAsJavaList(o.asInstanceOf[Seq[_]].map(wrapper))
+      (o: Any) => if (o != null) seqAsJavaList(o.asInstanceOf[Seq[_]].map(wrapper)) else null
 
     case moi: MapObjectInspector =>
       // The Predef.Map is scala.collection.immutable.Map.
@@ -364,9 +368,15 @@ private[hive] trait HiveInspectors {
 
       val keyWrapper = wrapperFor(moi.getMapKeyObjectInspector)
       val valueWrapper = wrapperFor(moi.getMapValueObjectInspector)
-      (o: Any) => mapAsJavaMap(o.asInstanceOf[Map[_, _]].map { case (key, value) =>
-        keyWrapper(key) -> valueWrapper(value)
-      })
+      (o: Any) => {
+        if (o != null) {
+          mapAsJavaMap(o.asInstanceOf[Map[_, _]].map { case (key, value) =>
+            keyWrapper(key) -> valueWrapper(value)
+          })
+        } else {
+          null
+        }
+      }
 
     case _ =>
       identity[Any]
@@ -412,7 +422,7 @@ private[hive] trait HiveInspectors {
       case _: HiveDecimalObjectInspector if x.preferWritable() =>
         HiveShim.getDecimalWritable(a.asInstanceOf[Decimal])
       case _: HiveDecimalObjectInspector =>
-        HiveShim.createDecimal(a.asInstanceOf[Decimal].toBigDecimal.underlying())
+        HiveShim.createDecimal(a.asInstanceOf[Decimal].toJavaBigDecimal)
       case _: BinaryObjectInspector if x.preferWritable() => HiveShim.getBinaryWritable(a)
       case _: BinaryObjectInspector => a.asInstanceOf[Array[Byte]]
       case _: DateObjectInspector if x.preferWritable() => HiveShim.getDateWritable(a)
@@ -422,7 +432,7 @@ private[hive] trait HiveInspectors {
     }
     case x: SettableStructObjectInspector =>
       val fieldRefs = x.getAllStructFieldRefs
-      val row = a.asInstanceOf[Seq[_]]
+      val row = a.asInstanceOf[Row]
       // 1. create the pojo (most likely) object
       val result = x.create()
       var i = 0
@@ -438,7 +448,7 @@ private[hive] trait HiveInspectors {
       result
     case x: StructObjectInspector =>
       val fieldRefs = x.getAllStructFieldRefs
-      val row = a.asInstanceOf[Seq[_]]
+      val row = a.asInstanceOf[Row]
       val result = new java.util.ArrayList[AnyRef](fieldRefs.length)
       var i = 0
       while (i < fieldRefs.length) {
@@ -465,9 +475,21 @@ private[hive] trait HiveInspectors {
   }
 
   def wrap(
-      row: Seq[Any],
+      row: Row,
       inspectors: Seq[ObjectInspector],
       cache: Array[AnyRef]): Array[AnyRef] = {
+    var i = 0
+    while (i < inspectors.length) {
+      cache(i) = wrap(row(i), inspectors(i))
+      i += 1
+    }
+    cache
+  }
+
+  def wrap(
+    row: Seq[Any],
+    inspectors: Seq[ObjectInspector],
+    cache: Array[AnyRef]): Array[AnyRef] = {
     var i = 0
     while (i < inspectors.length) {
       cache(i) = wrap(row(i), inspectors(i))

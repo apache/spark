@@ -18,7 +18,6 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
@@ -42,7 +41,7 @@ object SimpleParamsExample {
 
     // Prepare training data.
     // We use LabeledPoint, which is a case class.  Spark SQL can convert RDDs of Java Beans
-    // into SchemaRDDs, where it uses the bean metadata to infer the schema.
+    // into DataFrames, where it uses the bean metadata to infer the schema.
     val training = sparkContext.parallelize(Seq(
       LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
       LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
@@ -92,7 +91,7 @@ object SimpleParamsExample {
     // Note that model2.transform() outputs a 'probability' column instead of the usual 'score'
     // column since we renamed the lr.scoreCol parameter previously.
     model2.transform(test)
-      .select('features, 'label, 'probability, 'prediction)
+      .select("features", "label", "probability", "prediction")
       .collect()
       .foreach { case Row(features: Vector, label: Double, prob: Double, prediction: Double) =>
         println("(" + features + ", " + label + ") -> prob=" + prob + ", prediction=" + prediction)
