@@ -1264,7 +1264,10 @@
           </execution>
         </executions>
       </plugin>
-      <!-- The shade plug-in is used here to create effective pom's (see SPARK-3812). -->
+      <!--
+        The shade plug-in is used here to create effective pom's (see SPARK-3812), and also
+        remove references from the shaded libraries from artifacts published by Spark.
+      -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
@@ -1276,6 +1279,23 @@
               <include>org.spark-project.spark:unused</include>
             </includes>
           </artifactSet>
+          <relocations>
+            <relocation>
+              <pattern>com.google.common</pattern>
+              <shadedPattern>org.spark-project.guava</shadedPattern>
+              <excludes>
+                <!--
+                  These classes cannot be relocated, because the Java API exposes the
+                  "Optional" type; the others are referenced by the Optional class.
+                -->
+                <exclude>com/google/common/base/Absent*</exclude>
+                <exclude>com/google/common/base/Function</exclude>
+                <exclude>com/google/common/base/Optional*</exclude>
+                <exclude>com/google/common/base/Present*</exclude>
+                <exclude>com/google/common/base/Supplier</exclude>
+              </excludes>
+            </relocation>
+          </relocations>
         </configuration>
         <executions>
           <execution>
