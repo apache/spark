@@ -594,7 +594,7 @@ class Airflow(BaseView):
         task_id = request.args.get('task_id')
         dag = dagbag.dags[dag_id]
         task = dag.get_task(task_id)
-        task = copy.deepcopy(task)
+        task = copy.copy(task)
         task.materialize_files()
 
         special_attrs = {
