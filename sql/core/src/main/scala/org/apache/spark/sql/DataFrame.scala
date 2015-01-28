@@ -51,7 +51,8 @@ import org.apache.spark.util.Utils
  * }}}
  *
  * Once created, it can be manipulated using the various domain-specific-language (DSL) functions
- * defined in: [[DataFrame]] (this class), [[Column]], and [[dsl]] for Scala DSL.
+ * defined in: [[DataFrame]] (this class), [[Column]], [[api.scala.dsl]] for Scala DSL, and
+ * [[api.java.dsl]] for Java DSL.
  *
  * To select a column from the data frame, use the apply method:
  * {{{

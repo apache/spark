@@ -15,18 +15,26 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.api.scala
 
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
 
+/**
+ * Scala version of the domain specific functions available for [[DataFrame]].
+ *
+ * The Java-version is at [[api.java.dsl]].
+ */
 package object dsl {
+  // NOTE: Update also the Java version when we update this version.
 
+  /** An implicit conversion that turns a Scala `Symbol` into a [[Column]]. */
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 
   /** Converts $"col name" into an [[Column]]. */
@@ -37,25 +45,6 @@ package object dsl {
   }
 
   private[this] implicit def toColumn(expr: Expression): Column = new Column(expr)
-
-  def sum(e: Column): Column = Sum(e.expr)
-  def sumDistinct(e: Column): Column = SumDistinct(e.expr)
-  def count(e: Column): Column = Count(e.expr)
-
-  @scala.annotation.varargs
-  def countDistinct(expr: Column, exprs: Column*): Column =
-    CountDistinct((expr +: exprs).map(_.expr))
-
-  def avg(e: Column): Column = Average(e.expr)
-  def first(e: Column): Column = First(e.expr)
-  def last(e: Column): Column = Last(e.expr)
-  def min(e: Column): Column = Min(e.expr)
-  def max(e: Column): Column = Max(e.expr)
-
-  def upper(e: Column): Column = Upper(e.expr)
-  def lower(e: Column): Column = Lower(e.expr)
-  def sqrt(e: Column): Column = Sqrt(e.expr)
-  def abs(e: Column): Column = Abs(e.expr)
 
   /**
    * Creates a [[Column]] of literal value.
@@ -86,6 +75,25 @@ package object dsl {
     }
     new Column(literalExpr)
   }
+
+  def sum(e: Column): Column = Sum(e.expr)
+  def sumDistinct(e: Column): Column = SumDistinct(e.expr)
+  def count(e: Column): Column = Count(e.expr)
+
+  def countDistinct(expr: Column, exprs: Column*): Column =
+    CountDistinct((expr +: exprs).map(_.expr))
+
+  def avg(e: Column): Column = Average(e.expr)
+  def first(e: Column): Column = First(e.expr)
+  def last(e: Column): Column = Last(e.expr)
+  def min(e: Column): Column = Min(e.expr)
+  def max(e: Column): Column = Max(e.expr)
+
+  def upper(e: Column): Column = Upper(e.expr)
+  def lower(e: Column): Column = Lower(e.expr)
+  def sqrt(e: Column): Column = Sqrt(e.expr)
+  def abs(e: Column): Column = Abs(e.expr)
+
 
   // scalastyle:off
 

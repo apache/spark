@@ -19,11 +19,11 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
+import org.apache.spark.sql.api.scala.dsl.lit
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => LiteralExpr}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
-import org.apache.spark.sql.dsl.lit
 import org.apache.spark.sql.types._
 
 
