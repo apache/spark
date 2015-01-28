@@ -337,25 +337,38 @@
           </exclusion>
         </exclusions>
       </dependency>
+ 
+      <!-- Shaded deps marked as provided. These are promoted to compile scope
+           in spark-core so that we only have one copy of the shaded dependency. -->
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-http</artifactId>
+        <version>${jetty.version}</version>
+        <scope>provided</scope>
+      </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-util</artifactId>
         <version>${jetty.version}</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-security</artifactId>
         <version>${jetty.version}</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-plus</artifactId>
         <version>${jetty.version}</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
         <version>${jetty.version}</version>
+        <scope>provided</scope>
       </dependency>
       <dependency>
         <groupId>com.google.guava</groupId>
@@ -363,6 +376,8 @@
         <version>14.0.1</version>
         <scope>provided</scope>
       </dependency>
+      <!-- End of shaded deps -->
+ 
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
