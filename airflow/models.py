@@ -5,7 +5,7 @@ import imp
 import jinja2
 import logging
 import os
-import pickle
+import dill as pickle
 import re
 import signal
 import socket
@@ -14,7 +14,6 @@ from sqlalchemy import (
     Column, Integer, String, DateTime, Text, Boolean, ForeignKey)
 from sqlalchemy import func
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.ext.serializer import loads, dumps
 from sqlalchemy.dialects.mysql import LONGTEXT
 from sqlalchemy.orm import relationship
 
@@ -230,10 +229,10 @@ class DagPickle(Base):
         self.job = job
         for t in dag.tasks:
             t.materialize_files()
-        self.pickle = dumps(dag)
+        self.pickle = pickle.dumps(dag)
 
     def get_object(self):
-        return loads(self.pickle)
+        return pickle.loads(self.pickle)
 
 
 class TaskInstance(Base):

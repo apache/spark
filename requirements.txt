@@ -1,5 +1,6 @@
 celery
 chartkick
+dill
 flake8
 flask
 flask-admin
