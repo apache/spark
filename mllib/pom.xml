@@ -125,6 +125,8 @@
         <directory>../python</directory>
         <includes>
           <include>pyspark/mllib/*.py</include>
+          <include>pyspark/ml/*.py</include>
+          <include>pyspark/ml/param/*.py</include>
         </includes>
       </resource>
     </resources>

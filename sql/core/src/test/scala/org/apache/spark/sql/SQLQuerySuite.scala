@@ -21,7 +21,7 @@ import java.util.TimeZone
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.dsl._
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.types._

@@ -17,10 +17,12 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
+import scala.collection.mutable.ArrayBuffer
+
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.{Logging, Partitioner}
-import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix}
+import org.apache.spark.mllib.linalg.{SparseMatrix, DenseMatrix, Matrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -180,6 +182,28 @@ class BlockMatrix(
   def persist(storageLevel: StorageLevel): this.type = {
     blocks.persist(storageLevel)
     this
+  }
+
+  /** Converts to CoordinateMatrix. */
+  def toCoordinateMatrix(): CoordinateMatrix = {
+    val entryRDD = blocks.flatMap { case ((blockRowIndex, blockColIndex), mat) =>
+      val rowStart = blockRowIndex.toLong * rowsPerBlock
+      val colStart = blockColIndex.toLong * colsPerBlock
+      val entryValues = new ArrayBuffer[MatrixEntry]()
+      mat.foreachActive { (i, j, v) =>
+        if (v != 0.0) entryValues.append(new MatrixEntry(rowStart + i, colStart + j, v))
+      }
+      entryValues
+    }
+    new CoordinateMatrix(entryRDD, numRows(), numCols())
+  }
+
+  /** Converts to IndexedRowMatrix. The number of columns must be within the integer range. */
+  def toIndexedRowMatrix(): IndexedRowMatrix = {
+    require(numCols() < Int.MaxValue, "The number of columns must be within the integer range. " +
+      s"numCols: ${numCols()}")
+    // TODO: This implementation may be optimized
+    toCoordinateMatrix().toIndexedRowMatrix()
   }
 
   /** Collect the distributed matrix on the driver as a `DenseMatrix`. */

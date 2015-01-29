@@ -29,7 +29,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.spark.{SparkFiles, SparkException}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.dsl._
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._

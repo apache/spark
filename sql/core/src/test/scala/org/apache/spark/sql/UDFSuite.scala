@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.dsl.StringToColumn
+import org.apache.spark.sql.api.scala.dsl.StringToColumn
 import org.apache.spark.sql.test._
 
 /* Implicits */
