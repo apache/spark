@@ -47,7 +47,7 @@ isRemoveMethod <- function(isStatic, objId, methodName) {
 # methodName - name of method to be invoked
 invokeJava <- function(isStatic, objId, methodName, ...) {
   if (!exists(".sparkRCon", .sparkREnv)) {
-    stop("No connection to backend found")
+    stop("No connection to backend found. Please re-run sparkR.init")
   }
 
   # If this isn't a removeJObject call
@@ -61,6 +61,7 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
       rm(list = objsToRemove, envir = .toRemoveJobjs)
     }
   }
+
 
   rc <- rawConnection(raw(0), "r+")
 
@@ -78,12 +79,12 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
   writeInt(conn, length(bytesToSend))
   writeBin(bytesToSend, conn)
 
+  close(rc) # TODO: Can we close this before ?
+
   # TODO: check the status code to output error information
   returnStatus <- readInt(conn)
   stopifnot(returnStatus == 0)
   ret <- readObject(conn)
-
-  close(rc) # TODO: Can we close this before ?
 
   ret
 }
