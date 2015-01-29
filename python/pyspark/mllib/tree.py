@@ -250,7 +250,7 @@ class RandomForest(object):
         return RandomForestModel(model)
 
     @classmethod
-    def trainClassifier(cls, data, numClassesForClassification, categoricalFeaturesInfo, numTrees,
+    def trainClassifier(cls, data, numClasses, categoricalFeaturesInfo, numTrees,
                         featureSubsetStrategy="auto", impurity="gini", maxDepth=4, maxBins=32,
                         seed=None):
         """
@@ -259,7 +259,7 @@ class RandomForest(object):
 
         :param data: Training dataset: RDD of LabeledPoint. Labels should take
                values {0, 1, ..., numClasses-1}.
-        :param numClassesForClassification: number of classes for classification.
+        :param numClasses: number of classes for classification.
         :param categoricalFeaturesInfo: Map storing arity of categorical features.
                E.g., an entry (n -> k) indicates that feature n is categorical
                with k categories indexed from 0: {0, 1, ..., k-1}.
@@ -320,7 +320,7 @@ class RandomForest(object):
         >>> model.predict(rdd).collect()
         [1.0, 0.0]
         """
-        return cls._train(data, "classification", numClassesForClassification,
+        return cls._train(data, "classification", numClasses,
                           categoricalFeaturesInfo, numTrees, featureSubsetStrategy, impurity,
                           maxDepth, maxBins, seed)
 

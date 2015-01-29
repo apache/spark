@@ -19,6 +19,8 @@ package org.apache.spark.graphx
 
 import org.scalatest.FunSuite
 
+import com.google.common.io.Files
+
 import org.apache.spark.SparkContext
 import org.apache.spark.graphx.Graph._
 import org.apache.spark.graphx.PartitionStrategy._
@@ -362,6 +364,45 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         .collect.toSet
       assert(triplets ===
         Set((1: VertexId, 2: VertexId, "a", "b"), (2: VertexId, 1: VertexId, "b", "a")))
+    }
+  }
+
+  test("checkpoint") {
+    val checkpointDir = Files.createTempDir()
+    checkpointDir.deleteOnExit()
+    withSpark { sc =>
+      sc.setCheckpointDir(checkpointDir.getAbsolutePath)
+      val ring = (0L to 100L).zip((1L to 99L) :+ 0L).map { case (a, b) => Edge(a, b, 1)}
+      val rdd = sc.parallelize(ring)
+      val graph = Graph.fromEdges(rdd, 1.0F)
+      graph.checkpoint()
+      graph.edges.map(_.attr).count()
+      graph.vertices.map(_._2).count()
+
+      val edgesDependencies = graph.edges.partitionsRDD.dependencies
+      val verticesDependencies = graph.vertices.partitionsRDD.dependencies
+      assert(edgesDependencies.forall(_.rdd.isInstanceOf[CheckpointRDD[_]]))
+      assert(verticesDependencies.forall(_.rdd.isInstanceOf[CheckpointRDD[_]]))
+    }
+  }
+
+  test("non-default number of edge partitions") {
+    val n = 10
+    val defaultParallelism = 3
+    val numEdgePartitions = 4
+    assert(defaultParallelism != numEdgePartitions)
+    val conf = new org.apache.spark.SparkConf()
+      .set("spark.default.parallelism", defaultParallelism.toString)
+    val sc = new SparkContext("local", "test", conf)
+    try {
+      val edges = sc.parallelize((1 to n).map(x => (x: VertexId, 0: VertexId)),
+        numEdgePartitions)
+      val graph = Graph.fromEdgeTuples(edges, 1)
+      val neighborAttrSums = graph.mapReduceTriplets[Int](
+        et => Iterator((et.dstId, et.srcAttr)), _ + _)
+      assert(neighborAttrSums.collect.toSet === Set((0: VertexId, n)))
+    } finally {
+      sc.stop()
     }
   }
 

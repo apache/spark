@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar._
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
@@ -47,6 +48,20 @@ class CachedTableSuite extends QueryTest {
     cacheTable("tempTable")
     assertCached(sql("SELECT COUNT(*) FROM tempTable"))
     uncacheTable("tempTable")
+  }
+
+  test("unpersist an uncached table will not raise exception") {
+    assert(None == cacheManager.lookupCachedData(testData))
+    testData.unpersist(true)
+    assert(None == cacheManager.lookupCachedData(testData))
+    testData.unpersist(false)
+    assert(None == cacheManager.lookupCachedData(testData))
+    testData.persist()
+    assert(None != cacheManager.lookupCachedData(testData))
+    testData.unpersist(true)
+    assert(None == cacheManager.lookupCachedData(testData))
+    testData.unpersist(false)
+    assert(None == cacheManager.lookupCachedData(testData))
   }
 
   test("cache table as select") {

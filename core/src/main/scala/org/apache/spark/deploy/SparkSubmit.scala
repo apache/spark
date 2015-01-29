@@ -200,6 +200,7 @@ object SparkSubmit {
       // Yarn cluster only
       OptionAssigner(args.name, YARN, CLUSTER, clOption = "--name"),
       OptionAssigner(args.driverMemory, YARN, CLUSTER, clOption = "--driver-memory"),
+      OptionAssigner(args.driverCores, YARN, CLUSTER, clOption = "--driver-cores"),
       OptionAssigner(args.queue, YARN, CLUSTER, clOption = "--queue"),
       OptionAssigner(args.numExecutors, YARN, CLUSTER, clOption = "--num-executors"),
       OptionAssigner(args.executorMemory, YARN, CLUSTER, clOption = "--executor-memory"),
@@ -279,6 +280,11 @@ object SparkSubmit {
     // Load any properties specified through --conf and the default properties file
     for ((k, v) <- args.sparkProperties) {
       sysProps.getOrElseUpdate(k, v)
+    }
+
+    // Ignore invalid spark.driver.host in cluster modes.
+    if (deployMode == CLUSTER) {
+      sysProps -= ("spark.driver.host")
     }
 
     // Resolve paths in certain spark properties

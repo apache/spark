@@ -27,7 +27,6 @@ import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
-import org.apache.spark.SparkContext._
 import org.apache.spark.LocalSparkContext._
 import org.apache.spark.api.java.StorageLevels
 import org.apache.spark.shuffle.FetchFailedException
@@ -174,7 +173,7 @@ class UISeleniumSuite extends FunSuite with WebBrowser with Matchers {
       // Simulate fetch failures:
       val mappedData = data.map { x =>
         val taskContext = TaskContext.get
-        if (taskContext.attemptId() == 1) {  // Cause this stage to fail on its first attempt.
+        if (taskContext.attemptNumber == 0) {  // Cause this stage to fail on its first attempt.
           val env = SparkEnv.get
           val bmAddress = env.blockManager.blockManagerId
           val shuffleId = shuffleHandle.shuffleId

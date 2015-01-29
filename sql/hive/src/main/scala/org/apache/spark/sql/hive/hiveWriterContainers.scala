@@ -209,7 +209,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
 
   override def getLocalFileWriter(row: Row): FileSinkOperator.RecordWriter = {
     val dynamicPartPath = dynamicPartColNames
-      .zip(row.takeRight(dynamicPartColNames.length))
+      .zip(row.toSeq.takeRight(dynamicPartColNames.length))
       .map { case (col, rawVal) =>
         val string = if (rawVal == null) null else String.valueOf(rawVal)
         s"/$col=${if (string == null || string.isEmpty) defaultPartName else string}"

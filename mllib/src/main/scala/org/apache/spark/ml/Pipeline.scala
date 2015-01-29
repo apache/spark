@@ -21,8 +21,9 @@ import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.Logging
 import org.apache.spark.annotation.AlphaComponent
-import org.apache.spark.ml.param.{Params, Param, ParamMap}
-import org.apache.spark.sql.{SchemaRDD, StructType}
+import org.apache.spark.ml.param.{Param, ParamMap}
+import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.types.StructType
 
 /**
  * :: AlphaComponent ::
@@ -87,7 +88,7 @@ class Pipeline extends Estimator[PipelineModel] {
    * @param paramMap parameter map
    * @return fitted pipeline
    */
-  override def fit(dataset: SchemaRDD, paramMap: ParamMap): PipelineModel = {
+  override def fit(dataset: DataFrame, paramMap: ParamMap): PipelineModel = {
     transformSchema(dataset.schema, paramMap, logging = true)
     val map = this.paramMap ++ paramMap
     val theStages = map(stages)
@@ -161,12 +162,16 @@ class PipelineModel private[ml] (
     }
   }
 
-  override def transform(dataset: SchemaRDD, paramMap: ParamMap): SchemaRDD = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    stages.foldLeft(dataset)((cur, transformer) => transformer.transform(cur, paramMap))
+  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
+    // Precedence of ParamMaps: paramMap > this.paramMap > fittingParamMap
+    val map = (fittingParamMap ++ this.paramMap) ++ paramMap
+    transformSchema(dataset.schema, map, logging = true)
+    stages.foldLeft(dataset)((cur, transformer) => transformer.transform(cur, map))
   }
 
   private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur, paramMap))
+    // Precedence of ParamMaps: paramMap > this.paramMap > fittingParamMap
+    val map = (fittingParamMap ++ this.paramMap) ++ paramMap
+    stages.foldLeft(schema)((cur, transformer) => transformer.transformSchema(cur, map))
   }
 }

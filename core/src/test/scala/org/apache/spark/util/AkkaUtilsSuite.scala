@@ -31,7 +31,7 @@ import org.apache.spark.storage.BlockManagerId
 /**
   * Test the AkkaUtils with various security settings.
   */
-class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
+class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemProperties {
 
   test("remote fetch security bad password") {
     val conf = new SparkConf

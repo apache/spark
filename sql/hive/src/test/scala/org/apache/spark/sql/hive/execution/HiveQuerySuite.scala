@@ -27,11 +27,12 @@ import scala.util.Try
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 
 import org.apache.spark.{SparkFiles, SparkException}
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.{SQLConf, Row, SchemaRDD}
 
 case class TestData(a: Int, b: String)
 
@@ -55,6 +56,21 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     TimeZone.setDefault(originalTimeZone)
     Locale.setDefault(originalLocale)
   }
+
+  test("SPARK-4908: concurent hive native commands") {
+    (1 to 100).par.map { _ =>
+      sql("USE default")
+      sql("SHOW TABLES")
+    }
+  }
+  
+  createQueryTest("! operator",
+    """
+      |SELECT a FROM (
+      |  SELECT 1 AS a FROM src LIMIT 1 UNION ALL
+      |  SELECT 2 AS a FROM src LIMIT 1) table
+      |WHERE !(a>1)
+    """.stripMargin)
 
   createQueryTest("constant object inspector for generic udf",
     """SELECT named_struct(
@@ -211,7 +227,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   // Jdk version leads to different query output for double, so not use createQueryTest here
   test("division") {
     val res = sql("SELECT 2 / 1, 1 / 2, 1 / 3, 1 / COUNT(*) FROM src LIMIT 1").collect().head
-    Seq(2.0, 0.5, 0.3333333333333333, 0.002).zip(res).foreach( x =>
+    Seq(2.0, 0.5, 0.3333333333333333, 0.002).zip(res.toSeq).foreach( x =>
       assert(x._1 == x._2.asInstanceOf[Double]))
   }
 
@@ -220,7 +236,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("Query expressed in SQL") {
     setConf("spark.sql.dialect", "sql")
-    assert(sql("SELECT 1").collect() === Array(Seq(1)))
+    assert(sql("SELECT 1").collect() === Array(Row(1)))
     setConf("spark.sql.dialect", "hiveql")
   }
 
@@ -319,10 +335,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("DISTINCT",
     "SELECT DISTINCT key, value FROM src")
 
-  ignore("empty aggregate input") {
-    createQueryTest("empty aggregate input",
-      "SELECT SUM(key) FROM (SELECT * FROM src LIMIT 0) a")
-  }
+  createQueryTest("empty aggregate input",
+    "SELECT SUM(key) FROM (SELECT * FROM src LIMIT 0) a")
 
   createQueryTest("lateral view1",
     "SELECT tbl.* FROM src LATERAL VIEW explode(array(1,2)) tbl as a")
@@ -354,7 +368,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
   }
 
-  test("SchemaRDD toString") {
+  test("DataFrame toString") {
     sql("SHOW TABLES").toString
     sql("SELECT * FROM src").toString
   }
@@ -413,6 +427,15 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("select null from table",
     "SELECT null FROM src LIMIT 1")
 
+  test("predicates contains an empty AttributeSet() references") {
+    sql(
+      """
+        |SELECT a FROM (
+        |  SELECT 1 AS a FROM src LIMIT 1 ) table
+        |WHERE abs(20141202) is not null
+      """.stripMargin).collect()
+  }
+
   test("implement identity function using case statement") {
     val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")
       .map { case Row(i: Int) => i }
@@ -445,18 +468,18 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         TestData(2, "str2") :: Nil)
     testData.registerTempTable("REGisteredTABle")
 
-    assertResult(Array(Array(2, "str2"))) {
+    assertResult(Array(Row(2, "str2"))) {
       sql("SELECT tablealias.A, TABLEALIAS.b FROM reGisteredTABle TableAlias " +
         "WHERE TableAliaS.a > 1").collect()
     }
   }
 
-  def isExplanation(result: SchemaRDD) = {
+  def isExplanation(result: DataFrame) = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
     explanation.contains("== Physical Plan ==")
   }
 
-  test("SPARK-1704: Explain commands as a SchemaRDD") {
+  test("SPARK-1704: Explain commands as a DataFrame") {
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 
     val rdd = sql("explain select key, count(value) from src group by key")
@@ -531,12 +554,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     // Describe a table
     assertResult(
       Array(
-        Array("key", "int", null),
-        Array("value", "string", null),
-        Array("dt", "string", null),
-        Array("# Partition Information", "", ""),
-        Array("# col_name", "data_type", "comment"),
-        Array("dt", "string", null))
+        Row("key", "int", null),
+        Row("value", "string", null),
+        Row("dt", "string", null),
+        Row("# Partition Information", "", ""),
+        Row("# col_name", "data_type", "comment"),
+        Row("dt", "string", null))
     ) {
       sql("DESCRIBE test_describe_commands1")
         .select('col_name, 'data_type, 'comment)
@@ -546,12 +569,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     // Describe a table with a fully qualified table name
     assertResult(
       Array(
-        Array("key", "int", null),
-        Array("value", "string", null),
-        Array("dt", "string", null),
-        Array("# Partition Information", "", ""),
-        Array("# col_name", "data_type", "comment"),
-        Array("dt", "string", null))
+        Row("key", "int", null),
+        Row("value", "string", null),
+        Row("dt", "string", null),
+        Row("# Partition Information", "", ""),
+        Row("# col_name", "data_type", "comment"),
+        Row("dt", "string", null))
     ) {
       sql("DESCRIBE default.test_describe_commands1")
         .select('col_name, 'data_type, 'comment)
@@ -601,9 +624,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
     assertResult(
       Array(
-        Array("# Registered as a temporary table", null, null),
-        Array("a", "IntegerType", null),
-        Array("b", "StringType", null))
+        Row("a", "IntegerType", null),
+        Row("b", "StringType", null))
     ) {
       sql("DESCRIBE test_describe_commands2")
         .select('col_name, 'data_type, 'comment)
@@ -821,12 +843,12 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
     val KV = "([^=]+)=([^=]*)".r
-    def collectResults(rdd: SchemaRDD): Set[(String, String)] =
+    def collectResults(rdd: DataFrame): Set[(String, String)] =
       rdd.collect().map {
         case Row(key: String, value: String) => key -> value
         case Row(KV(key, value)) => key -> value
       }.toSet
-    clear()
+    conf.clear()
 
     // "SET" itself returns all config variables currently specified in SQLConf.
     // TODO: Should we be listing the default here always? probably...
@@ -858,7 +880,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       collectResults(sql(s"SET $nonexistentKey"))
     }
 
-    clear()
+    conf.clear()
   }
 
   createQueryTest("select from thrift based table",
