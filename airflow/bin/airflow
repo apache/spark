@@ -49,7 +49,8 @@ def backfill(args):
     dag.run(
         start_date=args.start_date,
         end_date=args.end_date,
-        mark_success=args.mark_success)
+        mark_success=args.mark_success,
+        include_adhoc=args.include_adhoc)
 
 
 def run(args):
@@ -319,6 +320,9 @@ if __name__ == '__main__':
         "-e", "--end_date", help="Overide end_date YYYY-MM-DD")
     parser_backfill.add_argument(
         "-m", "--mark_success",
+        help=mark_success_help, action="store_true")
+    parser_backfill.add_argument(
+        "-a", "--include_adhoc",
         help=mark_success_help, action="store_true")
     parser_backfill.add_argument(
         "-i", "--ignore_dependencies",

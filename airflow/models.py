@@ -781,6 +781,7 @@ class BaseOperator(Base):
             dag=None,
             params=None,
             default_args=None,
+            adhoc=True,
             *args,
             **kwargs):
 
@@ -800,6 +801,7 @@ class BaseOperator(Base):
         self.retries = retries
         self.retry_delay = retry_delay
         self.params = params or {}  # Available in templates!
+        self.adhoc = adhoc
 
         # Private attributes
         self._upstream_list = []
@@ -1274,10 +1276,16 @@ class DAG(Base):
         session.merge(self)
         session.commit()
 
-    def run(self, start_date=None, end_date=None, mark_success=False):
+    def run(
+            self, start_date=None, end_date=None, mark_success=False,
+            include_adhoc=False):
         from airflow import jobs
         job = jobs.BackfillJob(
-            self, start_date, end_date, mark_success)
+            self,
+            start_date=start_date,
+            end_date=end_date,
+            mark_success=mark_success,
+            include_adhoc=include_adhoc)
         job.run()
 
 
