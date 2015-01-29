@@ -72,7 +72,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       Array(
         Row("col_name", "StringType", null),
         Row("data_type", "StringType", null),
-	Row("comment", "StringType", null)
+	      Row("comment", "StringType", null)
       )) {
       sql("desc mydesc").collect()
     }
