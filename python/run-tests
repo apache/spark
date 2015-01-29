@@ -110,10 +110,7 @@ $PYSPARK_PYTHON --version
 run_core_tests
 run_sql_tests
 run_mllib_tests
-<<<<<<< HEAD
 run_ml_tests
-=======
->>>>>>> Minor style fix.
 run_streaming_tests
 
 # Try to test with PyPy
