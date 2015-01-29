@@ -97,6 +97,11 @@ class CoordinateMatrix(
     toIndexedRowMatrix().toRowMatrix()
   }
 
+  /** Converts to BlockMatrix. Creates blocks of size 1024 x 1024. */
+  def toBlockMatrix(): BlockMatrix = {
+    toBlockMatrix(1024, 1024)
+  }
+
   /**
    * Converts to BlockMatrix.
    * @param rowsPerBlock The number of rows of each block. The blocks at the bottom edge may have
