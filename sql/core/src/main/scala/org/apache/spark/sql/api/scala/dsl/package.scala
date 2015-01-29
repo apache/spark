@@ -20,6 +20,7 @@ package org.apache.spark.sql.api.scala
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
@@ -37,6 +38,21 @@ package object dsl {
   /** An implicit conversion that turns a Scala `Symbol` into a [[Column]]. */
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 
+//  /**
+//   * An implicit conversion that turns a RDD of product into a [[DataFrame]].
+//   *
+//   * This method requires an implicit SQLContext in scope. For example:
+//   * {{{
+//   *   implicit val sqlContext: SQLContext = ...
+//   *   val rdd: RDD[(Int, String)] = ...
+//   *   rdd.toDataFrame  // triggers the implicit here
+//   * }}}
+//   */
+//  implicit def rddToDataFrame[A <: Product: TypeTag](rdd: RDD[A])(implicit context: SQLContext)
+//    : DataFrame = {
+//    context.createDataFrame(rdd)
+//  }
+
   /** Converts $"col name" into an [[Column]]. */
   implicit class StringToColumn(val sc: StringContext) extends AnyVal {
     def $(args: Any*): ColumnName = {
@@ -45,6 +61,11 @@ package object dsl {
   }
 
   private[this] implicit def toColumn(expr: Expression): Column = new Column(expr)
+
+  /**
+   * Returns a [[Column]] based on the given column name.
+   */
+  def col(colName: String): Column = new Column(colName)
 
   /**
    * Creates a [[Column]] of literal value.

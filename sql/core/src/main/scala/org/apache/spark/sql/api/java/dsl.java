@@ -33,6 +33,13 @@ public class dsl {
   private static package$ scalaDsl = package$.MODULE$;
 
   /**
+   * Returns a {@link Column} based on the given column name.
+   */
+  public static Column col(String colName) {
+    return new Column(colName);
+  }
+
+  /**
    * Creates a column of literal value.
    */
   public static Column lit(Object literalValue) {

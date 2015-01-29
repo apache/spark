@@ -25,7 +25,6 @@ import org.apache.spark.mllib.linalg.{BLAS, Vector, VectorUDT}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql._
 import org.apache.spark.sql.api.scala.dsl._
-import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
 import org.apache.spark.storage.StorageLevel
 
@@ -138,10 +137,10 @@ class LogisticRegressionModel private[ml] (
       1.0 / (1.0 + math.exp(-margin))
     }
     val t = map(threshold)
-    val predict: Double => Double = (score) => {
-      if (score > t) 1.0 else 0.0
-    }
-    dataset.select($"*", callUDF(score, Column(map(featuresCol))).as(map(scoreCol)))
-      .select($"*", callUDF(predict, Column(map(scoreCol))).as(map(predictionCol)))
+    val predict: Double => Double = (score) => { if (score > t) 1.0 else 0.0 }
+    dataset.select(
+      $"*",
+      callUDF(score, dataset(map(featuresCol))).as(map(scoreCol)),
+      callUDF(predict, dataset(map(scoreCol))).as(map(predictionCol)))
   }
 }

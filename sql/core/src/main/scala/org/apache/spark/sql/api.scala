@@ -44,7 +44,13 @@ private[sql] trait RDDApi[T] {
 
   def map[R: ClassTag](f: T => R): RDD[R]
 
+  def flatMap[R: ClassTag](f: T => TraversableOnce[R]): RDD[R]
+
   def mapPartitions[R: ClassTag](f: Iterator[T] => Iterator[R]): RDD[R]
+
+  def foreach(f: T => Unit): Unit
+
+  def foreachPartition(f: Iterator[T] => Unit): Unit
 
   def take(n: Int): Array[T]
 
