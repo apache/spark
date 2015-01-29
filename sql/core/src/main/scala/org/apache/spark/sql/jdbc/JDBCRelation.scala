@@ -34,7 +34,7 @@ private[sql] case class JDBCPartition(whereClause: String, idx: Int) extends Par
 /**
  * Instructions on how to partition the table among workers.
  */
-case class JDBCPartitioningInfo(
+private[jdbc] case class JDBCPartitioningInfo(
     column: String,
     lowerBound: Long,
     upperBound: Long,
