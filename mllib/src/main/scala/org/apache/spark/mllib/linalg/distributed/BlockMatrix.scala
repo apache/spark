@@ -21,8 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import breeze.linalg.{DenseMatrix => BDM}
 
-import org.apache.spark.{Logging, Partitioner}
-import org.apache.spark.mllib.linalg.{SparseMatrix, DenseMatrix, Matrix}
+import org.apache.spark.{SparkException, Logging, Partitioner}
+import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix, SparseMatrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -45,8 +45,8 @@ private[mllib] class GridPartitioner(
   require(rowsPerPart > 0)
   require(colsPerPart > 0)
 
-  private val rowPartitions = math.ceil(rows / rowsPerPart).toInt
-  private val colPartitions = math.ceil(cols / colsPerPart).toInt
+  private val rowPartitions = math.ceil(rows * 1.0 / rowsPerPart).toInt
+  private val colPartitions = math.ceil(cols * 1.0 / colsPerPart).toInt
 
   override val numPartitions = rowPartitions * colPartitions
 
@@ -106,8 +106,9 @@ private[mllib] object GridPartitioner {
 /**
  * Represents a distributed matrix in blocks of local matrices.
  *
- * @param blocks The RDD of sub-matrix blocks (blockRowIndex, blockColIndex, sub-matrix) that form
- *               this distributed matrix.
+ * @param blocks The RDD of sub-matrix blocks ((blockRowIndex, blockColIndex), sub-matrix) that
+ *               form this distributed matrix. If multiple blocks with the same index exist, the
+ *               results for operations like add and multiply will be unpredictable.
  * @param rowsPerBlock Number of rows that make up each block. The blocks forming the final
  *                     rows are not required to have the given number of rows
  * @param colsPerBlock Number of columns that make up each block. The blocks forming the final
@@ -129,17 +130,19 @@ class BlockMatrix(
   /**
    * Alternate constructor for BlockMatrix without the input of the number of rows and columns.
    *
-   * @param rdd The RDD of SubMatrices (local matrices) that form this matrix
+   * @param blocks The RDD of sub-matrix blocks ((blockRowIndex, blockColIndex), sub-matrix) that
+   *               form this distributed matrix. If multiple blocks with the same index exist, the
+   *               results for operations like add and multiply will be unpredictable.
    * @param rowsPerBlock Number of rows that make up each block. The blocks forming the final
    *                     rows are not required to have the given number of rows
    * @param colsPerBlock Number of columns that make up each block. The blocks forming the final
    *                     columns are not required to have the given number of columns
    */
   def this(
-      rdd: RDD[((Int, Int), Matrix)],
+      blocks: RDD[((Int, Int), Matrix)],
       rowsPerBlock: Int,
       colsPerBlock: Int) = {
-    this(rdd, rowsPerBlock, colsPerBlock, 0L, 0L)
+    this(blocks, rowsPerBlock, colsPerBlock, 0L, 0L)
   }
 
   override def numRows(): Long = {
@@ -218,7 +221,6 @@ class BlockMatrix(
     val n = numCols().toInt
     val mem = m * n / 125000
     if (mem > 500) logWarning(s"Storing this matrix will require $mem MB of memory!")
-
     val localBlocks = blocks.collect()
     val values = new Array[Double](m * n)
     localBlocks.foreach { case ((blockRowIndex, blockColIndex), submat) =>
@@ -237,4 +239,88 @@ class BlockMatrix(
     val localMat = toLocalMatrix()
     new BDM[Double](localMat.numRows, localMat.numCols, localMat.toArray)
   }
+
+  /** Adds two block matrices together. The matrices must have the same size and matching
+    * `rowsPerBlock` and `colsPerBlock` values. */
+  def add(other: BlockMatrix): BlockMatrix = {
+    require(numRows() == other.numRows(), "Both matrices must have the same number of rows. " +
+      s"A.numRows: ${numRows()}, B.numRows: ${other.numRows()}")
+    require(numCols() == other.numCols(), "Both matrices must have the same number of columns. " +
+      s"A.numCols: ${numCols()}, B.numCols: ${other.numCols()}")
+    if (checkPartitioning(other, OperationNames.add)) {
+      val addedBlocks = blocks.cogroup(other.blocks, partitioner).
+        map { case ((blockRowIndex, blockColIndex), (a, b)) =>
+          if (a.isEmpty) {
+            new MatrixBlock((blockRowIndex, blockColIndex), b.head)
+          } else if (b.isEmpty) {
+            new MatrixBlock((blockRowIndex, blockColIndex), a.head)
+          } else {
+            val result = a.head.toBreeze + b.head.toBreeze
+            new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
+          }
+      }
+      new BlockMatrix(addedBlocks, rowsPerBlock, colsPerBlock, numRows(), numCols())
+    } else {
+      throw new SparkException(
+        "Cannot add matrices with non-matching partitioners")
+    }
+  }
+
+  /** Left multiplies this [[BlockMatrix]] to `other`, another [[BlockMatrix]]. The `colsPerBlock`
+    * of this matrix must equal the `rowsPerBlock` of `other`. If `other` contains
+    * [[SparseMatrix]], they will have to be converted to a
+    * [[DenseMatrix]]. This may cause some performance issues until support for multiplying
+    * two sparse matrices is added.
+    */
+  def multiply(other: BlockMatrix): BlockMatrix = {
+    require(numCols() == other.numRows(), "The number of columns of A and the number of rows " +
+      s"of B must be equal. A.numCols: ${numCols()}, B.numRows: ${other.numRows()}. If you " +
+      s"think they should be equal, try setting the dimensions of A and B explicitly while " +
+      s"initializing them.")
+    if (checkPartitioning(other, OperationNames.multiply)) {
+      val resultPartitioner = GridPartitioner(numRowBlocks, other.numColBlocks,
+        math.min(partitioner.numPartitions, other.partitioner.numPartitions))
+      // Each block of A must be multiplied with the corresponding blocks in each column of B.
+      val flatA = blocks.flatMap{ case ((blockRowIndex, blockColIndex), block) =>
+        Array.tabulate(other.numColBlocks)(j => ((blockRowIndex, j, blockColIndex), block))
+      }
+      // Each block of B must be multiplied with the corresponding blocks in each row of A.
+      val flatB = other.blocks.flatMap{ case ((blockRowIndex, blockColIndex), block) =>
+        Array.tabulate(numRowBlocks)(i => ((i, blockColIndex, blockRowIndex), block))
+      }
+      val newBlocks: RDD[MatrixBlock] = flatA.join(flatB, resultPartitioner).
+        map { case ((blockRowIndex, blockColIndex, _), (mat1, mat2)) =>
+          val C = mat2 match {
+            case dense: DenseMatrix => mat1.multiply(dense)
+            case sparse: SparseMatrix => mat1.multiply(sparse.toDense())
+            case _ =>  throw new SparkException(s"Unrecognized matrix type ${mat2.getClass}.")
+          }
+          ((blockRowIndex, blockColIndex), C.toBreeze)
+      }.reduceByKey(resultPartitioner, (a, b) => a + b).mapValues(Matrices.fromBreeze)
+      new BlockMatrix(newBlocks, rowsPerBlock, other.colsPerBlock, numRows(), other.numCols())
+    } else {
+      throw new SparkException(
+        "Cannot multiply matrices with non-matching partitioners")
+    }
+  }
+
+  /** Checks if the partitioning of `other` is valid for operations like add and multiply. */
+  private def checkPartitioning(other: BlockMatrix, operation: Int): Boolean = {
+    operation match {
+      case OperationNames.add =>
+        rowsPerBlock == other.rowsPerBlock && colsPerBlock == other.colsPerBlock
+      case OperationNames.multiply => colsPerBlock == other.rowsPerBlock
+      case _ => throw new IllegalArgumentException("Unrecognized operation")
+    }
+  }
+}
+
+/**
+ * Maintains supported and default block matrix operation names.
+ *
+ * Currently supported operations: `add`, `multiply`.
+ */
+private object OperationNames {
+  val add: Int = 1
+  val multiply: Int = 2
 }
