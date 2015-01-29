@@ -172,7 +172,8 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     }
 
     // Require all python files to be local, so we can add them to the PYTHONPATH
-    if (isPython) {
+    // when yarn-cluster, all python files can be non-local
+    if (isPython && !master.equalsIgnoreCase("yarn-cluster")) {
       if (Utils.nonLocalPaths(primaryResource).nonEmpty) {
         SparkSubmit.printErrorAndExit(s"Only local python files are supported: $primaryResource")
       }
