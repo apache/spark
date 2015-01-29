@@ -24,6 +24,7 @@ import scala.reflect.runtime.universe.TypeTag
 import scala.util.Try
 
 import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.util.Utils
 
@@ -35,7 +36,7 @@ import org.apache.spark.util.Utils
  * Especially, `Tuple1.apply` can be used to easily wrap a single type/value.
  */
 trait ParquetTest {
-  val sqlContext: SQLContext
+  protected implicit val sqlContext: SQLContext
 
   import sqlContext._
 

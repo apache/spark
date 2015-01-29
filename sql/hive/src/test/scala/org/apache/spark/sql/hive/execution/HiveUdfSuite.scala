@@ -29,6 +29,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.{ObjectInspector, ObjectIns
 import org.apache.hadoop.hive.serde2.{AbstractSerDe, SerDeStats}
 import org.apache.hadoop.io.Writable
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.hive.test.TestHive
 
 import org.apache.spark.util.Utils

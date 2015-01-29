@@ -23,6 +23,7 @@ import java.io.File
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql._
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.hive.HiveContext
 
 object HiveFromSpark {
@@ -42,8 +43,8 @@ object HiveFromSpark {
     // using HiveQL. Users who do not have an existing Hive deployment can still create a
     // HiveContext. When not configured by the hive-site.xml, the context automatically
     // creates metastore_db and warehouse in the current directory.
-    val hiveContext = new HiveContext(sc)
-    import hiveContext._
+    implicit val hiveContext = new HiveContext(sc)
+    import hiveContext.sql
 
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
     sql(s"LOAD DATA LOCAL INPATH '${kv1File.getAbsolutePath}' INTO TABLE src")

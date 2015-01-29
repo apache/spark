@@ -20,9 +20,13 @@ package org.apache.spark.sql.columnar
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.test.TestSQLContext._
 
 class PartitionBatchPruningSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfter {
+
+  implicit val sqlContext = org.apache.spark.sql.test.TestSQLContext
+
   val originalColumnBatchSize = conf.columnBatchSize
   val originalInMemoryPartitionPruning = conf.inMemoryPartitionPruning
 

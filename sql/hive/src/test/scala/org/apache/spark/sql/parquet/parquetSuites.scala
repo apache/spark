@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.Row
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.hive.execution.HiveTableScan
 import org.apache.spark.sql.hive.test.TestHive._
 

@@ -29,8 +29,7 @@ import org.apache.spark.{HashPartitioner, Logging, Partitioner}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, DataFrame}
-import org.apache.spark.sql.api.scala.dsl._
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.types.{DoubleType, FloatType, IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 import org.apache.spark.util.collection.{OpenHashMap, OpenHashSet, SortDataFormat, Sorter}
@@ -111,7 +110,8 @@ class ALSModel private[ml] (
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    import dataset.sqlContext.createDataFrame
+    import org.apache.spark.sql.api.scala.dsl._
+    implicit val sqlContext = dataset.sqlContext
     val map = this.paramMap ++ paramMap
     val users = userFactors.toDataFrame("id", "features")
     val items = itemFactors.toDataFrame("id", "features")
@@ -195,6 +195,7 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   setRegParam(1.0)
 
   override def fit(dataset: DataFrame, paramMap: ParamMap): ALSModel = {
+    import org.apache.spark.sql.api.scala.dsl._
     val map = this.paramMap ++ paramMap
     val ratings = dataset
       .select(col(map(userCol)), col(map(itemCol)), col(map(ratingCol)).cast(FloatType))

@@ -23,6 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{ExprId, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.hive.test.TestHive
 
 
 /**
@@ -32,6 +33,8 @@ import org.apache.spark.sql.catalyst.util._
  * So, we duplicate this code here.
  */
 class QueryTest extends PlanTest {
+
+  implicit val sqlContext: SQLContext = TestHive
 
   /**
    * Runs the plan and makes sure the answer contains all of the keywords, or the

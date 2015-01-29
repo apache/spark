@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.api.scala.dsl._
-import org.apache.spark.sql.types._
-
-/* Implicits */
-import org.apache.spark.sql.test.TestSQLContext._
-
 import scala.language.postfixOps
+
+import org.apache.spark.sql.api.scala.dsl._
+import org.apache.spark.sql.test.TestSQLContext._
+import org.apache.spark.sql.types._
 
 class DataFrameSuite extends QueryTest {
   import org.apache.spark.sql.TestData._

@@ -38,20 +38,20 @@ package object dsl {
   /** An implicit conversion that turns a Scala `Symbol` into a [[Column]]. */
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 
-//  /**
-//   * An implicit conversion that turns a RDD of product into a [[DataFrame]].
-//   *
-//   * This method requires an implicit SQLContext in scope. For example:
-//   * {{{
-//   *   implicit val sqlContext: SQLContext = ...
-//   *   val rdd: RDD[(Int, String)] = ...
-//   *   rdd.toDataFrame  // triggers the implicit here
-//   * }}}
-//   */
-//  implicit def rddToDataFrame[A <: Product: TypeTag](rdd: RDD[A])(implicit context: SQLContext)
-//    : DataFrame = {
-//    context.createDataFrame(rdd)
-//  }
+  /**
+   * An implicit conversion that turns a RDD of product into a [[DataFrame]].
+   *
+   * This method requires an implicit SQLContext in scope. For example:
+   * {{{
+   *   implicit val sqlContext: SQLContext = ...
+   *   val rdd: RDD[(Int, String)] = ...
+   *   rdd.toDataFrame  // triggers the implicit here
+   * }}}
+   */
+  implicit def rddToDataFrame[A <: Product: TypeTag](rdd: RDD[A])(implicit context: SQLContext)
+    : DataFrame = {
+    context.createDataFrame(rdd)
+  }
 
   /** Converts $"col name" into an [[Column]]. */
   implicit class StringToColumn(val sc: StringContext) extends AnyVal {

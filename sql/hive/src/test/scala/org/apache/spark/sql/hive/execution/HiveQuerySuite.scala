@@ -40,6 +40,9 @@ case class TestData(a: Int, b: String)
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
+
+  implicit val sqlContext = TestHive
+
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
 

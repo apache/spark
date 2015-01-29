@@ -21,7 +21,9 @@ import java.sql.{Date, Timestamp}
 
 import org.scalatest.FunSuite
 
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 
 case class ReflectData(
@@ -75,6 +77,9 @@ case class ComplexReflectData(
     dataField: Data)
 
 class ScalaReflectionRelationSuite extends FunSuite {
+
+  implicit val sqlContext = TestSQLContext
+
   test("query case class RDD") {
     val data = ReflectData("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,
                            new java.math.BigDecimal(1), new Date(12345), new Timestamp(12345), Seq(1,2,3))

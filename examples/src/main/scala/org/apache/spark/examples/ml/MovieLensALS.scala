@@ -23,6 +23,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.recommendation.ALS
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.api.scala.dsl._
 
 /**
  * An example app for ALS on MovieLens data (http://grouplens.org/datasets/movielens/).
@@ -108,8 +109,7 @@ object MovieLensALS {
   def run(params: Params) {
     val conf = new SparkConf().setAppName(s"MovieLensALS with $params")
     val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
-    import sqlContext._
+    implicit val sqlContext = new SQLContext(sc)
 
     val ratings = sc.textFile(params.ratings).map(Rating.parseRating).cache()
 
