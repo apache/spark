@@ -46,9 +46,10 @@ else:
 
 from pyspark.conf import SparkConf
 from pyspark.context import SparkContext
+from pyspark.rdd import RDD
 from pyspark.files import SparkFiles
 from pyspark.serializers import read_int, BatchedSerializer, MarshalSerializer, PickleSerializer, \
-    CloudPickleSerializer, CompressedSerializer
+    CloudPickleSerializer, CompressedSerializer, UTF8Deserializer
 from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, ExternalSorter
 from pyspark.sql import SQLContext, IntegerType, Row, ArrayType, StructType, StructField, \
     UserDefinedType, DoubleType
@@ -713,6 +714,11 @@ class RDDTests(ReusedPySparkTestCase):
         wr_s11 = rdd.sample(True, 0.4, 11).collect()
         wr_s21 = rdd.sample(True, 0.4, 21).collect()
         self.assertNotEqual(set(wr_s11), set(wr_s21))
+
+    def test_null_in_rdd(self):
+        jrdd = self.sc._jvm.PythonUtils.generateRDDWithNull(self.sc._jsc)
+        rdd = RDD(jrdd, self.sc, UTF8Deserializer())
+        self.assertEqual([u"a", None, u"b"], rdd.collect())
 
 
 class ProfilerTests(PySparkTestCase):

@@ -33,7 +33,7 @@ def utf8_decoder(s):
 class KafkaUtils(object):
 
     @staticmethod
-    def createStream(ssc, zkQuorum, groupId, topics,
+    def createStream(ssc, zkQuorum, groupId, topics, kafkaParams={},
                      storageLevel=StorageLevel.MEMORY_AND_DISK_SER_2,
                      keyDecoder=utf8_decoder, valueDecoder=utf8_decoder):
         """
@@ -44,22 +44,23 @@ class KafkaUtils(object):
         :param groupId:  The group id for this consumer.
         :param topics:  Dict of (topic_name -> numPartitions) to consume.
                         Each partition is consumed in its own thread.
+        :param kafkaParams: Additional params for Kafka
         :param storageLevel:  RDD storage level.
-        :param keyDecoder:  A function used to decode key
-        :param valueDecoder:  A function used to decode value
+        :param keyDecoder:  A function used to decode key (default is utf8_decoder)
+        :param valueDecoder:  A function used to decode value (default is utf8_decoder)
         :return: A DStream object
         """
         java_import(ssc._jvm, "org.apache.spark.streaming.kafka.KafkaUtils")
 
-        param = {
+        kafkaParams.update({
             "zookeeper.connect": zkQuorum,
             "group.id": groupId,
             "zookeeper.connection.timeout.ms": "10000",
-        }
+        })
         if not isinstance(topics, dict):
             raise TypeError("topics should be dict")
         jtopics = MapConverter().convert(topics, ssc.sparkContext._gateway._gateway_client)
-        jparam = MapConverter().convert(param, ssc.sparkContext._gateway._gateway_client)
+        jparam = MapConverter().convert(kafkaParams, ssc.sparkContext._gateway._gateway_client)
         jlevel = ssc._sc._getJavaStorageLevel(storageLevel)
 
         def getClassByName(name):

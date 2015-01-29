@@ -134,6 +134,8 @@ class FramedSerializer(Serializer):
 
     def _write_with_length(self, obj, stream):
         serialized = self.dumps(obj)
+        if serialized is None:
+            raise ValueError("serialized value should not be None")
         if len(serialized) > (1 << 31):
             raise ValueError("can not serialize object larger than 2G")
         write_int(len(serialized), stream)
