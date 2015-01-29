@@ -17,6 +17,55 @@
 # limitations under the License.
 #
 
+# Run test suites and indivisual test suite.
+#
+# Usage: run-tests [core|sql|mllib|ml|streaming]
+#
+# When you select none, all test suites are run. You can also select
+# multiple test suites.
+
+function usage() {
+    echo "Usage: run-tests [core|sql|mllib|ml|streaming]"
+}
+
+if [ $# == 0 ]; then
+    DO_CORE_TESTS=1
+    DO_SQL_TESTS=1
+    DO_MLLIB_TESTS=1
+    DO_ML_TESTS=1
+    DO_STREAMING_TESTS=1
+else
+    DO_CORE_TESTS=0
+    DO_SQL_TESTS=0
+    DO_MLLIB_TESTS=0
+    DO_ML_TESTS=0
+    DO_STREAMING_TESTS=0
+
+    while (("$#")); do
+        case $1 in
+            core)
+                DO_CORE_TESTS=1
+                ;;
+            sql)
+                DO_SQL_TESTS=1
+                ;;
+            mllib)
+                DO_MLLIB_TESTS=1
+                ;;
+            ml)
+                DO_ML_TESTS=1
+                ;;
+            streaming)
+                DO_STREAMING_TESTS=1
+                ;;
+            *)
+                usage
+                exit 1
+                ;;
+        esac
+        shift
+    done
+fi
 
 # Figure out where the Spark framework is installed
 FWDIR="$(cd "`dirname "$0"`"; cd ../; pwd)"
@@ -143,11 +192,25 @@ fi
 echo "Testing with Python version:"
 $PYSPARK_PYTHON --version
 
-run_core_tests
-run_sql_tests
-run_mllib_tests
-run_ml_tests
-run_streaming_tests
+if [ $DO_CORE_TESTS == 1 ]; then
+    run_core_tests
+fi
+
+if [ $DO_SQL_TESTS == 1 ]; then
+    run_sql_tests
+fi
+
+if [ $DO_MLLIB_TESTS == 1 ]; then
+    run_mllib_tests
+fi
+
+if [ $DO_ML_TESTS == 1 ]; then
+    run_ml_tests
+fi
+
+if [ $DO_STREAMING_TESTS == 1 ]; then
+    run_streaming_tests
+fi
 
 # Try to test with Python 3
 if [ $(which python3.4) ]; then
@@ -168,9 +231,17 @@ if [ $(which pypy) ]; then
     echo "Testing with PyPy version:"
     $PYSPARK_PYTHON --version
 
-    run_core_tests
-    run_sql_tests
-    run_streaming_tests
+    if [ $DO_CORE_TESTS == 1 ]; then
+        run_core_tests
+    fi
+
+    if [ $DO_SQL_TESTS == 1 ]; then
+        run_sql_tests
+    fi
+
+    if [ $DO_STREAMING_TESTS == 1 ]; then
+        run_streaming_tests
+    fi
 fi
 
 if [[ $FAILED == 0 ]]; then
