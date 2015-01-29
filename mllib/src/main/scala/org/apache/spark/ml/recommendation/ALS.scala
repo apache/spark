@@ -20,6 +20,8 @@ package org.apache.spark.ml.recommendation
 import java.{util => ju}
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
+import scala.util.Sorting
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import com.github.fommil.netlib.LAPACK.{getInstance => lapack}
@@ -29,7 +31,7 @@ import org.apache.spark.{HashPartitioner, Logging, Partitioner}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Column, DataFrame}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.types.{DoubleType, FloatType, IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
@@ -221,7 +223,8 @@ private[recommendation] object ALS extends Logging {
   private[recommendation]
   case class Rating[@specialized(Int, Long) User, @specialized(Int, Long) Item](
       user: User,
-      item: Item, rating: Float)
+      item: Item,
+      rating: Float)
 
   /** Cholesky solver for least square problems. */
   private[recommendation] class CholeskySolver {
@@ -333,7 +336,9 @@ private[recommendation] object ALS extends Logging {
   /**
    * Implementation of the ALS algorithm.
    */
-  private def train[@specialized(Int, Long) User, @specialized(Int, Long) Item](
+  private def train[
+      @specialized(Int, Long) User: ClassTag,
+      @specialized(Int, Long) Item: ClassTag](
       ratings: RDD[Rating[User, Item]],
       rank: Int = 10,
       numUserBlocks: Int = 10,
@@ -341,7 +346,9 @@ private[recommendation] object ALS extends Logging {
       maxIter: Int = 10,
       regParam: Double = 1.0,
       implicitPrefs: Boolean = false,
-      alpha: Double = 1.0): (RDD[(User, Array[Float])], RDD[(Item, Array[Float])]) = {
+      alpha: Double = 1.0)(
+      implicit userOrd: Ordering[User],
+      itemOrd: Ordering[Item]): (RDD[(User, Array[Float])], RDD[(Item, Array[Float])]) = {
     val userPart = new HashPartitioner(numUserBlocks)
     val itemPart = new HashPartitioner(numItemBlocks)
     val userLocalIndexEncoder = new LocalIndexEncoder(userPart.numPartitions)
@@ -444,8 +451,8 @@ private[recommendation] object ALS extends Logging {
    *
    * @see [[LocalIndexEncoder]]
    */
-  private[recommendation] case class InBlock[@specialized(Int, Long) SrcType](
-      srcIds: Array[SrcType],
+  private[recommendation] case class InBlock[@specialized(Int, Long) Src: ClassTag](
+      srcIds: Array[Src],
       dstPtrs: Array[Int],
       dstEncodedIndices: Array[Int],
       ratings: Array[Float]) {
@@ -463,8 +470,8 @@ private[recommendation] object ALS extends Logging {
    * @param rank rank
    * @return initialized factor blocks
    */
-  private def initialize[@specialized(Int, Long) SrcType](
-      inBlocks: RDD[(Int, InBlock[SrcType])],
+  private def initialize[@specialized(Int, Long) Src](
+      inBlocks: RDD[(Int, InBlock[Src])],
       rank: Int): RDD[(Int, FactorBlock)] = {
     // Choose a unit vector uniformly at random from the unit sphere, but from the
     // "first quadrant" where all elements are nonnegative. This can be done by choosing
@@ -487,9 +494,9 @@ private[recommendation] object ALS extends Logging {
    * A rating block that contains src IDs, dst IDs, and ratings, stored in primitive arrays.
    */
   private[recommendation]
-  case class RatingBlock[@specialized(Int, Long) SrcType, @specialized(Int, Long) DstType](
-      srcIds: Array[SrcType],
-      dstIds: Array[DstType],
+  case class RatingBlock[@specialized(Int, Long) Src, @specialized(Int, Long) Dst](
+      srcIds: Array[Src],
+      dstIds: Array[Dst],
       ratings: Array[Float]) {
     /** Size of the block. */
     val size: Int = srcIds.size
@@ -501,16 +508,16 @@ private[recommendation] object ALS extends Logging {
    * Builder for [[RatingBlock]]. [[mutable.ArrayBuilder]] is used to avoid boxing/unboxing.
    */
   private[recommendation] class RatingBlockBuilder[
-      @specialized(Int, Long) SrcType,
-      @specialized(Int, Long) DstType] extends Serializable {
+      @specialized(Int, Long) Src: ClassTag,
+      @specialized(Int, Long) Dst: ClassTag] extends Serializable {
 
-    private val srcIds = mutable.ArrayBuilder.make[SrcType]
-    private val dstIds = mutable.ArrayBuilder.make[DstType]
+    private val srcIds = mutable.ArrayBuilder.make[Src]
+    private val dstIds = mutable.ArrayBuilder.make[Dst]
     private val ratings = mutable.ArrayBuilder.make[Float]
     var size = 0
 
     /** Adds a rating. */
-    def add(r: Rating[SrcType, DstType]): this.type = {
+    def add(r: Rating[Src, Dst]): this.type = {
       size += 1
       srcIds += r.user
       dstIds += r.item
@@ -519,7 +526,7 @@ private[recommendation] object ALS extends Logging {
     }
 
     /** Merges another [[RatingBlockBuilder]]. */
-    def merge(other: RatingBlock[SrcType, DstType]): this.type = {
+    def merge(other: RatingBlock[Src, Dst]): this.type = {
       size += other.srcIds.size
       srcIds ++= other.srcIds
       dstIds ++= other.dstIds
@@ -528,8 +535,8 @@ private[recommendation] object ALS extends Logging {
     }
 
     /** Builds a [[RatingBlock]]. */
-    def build(): RatingBlock[SrcType, DstType] = {
-      RatingBlock[SrcType, DstType](srcIds.result(), dstIds.result(), ratings.result())
+    def build(): RatingBlock[Src, Dst] = {
+      RatingBlock[Src, Dst](srcIds.result(), dstIds.result(), ratings.result())
     }
   }
 
@@ -542,7 +549,9 @@ private[recommendation] object ALS extends Logging {
    *
    * @return an RDD of rating blocks in the form of ((srcBlockId, dstBlockId), ratingBlock)
    */
-  private def partitionRatings[@specialized(Int, Long) User, @specialized(Int, Long) Item](
+  private def partitionRatings[
+      @specialized(Int, Long) User: ClassTag,
+      @specialized(Int, Long) Item: ClassTag](
       ratings: RDD[Rating[User, Item]],
       srcPart: Partitioner,
       dstPart: Partitioner): RDD[((Int, Int), RatingBlock[User, Item])] = {
@@ -590,10 +599,11 @@ private[recommendation] object ALS extends Logging {
    * Builder for uncompressed in-blocks of (srcId, dstEncodedIndex, rating) tuples.
    * @param encoder encoder for dst indices
    */
-  private[recommendation] class UncompressedInBlockBuilder[@specialized(Int, Long) SrcType](
-      encoder: LocalIndexEncoder) {
+  private[recommendation] class UncompressedInBlockBuilder[@specialized(Int, Long) Src: ClassTag](
+      encoder: LocalIndexEncoder)(
+      implicit ord: Ordering[Src]) {
 
-    private val srcIds = mutable.ArrayBuilder.make[SrcType]
+    private val srcIds = mutable.ArrayBuilder.make[Src]
     private val dstEncodedIndices = mutable.ArrayBuilder.make[Int]
     private val ratings = mutable.ArrayBuilder.make[Float]
 
@@ -607,7 +617,7 @@ private[recommendation] object ALS extends Logging {
      */
     def add(
         dstBlockId: Int,
-        srcIds: Array[SrcType],
+        srcIds: Array[Src],
         dstLocalIndices: Array[Int],
         ratings: Array[Float]): this.type = {
       val sz = srcIds.size
@@ -624,7 +634,7 @@ private[recommendation] object ALS extends Logging {
     }
 
     /** Builds a [[UncompressedInBlock]]. */
-    def build(): UncompressedInBlock[SrcType] = {
+    def build(): UncompressedInBlock[Src] = {
       new UncompressedInBlock(srcIds.result(), dstEncodedIndices.result(), ratings.result())
     }
   }
@@ -632,10 +642,11 @@ private[recommendation] object ALS extends Logging {
   /**
    * A block of (srcId, dstEncodedIndex, rating) tuples stored in primitive arrays.
    */
-  private[recommendation] class UncompressedInBlock[@specialized(Int, Long) SrcType](
-      val srcIds: Array[SrcType],
+  private[recommendation] class UncompressedInBlock[@specialized(Int, Long) Src: ClassTag](
+      val srcIds: Array[Src],
       val dstEncodedIndices: Array[Int],
-      val ratings: Array[Float]) {
+      val ratings: Array[Float])(
+      implicit ord: Ordering[Src]) {
 
     /** Size the of block. */
     def size: Int = srcIds.size
@@ -645,11 +656,11 @@ private[recommendation] object ALS extends Logging {
      * sparse matrix from coordinate list (COO) format into compressed sparse column (CSC) format.
      * Sorting is done using Spark's built-in Timsort to avoid generating too many objects.
      */
-    def compress(): InBlock[SrcType] = {
+    def compress(): InBlock[Src] = {
       val sz = size
       assert(sz > 0, "Empty in-link block should not exist.")
       sort()
-      val uniqueSrcIdsBuilder = mutable.ArrayBuilder.make[SrcType]
+      val uniqueSrcIdsBuilder = mutable.ArrayBuilder.make[Src]
       val dstCountsBuilder = mutable.ArrayBuilder.make[Int]
       var preSrcId = srcIds(0)
       uniqueSrcIdsBuilder += preSrcId
@@ -689,8 +700,8 @@ private[recommendation] object ALS extends Logging {
       val sortId = Utils.random.nextInt()
       logDebug(s"Start sorting an uncompressed in-block of size $sz. (sortId = $sortId)")
       val start = System.nanoTime()
-      val sorter = new Sorter(new UncompressedInBlockSort[SrcType])
-      sorter.sort(this, 0, size, Ordering[KeyWrapper[SrcType]])
+      val sorter = new Sorter(new UncompressedInBlockSort[Src])
+      sorter.sort(this, 0, size, Ordering[KeyWrapper[Src]])
       val duration = (System.nanoTime() - start) / 1e9
       logDebug(s"Sorting took $duration seconds. (sortId = $sortId)")
     }
@@ -701,13 +712,13 @@ private[recommendation] object ALS extends Logging {
    *
    * @see [[UncompressedInBlockSort]]
    */
-  private class KeyWrapper[@specialized(Int, Long) KeyType <: Ordered[KeyType]]
-      extends Ordered[KeyWrapper[KeyType]] {
+  private class KeyWrapper[@specialized(Int, Long) KeyType: ClassTag](
+      implicit ord: Ordering[KeyType]) extends Ordered[KeyWrapper[KeyType]] {
 
-    private var key: KeyType = _
+    var key: KeyType = _
 
     override def compare(that: KeyWrapper[KeyType]): Int = {
-      key.compare(that.key)
+      ord.compare(key, that.key)
     }
 
     def setKey(key: KeyType): this.type = {
@@ -719,15 +730,16 @@ private[recommendation] object ALS extends Logging {
   /**
    * [[SortDataFormat]] of [[UncompressedInBlock]] used by [[Sorter]].
    */
-  private class UncompressedInBlockSort[@specialized(Int, Long) SrcType]
-      extends SortDataFormat[KeyWrapper[SrcType], UncompressedInBlock[SrcType]] {
+  private class UncompressedInBlockSort[@specialized(Int, Long) Src: ClassTag](
+      implicit ord: Ordering[Src])
+    extends SortDataFormat[KeyWrapper[Src], UncompressedInBlock[Src]] {
 
-    override def newKey(): KeyWrapper[SrcType] = new KeyWrapper()
+    override def newKey(): KeyWrapper[Src] = new KeyWrapper()
 
     override def getKey(
-        data: UncompressedInBlock[SrcType],
+        data: UncompressedInBlock[Src],
         pos: Int,
-        reuse: KeyWrapper[SrcType]): KeyWrapper[SrcType] = {
+        reuse: KeyWrapper[Src]): KeyWrapper[Src] = {
       if (reuse == null) {
         new KeyWrapper().setKey(data.srcIds(pos))
       } else {
@@ -736,8 +748,8 @@ private[recommendation] object ALS extends Logging {
     }
 
     override def getKey(
-        data: UncompressedInBlock[SrcType],
-        pos: Int): KeyWrapper[SrcType] = {
+        data: UncompressedInBlock[Src],
+        pos: Int): KeyWrapper[Src] = {
       getKey(data, pos, null)
     }
 
@@ -750,16 +762,16 @@ private[recommendation] object ALS extends Logging {
       data(pos1) = tmp
     }
 
-    override def swap(data: UncompressedInBlock[SrcType], pos0: Int, pos1: Int): Unit = {
+    override def swap(data: UncompressedInBlock[Src], pos0: Int, pos1: Int): Unit = {
       swapElements(data.srcIds, pos0, pos1)
       swapElements(data.dstEncodedIndices, pos0, pos1)
       swapElements(data.ratings, pos0, pos1)
     }
 
     override def copyRange(
-        src: UncompressedInBlock[SrcType],
+        src: UncompressedInBlock[Src],
         srcPos: Int,
-        dst: UncompressedInBlock[SrcType],
+        dst: UncompressedInBlock[Src],
         dstPos: Int,
         length: Int): Unit = {
       System.arraycopy(src.srcIds, srcPos, dst.srcIds, dstPos, length)
@@ -767,15 +779,15 @@ private[recommendation] object ALS extends Logging {
       System.arraycopy(src.ratings, srcPos, dst.ratings, dstPos, length)
     }
 
-    override def allocate(length: Int): UncompressedInBlock[SrcType] = {
+    override def allocate(length: Int): UncompressedInBlock[Src] = {
       new UncompressedInBlock(
-        new Array[SrcType](length), new Array[Int](length), new Array[Float](length))
+        new Array[Src](length), new Array[Int](length), new Array[Float](length))
     }
 
     override def copyElement(
-        src: UncompressedInBlock[SrcType],
+        src: UncompressedInBlock[Src],
         srcPos: Int,
-        dst: UncompressedInBlock[SrcType],
+        dst: UncompressedInBlock[Src],
         dstPos: Int): Unit = {
       dst.srcIds(dstPos) = src.srcIds(srcPos)
       dst.dstEncodedIndices(dstPos) = src.dstEncodedIndices(srcPos)
@@ -791,20 +803,23 @@ private[recommendation] object ALS extends Logging {
    * @param dstPart partitioner for dst IDs
    * @return (in-blocks, out-blocks)
    */
-  private def makeBlocks[@specialized(Int, Long) SrcType, @specialized(Int, Long) DstType](
+  private def makeBlocks[
+      @specialized(Int, Long) Src: ClassTag,
+      @specialized(Int, Long) Dst: ClassTag](
       prefix: String,
-      ratingBlocks: RDD[((Int, Int), RatingBlock[SrcType, DstType])],
+      ratingBlocks: RDD[((Int, Int), RatingBlock[Src, Dst])],
       srcPart: Partitioner,
       dstPart: Partitioner)(
-      implicit ord: Ordering[DstType]): (RDD[(Int, InBlock[SrcType])], RDD[(Int, OutBlock)]) = {
+      implicit srcOrd: Ordering[Src],
+      dstOrd: Ordering[Dst]): (RDD[(Int, InBlock[Src])], RDD[(Int, OutBlock)]) = {
     val inBlocks = ratingBlocks.map {
       case ((srcBlockId, dstBlockId), RatingBlock(srcIds, dstIds, ratings)) =>
         // The implementation is a faster version of
         // val dstIdToLocalIndex = dstIds.toSet.toSeq.sorted.zipWithIndex.toMap
         val start = System.nanoTime()
-        val dstIdSet = new OpenHashSet[DstType](1 << 20)
+        val dstIdSet = new OpenHashSet[Dst](1 << 20)
         dstIds.foreach(dstIdSet.add)
-        val sortedDstIds = new Array[DstType](dstIdSet.size)
+        val sortedDstIds = new Array[Dst](dstIdSet.size)
         var i = 0
         var pos = dstIdSet.nextPos(0)
         while (pos != -1) {
@@ -813,8 +828,8 @@ private[recommendation] object ALS extends Logging {
           i += 1
         }
         assert(i == dstIdSet.size)
-        ju.Arrays.sort(sortedDstIds, ord)
-        val dstIdToLocalIndex = new OpenHashMap[DstType, Int](sortedDstIds.size)
+        Sorting.quickSort(sortedDstIds)
+        val dstIdToLocalIndex = new OpenHashMap[Dst, Int](sortedDstIds.size)
         i = 0
         while (i < sortedDstIds.size) {
           dstIdToLocalIndex.update(sortedDstIds(i), i)
@@ -827,7 +842,7 @@ private[recommendation] object ALS extends Logging {
     }.groupByKey(new HashPartitioner(srcPart.numPartitions))
         .mapValues { iter =>
       val builder =
-        new UncompressedInBlockBuilder[SrcType](new LocalIndexEncoder(dstPart.numPartitions))
+        new UncompressedInBlockBuilder[Src](new LocalIndexEncoder(dstPart.numPartitions))
       iter.foreach { case (dstBlockId, srcIds, dstLocalIndices, ratings) =>
         builder.add(dstBlockId, srcIds, dstLocalIndices, ratings)
       }
@@ -872,10 +887,10 @@ private[recommendation] object ALS extends Logging {
    *
    * @return dst factors
    */
-  private def computeFactors[@specialized(Int, Long) SrcType](
+  private def computeFactors[@specialized(Int, Long) Src](
       srcFactorBlocks: RDD[(Int, FactorBlock)],
       srcOutBlocks: RDD[(Int, OutBlock)],
-      dstInBlocks: RDD[(Int, InBlock[SrcType])],
+      dstInBlocks: RDD[(Int, InBlock[Src])],
       rank: Int,
       regParam: Double,
       srcEncoder: LocalIndexEncoder,
