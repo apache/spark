@@ -97,8 +97,19 @@ class CoordinateMatrix(
     toIndexedRowMatrix().toRowMatrix()
   }
 
-  /** Converts to BlockMatrix. */
+  /**
+   * Converts to BlockMatrix.
+   * @param rowsPerBlock The number of rows of each block. The blocks at the bottom edge may have
+   *                     a smaller value. Must be an integer value greater than 0.
+   * @param colsPerBlock The number of columns of each block. The blocks at the right edge may have
+   *                     a smaller value. Must be an integer value greater than 0.
+   * @return a `BlockMatrix`
+   */
   def toBlockMatrix(rowsPerBlock: Int, colsPerBlock: Int): BlockMatrix = {
+    require(rowsPerBlock > 0,
+      s"rowsPerBlock needs to be greater than 0. rowsPerBlock: $rowsPerBlock")
+    require(colsPerBlock > 0,
+      s"colsPerBlock needs to be greater than 0. colsPerBlock: $colsPerBlock")
     val m = numRows()
     val n = numCols()
     val numRowBlocks = math.ceil(m.toDouble / rowsPerBlock).toInt

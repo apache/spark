@@ -77,7 +77,14 @@ class IndexedRowMatrix(
     new RowMatrix(rows.map(_.vector), 0L, nCols)
   }
 
-  /** Converts to BlockMatrix. */
+  /**
+   * Converts to BlockMatrix.
+   * @param rowsPerBlock The number of rows of each block. The blocks at the bottom edge may have
+   *                     a smaller value. Must be an integer value greater than 0.
+   * @param colsPerBlock The number of columns of each block. The blocks at the right edge may have
+   *                     a smaller value. Must be an integer value greater than 0.
+   * @return a `BlockMatrix`
+   */
   def toBlockMatrix(rowsPerBlock: Int, colsPerBlock: Int): BlockMatrix = {
     toCoordinateMatrix().toBlockMatrix(rowsPerBlock, colsPerBlock)
   }

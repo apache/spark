@@ -94,6 +94,13 @@ class IndexedRowMatrixSuite extends FunSuite with MLlibTestSparkContext {
     assert(blockMat.numRows() === m)
     assert(blockMat.numCols() === n)
     assert(blockMat.toBreeze() === idxRowMat.toBreeze())
+
+    intercept[IllegalArgumentException] {
+      idxRowMat.toBlockMatrix(-1, 2)
+    }
+    intercept[IllegalArgumentException] {
+      idxRowMat.toBlockMatrix(2, 0)
+    }
   }
 
   test("multiply a local matrix") {

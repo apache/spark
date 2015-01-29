@@ -17,14 +17,14 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
+import scala.collection.mutable.ArrayBuffer
+
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.{Logging, Partitioner}
 import org.apache.spark.mllib.linalg.{SparseMatrix, DenseMatrix, Matrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * A grid partitioner, which uses a regular grid to partition coordinates.
@@ -189,18 +189,22 @@ class BlockMatrix(
     val entryRDD = blocks.flatMap { case ((blockRowIndex, blockColIndex), mat) =>
       val rowStart = blockRowIndex.toLong * rowsPerBlock
       val colStart = blockColIndex.toLong * colsPerBlock
-      val entryValues = new ArrayBuffer[MatrixEntry](mat.numRows * mat.numCols)
       mat match {
         case dn: DenseMatrix =>
+          val entryValues = new ArrayBuffer[MatrixEntry](mat.numRows * mat.numCols)
           dn.foreachActive { (i, j, v) =>
             if (v != 0.0) entryValues.append(new MatrixEntry(rowStart + i, colStart + j, v))
           }
+          entryValues
         case sp: SparseMatrix =>
+          val entryValues = new Array[MatrixEntry](sp.values.length)
+          var cnt = 0
           sp.foreachActive { (i, j, v) =>
-            entryValues.append(new MatrixEntry(rowStart + i, colStart + j, v))
+            entryValues(cnt) = new MatrixEntry(rowStart + i, colStart + j, v)
+            cnt += 1
           }
+          entryValues
       }
-      entryValues
     }
     new CoordinateMatrix(entryRDD, numRows(), numCols())
   }

@@ -106,5 +106,12 @@ class CoordinateMatrixSuite extends FunSuite with MLlibTestSparkContext {
     assert(blockMat.numRows() === m)
     assert(blockMat.numCols() === n)
     assert(blockMat.toBreeze() === mat.toBreeze())
+
+    intercept[IllegalArgumentException] {
+      mat.toBlockMatrix(-1, 2)
+    }
+    intercept[IllegalArgumentException] {
+      mat.toBlockMatrix(2, 0)
+    }
   }
 }
