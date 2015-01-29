@@ -7,7 +7,7 @@ import sys
 from time import sleep
 
 from sqlalchemy import (
-        Column, Integer, String, DateTime)
+    Column, Integer, String, DateTime)
 from sqlalchemy import func
 from sqlalchemy.orm.session import make_transient
 
@@ -22,6 +22,7 @@ from airflow.utils import State
 
 Base = models.Base
 ID_LEN = conf.getint('misc', 'ID_LEN')
+
 
 class BaseJob(Base):
     """
@@ -71,7 +72,7 @@ class BaseJob(Base):
 
     def kill(self):
         session = settings.Session()
-        job = session.query(BaseJob).filter(BaseJob.id==self.id).first()
+        job = session.query(BaseJob).filter(BaseJob.id == self.id).first()
         job.end_date = datetime.now()
         try:
             self.on_kill()
@@ -108,7 +109,7 @@ class BaseJob(Base):
         sleep at all.
         '''
         session = settings.Session()
-        job = session.query(BaseJob).filter(BaseJob.id==self.id).first()
+        job = session.query(BaseJob).filter(BaseJob.id == self.id).first()
 
         if job.state == State.SHUTDOWN:
             self.kill()
@@ -199,8 +200,9 @@ class MasterJob(BaseJob):
                 sq = session.query(
                     TI.task_id,
                     func.max(TI.execution_date).label('max_ti')
-                ).filter(TI.dag_id == dag.dag_id).group_by(TI.task_id).subquery(
-                    'sq')
+                ).filter(
+                    TI.dag_id == dag.dag_id
+                ).group_by(TI.task_id).subquery('sq')
 
                 qry = session.query(TI).filter(
                     TI.dag_id == dag.dag_id,
@@ -213,6 +215,8 @@ class MasterJob(BaseJob):
                 session.commit()
 
                 for task in dag.tasks:
+                    if task.adhoc:
+                        continue
                     if task.task_id not in ti_dict:
                         # Brand new task, let's get started
                         ti = TI(task, task.start_date)
@@ -236,8 +240,8 @@ class MasterJob(BaseJob):
                             # Trying to run the next schedule
                             ti = TI(
                                 task=task,
-                                execution_date=ti.execution_date +
-                                    task.schedule_interval
+                                execution_date=(
+                                    ti.execution_date + task.schedule_interval)
                             )
                             ti.refresh_from_db()
                             if ti.is_runnable():
@@ -258,9 +262,11 @@ class BackfillJob(BaseJob):
     __mapper_args__ = {
         'polymorphic_identity': 'BackfillJob'
     }
+
     def __init__(
             self,
             dag, start_date=None, end_date=None, mark_success=False,
+            include_adhoc=False,
             *args, **kwargs):
         self.dag = dag
         dag.override_start_date(start_date)
@@ -268,6 +274,7 @@ class BackfillJob(BaseJob):
         self.bf_start_date = start_date
         self.bf_end_date = end_date
         self.mark_success = mark_success
+        self.include_adhoc = include_adhoc
         super(BackfillJob, self).__init__(*args, **kwargs)
 
     def _execute(self):
@@ -292,6 +299,9 @@ class BackfillJob(BaseJob):
         started = []
         wont_run = []
         for task in self.dag.tasks:
+            if (not self.include_adhoc) and task.adhoc:
+                continue
+
             start_date = start_date or task.start_date
             end_date = end_date or task.end_date or datetime.now()
             for dttm in utils.date_range(
