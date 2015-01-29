@@ -16,7 +16,9 @@
  */
 package org.apache.spark.mllib.kernels
 
+import breeze.linalg.norm
 import org.apache.spark.mllib.classification.SVMSuite
+import org.apache.spark.mllib.prototype.{QuadraticRenyiEntropy, GreedyEntropySelector}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.scalatest.FunSuite
 
@@ -82,8 +84,9 @@ class KernelSuite extends FunSuite with MLlibTestSparkContext {
 
   }
 
-  test("Testing optimal bandwidth calculation on Gaussian Kernel"){
-    val nPoints = 100
+  test("Testing optimal bandwidth calculation on Gaussian Kernel" +
+    " and maximum entropy subset selection"){
+    val nPoints = 10000
 
     // NOTE: Intercept should be small for generating equal 0s and 1s
     val A = 0.01
@@ -98,5 +101,18 @@ class KernelSuite extends FunSuite with MLlibTestSparkContext {
     val kern = new GaussianDensityKernel()
     kern.optimalBandwidth(newtestRDD)
     assert(kern.eval(newtestRDD.first()) != Double.NaN)
+
+    val newIndexedRDD = SVMKernel.indexedRDD(newtestRDD)
+    newIndexedRDD.cache()
+    newtestRDD.unpersist()
+
+    val entropy: QuadraticRenyiEntropy = new QuadraticRenyiEntropy(kern)
+    val subsetsel: GreedyEntropySelector = new GreedyEntropySelector(entropy)
+
+    val subsetRDD = subsetsel.selectPrototypes(
+      newIndexedRDD,
+      100)
+
+    assert(subsetRDD.count() == 100)
   }
 }
