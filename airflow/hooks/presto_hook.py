@@ -4,6 +4,9 @@ from airflow.models import Connection
 from airflow.hooks.base_hook import BaseHook
 from pyhive import presto
 
+import logging
+logging.getLogger("pyhive").setLevel(logging.INFO)
+
 
 class PrestoHook(BaseHook):
     """
