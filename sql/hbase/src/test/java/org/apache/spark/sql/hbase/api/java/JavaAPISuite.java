@@ -37,15 +37,15 @@ public class JavaAPISuite extends HBaseIntegrationTestBase implements Serializab
     private transient MiniHBaseCluster cluster;
     private transient HBaseAdmin hbaseAdmin;
 
-    String hb_staging_table = "HbStagingTable";
-    String staging_table = "StagingTable";
-    String create_sql = "CREATE TABLE " + staging_table + "(strcol STRING, bytecol String, shortcol String, intcol String, " +
+    private final String hb_staging_table = "HbStagingTable";
+    private final String staging_table = "StagingTable";
+    private final String create_sql = "CREATE TABLE " + staging_table + "(strcol STRING, bytecol String, shortcol String, intcol String, " +
             "longcol string, floatcol string, doublecol string, PRIMARY KEY(doublecol, strcol, intcol))" +
             " MAPPED BY (" + hb_staging_table + ", COLS=[bytecol=cf1.hbytecol, " +
             "shortcol=cf1.hshortcol, longcol=cf2.hlongcol, floatcol=cf2.hfloatcol])";
-    String insert_sql = "INSERT INTO " + staging_table + " VALUES (\"strcol\" , \"bytecol\" , \"shortcol\" , \"intcol\" ," +
+    private final String insert_sql = "INSERT INTO " + staging_table + " VALUES (\"strcol\" , \"bytecol\" , \"shortcol\" , \"intcol\" ," +
             "  \"longcol\" , \"floatcol\" , \"doublecol\")";
-    String retrieve_sql = "SELECT * FROM " + staging_table;
+    private final String retrieve_sql = "SELECT * FROM " + staging_table;
 
     @Before
     public void setUp() {
@@ -66,10 +66,6 @@ public class JavaAPISuite extends HBaseIntegrationTestBase implements Serializab
         } catch (Exception e) {
             e.printStackTrace();
         }
-    }
-
-    @After
-    public void tearDown() {
     }
 
     @Test

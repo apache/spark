@@ -111,7 +111,7 @@ object HBaseKVHelper {
     v match {
       case "" => new Array[Byte](0)
       case null => new Array[Byte](0)
-      case _ => {
+      case _ =>
         bu.dataType match {
           // todo: handle some complex types
           case BooleanType => bu.toBytes(v.toBoolean)
@@ -123,7 +123,6 @@ object HBaseKVHelper {
           case ShortType => bu.toBytes(v.toShort)
           case StringType => bu.toBytes(v)
         }
-      }
     }
   }
 

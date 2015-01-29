@@ -36,9 +36,9 @@ class HBasePartitionerSuite extends HBaseIntegrationTestBase {
     val rdd = TestHbase.sparkContext.parallelize(data, 4)
     val splitKeys = new ArrayBuffer[HBaseRawType]()
     splitKeys += Array.empty[Byte]
-    ((1 to 40).filter(_ % 5 == 0).filter(_ != 40).map { r =>
+    (1 to 40).filter(_ % 5 == 0).filter(_ != 40).map { r =>
       splitKeys += Bytes.toBytes(r)
-    })
+    }
     val partitioner = new HBasePartitioner(splitKeys.toArray)
     val shuffled =
       new ShuffledRDD[HBaseRawType, Int, Int](rdd, partitioner)
