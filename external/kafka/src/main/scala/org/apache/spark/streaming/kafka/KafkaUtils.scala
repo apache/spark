@@ -28,13 +28,13 @@ import kafka.message.MessageAndMetadata
 import kafka.serializer.{Decoder, StringDecoder}
 
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaPairReceiverInputDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.{InputDStream, ReceiverInputDStream}
-import org.apache.spark.rdd.kafka.{KafkaCluster, KafkaRDD, KafkaRDDPartition, OffsetRange}
+import org.apache.spark.rdd.kafka.{KafkaCluster, KafkaRDD, KafkaRDDPartition, OffsetRange, HasOffsetRanges}
 
 object KafkaUtils {
   /**
@@ -173,7 +173,7 @@ object KafkaUtils {
       kafkaParams: Map[String, String],
       batch: Array[OffsetRange],
       messageHandler: MessageAndMetadata[K, V] => R
-  ): RDD[R] = {
+  ): RDD[R] with HasOffsetRanges = {
     val parts = batch.zipWithIndex.map { case (o, i) =>
         new KafkaRDDPartition(i, o.topic, o.partition, o.fromOffset, o.untilOffset, o.host, o.port)
     }.toArray
@@ -181,12 +181,26 @@ object KafkaUtils {
   }
 
   /**
-   * This DOES NOT guarantee that side-effects of an action will see each message exactly once.
-   * If you need that guarantee, get the offsets from this stream and store them with your output.
-   * Nor does this store offsets in Kafka / Zookeeper.
-   * If checkpointed, it will store offset ranges in the checkpoint, such that each message
-   * will be transformed effectively exactly once even after failure,
-   * provided you have sufficient Kafka log retention.
+   * Compared to `createStream`, the stream created by this can guarantee that each message
+   * from Kafka is included in transformations (as opposed to output actions) exactly once,
+   * even in most failure situations.
+   *
+   * Points to note:
+   *
+   * Failure Recovery - You must checkpoint this stream, or save offsets yourself and provide them
+   * as the fromOffsets parameter on restart.
+   * Kafka must have sufficient log retention to obtain messages after failure.
+   *
+   * Getting offsets from the stream - see programming guide
+   *
+.  * Zookeeper - This does not use Zookeeper to store offsets.  For interop with Kafka monitors
+   * that depend on Zookeeper, you must store offsets in ZK yourself.
+   *
+   * End-to-end semantics - This does not guarantee that any output operation will push each record
+   * exactly once. To ensure end-to-end exactly-once semantics (that is, receiving exactly once and
+   * outputting exactly once), you have to either ensure that the output operation is
+   * idempotent, or transactionally store offsets with the output. See the programming guide for
+   * more details.
    *
    * @param ssc StreamingContext object
    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
@@ -198,7 +212,7 @@ object KafkaUtils {
    *  starting point of the stream
    * @param maxRetries maximum number of times in a row to retry getting leaders' offsets
    */
-  def createExactlyOnceStream[
+  def createNewStream[
     K: ClassTag,
     V: ClassTag,
     U <: Decoder[_]: ClassTag,
@@ -215,12 +229,23 @@ object KafkaUtils {
   }
 
   /**
-   * This DOES NOT guarantee that side-effects of an action will see each message exactly once.
-   * If you need that guarantee, get the offsets from this stream and store them with your output.
-   * Nor does this store offsets in Kafka / Zookeeper.
-   * If checkpointed, it will store offset ranges in the checkpoint, such that each message
-   * will be transformed effectively exactly once even after failure,
-   * provided you have sufficient Kafka log retention.
+   * Compared to `createStream`, the stream created by this can guarantee that each message
+   * from Kafka is included in transformations (as opposed to output actions) exactly once,
+   * even in most failure situations.
+   *
+   * Points to note:
+   *
+   * Failure Recovery - You must checkpoint this stream.
+   * Kafka must have sufficient log retention to obtain messages after failure.
+   *
+   * Getting offsets from the stream - see programming guide
+   *
+.  * Zookeeper - This does not use Zookeeper to store offsets.  For interop with Kafka monitors
+   * that depend on Zookeeper, you must store offsets in ZK yourself.
+   *
+   * End-to-end semantics - This does not guarantee that any output operation will push each record
+   * exactly once. To ensure end-to-end exactly-once semantics (that is, receiving exactly once and
+   * outputting exactly once), you have to ensure that the output operation is idempotent.
    *
    * @param ssc StreamingContext object
    * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#configuration">
@@ -231,7 +256,7 @@ object KafkaUtils {
    *   to determine where the stream starts (defaults to "largest")
    * @param topics names of the topics to consume
    */
-  def createExactlyOnceStream[
+  def createNewStream[
     K: ClassTag,
     V: ClassTag,
     U <: Decoder[_]: ClassTag,
@@ -258,7 +283,7 @@ object KafkaUtils {
       new DeterministicKafkaInputDStream[K, V, U, T, (K, V)](
         ssc, kafkaParams, fromOffsets, messageHandler, 1)
     }).fold(
-      errs => throw new Exception(errs.mkString("\n")),
+      errs => throw new SparkException(errs.mkString("\n")),
       ok => ok
     )
   }
