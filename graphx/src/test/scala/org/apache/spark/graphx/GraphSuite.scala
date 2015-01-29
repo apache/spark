@@ -385,6 +385,8 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val verticesDependencies = graph.vertices.partitionsRDD.dependencies
       assert(edgesDependencies.forall(_.rdd.isInstanceOf[CheckpointRDD[_]]))
       assert(verticesDependencies.forall(_.rdd.isInstanceOf[CheckpointRDD[_]]))
+      assert(graph.isCheckpointed)
+      assert(graph.getCheckpointFiles.size === 2)
     }
   }
 
