@@ -113,16 +113,22 @@ private[sql] trait DataFrameSpecificApi {
 
   def agg(exprs: Map[String, String]): DataFrame
 
+  def agg(exprs: java.util.Map[String, String]): DataFrame
+
   @scala.annotation.varargs
   def agg(expr: Column, exprs: Column*): DataFrame
 
-  def sort(colName: String): DataFrame
+  @scala.annotation.varargs
+  def sort(sortExpr: Column, sortExprs: Column*): DataFrame
+
+  @scala.annotation.varargs
+  def sort(sortCol: String, sortCols: String*): DataFrame
 
   @scala.annotation.varargs
   def orderBy(sortExpr: Column, sortExprs: Column*): DataFrame
 
   @scala.annotation.varargs
-  def sort(sortExpr: Column, sortExprs: Column*): DataFrame
+  def orderBy(sortCol: String, sortCols: String*): DataFrame
 
   def join(right: DataFrame): DataFrame
 
@@ -257,6 +263,7 @@ private[sql] trait ExpressionApi {
   def getField(fieldName: String): Column
 
   def cast(to: DataType): Column
+  def cast(to: String): Column
 
   def asc: Column
   def desc: Column

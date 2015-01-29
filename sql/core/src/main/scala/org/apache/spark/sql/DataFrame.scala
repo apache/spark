@@ -208,7 +208,7 @@ class DataFrame protected[sql](
   }
 
   /**
-   * Returns a new [[DataFrame]] sorted by the specified column, in ascending column.
+   * Returns a new [[DataFrame]] sorted by the specified column, all in ascending order.
    * {{{
    *   // The following 3 are equivalent
    *   df.sort("sortcol")
@@ -216,8 +216,9 @@ class DataFrame protected[sql](
    *   df.sort($"sortcol".asc)
    * }}}
    */
-  override def sort(colName: String): DataFrame = {
-    Sort(Seq(SortOrder(apply(colName).expr, Ascending)), global = true, logicalPlan)
+  @scala.annotation.varargs
+  override def sort(sortCol: String, sortCols: String*): DataFrame = {
+    orderBy(apply(sortCol), sortCols.map(apply) :_*)
   }
 
   /**
@@ -237,6 +238,15 @@ class DataFrame protected[sql](
       }
     }
     Sort(sortOrder, global = true, logicalPlan)
+  }
+
+  /**
+   * Returns a new [[DataFrame]] sorted by the given expressions.
+   * This is an alias of the `sort` function.
+   */
+  @scala.annotation.varargs
+  override def orderBy(sortCol: String, sortCols: String*): DataFrame = {
+    sort(sortCol, sortCols :_*)
   }
 
   /**
@@ -400,6 +410,16 @@ class DataFrame protected[sql](
    * }}
    */
   override def agg(exprs: Map[String, String]): DataFrame = groupBy().agg(exprs)
+
+  /**
+   * Aggregates on the entire [[DataFrame]] without groups.
+   * {{
+   *   // df.agg(...) is a shorthand for df.groupBy().agg(...)
+   *   df.agg(Map("age" -> "max", "salary" -> "avg"))
+   *   df.groupBy().agg(Map("age" -> "max", "salary" -> "avg"))
+   * }}
+   */
+  override def agg(exprs: java.util.Map[String, String]): DataFrame = agg(exprs.toMap)
 
   /**
    * Aggregates on the entire [[DataFrame]] without groups.

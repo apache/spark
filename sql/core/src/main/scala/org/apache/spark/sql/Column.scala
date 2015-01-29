@@ -56,7 +56,7 @@ object Column {
 class Column(
     sqlContext: Option[SQLContext],
     plan: Option[LogicalPlan],
-    val expr: Expression)
+    protected[sql] val expr: Expression)
   extends DataFrame(sqlContext, plan) with ExpressionApi {
 
   /** Turns a Catalyst expression into a `Column`. */
@@ -437,9 +437,7 @@ class Column(
   override def rlike(literal: String): Column = RLike(expr, lit(literal).expr)
 
   /**
-   * An expression that gets an
-   * @param ordinal
-   * @return
+   * An expression that gets an item at position `ordinal` out of an array.
    */
   override def getItem(ordinal: Int): Column = GetItem(expr, Literal(ordinal))
 
@@ -490,10 +488,37 @@ class Column(
    * {{{
    *   // Casts colA to IntegerType.
    *   import org.apache.spark.sql.types.IntegerType
-   *   df.select(df("colA").as(IntegerType))
+   *   df.select(df("colA").cast(IntegerType))
+   *
+   *   // equivalent to
+   *   df.select(df("colA").cast("int"))
    * }}}
    */
   override def cast(to: DataType): Column = Cast(expr, to)
+
+  /**
+   * Casts the column to a different data type, using the canonical string representation
+   * of the type. The supported types are: `string`, `boolean`, `byte`, `short`, `int`, `long`,
+   * `float`, `double`, `decimal`, `date`, `timestamp`.
+   * {{{
+   *   // Casts colA to integer.
+   *   df.select(df("colA").cast("int"))
+   * }}}
+   */
+  override def cast(to: String): Column = Cast(expr, to.toLowerCase match {
+    case "string" => StringType
+    case "boolean" => BooleanType
+    case "byte" => ByteType
+    case "short" => ShortType
+    case "int" => IntegerType
+    case "long" => LongType
+    case "float" => FloatType
+    case "double" => DoubleType
+    case "decimal" => DecimalType.Unlimited
+    case "date" => DateType
+    case "timestamp" => TimestampType
+    case _ => throw new RuntimeException(s"""Unsupported cast type: "$to"""")
+  })
 
   override def desc: Column = SortOrder(expr, Descending)
 
