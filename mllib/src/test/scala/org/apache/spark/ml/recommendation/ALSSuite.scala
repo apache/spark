@@ -183,8 +183,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       .add(0, Array(1, 0, 2), Array(0, 1, 4), Array(1.0f, 2.0f, 3.0f))
       .add(1, Array(3, 0), Array(2, 5), Array(4.0f, 5.0f))
       .build()
-    assert(uncompressed.size === 5)
-    val records = Seq.tabulate(uncompressed.size) { i =>
+    assert(uncompressed.length === 5)
+    val records = Seq.tabulate(uncompressed.length) { i =>
       val dstEncodedIndex = uncompressed.dstEncodedIndices(i)
       val dstBlockId = encoder.blockId(dstEncodedIndex)
       val dstLocalIndex = encoder.localIndex(dstEncodedIndex)

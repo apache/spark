@@ -291,7 +291,7 @@ object ALS extends Logging {
 
     /** Adds an observation. */
     def add(a: Array[Float], b: Float): this.type = {
-      require(a.size == k)
+      require(a.length == k)
       copyToDouble(a)
       blas.dspr(upper, k, 1.0, da, 1, ata)
       blas.daxpy(k, b.toDouble, da, 1, atb, 1)
@@ -303,7 +303,7 @@ object ALS extends Logging {
      * Adds an observation with implicit feedback. Note that this does not increment the counter.
      */
     def addImplicit(a: Array[Float], b: Float, alpha: Double): this.type = {
-      require(a.size == k)
+      require(a.length == k)
       // Extension to the original paper to handle b < 0. confidence is a function of |b| instead
       // so that it is never negative.
       val confidence = 1.0 + alpha * math.abs(b)
@@ -319,8 +319,8 @@ object ALS extends Logging {
     /** Merges another normal equation object. */
     def merge(other: NormalEquation): this.type = {
       require(other.k == k)
-      blas.daxpy(ata.size, 1.0, other.ata, 1, ata, 1)
-      blas.daxpy(atb.size, 1.0, other.atb, 1, atb, 1)
+      blas.daxpy(ata.length, 1.0, other.ata, 1, ata, 1)
+      blas.daxpy(atb.length, 1.0, other.atb, 1, atb, 1)
       n += other.n
       this
     }
@@ -454,9 +454,9 @@ object ALS extends Logging {
       dstEncodedIndices: Array[Int],
       ratings: Array[Float]) {
     /** Size of the block. */
-    val size: Int = ratings.size
-    require(dstEncodedIndices.size == size)
-    require(dstPtrs.size == srcIds.size + 1)
+    def size: Int = ratings.length
+    require(dstEncodedIndices.length == size)
+    require(dstPtrs.length == srcIds.length + 1)
   }
 
   /**
@@ -476,7 +476,7 @@ object ALS extends Logging {
     // (<1%) compared picking elements uniformly at random in [0,1].
     inBlocks.map { case (srcBlockId, inBlock) =>
       val random = new XORShiftRandom(srcBlockId)
-      val factors = Array.fill(inBlock.srcIds.size) {
+      val factors = Array.fill(inBlock.srcIds.length) {
         val factor = Array.fill(rank)(random.nextGaussian().toFloat)
         val nrm = blas.snrm2(rank, factor, 1)
         blas.sscal(rank, 1.0f / nrm, factor, 1)
@@ -489,15 +489,14 @@ object ALS extends Logging {
   /**
    * A rating block that contains src IDs, dst IDs, and ratings, stored in primitive arrays.
    */
-  private[recommendation]
-  case class RatingBlock[@specialized(Int, Long) ID](
+  case class RatingBlock[@specialized(Int, Long) ID: ClassTag](
       srcIds: Array[ID],
       dstIds: Array[ID],
       ratings: Array[Float]) {
     /** Size of the block. */
-    val size: Int = srcIds.size
-    require(dstIds.size == size)
-    require(ratings.size == size)
+    def size: Int = srcIds.length
+    require(dstIds.length == srcIds.length)
+    require(ratings.length == srcIds.length)
   }
 
   /**
@@ -522,7 +521,7 @@ object ALS extends Logging {
 
     /** Merges another [[RatingBlockBuilder]]. */
     def merge(other: RatingBlock[ID]): this.type = {
-      size += other.srcIds.size
+      size += other.srcIds.length
       srcIds ++= other.srcIds
       dstIds ++= other.dstIds
       ratings ++= other.ratings
@@ -531,7 +530,7 @@ object ALS extends Logging {
 
     /** Builds a [[RatingBlock]]. */
     def build(): RatingBlock[ID] = {
-      RatingBlock[ID](srcIds.result(), dstIds.result(), ratings.result())
+      new RatingBlock[ID](srcIds.result(), dstIds.result(), ratings.result())
     }
   }
 
@@ -568,14 +567,14 @@ object ALS extends Logging {
         val idx = srcBlockId + srcPart.numPartitions * dstBlockId
         val builder = builders(idx)
         builder.add(r)
-        if (builder.size >= 2048) { // 2048 * (3 * 4) = 24k
+        if (builder.length >= 2048) { // 2048 * (3 * 4) = 24k
           builders(idx) = new RatingBlockBuilder
           Iterator.single(((srcBlockId, dstBlockId), builder.build()))
         } else {
           Iterator.empty
         }
       } ++ {
-        builders.view.zipWithIndex.filter(_._1.size > 0).map { case (block, idx) =>
+        builders.view.zipWithIndex.filter(_._1.length > 0).map { case (block, idx) =>
           val srcBlockId = idx % srcPart.numPartitions
           val dstBlockId = idx / srcPart.numPartitions
           ((srcBlockId, dstBlockId), block.build())
@@ -613,9 +612,9 @@ object ALS extends Logging {
         srcIds: Array[ID],
         dstLocalIndices: Array[Int],
         ratings: Array[Float]): this.type = {
-      val sz = srcIds.size
-      require(dstLocalIndices.size == sz)
-      require(ratings.size == sz)
+      val sz = srcIds.length
+      require(dstLocalIndices.length == sz)
+      require(ratings.length == sz)
       this.srcIds ++= srcIds
       this.ratings ++= ratings
       var j = 0
@@ -642,7 +641,7 @@ object ALS extends Logging {
       implicit ord: Ordering[ID]) {
 
     /** Size the of block. */
-    def size: Int = srcIds.size
+    def length: Int = srcIds.length
 
     /**
      * Compresses the block into an [[InBlock]]. The algorithm is the same as converting a
@@ -650,7 +649,7 @@ object ALS extends Logging {
      * Sorting is done using Spark's built-in Timsort to avoid generating too many objects.
      */
     def compress(): InBlock[ID] = {
-      val sz = size
+      val sz = length
       assert(sz > 0, "Empty in-link block should not exist.")
       sort()
       val uniqueSrcIdsBuilder = mutable.ArrayBuilder.make[ID]
@@ -674,7 +673,7 @@ object ALS extends Logging {
       }
       dstCountsBuilder += curCount
       val uniqueSrcIds = uniqueSrcIdsBuilder.result()
-      val numUniqueSrdIds = uniqueSrcIds.size
+      val numUniqueSrdIds = uniqueSrcIds.length
       val dstCounts = dstCountsBuilder.result()
       val dstPtrs = new Array[Int](numUniqueSrdIds + 1)
       var sum = 0
@@ -688,13 +687,13 @@ object ALS extends Logging {
     }
 
     private def sort(): Unit = {
-      val sz = size
+      val sz = length
       // Since there might be interleaved log messages, we insert a unique id for easy pairing.
       val sortId = Utils.random.nextInt()
       logDebug(s"Start sorting an uncompressed in-block of size $sz. (sortId = $sortId)")
       val start = System.nanoTime()
       val sorter = new Sorter(new UncompressedInBlockSort[ID])
-      sorter.sort(this, 0, size, Ordering[KeyWrapper[ID]])
+      sorter.sort(this, 0, length, Ordering[KeyWrapper[ID]])
       val duration = (System.nanoTime() - start) / 1e9
       logDebug(s"Sorting took $duration seconds. (sortId = $sortId)")
     }
@@ -819,9 +818,9 @@ object ALS extends Logging {
         }
         assert(i == dstIdSet.size)
         Sorting.quickSort(sortedDstIds)
-        val dstIdToLocalIndex = new OpenHashMap[ID, Int](sortedDstIds.size)
+        val dstIdToLocalIndex = new OpenHashMap[ID, Int](sortedDstIds.length)
         i = 0
-        while (i < sortedDstIds.size) {
+        while (i < sortedDstIds.length) {
           dstIdToLocalIndex.update(sortedDstIds(i), i)
           i += 1
         }
@@ -843,7 +842,7 @@ object ALS extends Logging {
       val activeIds = Array.fill(dstPart.numPartitions)(mutable.ArrayBuilder.make[Int])
       var i = 0
       val seen = new Array[Boolean](dstPart.numPartitions)
-      while (i < srcIds.size) {
+      while (i < srcIds.length) {
         var j = dstPtrs(i)
         ju.Arrays.fill(seen, false)
         while (j < dstPtrs(i + 1)) {
@@ -886,7 +885,7 @@ object ALS extends Logging {
       srcEncoder: LocalIndexEncoder,
       implicitPrefs: Boolean = false,
       alpha: Double = 1.0): RDD[(Int, FactorBlock)] = {
-    val numSrcBlocks = srcFactorBlocks.partitions.size
+    val numSrcBlocks = srcFactorBlocks.partitions.length
     val YtY = if (implicitPrefs) Some(computeYtY(srcFactorBlocks, rank)) else None
     val srcOut = srcOutBlocks.join(srcFactorBlocks).flatMap {
       case (srcBlockId, (srcOutBlock, srcFactors)) =>
@@ -894,18 +893,18 @@ object ALS extends Logging {
           (dstBlockId, (srcBlockId, activeIndices.map(idx => srcFactors(idx))))
         }
     }
-    val merged = srcOut.groupByKey(new HashPartitioner(dstInBlocks.partitions.size))
+    val merged = srcOut.groupByKey(new HashPartitioner(dstInBlocks.partitions.length))
     dstInBlocks.join(merged).mapValues {
       case (InBlock(dstIds, srcPtrs, srcEncodedIndices, ratings), srcFactors) =>
         val sortedSrcFactors = new Array[FactorBlock](numSrcBlocks)
         srcFactors.foreach { case (srcBlockId, factors) =>
           sortedSrcFactors(srcBlockId) = factors
         }
-        val dstFactors = new Array[Array[Float]](dstIds.size)
+        val dstFactors = new Array[Array[Float]](dstIds.length)
         var j = 0
         val ls = new NormalEquation(rank)
         val solver = new CholeskySolver // TODO: add NNLS solver
-        while (j < dstIds.size) {
+        while (j < dstIds.length) {
           ls.reset()
           if (implicitPrefs) {
             ls.merge(YtY.get)
