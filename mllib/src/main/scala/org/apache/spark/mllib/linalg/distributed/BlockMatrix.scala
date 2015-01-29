@@ -189,27 +189,17 @@ class BlockMatrix(
     val entryRDD = blocks.flatMap { case ((blockRowIndex, blockColIndex), mat) =>
       val rowStart = blockRowIndex.toLong * rowsPerBlock
       val colStart = blockColIndex.toLong * colsPerBlock
-      mat match {
-        case dn: DenseMatrix =>
-          val entryValues = new ArrayBuffer[MatrixEntry](mat.numRows * mat.numCols)
-          dn.foreachActive { (i, j, v) =>
-            if (v != 0.0) entryValues.append(new MatrixEntry(rowStart + i, colStart + j, v))
-          }
-          entryValues
-        case sp: SparseMatrix =>
-          val entryValues = new Array[MatrixEntry](sp.values.length)
-          var cnt = 0
-          sp.foreachActive { (i, j, v) =>
-            entryValues(cnt) = new MatrixEntry(rowStart + i, colStart + j, v)
-            cnt += 1
-          }
-          entryValues
+      val entryValues = new ArrayBuffer[MatrixEntry]()
+      mat.foreachActive { (i, j, v) =>
+        if (v != 0.0) entryValues.append(new MatrixEntry(rowStart + i, colStart + j, v))
       }
+      entryValues
     }
     new CoordinateMatrix(entryRDD, numRows(), numCols())
   }
 
   /** Converts to IndexedRowMatrix. The number of columns must be within the integer range. */
+  // TODO: This implementation may be optimized
   def toIndexedRowMatrix(): IndexedRowMatrix = {
     require(numCols() < Int.MaxValue, "The number of columns must be within the integer range. " +
       s"numCols: ${numCols()}")

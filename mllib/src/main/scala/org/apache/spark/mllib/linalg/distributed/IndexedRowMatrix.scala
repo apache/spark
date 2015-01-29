@@ -24,8 +24,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.SingularValueDecomposition
 
-import java.util.Arrays
-
 /**
  * :: Experimental ::
  * Represents a row of [[org.apache.spark.mllib.linalg.distributed.IndexedRowMatrix]].
@@ -77,19 +75,20 @@ class IndexedRowMatrix(
     new RowMatrix(rows.map(_.vector), 0L, nCols)
   }
 
-  /** Converts to BlockMatrix. Creates blocks of size 1024 x 1024. */
+  /** Converts to BlockMatrix. Creates blocks of [[SparseMatrix]] with size 1024 x 1024. */
   def toBlockMatrix(): BlockMatrix = {
     toBlockMatrix(1024, 1024)
   }
 
   /**
-   * Converts to BlockMatrix.
+   * Converts to BlockMatrix. Creates blocks of [[SparseMatrix]].
    * @param rowsPerBlock The number of rows of each block. The blocks at the bottom edge may have
    *                     a smaller value. Must be an integer value greater than 0.
    * @param colsPerBlock The number of columns of each block. The blocks at the right edge may have
    *                     a smaller value. Must be an integer value greater than 0.
-   * @return a `BlockMatrix`
+   * @return a [[BlockMatrix]]
    */
+  // TODO: This implementation may be optimized
   def toBlockMatrix(rowsPerBlock: Int, colsPerBlock: Int): BlockMatrix = {
     toCoordinateMatrix().toBlockMatrix(rowsPerBlock, colsPerBlock)
   }

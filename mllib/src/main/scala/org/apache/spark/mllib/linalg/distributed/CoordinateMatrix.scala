@@ -97,18 +97,18 @@ class CoordinateMatrix(
     toIndexedRowMatrix().toRowMatrix()
   }
 
-  /** Converts to BlockMatrix. Creates blocks of size 1024 x 1024. */
+  /** Converts to BlockMatrix. Creates blocks of [[SparseMatrix]] with size 1024 x 1024. */
   def toBlockMatrix(): BlockMatrix = {
     toBlockMatrix(1024, 1024)
   }
 
   /**
-   * Converts to BlockMatrix.
+   * Converts to BlockMatrix. Creates blocks of [[SparseMatrix]].
    * @param rowsPerBlock The number of rows of each block. The blocks at the bottom edge may have
    *                     a smaller value. Must be an integer value greater than 0.
    * @param colsPerBlock The number of columns of each block. The blocks at the right edge may have
    *                     a smaller value. Must be an integer value greater than 0.
-   * @return a `BlockMatrix`
+   * @return a [[BlockMatrix]]
    */
   def toBlockMatrix(rowsPerBlock: Int, colsPerBlock: Int): BlockMatrix = {
     require(rowsPerBlock > 0,
@@ -130,22 +130,9 @@ class CoordinateMatrix(
 
       ((blockRowIndex, blockColIndex), (rowId.toInt, colId.toInt, entry.value))
     }.groupByKey(partitioner).map { case ((blockRowIndex, blockColIndex), entry) =>
-      val effRows =
-        if (blockRowIndex == numRowBlocks - 1) {
-          val modulo = m % rowsPerBlock
-          if (modulo != 0) modulo else rowsPerBlock
-        } else {
-          rowsPerBlock
-        }
-      val effCols =
-        if (blockColIndex == numColBlocks - 1) {
-          val modulo = n % colsPerBlock
-          if (modulo != 0) modulo else colsPerBlock
-        } else {
-          colsPerBlock
-        }
-      ((blockRowIndex.toInt, blockColIndex.toInt),
-        SparseMatrix.fromCOO(effRows.toInt, effCols.toInt, entry))
+      val effRows = math.min(m - blockRowIndex.toLong * rowsPerBlock, rowsPerBlock).toInt
+      val effCols = math.min(n - blockColIndex.toLong * colsPerBlock, colsPerBlock).toInt
+      ((blockRowIndex, blockColIndex), SparseMatrix.fromCOO(effRows, effCols, entry))
     }
     new BlockMatrix(blocks, rowsPerBlock, colsPerBlock, m, n)
   }
