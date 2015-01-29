@@ -339,7 +339,8 @@
       </dependency>
  
       <!-- Shaded deps marked as provided. These are promoted to compile scope
-           in spark-core so that we only have one copy of the shaded dependency. -->
+           in the modules where we want the shaded classes to appear in the
+           associated jar. -->
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-http</artifactId>
