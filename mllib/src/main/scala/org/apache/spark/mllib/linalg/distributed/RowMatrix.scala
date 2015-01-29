@@ -220,8 +220,12 @@ class RowMatrix(
 
     val computeMode = mode match {
       case "auto" =>
+        if(k > 5000) {
+          logWarning(s"computing svd with k=$k and n=$n, please check necessity")
+        }
+
         // TODO: The conditions below are not fully tested.
-        if (n < 100 || k > n / 2) {
+        if (n < 100 || (k > n / 2 && n <= 15000)) {
           // If n is small or k is large compared with n, we better compute the Gramian matrix first
           // and then compute its eigenvalues locally, instead of making multiple passes.
           if (k < n / 3) {
