@@ -743,10 +743,8 @@ class DAGSchedulerSuite
     "while MapStage.isAvailable is true while stage was retry ") {
     val firstRDD = new MyRDD(sc, 6, Nil)
     val firstShuffleDep = new ShuffleDependency(firstRDD, null)
-    val firstShuyffleId = firstShuffleDep.shuffleId
     val shuffleMapRdd = new MyRDD(sc, 6, List(firstShuffleDep))
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, null)
-    val shuffleId = shuffleDep.shuffleId
     val reduceRdd = new MyRDD(sc, 2, List(shuffleDep))
     submit(reduceRdd, Array(0, 1))
     complete(taskSets(0), Seq(
