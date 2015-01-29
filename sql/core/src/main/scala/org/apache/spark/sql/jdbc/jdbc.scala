@@ -75,7 +75,8 @@ package object jdbc {
     /**
      * Returns a PreparedStatement that inserts a row into table via conn.
      */
-    private def insertStatement(conn: Connection, table: String, rddSchema: StructType): PreparedStatement = {
+    private def insertStatement(conn: Connection, table: String, rddSchema: StructType):
+        PreparedStatement = {
       val sql = new StringBuilder(s"INSERT INTO $table VALUES (")
       var fieldsLeft = rddSchema.fields.length
       while (fieldsLeft > 0) {
@@ -114,21 +115,21 @@ package object jdbc {
             var i = 0
             while (i < numFields) {
               if (row.isNullAt(i)) {
-                stmt.setNull(i+1, nullTypes(i))
+                stmt.setNull(i + 1, nullTypes(i))
               } else {
                 rddSchema.fields(i).dataType match {
-                  case IntegerType => stmt.setInt(i+1, row.getInt(i))
-                  case LongType => stmt.setLong(i+1, row.getLong(i))
-                  case DoubleType => stmt.setDouble(i+1, row.getDouble(i))
-                  case FloatType => stmt.setFloat(i+1, row.getFloat(i))
-                  case ShortType => stmt.setInt(i+1, row.getShort(i))
-                  case ByteType => stmt.setInt(i+1, row.getByte(i))
-                  case BooleanType => stmt.setBoolean(i+1, row.getBoolean(i))
-                  case StringType => stmt.setString(i+1, row.getString(i))
-                  case BinaryType => stmt.setBytes(i+1, row.getAs[Array[Byte]](i))
-                  case TimestampType => stmt.setTimestamp(i+1, row.getAs[java.sql.Timestamp](i))
-                  case DateType => stmt.setDate(i+1, row.getAs[java.sql.Date](i))
-                  case DecimalType.Unlimited => stmt.setBigDecimal(i+1,
+                  case IntegerType => stmt.setInt(i + 1, row.getInt(i))
+                  case LongType => stmt.setLong(i + 1, row.getLong(i))
+                  case DoubleType => stmt.setDouble(i + 1, row.getDouble(i))
+                  case FloatType => stmt.setFloat(i + 1, row.getFloat(i))
+                  case ShortType => stmt.setInt(i + 1, row.getShort(i))
+                  case ByteType => stmt.setInt(i + 1, row.getByte(i))
+                  case BooleanType => stmt.setBoolean(i + 1, row.getBoolean(i))
+                  case StringType => stmt.setString(i + 1, row.getString(i))
+                  case BinaryType => stmt.setBytes(i + 1, row.getAs[Array[Byte]](i))
+                  case TimestampType => stmt.setTimestamp(i + 1, row.getAs[java.sql.Timestamp](i))
+                  case DateType => stmt.setDate(i + 1, row.getAs[java.sql.Date](i))
+                  case DecimalType.Unlimited => stmt.setBigDecimal(i + 1,
                       row.getAs[java.math.BigDecimal](i))
                   case _ => throw new IllegalArgumentException(
                       s"Can't translate non-null value for field $i")
