@@ -336,12 +336,23 @@ class SQLContext(@transient val sparkContext: SparkContext)
 
   /**
    * Registers the given RDD as a temporary table in the catalog.  Temporary tables exist only
-   * during the lifetime of this instance of SQLContext.
+   * during the lifetime of this instance of SQLContext. If the table exists in catalog and
+   * `allowExisting` is set to true, it will uncache the table first and re-register this table
+   * in the overwrite manner, otherwise it will throw a table already exists exception.
    *
    * @group userf
    */
-  def registerRDDAsTable(rdd: DataFrame, tableName: String): Unit = {
-    catalog.registerTable(Seq(tableName), rdd.logicalPlan)
+
+  def registerRDDAsTable(
+      rdd: DataFrame, tableName: String,
+      allowExisting: Boolean = false): Unit = {
+
+    val tableExists = catalog.tableExists(Seq(tableName))
+    if (tableExists) {
+      if (allowExisting) {cacheManager.tryUncacheQuery(rdd)}
+      else sys.error(s"Table $tableName already exists")
+    }
+    catalog.registerTable(Seq(tableName), rdd.queryExecution.logical)
   }
 
   /**

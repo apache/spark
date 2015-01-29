@@ -572,8 +572,8 @@ class DataFrame protected[sql](
    *
    * @group schema
    */
-  override def registerTempTable(tableName: String): Unit = {
-    sqlContext.registerRDDAsTable(this, tableName)
+  override def registerTempTable(tableName: String, allowExisting: Boolean = false): Unit = {
+    sqlContext.registerRDDAsTable(this, tableName, allowExisting)
   }
 
   /**

@@ -115,7 +115,7 @@ public class JavaCrossValidatorExample {
     DataFrame test = jsql.applySchema(jsc.parallelize(localTest), Document.class);
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
-    cvModel.transform(test).registerTempTable("prediction");
+    cvModel.transform(test).registerTempTable("prediction", false);
     DataFrame predictions = jsql.sql("SELECT id, text, score, prediction FROM prediction");
     for (Row r: predictions.collect()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> score=" + r.get(2)

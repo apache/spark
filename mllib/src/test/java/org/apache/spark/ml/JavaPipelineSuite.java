@@ -64,7 +64,7 @@ public class JavaPipelineSuite {
     Pipeline pipeline = new Pipeline()
       .setStages(new PipelineStage[] {scaler, lr});
     PipelineModel model = pipeline.fit(dataset);
-    model.transform(dataset).registerTempTable("prediction");
+    model.transform(dataset).registerTempTable("prediction", false);
     DataFrame predictions = jsql.sql("SELECT label, score, prediction FROM prediction");
     predictions.collectAsList();
   }
