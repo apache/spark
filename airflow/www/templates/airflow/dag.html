@@ -58,6 +58,9 @@
           <button id="btn_task" type="button" class="btn btn-primary">
             Task Details
           </button>
+          <button id="btn_rendered" type="button" class="btn btn-primary">
+            Rendered
+          </button>
           <button id="btn_ti" type="button" class="btn btn-primary">
             Task Instances 
           </button>
@@ -119,6 +122,14 @@
       // TRick to fix a problem with Bootstrap 2.3.1 that ships with flask-admin
       $("#myModal").css("margin-top","0px")
     }
+
+    $("#btn_rendered").click(function(){
+      url = "{{ url_for('airflow.rendered') }}" +
+        "?task_id=" + task_id +
+        "&dag_id=" + dag_id +
+        "&execution_date=" + execution_date;
+      window.location = url;
+    });
 
     $("#btn_log").click(function(){
       url = "{{ url_for('airflow.log') }}" +

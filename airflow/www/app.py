@@ -536,6 +536,27 @@ class Airflow(BaseView):
         flask_login.logout_user()
         return redirect('/admin')
 
+    @expose('/rendered')
+    def rendered(self):
+        dag_id = request.args.get('dag_id')
+        task_id = request.args.get('task_id')
+        execution_date = request.args.get('execution_date')
+        dttm = dateutil.parser.parse(execution_date)
+        dag = dagbag.dags[dag_id]
+        task = copy.copy(dag.get_task(task_id))
+        ti = models.TaskInstance(task=task, execution_date=dttm)
+        ti.templatify()
+        title = "{dag_id}.{task_id} [{execution_date}] rendered"
+        code_dict = {}
+        for template_field in task.__class__.template_fields:
+            code_dict[template_field] = getattr(task, template_field)
+
+        return self.render(
+            'airflow/dag_code.html',
+            code_dict=code_dict,
+            dag=dag,
+            title=title.format(**locals()))
+
     @expose('/log')
     def log(self):
         BASE_LOG_FOLDER = conf.get('core', 'BASE_LOG_FOLDER')

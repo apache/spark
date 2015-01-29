@@ -5,13 +5,13 @@ import imp
 import jinja2
 import logging
 import os
-import dill as pickle
+import dill
 import re
 import signal
 import socket
 
 from sqlalchemy import (
-    Column, Integer, String, DateTime, Text, Boolean, ForeignKey)
+    Column, Integer, String, DateTime, Text, Boolean, ForeignKey, PickleType)
 from sqlalchemy import func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.dialects.mysql import LONGTEXT
@@ -220,19 +220,15 @@ class DagPickle(Base):
     the database.
     """
     id = Column(Integer, primary_key=True)
-    pickle = Column(LongText())
+    pickle = Column(PickleType())
 
     __tablename__ = "dag_pickle"
 
-    def __init__(self, dag, job=None):
+    def __init__(self, dag):
         self.dag_id = dag.dag_id
-        self.job = job
         for t in dag.tasks:
             t.materialize_files()
-        self.pickle = pickle.dumps(dag)
-
-    def get_object(self):
-        return pickle.loads(self.pickle)
+        self.pickle = dag
 
 
 class TaskInstance(Base):
@@ -278,8 +274,10 @@ class TaskInstance(Base):
             mark_success=False,
             ignore_dependencies=False,
             force=False,
-            local=True,
-            pickle_id=None):
+            local=False,
+            pickle_id=None,
+            raw=False,
+            job_id=None):
         """
         Returns a command that can be executed anywhere where airflow is
         installed. This command is part of the message sent to executors by
@@ -288,9 +286,11 @@ class TaskInstance(Base):
         iso = self.execution_date.isoformat()
         mark_success = "--mark_success" if mark_success else ""
         pickle = "--pickle {0}".format(pickle_id) if pickle_id else ""
+        job_id = "--job_id {0}".format(job_id) if job_id else ""
         ignore_dependencies = "-i" if ignore_dependencies else ""
         force = "--force" if force else ""
         local = "--local" if local else ""
+        raw = "--raw" if raw else ""
         subdir = ""
         if not pickle and self.task.dag and self.task.dag.full_filepath:
             subdir = "-sd {0}".format(self.task.dag.full_filepath)
@@ -302,6 +302,8 @@ class TaskInstance(Base):
             "{local} "
             "{ignore_dependencies} "
             "{force} "
+            "{job_id} "
+            "{raw} "
             "{subdir} "
         ).format(**locals())
 
@@ -490,16 +492,6 @@ class TaskInstance(Base):
         return self.state == State.UP_FOR_RETRY and \
             self.end_date + self.task.retry_delay < datetime.now()
 
-    def get_template(self, source):
-        if hasattr(self, 'task') and hasattr(self.task, 'dag'):
-            env = self.task.dag.get_template_env()
-        template = None
-        for ext in self.task.__class__.template_ext:
-            # if field has the right extension, look for the file.
-            if source.strip().endswith(ext):
-                template = env.get_template(source)
-        return template or env.template_class(source)
-
     def run(
             self,
             verbose=True,
@@ -566,36 +558,9 @@ class TaskInstance(Base):
             try:
                 logging.info(msg.format(self=self))
                 if not mark_success:
-                    from airflow import macros
-                    tables = None
-                    if 'tables' in task.params:
-                        tables = task.params['tables']
-                    ds = self.execution_date.isoformat()[:10]
-                    ds_nodash = ds.replace('-', '')
-                    ti_key_str = "{task.dag_id}__{task.task_id}__{ds_nodash}"
-                    ti_key_str = ti_key_str.format(**locals())
 
-                    jinja_context = {
-                        'dag': task.dag,
-                        'ds': ds,
-                        'ds_nodash': ds_nodash,
-                        'end_date': ds,
-                        'execution_date': self.execution_date,
-                        'latest_date': ds,
-                        'macros': macros,
-                        'params': task.params,
-                        'tables': tables,
-                        'task': task,
-                        'task_instance': self,
-                        'ti': self,
-                        'task_instance_key_str': ti_key_str
-                    }
-                    if hasattr(self, 'task') and hasattr(self.task, 'dag'):
-                        if self.task.dag.user_defined_macros:
-                            jinja_context.update(
-                                self.task.dag.user_defined_macros)
                     task_copy = copy.copy(task)
-
+                    self.task = task_copy
                     # Setting kill signal handler
                     def signal_handler(signum, frame):
                         logging.error("Killing subprocess")
@@ -603,42 +568,13 @@ class TaskInstance(Base):
                         raise Exception("Task received SIGTERM signal")
                     signal.signal(signal.SIGTERM, signal_handler)
 
-                    for attr in task_copy.__class__.template_fields:
-                        source = getattr(task_copy, attr)
-                        template = self.get_template(source)
-                        setattr(
-                            task_copy, attr,
-                            template.render(**jinja_context)
-                        )
+                    self.templatify()
                     task_copy.execute(self.execution_date)
             except (Exception, StandardError, KeyboardInterrupt) as e:
-                session = settings.Session()
-                self.end_date = datetime.now()
-                self.set_duration()
-                if not test_mode:
-                    session.add(Log(State.FAILED, self))
-
-                # Let's go deeper
-                try:
-                    if self.try_number <= task.retries:
-                        self.state = State.UP_FOR_RETRY
-                        if task.email_on_retry and task.email:
-                            self.email_alert(e, is_retry=True)
-                    else:
-                        self.state = State.FAILED
-                        if task.email_on_failure and task.email:
-                            self.email_alert(e, is_retry=False)
-                except Exception as e2:
-                    logging.error(
-                        'Failed to send email to: ' + str(task.email))
-                    logging.error(str(e2))
-
-                if not test_mode:
-                    session.merge(self)
-                session.commit()
-                logging.error(str(e))
+                self.record_failure(e, test_mode)
                 raise e
 
+            # Recording SUCCESS
             session = settings.Session()
             self.end_date = datetime.now()
             self.set_duration()
@@ -648,6 +584,83 @@ class TaskInstance(Base):
                 session.merge(self)
 
         session.commit()
+
+    def record_failure(self, error, test_mode=False):
+        task = self.task
+        session = settings.Session()
+        self.end_date = datetime.now()
+        self.set_duration()
+        if not test_mode:
+            session.add(Log(State.FAILED, self))
+
+        # Let's go deeper
+        try:
+            if self.try_number <= task.retries:
+                self.state = State.UP_FOR_RETRY
+                if task.email_on_retry and task.email:
+                    self.email_alert(error, is_retry=True)
+            else:
+                self.state = State.FAILED
+                if task.email_on_failure and task.email:
+                    self.email_alert(error, is_retry=False)
+        except Exception as e2:
+            logging.error(
+                'Failed to send email to: ' + str(task.email))
+            logging.error(str(e2))
+
+        if not test_mode:
+            session.merge(self)
+        session.commit()
+        logging.error(str(error))
+
+    def get_template(self, attr):
+        if hasattr(self, 'task') and hasattr(self.task, 'dag'):
+            env = self.task.dag.get_template_env()
+        template = None
+        for ext in self.task.__class__.template_ext:
+            # if field has the right extension, look for the file.
+            if attr.strip().endswith(ext):
+                template = env.get_template(attr)
+        return template or env.template_class(attr)
+
+    def templatify(self):
+        task = self.task
+        from airflow import macros
+        tables = None
+        if 'tables' in task.params:
+            tables = task.params['tables']
+        ds = self.execution_date.isoformat()[:10]
+        ds_nodash = ds.replace('-', '')
+        ti_key_str = "{task.dag_id}__{task.task_id}__{ds_nodash}"
+        ti_key_str = ti_key_str.format(**locals())
+
+        jinja_context = {
+            'dag': task.dag,
+            'ds': ds,
+            'ds_nodash': ds_nodash,
+            'end_date': ds,
+            'execution_date': self.execution_date,
+            'latest_date': ds,
+            'macros': macros,
+            'params': task.params,
+            'tables': tables,
+            'task': task,
+            'task_instance': self,
+            'ti': self,
+            'task_instance_key_str': ti_key_str
+        }
+        if hasattr(self, 'task') and hasattr(self.task, 'dag'):
+            if self.task.dag.user_defined_macros:
+                jinja_context.update(
+                    self.task.dag.user_defined_macros)
+
+        for attr in task.__class__.template_fields:
+            source = getattr(task, attr)
+            template = self.get_template(source)
+            setattr(
+                task, attr,
+                template.render(**jinja_context)
+            )
 
     def email_alert(self, exception, is_retry=False):
         task = self.task
@@ -780,7 +793,7 @@ class BaseOperator(Base):
             dag=None,
             params=None,
             default_args=None,
-            adhoc=True,
+            adhoc=False,
             *args,
             **kwargs):
 
@@ -847,9 +860,6 @@ class BaseOperator(Base):
     def downstream_list(self):
         """@property: list of tasks directly downstream"""
         return self._downstream_list
-
-    def pickle(self):
-        return pickle.dumps(self)
 
     def clear(
             self, start_date=None, end_date=None,
@@ -1016,9 +1026,6 @@ class DAG(Base):
     :param end_date: A date beyond which your DAG won't run, leave to None
         for open ended scheduling
     :type end_date: datetime.datetime
-    :param executor: The executor to use, default stays in sync with how
-        your environment is setup
-    :type executor: derivative of airflow.executors.BaseExecutor
     :param template_searchpath: This list of folders (non relative)
         defines where jinja will look for your templates. Order matters.
         Note that jinja/airflow includes the path of your DAG file by
@@ -1032,24 +1039,21 @@ class DAG(Base):
 
     dag_id = Column(String(ID_LEN), primary_key=True)
     task_count = Column(Integer)
-    parallelism = Column(Integer)
     full_filepath = Column(String(2000))
 
     def __init__(
             self, dag_id,
             schedule_interval=timedelta(days=1),
-            start_date=None, end_date=None, parallelism=0,
-            full_filepath=None, executor=DEFAULT_EXECUTOR,
+            start_date=None, end_date=None,
+            full_filepath=None,
             template_searchpath=None,
             user_defined_macros=None):
 
-        self.tasks = []
         utils.validate_key(dag_id)
+        self.tasks = []
         self.dag_id = dag_id
-        self.executor = executor
         self.start_date = start_date
         self.end_date = end_date or datetime.now()
-        self.parallelism = parallelism
         self.schedule_interval = schedule_interval
         self.full_filepath = full_filepath if full_filepath else ''
         if isinstance(template_searchpath, basestring):
@@ -1098,9 +1102,6 @@ class DAG(Base):
         dag explicitely.
         """
         raise NotImplemented("")
-
-    def pickle(self):
-        return pickle.dumps(self)
 
     def override_start_date(self, start_date):
         """
@@ -1278,8 +1279,8 @@ class DAG(Base):
     def run(
             self, start_date=None, end_date=None, mark_success=False,
             include_adhoc=False):
-        from airflow import jobs
-        job = jobs.BackfillJob(
+        from airflow.jobs import BackfillJob
+        job = BackfillJob(
             self,
             start_date=start_date,
             end_date=end_date,
