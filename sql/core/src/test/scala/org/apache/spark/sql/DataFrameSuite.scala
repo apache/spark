@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.api.scala.dsl._
+import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.types._
 
 /* Implicits */

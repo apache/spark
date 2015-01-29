@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
-import org.apache.spark.sql.api.scala.dsl.lit
+import org.apache.spark.sql.Dsl.lit
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
@@ -28,8 +28,7 @@ import org.apache.spark.sql.types._
 
 object Column {
   /**
-   * Creates a [[Column]] based on the given column name.
-   * Same as [[api.scala.dsl.col]] and [[api.java.dsl.col]].
+   * Creates a [[Column]] based on the given column name. Same as [[Dsl.col]].
    */
   def apply(colName: String): Column = new Column(colName)
 

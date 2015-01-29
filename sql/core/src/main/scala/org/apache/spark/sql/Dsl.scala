@@ -15,43 +15,38 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.api.scala
+package org.apache.spark.sql
 
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
 
 
 /**
- * Scala version of the domain specific functions available for [[DataFrame]].
- *
- * The Java-version is at [[api.java.dsl]].
+ * Domain specific functions available for [[DataFrame]].
  */
-package object dsl {
-  // NOTE: Update also the Java version when we update this version.
+object Dsl {
 
   /** An implicit conversion that turns a Scala `Symbol` into a [[Column]]. */
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
 
-//  /**
-//   * An implicit conversion that turns a RDD of product into a [[DataFrame]].
-//   *
-//   * This method requires an implicit SQLContext in scope. For example:
-//   * {{{
-//   *   implicit val sqlContext: SQLContext = ...
-//   *   val rdd: RDD[(Int, String)] = ...
-//   *   rdd.toDataFrame  // triggers the implicit here
-//   * }}}
-//   */
-//  implicit def rddToDataFrame[A <: Product: TypeTag](rdd: RDD[A])(implicit context: SQLContext)
-//    : DataFrame = {
-//    context.createDataFrame(rdd)
-//  }
+  //  /**
+  //   * An implicit conversion that turns a RDD of product into a [[DataFrame]].
+  //   *
+  //   * This method requires an implicit SQLContext in scope. For example:
+  //   * {{{
+  //   *   implicit val sqlContext: SQLContext = ...
+  //   *   val rdd: RDD[(Int, String)] = ...
+  //   *   rdd.toDataFrame  // triggers the implicit here
+  //   * }}}
+  //   */
+  //  implicit def rddToDataFrame[A <: Product: TypeTag](rdd: RDD[A])(implicit context: SQLContext)
+  //    : DataFrame = {
+  //    context.createDataFrame(rdd)
+  //  }
 
   /** Converts $"col name" into an [[Column]]. */
   implicit class StringToColumn(val sc: StringContext) extends AnyVal {
