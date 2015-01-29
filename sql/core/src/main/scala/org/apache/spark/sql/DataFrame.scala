@@ -118,8 +118,8 @@ class DataFrame protected[sql](
 
   /** Resolves a column name into a Catalyst [[NamedExpression]]. */
   protected[sql] def resolve(colName: String): NamedExpression = {
-    logicalPlan.resolve(colName, sqlContext.analyzer.resolver).getOrElse(
-      throw new RuntimeException(s"""Cannot resolve column name "$colName""""))
+    logicalPlan.resolve(colName, sqlContext.analyzer.resolver).getOrElse(throw new RuntimeException(
+      s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})"""))
   }
 
   /** Left here for compatibility reasons. */
