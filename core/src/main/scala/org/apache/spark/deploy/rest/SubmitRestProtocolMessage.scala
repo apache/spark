@@ -26,22 +26,29 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.util.Utils
 
+/**
+ * An abstract message exchanged in the REST application submission protocol.
+ *
+ * This message is intended to be serialized to and deserialized from JSON in the exchange.
+ * Each message can either be a request or a response and consists of three common fields:
+ *   (1) the action, which fully specifies the type of the message
+ *   (2) the Spark version of the client / server
+ *   (3) an optional message
+ */
 @JsonInclude(Include.NON_NULL)
 @JsonAutoDetect(getterVisibility = Visibility.ANY, setterVisibility = Visibility.ANY)
 @JsonPropertyOrder(alphabetic = true)
 abstract class SubmitRestProtocolMessage {
-  import SubmitRestProtocolMessage._
-
   private val messageType = Utils.getFormattedClassName(this)
-  protected val action: String = camelCaseToUnderscores(decapitalize(messageType))
-  protected val sparkVersion = new SubmitRestProtocolField[String]
-  protected val message = new SubmitRestProtocolField[String]
+  protected val action: String = messageType
+  protected val sparkVersion: SubmitRestProtocolField[String]
+  protected val message = new SubmitRestProtocolField[String]("message")
 
   // Required for JSON de/serialization and not explicitly used
   private def getAction: String = action
   private def setAction(s: String): this.type = this
 
-  // Spark version implementation depends on whether this is a request or a response
+  // Intended for the user and not for JSON de/serialization, which expects more specific keys
   @JsonIgnore
   def getSparkVersion: String
   @JsonIgnore
@@ -50,26 +57,37 @@ abstract class SubmitRestProtocolMessage {
   def getMessage: String = message.toString
   def setMessage(s: String): this.type = setField(message, s)
 
+  /**
+   * Serialize the message to JSON.
+   * This also ensures that the message is valid and its fields are in the expected format.
+   */
   def toJson: String = {
     validate()
     val mapper = new ObjectMapper
-    val json = mapper.writeValueAsString(this)
-    postProcessJson(json)
+    pretty(parse(mapper.writeValueAsString(this)))
   }
 
+  /** Assert the validity of the message. */
   def validate(): Unit = {
     assert(action != null, s"The action field is missing in $messageType!")
+    assertFieldIsSet(sparkVersion)
   }
 
-  protected def assertFieldIsSet(field: SubmitRestProtocolField[_], name: String): Unit = {
-    assert(field.isSet, s"The $name field is missing in $messageType!")
+  /** Assert that the specified field is set in this message. */
+  protected def assertFieldIsSet(field: SubmitRestProtocolField[_]): Unit = {
+    assert(field.isSet, s"Field '${field.name}' is missing in $messageType!")
   }
 
+  /** Set the field to the given value, or clear the field if the value is null. */
   protected def setField(field: SubmitRestProtocolField[String], value: String): this.type = {
     if (value == null) { field.clearValue() } else { field.setValue(value) }
     this
   }
 
+  /**
+   * Set the field to the given boolean value, or clear the field if the value is null.
+   * If the provided value does not represent a boolean, throw an exception.
+   */
   protected def setBooleanField(
       field: SubmitRestProtocolField[Boolean],
       value: String): this.type = {
@@ -77,6 +95,10 @@ abstract class SubmitRestProtocolMessage {
     this
   }
 
+  /**
+   * Set the field to the given numeric value, or clear the field if the value is null.
+   * If the provided value does not represent a numeric, throw an exception.
+   */
   protected def setNumericField(
       field: SubmitRestProtocolField[Int],
       value: String): this.type = {
@@ -84,6 +106,11 @@ abstract class SubmitRestProtocolMessage {
     this
   }
 
+  /**
+   * Set the field to the given memory value, or clear the field if the value is null.
+   * If the provided value does not represent a memory value, throw an exception.
+   * Valid examples of memory values include "512m", "24g", and "128000".
+   */
   protected def setMemoryField(
       field: SubmitRestProtocolField[String],
       value: String): this.type = {
@@ -91,116 +118,69 @@ abstract class SubmitRestProtocolMessage {
     setField(field, value)
     this
   }
-
-  private def postProcessJson(json: String): String = {
-    val fields = parse(json).asInstanceOf[JObject].obj
-    val newFields = fields.map { case (k, v) => (camelCaseToUnderscores(k), v) }
-    pretty(render(JObject(newFields)))
-  }
 }
 
+/**
+ * An abstract request sent from the client in the REST application submission protocol.
+ */
 abstract class SubmitRestProtocolRequest extends SubmitRestProtocolMessage {
+  protected override val sparkVersion = new SubmitRestProtocolField[String]("client_spark_version")
   def getClientSparkVersion: String = sparkVersion.toString
   def setClientSparkVersion(s: String): this.type = setField(sparkVersion, s)
   override def getSparkVersion: String = getClientSparkVersion
   override def setSparkVersion(s: String) = setClientSparkVersion(s)
-  override def validate(): Unit = {
-    super.validate()
-    assertFieldIsSet(sparkVersion, "client_spark_version")
-  }
 }
 
+/**
+ * An abstract response sent from the server in the REST application submission protocol.
+ */
 abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
+  protected override val sparkVersion = new SubmitRestProtocolField[String]("server_spark_version")
   def getServerSparkVersion: String = sparkVersion.toString
   def setServerSparkVersion(s: String): this.type = setField(sparkVersion, s)
   override def getSparkVersion: String = getServerSparkVersion
   override def setSparkVersion(s: String) = setServerSparkVersion(s)
-  override def validate(): Unit = {
-    super.validate()
-    assertFieldIsSet(sparkVersion, "server_spark_version")
-  }
 }
 
 object SubmitRestProtocolMessage {
   private val mapper = new ObjectMapper
   private val packagePrefix = this.getClass.getPackage.getName
 
-  def parseAction(json: String): String = {
+  /** Parse the value of the action field from the given JSON. */
+  def parseAction(json: String): String = parseField(json, "action")
+
+  /** Parse the value of the specified field from the given JSON. */
+  def parseField(json: String, field: String): String = {
     parse(json).asInstanceOf[JObject].obj
-      .find { case (f, _) => f == "action" }
+      .find { case (f, _) => f == field }
       .map { case (_, v) => v.asInstanceOf[JString].s }
       .getOrElse {
-      throw new IllegalArgumentException(s"Could not find action field in message:\n$json")
-    }
+        throw new IllegalArgumentException(s"Could not find field '$field' in message:\n$json")
+      }
   }
 
+  /**
+   * Construct a [[SubmitRestProtocolMessage]] from its JSON representation.
+   *
+   * This method first parses the action from the JSON and uses it to infers the message type.
+   * Note that the action must represent one of the [[SubmitRestProtocolMessage]]s defined in
+   * this package. Otherwise, a [[ClassNotFoundException]] will be thrown.
+   */
   def fromJson(json: String): SubmitRestProtocolMessage = {
-    val action = parseAction(json)
-    val className = underscoresToCamelCase(action).capitalize
+    val className = parseAction(json)
     val clazz = Class.forName(packagePrefix + "." + className)
       .asSubclass[SubmitRestProtocolMessage](classOf[SubmitRestProtocolMessage])
     fromJson(json, clazz)
   }
 
+  /**
+   * Construct a [[SubmitRestProtocolMessage]] from its JSON representation.
+   *
+   * This method determines the type of the message from the class provided instead of
+   * inferring it from the action field. This is useful for deserializing JSON that
+   * represents custom user-defined messages.
+   */
   def fromJson[T <: SubmitRestProtocolMessage](json: String, clazz: Class[T]): T = {
-    val fields = parse(json).asInstanceOf[JObject].obj
-    val processedFields = fields.map { case (k, v) => (underscoresToCamelCase(k), v) }
-    val processedJson = compact(render(JObject(processedFields)))
-    mapper.readValue(processedJson, clazz)
-  }
-
-  private def camelCaseToUnderscores(s: String): String = {
-    val newString = new StringBuilder
-    s.foreach { c =>
-      if (c.isUpper) {
-        newString.append("_" + c.toLower)
-      } else {
-        newString.append(c)
-      }
-    }
-    newString.toString()
-  }
-
-  private def underscoresToCamelCase(s: String): String = {
-    val newString = new StringBuilder
-    var capitalizeNext = false
-    s.foreach { c =>
-      if (c == '_') {
-        capitalizeNext = true
-      } else {
-        val nextChar = if (capitalizeNext) c.toUpper else c
-        newString.append(nextChar)
-        capitalizeNext = false
-      }
-    }
-    newString.toString()
-  }
-
-  private def decapitalize(s: String): String = {
-    if (s != null && s.nonEmpty) {
-      s(0).toLower + s.substring(1)
-    } else {
-      s
-    }
-  }
-}
-
-object SubmitRestProtocolRequest {
-  def fromJson(s: String): SubmitRestProtocolRequest = {
-    SubmitRestProtocolMessage.fromJson(s) match {
-      case req: SubmitRestProtocolRequest => req
-      case res: SubmitRestProtocolResponse =>
-        throw new IllegalArgumentException(s"Message was not a request:\n$s")
-    }
-  }
-}
-
-object SubmitRestProtocolResponse {
-  def fromJson(s: String): SubmitRestProtocolResponse = {
-    SubmitRestProtocolMessage.fromJson(s) match {
-      case req: SubmitRestProtocolRequest =>
-        throw new IllegalArgumentException(s"Message was not a response:\n$s")
-      case res: SubmitRestProtocolResponse => res
-    }
+    mapper.readValue(json, clazz)
   }
 }

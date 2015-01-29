@@ -32,8 +32,8 @@ import org.apache.spark.{SPARK_VERSION => sparkVersion, Logging, SparkConf}
 import org.apache.spark.util.Utils
 
 /**
- * An abstract server that responds to requests submitted by the SubmitRestClient
- * in the stable application submission REST protocol.
+ * An abstract server that responds to requests submitted by the
+ * [[SubmitRestClient]] in the REST application submission protocol.
  */
 private[spark] abstract class SubmitRestServer(host: String, requestedPort: Int, conf: SparkConf)
   extends Logging {
@@ -66,8 +66,8 @@ private[spark] abstract class SubmitRestServer(host: String, requestedPort: Int,
 }
 
 /**
- * An abstract handler for requests submitted via the stable application submission REST protocol.
- * This represents the main handler used in the SubmitRestServer.
+ * An abstract handler for requests submitted via the REST application submission protocol.
+ * This represents the main handler used in the [[SubmitRestServer]].
  */
 private[spark] abstract class SubmitRestServerHandler extends AbstractHandler with Logging {
   protected def handleSubmit(request: SubmitDriverRequest): SubmitDriverResponse
@@ -75,8 +75,8 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
   protected def handleStatus(request: DriverStatusRequest): DriverStatusResponse
 
   /**
-   * Handle a request submitted by the SubmitRestClient.
-   * This assumes both the request and the response use the JSON format.
+   * Handle a request submitted by the [[SubmitRestClient]].
+   * This assumes that both the request and the response use the JSON format.
    */
   override def handle(
       target: String,
@@ -85,7 +85,8 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
       response: HttpServletResponse): Unit = {
     try {
       val requestMessageJson = Source.fromInputStream(request.getInputStream).mkString
-      val requestMessage = SubmitRestProtocolRequest.fromJson(requestMessageJson)
+      val requestMessage = SubmitRestProtocolMessage.fromJson(requestMessageJson)
+        .asInstanceOf[SubmitRestProtocolRequest]
       val responseMessage = constructResponseMessage(requestMessage)
       response.setContentType("application/json")
       response.setCharacterEncoding("utf-8")
@@ -102,7 +103,7 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
 
   /**
    * Construct the appropriate response message based on the type of the request message.
-   * If an IllegalArgumentException is thrown in the process, construct an error message instead.
+   * If an [[IllegalArgumentException]] is thrown, construct an error message instead.
    */
   private def constructResponseMessage(
       request: SubmitRestProtocolRequest): SubmitRestProtocolResponse = {
@@ -121,14 +122,15 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
             s"Received message of unexpected type ${Utils.getFormattedClassName(unexpected)}.")
         }
       } catch {
-        case e: IllegalArgumentException => handleError(e.getMessage)
+        case e: IllegalArgumentException => handleError(formatException(e))
       }
     // Validate the response message to ensure that it is correctly constructed. If it is not,
     // propagate the exception back to the client and signal that it is a server error.
     try {
       response.validate()
     } catch {
-      case e: IllegalArgumentException => handleError(s"Internal server error: ${e.getMessage}")
+      case e: IllegalArgumentException =>
+        handleError("Internal server error: " + formatException(e))
     }
     response
   }
@@ -138,5 +140,11 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
     new ErrorResponse()
       .setSparkVersion(sparkVersion)
       .setMessage(message)
+  }
+
+  /** Return a human readable String representation of the exception. */
+  protected def formatException(e: Exception): String = {
+    val stackTraceString = e.getStackTrace.map { "\t" + _ }.mkString("\n")
+    s"$e\n$stackTraceString"
   }
 }

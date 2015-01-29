@@ -21,11 +21,10 @@ import java.net.URL
 
 import org.apache.spark.{SPARK_VERSION => sparkVersion}
 import org.apache.spark.deploy.SparkSubmitArguments
-import org.apache.spark.util.Utils
 
 /**
- * A client that submits applications to the standalone Master using the stable REST protocol.
- * This client is intended to communicate with the StandaloneRestServer. Cluster mode only.
+ * A client that submits applications to the standalone Master using the REST protocol
+ * This client is intended to communicate with the [[StandaloneRestServer]]. Cluster mode only.
  */
 private[spark] class StandaloneRestClient extends SubmitRestClient {
   import StandaloneRestClient._
@@ -38,7 +37,8 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
    * this reports failure and logs an error message provided by the REST server.
    */
   override def submitDriver(args: SparkSubmitArguments): SubmitDriverResponse = {
-    val submitResponse = super.submitDriver(args).asInstanceOf[SubmitDriverResponse]
+    validateSubmitArgs(args)
+    val submitResponse = super.submitDriver(args)
     val submitSuccess = submitResponse.getSuccess.toBoolean
     if (submitSuccess) {
       val driverId = submitResponse.getDriverId
@@ -51,14 +51,25 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
     submitResponse
   }
 
+  /** Request that the REST server kill the specified driver. */
+  override def killDriver(master: String, driverId: String): KillDriverResponse = {
+    validateMaster(master)
+    super.killDriver(master, driverId)
+  }
+
+  /** Request the status of the specified driver from the REST server. */
+  override def requestDriverStatus(master: String, driverId: String): DriverStatusResponse = {
+    validateMaster(master)
+    super.requestDriverStatus(master, driverId)
+  }
+
   /**
-   * Poll the status of the driver that was just submitted and report it.
-   * This retries up to a fixed number of times until giving up.
+   * Poll the status of the driver that was just submitted and log it.
+   * This retries up to a fixed number of times before giving up.
    */
   private def pollSubmittedDriverStatus(master: String, driverId: String): Unit = {
     (1 to REPORT_DRIVER_STATUS_MAX_TRIES).foreach { _ =>
       val statusResponse = requestDriverStatus(master, driverId)
-        .asInstanceOf[DriverStatusResponse]
       val statusSuccess = statusResponse.getSuccess.toBoolean
       if (statusSuccess) {
         val driverState = statusResponse.getDriverState
@@ -75,13 +86,13 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
         exception.foreach { e => logError(e) }
         return
       }
+      Thread.sleep(REPORT_DRIVER_STATUS_INTERVAL)
     }
     logError(s"Error: Master did not recognize driver $driverId.")
   }
 
   /** Construct a submit driver request message. */
-  override protected def constructSubmitRequest(
-      args: SparkSubmitArguments): SubmitDriverRequest = {
+  protected override def constructSubmitRequest(args: SparkSubmitArguments): SubmitDriverRequest = {
     val message = new SubmitDriverRequest()
       .setSparkVersion(sparkVersion)
       .setAppName(args.name)
@@ -99,12 +110,14 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
       .setTotalExecutorCores(args.totalExecutorCores)
     args.childArgs.foreach(message.addAppArg)
     args.sparkProperties.foreach { case (k, v) => message.setSparkProperty(k, v) }
-    // TODO: send special environment variables?
+    sys.env.foreach { case (k, v) =>
+      if (k.startsWith("SPARK_")) { message.setEnvironmentVariable(k, v) }
+    }
     message
   }
 
   /** Construct a kill driver request message. */
-  override protected def constructKillRequest(
+  protected override def constructKillRequest(
       master: String,
       driverId: String): KillDriverRequest = {
     new KillDriverRequest()
@@ -113,7 +126,7 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
   }
 
   /** Construct a driver status request message. */
-  override protected def constructStatusRequest(
+  protected override def constructStatusRequest(
       master: String,
       driverId: String): DriverStatusRequest = {
     new DriverStatusRequest()
@@ -121,24 +134,25 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
       .setDriverId(driverId)
   }
 
+  /** Extract the URL portion of the master address. */
+  protected override def getHttpUrl(master: String): URL = {
+    validateMaster(master)
+    new URL("http://" + master.stripPrefix("spark://"))
+  }
+
   /** Throw an exception if this is not standalone mode. */
-  override protected def validateMaster(master: String): Unit = {
+  private def validateMaster(master: String): Unit = {
     if (!master.startsWith("spark://")) {
       throw new IllegalArgumentException("This REST client is only supported in standalone mode.")
     }
   }
 
-  /** Throw an exception if this is not cluster deploy mode. */
-  override protected def validateDeployMode(deployMode: String): Unit = {
-    if (deployMode != "cluster") {
-      throw new IllegalArgumentException("This REST client is only supported in cluster mode.")
+  /** Throw an exception if this is not standalone cluster mode. */
+  private def validateSubmitArgs(args: SparkSubmitArguments): Unit = {
+    if (!args.isStandaloneCluster) {
+      throw new IllegalArgumentException(
+        "This REST client is only supported in standalone cluster mode.")
     }
-  }
-
-  /** Extract the URL portion of the master address. */
-  override protected def getHttpUrl(master: String): URL = {
-    validateMaster(master)
-    new URL("http://" + master.stripPrefix("spark://"))
   }
 }
 

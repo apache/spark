@@ -20,44 +20,10 @@ package org.apache.spark.deploy.rest
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.FunSuite
 
-class DummyRequest extends SubmitRestProtocolRequest {
-  private val active = new SubmitRestProtocolField[Boolean]
-  private val age = new SubmitRestProtocolField[Int]
-  private val name = new SubmitRestProtocolField[String]
-
-  def getActive: String = active.toString
-  def getAge: String = age.toString
-  def getName: String = name.toString
-
-  def setActive(s: String): this.type = setBooleanField(active, s)
-  def setAge(s: String): this.type = setNumericField(age, s)
-  def setName(s: String): this.type = setField(name, s)
-
-  override def validate(): Unit = {
-    super.validate()
-    assertFieldIsSet(name, "name")
-    assertFieldIsSet(age, "age")
-    assert(age.getValue > 5, "Not old enough!")
-  }
-}
-
-class DummyResponse extends SubmitRestProtocolResponse
-
 /**
- * Tests for the stable application submission REST protocol.
+ * Tests for the REST application submission protocol.
  */
 class SubmitRestProtocolSuite extends FunSuite {
-
-  /** Assert that the contents in the two JSON strings are equal after ignoring whitespace. */
-  private def assertJsonEquals(jsonString1: String, jsonString2: String): Unit = {
-    val trimmedJson1 = jsonString1.trim
-    val trimmedJson2 = jsonString2.trim
-    val json1 = compact(render(parse(trimmedJson1)))
-    val json2 = compact(render(parse(trimmedJson2)))
-    // Put this on a separate line to avoid printing comparison twice when test fails
-    val equals = json1 == json2
-    assert(equals, "\"[%s]\" did not equal \"[%s]\"".format(trimmedJson1, trimmedJson2))
-  }
 
   test("get and set fields") {
     val request = new DummyRequest
@@ -319,10 +285,10 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val dummyRequestJson =
     """
       |{
-      |  "action" : "dummy_request",
+      |  "action" : "DummyRequest",
       |  "active" : "true",
       |  "age" : "25",
-      |  "client_spark_version" : "1.2.3",
+      |  "clientSparkVersion" : "1.2.3",
       |  "name" : "jung"
       |}
     """.stripMargin
@@ -330,42 +296,42 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val dummyResponseJson =
     """
       |{
-      |  "action" : "dummy_response",
-      |  "server_spark_version" : "3.3.4"
+      |  "action" : "DummyResponse",
+      |  "serverSparkVersion" : "3.3.4"
       |}
     """.stripMargin
 
   private val submitDriverRequestJson =
     """
       |{
-      |  "action" : "submit_driver_request",
-      |  "app_args" : "[\"two slices\",\"a hint of cinnamon\"]",
-      |  "app_name" : "SparkPie",
-      |  "app_resource" : "honey-walnut-cherry.jar",
-      |  "client_spark_version" : "1.2.3",
-      |  "driver_cores" : "180",
-      |  "driver_extra_class_path" : "food-coloring.jar",
-      |  "driver_extra_java_options" : " -Dslices=5 -Dcolor=mostly_red",
-      |  "driver_extra_library_path" : "pickle.jar",
-      |  "driver_memory" : "512m",
-      |  "environment_variables" : "{\"PATH\":\"/dev/null\",\"PYTHONPATH\":\"/dev/null\"}",
-      |  "executor_memory" : "256m",
+      |  "action" : "SubmitDriverRequest",
+      |  "appArgs" : "[\"two slices\",\"a hint of cinnamon\"]",
+      |  "appName" : "SparkPie",
+      |  "appResource" : "honey-walnut-cherry.jar",
+      |  "clientSparkVersion" : "1.2.3",
+      |  "driverCores" : "180",
+      |  "driverExtraClassPath" : "food-coloring.jar",
+      |  "driverExtraJavaOptions" : " -Dslices=5 -Dcolor=mostly_red",
+      |  "driverExtraLibraryPath" : "pickle.jar",
+      |  "driverMemory" : "512m",
+      |  "environmentVariables" : "{\"PATH\":\"/dev/null\",\"PYTHONPATH\":\"/dev/null\"}",
+      |  "executorMemory" : "256m",
       |  "files" : "fireball.png",
       |  "jars" : "mayonnaise.jar,ketchup.jar",
-      |  "main_class" : "org.apache.spark.examples.SparkPie",
-      |  "py_files" : "do-not-eat-my.py",
-      |  "spark_properties" : "{\"spark.live.long\":\"true\",\"spark.shuffle.enabled\":\"false\"}",
-      |  "supervise_driver" : "false",
-      |  "total_executor_cores" : "10000"
+      |  "mainClass" : "org.apache.spark.examples.SparkPie",
+      |  "pyFiles" : "do-not-eat-my.py",
+      |  "sparkProperties" : "{\"spark.live.long\":\"true\",\"spark.shuffle.enabled\":\"false\"}",
+      |  "superviseDriver" : "false",
+      |  "totalExecutorCores" : "10000"
       |}
     """.stripMargin
 
   private val submitDriverResponseJson =
     """
       |{
-      |  "action" : "submit_driver_response",
-      |  "driver_id" : "driver_123",
-      |  "server_spark_version" : "1.2.3",
+      |  "action" : "SubmitDriverResponse",
+      |  "driverId" : "driver_123",
+      |  "serverSparkVersion" : "1.2.3",
       |  "success" : "true"
       |}
     """.stripMargin
@@ -373,18 +339,18 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val killDriverRequestJson =
     """
       |{
-      |  "action" : "kill_driver_request",
-      |  "client_spark_version" : "1.2.3",
-      |  "driver_id" : "driver_123"
+      |  "action" : "KillDriverRequest",
+      |  "clientSparkVersion" : "1.2.3",
+      |  "driverId" : "driver_123"
       |}
     """.stripMargin
 
   private val killDriverResponseJson =
     """
       |{
-      |  "action" : "kill_driver_response",
-      |  "driver_id" : "driver_123",
-      |  "server_spark_version" : "1.2.3",
+      |  "action" : "KillDriverResponse",
+      |  "driverId" : "driver_123",
+      |  "serverSparkVersion" : "1.2.3",
       |  "success" : "true"
       |}
     """.stripMargin
@@ -392,31 +358,64 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val driverStatusRequestJson =
     """
       |{
-      |  "action" : "driver_status_request",
-      |  "client_spark_version" : "1.2.3",
-      |  "driver_id" : "driver_123"
+      |  "action" : "DriverStatusRequest",
+      |  "clientSparkVersion" : "1.2.3",
+      |  "driverId" : "driver_123"
       |}
     """.stripMargin
 
   private val driverStatusResponseJson =
     """
       |{
-      |  "action" : "driver_status_response",
-      |  "driver_id" : "driver_123",
-      |  "driver_state" : "RUNNING",
-      |  "server_spark_version" : "1.2.3",
+      |  "action" : "DriverStatusResponse",
+      |  "driverId" : "driver_123",
+      |  "driverState" : "RUNNING",
+      |  "serverSparkVersion" : "1.2.3",
       |  "success" : "true",
-      |  "worker_host_port" : "1.2.3.4:7780",
-      |  "worker_id" : "worker_123"
+      |  "workerHostPort" : "1.2.3.4:7780",
+      |  "workerId" : "worker_123"
       |}
     """.stripMargin
 
   private val errorJson =
     """
       |{
-      |  "action" : "error_response",
+      |  "action" : "ErrorResponse",
       |  "message" : "Field not found in submit request: X",
-      |  "server_spark_version" : "1.2.3"
+      |  "serverSparkVersion" : "1.2.3"
       |}
     """.stripMargin
+
+  /** Assert that the contents in the two JSON strings are equal after ignoring whitespace. */
+  private def assertJsonEquals(jsonString1: String, jsonString2: String): Unit = {
+    val trimmedJson1 = jsonString1.trim
+    val trimmedJson2 = jsonString2.trim
+    val json1 = compact(render(parse(trimmedJson1)))
+    val json2 = compact(render(parse(trimmedJson2)))
+    // Put this on a separate line to avoid printing comparison twice when test fails
+    val equals = json1 == json2
+    assert(equals, "\"[%s]\" did not equal \"[%s]\"".format(trimmedJson1, trimmedJson2))
+  }
+}
+
+private class DummyResponse extends SubmitRestProtocolResponse
+private class DummyRequest extends SubmitRestProtocolRequest {
+  private val active = new SubmitRestProtocolField[Boolean]("active")
+  private val age = new SubmitRestProtocolField[Int]("age")
+  private val name = new SubmitRestProtocolField[String]("name")
+
+  def getActive: String = active.toString
+  def getAge: String = age.toString
+  def getName: String = name.toString
+
+  def setActive(s: String): this.type = setBooleanField(active, s)
+  def setAge(s: String): this.type = setNumericField(age, s)
+  def setName(s: String): this.type = setField(name, s)
+
+  override def validate(): Unit = {
+    super.validate()
+    assertFieldIsSet(name)
+    assertFieldIsSet(age)
+    assert(age.getValue > 5, "Not old enough!")
+  }
 }

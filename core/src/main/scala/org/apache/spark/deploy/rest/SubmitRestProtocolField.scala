@@ -17,10 +17,20 @@
 
 package org.apache.spark.deploy.rest
 
-class SubmitRestProtocolField[T] {
+/**
+ * A field used in [[SubmitRestProtocolMessage]]s.
+ */
+class SubmitRestProtocolField[T](val name: String) {
   protected var value: Option[T] = None
+
+  /** Return the value or throw an [[IllegalArgumentException]] if the value is not set. */
+  def getValue: T = {
+    value.getOrElse {
+      throw new IllegalAccessException(s"Value not set in field '$name'!")
+    }
+  }
+
   def isSet: Boolean = value.isDefined
-  def getValue: T = value.getOrElse { throw new IllegalAccessException("Value not set!") }
   def getValueOption: Option[T] = value
   def setValue(v: T): Unit = { value = Some(v) }
   def clearValue(): Unit = { value = None }

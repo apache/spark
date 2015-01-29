@@ -24,23 +24,22 @@ import akka.actor.ActorRef
 import org.apache.spark.{SPARK_VERSION => sparkVersion}
 import org.apache.spark.SparkConf
 import org.apache.spark.util.{AkkaUtils, Utils}
-import org.apache.spark.deploy.{Command, DriverDescription}
+import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
-import org.apache.spark.deploy.DeployMessages
 import org.apache.spark.deploy.master.Master
 
 /**
- * A server that responds to requests submitted by the StandaloneRestClient.
- * This is intended to be embedded in the standalone Master. Cluster mode only.
+ * A server that responds to requests submitted by the [[StandaloneRestClient]].
+ * This is intended to be embedded in the standalone Master. Cluster mode only
  */
 private[spark] class StandaloneRestServer(master: Master, host: String, requestedPort: Int)
   extends SubmitRestServer(host, requestedPort, master.conf) {
-  override protected val handler = new StandaloneRestServerHandler(master)
+  protected override val handler = new StandaloneRestServerHandler(master)
 }
 
 /**
- * A handler for requests submitted to the standalone Master
- * via the stable application submission REST protocol.
+ * A handler for requests submitted to the standalone
+ * Master via the REST application submission protocol.
  */
 private[spark] class StandaloneRestServerHandler(
     conf: SparkConf,
@@ -55,8 +54,7 @@ private[spark] class StandaloneRestServerHandler(
   }
 
   /** Handle a request to submit a driver. */
-  override protected def handleSubmit(
-      request: SubmitDriverRequest): SubmitDriverResponse = {
+  protected override def handleSubmit(request: SubmitDriverRequest): SubmitDriverResponse = {
     val driverDescription = buildDriverDescription(request)
     val response = AkkaUtils.askWithReply[DeployMessages.SubmitDriverResponse](
       DeployMessages.RequestSubmitDriver(driverDescription), masterActor, askTimeout)
@@ -68,8 +66,7 @@ private[spark] class StandaloneRestServerHandler(
   }
 
   /** Handle a request to kill a driver. */
-  override protected def handleKill(
-      request: KillDriverRequest): KillDriverResponse = {
+  protected override def handleKill(request: KillDriverRequest): KillDriverResponse = {
     val driverId = request.getDriverId
     val response = AkkaUtils.askWithReply[DeployMessages.KillDriverResponse](
       DeployMessages.RequestKillDriver(driverId), masterActor, askTimeout)
@@ -81,16 +78,11 @@ private[spark] class StandaloneRestServerHandler(
   }
 
   /** Handle a request for a driver's status. */
-  override protected def handleStatus(
-      request: DriverStatusRequest): DriverStatusResponse = {
+  protected override def handleStatus(request: DriverStatusRequest): DriverStatusResponse = {
     val driverId = request.getDriverId
     val response = AkkaUtils.askWithReply[DeployMessages.DriverStatusResponse](
       DeployMessages.RequestDriverStatus(driverId), masterActor, askTimeout)
-    // Format exception nicely, if it exists
-    val message = response.exception.map { e =>
-      val stackTraceString = e.getStackTrace.map { "\t" + _ }.mkString("\n")
-      s"Exception from the cluster:\n$e\n$stackTraceString"
-    }
+    val message = response.exception.map { s"Exception from the cluster:\n" + formatException(_) }
     new DriverStatusResponse()
       .setSparkVersion(sparkVersion)
       .setDriverId(driverId)
@@ -103,6 +95,7 @@ private[spark] class StandaloneRestServerHandler(
 
   /**
    * Build a driver description from the fields specified in the submit request.
+   *
    * This does not currently consider fields used by python applications since
    * python is not supported in standalone cluster mode yet.
    */

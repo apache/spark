@@ -17,9 +17,12 @@
 
 package org.apache.spark.deploy.rest
 
+/**
+ * An error response message used in the REST application submission protocol.
+ */
 class ErrorResponse extends SubmitRestProtocolResponse {
   override def validate(): Unit = {
     super.validate()
-    assertFieldIsSet(message, "message")
+    assertFieldIsSet(message)
   }
 }

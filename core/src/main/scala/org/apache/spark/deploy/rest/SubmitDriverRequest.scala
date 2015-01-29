@@ -25,21 +25,24 @@ import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.util.JsonProtocol
 
+/**
+ * A request to submit a driver in the REST application submission protocol.
+ */
 class SubmitDriverRequest extends SubmitRestProtocolRequest {
-  private val appName = new SubmitRestProtocolField[String]
-  private val appResource = new SubmitRestProtocolField[String]
-  private val mainClass = new SubmitRestProtocolField[String]
-  private val jars = new SubmitRestProtocolField[String]
-  private val files = new SubmitRestProtocolField[String]
-  private val pyFiles = new SubmitRestProtocolField[String]
-  private val driverMemory = new SubmitRestProtocolField[String]
-  private val driverCores = new SubmitRestProtocolField[Int]
-  private val driverExtraJavaOptions = new SubmitRestProtocolField[String]
-  private val driverExtraClassPath = new SubmitRestProtocolField[String]
-  private val driverExtraLibraryPath = new SubmitRestProtocolField[String]
-  private val superviseDriver = new SubmitRestProtocolField[Boolean]
-  private val executorMemory = new SubmitRestProtocolField[String]
-  private val totalExecutorCores = new SubmitRestProtocolField[Int]
+  private val appName = new SubmitRestProtocolField[String]("appName")
+  private val appResource = new SubmitRestProtocolField[String]("appResource")
+  private val mainClass = new SubmitRestProtocolField[String]("mainClass")
+  private val jars = new SubmitRestProtocolField[String]("jars")
+  private val files = new SubmitRestProtocolField[String]("files")
+  private val pyFiles = new SubmitRestProtocolField[String]("pyFiles")
+  private val driverMemory = new SubmitRestProtocolField[String]("driverMemory")
+  private val driverCores = new SubmitRestProtocolField[Int]("driverCores")
+  private val driverExtraJavaOptions = new SubmitRestProtocolField[String]("driverExtraJavaOptions")
+  private val driverExtraClassPath = new SubmitRestProtocolField[String]("driverExtraClassPath")
+  private val driverExtraLibraryPath = new SubmitRestProtocolField[String]("driverExtraLibraryPath")
+  private val superviseDriver = new SubmitRestProtocolField[Boolean]("superviseDriver")
+  private val executorMemory = new SubmitRestProtocolField[String]("executorMemory")
+  private val totalExecutorCores = new SubmitRestProtocolField[Int]("totalExecutorCores")
 
   // Special fields
   private val appArgs = new ArrayBuffer[String]
@@ -101,30 +104,43 @@ class SubmitDriverRequest extends SubmitRestProtocolRequest {
     envVars ++= JsonProtocol.mapFromJson(parse(s))
   }
 
+  /** Return an array of arguments to be passed to the application. */
   @JsonIgnore
   def getAppArgs: Array[String] = appArgs.toArray
+
+  /** Return a map of Spark properties to be passed to the application as java options. */
   @JsonIgnore
   def getSparkProperties: Map[String, String] = sparkProperties.toMap
+
+  /** Return a map of environment variables to be passed to the application. */
   @JsonIgnore
   def getEnvironmentVariables: Map[String, String] = envVars.toMap
+
+  /** Add a command line argument to be passed to the application. */
   @JsonIgnore
   def addAppArg(s: String): this.type = { appArgs += s; this }
+
+  /** Set a Spark property to be passed to the application as a java option. */
   @JsonIgnore
   def setSparkProperty(k: String, v: String): this.type = { sparkProperties(k) = v; this }
+
+  /** Set an environment variable to be passed to the application. */
   @JsonIgnore
   def setEnvironmentVariable(k: String, v: String): this.type = { envVars(k) = v; this }
 
+  /** Serialize the given Array to a compact JSON string. */
   private def arrayToJson(arr: Array[String]): String = {
     if (arr.nonEmpty) { compact(render(JsonProtocol.arrayToJson(arr))) } else null
   }
 
+  /** Serialize the given Map to a compact JSON string. */
   private def mapToJson(map: Map[String, String]): String = {
     if (map.nonEmpty) { compact(render(JsonProtocol.mapToJson(map))) } else null
   }
 
   override def validate(): Unit = {
     super.validate()
-    assertFieldIsSet(appName, "app_name")
-    assertFieldIsSet(appResource, "app_resource")
+    assertFieldIsSet(appName)
+    assertFieldIsSet(appResource)
   }
 }

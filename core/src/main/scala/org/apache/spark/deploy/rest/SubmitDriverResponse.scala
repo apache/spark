@@ -17,9 +17,12 @@
 
 package org.apache.spark.deploy.rest
 
+/**
+ * A response to the [[SubmitDriverRequest]] in the REST application submission protocol.
+ */
 class SubmitDriverResponse extends SubmitRestProtocolResponse {
-  private val success = new SubmitRestProtocolField[Boolean]
-  private val driverId = new SubmitRestProtocolField[String]
+  private val success = new SubmitRestProtocolField[Boolean]("success")
+  private val driverId = new SubmitRestProtocolField[String]("driverId")
 
   def getSuccess: String = success.toString
   def getDriverId: String = driverId.toString
@@ -29,6 +32,6 @@ class SubmitDriverResponse extends SubmitRestProtocolResponse {
 
   override def validate(): Unit = {
     super.validate()
-    assertFieldIsSet(success, "success")
+    assertFieldIsSet(success)
   }
 }

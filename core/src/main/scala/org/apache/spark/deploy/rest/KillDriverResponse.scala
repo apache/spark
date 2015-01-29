@@ -17,9 +17,12 @@
 
 package org.apache.spark.deploy.rest
 
+/**
+ * A response to the [[KillDriverRequest]] in the REST application submission protocol.
+ */
 class KillDriverResponse extends SubmitRestProtocolResponse {
-  private val driverId = new SubmitRestProtocolField[String]
-  private val success = new SubmitRestProtocolField[Boolean]
+  private val driverId = new SubmitRestProtocolField[String]("driverId")
+  private val success = new SubmitRestProtocolField[Boolean]("success")
 
   def getDriverId: String = driverId.toString
   def getSuccess: String = success.toString
@@ -29,7 +32,7 @@ class KillDriverResponse extends SubmitRestProtocolResponse {
 
   override def validate(): Unit = {
     super.validate()
-    assertFieldIsSet(driverId, "driver_id")
-    assertFieldIsSet(success, "success")
+    assertFieldIsSet(driverId)
+    assertFieldIsSet(success)
   }
 }

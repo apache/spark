@@ -28,14 +28,13 @@ import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.deploy.SparkSubmitArguments
 
 /**
- * An abstract client that submits applications using the stable REST protocol.
- * This client is intended to communicate with the SubmitRestServer.
+ * An abstract client that submits applications using the REST protocol.
+ * This client is intended to communicate with the [[SubmitRestServer]].
  */
 private[spark] abstract class SubmitRestClient extends Logging {
 
-  /** Request that the REST server submit a driver specified by the provided arguments. */
+  /** Request that the REST server submit a driver using the provided arguments. */
   def submitDriver(args: SparkSubmitArguments): SubmitDriverResponse = {
-    validateSubmitArguments(args)
     val url = getHttpUrl(args.master)
     val request = constructSubmitRequest(args)
     logInfo(s"Submitting a request to launch a driver in ${args.master}.")
@@ -44,7 +43,6 @@ private[spark] abstract class SubmitRestClient extends Logging {
 
   /** Request that the REST server kill the specified driver. */
   def killDriver(master: String, driverId: String): KillDriverResponse = {
-    validateMaster(master)
     val url = getHttpUrl(master)
     val request = constructKillRequest(master, driverId)
     logInfo(s"Submitting a request to kill driver $driverId in $master.")
@@ -53,7 +51,6 @@ private[spark] abstract class SubmitRestClient extends Logging {
 
   /** Request the status of the specified driver from the REST server. */
   def requestDriverStatus(master: String, driverId: String): DriverStatusResponse = {
-    validateMaster(master)
     val url = getHttpUrl(master)
     val request = constructStatusRequest(master, driverId)
     logInfo(s"Submitting a request for the status of driver $driverId in $master.")
@@ -68,17 +65,9 @@ private[spark] abstract class SubmitRestClient extends Logging {
   protected def constructKillRequest(master: String, driverId: String): KillDriverRequest
   protected def constructStatusRequest(master: String, driverId: String): DriverStatusRequest
 
-  // If the provided arguments are not as expected, throw an exception
-  protected def validateMaster(master: String): Unit
-  protected def validateDeployMode(deployMode: String): Unit
-  protected def validateSubmitArguments(args: SparkSubmitArguments): Unit = {
-    validateMaster(args.master)
-    validateDeployMode(args.deployMode)
-  }
-
   /**
    * Send the provided request in an HTTP message to the given URL.
-   * This assumes both the request and the response use the JSON format.
+   * This assumes that both the request and the response use the JSON format.
    * Return the response received from the REST server.
    */
   private def sendHttp(url: URL, request: SubmitRestProtocolRequest): SubmitRestProtocolResponse = {
@@ -96,7 +85,7 @@ private[spark] abstract class SubmitRestClient extends Logging {
       out.close()
       val responseJson = Source.fromInputStream(conn.getInputStream).mkString
       logDebug(s"Response from the REST server:\n$responseJson")
-      SubmitRestProtocolResponse.fromJson(responseJson)
+      SubmitRestProtocolMessage.fromJson(responseJson).asInstanceOf[SubmitRestProtocolResponse]
     } catch {
       case e: FileNotFoundException =>
         throw new SparkException(s"Unable to connect to REST server $url", e)
