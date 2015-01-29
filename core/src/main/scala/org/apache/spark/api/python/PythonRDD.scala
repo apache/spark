@@ -68,7 +68,7 @@ private[spark] class PythonRDD(
     }
     val worker: Socket = env.createPythonWorker(pythonExec, envVars.toMap)
     // Whether is the worker released into idle pool
-    var released = false
+    @volatile var released = false
 
     // Start a thread to feed the process input from our parent's iterator
     val writerThread = new WriterThread(env, worker, split, context)
