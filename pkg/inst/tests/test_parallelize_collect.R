@@ -68,14 +68,12 @@ test_that("collect(), following a parallelize(), gives back the original collect
 })
 
 test_that("regression: collect() following a parallelize() does not drop elements", {
-  lapply(1:72,
-         function(collLen) {
-           lapply(1:15, function(numPart) {
-             expected <- runif(collLen)
-             actual <- collect(parallelize(jsc, expected, numPart))
-             expect_equal(actual, as.list(expected))
-           })
-         })
+  # 10 %/% 6 = 1, ceiling(10 / 6) = 2
+  collLen <- 10
+  numPart <- 6
+  expected <- runif(collLen)
+  actual <- collect(parallelize(jsc, expected, numPart))
+  expect_equal(actual, as.list(expected))
 })
 
 test_that("parallelize() and collect() work for lists of pairs (pairwise data)", {
