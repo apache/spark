@@ -88,8 +88,8 @@ class IndexedRowMatrix(
    *                     a smaller value. Must be an integer value greater than 0.
    * @return a [[BlockMatrix]]
    */
-  // TODO: This implementation may be optimized
   def toBlockMatrix(rowsPerBlock: Int, colsPerBlock: Int): BlockMatrix = {
+    // TODO: This implementation may be optimized
     toCoordinateMatrix().toBlockMatrix(rowsPerBlock, colsPerBlock)
   }
 

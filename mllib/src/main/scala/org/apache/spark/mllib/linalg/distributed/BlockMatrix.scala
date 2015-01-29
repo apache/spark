@@ -199,10 +199,10 @@ class BlockMatrix(
   }
 
   /** Converts to IndexedRowMatrix. The number of columns must be within the integer range. */
-  // TODO: This implementation may be optimized
   def toIndexedRowMatrix(): IndexedRowMatrix = {
     require(numCols() < Int.MaxValue, "The number of columns must be within the integer range. " +
       s"numCols: ${numCols()}")
+    // TODO: This implementation may be optimized
     toCoordinateMatrix().toIndexedRowMatrix()
   }
 
