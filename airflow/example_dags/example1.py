@@ -24,7 +24,7 @@ for i in range(9):
     i = str(i)
     task = BashOperator(
         task_id='runme_'+i,
-        bash_command='echo "{{ task_instance_key_str }}"',
+        bash_command='echo "{{ task_instance_key_str }}" && sleep 60',
         default_args=args)
     task.set_downstream(run_this)
     dag.add_task(task)

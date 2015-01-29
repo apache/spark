@@ -83,7 +83,7 @@ def run(args):
             DagPickle).filter(DagPickle.id == args.pickle).first()
         if not dag_pickle:
             raise Exception("Who hid the pickle!? [missing pickle]")
-        dag = dag_pickle.get_object()
+        dag = dag_pickle.pickle
         task = dag.get_task(task_id=args.task_id)
 
     # TODO: add run_local and fire it with the right executor from run
@@ -97,6 +97,13 @@ def run(args):
             force=args.force,
             ignore_dependencies=args.ignore_dependencies)
         run_job.run()
+    elif args.raw:
+        ti.run(
+            mark_success=args.mark_success,
+            force=args.force,
+            ignore_dependencies=args.ignore_dependencies,
+            job_id=args.job_id,
+        )
     else:
         # Pickling the DAG
         session = settings.Session()
@@ -112,6 +119,7 @@ def run(args):
         print("Sending run command to executor.")
         cmd = ti.command(
             force=args.force,
+            local=True,
             mark_success=args.mark_success,
             ignore_dependencies=args.ignore_dependencies,
             pickle_id=pickle_id)
@@ -199,22 +207,6 @@ def webserver(args):
 def master(args):
     job = jobs.MasterJob(args.dag_id, args.subdir)
     job.run()
-
-def serve_logs(args):
-    print("Starting flask")
-    import flask
-    flask_app = flask.Flask(__name__)
-    @flask_app.route('/log/<path:filename>')
-    def serve_logs(filename):
-        conf.get('core', 'BASE_LOG_FOLDER')
-        print filename
-        return flask.send_from_directory(
-            conf.get('core', 'BASE_LOG_FOLDER'), 
-            filename,
-            mimetype="application/json",
-            as_attachment=False)
-    print(conf.get('core', 'BASE_LOG_FOLDER'))
-    flask_app.run(host='0.0.0.0', port=8990, debug=True)
 
 def serve_logs(args):
     print("Starting flask")
@@ -379,12 +371,18 @@ if __name__ == '__main__':
         help="Runs the task locally, don't use the executor",
         action="store_true")
     parser_run.add_argument(
+        "-r", "--raw",
+        help=argparse.SUPPRESS,
+        action="store_true")
+    parser_run.add_argument(
         "-i", "--ignore_dependencies",
         help="Ignore upstream and depends_on_past dependencies",
         action="store_true")
     parser_run.add_argument(
         "-p", "--pickle",
         help="Serialized pickle object of the entire dag (used internally)")
+    parser_run.add_argument(
+        "-j", "--job_id", help=argparse.SUPPRESS)
     parser_run.set_defaults(func=run)
 
     ht = (

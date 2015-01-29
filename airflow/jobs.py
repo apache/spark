@@ -1,8 +1,8 @@
 from datetime import datetime
 import getpass
 import logging
-from multiprocessing import Process
 import signal
+import subprocess
 import sys
 from time import sleep
 
@@ -285,11 +285,11 @@ class BackfillJob(BaseJob):
         end_date = self.bf_end_date
 
         session = settings.Session()
-        pickle = models.DagPickle(self.dag, self)
-        executor = self.executor
-        executor.start()
+        pickle = models.DagPickle(self.dag)
         session.add(pickle)
         session.commit()
+        executor = self.executor
+        executor.start()
         pickle_id = pickle.id
 
         # Build a list of all intances to run
@@ -386,18 +386,18 @@ class LocalTaskJob(BaseJob):
         super(LocalTaskJob, self).__init__(*args, **kwargs)
 
     def _execute(self):
-        self.process = Process(
-            target=self.task_instance.run,
-            kwargs={
-                'ignore_dependencies': self.ignore_dependencies,
-                'force': self.force,
-                'mark_success': self.mark_success,
-                'job_id': self.id,
-            })
-
-        self.process.start()
-        while self.process.is_alive():
+        command = self.task_instance.command(
+            raw=True,
+            ignore_dependencies=self.ignore_dependencies,
+            force=self.force,
+            mark_success=self.mark_success,
+            job_id=self.id,
+        )
+        self.process = subprocess.Popen(['bash', '-c', command])
+        return_code = None
+        while return_code is None:
             self.heartbeat()
+            return_code = self.process.poll()
 
     def on_kill(self):
         self.process.terminate()
