@@ -29,7 +29,7 @@ object RDDRelation {
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setAppName("RDDRelation")
     val sc = new SparkContext(sparkConf)
-    val sqlContext = new SQLContext(sc)
+    implicit val sqlContext = new SQLContext(sc)
 
     // Importing the SQL context gives access to all the SQL functions and implicit conversions.
     import sqlContext._

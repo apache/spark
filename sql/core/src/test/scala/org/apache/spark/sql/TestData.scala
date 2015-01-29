@@ -29,6 +29,9 @@ import org.apache.spark.sql.test.TestSQLContext._
 case class TestData(key: Int, value: String)
 
 object TestData {
+
+  private implicit val sqlContext = TestSQLContext
+
   val testData = TestSQLContext.sparkContext.parallelize(
     (1 to 100).map(i => TestData(i, i.toString))).toDataFrame
   testData.registerTempTable("testData")

@@ -32,6 +32,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.api.scala.dsl._
 
 class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
 
@@ -349,8 +350,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       numUserBlocks: Int = 2,
       numItemBlocks: Int = 3,
       targetRMSE: Double = 0.05): Unit = {
-    val sqlContext = this.sqlContext
-    import sqlContext.createDataFrame
+    implicit val sqlContext = this.sqlContext
     val als = new ALS()
       .setRank(rank)
       .setRegParam(regParam)

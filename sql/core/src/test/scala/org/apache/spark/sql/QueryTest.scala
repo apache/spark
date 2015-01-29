@@ -20,8 +20,11 @@ package org.apache.spark.sql
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.columnar.InMemoryRelation
+import org.apache.spark.sql.test.TestSQLContext
 
 class QueryTest extends PlanTest {
+
+  protected implicit val sqlContext: SQLContext = TestSQLContext
 
   /**
    * Runs the plan and makes sure the answer contains all of the keywords, or the

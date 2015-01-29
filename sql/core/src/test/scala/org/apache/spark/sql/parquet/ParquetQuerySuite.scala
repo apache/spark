@@ -26,7 +26,6 @@ import org.apache.spark.sql.test.TestSQLContext._
  * A test suite that tests various Parquet queries.
  */
 class ParquetQuerySuite extends QueryTest with ParquetTest {
-  val sqlContext = TestSQLContext
 
   test("simple projection") {
     withParquetTable((0 until 10).map(i => (i, i.toString)), "t") {

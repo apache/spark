@@ -36,7 +36,6 @@ import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf}
 import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.types.DecimalType
 
@@ -64,7 +63,6 @@ private[parquet] class TestGroupWriteSupport(schema: MessageType) extends WriteS
  * A test suite that tests basic Parquet I/O.
  */
 class ParquetIOSuite extends QueryTest with ParquetTest {
-  val sqlContext = TestSQLContext
 
   /**
    * Writes `data` to a Parquet file, reads it back and check file contents.

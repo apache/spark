@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.commons.io.FileUtils
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.types._
 

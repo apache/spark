@@ -24,8 +24,6 @@ import org.apache.spark.sql.hive.test.TestHive
 case class Cases(lower: String, UPPER: String)
 
 class HiveParquetSuite extends QueryTest with ParquetTest {
-  val sqlContext = TestHive
-
   import sqlContext._
 
   test("Case insensitive attribute names") {

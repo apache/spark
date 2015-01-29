@@ -29,6 +29,7 @@ import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Row, SQLContext, DataFrame}
+import org.apache.spark.sql.api.scala.dsl._
 
 /**
  * An example of how to use [[org.apache.spark.sql.DataFrame]] as a Dataset for ML. Run with
@@ -67,11 +68,9 @@ object DatasetExample {
   }
 
   def run(params: Params) {
-
     val conf = new SparkConf().setAppName(s"DatasetExample with $params")
     val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
-    import sqlContext._ // for implicit conversions
+    implicit val sqlContext = new SQLContext(sc)
 
     // Load input data
     val origData: RDD[LabeledPoint] = params.dataFormat match {

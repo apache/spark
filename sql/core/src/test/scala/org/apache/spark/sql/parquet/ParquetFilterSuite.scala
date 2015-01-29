@@ -38,7 +38,6 @@ import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf}
  *    data type is nullable.
  */
 class ParquetFilterSuite extends QueryTest with ParquetTest {
-  val sqlContext = TestSQLContext
 
   private def checkFilterPredicate(
       rdd: DataFrame,
