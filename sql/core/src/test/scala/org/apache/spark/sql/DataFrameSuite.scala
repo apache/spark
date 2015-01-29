@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.sql.dsl._
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.types._
 
 /* Implicits */
@@ -57,13 +57,13 @@ class DataFrameSuite extends QueryTest {
 
   test("convert $\"attribute name\" into unresolved attribute") {
     checkAnswer(
-      testData.where($"key" === Literal(1)).select($"value"),
+      testData.where($"key" === lit(1)).select($"value"),
       Row("1"))
   }
 
   test("convert Scala Symbol 'attrname into unresolved attribute") {
     checkAnswer(
-      testData.where('key === Literal(1)).select('value),
+      testData.where('key === lit(1)).select('value),
       Row("1"))
   }
 
@@ -75,13 +75,13 @@ class DataFrameSuite extends QueryTest {
 
   test("simple select") {
     checkAnswer(
-      testData.where('key === Literal(1)).select('value),
+      testData.where('key === lit(1)).select('value),
       Row("1"))
   }
 
   test("select with functions") {
     checkAnswer(
-      testData.select(sum('value), avg('value), count(Literal(1))),
+      testData.select(sum('value), avg('value), count(lit(1))),
       Row(5050.0, 50.5, 100))
 
     checkAnswer(
@@ -215,7 +215,7 @@ class DataFrameSuite extends QueryTest {
     )
 
     checkAnswer(
-      testData3.agg(count('a), count('b), count(Literal(1)), countDistinct('a), countDistinct('b)),
+      testData3.agg(count('a), count('b), count(lit(1)), countDistinct('a), countDistinct('b)),
       Row(2, 1, 2, 2, 1)
     )
 

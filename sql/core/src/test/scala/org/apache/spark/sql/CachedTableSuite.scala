@@ -19,7 +19,7 @@ package org.apache.spark.sql
 
 import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.columnar._
-import org.apache.spark.sql.dsl._
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.storage.{StorageLevel, RDDBlockId}
 
