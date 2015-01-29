@@ -111,20 +111,10 @@ class ALSModel private[ml] (
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
   override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    import dataset.sqlContext._
-    import org.apache.spark.ml.recommendation.ALSModel.Factor
+    import dataset.sqlContext.createDataFrame
     val map = this.paramMap ++ paramMap
-    // TODO: Add DSL to simplify the code here.
-    val instanceTable = s"instance_$uid"
-    val userTable = s"user_$uid"
-    val itemTable = s"item_$uid"
-    val instances = dataset.as(instanceTable)
-    val users = userFactors.map { case (id, features) =>
-      Factor(id, features)
-    }.as(userTable)
-    val items = itemFactors.map { case (id, features) =>
-      Factor(id, features)
-    }.as(itemTable)
+    val users = userFactors.toDataFrame("id", "features")
+    val items = itemFactors.toDataFrame("id", "features")
     val predict: (Seq[Float], Seq[Float]) => Float = (userFeatures, itemFeatures) => {
       if (userFeatures != null && itemFeatures != null) {
         blas.sdot(k, userFeatures.toArray, 1, itemFeatures.toArray, 1)
@@ -133,13 +123,14 @@ class ALSModel private[ml] (
       }
     }
     val inputColumns = dataset.schema.fieldNames
-    val prediction = callUDF(predict, $"$userTable.features", $"$itemTable.features")
-        .as(map(predictionCol))
-    val outputColumns = inputColumns.map(f => $"$instanceTable.$f".as(f)) :+ prediction
-    instances
-      .join(users, Column(map(userCol)) === $"$userTable.id", "left")
-      .join(items, Column(map(itemCol)) === $"$itemTable.id", "left")
+    val prediction = callUDF(predict, users("features"), items("features")).as(map(predictionCol))
+    val outputColumns = inputColumns.map(f => dataset(f)) :+ prediction
+    dataset
+      .join(users, dataset(map(userCol)) === users("id"), "left")
+      .join(items, dataset(map(itemCol)) === items("id"), "left")
       .select(outputColumns: _*)
+      // TODO: Just use a dataset("*")
+      // .select(dataset("*"), prediction)
   }
 
   override private[ml] def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
@@ -147,10 +138,6 @@ class ALSModel private[ml] (
   }
 }
 
-private object ALSModel {
-  /** Case class to convert factors to [[DataFrame]]s */
-  private case class Factor(id: Int, features: Seq[Float])
-}
 
 /**
  * Alternating Least Squares (ALS) matrix factorization.
@@ -210,7 +197,7 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   override def fit(dataset: DataFrame, paramMap: ParamMap): ALSModel = {
     val map = this.paramMap ++ paramMap
     val ratings = dataset
-      .select(Column(map(userCol)), Column(map(itemCol)), Column(map(ratingCol)).cast(FloatType))
+      .select(col(map(userCol)), col(map(itemCol)), col(map(ratingCol)).cast(FloatType))
       .map { row =>
         new Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }

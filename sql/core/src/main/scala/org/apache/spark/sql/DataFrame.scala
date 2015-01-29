@@ -118,8 +118,8 @@ class DataFrame protected[sql](
 
   /** Resolves a column name into a Catalyst [[NamedExpression]]. */
   protected[sql] def resolve(colName: String): NamedExpression = {
-    logicalPlan.resolve(colName, sqlContext.analyzer.resolver).getOrElse(
-      throw new RuntimeException(s"""Cannot resolve column name "$colName""""))
+    logicalPlan.resolve(colName, sqlContext.analyzer.resolver).getOrElse(throw new RuntimeException(
+      s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})"""))
   }
 
   /** Left here for compatibility reasons. */
@@ -130,6 +130,29 @@ class DataFrame protected[sql](
    * Returns the object itself. Used to force an implicit conversion from RDD to DataFrame in Scala.
    */
   def toDataFrame: DataFrame = this
+
+  /**
+   * Returns a new [[DataFrame]] with columns renamed. This can be quite convenient in conversion
+   * from a RDD of tuples into a [[DataFrame]] with meaningful names. For example:
+   * {{{
+   *   val rdd: RDD[(Int, String)] = ...
+   *   rdd.toDataFrame  // this implicit conversion creates a DataFrame with column name _1 and _2
+   *   rdd.toDataFrame("id", "name")  // this creates a DataFrame with column name "id" and "name"
+   * }}}
+   */
+  @scala.annotation.varargs
+  def toDataFrame(colName: String, colNames: String*): DataFrame = {
+    val newNames = colName +: colNames
+    require(schema.size == newNames.size,
+      "The number of columns doesn't match.\n" +
+      "Old column names: " + schema.fields.map(_.name).mkString(", ") + "\n" +
+      "New column names: " + newNames.mkString(", "))
+
+    val newCols = schema.fieldNames.zip(newNames).map { case (oldName, newName) =>
+      apply(oldName).as(newName)
+    }
+    select(newCols :_*)
+  }
 
   /** Returns the schema of this [[DataFrame]]. */
   override def schema: StructType = queryExecution.analyzed.schema
@@ -227,7 +250,7 @@ class DataFrame protected[sql](
   }
 
   /**
-   * Selects a single column and return it as a [[Column]].
+   * Selects column based on the column name and return it as a [[Column]].
    */
   override def apply(colName: String): Column = colName match {
     case "*" =>
@@ -467,11 +490,27 @@ class DataFrame protected[sql](
   }
 
   /**
+   * Returns a new RDD by first applying a function to all rows of this [[DataFrame]],
+   * and then flattening the results.
+   */
+  override def flatMap[R: ClassTag](f: Row => TraversableOnce[R]): RDD[R] = rdd.flatMap(f)
+
+  /**
    * Returns a new RDD by applying a function to each partition of this DataFrame.
    */
   override def mapPartitions[R: ClassTag](f: Iterator[Row] => Iterator[R]): RDD[R] = {
     rdd.mapPartitions(f)
   }
+
+  /**
+   * Applies a function `f` to all rows.
+   */
+  override def foreach(f: Row => Unit): Unit = rdd.foreach(f)
+
+  /**
+   * Applies a function f to each partition of this [[DataFrame]].
+   */
+  override def foreachPartition(f: Iterator[Row] => Unit): Unit = rdd.foreachPartition(f)
 
   /**
    * Returns the first `n` rows in the [[DataFrame]].
@@ -520,7 +559,7 @@ class DataFrame protected[sql](
   /////////////////////////////////////////////////////////////////////////////
 
   /**
-   * Return the content of the [[DataFrame]] as a [[RDD]] of [[Row]]s.
+   * Returns the content of the [[DataFrame]] as an [[RDD]] of [[Row]]s.
    */
   override def rdd: RDD[Row] = {
     val schema = this.schema

@@ -24,7 +24,6 @@ import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
 import org.apache.spark.sql.api.scala.dsl._
-import org.apache.spark.sql.catalyst.dsl._
 import org.apache.spark.sql.types.{StructField, StructType}
 
 /**
@@ -85,7 +84,7 @@ class StandardScalerModel private[ml] (
     val scale: (Vector) => Vector = (v) => {
       scaler.transform(v)
     }
-    dataset.select($"*", callUDF(scale, Column(map(inputCol))).as(map(outputCol)))
+    dataset.select($"*", callUDF(scale, col(map(inputCol))).as(map(outputCol)))
   }
 
   private[ml] override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
