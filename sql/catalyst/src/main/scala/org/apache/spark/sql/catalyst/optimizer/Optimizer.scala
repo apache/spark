@@ -294,62 +294,110 @@ object OptimizeIn extends Rule[LogicalPlan] {
 
 /**
  * Simplifies boolean expressions:
- *
  * 1. Simplifies expressions whose answer can be determined without evaluating both sides.
  * 2. Eliminates / extracts common factors.
- * 3. Removes `Not` operator.
- *
- * Note that this rule can eliminate expressions that might otherwise have been evaluated and thus
- * is only safe when evaluations of expressions does not result in side effects.
+ * 3. Merge same expressions
+ * 4. Removes `Not` operator.
  */
 object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
-      case and @ And(left, right) =>
-        (left, right) match {
-          case (Literal(true, BooleanType), r) => r
-          case (l, Literal(true, BooleanType)) => l
-          case (Literal(false, BooleanType), _) => Literal(false)
-          case (_, Literal(false, BooleanType)) => Literal(false)
-          // a && a && a ... => a
-          case _ if splitConjunctivePredicates(and).distinct.size == 1 => left
-          case _ => and
-        }
+      case and @ And(left, right) => (left, right) match {
+        // true && r  =>  r
+        case (Literal(true, BooleanType), r) => r
+        // l && true  =>  l
+        case (l, Literal(true, BooleanType)) => l
+        // false && r  =>  false
+        case (Literal(false, BooleanType), _) => Literal(false)
+        // l && false  =>  false
+        case (_, Literal(false, BooleanType)) => Literal(false)
+        // a && a  =>  a
+        case (l, r) if l fastEquals r => l
+        // (a || b) && (a || c)  =>  a || (b && c)
+        case _ =>
+          // 1. Split left and right to get the disjunctive predicates,
+          //   i.e. lhsSet = (a, b), rhsSet = (a, c)
+          // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
+          // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
+          // 4. Apply the formula, get the optimized predicate: common || (ldiff && rdiff)
+          val lhsSet = splitDisjunctivePredicates(left).toSet
+          val rhsSet = splitDisjunctivePredicates(right).toSet
+          val common = lhsSet.intersect(rhsSet)
+          if (common.isEmpty) {
+            // No common factors, return the original predicate
+            and
+          } else {
+            val ldiff = lhsSet.diff(common)
+            val rdiff = rhsSet.diff(common)
+            if (ldiff.isEmpty || rdiff.isEmpty) {
+              // (a || b || c || ...) && (a || b) => (a || b)
+              common.reduce(Or)
+            } else {
+              // (a || b || c || ...) && (a || b || d || ...) =>
+              // ((c || ...) && (d || ...)) || a || b
+              (common + And(ldiff.reduce(Or), rdiff.reduce(Or))).reduce(Or)
+            }
+          }
+      }  // end of And(left, right)
 
-      case or @ Or(left, right) =>
-        (left, right) match {
-          case (Literal(true, BooleanType), _) => Literal(true)
-          case (_, Literal(true, BooleanType)) => Literal(true)
-          case (Literal(false, BooleanType), r) => r
-          case (l, Literal(false, BooleanType)) => l
-          // a || a || a ... => a
-          case _ if splitDisjunctivePredicates(or).distinct.size == 1 => left
-          // (a && b && c && ...) || (a && b && d && ...) => a && b && (c || d || ...)
-          case _ =>
-            val lhsSet = splitConjunctivePredicates(left).toSet
-            val rhsSet = splitConjunctivePredicates(right).toSet
-            val common = lhsSet.intersect(rhsSet)
+      case or @ Or(left, right) => (left, right) match {
+        // true || r  =>  true
+        case (Literal(true, BooleanType), _) => Literal(true)
+        // r || true  =>  true
+        case (_, Literal(true, BooleanType)) => Literal(true)
+        // false || r  =>  r
+        case (Literal(false, BooleanType), r) => r
+        // l || false  =>  l
+        case (l, Literal(false, BooleanType)) => l
+        // a || a => a
+        case (l, r) if l fastEquals r => l
+        // (a && b) || (a && c)  =>  a && (b || c)
+        case _ =>
+           // 1. Split left and right to get the conjunctive predicates,
+           //   i.e.  lhsSet = (a, b), rhsSet = (a, c)
+           // 2. Find the common predict between lhsSet and rhsSet, i.e. common = (a)
+           // 3. Remove common predict from lhsSet and rhsSet, i.e. ldiff = (b), rdiff = (c)
+           // 4. Apply the formula, get the optimized predicate: common && (ldiff || rdiff)
+          val lhsSet = splitConjunctivePredicates(left).toSet
+          val rhsSet = splitConjunctivePredicates(right).toSet
+          val common = lhsSet.intersect(rhsSet)
+          if (common.isEmpty) {
+            // No common factors, return the original predicate
+            or
+          } else {
+            val ldiff = lhsSet.diff(common)
+            val rdiff = rhsSet.diff(common)
+            if (ldiff.isEmpty || rdiff.isEmpty) {
+              // (a && b) || (a && b && c && ...) => a && b
+              common.reduce(And)
+            } else {
+              // (a && b && c && ...) || (a && b && d && ...) =>
+              // ((c && ...) || (d && ...)) && a && b
+              (common + Or(ldiff.reduce(And), rdiff.reduce(And))).reduce(And)
+            }
+          }
+      }  // end of Or(left, right)
 
-            (lhsSet.diff(common).reduceOption(And) ++ rhsSet.diff(common).reduceOption(And))
-              .reduceOption(Or)
-              .map(_ :: common.toList)
-              .getOrElse(common.toList)
-              .reduce(And)
-        }
+      case not @ Not(exp) => exp match {
+        // not(true)  =>  false
+        case Literal(true, BooleanType) => Literal(false)
+        // not(false)  =>  true
+        case Literal(false, BooleanType) => Literal(true)
+        // not(l > r)  =>  l <= r
+        case GreaterThan(l, r) => LessThanOrEqual(l, r)
+        // not(l >= r)  =>  l < r
+        case GreaterThanOrEqual(l, r) => LessThan(l, r)
+        // not(l < r)  =>  l >= r
+        case LessThan(l, r) => GreaterThanOrEqual(l, r)
+        // not(l <= r)  =>  l > r
+        case LessThanOrEqual(l, r) => GreaterThan(l, r)
+        // not(not(e))  =>  e
+        case Not(e) => e
+        case _ => not
+      }  // end of Not(exp)
 
-      case not @ Not(exp) =>
-        exp match {
-          case Literal(true, BooleanType) => Literal(false)
-          case Literal(false, BooleanType) => Literal(true)
-          case GreaterThan(l, r) => LessThanOrEqual(l, r)
-          case GreaterThanOrEqual(l, r) => LessThan(l, r)
-          case LessThan(l, r) => GreaterThanOrEqual(l, r)
-          case LessThanOrEqual(l, r) => GreaterThan(l, r)
-          case Not(e) => e
-          case _ => not
-        }
-
-      // Turn "if (true) a else b" into "a", and if (false) a else b" into "b".
+      // if (true) a else b  =>  a
+      // if (false) a else b  =>  b
       case e @ If(Literal(v, _), trueValue, falseValue) => if (v == true) trueValue else falseValue
     }
   }

@@ -20,7 +20,6 @@ package org.apache.spark.sql.types
 import java.text.SimpleDateFormat
 
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.Decimal
 
 
 protected[sql] object DataTypeConversions {
@@ -56,13 +55,7 @@ protected[sql] object DataTypeConversions {
   /** Converts Java objects to catalyst rows / types */
   def convertJavaToCatalyst(a: Any, dataType: DataType): Any = (a, dataType) match {
     case (obj, udt: UserDefinedType[_]) => ScalaReflection.convertToCatalyst(obj, udt) // Scala type
-    case (d: java.math.BigDecimal, _) => Decimal(BigDecimal(d))
+    case (d: java.math.BigDecimal, _) => Decimal(d)
     case (other, _) => other
-  }
-
-  /** Converts Java objects to catalyst rows / types */
-  def convertCatalystToJava(a: Any): Any = a match {
-    case d: scala.math.BigDecimal => d.underlying()
-    case other => other
   }
 }

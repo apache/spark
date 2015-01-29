@@ -156,8 +156,8 @@ final class ShuffleBlockFetcherIterator(
             // This needs to be released after use.
             buf.retain()
             results.put(new SuccessFetchResult(BlockId(blockId), sizeMap(blockId), buf))
-            shuffleMetrics.remoteBytesRead += buf.size
-            shuffleMetrics.remoteBlocksFetched += 1
+            shuffleMetrics.incRemoteBytesRead(buf.size)
+            shuffleMetrics.incRemoteBlocksFetched(1)
           }
           logTrace("Got remote block " + blockId + " after " + Utils.getUsedTimeMs(startTime))
         }
@@ -233,7 +233,7 @@ final class ShuffleBlockFetcherIterator(
       val blockId = iter.next()
       try {
         val buf = blockManager.getBlockData(blockId)
-        shuffleMetrics.localBlocksFetched += 1
+        shuffleMetrics.incLocalBlocksFetched(1)
         buf.retain()
         results.put(new SuccessFetchResult(blockId, 0, buf))
       } catch {
@@ -277,7 +277,7 @@ final class ShuffleBlockFetcherIterator(
     currentResult = results.take()
     val result = currentResult
     val stopFetchWait = System.currentTimeMillis()
-    shuffleMetrics.fetchWaitTime += (stopFetchWait - startFetchWait)
+    shuffleMetrics.incFetchWaitTime(stopFetchWait - startFetchWait)
 
     result match {
       case SuccessFetchResult(_, size, _) => bytesInFlight -= size

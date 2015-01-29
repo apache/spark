@@ -54,9 +54,14 @@ case class DropTable(
     val hiveContext = sqlContext.asInstanceOf[HiveContext]
     val ifExistsClause = if (ifExists) "IF EXISTS " else ""
     try {
-      hiveContext.tryUncacheQuery(hiveContext.table(tableName))
+      hiveContext.cacheManager.tryUncacheQuery(hiveContext.table(tableName))
     } catch {
+      // This table's metadata is not in
       case _: org.apache.hadoop.hive.ql.metadata.InvalidTableException =>
+      // Other exceptions can be caused by users providing wrong parameters in OPTIONS
+      // (e.g. invalid paths). We catch it and log a warning message.
+      // Users should be able to drop such kinds of tables regardless if there is an exception.
+      case e: Exception => log.warn(s"${e.getMessage}")
     }
     hiveContext.invalidateTable(tableName)
     hiveContext.runSqlHive(s"DROP TABLE $ifExistsClause$tableName")

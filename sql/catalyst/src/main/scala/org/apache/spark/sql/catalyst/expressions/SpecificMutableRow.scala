@@ -209,6 +209,8 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
 
   override def length: Int = values.length
 
+  override def toSeq: Seq[Any] = values.map(_.boxed).toSeq
+
   override def setNullAt(i: Int): Unit = {
     values(i).isNull = true
   }
@@ -230,8 +232,6 @@ final class SpecificMutableRow(val values: Array[MutableValue]) extends MutableR
   override def update(ordinal: Int, value: Any): Unit = {
     if (value == null) setNullAt(ordinal) else values(ordinal).update(value)
   }
-
-  override def iterator: Iterator[Any] = values.map(_.boxed).iterator
 
   override def setString(ordinal: Int, value: String) = update(ordinal, value)
 

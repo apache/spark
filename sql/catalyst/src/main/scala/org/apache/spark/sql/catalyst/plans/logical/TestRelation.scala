@@ -19,10 +19,14 @@ package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.types.{StructType, StructField}
 
 object LocalRelation {
-  def apply(output: Attribute*) =
-    new LocalRelation(output)
+  def apply(output: Attribute*): LocalRelation = new LocalRelation(output)
+
+  def apply(output1: StructField, output: StructField*): LocalRelation = new LocalRelation(
+    StructType(output1 +: output).toAttributes
+  )
 }
 
 case class LocalRelation(output: Seq[Attribute], data: Seq[Product] = Nil)

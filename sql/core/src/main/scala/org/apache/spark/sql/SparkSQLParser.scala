@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql
 
+
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.spark.sql.catalyst.{SqlLexical, AbstractSparkSQLParser}
+import org.apache.spark.sql.catalyst.AbstractSparkSQLParser
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.{UncacheTableCommand, CacheTableCommand, SetCommand}
@@ -60,18 +61,6 @@ private[sql] class SparkSQLParser(fallback: String => LogicalPlan) extends Abstr
   protected val SET     = Keyword("SET")
   protected val TABLE   = Keyword("TABLE")
   protected val UNCACHE = Keyword("UNCACHE")
-
-  protected implicit def asParser(k: Keyword): Parser[String] =
-    lexical.allCaseVersions(k.str).map(x => x : Parser[String]).reduce(_ | _)
-
-  private val reservedWords: Seq[String] =
-    this
-      .getClass
-      .getMethods
-      .filter(_.getReturnType == classOf[Keyword])
-      .map(_.invoke(this).asInstanceOf[Keyword].str)
-
-  override val lexical = new SqlLexical(reservedWords)
 
   override protected lazy val start: Parser[LogicalPlan] = cache | uncache | set | others
 

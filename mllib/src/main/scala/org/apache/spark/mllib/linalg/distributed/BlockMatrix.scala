@@ -19,159 +19,166 @@ package org.apache.spark.mllib.linalg.distributed
 
 import breeze.linalg.{DenseMatrix => BDM}
 
-import org.apache.spark.{Logging, Partitioner, SparkException}
-import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.rdd.RDDFunctions._
+import org.apache.spark.{SparkException, Logging, Partitioner}
+import org.apache.spark.mllib.linalg.{Matrices, DenseMatrix, Matrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.Utils
 
 /**
- * A grid partitioner, which stores every block in a separate partition.
+ * A grid partitioner, which uses a regular grid to partition coordinates.
  *
- * @param numRowBlocks Number of blocks that form the rows of the matrix.
- * @param numColBlocks Number of blocks that form the columns of the matrix.
- * @param rowsPerBlock Number of rows that make up each block.
- * @param colsPerBlock Number of columns that make up each block.
+ * @param rows Number of rows.
+ * @param cols Number of columns.
+ * @param rowsPerPart Number of rows per partition, which may be less at the bottom edge.
+ * @param colsPerPart Number of columns per partition, which may be less at the right edge.
  */
 private[mllib] class GridPartitioner(
-    val numRowBlocks: Int,
-    val numColBlocks: Int,
-    val rowsPerBlock: Int,
-    val colsPerBlock: Int,
-    override val numPartitions: Int) extends Partitioner {
+    val rows: Int,
+    val cols: Int,
+    val rowsPerPart: Int,
+    val colsPerPart: Int) extends Partitioner {
+
+  require(rows > 0)
+  require(cols > 0)
+  require(rowsPerPart > 0)
+  require(colsPerPart > 0)
+
+  private val rowPartitions = math.ceil(rows / rowsPerPart).toInt
+  private val colPartitions = math.ceil(cols / colsPerPart).toInt
+
+  override val numPartitions = rowPartitions * colPartitions
 
   /**
-   * Returns the index of the partition the SubMatrix belongs to.
+   * Returns the index of the partition the input coordinate belongs to.
    *
-   * @param key The key for the SubMatrix. Can be its position in the grid (its column major index)
-   *            or a tuple of three integers that are the final row index after the multiplication,
-   *            the index of the block to multiply with, and the final column index after the
-   *            multiplication.
-   * @return The index of the partition, which the SubMatrix belongs to.
+   * @param key The coordinate (i, j) or a tuple (i, j, k), where k is the inner index used in
+   *            multiplication. k is ignored in computing partitions.
+   * @return The index of the partition, which the coordinate belongs to.
    */
   override def getPartition(key: Any): Int = {
     key match {
-      case (rowIndex: Int, colIndex: Int) =>
-        Utils.nonNegativeMod(rowIndex + colIndex * numRowBlocks, numPartitions)
-      case (rowIndex: Int, innerIndex: Int, colIndex: Int) =>
-        Utils.nonNegativeMod(rowIndex + colIndex * numRowBlocks, numPartitions)
+      case (i: Int, j: Int) =>
+        getPartitionId(i, j)
+      case (i: Int, j: Int, _: Int) =>
+        getPartitionId(i, j)
       case _ =>
-        throw new IllegalArgumentException("Unrecognized key")
+        throw new IllegalArgumentException(s"Unrecognized key: $key.")
     }
   }
 
-  /** Checks whether the partitioners have the same characteristics */
+  /** Partitions sub-matrices as blocks with neighboring sub-matrices. */
+  private def getPartitionId(i: Int, j: Int): Int = {
+    require(0 <= i && i < rows, s"Row index $i out of range [0, $rows).")
+    require(0 <= j && j < cols, s"Column index $j out of range [0, $cols).")
+    i / rowsPerPart + j / colsPerPart * rowPartitions
+  }
+
   override def equals(obj: Any): Boolean = {
     obj match {
       case r: GridPartitioner =>
-        (this.numPartitions == r.numPartitions) && (this.rowsPerBlock == r.rowsPerBlock) &&
-          (this.colsPerBlock == r.colsPerBlock)
+        (this.rows == r.rows) && (this.cols == r.cols) &&
+          (this.rowsPerPart == r.rowsPerPart) && (this.colsPerPart == r.colsPerPart)
       case _ =>
         false
     }
   }
 }
 
+private[mllib] object GridPartitioner {
+
+  /** Creates a new [[GridPartitioner]] instance. */
+  def apply(rows: Int, cols: Int, rowsPerPart: Int, colsPerPart: Int): GridPartitioner = {
+    new GridPartitioner(rows, cols, rowsPerPart, colsPerPart)
+  }
+
+  /** Creates a new [[GridPartitioner]] instance with the input suggested number of partitions. */
+  def apply(rows: Int, cols: Int, suggestedNumPartitions: Int): GridPartitioner = {
+    require(suggestedNumPartitions > 0)
+    val scale = 1.0 / math.sqrt(suggestedNumPartitions)
+    val rowsPerPart = math.round(math.max(scale * rows, 1.0)).toInt
+    val colsPerPart = math.round(math.max(scale * cols, 1.0)).toInt
+    new GridPartitioner(rows, cols, rowsPerPart, colsPerPart)
+  }
+}
+
 /**
  * Represents a distributed matrix in blocks of local matrices.
  *
- * @param numRowBlocks Number of blocks that form the rows of this matrix
- * @param numColBlocks Number of blocks that form the columns of this matrix
- * @param rdd The RDD of SubMatrices (local matrices) that form this matrix
+ * @param blocks The RDD of sub-matrix blocks (blockRowIndex, blockColIndex, sub-matrix) that form
+ *               this distributed matrix.
+ * @param rowsPerBlock Number of rows that make up each block. The blocks forming the final
+ *                     rows are not required to have the given number of rows
+ * @param colsPerBlock Number of columns that make up each block. The blocks forming the final
+ *                     columns are not required to have the given number of columns
+ * @param nRows Number of rows of this matrix. If the supplied value is less than or equal to zero,
+ *              the number of rows will be calculated when `numRows` is invoked.
+ * @param nCols Number of columns of this matrix. If the supplied value is less than or equal to
+ *              zero, the number of columns will be calculated when `numCols` is invoked.
  */
 class BlockMatrix(
-    val numRowBlocks: Int,
-    val numColBlocks: Int,
-    val rdd: RDD[((Int, Int), Matrix)]) extends DistributedMatrix with Logging {
+    val blocks: RDD[((Int, Int), Matrix)],
+    val rowsPerBlock: Int,
+    val colsPerBlock: Int,
+    private var nRows: Long,
+    private var nCols: Long) extends DistributedMatrix with Logging {
 
-  type SubMatrix = ((Int, Int), Matrix) // ((blockRowIndex, blockColIndex), matrix)
+  private type MatrixBlock = ((Int, Int), Matrix) // ((blockRowIndex, blockColIndex), sub-matrix)
 
   /**
-   * Alternate constructor for BlockMatrix without the input of a partitioner. Will use a Grid
-   * Partitioner by default.
+   * Alternate constructor for BlockMatrix without the input of the number of rows and columns.
    *
-   * @param numRowBlocks Number of blocks that form the rows of this matrix
-   * @param numColBlocks Number of blocks that form the columns of this matrix
    * @param rdd The RDD of SubMatrices (local matrices) that form this matrix
-   * @param rowsPerBlock Number of rows that make up each block.
-   * @param colsPerBlock Number of columns that make up each block.
+   * @param rowsPerBlock Number of rows that make up each block. The blocks forming the final
+   *                     rows are not required to have the given number of rows
+   * @param colsPerBlock Number of columns that make up each block. The blocks forming the final
+   *                     columns are not required to have the given number of columns
    */
   def this(
-      numRowBlocks: Int,
-      numColBlocks: Int,
       rdd: RDD[((Int, Int), Matrix)],
       rowsPerBlock: Int,
       colsPerBlock: Int) = {
-    this(numRowBlocks, numColBlocks, rdd)
-    val part = new GridPartitioner(numRowBlocks, numColBlocks, rowsPerBlock,
-      colsPerBlock, rdd.partitions.length)
-    partitioner = part
+    this(rdd, rowsPerBlock, colsPerBlock, 0L, 0L)
   }
 
-  private[mllib] var partitioner: GridPartitioner = {
-    val firstSubMatrix = rdd.first()._2
-    new GridPartitioner(numRowBlocks, numColBlocks,
-      firstSubMatrix.numRows, firstSubMatrix.numCols, rdd.partitions.length)
+  override def numRows(): Long = {
+    if (nRows <= 0L) estimateDim()
+    nRows
   }
 
-  private lazy val dims: (Long, Long) = getDim
+  override def numCols(): Long = {
+    if (nCols <= 0L) estimateDim()
+    nCols
+  }
 
-  override def numRows(): Long = dims._1
-  override def numCols(): Long = dims._2
+  val numRowBlocks = math.ceil(numRows() * 1.0 / rowsPerBlock).toInt
+  val numColBlocks = math.ceil(numCols() * 1.0 / colsPerBlock).toInt
 
-  /** Returns the dimensions of the matrix. */
-  private def getDim: (Long, Long) = {
-    case class MatrixMetaData(var rowIndex: Int, var colIndex: Int,
-        var numRows: Int, var numCols: Int)
-    // picks the sizes of the matrix with the maximum indices
-    def pickSizeByGreaterIndex(example: MatrixMetaData, base: MatrixMetaData): MatrixMetaData = {
-      if (example.rowIndex > base.rowIndex) {
-        base.rowIndex = example.rowIndex
-        base.numRows = example.numRows
-      }
-      if (example.colIndex > base.colIndex) {
-        base.colIndex = example.colIndex
-        base.numCols = example.numCols
-      }
-      base
+  private[mllib] var partitioner: GridPartitioner =
+    GridPartitioner(numRowBlocks, numColBlocks, suggestedNumPartitions = blocks.partitions.size)
+
+  /** Estimates the dimensions of the matrix. */
+  private def estimateDim(): Unit = {
+    val (rows, cols) = blocks.map { case ((blockRowIndex, blockColIndex), mat) =>
+      (blockRowIndex.toLong * rowsPerBlock + mat.numRows,
+        blockColIndex.toLong * colsPerBlock + mat.numCols)
+    }.reduce { (x0, x1) =>
+      (math.max(x0._1, x1._1), math.max(x0._2, x1._2))
     }
-
-    val lastRowCol = rdd.treeAggregate(new MatrixMetaData(0, 0, 0, 0))(
-      seqOp = (c, v) => (c, v) match { case (base, ((blockXInd, blockYInd), mat)) =>
-        pickSizeByGreaterIndex(
-          new MatrixMetaData(blockXInd, blockYInd, mat.numRows, mat.numCols), base)
-      },
-      combOp = (c1, c2) => (c1, c2) match {
-        case (res1, res2) =>
-          pickSizeByGreaterIndex(res1, res2)
-      })
-    // We add the size of the edge matrices, because they can be less than the specified
-    // rowsPerBlock or colsPerBlock.
-    (lastRowCol.rowIndex.toLong * partitioner.rowsPerBlock + lastRowCol.numRows,
-      lastRowCol.colIndex.toLong * partitioner.colsPerBlock + lastRowCol.numCols)
+    if (nRows <= 0L) nRows = rows
+    assert(rows <= nRows, s"The number of rows $rows is more than claimed $nRows.")
+    if (nCols <= 0L) nCols = cols
+    assert(cols <= nCols, s"The number of columns $cols is more than claimed $nCols.")
   }
 
-  /** Returns the Frobenius Norm of the matrix */
-  def normFro(): Double = {
-    math.sqrt(rdd.map { mat => mat._2 match {
-      case sparse: SparseMatrix =>
-        sparse.values.map(x => math.pow(x, 2)).sum
-      case dense: DenseMatrix =>
-        dense.values.map(x => math.pow(x, 2)).sum
-      }
-    }.reduce(_ + _))
-  }
-
-  /** Cache the underlying RDD. */
-  def cache(): BlockMatrix = {
-    rdd.cache()
+  /** Caches the underlying RDD. */
+  def cache(): this.type = {
+    blocks.cache()
     this
   }
 
-  /** Set the storage level for the underlying RDD. */
-  def persist(storageLevel: StorageLevel): BlockMatrix = {
-    rdd.persist(storageLevel)
+  /** Persists the underlying RDD with the specified storage level. */
+  def persist(storageLevel: StorageLevel): this.type = {
+    blocks.persist(storageLevel)
     this
   }
 
@@ -181,30 +188,24 @@ class BlockMatrix(
       s"Int.MaxValue. Currently numRows: ${numRows()}")
     require(numCols() < Int.MaxValue, "The number of columns of this matrix should be less than " +
       s"Int.MaxValue. Currently numCols: ${numCols()}")
-    val nRows = numRows().toInt
-    val nCols = numCols().toInt
-    val mem = nRows * nCols * 8 / 1000000
+    require(numRows() * numCols() < Int.MaxValue, "The length of the values array must be " +
+      s"less than Int.MaxValue. Currently numRows * numCols: ${numRows() * numCols()}")
+    val m = numRows().toInt
+    val n = numCols().toInt
+    val mem = m * n / 125000
     if (mem > 500) logWarning(s"Storing this matrix will require $mem MB of memory!")
 
-    val parts = rdd.collect().sortBy(x => (x._1._2, x._1._1))
-    val values = new Array[Double](nRows * nCols)
-    parts.foreach { case ((rowIndex, colIndex), block) =>
-      val rowOffset = rowIndex * partitioner.rowsPerBlock
-      val colOffset = colIndex * partitioner.colsPerBlock
-      var j = 0
-      val mat = block.toArray
-      while (j < block.numCols) {
-        var i = 0
-        val indStart = (j + colOffset) * nRows + rowOffset
-        val matStart = j * block.numRows
-        while (i < block.numRows) {
-          values(indStart + i) = mat(matStart + i)
-          i += 1
-        }
-        j += 1
+    val localBlocks = blocks.collect()
+    val values = new Array[Double](m * n)
+    localBlocks.foreach { case ((blockRowIndex, blockColIndex), submat) =>
+      val rowOffset = blockRowIndex * rowsPerBlock
+      val colOffset = blockColIndex * colsPerBlock
+      submat.foreachActive { (i, j, v) =>
+        val indexOffset = (j + colOffset) * m + rowOffset + i
+        values(indexOffset) = v
       }
     }
-    new DenseMatrix(nRows, nCols, values)
+    new DenseMatrix(m, n, values)
   }
 
   /** Collects data and assembles a local dense breeze matrix (for test only). */
@@ -216,11 +217,12 @@ class BlockMatrix(
   /** Adds two block matrices together. */
   def add(other: BlockMatrix): BlockMatrix = {
     if (checkPartitioning(other, OperationNames.add)) {
-      val addedBlocks = rdd.zip(other.rdd).map{ case (a, b) =>
-        val result = a._2.toBreeze + b._2.toBreeze
-        new SubMatrix((a._1._1, a._1._2), Matrices.fromBreeze(result))
+      val addedBlocks = blocks.join(other.blocks).
+        map { case ((blockRowIndex, blockColIndex), (a, b)) =>
+          val result = a.toBreeze + b.toBreeze
+          ((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
       }
-      new BlockMatrix(numRowBlocks, numColBlocks, addedBlocks)
+      new BlockMatrix(addedBlocks, numRowBlocks, numColBlocks)
     } else {
       throw new SparkException(
         "Cannot add matrices with non-matching partitioners")
@@ -231,32 +233,24 @@ class BlockMatrix(
   def multiply(other: BlockMatrix): BlockMatrix = {
     if (checkPartitioning(other, OperationNames.multiply)) {
       val otherPartitioner = other.partitioner
-      val resultPartitioner = new GridPartitioner(numRowBlocks, other.numColBlocks,
-        partitioner.rowsPerBlock, otherPartitioner.colsPerBlock, partitioner.numPartitions)
+      val resultPartitioner = GridPartitioner(rowsPerBlock, other.colsPerBlock,
+        math.min(partitioner.numPartitions, other.partitioner.numPartitions))
 
-      val flatA = rdd.flatMap{ case (index, block) =>
-        val rowId = index._1
-        val colId = index._2
-        Array.tabulate(other.numColBlocks)(j => ((rowId, colId, j), block))
+      val flatA = blocks.flatMap{ case ((blockRowIndex, blockColIndex), block) =>
+        Array.tabulate(other.numColBlocks)(j => ((blockRowIndex, j, blockColIndex), block))
       }
 
-      val flatB = other.rdd.flatMap{ case (index, block) =>
-        val rowId = index._1
-        val colId = index._2
-        Array.tabulate(numRowBlocks)(i => ((i, rowId, colId), block))
+      val flatB = other.blocks.flatMap{ case ((blockRowIndex, blockColIndex), block) =>
+        Array.tabulate(numRowBlocks)(i => ((i, blockColIndex, blockRowIndex), block))
       }
 
-      val multiplyBlocks = flatA.join(flatB, resultPartitioner).
-        map { case ((rowId, j, colId), (mat1, mat2)) =>
+      val newBlocks = flatA.join(flatB, resultPartitioner).
+        map { case ((blockRowIndex, blockColIndex, _), (mat1, mat2)) =>
           val C = mat1.multiply(mat2.asInstanceOf[DenseMatrix])
-          ((rowId, colId), C.toBreeze)
-      }.reduceByKey(resultPartitioner, (a, b) => a + b)
+          ((blockRowIndex, blockColIndex), C.toBreeze)
+      }.reduceByKey(resultPartitioner, (a, b) => a + b).mapValues(Matrices.fromBreeze)
 
-      val newBlocks = multiplyBlocks.map { case (index, mat) =>
-          new SubMatrix(index, Matrices.fromBreeze(mat))
-      }
-
-      new BlockMatrix(numRowBlocks, other.numColBlocks, newBlocks)
+      new BlockMatrix(newBlocks, rowsPerBlock, other.colsPerBlock, numRows(), other.numCols())
     } else {
       throw new SparkException(
         "Cannot multiply matrices with non-matching partitioners")
@@ -265,15 +259,12 @@ class BlockMatrix(
 
   /** Checks if the partitioners match for operations like add and multiply */
   private def checkPartitioning(other: BlockMatrix, operation: Int): Boolean = {
-    val otherPartitioner = other.partitioner
     operation match {
       case OperationNames.add =>
-        partitioner.rowsPerBlock == otherPartitioner.rowsPerBlock &&
-          partitioner.colsPerBlock == otherPartitioner.colsPerBlock &&
-          numColBlocks == other.numRowBlocks
+        rowsPerBlock == other.rowsPerBlock && colsPerBlock == other.colsPerBlock &&
+          numRows() == other.numRows() && numCols() == other.numCols()
       case OperationNames.multiply =>
-        partitioner.colsPerBlock == otherPartitioner.rowsPerBlock &&
-          numColBlocks == other.numRowBlocks
+        colsPerBlock == other.rowsPerBlock && numCols() == other.numRows()
       case _ =>
         throw new IllegalArgumentException("Unsupported operation")
     }
