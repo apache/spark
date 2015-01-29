@@ -23,31 +23,35 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 
 class IsotonicRegressionSuite extends FunSuite with MLlibTestSparkContext with Matchers {
 
-  private def round(d: Double) =
+  private def round(d: Double) = {
     Math.round(d * 100).toDouble / 100
+  }
 
-  private def generateIsotonicInput(labels: Seq[Double]): Seq[(Double, Double, Double)] =
+  private def generateIsotonicInput(labels: Seq[Double]): Seq[(Double, Double, Double)] = {
     labels.zip(1 to labels.size).map(point => (point._1, point._2.toDouble, 1d))
+  }
 
   private def generateIsotonicInput(
       labels: Seq[Double],
-      weights: Seq[Double]): Seq[(Double, Double, Double)] =
+      weights: Seq[Double]): Seq[(Double, Double, Double)] = {
     labels.zip(1 to labels.size)
       .zip(weights)
       .map(point => (point._1._1, point._1._2.toDouble, point._2))
+  }
 
   private def runIsotonicRegression(
       labels: Seq[Double],
       weights: Seq[Double],
       isotonic: Boolean): IsotonicRegressionModel = {
     val trainRDD = sc.parallelize(generateIsotonicInput(labels, weights)).cache()
-    new IsotonicRegression().run(trainRDD, isotonic)
+    new IsotonicRegression().setIsotonic(isotonic).run(trainRDD)
   }
 
   private def runIsotonicRegression(
       labels: Seq[Double],
-      isotonic: Boolean): IsotonicRegressionModel =
+      isotonic: Boolean): IsotonicRegressionModel = {
     runIsotonicRegression(labels, Array.fill(labels.size)(1d), isotonic)
+  }
 
   test("increasing isotonic regression") {
     val model = runIsotonicRegression(Seq(1, 2, 3, 3, 1, 6, 17, 16, 17, 18), true)
@@ -99,7 +103,7 @@ class IsotonicRegressionSuite extends FunSuite with MLlibTestSparkContext with M
 
   test("isotonic regression with unordered input") {
     val trainRDD = sc.parallelize(generateIsotonicInput(Seq(1, 2, 3, 4, 5)).reverse).cache()
-    val model = new IsotonicRegression().run(trainRDD, true)
+    val model = new IsotonicRegression().run(trainRDD)
 
     assert(model.predictions === Array(1, 2, 3, 4, 5))
   }

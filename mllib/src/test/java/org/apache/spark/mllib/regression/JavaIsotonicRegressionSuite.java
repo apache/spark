@@ -61,7 +61,7 @@ public class JavaIsotonicRegressionSuite implements Serializable {
     JavaRDD<Tuple3<Double, Double, Double>> trainRDD =
       sc.parallelize(generateIsotonicInput(labels)).cache();
 
-    return new IsotonicRegression().run(trainRDD, true);
+    return new IsotonicRegression().run(trainRDD);
   }
 
   @Before
