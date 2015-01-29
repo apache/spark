@@ -82,6 +82,13 @@ function run_mllib_tests() {
     run_test "pyspark/mllib/tests.py"
 }
 
+function run_ml_tests() {
+    echo "Run ml tests ..."
+    run_test "pyspark/ml/feature.py"
+    run_test "pyspark/ml/classification.py"
+    run_test "pyspark/ml/tests.py"
+}
+
 function run_streaming_tests() {
     echo "Run streaming tests ..."
     run_test "pyspark/streaming/util.py"
@@ -103,6 +110,7 @@ $PYSPARK_PYTHON --version
 run_core_tests
 run_sql_tests
 run_mllib_tests
+run_ml_tests
 run_streaming_tests
 
 # Try to test with PyPy
