@@ -217,7 +217,7 @@ class ALS extends Estimator[ALSModel] with ALSParams {
   }
 }
 
-private[recommendation] object ALS extends Logging {
+object ALS extends Logging {
 
   /** Rating class for better code readability. */
   private[recommendation]
@@ -337,8 +337,8 @@ private[recommendation] object ALS extends Logging {
    * Implementation of the ALS algorithm.
    */
   private def train[
-      @specialized(Int, Long) User: ClassTag,
-      @specialized(Int, Long) Item: ClassTag](
+      User: ClassTag,
+      Item: ClassTag](
       ratings: RDD[Rating[User, Item]],
       rank: Int = 10,
       numUserBlocks: Int = 10,
@@ -470,7 +470,7 @@ private[recommendation] object ALS extends Logging {
    * @param rank rank
    * @return initialized factor blocks
    */
-  private def initialize[@specialized(Int, Long) Src](
+  private def initialize[Src](
       inBlocks: RDD[(Int, InBlock[Src])],
       rank: Int): RDD[(Int, FactorBlock)] = {
     // Choose a unit vector uniformly at random from the unit sphere, but from the
@@ -494,7 +494,9 @@ private[recommendation] object ALS extends Logging {
    * A rating block that contains src IDs, dst IDs, and ratings, stored in primitive arrays.
    */
   private[recommendation]
-  case class RatingBlock[@specialized(Int, Long) Src, @specialized(Int, Long) Dst](
+  case class RatingBlock[
+      @specialized(Int, Long) Src,
+      @specialized(Int, Long) Dst](
       srcIds: Array[Src],
       dstIds: Array[Dst],
       ratings: Array[Float]) {
@@ -550,8 +552,8 @@ private[recommendation] object ALS extends Logging {
    * @return an RDD of rating blocks in the form of ((srcBlockId, dstBlockId), ratingBlock)
    */
   private def partitionRatings[
-      @specialized(Int, Long) User: ClassTag,
-      @specialized(Int, Long) Item: ClassTag](
+      User: ClassTag,
+      Item: ClassTag](
       ratings: RDD[Rating[User, Item]],
       srcPart: Partitioner,
       dstPart: Partitioner): RDD[((Int, Int), RatingBlock[User, Item])] = {
@@ -804,8 +806,8 @@ private[recommendation] object ALS extends Logging {
    * @return (in-blocks, out-blocks)
    */
   private def makeBlocks[
-      @specialized(Int, Long) Src: ClassTag,
-      @specialized(Int, Long) Dst: ClassTag](
+      Src: ClassTag,
+      Dst: ClassTag](
       prefix: String,
       ratingBlocks: RDD[((Int, Int), RatingBlock[Src, Dst])],
       srcPart: Partitioner,
@@ -887,7 +889,7 @@ private[recommendation] object ALS extends Logging {
    *
    * @return dst factors
    */
-  private def computeFactors[@specialized(Int, Long) Src](
+  private def computeFactors[Src](
       srcFactorBlocks: RDD[(Int, FactorBlock)],
       srcOutBlocks: RDD[(Int, OutBlock)],
       dstInBlocks: RDD[(Int, InBlock[Src])],
