@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.{Logging, Partitioner}
-import org.apache.spark.mllib.linalg.{SparseMatrix, DenseMatrix, Matrix}
+import org.apache.spark.mllib.linalg.{DenseMatrix, Matrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
@@ -172,6 +172,96 @@ class BlockMatrix(
     assert(cols <= nCols, s"The number of columns $cols is more than claimed $nCols.")
   }
 
+  def validate(): Unit = {
+    validator match {
+      case (ValidationError.DIMENSION_MISMATCH, e: AssertionError) =>
+        println(s"$e\nPlease instantiate a new BlockMatrix with the correct dimensions.")
+      case (ValidationError.DIMENSION_MISMATCH, exc: Exception) =>
+        println(s"There was an error while calculating the dimensions for this matrix.\n$exc")
+      case (ValidationError.DUPLICATE_INDEX, size: Int) =>
+        println(s"There are $size MatrixBlocks with duplicate indices. Please remove blocks with " +
+          s"duplicate indices. You may call reduceByKey on the underlying RDD and sum the " +
+          s"duplicates. You may convert the matrices to Breeze before summing them up.")
+      case (ValidationError.DUPLICATE_INDEX, duplicates: Map[(Int, Int), Long]) =>
+        println(s"The following indices have more than one Matrix:")
+        duplicates.foreach(index => println(s"Index: ${index._1}, count: ${index._2}"))
+        println("Please remove these blocks with duplicate indices. You may call reduceByKey on " +
+          "the underlying RDD and sum the duplicates. You may convert the matrices to Breeze " +
+          "before summing them up.")
+      case (ValidationError.DUPLICATE_INDEX, exc: Exception) =>
+        println(s"There was an error while looking for duplicate indices.\n$exc")
+      case (ValidationError.MATRIX_BLOCK_DIMENSION_MISMATCH, size: Long) =>
+        println(s"There are $size MatrixBlocks with dimensions different than " +
+          s"rowsPerBlock: $rowsPerBlock, and colsPerBlock: $colsPerBlock. You may use the " +
+          s"repartition method to fix this issue.")
+      case (ValidationError.MATRIX_BLOCK_DIMENSION_MISMATCH,
+          mismatches: Array[((Int, Int), (Int, Int))]) =>
+        println(s"The following MatrixBlocks have dimensions different than " +
+          s"(rowsPerBlock, colsPerBlock): ($rowsPerBlock, $colsPerBlock)")
+        mismatches.foreach(index => println(s"Index: ${index._1}, dimensions: ${index._2}"))
+        println("You may use the repartition method to fix this issue.")
+      case (ValidationError.MATRIX_BLOCK_DIMENSION_MISMATCH, exc: Exception) =>
+        println(s"There was an error while looking for MatrixBlock dimension mismatches.\n$exc")
+      case (ValidationError.NO_ERROR, _) => println("There are no problems with this BlockMatrix!")
+    }
+  }
+
+  private[mllib] def validator: (ValidationError.Value, Any) = {
+    logDebug("Validating BlockMatrix...")
+    // check if the matrix is larger than the claimed dimensions
+    try {
+      estimateDim()
+      logDebug("BlockMatrix dimensions are okay...")
+    } catch {
+      case exc: AssertionError => return (ValidationError.DIMENSION_MISMATCH, exc)
+      case e: Exception =>
+        logError(s"${e.getMessage}\n${e.getStackTraceString}")
+        return (ValidationError.DIMENSION_MISMATCH, e)
+    }
+    try {
+      // Check if there are multiple MatrixBlocks with the same index.
+      val indexCounts = blocks.countByKey().filter(p => p._2 > 1)
+      if (indexCounts.size > 50) {
+        return (ValidationError.DUPLICATE_INDEX, indexCounts.size)
+      } else if (indexCounts.size > 0) {
+        return (ValidationError.DUPLICATE_INDEX, indexCounts)
+      }
+      logDebug("MatrixBlock indices are okay...")
+    } catch {
+      case e: Exception =>
+        logError(s"${e.getMessage}\n${e.getStackTraceString}")
+        return (ValidationError.DUPLICATE_INDEX, e)
+    }
+    try {
+      // Check if each MatrixBlock (except edges) has the dimensions rowsPerBlock x colsPerBlock
+      // The first tuple is the index and the second tuple is the dimensions of the MatrixBlock
+      val blockDimensionMismatches = blocks.filter { case ((blockRowIndex, blockColIndex), block) =>
+        if ((blockRowIndex == numRowBlocks - 1) || (blockColIndex == numColBlocks - 1)) {
+          false // neglect edge blocks
+        } else {
+          // include it if the dimensions don't match
+          !(block.numRows == rowsPerBlock && block.numCols == colsPerBlock)
+        }
+      }.map { case ((blockRowIndex, blockColIndex), mat) =>
+        ((blockRowIndex, blockColIndex), (mat.numRows, mat.numCols))
+      }
+      val dimensionMismatchCount = blockDimensionMismatches.count()
+      // Don't send whole list if there are more than 50 matrices with the wrong dimensions
+      if (dimensionMismatchCount > 50) {
+        return (ValidationError.MATRIX_BLOCK_DIMENSION_MISMATCH, dimensionMismatchCount)
+      } else if (dimensionMismatchCount > 0) {
+        return (ValidationError.MATRIX_BLOCK_DIMENSION_MISMATCH, blockDimensionMismatches.collect())
+      }
+      logDebug("MatrixBlock dimensions are okay...")
+      logDebug("BlockMatrix is valid!")
+      (ValidationError.NO_ERROR, null)
+    } catch {
+      case e: Exception =>
+        logError(s"${e.getMessage}\n${e.getStackTraceString}")
+        (ValidationError.MATRIX_BLOCK_DIMENSION_MISMATCH, e)
+    }
+  }
+
   /** Caches the underlying RDD. */
   def cache(): this.type = {
     blocks.cache()
@@ -237,4 +327,9 @@ class BlockMatrix(
     val localMat = toLocalMatrix()
     new BDM[Double](localMat.numRows, localMat.numCols, localMat.toArray)
   }
+}
+
+private[mllib] object ValidationError extends Enumeration {
+  type ValidationError = Value
+  val NO_ERROR, DUPLICATE_INDEX, MATRIX_BLOCK_DIMENSION_MISMATCH, DIMENSION_MISMATCH, OTHER = Value
 }
