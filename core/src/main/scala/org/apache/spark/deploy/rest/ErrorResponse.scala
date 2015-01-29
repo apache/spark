@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.rest
 
 class ErrorResponse extends SubmitRestProtocolResponse {
-  protected override val action = SubmitRestProtocolAction.ERROR
   override def validate(): Unit = {
     super.validate()
     assertFieldIsSet(message, "message")

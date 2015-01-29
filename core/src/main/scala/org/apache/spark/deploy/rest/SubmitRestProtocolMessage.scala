@@ -25,7 +25,6 @@ import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.util.Utils
-import org.apache.spark.deploy.rest.SubmitRestProtocolAction._
 
 @JsonInclude(Include.NON_NULL)
 @JsonAutoDetect(getterVisibility = Visibility.ANY, setterVisibility = Visibility.ANY)
@@ -34,12 +33,12 @@ abstract class SubmitRestProtocolMessage {
   import SubmitRestProtocolMessage._
 
   private val messageType = Utils.getFormattedClassName(this)
-  protected val action: SubmitRestProtocolAction
+  protected val action: String = camelCaseToUnderscores(decapitalize(messageType))
   protected val sparkVersion = new SubmitRestProtocolField[String]
   protected val message = new SubmitRestProtocolField[String]
 
   // Required for JSON de/serialization and not explicitly used
-  private def getAction: String = action.toString
+  private def getAction: String = action
   private def setAction(s: String): this.type = this
 
   // Spark version implementation depends on whether this is a request or a response
@@ -124,24 +123,22 @@ abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
 
 object SubmitRestProtocolMessage {
   private val mapper = new ObjectMapper
+  private val packagePrefix = this.getClass.getPackage.getName
 
-  def fromJson(json: String): SubmitRestProtocolMessage = {
-    val fields = parse(json).asInstanceOf[JObject].obj
-    val action = fields
+  def parseAction(json: String): String = {
+    parse(json).asInstanceOf[JObject].obj
       .find { case (f, _) => f == "action" }
       .map { case (_, v) => v.asInstanceOf[JString].s }
       .getOrElse {
-        throw new IllegalArgumentException(s"Could not find action field in message:\n$json")
-      }
-    val clazz = SubmitRestProtocolAction.fromString(action) match {
-      case SUBMIT_DRIVER_REQUEST => classOf[SubmitDriverRequest]
-      case SUBMIT_DRIVER_RESPONSE => classOf[SubmitDriverResponse]
-      case KILL_DRIVER_REQUEST => classOf[KillDriverRequest]
-      case KILL_DRIVER_RESPONSE => classOf[KillDriverResponse]
-      case DRIVER_STATUS_REQUEST => classOf[DriverStatusRequest]
-      case DRIVER_STATUS_RESPONSE => classOf[DriverStatusResponse]
-      case ERROR => classOf[ErrorResponse]
+      throw new IllegalArgumentException(s"Could not find action field in message:\n$json")
     }
+  }
+
+  def fromJson(json: String): SubmitRestProtocolMessage = {
+    val action = parseAction(json)
+    val className = underscoresToCamelCase(action).capitalize
+    val clazz = Class.forName(packagePrefix + "." + className)
+      .asSubclass[SubmitRestProtocolMessage](classOf[SubmitRestProtocolMessage])
     fromJson(json, clazz)
   }
 
@@ -177,6 +174,14 @@ object SubmitRestProtocolMessage {
       }
     }
     newString.toString()
+  }
+
+  private def decapitalize(s: String): String = {
+    if (s != null && s.nonEmpty) {
+      s(0).toLower + s.substring(1)
+    } else {
+      s
+    }
   }
 }
 

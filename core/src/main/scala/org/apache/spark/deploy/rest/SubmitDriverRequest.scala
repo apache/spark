@@ -26,7 +26,6 @@ import org.json4s.jackson.JsonMethods._
 import org.apache.spark.util.JsonProtocol
 
 class SubmitDriverRequest extends SubmitRestProtocolRequest {
-  protected override val action = SubmitRestProtocolAction.SUBMIT_DRIVER_REQUEST
   private val appName = new SubmitRestProtocolField[String]
   private val appResource = new SubmitRestProtocolField[String]
   private val mainClass = new SubmitRestProtocolField[String]
@@ -62,7 +61,7 @@ class SubmitDriverRequest extends SubmitRestProtocolRequest {
   def getExecutorMemory: String = executorMemory.toString
   def getTotalExecutorCores: String = totalExecutorCores.toString
 
-  // Special getters required for JSON de/serialization
+  // Special getters required for JSON serialization
   @JsonProperty("appArgs")
   private def getAppArgsJson: String = arrayToJson(getAppArgs)
   @JsonProperty("sparkProperties")
@@ -85,7 +84,7 @@ class SubmitDriverRequest extends SubmitRestProtocolRequest {
   def setExecutorMemory(s: String): this.type = setField(executorMemory, s)
   def setTotalExecutorCores(s: String): this.type = setNumericField(totalExecutorCores, s)
 
-  // Special setters required for JSON de/serialization
+  // Special setters required for JSON deserialization
   @JsonProperty("appArgs")
   private def setAppArgsJson(s: String): Unit = {
     appArgs.clear()
@@ -116,11 +115,11 @@ class SubmitDriverRequest extends SubmitRestProtocolRequest {
   def setEnvironmentVariable(k: String, v: String): this.type = { envVars(k) = v; this }
 
   private def arrayToJson(arr: Array[String]): String = {
-    if (arr.nonEmpty) { compact(render(JsonProtocol.arrayToJson(arr))) } else { null }
+    if (arr.nonEmpty) { compact(render(JsonProtocol.arrayToJson(arr))) } else null
   }
 
   private def mapToJson(map: Map[String, String]): String = {
-    if (map.nonEmpty) { compact(render(JsonProtocol.mapToJson(map))) } else { null }
+    if (map.nonEmpty) { compact(render(JsonProtocol.mapToJson(map))) } else null
   }
 
   override def validate(): Unit = {

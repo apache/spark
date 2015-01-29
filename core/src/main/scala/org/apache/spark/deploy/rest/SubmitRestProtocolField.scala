@@ -17,30 +17,6 @@
 
 package org.apache.spark.deploy.rest
 
-/**
- * All possible values of the ACTION field in a SubmitRestProtocolMessage.
- */
-abstract class SubmitRestProtocolAction
-object SubmitRestProtocolAction {
-  case object SUBMIT_DRIVER_REQUEST extends SubmitRestProtocolAction
-  case object SUBMIT_DRIVER_RESPONSE extends SubmitRestProtocolAction
-  case object KILL_DRIVER_REQUEST extends SubmitRestProtocolAction
-  case object KILL_DRIVER_RESPONSE extends SubmitRestProtocolAction
-  case object DRIVER_STATUS_REQUEST extends SubmitRestProtocolAction
-  case object DRIVER_STATUS_RESPONSE extends SubmitRestProtocolAction
-  case object ERROR extends SubmitRestProtocolAction
-  private val allActions =
-    Seq(SUBMIT_DRIVER_REQUEST, SUBMIT_DRIVER_RESPONSE, KILL_DRIVER_REQUEST,
-      KILL_DRIVER_RESPONSE, DRIVER_STATUS_REQUEST, DRIVER_STATUS_RESPONSE, ERROR)
-  private val allActionsMap = allActions.map { a => (a.toString, a) }.toMap
-
-  def fromString(action: String): SubmitRestProtocolAction = {
-    allActionsMap.get(action).getOrElse {
-      throw new IllegalArgumentException(s"Unknown action $action")
-    }
-  }
-}
-
 class SubmitRestProtocolField[T] {
   protected var value: Option[T] = None
   def isSet: Boolean = value.isDefined

@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.rest
 
 class DriverStatusResponse extends SubmitRestProtocolResponse {
-  protected override val action = SubmitRestProtocolAction.DRIVER_STATUS_RESPONSE
   private val driverId = new SubmitRestProtocolField[String]
   private val success = new SubmitRestProtocolField[Boolean]
   private val driverState = new SubmitRestProtocolField[String]

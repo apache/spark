@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.rest
 
 class KillDriverResponse extends SubmitRestProtocolResponse {
-  protected override val action = SubmitRestProtocolAction.KILL_DRIVER_RESPONSE
   private val driverId = new SubmitRestProtocolField[String]
   private val success = new SubmitRestProtocolField[Boolean]
 

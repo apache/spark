@@ -20,11 +20,7 @@ package org.apache.spark.deploy.rest
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.FunSuite
 
-case object DUMMY_REQUEST extends SubmitRestProtocolAction
-case object DUMMY_RESPONSE extends SubmitRestProtocolAction
-
 class DummyRequest extends SubmitRestProtocolRequest {
-  protected override val action = DUMMY_REQUEST
   private val active = new SubmitRestProtocolField[Boolean]
   private val age = new SubmitRestProtocolField[Int]
   private val name = new SubmitRestProtocolField[String]
@@ -45,9 +41,7 @@ class DummyRequest extends SubmitRestProtocolRequest {
   }
 }
 
-class DummyResponse extends SubmitRestProtocolResponse {
-  protected override val action = DUMMY_RESPONSE
-}
+class DummyResponse extends SubmitRestProtocolResponse
 
 /**
  * Tests for the stable application submission REST protocol.
@@ -325,7 +319,7 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val dummyRequestJson =
     """
       |{
-      |  "action" : "DUMMY_REQUEST",
+      |  "action" : "dummy_request",
       |  "active" : "true",
       |  "age" : "25",
       |  "client_spark_version" : "1.2.3",
@@ -336,7 +330,7 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val dummyResponseJson =
     """
       |{
-      |  "action" : "DUMMY_RESPONSE",
+      |  "action" : "dummy_response",
       |  "server_spark_version" : "3.3.4"
       |}
     """.stripMargin
@@ -344,7 +338,7 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val submitDriverRequestJson =
     """
       |{
-      |  "action" : "SUBMIT_DRIVER_REQUEST",
+      |  "action" : "submit_driver_request",
       |  "app_args" : "[\"two slices\",\"a hint of cinnamon\"]",
       |  "app_name" : "SparkPie",
       |  "app_resource" : "honey-walnut-cherry.jar",
@@ -369,7 +363,7 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val submitDriverResponseJson =
     """
       |{
-      |  "action" : "SUBMIT_DRIVER_RESPONSE",
+      |  "action" : "submit_driver_response",
       |  "driver_id" : "driver_123",
       |  "server_spark_version" : "1.2.3",
       |  "success" : "true"
@@ -379,7 +373,7 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val killDriverRequestJson =
     """
       |{
-      |  "action" : "KILL_DRIVER_REQUEST",
+      |  "action" : "kill_driver_request",
       |  "client_spark_version" : "1.2.3",
       |  "driver_id" : "driver_123"
       |}
@@ -388,7 +382,7 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val killDriverResponseJson =
     """
       |{
-      |  "action" : "KILL_DRIVER_RESPONSE",
+      |  "action" : "kill_driver_response",
       |  "driver_id" : "driver_123",
       |  "server_spark_version" : "1.2.3",
       |  "success" : "true"
@@ -398,7 +392,7 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val driverStatusRequestJson =
     """
       |{
-      |  "action" : "DRIVER_STATUS_REQUEST",
+      |  "action" : "driver_status_request",
       |  "client_spark_version" : "1.2.3",
       |  "driver_id" : "driver_123"
       |}
@@ -407,7 +401,7 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val driverStatusResponseJson =
     """
       |{
-      |  "action" : "DRIVER_STATUS_RESPONSE",
+      |  "action" : "driver_status_response",
       |  "driver_id" : "driver_123",
       |  "driver_state" : "RUNNING",
       |  "server_spark_version" : "1.2.3",
@@ -420,7 +414,7 @@ class SubmitRestProtocolSuite extends FunSuite {
   private val errorJson =
     """
       |{
-      |  "action" : "ERROR",
+      |  "action" : "error_response",
       |  "message" : "Field not found in submit request: X",
       |  "server_spark_version" : "1.2.3"
       |}
