@@ -1329,7 +1329,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite.shortForm)
     if (conf.getBoolean("spark.rddDebug.enable", false)) {
-      logInfo("toDebugString: " + rdd.toDebugString)
+      logInfo("RDD.toDebugString:\n" + rdd.toDebugString)
     }
     dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
       resultHandler, localProperties.get)
