@@ -39,7 +39,7 @@ abstract class SVMKernel[T] extends Kernel with Logging with Serializable {
  * while working with [[RDD]] of [[LabeledPoint]]
  *
  * */
-object SVMKernel extends Logging with Serializable{
+object SVMKernel extends Logging with Serializable {
 
   /**
    * Returns an indexed [[RDD]] from a non indexed [[RDD]] of [[LabeledPoint]]
@@ -49,15 +49,7 @@ object SVMKernel extends Logging with Serializable{
    * @return An (Int, LabeledPoint) Key-Value RDD indexed
    *         from 0 to data.count() - 1
    * */
-  def indexedRDD[T](data: RDD[T]): RDD[(Long, T)] = {
-    val sc = data.context
-    val i: org.apache.spark.Accumulator[Long] = sc.accumulator(-1, "Raw Data Index")
-
-    data.map((point) => {
-      i+=1
-      (i.localValue, point)
-    })
-  }
+  def indexedRDD[T](data: RDD[T]): RDD[(Long, T)] = data.zipWithIndex().map((p) => (p._2, p._1))
 
 
   /**
@@ -87,13 +79,19 @@ object SVMKernel extends Logging with Serializable{
     new SVMKernelMatrix(kernel, length, labels)
   }
 
+  def zipVectorsWithLabels(mappedData: RDD[(Long, Vector)],
+                           labels: RDD[(Long, Double)]):
+  RDD[LabeledPoint] = mappedData.join(labels).map((point) =>
+    new LabeledPoint(point._2._2, point._2._1))
+
+
 }
 
 /**
  * Defines a trait which outlines the basic
  * functionality of Kernel Matrices.
  * */
-trait KernelMatrix[T] extends Serializable{
+trait KernelMatrix[T] extends Serializable {
   protected val kernel: T
   def buildFeatureMap(dimensions: Int): RDD[LabeledPoint]
   def getKernelMatrix(): T = this.kernel
