@@ -29,7 +29,7 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.spark.{SparkFiles, SparkException}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.dsl._
+import org.apache.spark.sql.Dsl._
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
@@ -368,7 +368,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("SELECT * FROM src TABLESAMPLE(0.1 PERCENT) s")
   }
 
-  test("SchemaRDD toString") {
+  test("DataFrame toString") {
     sql("SHOW TABLES").toString
     sql("SELECT * FROM src").toString
   }
@@ -479,7 +479,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     explanation.contains("== Physical Plan ==")
   }
 
-  test("SPARK-1704: Explain commands as a SchemaRDD") {
+  test("SPARK-1704: Explain commands as a DataFrame") {
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 
     val rdd = sql("explain select key, count(value) from src group by key")

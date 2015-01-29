@@ -17,19 +17,36 @@
 
 package org.apache.spark.sql
 
-import java.sql.{Timestamp, Date}
-
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.{TypeTag, typeTag}
 
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
 
 
-package object dsl {
+/**
+ * Domain specific functions available for [[DataFrame]].
+ */
+object Dsl {
 
+  /** An implicit conversion that turns a Scala `Symbol` into a [[Column]]. */
   implicit def symbolToColumn(s: Symbol): ColumnName = new ColumnName(s.name)
+
+  //  /**
+  //   * An implicit conversion that turns a RDD of product into a [[DataFrame]].
+  //   *
+  //   * This method requires an implicit SQLContext in scope. For example:
+  //   * {{{
+  //   *   implicit val sqlContext: SQLContext = ...
+  //   *   val rdd: RDD[(Int, String)] = ...
+  //   *   rdd.toDataFrame  // triggers the implicit here
+  //   * }}}
+  //   */
+  //  implicit def rddToDataFrame[A <: Product: TypeTag](rdd: RDD[A])(implicit context: SQLContext)
+  //    : DataFrame = {
+  //    context.createDataFrame(rdd)
+  //  }
 
   /** Converts $"col name" into an [[Column]]. */
   implicit class StringToColumn(val sc: StringContext) extends AnyVal {
@@ -40,11 +57,45 @@ package object dsl {
 
   private[this] implicit def toColumn(expr: Expression): Column = new Column(expr)
 
+  /**
+   * Returns a [[Column]] based on the given column name.
+   */
+  def col(colName: String): Column = new Column(colName)
+
+  /**
+   * Creates a [[Column]] of literal value.
+   */
+  def lit(literal: Any): Column = {
+    if (literal.isInstanceOf[Symbol]) {
+      return new ColumnName(literal.asInstanceOf[Symbol].name)
+    }
+
+    val literalExpr = literal match {
+      case v: Boolean => Literal(v, BooleanType)
+      case v: Byte => Literal(v, ByteType)
+      case v: Short => Literal(v, ShortType)
+      case v: Int => Literal(v, IntegerType)
+      case v: Long => Literal(v, LongType)
+      case v: Float => Literal(v, FloatType)
+      case v: Double => Literal(v, DoubleType)
+      case v: String => Literal(v, StringType)
+      case v: BigDecimal => Literal(Decimal(v), DecimalType.Unlimited)
+      case v: java.math.BigDecimal => Literal(Decimal(v), DecimalType.Unlimited)
+      case v: Decimal => Literal(v, DecimalType.Unlimited)
+      case v: java.sql.Timestamp => Literal(v, TimestampType)
+      case v: java.sql.Date => Literal(v, DateType)
+      case v: Array[Byte] => Literal(v, BinaryType)
+      case null => Literal(null, NullType)
+      case _ =>
+        throw new RuntimeException("Unsupported literal type " + literal.getClass + " " + literal)
+    }
+    new Column(literalExpr)
+  }
+
   def sum(e: Column): Column = Sum(e.expr)
   def sumDistinct(e: Column): Column = SumDistinct(e.expr)
   def count(e: Column): Column = Count(e.expr)
 
-  @scala.annotation.varargs
   def countDistinct(expr: Column, exprs: Column*): Column =
     CountDistinct((expr +: exprs).map(_.expr))
 
@@ -59,37 +110,8 @@ package object dsl {
   def sqrt(e: Column): Column = Sqrt(e.expr)
   def abs(e: Column): Column = Abs(e.expr)
 
+
   // scalastyle:off
-
-  object literals {
-
-    implicit def booleanToLiteral(b: Boolean): Column = Literal(b)
-
-    implicit def byteToLiteral(b: Byte): Column = Literal(b)
-
-    implicit def shortToLiteral(s: Short): Column = Literal(s)
-
-    implicit def intToLiteral(i: Int): Column = Literal(i)
-
-    implicit def longToLiteral(l: Long): Column = Literal(l)
-
-    implicit def floatToLiteral(f: Float): Column = Literal(f)
-
-    implicit def doubleToLiteral(d: Double): Column = Literal(d)
-
-    implicit def stringToLiteral(s: String): Column = Literal(s)
-
-    implicit def dateToLiteral(d: Date): Column = Literal(d)
-
-    implicit def bigDecimalToLiteral(d: BigDecimal): Column = Literal(d.underlying())
-
-    implicit def bigDecimalToLiteral(d: java.math.BigDecimal): Column = Literal(d)
-
-    implicit def timestampToLiteral(t: Timestamp): Column = Literal(t)
-
-    implicit def binaryToLiteral(a: Array[Byte]): Column = Literal(a)
-  }
-
 
   /* Use the following code to generate:
   (0 to 22).map { x =>

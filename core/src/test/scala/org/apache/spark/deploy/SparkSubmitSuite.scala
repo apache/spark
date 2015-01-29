@@ -21,25 +21,28 @@ import java.io._
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.scalatest.FunSuite
+import org.scalatest.Matchers
+import org.scalatest.concurrent.Timeouts
+import org.scalatest.time.SpanSugar._
+
 import org.apache.spark._
 import org.apache.spark.deploy.SparkSubmit._
 import org.apache.spark.util.{ResetSystemProperties, Utils}
-import org.scalatest.FunSuite
-import org.scalatest.Matchers
 
 // Note: this suite mixes in ResetSystemProperties because SparkSubmit.main() sets a bunch
 // of properties that neeed to be cleared after tests.
-class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties {
+class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties with Timeouts {
   def beforeAll() {
     System.setProperty("spark.testing", "true")
   }
 
-  val noOpOutputStream = new OutputStream {
+  private val noOpOutputStream = new OutputStream {
     def write(b: Int) = {}
   }
 
   /** Simple PrintStream that reads data into a buffer */
-  class BufferPrintStream extends PrintStream(noOpOutputStream) {
+  private class BufferPrintStream extends PrintStream(noOpOutputStream) {
     var lineBuffer = ArrayBuffer[String]()
     override def println(line: String) {
       lineBuffer += line
@@ -47,7 +50,7 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
   }
 
   /** Returns true if the script exits and the given search string is printed. */
-  def testPrematureExit(input: Array[String], searchString: String) = {
+  private def testPrematureExit(input: Array[String], searchString: String) = {
     val printStream = new BufferPrintStream()
     SparkSubmit.printStream = printStream
 
@@ -290,7 +293,6 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "--class", SimpleApplicationTest.getClass.getName.stripSuffix("$"),
       "--name", "testApp",
       "--master", "local",
-      "--conf", "spark.ui.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -305,7 +307,6 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
       "--name", "testApp",
       "--master", "local-cluster[2,1,512]",
       "--jars", jarsString,
-      "--conf", "spark.ui.enabled=false",
       unusedJar.toString)
     runSparkSubmit(args)
   }
@@ -430,15 +431,18 @@ class SparkSubmitSuite extends FunSuite with Matchers with ResetSystemProperties
   }
 
   // NOTE: This is an expensive operation in terms of time (10 seconds+). Use sparingly.
-  def runSparkSubmit(args: Seq[String]): String = {
+  private def runSparkSubmit(args: Seq[String]): Unit = {
     val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
-    Utils.executeAndGetOutput(
+    val process = Utils.executeCommand(
       Seq("./bin/spark-submit") ++ args,
       new File(sparkHome),
       Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
+    failAfter(60 seconds) { process.waitFor() }
+    // Ensure we still kill the process in case it timed out
+    process.destroy()
   }
 
-  def forConfDir(defaults: Map[String, String]) (f: String => Unit) = {
+  private def forConfDir(defaults: Map[String, String]) (f: String => Unit) = {
     val tmpDir = Utils.createTempDir()
 
     val defaultsConf = new File(tmpDir.getAbsolutePath, "spark-defaults.conf")

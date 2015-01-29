@@ -48,10 +48,15 @@
       <artifactId>slf4j-api</artifactId>
       <scope>provided</scope>
     </dependency>
+    <!--
+      Promote Guava to "compile" so that maven-shade-plugin picks it up (for packaging the Optional
+      class exposed in the Java API). The plugin will then remove this dependency from the published
+      pom, so that Guava does not pollute the client's compilation classpath.
+    -->
     <dependency>
       <groupId>com.google.guava</groupId>
       <artifactId>guava</artifactId>
-      <scope>provided</scope>
+      <scope>compile</scope>
     </dependency>
 
     <!-- Test dependencies -->
@@ -88,11 +93,6 @@
         <version>2.2</version>
         <executions>
           <execution>
-            <goals>
-              <goal>test-jar</goal>
-            </goals>
-          </execution>
-          <execution>
             <id>test-jar-on-test-compile</id>
             <phase>test-compile</phase>
             <goals>
@@ -100,6 +100,18 @@
             </goals>
           </execution>
         </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-shade-plugin</artifactId>
+        <configuration>
+          <shadedArtifactAttached>false</shadedArtifactAttached>
+          <artifactSet>
+            <includes>
+              <include>com.google.guava:guava</include>
+            </includes>
+          </artifactSet>
+        </configuration>
       </plugin>
     </plugins>
   </build>

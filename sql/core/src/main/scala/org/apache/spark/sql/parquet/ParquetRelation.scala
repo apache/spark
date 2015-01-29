@@ -26,7 +26,7 @@ import parquet.hadoop.ParquetOutputFormat
 import parquet.hadoop.metadata.CompressionCodecName
 import parquet.schema.MessageType
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.{DataFrame, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.{MultiInstanceRelation, UnresolvedException}
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
@@ -34,8 +34,8 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Stati
 /**
  * Relation that consists of data stored in a Parquet columnar format.
  *
- * Users should interact with parquet files though a SchemaRDD, created by a [[SQLContext]] instead
- * of using this class directly.
+ * Users should interact with parquet files though a [[DataFrame]], created by a [[SQLContext]]
+ * instead of using this class directly.
  *
  * {{{
  *   val parquetRDD = sqlContext.parquetFile("path/to/parquet.file")

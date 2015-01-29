@@ -184,13 +184,15 @@ private[nio] class ConnectionManager(
   // to be able to track asynchronous messages
   private val idCount: AtomicInteger = new AtomicInteger(1)
 
+  private val writeRunnableStarted: HashSet[SelectionKey] = new HashSet[SelectionKey]()
+  private val readRunnableStarted: HashSet[SelectionKey] = new HashSet[SelectionKey]()
+
   private val selectorThread = new Thread("connection-manager-thread") {
     override def run() = ConnectionManager.this.run()
   }
   selectorThread.setDaemon(true)
+  // start this thread last, since it invokes run(), which accesses members above
   selectorThread.start()
-
-  private val writeRunnableStarted: HashSet[SelectionKey] = new HashSet[SelectionKey]()
 
   private def triggerWrite(key: SelectionKey) {
     val conn = connectionsByKey.getOrElse(key, null)
@@ -232,7 +234,6 @@ private[nio] class ConnectionManager(
     } )
   }
 
-  private val readRunnableStarted: HashSet[SelectionKey] = new HashSet[SelectionKey]()
 
   private def triggerRead(key: SelectionKey) {
     val conn = connectionsByKey.getOrElse(key, null)
