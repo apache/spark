@@ -23,16 +23,19 @@ import org.apache.spark.sql.hbase.execution._
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.hbase.util.BytesUtils
 import org.apache.spark.sql.types.IntegerType
+import java.io.File
 
 class BulkLoadIntoTableSuite extends QueriesSuiteBase {
   val sc: SparkContext = TestHbase.sparkContext
-  val sparkHome = TestHbase.sparkContext.getSparkHome().getOrElse("./")
-  if (sparkHome == null || sparkHome.isEmpty)
+  val hbaseHome = {
+    val loader = this.getClass.getClassLoader
+    val url = loader.getResource("loadData.txt")
+    val file = new File(url.getPath)
+    val parent = file.getParentFile
+    parent.getAbsolutePath
+  }
+  if (hbaseHome == null || hbaseHome.isEmpty)
     logError("Spark Home is not defined; may lead to unexpected error!")
-
-//  test("a") {
-//    val a =
-//  }
 
   // Test if we can parse 'LOAD DATA LOCAL INPATH './usr/file.txt' INTO TABLE tb1'
   test("bulk load parser test, local file") {
@@ -108,7 +111,7 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
     val executeSql2 = TestHbase.executeSql(sql2)
     executeSql2.toRdd.collect()
 
-    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadData.txt'"
+    val inputFile = "'" + hbaseHome + "/loadData.txt'"
 
     // then load data into table
     val loadSql = "LOAD DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
@@ -153,7 +156,7 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
     val executeSql2 = TestHbase.executeSql(sql2)
     executeSql2.toRdd.collect()
 
-    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadData.txt'"
+    val inputFile = "'" + hbaseHome + "/loadData.txt'"
 
     // then load parall data into table
     val loadSql = "LOAD PARALL DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
@@ -196,7 +199,7 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
     val executeSql2 = TestHbase.executeSql(sql2)
     executeSql2.toRdd.collect()
 
-    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadNullableData.txt'"
+    val inputFile = "'" + hbaseHome + "/loadNullableData.txt'"
 
     // then load data into table
     val loadSql = "LOAD DATA LOCAL INPATH " + inputFile + " INTO TABLE testNullColumnBulkload"
@@ -247,7 +250,7 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
     val executeSql2 = TestHbase.executeSql(sql2)
     executeSql2.toRdd.collect()
 
-    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadNullableData.txt'"
+    val inputFile = "'" + hbaseHome + "/loadNullableData.txt'"
 
     // then load parall data into table
     val loadSql = "LOAD PARALL DATA LOCAL INPATH " + inputFile + " INTO TABLE testNullColumnBulkload"
@@ -288,7 +291,7 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
     val executeSql2 = TestHbase.executeSql(sql2)
     executeSql2.toRdd.collect()
 
-    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadData.txt'"
+    val inputFile = "'" + hbaseHome + "/loadData.txt'"
 
     // then load parall data into table
     val loadSql = "LOAD DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
@@ -325,7 +328,7 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
     val executeSql2 = TestHbase.executeSql(sql2)
     executeSql2.toRdd.collect()
 
-    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/loadData.txt'"
+    val inputFile = "'" + hbaseHome + "/loadData.txt'"
 
     // then load parall data into table
     val loadSql = "LOAD PARALL DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
@@ -364,7 +367,7 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
     val executeSql2 = TestHbase.executeSql(sql2)
     executeSql2.toRdd.collect()
 
-    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/splitLoadData.txt'"
+    val inputFile = "'" + hbaseHome + "/splitLoadData.txt'"
 
     // then load parall data into table
     val loadSql = "LOAD DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
@@ -400,7 +403,7 @@ class BulkLoadIntoTableSuite extends QueriesSuiteBase {
     val executeSql2 = TestHbase.executeSql(sql2)
     executeSql2.toRdd.collect()
 
-    val inputFile = "'" + sparkHome + "/sql/hbase/src/test/resources/splitLoadData.txt'"
+    val inputFile = "'" + hbaseHome + "/splitLoadData.txt'"
 
     // then load parall data into table
     val loadSql = "LOAD PARALL DATA LOCAL INPATH " + inputFile + " INTO TABLE testblk"
