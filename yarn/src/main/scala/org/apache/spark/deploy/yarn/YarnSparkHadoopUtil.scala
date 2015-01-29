@@ -25,6 +25,7 @@ import java.util.regex.Pattern
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.HashMap
+import scala.util.Try
 
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.JobConf
@@ -194,19 +195,12 @@ object YarnSparkHadoopUtil {
    * Otherwise, return the result of environment.$()
    * Note: $$() is added in Hadoop 2.4.
    */
-  def expandEnvironment(environment: Environment): String = {
-    var result = environment.$()
+  private lazy val expandMethod =
+    Try(classOf[Environment].getMethod("$$"))
+      .getOrElse(classOf[Environment].getMethod("$"))
 
-    // We use reflection in order not to fail building with Hadoop 2.3 or before.
-    val clazz = classOf[Environment]
-    val name = "$$"
-    if (clazz.getMethods().exists(_.getName == name)){
-      val method = clazz.getMethod(name)
-      result = method.invoke(environment).asInstanceOf[String]
-    }
-
-    result
-  }
+  def expandEnvironment(environment: Environment): String =
+    expandMethod.invoke(environment).asInstanceOf[String]
 
   /**
    * Get class path separator using Yarn API.
@@ -214,17 +208,11 @@ object YarnSparkHadoopUtil {
    * Otherwise, return File.pathSeparator
    * Note: File.pathSeparator is added in Hadoop 2.4.
    */
+  private lazy val classPathSeparatorField =
+    Try(classOf[ApplicationConstants].getField("CLASS_PATH_SEPARATOR"))
+      .getOrElse(classOf[File].getField("pathSeparator"))
+
   def getClassPathSeparator(): String = {
-    var result = File.pathSeparator
-
-    // We use reflection in order not to fail building with Hadoop 2.3 or before.
-    val clazz = classOf[ApplicationConstants]
-    val name = "CLASS_PATH_SEPARATOR"
-    if (clazz.getFields().exists(_.getName == name)){
-      val field = clazz.getField(name)
-      result = field.get(null).asInstanceOf[String]
-    }
-
-    result
+    classPathSeparatorField.get(null).asInstanceOf[String]
   }
 }

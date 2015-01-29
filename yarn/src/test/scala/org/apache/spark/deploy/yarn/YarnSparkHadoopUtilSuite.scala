@@ -23,12 +23,12 @@ import com.google.common.io.{ByteStreams, Files}
 import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.util.Shell
 import org.scalatest.{FunSuite, Matchers}
 
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.util.Utils
 
 
 class YarnSparkHadoopUtilSuite extends FunSuite with Matchers with Logging {
@@ -154,22 +154,23 @@ class YarnSparkHadoopUtilSuite extends FunSuite with Matchers with Logging {
 
   test("test expandEnvironment result") {
     val target = Environment.PWD
-    var expect = "$" + target
     if (classOf[Environment].getMethods().exists(_.getName == "$$")) {
-      expect = "{{" + target + "}}"
-    } else if (Shell.WINDOWS) {
-      expect = "%" + target + "%"
+      YarnSparkHadoopUtil.expandEnvironment(target) should be ("{{" + target + "}}")
+    } else if (Utils.isWindows) {
+      YarnSparkHadoopUtil.expandEnvironment(target) should be ("%" + target + "%")
+    } else {
+      YarnSparkHadoopUtil.expandEnvironment(target) should be ("$" + target)
     }
-    YarnSparkHadoopUtil.expandEnvironment(target) should be (expect)
+
   }
 
   test("test getClassPathSeparator result") {
-    var expect = ":"
     if (classOf[ApplicationConstants].getFields().exists(_.getName == "CLASS_PATH_SEPARATOR")) {
-      expect = "<CPS>"
-    } else if (Shell.WINDOWS) {
-      expect = ";"
+      YarnSparkHadoopUtil.getClassPathSeparator() should be ("<CPS>")
+    } else if (Utils.isWindows) {
+      YarnSparkHadoopUtil.getClassPathSeparator() should be (";")
+    } else {
+      YarnSparkHadoopUtil.getClassPathSeparator() should be (":")
     }
-    YarnSparkHadoopUtil.getClassPathSeparator() should be (expect)
   }
 }
