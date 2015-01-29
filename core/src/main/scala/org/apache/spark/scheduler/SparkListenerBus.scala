@@ -17,12 +17,12 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.util.ListenerHelper
+import org.apache.spark.util.ListenerBus
 
 /**
  * A [[SparkListenerEvent]] bus that relays [[SparkListenerEvent]]s to its listeners
  */
-private[spark] trait SparkListenerBus extends ListenerHelper[SparkListener, SparkListenerEvent] {
+private[spark] trait SparkListenerBus extends ListenerBus[SparkListener, SparkListenerEvent] {
 
   def onPostEvent(listener: SparkListener, event: SparkListenerEvent): Unit = {
     event match {

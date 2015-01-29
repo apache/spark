@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.spark.util.ListenerBus
+import org.apache.spark.util.AsynchronousListenerBus
 
 /**
  * Asynchronously passes SparkListenerEvents to registered SparkListeners.
@@ -29,7 +29,7 @@ import org.apache.spark.util.ListenerBus
  * is stopped when it receives a SparkListenerShutdown event, which is posted using stop().
  */
 private[spark] class LiveListenerBus
-  extends ListenerBus[SparkListener, SparkListenerEvent]("SparkListenerBus") with SparkListenerBus {
+  extends AsynchronousListenerBus[SparkListener, SparkListenerEvent]("SparkListenerBus") with SparkListenerBus {
 
   private val logDroppedEvent = new AtomicBoolean(false)
 

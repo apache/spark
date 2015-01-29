@@ -20,11 +20,11 @@ package org.apache.spark.streaming.scheduler
 import java.util.concurrent.atomic.AtomicBoolean
 
 import org.apache.spark.Logging
-import org.apache.spark.util.ListenerBus
+import org.apache.spark.util.AsynchronousListenerBus
 
 /** Asynchronously passes StreamingListenerEvents to registered StreamingListeners. */
 private[spark] class StreamingListenerBus
-  extends ListenerBus[StreamingListener, StreamingListenerEvent]("StreamingListenerBus")
+  extends AsynchronousListenerBus[StreamingListener, StreamingListenerEvent]("StreamingListenerBus")
   with Logging {
 
   private val logDroppedEvent = new AtomicBoolean(false)
