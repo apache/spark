@@ -36,7 +36,7 @@ import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.Worker
 
 /**
- * End-to-end tests for the stable application submission protocol in standalone mode.
+ * End-to-end tests for the REST application submission protocol in standalone mode.
  */
 class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
   private val systemsToStop = new ArrayBuffer[ActorSystem]
@@ -89,7 +89,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
 
   /**
    * Start a local cluster containing one Master and a few Workers.
-   * Do not use org.apache.spark.deploy.LocalCluster here because we want the REST URL.
+   * Do not use [[org.apache.spark.deploy.LocalSparkCluster]] here because we want the REST URL.
    * Return the Master's REST URL to which applications should be submitted.
    */
   private def startLocalCluster(): String = {
@@ -112,7 +112,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     masterRestUrl
   }
 
-  /** Submit the StandaloneRestApp and return the corresponding driver ID. */
+  /** Submit the [[StandaloneRestApp]] and return the corresponding driver ID. */
   private def submitApplication(resultsFile: File, numbers: Seq[Int], size: Int): String = {
     val appArgs = Seq(resultsFile.getAbsolutePath) ++ numbers.map(_.toString) ++ Seq(size.toString)
     val commandLineArgs = Array(
@@ -164,7 +164,7 @@ private object StandaloneRestProtocolSuite {
   private val pathPrefix = "org/apache/spark/deploy/rest"
 
   /**
-   * Create a jar that contains all the class files needed for running the StandaloneRestApp.
+   * Create a jar that contains all the class files needed for running the [[StandaloneRestApp]].
    * Return the absolute path to that jar.
    */
   def createJar(): String = {
@@ -184,7 +184,7 @@ private object StandaloneRestProtocolSuite {
   }
 
   /**
-   * Return a list of class files compiled for StandaloneRestApp.
+   * Return a list of class files compiled for [[StandaloneRestApp]].
    * This includes all the anonymous classes used in the application.
    */
   private def getClassFiles: Seq[File] = {
@@ -197,7 +197,7 @@ private object StandaloneRestProtocolSuite {
 }
 
 /**
- * Sample application to be submitted to the cluster using the stable gateway.
+ * Sample application to be submitted to the cluster using the REST gateway.
  * All relevant classes will be packaged into a jar at run time.
  */
 object StandaloneRestApp {

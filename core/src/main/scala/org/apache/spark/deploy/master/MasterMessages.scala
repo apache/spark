@@ -38,5 +38,5 @@ private[master] object MasterMessages {
 
   case object BoundPortsRequest
 
-  case class BoundPortsResponse(actorPort: Int, webUIPort: Int, stablePort: Option[Int])
+  case class BoundPortsResponse(actorPort: Int, webUIPort: Int, restPort: Option[Int])
 }

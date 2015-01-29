@@ -151,7 +151,7 @@ private[deploy] object DeployMessages {
   case class MasterStateResponse(
       host: String,
       port: Int,
-      stablePort: Option[Int],
+      restPort: Option[Int],
       workers: Array[WorkerInfo],
       activeApps: Array[ApplicationInfo],
       completedApps: Array[ApplicationInfo],
@@ -163,7 +163,7 @@ private[deploy] object DeployMessages {
     assert (port > 0)
 
     def uri = "spark://" + host + ":" + port
-    def stableUri: Option[String] = stablePort.map { p => "spark://" + host + ":" + p }
+    def restUri: Option[String] = restPort.map { p => "spark://" + host + ":" + p }
   }
 
   //  WorkerWebUI to Worker

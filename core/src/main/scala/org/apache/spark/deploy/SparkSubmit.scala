@@ -89,14 +89,15 @@ object SparkSubmit {
   }
 
   /**
-   * Kill an existing driver using the stable REST protocol. Standalone cluster mode only.
+   * Kill an existing driver using the REST application submission protocol.
+   * Standalone cluster mode only.
    */
   private def kill(args: SparkSubmitArguments): Unit = {
     new StandaloneRestClient().killDriver(args.master, args.driverToKill)
   }
 
   /**
-   * Request the status of an existing driver using the stable REST protocol.
+   * Request the status of an existing driver using the REST application submission protocol.
    * Standalone cluster mode only.
    */
   private def requestStatus(args: SparkSubmitArguments): Unit = {
@@ -112,7 +113,7 @@ object SparkSubmit {
    * Second, we use this launch environment to invoke the main method of the child
    * main class.
    *
-   * As of Spark 1.3, a stable REST-based application submission gateway is introduced.
+   * As of Spark 1.3, a REST-based application submission gateway is introduced.
    * If this is enabled, then we will run standalone cluster mode by passing the submit
    * parameters directly to a REST client, which will submit the application using the
    * REST protocol instead.
@@ -120,7 +121,7 @@ object SparkSubmit {
   private[spark] def submit(args: SparkSubmitArguments): Unit = {
     val (childArgs, childClasspath, sysProps, childMainClass) = prepareSubmitEnvironment(args)
     if (args.isStandaloneCluster && args.isRestEnabled) {
-      printStream.println("Running standalone cluster mode using the stable REST protocol.")
+      printStream.println("Running Spark using the REST application submission protocol.")
       new StandaloneRestClient().submitDriver(args)
     } else {
       runMain(childArgs, childClasspath, sysProps, childMainClass)
@@ -305,7 +306,7 @@ object SparkSubmit {
     }
 
     // In standalone-cluster mode, use Client as a wrapper around the user class
-    // Note that we won't actually launch this class if we're using the stable REST protocol
+    // Note that we won't actually launch this class if we're using the REST protocol
     if (args.isStandaloneCluster && !args.isRestEnabled) {
       childMainClass = "org.apache.spark.deploy.Client"
       if (args.supervise) {

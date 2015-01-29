@@ -256,7 +256,7 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
     master.startsWith("spark://") && deployMode == "cluster"
   }
 
-  /** Return whether the stable application submission REST gateway is enabled. */
+  /** Return whether the REST application submission protocol is enabled. */
   def isRestEnabled: Boolean = {
     sparkProperties.get("spark.submit.rest.enabled").getOrElse("false").toBoolean
   }

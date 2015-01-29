@@ -126,7 +126,7 @@ private[spark] class Master(
   private val restServerEnabled = conf.getBoolean("spark.master.rest.enabled", true)
   private val restServer =
     if (restServerEnabled) {
-      val port = conf.getInt("spark.master.rest.port", 17077)
+      val port = conf.getInt("spark.master.rest.port", 6066)
       Some(new StandaloneRestServer(this, host, port))
     } else {
       None
@@ -910,6 +910,6 @@ private[spark] object Master extends Logging {
     val timeout = AkkaUtils.askTimeout(conf)
     val portsRequest = actor.ask(BoundPortsRequest)(timeout)
     val portsResponse = Await.result(portsRequest, timeout).asInstanceOf[BoundPortsResponse]
-    (actorSystem, boundPort, portsResponse.webUIPort, portsResponse.stablePort)
+    (actorSystem, boundPort, portsResponse.webUIPort, portsResponse.restPort)
   }
 }

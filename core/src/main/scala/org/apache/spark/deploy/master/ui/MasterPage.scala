@@ -74,10 +74,10 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
             <ul class="unstyled">
               <li><strong>URL:</strong> {state.uri}</li>
               {
-                state.stableUri.map { uri =>
+                state.restUri.map { uri =>
                   <li>
-                    <strong>Stable URL:</strong> {uri}
-                    <span class="stable-uri"> (for standalone cluster mode in Spark 1.3+)</span>
+                    <strong>REST URL:</strong> {uri}
+                    <span class="rest-uri"> (for standalone cluster mode in Spark 1.3+)</span>
                   </li>
                 }.getOrElse { Seq.empty }
               }
