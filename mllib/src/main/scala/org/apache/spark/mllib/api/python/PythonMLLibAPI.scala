@@ -40,6 +40,7 @@ import org.apache.spark.mllib.recommendation._
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.stat.{MultivariateStatisticalSummary, Statistics}
 import org.apache.spark.mllib.stat.correlation.CorrelationNames
+import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.stat.test.ChiSqTestResult
 import org.apache.spark.mllib.tree.{RandomForest, DecisionTree}
 import org.apache.spark.mllib.tree.configuration.{Algo, Strategy}
@@ -285,13 +286,14 @@ class PythonMLLibAPI extends Serializable {
 
   /**
    * Java stub for Python mllib GaussianMixtureEM.train()
+   * Returns a list containing weights, mean and covariance of each mixture component.
    */
   def trainGaussianMixtureEM(
       data: JavaRDD[Vector], 
       k: Int, 
       convergenceTol: Double, 
       seed: Long, 
-      maxIterations: Int): JList[Object]  = {
+      maxIterations: Int): JList[Object] = {
     val gmmAlg = new GaussianMixtureEM()
       .setK(k)
       .setConvergenceTol(convergenceTol)
@@ -299,8 +301,15 @@ class PythonMLLibAPI extends Serializable {
       .setMaxIterations(maxIterations)
     try {
       val model = gmmAlg.run(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
-      List(model.weight, model.mu, model.sigma).
-      map(_.asInstanceOf[Object]).asJava
+      var wtArray:Array[Double] = Array()
+      var muArray:Array[Vector] = Array()
+      var siArray :Array[Matrix] = Array()
+      for (i <- 0 until model.k) {
+        wtArray = wtArray ++ Array(model.weights(i))
+        muArray = muArray ++ Array(model.gaussians(i).mu)
+        siArray = siArray ++ Array(model.gaussians(i).sigma)
+      }
+      List(wtArray, muArray, siArray).map(_.asInstanceOf[Object]).asJava
     } finally {
       data.rdd.unpersist(blocking = false)
     }
@@ -309,16 +318,19 @@ class PythonMLLibAPI extends Serializable {
   /**
    * Java stub for Python mllib GaussianMixtureModel.predictSoft()
    */
-  def findPredict(
+  def predictGMM(
       data: JavaRDD[Vector],
       wt: Object,
       mu: Array[Object],
       si: Array[Object]):  RDD[Array[Double]]  = {
     try {
       val weight = wt.asInstanceOf[Array[Double]]
-      val mean = mu.map(_.asInstanceOf[Vector])
-      val sigma = si.map(_.asInstanceOf[Matrix])
-      val model = new GaussianMixtureModel(weight, mean, sigma)
+      val mean = mu.map(_.asInstanceOf[DenseVector])
+      val sigma = si.map(_.asInstanceOf[DenseMatrix])
+      val gaussians = Array.tabulate(weight.length){
+        i => new MultivariateGaussian(mean(i),sigma(i))
+      }      
+      val model = new GaussianMixtureModel(weight, gaussians)
       model.predictSoft(data.rdd.persist(StorageLevel.MEMORY_AND_DISK))
     } finally {
       data.rdd.unpersist(blocking = false)

@@ -167,6 +167,32 @@ class ListTests(PySparkTestCase):
             # TODO: Allow small numeric difference.
             self.assertTrue(array_equal(c1, c2))
 
+    def test_gmm(self):
+        from pyspark.mllib.clustering import GaussianMixtureEM
+        data = self.sc.parallelize([
+            [1, 2],
+            [8, 9],
+            [-4, -3],
+            [-6, -7],
+        ])
+        clusters = GaussianMixtureEM.train(data, 2, convergenceTol=0.001,
+                                           seed=56, maxIterations=100)
+        labels = clusters.predict(data).collect()
+        self.assertEquals(labels[0], labels[1])
+        self.assertEquals(labels[2], labels[3])
+
+    def test_gmm_deterministic(self):
+        from pyspark.mllib.clustering import GaussianMixtureEM
+        X = range(0, 100, 10)
+        Y = range(0, 100, 10)
+        data = self.sc.parallelize([[x, y] for x, y in zip(X, Y)])
+        clusters1 = GaussianMixtureEM.train(data, 5, convergenceTol=0.001,
+                                            seed=63, maxIterations=100)
+        clusters2 = GaussianMixtureEM.train(data, 5, convergenceTol=0.001,
+                                            seed=63, maxIterations=100)
+        for c1, c2 in zip(clusters1.weights, clusters2.weights):
+            self.assertEquals(round(c1, 7), round(c2, 7))
+
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
         from pyspark.mllib.tree import DecisionTree

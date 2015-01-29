@@ -18,13 +18,13 @@
 """
 A Gaussian Mixture Model clustering program using MLlib.
 
-This example requires NumPy (http://www.numpy.org/).
 """
 
 import sys
 import random
 import argparse
 import numpy as np
+
 from pyspark import SparkConf, SparkContext
 from pyspark.mllib.clustering import GaussianMixtureEM
 
@@ -37,29 +37,31 @@ if __name__ == "__main__":
     """
     Parameters
     ----------
-    input_file : path of the file which contains data points
+    input_file : Input file path which contains data points
     k : Number of mixture components
-    convergenceTol : convergence_threshold.Default to 1e-3
+    convergenceTol : convergence_threshold. Default to 1e-3
     seed : random seed
-    n_iter : Number of EM iterations to perform. Default to 100
+    maxIterations : Number of EM iterations to perform. Default to 100
     """
-    conf = SparkConf().setAppName("GMM")
-    sc = SparkContext(conf=conf)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('input_file', help='input file')
     parser.add_argument('k', type=int, help='num_of_clusters')
-    parser.add_argument('--ct', default=1e-3, type=float, help='convergence_threshold')
+    parser.add_argument('--convergenceTol', default=1e-3, type=float, help='convergence_threshold')
     parser.add_argument('--seed', default=random.getrandbits(19),
                         type=long, help='num_of_iterations')
-    parser.add_argument('--n_iter', default=100, type=int, help='num_of_iterations')
+    parser.add_argument('--maxIterations', default=100, type=int, help='max_num_of_iterations')
     args = parser.parse_args()
+
+    conf = SparkConf().setAppName("GMM")
+    sc = SparkContext(conf=conf)
 
     lines = sc.textFile(args.input_file)
     data = lines.map(parseVector)
-    model = GaussianMixtureEM.train(data, args.k, args.ct, args.seed, args.n_iter)
+    model = GaussianMixtureEM.train(data, args.k, args.convergenceTol,
+                                    args.seed, args.maxIterations)
     for i in range(args.k):
-        print ("weight = ", model.weight[i], "mu = ", model.mu[i],
-               "sigma = ", model.sigma[i].toArray())
-    print model.predictLabels(data).collect()
+        print ("weight = ", model.weights[i], "mu = ", model.gaussians[i].mu,
+               "sigma = ", model.gaussians[i].sigma.toArray())
+    print ("Cluster labels (first 100): ", model.predict(data).take(100))
     sc.stop()

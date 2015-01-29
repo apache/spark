@@ -15,18 +15,20 @@
 # limitations under the License.
 #
 
+from numpy import array
+
 from pyspark import SparkContext
 from pyspark.mllib.common import callMLlibFunc, callJavaFunc
-from pyspark.mllib.linalg import SparseVector, _convert_to_vector, DenseVector
+from pyspark.mllib.linalg import DenseVector, SparseVector, _convert_to_vector
 
-__all__ = ['KMeansModel', 'KMeans', 'GaussianMixtureModel', 'GaussianMixtureEM']
+__all__ = ['KMeansModel', 'KMeans', 'GaussianMixtureModel', 'GaussianMixtureEM',
+           'MultiVariateGaussian']
 
 
 class KMeansModel(object):
 
     """A clustering model derived from the k-means method.
 
-    >>> from numpy import array
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4,2)
     >>> model = KMeans.train(
     ...     sc.parallelize(data), 2, maxIterations=10, runs=30, initializationMode="random")
@@ -90,16 +92,16 @@ class GaussianMixtureModel(object):
 
     """A clustering model derived from the Gaussian Mixture Model method.
 
-    >>> from numpy import array
     >>> clusterdata_1 =  sc.parallelize(array([-0.1,-0.05,-0.01,-0.1,
     ...                                         0.9,0.8,0.75,0.935,
     ...                                        -0.83,-0.68,-0.91,-0.76 ]).reshape(6,2))
-    >>> model = GaussianMixtureEM.train(clusterdata_1, 3, 0.0001, 3205, 10)
-    >>> labels = model.predictLabels(clusterdata_1).collect()
-    >>> labels[0]==labels[2]
-    True
-    >>> labels[3]==labels[4]
+    >>> model = GaussianMixtureEM.train(clusterdata_1, 3, convergenceTol=0.0001,
+    ...                                 maxIterations=50, seed=10)
+    >>> labels = model.predict(clusterdata_1).collect()
+    >>> labels[0]==labels[1]
     False
+    >>> labels[1]==labels[2]
+    True
     >>> labels[4]==labels[5]
     True
     >>> clusterdata_2 =  sc.parallelize(array([-5.1971, -2.5359, -3.8220,
@@ -107,45 +109,61 @@ class GaussianMixtureModel(object):
     ...                                         6.8989, 3.4592,  4.6322,
     ...                                         5.7048,  4.6567, 5.5026,
     ...                                         4.5605,  5.2043,  6.2734]).reshape(5,3))
-    >>> model = GaussianMixtureEM.train(clusterdata_2, 2, 0.0001, 150, 10)
-    >>> labels = model.predictLabels(clusterdata_2).collect()
+    >>> model = GaussianMixtureEM.train(clusterdata_2, 2, convergenceTol=0.0001,
+    ...                                 maxIterations=150, seed=10)
+    >>> labels = model.predict(clusterdata_2).collect()
     >>> labels[0]==labels[1]==labels[2]
     True
     >>> labels[3]==labels[4]
     True
     """
 
-    def __init__(self, weight, mu, sigma):
-        self.weight = weight
-        self.mu = mu
-        self.sigma = sigma
+    def __init__(self, weights, gaussians):
+        self.weights = weights
+        self.gaussians = gaussians
+        self.k = len(self.weights)
 
-    def predictLabels(self, X):
+    def predict(self, X):
         """
         Find the cluster to which the points in X has maximum membership
         in this model.
+        Returns an RDD of cluster labels.
         """
         cluster_labels = self.predictSoft(X).map(lambda x: x.index(max(x)))
         return cluster_labels
 
     def predictSoft(self, X):
         """
-        Find the membership of each point in X to all clusters in this model.
+        Find the membership of each point in X to all mixture components.
+        Returns an RDD of array of double values.
         """
-        membership_matrix = callMLlibFunc("findPredict", X.map(_convert_to_vector),
-                                          self.weight, self.mu, self.sigma)
+        means_temp = ()
+        sigmas_temp = ()
+        for i in range(self.k):
+            means_temp = means_temp + (self.gaussians[i].mu,)
+            sigmas_temp = sigmas_temp + (self.gaussians[i].sigma,)
+        membership_matrix = callMLlibFunc("predictGMM", X.map(_convert_to_vector),
+                                          self.weights, means_temp, sigmas_temp)
         return membership_matrix
+
+
+class MultiVariateGaussian(object):
+
+    def __init__(self, mu, sigma):
+        self.mu = mu
+        self.sigma = sigma
 
 
 class GaussianMixtureEM(object):
 
     @classmethod
-    def train(cls, rdd, k, convergenceTol, seed, maxIterations):
+    def train(cls, rdd, k, convergenceTol=1e-3, seed=None, maxIterations=100):
         """Train a Gaussian Mixture clustering model."""
         weight, mu, sigma = callMLlibFunc("trainGaussianMixtureEM",
                                           rdd.map(_convert_to_vector), k,
                                           convergenceTol, seed, maxIterations)
-        return GaussianMixtureModel(weight, mu, sigma)
+        mvg_obj = array([MultiVariateGaussian(mu[i], sigma[i]) for i in range(k)])
+        return GaussianMixtureModel(weight, mvg_obj)
 
 
 def _test():
