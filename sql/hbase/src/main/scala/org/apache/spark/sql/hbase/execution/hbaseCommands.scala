@@ -238,6 +238,8 @@ case class BulkLoadIntoTableCommand(
 
             if (prevK != null && Bytes.compareTo(kv._1, prevK) == 0) {
               // force flush because we cannot guarantee intra-row ordering
+              logInfo(s"flushing HFile writer " + writer)
+              // look at the type so we can print the name of the flushed file
               writer.write(null, null)
             }
 
@@ -258,6 +260,7 @@ case class BulkLoadIntoTableCommand(
         }
 
         committer.commitTask(hadoopContext)
+        logInfo(s"commit HFiles in $tmpPath")
 
         val targetPath = committer.getCommittedTaskPath(hadoopContext)
         if (par) {
