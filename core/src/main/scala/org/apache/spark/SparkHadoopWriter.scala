@@ -108,8 +108,7 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
     val cmtr = getOutputCommitter()
     if (cmtr.needsTaskCommit(taCtxt)) {
       val outputCommitCoordinator = SparkEnv.get.outputCommitCoordinator
-      val canCommit = outputCommitCoordinator.canCommit(jobID,
-        taID.value.getTaskID().getId(), splitID, attemptID)
+      val canCommit = outputCommitCoordinator.canCommit(jobID, splitID, attemptID)
       if (canCommit) {
         try {
           cmtr.commitTask(taCtxt)
@@ -124,13 +123,11 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
       } else {
         val msg: String = s"$taID: Not committed because the driver did not authorize commit"
         logInfo(msg)
+        cmtr.abortTask(taCtxt)
         throw new CommitDeniedException(msg, jobID, splitID, attemptID)
       }
     } else {
-      val msg: String = s"No need to commit output of task" +
-        " because needsTaskCommit=false: ${taID.value}"
-      logInfo(msg)
-      throw new CommitDeniedException(msg, jobID, splitID, attemptID)
+      logInfo(s"No need to commit output of task because needsTaskCommit=false: ${taID.value}")
     }
   }
 

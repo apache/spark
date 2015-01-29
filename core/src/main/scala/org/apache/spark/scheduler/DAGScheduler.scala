@@ -810,7 +810,7 @@ class DAGScheduler(
     // will be posted, which should always come after a corresponding SparkListenerStageSubmitted
     // event.
     stage.latestInfo = StageInfo.fromStage(stage, Some(partitionsToCompute.size))
-    outputCommitCoordinator.stageStart(stage.id, partitionsToCompute)
+    outputCommitCoordinator.stageStart(stage.id)
     listenerBus.post(SparkListenerStageSubmitted(stage.latestInfo, properties))
 
     // TODO: Maybe we can keep the taskBinary in Stage to avoid serializing it multiple times.
@@ -912,11 +912,9 @@ class DAGScheduler(
     val task = event.task
     val stageId = task.stageId
     val taskType = Utils.getFormattedClassName(task)
-    val isSuccess = event.reason == Success
 
-    outputCommitCoordinator.taskCompleted(stageId, event.taskInfo.taskId,
-       task.partitionId, event.taskInfo.attempt,
-       isSuccess)
+    outputCommitCoordinator.taskCompleted(stageId, task.partitionId,
+      event.taskInfo.attempt, event.reason)
 
     // The success case is dealt with separately below, since we need to compute accumulator
     // updates before posting.
@@ -930,6 +928,7 @@ class DAGScheduler(
       // Skip all the actions if the stage has been cancelled.
       return
     }
+
     val stage = stageIdToStage(task.stageId)
 
     def markStageAsFinished(stage: Stage, errorMessage: Option[String] = None) = {

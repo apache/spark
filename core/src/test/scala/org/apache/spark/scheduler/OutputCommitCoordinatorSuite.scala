@@ -17,96 +17,121 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
+import java.io.{File, ObjectInputStream, ObjectOutputStream, IOException}
 
-import scala.collection.mutable
-
+import org.mockito.Matchers
 import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
+import org.mockito.stubbing.Answer
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.hadoop.mapred.{TaskAttemptID, JobConf, TaskAttemptContext, OutputCommitter}
 
 import org.apache.spark._
-import org.apache.spark.executor.{TaskMetrics}
 import org.apache.spark.rdd.FakeOutputCommitter
+import org.apache.spark.util.Utils
+
+import scala.collection.mutable.ArrayBuffer
 
 /**
- * Unit tests for the output commit coordination functionality. Overrides the
- * SchedulerImpl to just run the tasks directly and send completion or error
- * messages back to the DAG scheduler.
+ * Unit tests for the output commit coordination functionality.
+ *
+ * The unit test makes both the original task and the speculated task
+ * attempt to commit, where committing is emulated by creating a
+ * directory. If both tasks create directories then the end result is
+ * a failure.
+ *
+ * Note that there are some aspects of this test that are less than ideal.
+ * In particular, the test mocks the speculation-dequeuing logic to always
+ * dequeue a task and consider it as speculated. Immediately after initially
+ * submitting the tasks and calling reviveOffers(), reviveOffers() is invoked
+ * again to pick up the speculated task. This may be hacking the original
+ * behavior in too much of an unrealistic fashion.
+ *
+ * Also, the validation is done by checking the number of files in a directory.
+ * Ideally, an accumulator would be used for this, where we could increment
+ * the accumulator in the output committer's commitTask() call. If the call to
+ * commitTask() was called twice erroneously then the test would ideally fail because
+ * the accumulator would be incremented twice.
+ *
+ * The problem with this test implementation is that when both a speculated task and
+ * its original counterpart complete, only one of the accumulator's increments is
+ * captured. This results in a paradox where if the OutputCommitCoordinator logic
+ * was not in SparkHadoopWriter, the tests would still pass because only one of the
+ * increments would be captured even though the commit in both tasks was executed
+ * erroneously.
  */
 class OutputCommitCoordinatorSuite
     extends FunSuite
     with BeforeAndAfter
-    with LocalSparkContext
     with Timeouts {
 
-  val conf = new SparkConf().set("spark.localExecution.enabled", "true")
+  val conf = new SparkConf()
+    .set("spark.localExecution.enabled", "true")
 
-  var taskScheduler: TaskSchedulerImpl = null
   var dagScheduler: DAGScheduler = null
-  var dagSchedulerEventProcessLoop: DAGSchedulerEventProcessLoop = null
-  var accum: Accumulator[Int] = null
-  var accumId: Long = 0
+  var tempDir: File = null
+  var tempDirPath: String = null
+  var sc: SparkContext = null
 
   before {
-    sc = new SparkContext("local", "Output Commit Coordinator Suite")
-    accum = sc.accumulator[Int](0)
-    Accumulators.register(accum, true)
-    accumId = accum.id
+    sc = new SparkContext("local[4]", "Output Commit Coordinator Suite")
+    tempDir = Utils.createTempDir()
+    tempDirPath = tempDir.getAbsolutePath()
+    // Use Mockito.spy() to maintain the default infrastructure everywhere else
+    val mockTaskScheduler = spy(sc.taskScheduler.asInstanceOf[TaskSchedulerImpl])
 
-    taskScheduler = new TaskSchedulerImpl(sc, 4, true) {
-      override def submitTasks(taskSet: TaskSet) {
-        // Instead of submitting a task to some executor, just run the task directly.
-        // Make two attempts. The first may or may not succeed. If the first
-        // succeeds then the second is redundant and should be handled
-        // accordingly by OutputCommitCoordinator. Otherwise the second
-        // should not be blocked from succeeding.
-        execTasks(taskSet, 0)
-        execTasks(taskSet, 1)
+    doAnswer(new Answer[Unit]() {
+      override def answer(invoke: InvocationOnMock): Unit = {
+        // Submit the tasks, then, force the task scheduler to dequeue the
+        // speculated task
+        invoke.callRealMethod()
+        mockTaskScheduler.backend.reviveOffers()
       }
+    }).when(mockTaskScheduler).submitTasks(Matchers.any())
 
-      private def execTasks(taskSet: TaskSet, attemptNumber: Int) {
-        var taskIndex = 0
-        taskSet.tasks.foreach { t =>
-          val tid = newTaskId
-          val taskInfo = new TaskInfo(tid, taskIndex, 0, System.currentTimeMillis, "0",
-            "localhost", TaskLocality.NODE_LOCAL, false)
-          taskIndex += 1
-          // Track the successful commits in an accumulator. However, we can't just invoke
-          // accum += 1 since this unit test circumvents the usual accumulator updating
-          // infrastructure. So just send the accumulator update manually.
-          val accumUpdates = new mutable.HashMap[Long, Any]
-          try {
-            accumUpdates(accumId) = t.run(attemptNumber, attemptNumber)
-            dagSchedulerEventProcessLoop.post(
-              new CompletionEvent(t, Success, 0, accumUpdates, taskInfo, new TaskMetrics))
-          } catch {
-            case e: Throwable =>
-              dagSchedulerEventProcessLoop.post(new CompletionEvent(t, new ExceptionFailure(e,
-                Option.empty[TaskMetrics]), 1, accumUpdates, taskInfo, new TaskMetrics))
+    doAnswer(new Answer[TaskSetManager]() {
+      override def answer(invoke: InvocationOnMock): TaskSetManager = {
+        val taskSet = invoke.getArguments()(0).asInstanceOf[TaskSet]
+        return new TaskSetManager(mockTaskScheduler, taskSet, 4) {
+          var hasDequeuedSpeculatedTask = false
+          override def dequeueSpeculativeTask(
+              execId: String,
+              host: String,
+              locality: TaskLocality.Value): Option[(Int, TaskLocality.Value)] = {
+            if (!hasDequeuedSpeculatedTask) {
+              hasDequeuedSpeculatedTask = true
+              return Some(0, TaskLocality.PROCESS_LOCAL)
+            } else {
+              return None
+            }
           }
         }
       }
-    }
+    }).when(mockTaskScheduler).createTaskSetManager(Matchers.any(), Matchers.any())
 
-    dagScheduler = new DAGScheduler(sc, taskScheduler)
-    taskScheduler.setDAGScheduler(dagScheduler)
-    sc.dagScheduler = dagScheduler
-    dagSchedulerEventProcessLoop = new DAGSchedulerSingleThreadedProcessLoop(dagScheduler)
+    sc.taskScheduler = mockTaskScheduler
+    val dagSchedulerWithMockTaskScheduler = new DAGScheduler(sc, mockTaskScheduler)
+    sc.taskScheduler.setDAGScheduler(dagSchedulerWithMockTaskScheduler)
+    sc.dagScheduler = dagSchedulerWithMockTaskScheduler
+  }
+
+  after {
+    sc.stop()
+    tempDir.delete()
   }
 
   /**
    * Function that constructs a SparkHadoopWriter with a mock committer and runs its commit
    */
-  private class OutputCommittingFunction
+  private class OutputCommittingFunction(private var tempDirPath: String)
       extends ((TaskContext, Iterator[Int]) => Int) with Serializable {
 
     def apply(ctxt: TaskContext, it: Iterator[Int]): Int = {
       val outputCommitter = new FakeOutputCommitter {
-        override def commitTask(taskAttemptContext: TaskAttemptContext) {
-          super.commitTask(taskAttemptContext)
+        override def commitTask(context: TaskAttemptContext) : Unit = {
+          Utils.createDirectory(tempDirPath)
         }
       }
       runCommitWithProvidedCommitter(ctxt, it, outputCommitter)
@@ -128,27 +153,26 @@ class OutputCommitCoordinatorSuite
       }
       sparkHadoopWriter.setup(ctxt.stageId, ctxt.partitionId, ctxt.attemptNumber)
       sparkHadoopWriter.commit
-      if (FakeOutputCommitter.ran) {
-        FakeOutputCommitter.ran = false
-        1
-      } else {
-        0
-      }
+      0
     }
 
     // Need this otherwise the entire test suite attempts to be serialized
     @throws(classOf[IOException])
-    private def writeObject(out: ObjectOutputStream) {}
+    private def writeObject(out: ObjectOutputStream): Unit = {
+      out.writeUTF(tempDirPath)
+    }
 
     @throws(classOf[IOException])
-    private def readObject(in: ObjectInputStream) {}
+    private def readObject(in: ObjectInputStream): Unit = {
+      tempDirPath = in.readUTF()
+    }
   }
 
   /**
    * Function that will explicitly fail to commit on the first attempt
    */
-  private class FailFirstTimeCommittingFunction
-      extends OutputCommittingFunction {
+  private class FailFirstTimeCommittingFunction(private var tempDirPath: String)
+      extends OutputCommittingFunction(tempDirPath) {
     override def apply(ctxt: TaskContext, it: Iterator[Int]): Int = {
       if (ctxt.attemptNumber == 0) {
         val outputCommitter = new FakeOutputCommitter {
@@ -164,14 +188,16 @@ class OutputCommitCoordinatorSuite
   }
 
   test("Only one of two duplicate commit tasks should commit") {
-    val rdd = sc.parallelize(1 to 10, 10)
-    sc.runJob(rdd, new OutputCommittingFunction)
-    assert(accum.value === 10)
+    val rdd = sc.parallelize(Seq(1), 1)
+    sc.runJob(rdd, new OutputCommittingFunction(tempDirPath),
+      0 until rdd.partitions.size, allowLocal = true)
+    assert(tempDir.list().size === 1)
   }
 
   test("If commit fails, if task is retried it should not be locked, and will succeed.") {
     val rdd = sc.parallelize(Seq(1), 1)
-    sc.runJob(rdd, new FailFirstTimeCommittingFunction)
-    assert(accum.value === 1)
+    sc.runJob(rdd, new FailFirstTimeCommittingFunction(tempDirPath),
+      0 until rdd.partitions.size, allowLocal = true)
+    assert(tempDir.list().size === 1)
   }
 }

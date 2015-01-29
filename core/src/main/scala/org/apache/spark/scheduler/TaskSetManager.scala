@@ -292,7 +292,8 @@ private[spark] class TaskSetManager(
    * an attempt running on this host, in case the host is slow. In addition, the task should meet
    * the given locality constraint.
    */
-  private def dequeueSpeculativeTask(execId: String, host: String, locality: TaskLocality.Value)
+  // Labeled as protected to allow tests to override providing speculative tasks if necessary
+  protected def dequeueSpeculativeTask(execId: String, host: String, locality: TaskLocality.Value)
     : Option[(Int, TaskLocality.Value)] =
   {
     speculatableTasks.retain(index => !successful(index)) // Remove finished tasks from set
@@ -596,7 +597,9 @@ private[spark] class TaskSetManager(
     removeRunningTask(tid)
     info.markFailed()
     val index = info.index
-    copiesRunning(index) -= 1
+    if (copiesRunning(index) >= 1) {
+      copiesRunning(index) -= 1
+    }
     var taskMetrics : TaskMetrics = null
 
     val failureReason = s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid, ${info.host}): " +
@@ -651,6 +654,7 @@ private[spark] class TaskSetManager(
 
       case e: TaskFailedReason =>  // TaskResultLost, TaskKilled, and others
         logWarning(failureReason)
+        return
 
       case e: TaskEndReason =>
         logError("Unknown TaskEndReason: " + e)
@@ -659,17 +663,20 @@ private[spark] class TaskSetManager(
     failedExecutors.getOrElseUpdate(index, new HashMap[String, Long]()).
       put(info.executorId, clock.getTime())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
-    addPendingTask(index)
-    if (!isZombie && state != TaskState.KILLED && !reason.isInstanceOf[TaskCommitDenied]) {
-      assert (null != failureReason)
-      numFailures(index) += 1
-      if (numFailures(index) >= maxTaskFailures) {
-        logError("Task %d in stage %s failed %d times; aborting job".format(
-          index, taskSet.id, maxTaskFailures))
-        abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
-          .format(index, taskSet.id, maxTaskFailures, failureReason))
-        return
+    if (!reason.isInstanceOf[TaskCommitDenied]) {
+      addPendingTask(index)
+      if (!isZombie && state != TaskState.KILLED) {
+        assert (null != failureReason)
+        numFailures(index) += 1
+        if (numFailures(index) >= maxTaskFailures) {
+          logError("Task %d in stage %s failed %d times; aborting job".format(
+            index, taskSet.id, maxTaskFailures))
+          abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
+            .format(index, taskSet.id, maxTaskFailures, failureReason))
+          return
+        }
       }
+
     }
     maybeFinishTaskSet()
   }
