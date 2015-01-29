@@ -266,7 +266,7 @@ private[spark] object BLAS extends Serializable with Logging {
   def gemm(
       alpha: Double,
       A: Matrix,
-      B: DenseMatrix,
+      B: Matrix,
       beta: Double,
       C: DenseMatrix): Unit = {
     require(!C.isTransposed,
@@ -276,9 +276,19 @@ private[spark] object BLAS extends Serializable with Logging {
     } else {
       A match {
         case sparse: SparseMatrix =>
-          gemm(alpha, sparse, B, beta, C)
+          B match {
+            case dB: DenseMatrix => gemm(alpha, sparse, dB, beta, C)
+            case sB: SparseMatrix => gemm(alpha, sparse, sB, beta, C)
+            case _ =>
+              throw new IllegalArgumentException(s"gemm doesn't support matrix type ${B.getClass}.")
+          }
         case dense: DenseMatrix =>
-          gemm(alpha, dense, B, beta, C)
+          B match {
+            case dB: DenseMatrix => gemm(alpha, dense, dB, beta, C)
+            case sB: SparseMatrix => gemm(alpha, dense, sB, beta, C)
+            case _ =>
+              throw new IllegalArgumentException(s"gemm doesn't support matrix type ${B.getClass}.")
+          }
         case _ =>
           throw new IllegalArgumentException(s"gemm doesn't support matrix type ${A.getClass}.")
       }
@@ -309,6 +319,150 @@ private[spark] object BLAS extends Serializable with Logging {
 
     nativeBLAS.dgemm(tAstr, tBstr, A.numRows, B.numCols, A.numCols, alpha, A.values, lda,
       B.values, ldb, beta, C.values, C.numRows)
+  }
+
+  /**
+   * C := alpha * A * B + beta * C
+   * For [[SparseMatrix]] A and [[SparseMatrix]] B. Uses Breeze.
+   */
+  private def gemm(
+      alpha: Double,
+      A: SparseMatrix,
+      B: SparseMatrix,
+      beta: Double,
+      C: DenseMatrix): Unit = {
+    val mA: Int = A.numRows
+    val nB: Int = B.numCols
+    val kA: Int = A.numCols
+    val kB: Int = B.numRows
+
+    require(kA == kB, s"The columns of A don't match the rows of B. A: $kA, B: $kB")
+    require(mA == C.numRows, s"The rows of C don't match the rows of A. C: ${C.numRows}, A: $mA")
+    require(nB == C.numCols,
+      s"The columns of C don't match the columns of B. C: ${C.numCols}, A: $nB")
+
+    // Scale C first if `beta` is not equal to 0.0
+    if (beta != 0.0) {
+      f2jBLAS.dscal(C.values.length, beta, C.values, 1)
+    }
+    // Scale A first if `alfa` is not equal to 1.0
+    if (alpha != 1.0) {
+      f2jBLAS.dscal(A.values.length, alpha, A.values, 1)
+    }
+    val brzA = A.toBreeze
+    val brzB = B.toBreeze
+    val brzC = C.toBreeze
+
+    brzC += brzA * brzB
+  }
+
+  /**
+   * C := alpha * A * B + beta * C
+   * For [[DenseMatrix]] A and [[SparseMatrix]] B.
+   */
+  private def gemm(
+      alpha: Double,
+      A: DenseMatrix,
+      B: SparseMatrix,
+      beta: Double,
+      C: DenseMatrix): Unit = {
+    val mA: Int = A.numRows
+    val nB: Int = B.numCols
+    val kA: Int = A.numCols
+    val kB: Int = B.numRows
+
+    require(kA == kB, s"The columns of A don't match the rows of B. A: $kA, B: $kB")
+    require(mA == C.numRows, s"The rows of C don't match the rows of A. C: ${C.numRows}, A: $mA")
+    require(nB == C.numCols,
+      s"The columns of C don't match the columns of B. C: ${C.numCols}, A: $nB")
+
+    val Bvals = B.values
+    val Brows = if (!B.isTransposed) B.rowIndices else B.colPtrs
+    val Bcols = if (!B.isTransposed) B.colPtrs else B.rowIndices
+
+    if (A.isTransposed){
+      var colCounterForB = 0
+      if (!B.isTransposed){
+        while (colCounterForB < nB) {
+          var rowCounterForA = 0
+          val Cstart = colCounterForB * mA
+          val indEnd = Bcols(colCounterForB + 1)
+          while (rowCounterForA < mA) {
+            var i = Bcols(colCounterForB)
+            val Astart = rowCounterForA * kA
+            var sum = 0.0
+            while (i < indEnd) {
+              sum += Bvals(i) * A.values(Astart + Brows(i))
+              i += 1
+            }
+            val Cindex = Cstart + rowCounterForA
+            C.values(Cindex) = beta * C.values(Cindex) + sum * alpha
+            rowCounterForA += 1
+          }
+          colCounterForB += 1
+        }
+      } else {
+        var rowCounterForA = 0
+        while (rowCounterForA < mA) {
+          var colCounterForA = 0
+          val Astart = rowCounterForA * kA
+          while (colCounterForA < kA) {
+            var i = Brows(colCounterForA)
+            val indEnd = Brows(colCounterForA + 1)
+            while (i < indEnd){
+              val Cindex = Bcols(i) * mA + rowCounterForA
+              C.values(Cindex) += A.values(Astart + colCounterForA) * Bvals(i) * alpha
+              i += 1
+            }
+            colCounterForA += 1
+          }
+          rowCounterForA += 1
+        }
+      }
+    } else {
+      // Scale matrix first if `beta` is not equal to 0.0
+      if (beta != 0.0){
+        nativeBLAS.dscal(C.values.length, beta, C.values, 1)
+      }
+      if (!B.isTransposed) { // Expensive to put the check inside the loop
+        // Loop over the columns of B, pick non-zero row in B, select corresponding column in A,
+        // and update the whole column in C by looping over rows in A.
+        var colCounterForB = 0 // the column to be updated in C
+        while (colCounterForB < nB) {
+          var i = Bcols(colCounterForB)
+          val indEnd = Bcols(colCounterForB + 1)
+          while (i < indEnd) {
+            var rowCounterForA = 0
+            val Bval = Bvals(i)
+            val Cstart = colCounterForB * mA
+            val Astart = mA * Brows(i)
+            while (rowCounterForA < mA){
+              C.values(Cstart + rowCounterForA) += A.values(Astart + rowCounterForA) * Bval * alpha
+              rowCounterForA += 1
+            }
+            i += 1
+          }
+          colCounterForB += 1
+        }
+      } else {
+        var colCounterForA = 0
+        while (colCounterForA < kA) {
+          var rowCounterForA = 0
+          val Astart = mA * colCounterForA
+          val indEnd = Brows(colCounterForA + 1)
+          while (rowCounterForA < mA) {
+            var i = Brows(colCounterForA)
+            while (i < indEnd){
+              val Cindex = Bcols(i) * mA + rowCounterForA
+              C.values(Cindex) += A.values(Astart + rowCounterForA) * Bvals(i) * alpha
+              i += 1
+            }
+            rowCounterForA += 1
+          }
+          colCounterForA += 1
+        }
+      }
+    }
   }
 
   /**

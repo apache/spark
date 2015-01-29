@@ -64,8 +64,8 @@ sealed trait Matrix extends Serializable {
   /** Transpose the Matrix. Returns a new `Matrix` instance sharing the same underlying data. */
   def transpose: Matrix
 
-  /** Convenience method for `Matrix`-`DenseMatrix` multiplication. */
-  def multiply(y: DenseMatrix): DenseMatrix = {
+  /** Convenience method for `Matrix`-`Matrix` multiplication. */
+  def multiply(y: Matrix): DenseMatrix = {
     val C: DenseMatrix = DenseMatrix.zeros(numRows, y.numCols)
     BLAS.gemm(1.0, this, y, 0.0, C)
     C

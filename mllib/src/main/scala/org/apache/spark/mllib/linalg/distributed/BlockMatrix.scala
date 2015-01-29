@@ -214,13 +214,14 @@ class BlockMatrix(
     new BDM[Double](localMat.numRows, localMat.numCols, localMat.toArray)
   }
 
-  /** Adds two block matrices together. */
+  /** Adds two block matrices together. The matrices must have the same size and matching
+    * `rowsPerBlock` and `colsPerBlock` values. */
   def add(other: BlockMatrix): BlockMatrix = {
     if (checkPartitioning(other, OperationNames.add)) {
       val addedBlocks = blocks.join(other.blocks).
         map { case ((blockRowIndex, blockColIndex), (a, b)) =>
           val result = a.toBreeze + b.toBreeze
-          ((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
+          new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
       }
       new BlockMatrix(addedBlocks, numRowBlocks, numColBlocks)
     } else {
@@ -229,10 +230,10 @@ class BlockMatrix(
     }
   }
 
-  /** Left multiplies this `BlockMatrix` to `other`, another `BlockMatrix`. */
+  /** Left multiplies this [[BlockMatrix]] to `other`, another [[BlockMatrix]]. The `colsPerBlock`
+    * of this matrix must equal the `rowsPerBlock` of `other`. */
   def multiply(other: BlockMatrix): BlockMatrix = {
     if (checkPartitioning(other, OperationNames.multiply)) {
-      val otherPartitioner = other.partitioner
       val resultPartitioner = GridPartitioner(rowsPerBlock, other.colsPerBlock,
         math.min(partitioner.numPartitions, other.partitioner.numPartitions))
 
@@ -246,7 +247,7 @@ class BlockMatrix(
 
       val newBlocks = flatA.join(flatB, resultPartitioner).
         map { case ((blockRowIndex, blockColIndex, _), (mat1, mat2)) =>
-          val C = mat1.multiply(mat2.asInstanceOf[DenseMatrix])
+          val C = mat1.multiply(mat2)
           ((blockRowIndex, blockColIndex), C.toBreeze)
       }.reduceByKey(resultPartitioner, (a, b) => a + b).mapValues(Matrices.fromBreeze)
 
@@ -257,7 +258,7 @@ class BlockMatrix(
     }
   }
 
-  /** Checks if the partitioners match for operations like add and multiply */
+  /** Checks if the partitioning of `other` is valid for operations like add and multiply. */
   private def checkPartitioning(other: BlockMatrix, operation: Int): Boolean = {
     operation match {
       case OperationNames.add =>
