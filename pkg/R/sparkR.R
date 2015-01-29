@@ -11,21 +11,42 @@ sparkR.onLoad <- function(libname, pkgname) {
   .sparkREnv$assemblyJarPath <- assemblyJarPath
 }
 
-#' Stop this Spark context
-#' Also terminates the backend this R session is connected to
-sparkR.stop <- function(sparkREnv) {
-  if (exists(".sparkRjsc", envir = .sparkREnv)) {
-    sc <- get(".sparkRjsc", envir = .sparkREnv)
+# Utility function that returns TRUE if we have an active connection to the
+# backend and FALSE otherwise
+connExists <- function(env) {
+  tryCatch({
+    exists(".sparkRCon", envir = env) && isOpen(env[[".sparkRCon"]])
+  }, error = function(err) {
+    return(FALSE)
+  })
+}
+
+# Stop the Spark context.
+# Also terminates the backend this R session is connected to
+sparkR.stop <- function(env) {
+  cat("Stopping SparkR\n")
+
+  if (!connExists(env)) {
+    # When the workspace is saved in R, the connections are closed
+    # *before* the finalizer is run. In these cases, we reconnect
+    # to the backend, so we can shut it down.
+    connectBackend("localhost", .sparkREnv$sparkRBackendPort)
+  }
+
+  if (exists(".sparkRjsc", envir = env)) {
+    sc <- get(".sparkRjsc", envir = env)
     callJMethod(sc, "stop")
   }
 
-  if (exists(".sparkRCon", envir = .sparkREnv)) {
-    callJStatic("SparkRHandler", "stopBackend")
-    # Also close the connection and remove it from our env
-    conn <- get(".sparkRCon", .sparkREnv)
-    close(conn)
-    rm(".sparkRCon", envir = .sparkREnv)
-  }
+  callJStatic("SparkRHandler", "stopBackend")
+  # Also close the connection and remove it from our env
+  conn <- get(".sparkRCon", env)
+  close(conn)
+  rm(".sparkRCon", envir = env)
+
+  # Finally, sleep for 1 sec to let backend finish exiting.
+  # Without this we get port conflicts in RStudio when we try to 'Restart R'.
+  Sys.sleep(1)
 }
 
 #' Initialize a new Spark Context.
@@ -79,7 +100,8 @@ sparkR.init <- function(
                 args = as.character(sparkRBackendPort),
                 javaOpts = paste("-Xmx", sparkMem, sep = ""))
   Sys.sleep(2) # Wait for backend to come up
-  connectBackend("localhost", 12345) # Connect to it
+  .sparkREnv$sparkRBackendPort <- sparkRBackendPort
+  connectBackend("localhost", sparkRBackendPort) # Connect to it
 
   if (nchar(sparkHome) != 0) {
     sparkHome <- normalizePath(sparkHome)
