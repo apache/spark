@@ -108,6 +108,9 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
       .orElse(sparkProperties.get("spark.driver.memory"))
       .orElse(env.get("SPARK_DRIVER_MEMORY"))
       .orNull
+    driverCores = Option(driverCores)
+      .orElse(sparkProperties.get("spark.driver.cores"))
+      .orNull
     executorMemory = Option(executorMemory)
       .orElse(sparkProperties.get("spark.executor.memory"))
       .orElse(env.get("SPARK_EXECUTOR_MEMORY"))
@@ -148,6 +151,11 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
 
     // Global defaults. These should be keep to minimum to avoid confusing behavior.
     master = Option(master).getOrElse("local[*]")
+
+    // In YARN mode, app name can be set via SPARK_YARN_APP_NAME (see SPARK-5222)
+    if (master.startsWith("yarn")) {
+      name = Option(name).orElse(env.get("SPARK_YARN_APP_NAME")).orNull
+    }
 
     // Set name from main class if not given
     name = Option(name).orElse(Option(mainClass)).orNull
@@ -401,11 +409,14 @@ private[spark] class SparkSubmitArguments(args: Seq[String], env: Map[String, St
         |  --total-executor-cores NUM  Total cores for all executors.
         |
         | YARN-only:
+        |  --driver-cores NUM          Number of cores used by the driver, only in cluster mode
+        |                              (Default: 1).
         |  --executor-cores NUM        Number of cores per executor (Default: 1).
         |  --queue QUEUE_NAME          The YARN queue to submit to (Default: "default").
         |  --num-executors NUM         Number of executors to launch (Default: 2).
         |  --archives ARCHIVES         Comma separated list of archives to be extracted into the
-        |                              working directory of each executor.""".stripMargin
+        |                              working directory of each executor.
+      """.stripMargin
     )
     SparkSubmit.exitFn()
   }

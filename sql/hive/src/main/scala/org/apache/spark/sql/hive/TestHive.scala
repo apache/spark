@@ -34,8 +34,9 @@ import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.util.Utils
 import org.apache.spark.sql.catalyst.analysis._
-import org.apache.spark.sql.catalyst.plans.logical.{CacheTableCommand, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution.CacheTableCommand
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.SQLConf
 import org.apache.spark.sql.hive.execution.HiveNativeCommand
@@ -98,11 +99,13 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   override def runSqlHive(sql: String): Seq[String] = super.runSqlHive(rewritePaths(sql))
 
   override def executePlan(plan: LogicalPlan): this.QueryExecution =
-    new this.QueryExecution { val logical = plan }
+    new this.QueryExecution(plan)
 
   /** Fewer partitions to speed up testing. */
-  override private[spark] def numShufflePartitions: Int =
-    getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+  protected[sql] override lazy val conf: SQLConf = new SQLConf {
+    override def numShufflePartitions: Int = getConf(SQLConf.SHUFFLE_PARTITIONS, "5").toInt
+    override def dialect: String = getConf(SQLConf.DIALECT, "hiveql")
+  }
 
   /**
    * Returns the value of specified environmental variable as a [[java.io.File]] after checking
@@ -147,8 +150,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
 
   val describedTable = "DESCRIBE (\\w+)".r
 
-  protected[hive] class HiveQLQueryExecution(hql: String) extends this.QueryExecution {
-    lazy val logical = HiveQl.parseSql(hql)
+  protected[hive] class HiveQLQueryExecution(hql: String)
+    extends this.QueryExecution(HiveQl.parseSql(hql)) {
     def hiveExec() = runSqlHive(hql)
     override def toString = hql + "\n" + super.toString
   }
@@ -156,7 +159,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   /**
    * Override QueryExecution with special debug workflow.
    */
-  abstract class QueryExecution extends super.QueryExecution {
+  class QueryExecution(logicalPlan: LogicalPlan)
+    extends super.QueryExecution(logicalPlan) {
     override lazy val analyzed = {
       val describedTables = logical match {
         case HiveNativeCommand(describedTable(tbl)) => tbl :: Nil
@@ -167,7 +171,7 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
       // Make sure any test tables referenced are loaded.
       val referencedTables =
         describedTables ++
-        logical.collect { case UnresolvedRelation(databaseName, name, _) => name }
+        logical.collect { case UnresolvedRelation(tableIdent, _) => tableIdent.last }
       val referencedTestTables = referencedTables.filter(testTables.contains)
       logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)
@@ -392,8 +396,9 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
         log.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
       }
 
-      clearCache()
+      cacheManager.clearCache()
       loadedTables.clear()
+      catalog.cachedDataSourceTables.invalidateAll()
       catalog.client.getAllTables("default").foreach { t =>
         logDebug(s"Deleting table $t")
         val table = catalog.client.getTable("default", t)

@@ -1333,9 +1333,9 @@ import  org.apache.spark.sql._
 <div data-lang="java" markdown="1">
 
 All data types of Spark SQL are located in the package of
-`org.apache.spark.sql.api.java`. To access or create a data type,
+`org.apache.spark.sql.types`. To access or create a data type,
 please use factory methods provided in
-`org.apache.spark.sql.api.java.DataType`.
+`org.apache.spark.sql.types.DataTypes`.
 
 <table class="table">
 <tr>
@@ -1346,109 +1346,110 @@ please use factory methods provided in
   <td> <b>ByteType</b> </td>
   <td> byte or Byte </td>
   <td>
-  DataType.ByteType
+  DataTypes.ByteType
   </td>
 </tr>
 <tr>
   <td> <b>ShortType</b> </td>
   <td> short or Short </td>
   <td>
-  DataType.ShortType
+  DataTypes.ShortType
   </td>
 </tr>
 <tr>
   <td> <b>IntegerType</b> </td>
   <td> int or Integer </td>
   <td>
-  DataType.IntegerType
+  DataTypes.IntegerType
   </td>
 </tr>
 <tr>
   <td> <b>LongType</b> </td>
   <td> long or Long </td>
   <td>
-  DataType.LongType
+  DataTypes.LongType
   </td>
 </tr>
 <tr>
   <td> <b>FloatType</b> </td>
   <td> float or Float </td>
   <td>
-  DataType.FloatType
+  DataTypes.FloatType
   </td>
 </tr>
 <tr>
   <td> <b>DoubleType</b> </td>
   <td> double or Double </td>
   <td>
-  DataType.DoubleType
+  DataTypes.DoubleType
   </td>
 </tr>
 <tr>
   <td> <b>DecimalType</b> </td>
   <td> java.math.BigDecimal </td>
   <td>
-  DataType.DecimalType
+  DataTypes.createDecimalType()<br />
+  DataTypes.createDecimalType(<i>precision</i>, <i>scale</i>).
   </td>
 </tr>
 <tr>
   <td> <b>StringType</b> </td>
   <td> String </td>
   <td>
-  DataType.StringType
+  DataTypes.StringType
   </td>
 </tr>
 <tr>
   <td> <b>BinaryType</b> </td>
   <td> byte[] </td>
   <td>
-  DataType.BinaryType
+  DataTypes.BinaryType
   </td>
 </tr>
 <tr>
   <td> <b>BooleanType</b> </td>
   <td> boolean or Boolean </td>
   <td>
-  DataType.BooleanType
+  DataTypes.BooleanType
   </td>
 </tr>
 <tr>
   <td> <b>TimestampType</b> </td>
   <td> java.sql.Timestamp </td>
   <td>
-  DataType.TimestampType
+  DataTypes.TimestampType
   </td>
 </tr>
 <tr>
   <td> <b>DateType</b> </td>
   <td> java.sql.Date </td>
   <td>
-  DataType.DateType
+  DataTypes.DateType
   </td>
 </tr>
 <tr>
   <td> <b>ArrayType</b> </td>
   <td> java.util.List </td>
   <td>
-  DataType.createArrayType(<i>elementType</i>)<br />
+  DataTypes.createArrayType(<i>elementType</i>)<br />
   <b>Note:</b> The value of <i>containsNull</i> will be <i>true</i><br />
-  DataType.createArrayType(<i>elementType</i>, <i>containsNull</i>).
+  DataTypes.createArrayType(<i>elementType</i>, <i>containsNull</i>).
   </td>
 </tr>
 <tr>
   <td> <b>MapType</b> </td>
   <td> java.util.Map </td>
   <td>
-  DataType.createMapType(<i>keyType</i>, <i>valueType</i>)<br />
+  DataTypes.createMapType(<i>keyType</i>, <i>valueType</i>)<br />
   <b>Note:</b> The value of <i>valueContainsNull</i> will be <i>true</i>.<br />
-  DataType.createMapType(<i>keyType</i>, <i>valueType</i>, <i>valueContainsNull</i>)<br />
+  DataTypes.createMapType(<i>keyType</i>, <i>valueType</i>, <i>valueContainsNull</i>)<br />
   </td>
 </tr>
 <tr>
   <td> <b>StructType</b> </td>
   <td> org.apache.spark.sql.api.java.Row </td>
   <td>
-  DataType.createStructType(<i>fields</i>)<br />
+  DataTypes.createStructType(<i>fields</i>)<br />
   <b>Note:</b> <i>fields</i> is a List or an array of StructFields.
   Also, two fields with the same name are not allowed.
   </td>
@@ -1458,7 +1459,7 @@ please use factory methods provided in
   <td> The value type in Java of the data type of this field
   (For example, int for a StructField with the data type IntegerType) </td>
   <td>
-  DataType.createStructField(<i>name</i>, <i>dataType</i>, <i>nullable</i>)
+  DataTypes.createStructField(<i>name</i>, <i>dataType</i>, <i>nullable</i>)
   </td>
 </tr>
 </table>

@@ -36,7 +36,7 @@ import parquet.schema.Type.Repetition
 
 import org.apache.spark.Logging
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
-import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.types._
 
 // Implicits
 import scala.collection.JavaConversions._
@@ -80,7 +80,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
 
   /**
    * Converts a given Parquet `Type` into the corresponding
-   * [[org.apache.spark.sql.catalyst.types.DataType]].
+   * [[org.apache.spark.sql.types.DataType]].
    *
    * We apply the following conversion rules:
    * <ul>
@@ -191,7 +191,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
   }
 
   /**
-   * For a given Catalyst [[org.apache.spark.sql.catalyst.types.DataType]] return
+   * For a given Catalyst [[org.apache.spark.sql.types.DataType]] return
    * the name of the corresponding Parquet primitive type or None if the given type
    * is not primitive.
    *
@@ -231,21 +231,21 @@ private[parquet] object ParquetTypesConverter extends Logging {
   }
 
   /**
-   * Converts a given Catalyst [[org.apache.spark.sql.catalyst.types.DataType]] into
+   * Converts a given Catalyst [[org.apache.spark.sql.types.DataType]] into
    * the corresponding Parquet `Type`.
    *
    * The conversion follows the rules below:
    * <ul>
    *   <li> Primitive types are converted into Parquet's primitive types.</li>
-   *   <li> [[org.apache.spark.sql.catalyst.types.StructType]]s are converted
+   *   <li> [[org.apache.spark.sql.types.StructType]]s are converted
    *        into Parquet's `GroupType` with the corresponding field types.</li>
-   *   <li> [[org.apache.spark.sql.catalyst.types.ArrayType]]s are converted
+   *   <li> [[org.apache.spark.sql.types.ArrayType]]s are converted
    *        into a 2-level nested group, where the outer group has the inner
    *        group as sole field. The inner group has name `values` and
    *        repetition level `REPEATED` and has the element type of
    *        the array as schema. We use Parquet's `ConversionPatterns` for this
    *        purpose.</li>
-   *   <li> [[org.apache.spark.sql.catalyst.types.MapType]]s are converted
+   *   <li> [[org.apache.spark.sql.types.MapType]]s are converted
    *        into a nested (2-level) Parquet `GroupType` with two fields: a key
    *        type and a value type. The nested group has repetition level
    *        `REPEATED` and name `map`. We use Parquet's `ConversionPatterns`
@@ -319,7 +319,7 @@ private[parquet] object ParquetTypesConverter extends Logging {
           val fields = structFields.map {
             field => fromDataType(field.dataType, field.name, field.nullable, inArray = false)
           }
-          new ParquetGroupType(repetition, name, fields)
+          new ParquetGroupType(repetition, name, fields.toSeq)
         }
         case MapType(keyType, valueType, valueContainsNull) => {
           val parquetKeyType =

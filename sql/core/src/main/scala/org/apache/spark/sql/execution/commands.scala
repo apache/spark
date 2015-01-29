@@ -20,11 +20,11 @@ package org.apache.spark.sql.execution
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, SQLConf, SQLContext}
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Row, Attribute}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.{SQLConf, SQLContext}
 
 /**
  * A logical command that is executed for its side-effects.  `RunnableCommand`s are
@@ -94,7 +94,7 @@ case class SetCommand(
       logWarning(
         s"Property ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS} is deprecated, " +
           s"showing ${SQLConf.SHUFFLE_PARTITIONS} instead.")
-      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${sqlContext.numShufflePartitions}"))
+      Seq(Row(s"${SQLConf.SHUFFLE_PARTITIONS}=${sqlContext.conf.numShufflePartitions}"))
 
     // Queries a single property.
     case Some((key, None)) =>
@@ -113,7 +113,7 @@ case class SetCommand(
 @DeveloperApi
 case class ExplainCommand(
     logicalPlan: LogicalPlan,
-    override val output: Seq[Attribute], extended: Boolean) extends RunnableCommand {
+    override val output: Seq[Attribute], extended: Boolean = false) extends RunnableCommand {
 
   // Run through the optimizer to generate the physical plan.
   override def run(sqlContext: SQLContext) = try {
@@ -137,14 +137,14 @@ case class CacheTableCommand(
     isLazy: Boolean) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    import sqlContext._
-
-    plan.foreach(_.registerTempTable(tableName))
-    cacheTable(tableName)
+    plan.foreach { logicalPlan =>
+      sqlContext.registerRDDAsTable(new DataFrame(sqlContext, logicalPlan), tableName)
+    }
+    sqlContext.cacheTable(tableName)
 
     if (!isLazy) {
       // Performs eager caching
-      table(tableName).count()
+      sqlContext.table(tableName).count()
     }
 
     Seq.empty[Row]
@@ -161,7 +161,7 @@ case class CacheTableCommand(
 case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    sqlContext.table(tableName).unpersist()
+    sqlContext.table(tableName).unpersist(blocking = false)
     Seq.empty[Row]
   }
 
@@ -177,7 +177,6 @@ case class DescribeCommand(
     override val output: Seq[Attribute]) extends RunnableCommand {
 
   override def run(sqlContext: SQLContext) = {
-    Row("# Registered as a temporary table", null, null) +:
-      child.output.map(field => Row(field.name, field.dataType.toString, null))
+    child.output.map(field => Row(field.name, field.dataType.toString, null))
   }
 }

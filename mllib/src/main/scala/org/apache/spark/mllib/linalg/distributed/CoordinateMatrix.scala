@@ -21,8 +21,7 @@ import breeze.linalg.{DenseMatrix => BDM}
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.linalg.{Matrix, SparseMatrix, Vectors}
 
 /**
  * :: Experimental ::
@@ -69,6 +68,11 @@ class CoordinateMatrix(
     nRows
   }
 
+  /** Transposes this CoordinateMatrix. */
+  def transpose(): CoordinateMatrix = {
+    new CoordinateMatrix(entries.map(x => MatrixEntry(x.j, x.i, x.value)), numCols(), numRows())
+  }
+
   /** Converts to IndexedRowMatrix. The number of columns must be within the integer range. */
   def toIndexedRowMatrix(): IndexedRowMatrix = {
     val nl = numCols()
@@ -91,6 +95,46 @@ class CoordinateMatrix(
    */
   def toRowMatrix(): RowMatrix = {
     toIndexedRowMatrix().toRowMatrix()
+  }
+
+  /** Converts to BlockMatrix. Creates blocks of [[SparseMatrix]] with size 1024 x 1024. */
+  def toBlockMatrix(): BlockMatrix = {
+    toBlockMatrix(1024, 1024)
+  }
+
+  /**
+   * Converts to BlockMatrix. Creates blocks of [[SparseMatrix]].
+   * @param rowsPerBlock The number of rows of each block. The blocks at the bottom edge may have
+   *                     a smaller value. Must be an integer value greater than 0.
+   * @param colsPerBlock The number of columns of each block. The blocks at the right edge may have
+   *                     a smaller value. Must be an integer value greater than 0.
+   * @return a [[BlockMatrix]]
+   */
+  def toBlockMatrix(rowsPerBlock: Int, colsPerBlock: Int): BlockMatrix = {
+    require(rowsPerBlock > 0,
+      s"rowsPerBlock needs to be greater than 0. rowsPerBlock: $rowsPerBlock")
+    require(colsPerBlock > 0,
+      s"colsPerBlock needs to be greater than 0. colsPerBlock: $colsPerBlock")
+    val m = numRows()
+    val n = numCols()
+    val numRowBlocks = math.ceil(m.toDouble / rowsPerBlock).toInt
+    val numColBlocks = math.ceil(n.toDouble / colsPerBlock).toInt
+    val partitioner = GridPartitioner(numRowBlocks, numColBlocks, entries.partitions.length)
+
+    val blocks: RDD[((Int, Int), Matrix)] = entries.map { entry =>
+      val blockRowIndex = (entry.i / rowsPerBlock).toInt
+      val blockColIndex = (entry.j / colsPerBlock).toInt
+
+      val rowId = entry.i % rowsPerBlock
+      val colId = entry.j % colsPerBlock
+
+      ((blockRowIndex, blockColIndex), (rowId.toInt, colId.toInt, entry.value))
+    }.groupByKey(partitioner).map { case ((blockRowIndex, blockColIndex), entry) =>
+      val effRows = math.min(m - blockRowIndex.toLong * rowsPerBlock, rowsPerBlock).toInt
+      val effCols = math.min(n - blockColIndex.toLong * colsPerBlock, colsPerBlock).toInt
+      ((blockRowIndex, blockColIndex), SparseMatrix.fromCOO(effRows, effCols, entry))
+    }
+    new BlockMatrix(blocks, rowsPerBlock, colsPerBlock, m, n)
   }
 
   /** Determines the size by computing the max row/column index. */

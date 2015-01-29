@@ -140,6 +140,7 @@ private class RandomForest (
     logDebug("maxBins = " + metadata.maxBins)
     logDebug("featureSubsetStrategy = " + featureSubsetStrategy)
     logDebug("numFeaturesPerNode = " + metadata.numFeaturesPerNode)
+    logDebug("subsamplingRate = " + strategy.subsamplingRate)
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
@@ -155,19 +156,12 @@ private class RandomForest (
     // Cache input RDD for speedup during multiple passes.
     val treeInput = TreePoint.convertToTreeRDD(retaggedInput, bins, metadata)
 
-    val (subsample, withReplacement) = {
-      // TODO: Have a stricter check for RF in the strategy
-      val isRandomForest = numTrees > 1
-      if (isRandomForest) {
-        (1.0, true)
-      } else {
-        (strategy.subsamplingRate, false)
-      }
-    }
+    val withReplacement = if (numTrees > 1) true else false
 
     val baggedInput
-      = BaggedPoint.convertToBaggedRDD(treeInput, subsample, numTrees, withReplacement, seed)
-        .persist(StorageLevel.MEMORY_AND_DISK)
+      = BaggedPoint.convertToBaggedRDD(treeInput,
+          strategy.subsamplingRate, numTrees,
+          withReplacement, seed).persist(StorageLevel.MEMORY_AND_DISK)
 
     // depth of the decision tree
     val maxDepth = strategy.maxDepth

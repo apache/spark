@@ -71,7 +71,8 @@ private[spark] class CoarseGrainedExecutorBackend(
         val ser = env.closureSerializer.newInstance()
         val taskDesc = ser.deserialize[TaskDescription](data.value)
         logInfo("Got assigned task " + taskDesc.taskId)
-        executor.launchTask(this, taskDesc.taskId, taskDesc.name, taskDesc.serializedTask)
+        executor.launchTask(this, taskId = taskDesc.taskId, attemptNumber = taskDesc.attemptNumber,
+          taskDesc.name, taskDesc.serializedTask)
       }
 
     case KillTask(taskId, _, interruptThread) =>
@@ -83,8 +84,12 @@ private[spark] class CoarseGrainedExecutorBackend(
       }
 
     case x: DisassociatedEvent =>
-      logError(s"Driver $x disassociated! Shutting down.")
-      System.exit(1)
+      if (x.remoteAddress == driver.anchorPath.address) {
+        logError(s"Driver $x disassociated! Shutting down.")
+        System.exit(1)
+      } else {
+        logWarning(s"Received irrelevant DisassociatedEvent $x")
+      }
 
     case StopExecutor =>
       logInfo("Driver commanded a shutdown")
