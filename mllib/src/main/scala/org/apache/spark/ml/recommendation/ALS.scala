@@ -219,9 +219,9 @@ private[recommendation] object ALS extends Logging {
 
   /** Rating class for better code readability. */
   private[recommendation]
-  case class Rating[@specialized(Int, Long) UserType, @specialized(Int, Long) ItemType](
-      user: UserType,
-      item: ItemType, rating: Float)
+  case class Rating[@specialized(Int, Long) User, @specialized(Int, Long) Item](
+      user: User,
+      item: Item, rating: Float)
 
   /** Cholesky solver for least square problems. */
   private[recommendation] class CholeskySolver {
@@ -333,15 +333,15 @@ private[recommendation] object ALS extends Logging {
   /**
    * Implementation of the ALS algorithm.
    */
-  private def train[@specialized(Int, Long) UserType, @specialized(Int, Long) ItemType](
-      ratings: RDD[Rating[UserType, ItemType]],
+  private def train[@specialized(Int, Long) User, @specialized(Int, Long) Item](
+      ratings: RDD[Rating[User, Item]],
       rank: Int = 10,
       numUserBlocks: Int = 10,
       numItemBlocks: Int = 10,
       maxIter: Int = 10,
       regParam: Double = 1.0,
       implicitPrefs: Boolean = false,
-      alpha: Double = 1.0): (RDD[(UserType, Array[Float])], RDD[(ItemType, Array[Float])]) = {
+      alpha: Double = 1.0): (RDD[(User, Array[Float])], RDD[(Item, Array[Float])]) = {
     val userPart = new HashPartitioner(numUserBlocks)
     val itemPart = new HashPartitioner(numItemBlocks)
     val userLocalIndexEncoder = new LocalIndexEncoder(userPart.numPartitions)
@@ -542,10 +542,10 @@ private[recommendation] object ALS extends Logging {
    *
    * @return an RDD of rating blocks in the form of ((srcBlockId, dstBlockId), ratingBlock)
    */
-  private def partitionRatings[@specialized(Int, Long) UserType, @specialized(Int, Long) ItemType](
-      ratings: RDD[Rating[UserType, ItemType]],
+  private def partitionRatings[@specialized(Int, Long) User, @specialized(Int, Long) Item](
+      ratings: RDD[Rating[User, Item]],
       srcPart: Partitioner,
-      dstPart: Partitioner): RDD[((Int, Int), RatingBlock[UserType, ItemType])] = {
+      dstPart: Partitioner): RDD[((Int, Int), RatingBlock[User, Item])] = {
 
      /* The implementation produces the same result as the following but generates less objects.
 
@@ -559,7 +559,7 @@ private[recommendation] object ALS extends Logging {
 
     val numPartitions = srcPart.numPartitions * dstPart.numPartitions
     ratings.mapPartitions { iter =>
-      val builders = Array.fill(numPartitions)(new RatingBlockBuilder[UserType, ItemType])
+      val builders = Array.fill(numPartitions)(new RatingBlockBuilder[User, Item])
       iter.flatMap { r =>
         val srcBlockId = srcPart.getPartition(r.user)
         val dstBlockId = dstPart.getPartition(r.item)
@@ -580,7 +580,7 @@ private[recommendation] object ALS extends Logging {
         }
       }
     }.groupByKey().mapValues { blocks =>
-      val builder = new RatingBlockBuilder[UserType, ItemType]
+      val builder = new RatingBlockBuilder[User, Item]
       blocks.foreach(builder.merge)
       builder.build()
     }.setName("ratingBlocks")
