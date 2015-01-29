@@ -2136,9 +2136,9 @@ class DataFrame(object):
 
     def __getattr__(self, name):
         """ Return the column by given name """
-        if isinstance(name, basestring):
-            return Column(self._jdf.apply(name))
-        raise AttributeError
+        if name.startswith("__"):
+            raise AttributeError(name)
+        return Column(self._jdf.apply(name))
 
     def alias(self, name):
         """ Alias the current DataFrame """
