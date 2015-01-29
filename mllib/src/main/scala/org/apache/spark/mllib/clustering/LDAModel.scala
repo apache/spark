@@ -17,9 +17,10 @@
 
 package org.apache.spark.mllib.clustering
 
-import breeze.linalg.{DenseMatrix => BDM, normalize}
+import breeze.linalg.{DenseMatrix => BDM, normalize, sum => brzSum}
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.graphx.{VertexId, EdgeContext, Graph}
 import org.apache.spark.mllib.linalg.{Vectors, Vector, Matrices, Matrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.BoundedPriorityQueue
@@ -62,7 +63,7 @@ abstract class LDAModel private[clustering] {
    *          as (term weight in topic, term index).
    *          Each topic's terms are sorted in order of decreasing weight.
    */
-  def describeTopics(maxTermsPerTopic: Int): Array[Array[(Double, String)]]
+  def describeTopics(maxTermsPerTopic: Int): Array[Array[(Double, Int)]]
 
   /**
    * Return the topics described by weighted terms.
@@ -73,7 +74,43 @@ abstract class LDAModel private[clustering] {
    *          as (term weight in topic, term index).
    *          Each topic's terms are sorted in order of decreasing weight.
    */
-  def describeTopics(): Array[Array[(Double, String)]] = describeTopics(vocabSize)
+  def describeTopics(): Array[Array[(Double, Int)]] = describeTopics(vocabSize)
+
+  /* TODO (once LDA can be trained with Strings or given a dictionary)
+   * Return the topics described by weighted terms.
+   *
+   * This is similar to [[describeTopics()]] but returns String values for terms.
+   * If this model was trained using Strings or was given a dictionary, then this method returns
+   * terms as text.  Otherwise, this method returns terms as term indices.
+   *
+   * This limits the number of terms per topic.
+   * This is approximate; it may not return exactly the top-weighted terms for each topic.
+   * To get a more precise set of top terms, increase maxTermsPerTopic.
+   *
+   * @param maxTermsPerTopic  Maximum number of terms to collect for each topic.
+   * @return  Array over topics, where each element is a set of top terms represented
+   *          as (term weight in topic, term), where "term" is either the actual term text
+   *          (if available) or the term index.
+   *          Each topic's terms are sorted in order of decreasing weight.
+   */
+  //def describeTopicsAsStrings(maxTermsPerTopic: Int): Array[Array[(Double, String)]]
+
+  /* TODO (once LDA can be trained with Strings or given a dictionary)
+   * Return the topics described by weighted terms.
+   *
+   * This is similar to [[describeTopics()]] but returns String values for terms.
+   * If this model was trained using Strings or was given a dictionary, then this method returns
+   * terms as text.  Otherwise, this method returns terms as term indices.
+   *
+   * WARNING: If vocabSize and k are large, this can return a large object!
+   *
+   * @return  Array over topics, where each element is a set of top terms represented
+   *          as (term weight in topic, term), where "term" is either the actual term text
+   *          (if available) or the term index.
+   *          Each topic's terms are sorted in order of decreasing weight.
+   */
+  //def describeTopicsAsStrings(): Array[Array[(Double, String)]] =
+  //  describeTopicsAsStrings(vocabSize)
 
   /* TODO
    * Compute the log likelihood of the observed tokens, given the current parameter estimates:
@@ -131,15 +168,12 @@ class LocalLDAModel private[clustering] (
 
   override def topicsMatrix: Matrix = topics
 
-  override def describeTopics(maxTermsPerTopic: Int): Array[Array[(Double, String)]] = {
+  override def describeTopics(maxTermsPerTopic: Int): Array[Array[(Double, Int)]] = {
     val brzTopics = topics.toBreeze.toDenseMatrix
-    val topicSummary = Range(0, k).map { topicIndex =>
+    Range(0, k).map { topicIndex =>
       val topic = normalize(brzTopics(::, topicIndex), 1.0)
       topic.toArray.zipWithIndex.sortBy(-_._1).take(maxTermsPerTopic)
     }.toArray
-    topicSummary.map { topic =>
-      topic.map { case (weight, term) => (weight, term.toString) }
-    }
   }
 
   // TODO
@@ -162,16 +196,28 @@ class LocalLDAModel private[clustering] (
  *       API changes.
  */
 @DeveloperApi
-class DistributedLDAModel private[clustering] (
-    private val state: LDA.LearningState) extends LDAModel {
+class DistributedLDAModel private (
+    private val graph: Graph[LDA.TopicCounts, LDA.TokenCount],
+    private val globalTopicTotals: LDA.TopicCounts,
+    val k: Int,
+    val vocabSize: Int,
+    private val topicSmoothing: Double,
+    private val termSmoothing: Double,
+    private[spark] val iterationTimes: Array[Double]) extends LDAModel {
 
   import LDA._
 
+  private[clustering] def this(state: LDA.LearningState, iterationTimes: Array[Double]) = {
+    this(state.graph, state.globalTopicTotals, state.k, state.vocabSize, state.topicSmoothing,
+      state.termSmoothing, iterationTimes)
+  }
+
+  /**
+   * Convert model to a local model.
+   * The local model stores the inferred topics but not the topic distributions for training
+   * documents.
+   */
   def toLocal: LocalLDAModel = new LocalLDAModel(topicsMatrix)
-
-  override def k: Int = state.k
-
-  override def vocabSize: Int = state.vocabSize
 
   /**
    * Inferred topics, where each topic is represented by a distribution over terms.
@@ -183,7 +229,7 @@ class DistributedLDAModel private[clustering] (
   override lazy val topicsMatrix: Matrix = {
     // Collect row-major topics
     val termTopicCounts: Array[(Int, TopicCounts)] =
-      state.graph.vertices.filter(_._1 < 0).map { case (termIndex, cnts) =>
+      graph.vertices.filter(_._1 < 0).map { case (termIndex, cnts) =>
         (index2term(termIndex), cnts)
       }.collect()
     // Convert to Matrix
@@ -198,12 +244,12 @@ class DistributedLDAModel private[clustering] (
     Matrices.fromBreeze(brzTopics)
   }
 
-  override def describeTopics(maxTermsPerTopic: Int): Array[Array[(Double, String)]] = {
+  override def describeTopics(maxTermsPerTopic: Int): Array[Array[(Double, Int)]] = {
     val numTopics = k
     // Note: N_k is not needed to find the top terms, but it is needed to normalize weights
     //       to a distribution over terms.
-    val N_k: TopicCounts = state.globalTopicTotals()
-    val topicSummary = state.graph.vertices.filter(isTermVertex)
+    val N_k: TopicCounts = globalTopicTotals
+    graph.vertices.filter(isTermVertex)
       .mapPartitions { termVertices =>
       // For this partition, collect the most common terms for each topic in queues:
       //  queues(topic) = queue of (term weight, term index).
@@ -221,16 +267,13 @@ class DistributedLDAModel private[clustering] (
       q1.zip(q2).foreach { case (a, b) => a ++= b}
       q1
     }.map(_.toArray.sortBy(-_._1))
-    topicSummary.map { topic =>
-      topic.map { case (weight, term) => (weight, term.toString) }
-    }
   }
 
   // TODO
   // override def logLikelihood(documents: RDD[Document]): Double = ???
 
   /**
-   * Compute the log likelihood of the observed tokens in the training set,
+   * Log likelihood of the observed tokens in the training set,
    * given the current parameter estimates:
    *  log P(docs | topics, topic distributions for docs, alpha, eta)
    *
@@ -239,13 +282,54 @@ class DistributedLDAModel private[clustering] (
    *  - Even with [[logPrior]], this is NOT the same as the data log likelihood given the
    *    hyperparameters.
    */
-  def logLikelihood = state.logLikelihood
+  lazy val logLikelihood: Double = {
+    val eta = termSmoothing
+    val alpha = topicSmoothing
+    assert(eta > 1.0)
+    assert(alpha > 1.0)
+    val N_k = globalTopicTotals
+    val smoothed_N_k: TopicCounts = N_k + (vocabSize * (eta - 1.0))
+    // Edges: Compute token log probability from phi_{wk}, theta_{kj}.
+    val sendMsg: EdgeContext[TopicCounts, TokenCount, Double] => Unit = (edgeContext) => {
+      val N_wj = edgeContext.attr
+      val smoothed_N_wk: TopicCounts = edgeContext.dstAttr + (eta - 1.0)
+      val smoothed_N_kj: TopicCounts = edgeContext.srcAttr + (alpha - 1.0)
+      val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
+      val theta_kj: TopicCounts = normalize(smoothed_N_kj, 1.0)
+      val tokenLogLikelihood = N_wj * math.log(phi_wk.dot(theta_kj))
+      edgeContext.sendToDst(tokenLogLikelihood)
+    }
+    graph.aggregateMessages[Double](sendMsg, _ + _)
+      .map(_._2).fold(0.0)(_ + _)
+  }
 
   /**
-   * Compute the log probability of the current parameter estimate, under the prior:
+   * Log probability of the current parameter estimate:
    *  log P(topics, topic distributions for docs | alpha, eta)
    */
-  def logPrior = state.logPrior
+  lazy val logPrior: Double = {
+    val eta = termSmoothing
+    val alpha = topicSmoothing
+    // Term vertices: Compute phi_{wk}.  Use to compute prior log probability.
+    // Doc vertex: Compute theta_{kj}.  Use to compute prior log probability.
+    val N_k = globalTopicTotals
+    val smoothed_N_k: TopicCounts = N_k + (vocabSize * (eta - 1.0))
+    val seqOp: (Double, (VertexId, TopicCounts)) => Double = {
+      case (sumPrior: Double, vertex: (VertexId, TopicCounts)) =>
+        if (isTermVertex(vertex)) {
+          val N_wk = vertex._2
+          val smoothed_N_wk: TopicCounts = N_wk + (eta - 1.0)
+          val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
+          (eta - 1.0) * brzSum(phi_wk.map(math.log))
+        } else {
+          val N_kj = vertex._2
+          val smoothed_N_kj: TopicCounts = N_kj + (alpha - 1.0)
+          val theta_kj: TopicCounts = normalize(smoothed_N_kj, 1.0)
+          (alpha - 1.0) * brzSum(theta_kj.map(math.log))
+        }
+    }
+    graph.vertices.aggregate(0.0)(seqOp, _ + _)
+  }
 
   /**
    * For each document in the training set, return the distribution over topics for that document
@@ -254,7 +338,7 @@ class DistributedLDAModel private[clustering] (
    * @return  RDD of (document ID, topic distribution) pairs
    */
   def topicDistributions: RDD[(Long, Vector)] = {
-    state.graph.vertices.filter(LDA.isDocumentVertex).map { case (docID, topicCounts) =>
+    graph.vertices.filter(LDA.isDocumentVertex).map { case (docID, topicCounts) =>
       (docID.toLong, Vectors.fromBreeze(normalize(topicCounts, 1.0)))
     }
   }

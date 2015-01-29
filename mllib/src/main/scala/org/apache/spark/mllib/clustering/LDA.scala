@@ -24,6 +24,8 @@ import breeze.linalg.{DenseVector => BDV, sum => brzSum, normalize, axpy => brzA
 import org.apache.spark.Logging
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.graphx._
+import org.apache.spark.graphx.impl.GraphImpl
+import org.apache.spark.mllib.impl.PeriodicGraphCheckpointer
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
@@ -59,12 +61,14 @@ class LDA private (
     private var maxIterations: Int,
     private var topicSmoothing: Double,
     private var termSmoothing: Double,
-    private var seed: Long) extends Logging {
+    private var seed: Long,
+    private var checkpointDir: Option[String],
+    private var checkpointInterval: Int) extends Logging {
 
   import LDA._
 
   def this() = this(k = 10, maxIterations = 20, topicSmoothing = -1, termSmoothing = -1,
-    seed = Utils.random.nextLong())
+    seed = Utils.random.nextLong(), checkpointDir = None, checkpointInterval = 10)
 
   /**
    * Number of topics to infer.  I.e., the number of soft cluster centers.
@@ -165,6 +169,35 @@ class LDA private (
   }
 
   /**
+   * Directory for storing checkpoint files during learning.
+   * This is not necessary, but checkpointing helps with recovery (when nodes fail).
+   * It also helps with eliminating temporary shuffle files on disk, which can be important when
+   * LDA is run for many iterations.
+   */
+  def getCheckpointDir: Option[String] = checkpointDir
+
+  def setCheckpointDir(checkpointDir: String): this.type = {
+    this.checkpointDir = Some(checkpointDir)
+    this
+  }
+
+  def clearCheckpointDir(): this.type = {
+    this.checkpointDir = None
+    this
+  }
+
+  /**
+   * Period (in iterations) between checkpoints.
+   * @see [[getCheckpointDir]]
+   */
+  def getCheckpointInterval: Int = checkpointInterval
+
+  def setCheckpointInterval(checkpointInterval: Int): this.type = {
+    this.checkpointInterval = checkpointInterval
+    this
+  }
+
+  /**
    * Learn an LDA model using the given dataset.
    *
    * @param documents  RDD of documents, where each document is represented as a vector of term
@@ -172,13 +205,19 @@ class LDA private (
    * @return  Inferred LDA model
    */
   def run(documents: RDD[Document]): DistributedLDAModel = {
-    var state = LDA.initialState(documents, k, getTopicSmoothing, getTermSmoothing, seed)
+    var state = LDA.initialState(documents, k, getTopicSmoothing, getTermSmoothing, seed,
+      checkpointDir, checkpointInterval)
     var iter = 0
+    val iterationTimes = Array.fill[Double](maxIterations)(0)
     while (iter < maxIterations) {
-      state = state.next()
+      val start = System.nanoTime()
+      state.next()
+      val elapsedSeconds = (System.nanoTime() - start) / 1e9
+      iterationTimes(iter) = elapsedSeconds
       iter += 1
     }
-    new DistributedLDAModel(state)
+    state.graphCheckpointer.deleteAllCheckpoints()
+    new DistributedLDAModel(state, iterationTimes)
   }
 }
 
@@ -279,21 +318,24 @@ object LDA {
    * @param topicSmoothing  "alpha"
    * @param termSmoothing  "eta"
    */
-  private[clustering] case class LearningState(
-      graph: Graph[TopicCounts, TokenCount],
-      k: Int,
-      vocabSize: Int,
-      topicSmoothing: Double,
-      termSmoothing: Double) {
-    // TODO: Checkpoint periodically?
-    def next(): LearningState = copy(graph = step(graph))
+  private[clustering] class LearningState(
+      var graph: Graph[TopicCounts, TokenCount],
+      val k: Int,
+      val vocabSize: Int,
+      val topicSmoothing: Double,
+      val termSmoothing: Double,
+      checkpointDir: Option[String],
+      checkpointInterval: Int) {
 
-    private def step(graph: Graph[TopicCounts, TokenCount]): Graph[TopicCounts, TokenCount] = {
+    private[LDA] val graphCheckpointer = new PeriodicGraphCheckpointer[TopicCounts, TokenCount](
+      graph, checkpointDir, checkpointInterval)
+
+    def next(): LearningState = {
       val eta = termSmoothing
       val W = vocabSize
       val alpha = topicSmoothing
 
-      val N_k = globalTopicTotals()
+      val N_k = globalTopicTotals
       val sendMsg: EdgeContext[TopicCounts, TokenCount, (Boolean, TopicCounts)] => Unit =
         (edgeContext) => {
           // Compute N_{wj} gamma_{wjk}
@@ -306,7 +348,7 @@ object LDA {
           edgeContext.sendToSrc((false, scaledTopicDistribution))
         }
       // This is a hack to detect whether we could modify the values in-place.
-      // TODO: Add zero/seqOp/combOp option to aggregateMessages.
+      // TODO: Add zero/seqOp/combOp option to aggregateMessages. (SPARK-5438)
       val mergeMsg: ((Boolean, TopicCounts), (Boolean, TopicCounts)) => (Boolean, TopicCounts) =
         (m0, m1) => {
           val sum =
@@ -324,71 +366,35 @@ object LDA {
         graph.aggregateMessages[(Boolean, TopicCounts)](sendMsg, mergeMsg)
           .mapValues(_._2)
       // Update the vertex descriptors with the new counts.
-      graph.outerJoinVertices(docTopicDistributions) { (vid, oldDist, newDist) => newDist.get }
+      val newGraph =
+        GraphImpl.fromExistingRDDs(docTopicDistributions, graph.edges)
+      // graph.outerJoinVertices(docTopicDistributions) { (vid, oldDist, newDist) => newDist.get }
+      /*
+      previousGraph match {
+        case Some(prevG) =>
+          prevG.unpersist(blocking = false)
+        case None =>
+      }
+      copy(graph = newGraph, previousGraph = Some(graph))
+      */
+      graph = newGraph
+      graphCheckpointer.updateGraph(newGraph)
+      globalTopicTotals = computeGlobalTopicTotals()
+      this
     }
 
-    def globalTopicTotals(): TopicCounts = {
+    /**
+     * Aggregate distributions over topics from all term vertices.
+     *
+     * Note: This executes an action on the graph RDDs.
+     */
+    private[clustering] var globalTopicTotals: TopicCounts = computeGlobalTopicTotals()
+
+    private def computeGlobalTopicTotals(): TopicCounts = {
       val numTopics = k
       graph.vertices.filter(isTermVertex).values.fold(BDV.zeros[Double](numTopics))(_ += _)
     }
 
-    /**
-     * Compute the log likelihood of the observed tokens, given the current parameter estimates:
-     *  log P(docs | topics, topic distributions for docs, alpha, eta)
-     *
-     * Note:
-     *  - This excludes the prior; for that, use [[logPrior]].
-     *  - Even with [[logPrior]], this is NOT the same as the data log likelihood given the
-     *    hyperparameters.
-     */
-    lazy val logLikelihood: Double = {
-      val eta = termSmoothing
-      val alpha = topicSmoothing
-      assert(eta > 1.0)
-      assert(alpha > 1.0)
-      val N_k = globalTopicTotals()
-      val smoothed_N_k: TopicCounts = N_k + (vocabSize * (eta - 1.0))
-      // Edges: Compute token log probability from phi_{wk}, theta_{kj}.
-      val sendMsg: EdgeContext[TopicCounts, TokenCount, Double] => Unit = (edgeContext) => {
-        val N_wj = edgeContext.attr
-        val smoothed_N_wk: TopicCounts = edgeContext.dstAttr + (eta - 1.0)
-        val smoothed_N_kj: TopicCounts = edgeContext.srcAttr + (alpha - 1.0)
-        val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
-        val theta_kj: TopicCounts = normalize(smoothed_N_kj, 1.0)
-        val tokenLogLikelihood = N_wj * math.log(phi_wk.dot(theta_kj))
-        edgeContext.sendToDst(tokenLogLikelihood)
-      }
-      graph.aggregateMessages[Double](sendMsg, _ + _)
-        .map(_._2).fold(0.0)(_ + _)
-    }
-
-    /**
-     * Compute the log probability of the current parameter estimate:
-     *  log P(topics, topic distributions for docs | alpha, eta)
-     */
-    lazy val logPrior: Double = {
-      val eta = termSmoothing
-      val alpha = topicSmoothing
-      // Term vertices: Compute phi_{wk}.  Use to compute prior log probability.
-      // Doc vertex: Compute theta_{kj}.  Use to compute prior log probability.
-      val N_k = globalTopicTotals()
-      val smoothed_N_k: TopicCounts = N_k + (vocabSize * (eta - 1.0))
-      val seqOp: (Double, (VertexId, TopicCounts)) => Double = {
-        case (sumPrior: Double, vertex: (VertexId, TopicCounts)) =>
-          if (isTermVertex(vertex)) {
-            val N_wk = vertex._2
-            val smoothed_N_wk: TopicCounts = N_wk + (eta - 1.0)
-            val phi_wk: TopicCounts = smoothed_N_wk :/ smoothed_N_k
-            (eta - 1.0) * brzSum(phi_wk.map(math.log))
-          } else {
-            val N_kj = vertex._2
-            val smoothed_N_kj: TopicCounts = N_kj + (alpha - 1.0)
-            val theta_kj: TopicCounts = normalize(smoothed_N_kj, 1.0)
-            (alpha - 1.0) * brzSum(theta_kj.map(math.log))
-          }
-      }
-      graph.vertices.aggregate(0.0)(seqOp, _ + _)
-    }
   }
 
   /**
@@ -429,7 +435,9 @@ object LDA {
       k: Int,
       topicSmoothing: Double,
       termSmoothing: Double,
-      randomSeed: Long): LearningState = {
+      randomSeed: Long,
+      checkpointDir: Option[String],
+      checkpointInterval: Int): LearningState = {
     // For each document, create an edge (Document -> Term) for each unique term in the document.
     val edges: RDD[Edge[TokenCount]] = docs.flatMap { doc =>
       // Add edges for terms with non-zero counts.
@@ -472,6 +480,8 @@ object LDA {
     val graph = Graph(docVertices ++ termVertices, edges)
       .partitionBy(PartitionStrategy.EdgePartition1D)
 
-    LearningState(graph, k, vocabSize, topicSmoothing, termSmoothing)
+    new LearningState(graph, k, vocabSize, topicSmoothing, termSmoothing, checkpointDir,
+      checkpointInterval)
   }
+
 }
