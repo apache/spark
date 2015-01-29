@@ -19,198 +19,143 @@ package org.apache.spark.mllib.regression
 
 import org.scalatest.{Matchers, FunSuite}
 
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkContext}
-import org.apache.spark.mllib.util.IsotonicDataGenerator._
+import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class IsotonicRegressionSuite
-  extends FunSuite
-  with MLlibTestSparkContext
-  with Matchers {
+class IsotonicRegressionSuite extends FunSuite with MLlibTestSparkContext with Matchers {
 
-  private def round(d: Double): Double =
+  private def round(d: Double) =
     Math.round(d * 100).toDouble / 100
 
-  test("increasing isotonic regression") {
-    val trainRDD = sc.parallelize(
-      generateIsotonicInput(
-        1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12, 14, 15, 17, 16, 17, 18, 19, 20)).cache()
+  private def generateIsotonicInput(labels: Seq[Double]): Seq[(Double, Double, Double)] =
+    labels.zip(1 to labels.size).map(point => (point._1, point._2.toDouble, 1d))
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
+  private def generateIsotonicInput(
+      labels: Seq[Double],
+      weights: Seq[Double]): Seq[(Double, Double, Double)] =
+    labels.zip(1 to labels.size)
+      .zip(weights)
+      .map(point => (point._1._1, point._1._2.toDouble, point._2))
 
-    model.labels should be(
-      Array(1, 2, 7d/3, 7d/3, 7d/3, 6, 7, 8, 10, 10, 10, 12, 14, 15, 16.5, 16.5, 17, 18, 19, 20))
+  private def runIsotonicRegression(
+      labels: Seq[Double],
+      weights: Seq[Double],
+      isotonic: Boolean): IsotonicRegressionModel = {
+    val trainRDD = sc.parallelize(generateIsotonicInput(labels, weights)).cache()
+    new IsotonicRegression().run(trainRDD, isotonic)
   }
 
-  test("increasing isotonic regression using api") {
-    val trainRDD = sc.parallelize(
-      generateIsotonicInput(
-        1, 2, 3, 3, 1, 6, 7, 8, 11, 9, 10, 12, 14, 15, 17, 16, 17, 18, 19, 20)).cache()
+  private def runIsotonicRegression(
+      labels: Seq[Double],
+      isotonic: Boolean): IsotonicRegressionModel =
+    runIsotonicRegression(labels, Array.fill(labels.size)(1d), isotonic)
 
-    val model = IsotonicRegression.train(trainRDD, true)
+  test("increasing isotonic regression") {
+    val model = runIsotonicRegression(Seq(1, 2, 3, 3, 1, 6, 17, 16, 17, 18), true)
 
-    model.labels should be(
-      Array(1, 2, 7d/3, 7d/3, 7d/3, 6, 7, 8, 10, 10, 10, 12, 14, 15, 16.5, 16.5, 17, 18, 19, 20))
+    assert(model.predictions === Array(1, 2, 7d/3, 7d/3, 7d/3, 6, 16.5, 16.5, 17, 18))
   }
 
   test("isotonic regression with size 0") {
-    val trainRDD = sc.parallelize(List[(Double, Double, Double)]()).cache()
+    val model = runIsotonicRegression(Seq(), true)
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
-
-    model.labels should be(Array())
+    assert(model.predictions === Array())
   }
 
   test("isotonic regression with size 1") {
-    val trainRDD = sc.parallelize(generateIsotonicInput(1)).cache()
+    val model = runIsotonicRegression(Seq(1), true)
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
-
-    model.labels should be(Array(1.0))
+    assert(model.predictions === Array(1.0))
   }
 
   test("isotonic regression strictly increasing sequence") {
-    val trainRDD = sc.parallelize(generateIsotonicInput(1, 2, 3, 4, 5)).cache()
+    val model = runIsotonicRegression(Seq(1, 2, 3, 4, 5), true)
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
-
-    model.labels should be(Array(1, 2, 3, 4, 5))
+    assert(model.predictions === Array(1, 2, 3, 4, 5))
   }
 
   test("isotonic regression strictly decreasing sequence") {
-    val trainRDD = sc.parallelize(generateIsotonicInput(5, 4, 3, 2, 1)).cache()
+    val model = runIsotonicRegression(Seq(5, 4, 3, 2, 1), true)
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
-
-    model.labels should be(Array(3, 3, 3, 3, 3))
+    assert(model.predictions === Array(3, 3, 3, 3, 3))
   }
 
   test("isotonic regression with last element violating monotonicity") {
-    val trainRDD = sc.parallelize(generateIsotonicInput(1, 2, 3, 4, 2)).cache()
+    val model = runIsotonicRegression(Seq(1, 2, 3, 4, 2), true)
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
-
-    model.labels should be(Array(1, 2, 3, 3, 3))
+    assert(model.predictions === Array(1, 2, 3, 3, 3))
   }
 
   test("isotonic regression with first element violating monotonicity") {
-    val trainRDD = sc.parallelize(generateIsotonicInput(4, 2, 3, 4, 5)).cache()
+    val model = runIsotonicRegression(Seq(4, 2, 3, 4, 5), true)
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
-
-    model.labels should be(Array(3, 3, 3, 4, 5))
+    assert(model.predictions === Array(3, 3, 3, 4, 5))
   }
 
   test("isotonic regression with negative labels") {
-    val trainRDD = sc.parallelize(generateIsotonicInput(-1, -2, 0, 1, -1)).cache()
+    val model = runIsotonicRegression(Seq(-1, -2, 0, 1, -1), true)
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
-
-    model.labels should be(Array(-1.5, -1.5, 0, 0, 0))
+    assert(model.predictions === Array(-1.5, -1.5, 0, 0, 0))
   }
 
   test("isotonic regression with unordered input") {
-    val trainRDD = sc.parallelize(generateIsotonicInput(1, 2, 3, 4, 5).reverse).cache()
+    val trainRDD = sc.parallelize(generateIsotonicInput(Seq(1, 2, 3, 4, 5)).reverse).cache()
+    val model = new IsotonicRegression().run(trainRDD, true)
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
-
-    model.labels should be(Array(1, 2, 3, 4, 5))
+    assert(model.predictions === Array(1, 2, 3, 4, 5))
   }
 
   test("weighted isotonic regression") {
-    val trainRDD = sc.parallelize(
-      generateWeightedIsotonicInput(Seq(1, 2, 3, 4, 2), Seq(1, 1, 1, 1, 2))).cache()
+    val model = runIsotonicRegression(Seq(1, 2, 3, 4, 2), Seq(1, 1, 1, 1, 2), true)
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
-
-    model.labels should be(Array(1, 2, 2.75, 2.75,2.75))
+    assert(model.predictions === Array(1, 2, 2.75, 2.75,2.75))
   }
 
   test("weighted isotonic regression with weights lower than 1") {
-    val trainRDD = sc.parallelize(
-      generateWeightedIsotonicInput(Seq(1, 2, 3, 2, 1), Seq(1, 1, 1, 0.1, 0.1))).cache()
+    val model = runIsotonicRegression(Seq(1, 2, 3, 2, 1), Seq(1, 1, 1, 0.1, 0.1), true)
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
-
-    model.labels.map(round) should be(Array(1, 2, 3.3/1.2, 3.3/1.2, 3.3/1.2))
+    assert(model.predictions.map(round) === Array(1, 2, 3.3/1.2, 3.3/1.2, 3.3/1.2))
   }
 
   test("weighted isotonic regression with negative weights") {
-    val trainRDD = sc.parallelize(generateWeightedIsotonicInput(Seq(1, 2, 3, 2, 1), Seq(-1, 1, -3, 1, -5))).cache()
+    val model = runIsotonicRegression(Seq(1, 2, 3, 2, 1), Seq(-1, 1, -3, 1, -5), true)
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
-
-    model.labels should be(Array(1.0, 10.0/6, 10.0/6, 10.0/6, 10.0/6))
+    assert(model.predictions  === Array(1.0, 10.0/6, 10.0/6, 10.0/6, 10.0/6))
   }
 
   test("weighted isotonic regression with zero weights") {
-    val trainRDD = sc.parallelize(generateWeightedIsotonicInput(Seq(1, 2, 3, 2, 1), Seq(0, 0, 0, 1, 0))).cache()
+    val model = runIsotonicRegression(Seq[Double](1, 2, 3, 2, 1), Seq[Double](0, 0, 0, 1, 0), true)
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
-
-    model.labels should be(Array(1, 2, 2, 2, 2))
+    assert(model.predictions === Array(1, 2, 2, 2, 2))
   }
 
   test("isotonic regression prediction") {
-    val trainRDD = sc.parallelize(generateIsotonicInput(1, 2, 7, 1, 2)).cache()
+    val model = runIsotonicRegression(Seq(1, 2, 7, 1, 2), true)
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
-
-    model.predict(0) should be(1)
-    model.predict(2) should be(2)
-    model.predict(3) should be(10d/3)
-    model.predict(10) should be(10d/3)
+    assert(model.predict(-1) === 1)
+    assert(model.predict(0) === 1)
+    assert(model.predict(1.5) === 1.5)
+    assert(model.predict(1.75) === 1.75)
+    assert(model.predict(2) === 2)
+    assert(model.predict(3) === 10d/3)
+    assert(model.predict(10) === 10d/3)
   }
 
   test("isotonic regression RDD prediction") {
-    val trainRDD = sc.parallelize(generateIsotonicInput(1, 2, 7, 1, 2)).cache()
-    val testRDD = sc.parallelize(List(0.0, 2.0, 3.0, 10.0)).cache()
+    val model = runIsotonicRegression(Seq(1, 2, 7, 1, 2), true)
+    val testRDD = sc.parallelize(List(-1.0, 0.0, 1.5, 1.75, 2.0, 3.0, 10.0)).cache()
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, true)
-
-    model.predict(testRDD).collect() should be(Array(1, 2, 10.0/3, 10.0/3))
+    assert(model.predict(testRDD).collect() === Array(1, 1, 1.5, 1.75, 2, 10.0/3, 10.0/3))
   }
 
   test("antitonic regression prediction") {
-    val trainRDD = sc.parallelize(generateIsotonicInput(7, 5, 3, 5, 1)).cache()
+    val model = runIsotonicRegression(Seq(7, 5, 3, 5, 1), false)
 
-    val alg = new IsotonicRegression
-    val model = alg.run(trainRDD, false)
-
-    model.predict(0) should be(7)
-    model.predict(2) should be(5)
-    model.predict(3) should be(4)
-    model.predict(10) should be(1)
-  }
-}
-
-class IsotonicRegressionClusterSuite
-  extends FunSuite
-  with LocalClusterSparkContext {
-
-  test("task size should be small in both training and prediction") {
-    val n = 1000
-
-    val trainData = (0 to n).map(i => (i.toDouble, i.toDouble, 1d))
-    val points = sc.parallelize(trainData, 2)
-
-    // If we serialize data directly in the task closure, the size of the serialized task would be
-    // greater than 1MB and hence Spark would throw an error.
-    val model = IsotonicRegression.train(points)
-    val predictions = model.predict(points.map(_._2))
+    assert(model.predict(-1) === 7)
+    assert(model.predict(0) === 7)
+    assert(model.predict(1.5) === 6)
+    assert(model.predict(1.75) === 5.5)
+    assert(model.predict(2) === 5)
+    assert(model.predict(3) === 4)
+    assert(model.predict(10) === 1)
   }
 }
