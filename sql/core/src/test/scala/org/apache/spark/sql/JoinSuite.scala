@@ -20,7 +20,7 @@ package org.apache.spark.sql
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.TestData._
-import org.apache.spark.sql.dsl._
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.test.TestSQLContext._
@@ -136,8 +136,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("inner join, where, multiple matches") {
-    val x = testData2.where($"a" === Literal(1)).as("x")
-    val y = testData2.where($"a" === Literal(1)).as("y")
+    val x = testData2.where($"a" === 1).as("x")
+    val y = testData2.where($"a" === 1).as("y")
     checkAnswer(
       x.join(y).where($"x.a" === $"y.a"),
       Row(1,1,1,1) ::
@@ -148,8 +148,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("inner join, no matches") {
-    val x = testData2.where($"a" === Literal(1)).as("x")
-    val y = testData2.where($"a" === Literal(2)).as("y")
+    val x = testData2.where($"a" === 1).as("x")
+    val y = testData2.where($"a" === 2).as("y")
     checkAnswer(
       x.join(y).where($"x.a" === $"y.a"),
       Nil)
@@ -185,7 +185,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(6, "F", null, null) :: Nil)
 
     checkAnswer(
-      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"n" > Literal(1), "left"),
+      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"n" > 1, "left"),
       Row(1, "A", null, null) ::
         Row(2, "B", 2, "b") ::
         Row(3, "C", 3, "c") ::
@@ -194,7 +194,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(6, "F", null, null) :: Nil)
 
     checkAnswer(
-      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"N" > Literal(1), "left"),
+      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"N" > 1, "left"),
       Row(1, "A", null, null) ::
         Row(2, "B", 2, "b") ::
         Row(3, "C", 3, "c") ::
@@ -247,7 +247,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 5, "E") ::
         Row(null, null, 6, "F") :: Nil)
     checkAnswer(
-      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"n" > Literal(1), "right"),
+      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"n" > 1, "right"),
       Row(null, null, 1, "A") ::
         Row(2, "b", 2, "B") ::
         Row(3, "c", 3, "C") ::
@@ -255,7 +255,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 5, "E") ::
         Row(null, null, 6, "F") :: Nil)
     checkAnswer(
-      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"N" > Literal(1), "right"),
+      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"N" > 1, "right"),
       Row(null, null, 1, "A") ::
         Row(2, "b", 2, "B") ::
         Row(3, "c", 3, "C") ::
@@ -298,8 +298,8 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("full outer join") {
-    upperCaseData.where('N <= Literal(4)).registerTempTable("left")
-    upperCaseData.where('N >= Literal(3)).registerTempTable("right")
+    upperCaseData.where('N <= 4).registerTempTable("left")
+    upperCaseData.where('N >= 3).registerTempTable("right")
 
     val left = UnresolvedRelation(Seq("left"), None)
     val right = UnresolvedRelation(Seq("right"), None)
@@ -314,7 +314,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"left.N" !== Literal(3)), "full"),
+      left.join(right, ($"left.N" === $"right.N") && ($"left.N" !== 3), "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::
@@ -324,7 +324,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"right.N" !== Literal(3)), "full"),
+      left.join(right, ($"left.N" === $"right.N") && ($"right.N" !== 3), "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::

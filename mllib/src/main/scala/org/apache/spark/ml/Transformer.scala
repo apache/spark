@@ -24,7 +24,7 @@ import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.param._
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql._
-import org.apache.spark.sql.dsl._
+import org.apache.spark.sql.api.scala.dsl._
 import org.apache.spark.sql.types._
 
 /**

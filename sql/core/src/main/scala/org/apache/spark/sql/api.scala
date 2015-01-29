@@ -30,7 +30,7 @@ import org.apache.spark.storage.StorageLevel
  * An internal interface defining the RDD-like methods for [[DataFrame]].
  * Please use [[DataFrame]] directly, and do NOT use this.
  */
-trait RDDApi[T] {
+private[sql] trait RDDApi[T] {
 
   def cache(): this.type = persist()
 
@@ -64,7 +64,7 @@ trait RDDApi[T] {
  * An internal interface defining data frame related methods in [[DataFrame]].
  * Please use [[DataFrame]] directly, and do NOT use this.
  */
-trait DataFrameSpecificApi {
+private[sql] trait DataFrameSpecificApi {
 
   def schema: StructType
 
@@ -181,7 +181,7 @@ trait DataFrameSpecificApi {
  * An internal interface defining expression APIs for [[DataFrame]].
  * Please use [[DataFrame]] and [[Column]] directly, and do NOT use this.
  */
-trait ExpressionApi {
+private[sql] trait ExpressionApi {
 
   def isComputable: Boolean
 
@@ -231,9 +231,7 @@ trait ExpressionApi {
   @scala.annotation.varargs
   def in(list: Column*): Column
 
-  def like(other: Column): Column
   def like(other: String): Column
-  def rlike(other: Column): Column
   def rlike(other: String): Column
 
   def contains(other: Column): Column
@@ -249,7 +247,6 @@ trait ExpressionApi {
   def isNull: Column
   def isNotNull: Column
 
-  def getItem(ordinal: Column): Column
   def getItem(ordinal: Int): Column
   def getField(fieldName: String): Column
 
@@ -266,7 +263,7 @@ trait ExpressionApi {
  * An internal interface defining aggregation APIs for [[DataFrame]].
  * Please use [[DataFrame]] and [[GroupedDataFrame]] directly, and do NOT use this.
  */
-trait GroupedDataFrameApi {
+private[sql] trait GroupedDataFrameApi {
 
   def agg(exprs: Map[String, String]): DataFrame
 

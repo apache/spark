@@ -19,6 +19,7 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
+import org.apache.spark.sql.api.scala.dsl.lit
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, Star}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => LiteralExpr}
@@ -55,11 +56,11 @@ class Column(
     val expr: Expression)
   extends DataFrame(sqlContext, plan) with ExpressionApi {
 
-  /** Turn a Catalyst expression into a `Column`. */
+  /** Turns a Catalyst expression into a `Column`. */
   protected[sql] def this(expr: Expression) = this(None, None, expr)
 
   /**
-   * Create a new `Column` expression based on a column or attribute name.
+   * Creates a new `Column` expression based on a column or attribute name.
    * The resolution of this is the same as SQL. For example:
    *
    * - "colName" becomes an expression selecting the column named "colName".
@@ -108,7 +109,7 @@ class Column(
   override def unary_~ : Column = BitwiseNot(expr)
 
   /**
-   * Invert a boolean expression, i.e. NOT.
+   * Inversion of boolean expression, i.e. NOT.
    * {{
    *   // Select rows that are not active (isActive === false)
    *   df.select( !df("isActive") )
@@ -135,7 +136,7 @@ class Column(
    *   df.select( df("colA".equalTo("Zaharia") )
    * }}}
    */
-  override def === (literal: Any): Column = this === Literal.anyToLiteral(literal)
+  override def === (literal: Any): Column = this === lit(literal)
 
   /**
    * Equality test with an expression.
@@ -175,7 +176,7 @@ class Column(
    *   df.select( !(df("colA") === 15) )
    * }}}
    */
-  override def !== (literal: Any): Column = this !== Literal.anyToLiteral(literal)
+  override def !== (literal: Any): Column = this !== lit(literal)
 
   /**
    * Greater than an expression.
@@ -193,7 +194,7 @@ class Column(
    *   people.select( people("age") > 21 )
    * }}}
    */
-  override def > (literal: Any): Column = this > Literal.anyToLiteral(literal)
+  override def > (literal: Any): Column = this > lit(literal)
 
   /**
    * Less than an expression.
@@ -211,7 +212,7 @@ class Column(
    *   people.select( people("age") < 21 )
    * }}}
    */
-  override def < (literal: Any): Column = this < Literal.anyToLiteral(literal)
+  override def < (literal: Any): Column = this < lit(literal)
 
   /**
    * Less than or equal to an expression.
@@ -229,7 +230,7 @@ class Column(
    *   people.select( people("age") <= 21 )
    * }}}
    */
-  override def <= (literal: Any): Column = this <= Literal.anyToLiteral(literal)
+  override def <= (literal: Any): Column = this <= lit(literal)
 
   /**
    * Greater than or equal to an expression.
@@ -247,20 +248,20 @@ class Column(
    *   people.select( people("age") >= 21 )
    * }}}
    */
-  override def >= (literal: Any): Column = this >= Literal.anyToLiteral(literal)
+  override def >= (literal: Any): Column = this >= lit(literal)
 
   /**
    * Equality test with an expression that is safe for null values.
    */
   override def <=> (other: Column): Column = other match {
-    case null => EqualNullSafe(expr, Literal.anyToLiteral(null).expr)
+    case null => EqualNullSafe(expr, lit(null).expr)
     case _ => EqualNullSafe(expr, other.expr)
   }
 
   /**
    * Equality test with a literal value that is safe for null values.
    */
-  override def <=> (literal: Any): Column = this <=> Literal.anyToLiteral(literal)
+  override def <=> (literal: Any): Column = this <=> lit(literal)
 
   /**
    * True if the current expression is null.
@@ -288,7 +289,7 @@ class Column(
    *   people.select( people("inSchool") || true )
    * }}}
    */
-  override def || (literal: Boolean): Column = this || Literal.anyToLiteral(literal)
+  override def || (literal: Boolean): Column = this || lit(literal)
 
   /**
    * Boolean AND with an expression.
@@ -306,7 +307,7 @@ class Column(
    *   people.select( people("inSchool") && true )
    * }}}
    */
-  override def && (literal: Boolean): Column = this && Literal.anyToLiteral(literal)
+  override def && (literal: Boolean): Column = this && lit(literal)
 
   /**
    * Bitwise AND with an expression.
@@ -316,7 +317,7 @@ class Column(
   /**
    * Bitwise AND with a literal value.
    */
-  override def & (literal: Any): Column = this & Literal.anyToLiteral(literal)
+  override def & (literal: Any): Column = this & lit(literal)
 
   /**
    * Bitwise OR with an expression.
@@ -326,7 +327,7 @@ class Column(
   /**
    * Bitwise OR with a literal value.
    */
-  override def | (literal: Any): Column = this | Literal.anyToLiteral(literal)
+  override def | (literal: Any): Column = this | lit(literal)
 
   /**
    * Bitwise XOR with an expression.
@@ -336,7 +337,7 @@ class Column(
   /**
    * Bitwise XOR with a literal value.
    */
-  override def ^ (literal: Any): Column = this ^ Literal.anyToLiteral(literal)
+  override def ^ (literal: Any): Column = this ^ lit(literal)
 
   /**
    * Sum of this expression and another expression.
@@ -354,10 +355,10 @@ class Column(
    *   people.select( people("height") + 10 )
    * }}}
    */
-  override def + (literal: Any): Column = this + Literal.anyToLiteral(literal)
+  override def + (literal: Any): Column = this + lit(literal)
 
   /**
-   * Subtraction. Substract the other expression from this expression.
+   * Subtraction. Subtract the other expression from this expression.
    * {{{
    *   // The following selects the difference between people's height and their weight.
    *   people.select( people("height") - people("weight") )
@@ -366,16 +367,16 @@ class Column(
   override def - (other: Column): Column = Subtract(expr, other.expr)
 
   /**
-   * Subtraction. Substract a literal value from this expression.
+   * Subtraction. Subtract a literal value from this expression.
    * {{{
-   *   // The following selects a person's height and substract it by 10.
+   *   // The following selects a person's height and subtract it by 10.
    *   people.select( people("height") - 10 )
    * }}}
    */
-  override def - (literal: Any): Column = this - Literal.anyToLiteral(literal)
+  override def - (literal: Any): Column = this - lit(literal)
 
   /**
-   * Multiply this expression and another expression.
+   * Multiplication of this expression and another expression.
    * {{{
    *   // The following multiplies a person's height by their weight.
    *   people.select( people("height") * people("weight") )
@@ -384,16 +385,16 @@ class Column(
   override def * (other: Column): Column = Multiply(expr, other.expr)
 
   /**
-   * Multiply this expression and a literal value.
+   * Multiplication this expression and a literal value.
    * {{{
    *   // The following multiplies a person's height by 10.
    *   people.select( people("height") * 10 )
    * }}}
    */
-  override def * (literal: Any): Column = this * Literal.anyToLiteral(literal)
+  override def * (literal: Any): Column = this * lit(literal)
 
   /**
-   * Divide this expression by another expression.
+   * Division this expression by another expression.
    * {{{
    *   // The following divides a person's height by their weight.
    *   people.select( people("height") / people("weight") )
@@ -402,13 +403,13 @@ class Column(
   override def / (other: Column): Column = Divide(expr, other.expr)
 
   /**
-   * Divide this expression by a literal value.
+   * Division this expression by a literal value.
    * {{{
    *   // The following divides a person's height by 10.
    *   people.select( people("height") / 10 )
    * }}}
    */
-  override def / (literal: Any): Column = this / Literal.anyToLiteral(literal)
+  override def / (literal: Any): Column = this / lit(literal)
 
   /**
    * Modulo (a.k.a. remainder) expression.
@@ -418,7 +419,7 @@ class Column(
   /**
    * Modulo (a.k.a. remainder) expression.
    */
-  override def % (literal: Any): Column = this % Literal.anyToLiteral(literal)
+  override def % (literal: Any): Column = this % lit(literal)
 
 
   /**
@@ -428,43 +429,67 @@ class Column(
   @scala.annotation.varargs
   override def in(list: Column*): Column = In(expr, list.map(_.expr))
 
-  override def like(other: Column): Column = Like(expr, other.expr)
+  override def like(literal: String): Column = Like(expr, lit(literal).expr)
 
-  override def like(literal: String): Column = this.like(Literal.anyToLiteral(literal))
+  override def rlike(literal: String): Column = RLike(expr, lit(literal).expr)
 
-  override def rlike(other: Column): Column = RLike(expr, other.expr)
-
-  override def rlike(literal: String): Column = this.rlike(Literal.anyToLiteral(literal))
-
-
+  /**
+   * An expression that gets an
+   * @param ordinal
+   * @return
+   */
   override def getItem(ordinal: Int): Column = GetItem(expr, LiteralExpr(ordinal))
 
-  override def getItem(ordinal: Column): Column = GetItem(expr, ordinal.expr)
-
+  /**
+   * An expression that gets a field by name in a [[StructField]].
+   */
   override def getField(fieldName: String): Column = GetField(expr, fieldName)
 
-
+  /**
+   * An expression that returns a substring.
+   * @param startPos expression for the starting position.
+   * @param len expression for the length of the substring.
+   */
   override def substr(startPos: Column, len: Column): Column =
     Substring(expr, startPos.expr, len.expr)
 
-  override def substr(startPos: Int, len: Int): Column =
-    this.substr(Literal.anyToLiteral(startPos), Literal.anyToLiteral(len))
+  /**
+   * An expression that returns a substring.
+   * @param startPos starting position.
+   * @param len length of the substring.
+   */
+  override def substr(startPos: Int, len: Int): Column = this.substr(lit(startPos), lit(len))
 
   override def contains(other: Column): Column = Contains(expr, other.expr)
 
-  override def contains(literal: Any): Column = this.contains(Literal.anyToLiteral(literal))
+  override def contains(literal: Any): Column = this.contains(lit(literal))
 
 
   override def startsWith(other: Column): Column = StartsWith(expr, other.expr)
 
-  override def startsWith(literal: String): Column = this.startsWith(Literal.anyToLiteral(literal))
+  override def startsWith(literal: String): Column = this.startsWith(lit(literal))
 
   override def endsWith(other: Column): Column = EndsWith(expr, other.expr)
 
-  override def endsWith(literal: String): Column = this.endsWith(Literal.anyToLiteral(literal))
+  override def endsWith(literal: String): Column = this.endsWith(lit(literal))
 
+  /**
+   * Gives the column an alias.
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select($"colA".as("colB"))
+   * }}}
+   */
   override def as(alias: String): Column = Alias(expr, alias)()
 
+  /**
+   * Casts the column to a different data type.
+   * {{{
+   *   // Casts colA to IntegerType.
+   *   import org.apache.spark.sql.types.IntegerType
+   *   df.select(df("colA").as(IntegerType))
+   * }}}
+   */
   override def cast(to: DataType): Column = Cast(expr, to)
 
   override def desc: Column = SortOrder(expr, Descending)
