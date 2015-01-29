@@ -130,7 +130,7 @@ class ALSModel private[ml] (
       .join(items, dataset(map(itemCol)) === items("id"), "left")
       .select(outputColumns: _*)
       // TODO: Just use a dataset("*")
-      //.select(dataset("*"), prediction)
+      // .select(dataset("*"), prediction)
   }
 
   override private[ml] def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
