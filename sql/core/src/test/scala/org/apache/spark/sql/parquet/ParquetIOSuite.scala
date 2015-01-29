@@ -32,12 +32,13 @@ import parquet.schema.{MessageType, MessageTypeParser}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.spark.sql.{DataFrame, QueryTest, SQLConf}
+import org.apache.spark.sql.dsl._
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.test.TestSQLContext._
 import org.apache.spark.sql.types.DecimalType
-import org.apache.spark.sql.{QueryTest, SQLConf, SchemaRDD}
 
 // Write support class for nested groups: ParquetWriter initializes GroupWriteSupport
 // with an empty configuration (it is after all not intended to be used in this way?)
@@ -68,8 +69,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
   /**
    * Writes `data` to a Parquet file, reads it back and check file contents.
    */
-  protected def checkParquetFile[T <: Product: ClassTag: TypeTag](data: Seq[T]): Unit = {
-    withParquetRDD(data)(checkAnswer(_, data))
+  protected def checkParquetFile[T <: Product : ClassTag: TypeTag](data: Seq[T]): Unit = {
+    withParquetRDD(data)(r => checkAnswer(r, data.map(Row.fromTuple)))
   }
 
   test("basic data types (without binary)") {
@@ -97,11 +98,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
   }
 
   test("fixed-length decimals") {
-    def makeDecimalRDD(decimal: DecimalType): SchemaRDD =
+    def makeDecimalRDD(decimal: DecimalType): DataFrame =
       sparkContext
         .parallelize(0 to 1000)
         .map(i => Tuple1(i / 100.0))
-        .select('_1 cast decimal)
+        .select($"_1" cast decimal as "abcd")
 
     for ((precision, scale) <- Seq((5, 2), (1, 0), (1, 1), (18, 10), (18, 17))) {
       withTempPath { dir =>
@@ -143,7 +144,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     withParquetRDD(data) { rdd =>
       // Structs are converted to `Row`s
       checkAnswer(rdd, data.map { case Tuple1(struct) =>
-        Tuple1(Row(struct.productIterator.toSeq: _*))
+        Row(Row(struct.productIterator.toSeq: _*))
       })
     }
   }
@@ -153,7 +154,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     withParquetRDD(data) { rdd =>
       // Structs are converted to `Row`s
       checkAnswer(rdd, data.map { case Tuple1(struct) =>
-        Tuple1(Row(struct.productIterator.toSeq: _*))
+        Row(Row(struct.productIterator.toSeq: _*))
       })
     }
   }
@@ -162,7 +163,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
     val data = (1 to 4).map(i => Tuple1(Map(i -> (i, s"val_$i"))))
     withParquetRDD(data) { rdd =>
       checkAnswer(rdd, data.map { case Tuple1(m) =>
-        Tuple1(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
+        Row(m.mapValues(struct => Row(struct.productIterator.toSeq: _*)))
       })
     }
   }
@@ -261,7 +262,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest {
       val path = new Path(dir.toURI.toString, "part-r-0.parquet")
       makeRawParquetFile(path)
       checkAnswer(parquetFile(path.toString), (0 until 10).map { i =>
-        (i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
+        Row(i % 2 == 0, i, i.toLong, i.toFloat, i.toDouble)
       })
     }
   }

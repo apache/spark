@@ -102,11 +102,10 @@ of the most common options to set are:
   </td>
 </tr>
 <tr>
-  <td><code>spark.executor.memory</code></td>
-  <td>512m</td>
+  <td><code>spark.driver.cores</code></td>
+  <td>1</td>
   <td>
-    Amount of memory to use per executor process, in the same format as JVM memory strings
-    (e.g. <code>512m</code>, <code>2g</code>).
+    Number of cores to use for the driver process, only in cluster mode.
   </td>
 </tr>
 <tr>
@@ -114,6 +113,14 @@ of the most common options to set are:
   <td>512m</td>
   <td>
     Amount of memory to use for the driver process, i.e. where SparkContext is initialized.
+    (e.g. <code>512m</code>, <code>2g</code>).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.executor.memory</code></td>
+  <td>512m</td>
+  <td>
+    Amount of memory to use per executor process, in the same format as JVM memory strings
     (e.g. <code>512m</code>, <code>2g</code>).
   </td>
 </tr>
@@ -190,6 +197,27 @@ Apart from these, the following properties are also available, and may be useful
 #### Runtime Environment
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.driver.extraJavaOptions</code></td>
+  <td>(none)</td>
+  <td>
+    A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.extraClassPath</code></td>
+  <td>(none)</td>
+  <td>
+    Extra classpath entries to append to the classpath of the driver.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.driver.extraLibraryPath</code></td>
+  <td>(none)</td>
+  <td>
+    Set a special library path to use when launching the driver JVM.
+  </td>
+</tr>
 <tr>
   <td><code>spark.executor.extraJavaOptions</code></td>
   <td>(none)</td>
@@ -283,6 +311,9 @@ Apart from these, the following properties are also available, and may be useful
     or it will be displayed before the driver exiting. It also can be dumped into disk by
     `sc.dump_profiles(path)`. If some of the profile results had been displayed maually,
     they will not be displayed automatically before driver exiting.
+
+    By default the `pyspark.profiler.BasicProfiler` will be used, but this can be overridden by
+    passing a profiler class in as a parameter to the `SparkContext` constructor.
   </td>
 </tr>
 <tr>

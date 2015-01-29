@@ -70,8 +70,8 @@ case class AllDataTypesScan(
         i.toLong,
         i.toFloat,
         i.toDouble,
-        BigDecimal(i),
-        BigDecimal(i),
+        new java.math.BigDecimal(i),
+        new java.math.BigDecimal(i),
         new Date((i + 1) * 8640000),
         new Timestamp(20000 + i),
         s"varchar_$i",
@@ -99,8 +99,8 @@ class TableScanSuite extends DataSourceTest {
       i.toLong,
       i.toFloat,
       i.toDouble,
-      BigDecimal(i),
-      BigDecimal(i),
+      new java.math.BigDecimal(i),
+      new java.math.BigDecimal(i),
       new Date((i + 1) * 8640000),
       new Timestamp(20000 + i),
       s"varchar_$i",
@@ -244,7 +244,7 @@ class TableScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT count(*) FROM tableWithSchema",
-    10)
+    Seq(Row(10)))
 
   sqlTest(
     "SELECT `string$%Field` FROM tableWithSchema",
@@ -260,7 +260,7 @@ class TableScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT structFieldSimple.key, arrayFieldSimple[1] FROM tableWithSchema a where int_Field=1",
-    Seq(Seq(1, 2)))
+    Seq(Row(1, 2)))
 
   sqlTest(
     "SELECT structFieldComplex.Value.`value_(2)` FROM tableWithSchema",

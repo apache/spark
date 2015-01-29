@@ -35,16 +35,20 @@ MLlib is under active development.
 The APIs marked `Experimental`/`DeveloperApi` may change in future releases, 
 and the migration guide below will explain all changes between releases.
 
-# spark.ml: The New ML Package
+# spark.ml: high-level APIs for ML pipelines
 
-Spark 1.2 includes a new machine learning package called `spark.ml`, currently an alpha component but potentially a successor to `spark.mllib`.  The `spark.ml` package aims to replace the old APIs with a cleaner, more uniform set of APIs which will help users create full machine learning pipelines.
+Spark 1.2 includes a new package called `spark.ml`, which aims to provide a uniform set of
+high-level APIs that help users create and tune practical machine learning pipelines.
+It is currently an alpha component, and we would like to hear back from the community about
+how it fits real-world use cases and how it could be improved.
+
+Note that we will keep supporting and adding features to `spark.mllib` along with the
+development of `spark.ml`.
+Users should be comfortable using `spark.mllib` features and expect more features coming.
+Developers should contribute new algorithms to `spark.mllib` and can optionally contribute
+to `spark.ml`.
 
 See the **[spark.ml programming guide](ml-guide.html)** for more information on this package.
-
-Users can use algorithms from either of the two packages, but APIs may differ.  Currently, `spark.ml` offers a subset of the algorithms from `spark.mllib`.
-
-Developers should contribute new algorithms to `spark.mllib` and can optionally contribute to `spark.ml`.
-See the `spark.ml` programming guide linked above for more details.
 
 # Dependencies
 

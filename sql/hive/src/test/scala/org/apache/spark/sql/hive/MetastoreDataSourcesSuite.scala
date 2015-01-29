@@ -155,7 +155,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
-      ("a", "b") :: Nil)
+      Row("a", "b"))
 
     FileUtils.deleteDirectory(tempDir)
     sparkContext.parallelize(("a1", "b1", "c1") :: Nil).toJSON.saveAsTextFile(tempDir.getCanonicalPath)
@@ -164,14 +164,14 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     // will show.
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
-      ("a1", "b1") :: Nil)
+      Row("a1", "b1"))
 
     refreshTable("jsonTable")
 
     // Check that the refresh worked
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
-      ("a1", "b1", "c1") :: Nil)
+      Row("a1", "b1", "c1"))
     FileUtils.deleteDirectory(tempDir)
   }
 
@@ -191,7 +191,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
 
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
-      ("a", "b") :: Nil)
+      Row("a", "b"))
 
     FileUtils.deleteDirectory(tempDir)
     sparkContext.parallelize(("a", "b", "c") :: Nil).toJSON.saveAsTextFile(tempDir.getCanonicalPath)
@@ -210,7 +210,7 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     // New table should reflect new schema.
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
-      ("a", "b", "c") :: Nil)
+      Row("a", "b", "c"))
     FileUtils.deleteDirectory(tempDir)
   }
 
@@ -241,5 +241,18 @@ class MetastoreDataSourcesSuite extends QueryTest with BeforeAndAfterEach {
     val expectedSchema = StructType(StructField("c_!@(3)", IntegerType, true) :: Nil)
 
     assert(expectedSchema == table("jsonTable").schema)
+  }
+
+  test("SPARK-5286 Fail to drop an invalid table when using the data source API") {
+    sql(
+      s"""
+        |CREATE TABLE jsonTable
+        |USING org.apache.spark.sql.json.DefaultSource
+        |OPTIONS (
+        |  path 'it is not a path at all!'
+        |)
+      """.stripMargin)
+
+    sql("DROP TABLE jsonTable").collect().foreach(println)
   }
 }

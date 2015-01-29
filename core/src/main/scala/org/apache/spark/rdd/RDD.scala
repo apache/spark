@@ -76,9 +76,26 @@ import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler, Bernoulli
  * on RDD internals.
  */
 abstract class RDD[T: ClassTag](
-    @transient private var sc: SparkContext,
+    @transient private var _sc: SparkContext,
     @transient private var deps: Seq[Dependency[_]]
   ) extends Serializable with Logging {
+
+  if (classOf[RDD[_]].isAssignableFrom(elementClassTag.runtimeClass)) {
+    // This is a warning instead of an exception in order to avoid breaking user programs that
+    // might have defined nested RDDs without running jobs with them.
+    logWarning("Spark does not support nested RDDs (see SPARK-5063)")
+  }
+
+  private def sc: SparkContext = {
+    if (_sc == null) {
+      throw new SparkException(
+        "RDD transformations and actions can only be invoked by the driver, not inside of other " +
+        "transformations; for example, rdd1.map(x => rdd2.values.count() * x) is invalid because " +
+        "the values transformation and count action cannot be performed inside of the rdd1.map " +
+        "transformation. For more information, see SPARK-5063.")
+    }
+    _sc
+  }
 
   /** Construct an RDD with just a one-to-one dependency on one parent */
   def this(@transient oneParent: RDD[_]) =
@@ -1174,6 +1191,12 @@ abstract class RDD[T: ClassTag](
    * @return the minimum element of the RDD
    * */
   def min()(implicit ord: Ordering[T]): T = this.reduce(ord.min)
+
+  /**
+   * @return true if and only if the RDD contains no elements at all. Note that an RDD
+   *         may be empty even when it has at least 1 partition.
+   */
+  def isEmpty(): Boolean = partitions.length == 0 || take(1).length == 0
 
   /**
    * Save this RDD as a text file, using string representations of elements.
