@@ -102,12 +102,12 @@ private[recommendation] trait ALSParams extends Params with HasMaxIter with HasR
 /**
  * Model fitted by ALS.
  */
-class ALSModel[@specialized(Int, Long) UserType, @specialized(Int, Long) ItemType] private[ml] (
-    override val parent: ALS[UserType, ItemType],
+class ALSModel private[ml] (
+    override val parent: ALS,
     override val fittingParamMap: ParamMap,
     k: Int,
-    userFactors: RDD[(UserType, Array[Float])],
-    itemFactors: RDD[(ItemType, Array[Float])])
+    userFactors: RDD[(Int, Array[Float])],
+    itemFactors: RDD[(Int, Array[Float])])
   extends Model[ALSModel] with ALSParams {
 
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
@@ -151,7 +151,7 @@ class ALSModel[@specialized(Int, Long) UserType, @specialized(Int, Long) ItemTyp
 
 private object ALSModel {
   /** Case class to convert factors to SchemaRDDs */
-  private case class Factor[@specialized(Int, Long) IDType](id: IDType, features: Seq[Float])
+  private case class Factor(id: Int, features: Seq[Float])
 }
 
 /**
@@ -183,8 +183,7 @@ private object ALSModel {
  * indicated user
  * preferences rather than explicit ratings given to items.
  */
-class ALS[@specialized(Int, Long) UserType, @specialized(Int, Long) ItemType]
-  extends Estimator[ALSModel] with ALSParams {
+class ALS extends Estimator[ALSModel] with ALSParams {
 
   import org.apache.spark.ml.recommendation.ALS.Rating
 
@@ -210,7 +209,7 @@ class ALS[@specialized(Int, Long) UserType, @specialized(Int, Long) ItemType]
   setMaxIter(20)
   setRegParam(1.0)
 
-  override def fit(dataset: SchemaRDD, paramMap: ParamMap): ALSModel[_, _] = {
+  override def fit(dataset: SchemaRDD, paramMap: ParamMap): ALSModel = {
     import dataset.sqlContext._
     val map = this.paramMap ++ paramMap
     val ratings =
