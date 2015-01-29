@@ -76,7 +76,7 @@ private[spark] class PythonRDD(
     context.addTaskCompletionListener { context =>
       writerThread.shutdownOnTaskCompletion()
       writerThread.join()
-      if (!released) {
+      if (!reuse_worker || !released) {
         try {
           worker.close()
         } catch {
@@ -144,6 +144,7 @@ private[spark] class PythonRDD(
                 stream.readFully(update)
                 accumulator += Collections.singletonList(update)
               }
+              // Check whether the worker is ready to be re-used.
               if (stream.readInt() == SpecialLengths.END_OF_STREAM) {
                 if (reuse_worker) {
                   env.releasePythonWorker(pythonExec, envVars.toMap, worker)
