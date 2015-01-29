@@ -29,7 +29,7 @@ import pipes
 import random
 import shutil
 import string
-from stat import s_IRUSR
+from stat import S_IRUSR
 import subprocess
 import sys
 import tarfile
@@ -357,8 +357,9 @@ def launch_cluster(conn, opts, cluster_name):
         sys.exit(1)
 
     file_mode = os.stat(opts.identity_file).st_mode
-    if not (file_mode & os.stat.S_IRUSR):
-        print >> stderr, "ERROR: Must set the permissions for the identity file to S_IRUSR."
+    if not (file_mode & S_IRUSR) or \
+       not oct(file_mode)[-2:] == '00':
+        print >> stderr, "ERROR: The identity file must be accessible only by you."
         sys.exit(1)
 
     if opts.key_pair is None:
