@@ -312,7 +312,7 @@ class BroadcastSuite extends FunSuite with LocalSparkContext {
       new SparkContext("local", "test", broadcastConf)
     }
     val blockManagerMaster = sc.env.blockManager.master
-    val list = List[Int](1, 2, 3, 4)
+    val list = (1 to 4096).toList
 
     // Create broadcast variable
     val broadcast = sc.broadcast(list)
