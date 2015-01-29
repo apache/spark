@@ -19,7 +19,7 @@ package org.apache.spark.rdd.kafka
 
 import scala.reflect.{classTag, ClassTag}
 
-import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
+import org.apache.spark.{Logging, Partition, SparkContext, SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.NextIterator
 
@@ -65,100 +65,123 @@ class KafkaRDD[
     Seq(part.host)
   }
 
+  private def assertStartedCleanly(part: KafkaRDDPartition) {
+    assert(part.fromOffset <= part.untilOffset,
+      s"Beginning offset ${part.fromOffset} is after the ending offset ${part.untilOffset} " +
+        s"for topic ${part.topic} partition ${part.partition}. " +
+        "You either provided an invalid fromOffset, or the Kafka topic has been damaged")
+  }
+
   override def compute(thePart: Partition, context: TaskContext): Iterator[R] = {
     val part = thePart.asInstanceOf[KafkaRDDPartition]
-    if (part.fromOffset >= part.untilOffset) {
-      log.warn("Beginning offset is same or after ending offset " +
+    assertStartedCleanly(part)
+    if (part.fromOffset == part.untilOffset) {
+      log.warn("Beginning offset ${part.fromOffset} is the same as ending offset " +
         s"skipping ${part.topic} ${part.partition}")
       Iterator.empty
     } else {
-      new NextIterator[R] {
-        context.addTaskCompletionListener{ context => closeIfNeeded() }
+      new KafkaRDDIterator(part, context)
+    }
+  }
 
-        log.info(s"Computing topic ${part.topic}, partition ${part.partition} " +
-          s"offsets ${part.fromOffset} -> ${part.untilOffset}")
+  private class KafkaRDDIterator(
+    part: KafkaRDDPartition, context: TaskContext) extends NextIterator[R] {
 
-        val kc = new KafkaCluster(kafkaParams)
-        val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
-          .newInstance(kc.config.props)
-          .asInstanceOf[Decoder[K]]
-        val valueDecoder = classTag[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
-          .newInstance(kc.config.props)
-          .asInstanceOf[Decoder[V]]
-        val consumer = connectLeader
-        var requestOffset = part.fromOffset
-        var iter: Iterator[MessageAndOffset] = null
+    context.addTaskCompletionListener{ context => closeIfNeeded() }
 
-        // The idea is to use the provided preferred host, except on task retry atttempts,
-        // to minimize number of kafka metadata requests
-        private def connectLeader: SimpleConsumer = {
-          if (context.attemptNumber > 0) {
-            kc.connectLeader(part.topic, part.partition).fold(
-              errs => throw new Exception(
-                s"Couldn't connect to leader for topic ${part.topic} ${part.partition}: " +
-                  errs.mkString("\n")),
-              consumer => consumer
-            )
-          } else {
-            kc.connect(part.host, part.port)
-          }
+    log.info(s"Computing topic ${part.topic}, partition ${part.partition} " +
+      s"offsets ${part.fromOffset} -> ${part.untilOffset}")
+
+    val kc = new KafkaCluster(kafkaParams)
+    val keyDecoder = classTag[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
+      .newInstance(kc.config.props)
+      .asInstanceOf[Decoder[K]]
+    val valueDecoder = classTag[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
+      .newInstance(kc.config.props)
+      .asInstanceOf[Decoder[V]]
+    val consumer = connectLeader
+    var requestOffset = part.fromOffset
+    var iter: Iterator[MessageAndOffset] = null
+
+    // The idea is to use the provided preferred host, except on task retry atttempts,
+    // to minimize number of kafka metadata requests
+    private def connectLeader: SimpleConsumer = {
+      if (context.attemptNumber > 0) {
+        kc.connectLeader(part.topic, part.partition).fold(
+          errs => throw new SparkException(
+            s"Couldn't connect to leader for topic ${part.topic} ${part.partition}: " +
+              errs.mkString("\n")),
+          consumer => consumer
+        )
+      } else {
+        kc.connect(part.host, part.port)
+      }
+    }
+
+    private def handleFetchErr(resp: FetchResponse) {
+      if (resp.hasError) {
+        val err = resp.errorCode(part.topic, part.partition)
+        if (err == ErrorMapping.LeaderNotAvailableCode ||
+          err == ErrorMapping.NotLeaderForPartitionCode) {
+          log.error(s"Lost leader for topic ${part.topic} partition ${part.partition}, " +
+            s" sleeping for ${kc.config.refreshLeaderBackoffMs}ms")
+          Thread.sleep(kc.config.refreshLeaderBackoffMs)
         }
+        // Let normal rdd retry sort out reconnect attempts
+        throw ErrorMapping.exceptionFor(err)
+      }
+    }
 
-        private def handleErr(resp: FetchResponse) {
-          if (resp.hasError) {
-            val err = resp.errorCode(part.topic, part.partition)
-            if (err == ErrorMapping.LeaderNotAvailableCode ||
-              err == ErrorMapping.NotLeaderForPartitionCode) {
-              log.error(s"Lost leader for topic ${part.topic} partition ${part.partition}, " +
-                s" sleeping for ${kc.config.refreshLeaderBackoffMs}ms")
-              Thread.sleep(kc.config.refreshLeaderBackoffMs)
-            }
-            // Let normal rdd retry sort out reconnect attempts
-            throw ErrorMapping.exceptionFor(err)
-          }
-        }
+    private def assertFinishedEmpty(requestOffset: Long) {
+      assert(requestOffset == part.untilOffset,
+        s"ran out of messages before reaching ending offset ${part.untilOffset} " +
+          s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
+          " This should not happen, and indicates that messages may have been lost")
+    }
 
-        override def close() = consumer.close()
+    private def assertFinishedWithoutOvershoot(itemOffset: Long) {
+      assert(itemOffset == part.untilOffset,
+        s"got ${itemOffset} > ending offset ${part.untilOffset} " +
+          s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
+          " This should not happen, and indicates a message may have been skipped")
+    }
 
-        override def getNext: R = {
-          if (iter == null || !iter.hasNext) {
-            val req = new FetchRequestBuilder().
-              addFetch(part.topic, part.partition, requestOffset, kc.config.fetchMessageMaxBytes).
-              build()
-            val resp = consumer.fetch(req)
-            handleErr(resp)
-            // kafka may return a batch that starts before the requested offset
-            iter = resp.messageSet(part.topic, part.partition)
-              .iterator
-              .dropWhile(_.offset < requestOffset)
-          }
-          if (!iter.hasNext) {
-            assert(requestOffset == part.untilOffset,
-              s"ran out of messages before reaching ending offset ${part.untilOffset} " +
-                s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
-                " This should not happen, and indicates that messages may have been lost")
-            finished = true
-            null.asInstanceOf[R]
-          } else {
-            val item = iter.next
-            if (item.offset >= part.untilOffset) {
-              assert(item.offset == part.untilOffset,
-                s"got ${item.offset} > ending offset ${part.untilOffset} " +
-                  s"for topic ${part.topic} partition ${part.partition} start ${part.fromOffset}." +
-                  " This should not happen, and indicates a message may have been skipped")
-              finished = true
-              null.asInstanceOf[R]
-            } else {
-              requestOffset = item.nextOffset
-              messageHandler(new MessageAndMetadata(
-                part.topic, part.partition, item.message, item.offset, keyDecoder, valueDecoder))
-            }
-          }
+    private def fetchBatch: Iterator[MessageAndOffset] = {
+      val req = new FetchRequestBuilder().
+        addFetch(part.topic, part.partition, requestOffset, kc.config.fetchMessageMaxBytes).
+        build()
+      val resp = consumer.fetch(req)
+      handleFetchErr(resp)
+      // kafka may return a batch that starts before the requested offset
+      resp.messageSet(part.topic, part.partition)
+        .iterator
+        .dropWhile(_.offset < requestOffset)
+    }
+
+    override def close() = consumer.close()
+
+    override def getNext: R = {
+      if (iter == null || !iter.hasNext) {
+        iter = fetchBatch
+      }
+      if (!iter.hasNext) {
+        assertFinishedEmpty(requestOffset)
+        finished = true
+        null.asInstanceOf[R]
+      } else {
+        val item = iter.next
+        if (item.offset >= part.untilOffset) {
+          assertFinishedWithoutOvershoot(item.offset)
+          finished = true
+          null.asInstanceOf[R]
+        } else {
+          requestOffset = item.nextOffset
+          messageHandler(new MessageAndMetadata(
+            part.topic, part.partition, item.message, item.offset, keyDecoder, valueDecoder))
         }
       }
     }
   }
-
 }
 
 private[spark]
