@@ -126,6 +126,8 @@ object Pregel extends Logging {
     // Loop
     var prevG: Graph[VD, ED] = null
     var i = 0
+    val checkpoint = g.vertices.context.getCheckpointDir.nonEmpty
+    val checkpointFrequency = 25
     while (activeMessages > 0 && i < maxIterations) {
       // Receive the messages. Vertices that didn't get any messages do not appear in newVerts.
       val newVerts = g.vertices.innerJoin(messages)(vprog).cache()
@@ -139,6 +141,14 @@ object Pregel extends Logging {
       // get to send messages. We must cache messages so it can be materialized on the next line,
       // allowing us to uncache the previous iteration.
       messages = g.mapReduceTriplets(sendMsg, mergeMsg, Some((newVerts, activeDirection))).cache()
+
+      if (checkpoint && i % checkpointFrequency == checkpointFrequency - 1) {
+        logInfo("Checkpointing in iteration " + i)
+        g.vertices.checkpoint()
+        g.edges.checkpoint()
+        messages.checkpoint()
+      }
+
       // The call to count() materializes `messages`, `newVerts`, and the vertices of `g`. This
       // hides oldMessages (depended on by newVerts), newVerts (depended on by messages), and the
       // vertices of prevG (depended on by newVerts, oldMessages, and the vertices of g).
