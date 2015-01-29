@@ -138,9 +138,7 @@ class LogisticRegressionModel private[ml] (
     }
     val t = map(threshold)
     val predict: Double => Double = (score) => { if (score > t) 1.0 else 0.0 }
-    dataset.select(
-      $"*",
-      callUDF(score, dataset(map(featuresCol))).as(map(scoreCol)),
-      callUDF(predict, dataset(map(scoreCol))).as(map(predictionCol)))
+    dataset.select($"*", callUDF(score, dataset(map(featuresCol))).as(map(scoreCol)))
+      .select($"*", callUDF(predict, dataset(map(scoreCol))).as(map(predictionCol)))
   }
 }

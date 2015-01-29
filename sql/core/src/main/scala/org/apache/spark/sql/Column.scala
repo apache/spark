@@ -22,15 +22,19 @@ import scala.language.implicitConversions
 import org.apache.spark.sql.api.scala.dsl.lit
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, Star}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Literal => LiteralExpr}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, LogicalPlan}
 import org.apache.spark.sql.types._
 
 
 object Column {
-  def unapply(col: Column): Option[Expression] = Some(col.expr)
-
+  /**
+   * Creates a [[Column]] based on the given column name.
+   * Same as [[api.scala.dsl.col]] and [[api.java.dsl.col]].
+   */
   def apply(colName: String): Column = new Column(colName)
+
+  /** For internal pattern matching. */
+  private[sql] def unapply(col: Column): Option[Expression] = Some(col.expr)
 }
 
 
@@ -438,7 +442,7 @@ class Column(
    * @param ordinal
    * @return
    */
-  override def getItem(ordinal: Int): Column = GetItem(expr, LiteralExpr(ordinal))
+  override def getItem(ordinal: Int): Column = GetItem(expr, Literal(ordinal))
 
   /**
    * An expression that gets a field by name in a [[StructField]].

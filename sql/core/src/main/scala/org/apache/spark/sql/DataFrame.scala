@@ -250,7 +250,7 @@ class DataFrame protected[sql](
   }
 
   /**
-   * Selects a single column and return it as a [[Column]].
+   * Selects column based on the column name and return it as a [[Column]].
    */
   override def apply(colName: String): Column = colName match {
     case "*" =>
