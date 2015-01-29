@@ -29,7 +29,8 @@ import org.apache.spark.util.AsynchronousListenerBus
  * is stopped when it receives a SparkListenerShutdown event, which is posted using stop().
  */
 private[spark] class LiveListenerBus
-  extends AsynchronousListenerBus[SparkListener, SparkListenerEvent]("SparkListenerBus") with SparkListenerBus {
+  extends AsynchronousListenerBus[SparkListener, SparkListenerEvent]("SparkListenerBus")
+  with SparkListenerBus {
 
   private val logDroppedEvent = new AtomicBoolean(false)
 
