@@ -17,14 +17,10 @@
 
 package org.apache.spark.mllib.tree.configuration
 
-import org.apache.spark.annotation.DeveloperApi
-
 /**
- * :: Experimental ::
  * Enum to select ensemble combining strategy for base learners
  */
-@DeveloperApi
-object EnsembleCombiningStrategy extends Enumeration {
+private[tree] object EnsembleCombiningStrategy extends Enumeration {
   type EnsembleCombiningStrategy = Value
-  val Sum, Average = Value
+  val Average, Sum, Vote = Value
 }

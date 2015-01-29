@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import java.io.File
+
 import scala.util.Properties
 import scala.collection.JavaConversions._
 
@@ -23,7 +25,7 @@ import sbt.Classpaths.publishTask
 import sbt.Keys._
 import sbtunidoc.Plugin.genjavadocSettings
 import sbtunidoc.Plugin.UnidocKeys.unidocGenjavadocVersion
-import com.typesafe.sbt.pom.{PomBuild, SbtPomKeys}
+import com.typesafe.sbt.pom.{loadEffectivePom, PomBuild, SbtPomKeys}
 import net.virtualvoid.sbt.graph.Plugin.graphSettings
 
 object BuildCommons {
@@ -38,9 +40,9 @@ object BuildCommons {
       "streaming-flume", "streaming-kafka", "streaming-mqtt", "streaming-twitter",
       "streaming-zeromq").map(ProjectRef(buildLocation, _))
 
-  val optionallyEnabledProjects@Seq(yarn, yarnStable, yarnAlpha, java8Tests,
-    sparkGangliaLgpl, sparkKinesisAsl) = Seq("yarn", "yarn-stable", "yarn-alpha",
-    "java8-tests", "ganglia-lgpl", "kinesis-asl").map(ProjectRef(buildLocation, _))
+  val optionallyEnabledProjects@Seq(yarn, yarnStable, java8Tests, sparkGangliaLgpl,
+    sparkKinesisAsl) = Seq("yarn", "yarn-stable", "java8-tests", "ganglia-lgpl",
+    "kinesis-asl").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(assembly, examples, networkYarn) =
     Seq("assembly", "examples", "network-yarn").map(ProjectRef(buildLocation, _))
@@ -79,14 +81,8 @@ object SparkBuild extends PomBuild {
       case None =>
     }
     if (Properties.envOrNone("SPARK_YARN").isDefined) {
-      if(isAlphaYarn) {
-        println("NOTE: SPARK_YARN is deprecated, please use -Pyarn-alpha flag.")
-        profiles ++= Seq("yarn-alpha")
-      }
-      else {
-        println("NOTE: SPARK_YARN is deprecated, please use -Pyarn flag.")
-        profiles ++= Seq("yarn")
-      }
+      println("NOTE: SPARK_YARN is deprecated, please use -Pyarn flag.")
+      profiles ++= Seq("yarn")
     }
     profiles
   }
@@ -101,14 +97,13 @@ object SparkBuild extends PomBuild {
       v.split("(\\s+|,)").filterNot(_.isEmpty).map(_.trim.replaceAll("-P", "")).toSeq
     }
 
-    if (profiles.exists(_.contains("scala-"))) {
-      profiles
-    } else if (System.getProperty("scala-2.11") != null) {
-      profiles ++ Seq("scala-2.11")
-    } else {
-      println("Enabled default scala profile")
-      profiles ++ Seq("scala-2.10")
+    if (System.getProperty("scala-2.11") == "") {
+      // To activate scala-2.11 profile, replace empty property value to non-empty value
+      // in the same way as Maven which handles -Dname as -Dname=true before executes build process.
+      // see: https://github.com/apache/maven/blob/maven-3.0.4/maven-embedder/src/main/java/org/apache/maven/cli/MavenCli.java#L1082
+      System.setProperty("scala-2.11", "true")
     }
+    profiles
   }
 
   Properties.envOrNone("SBT_MAVEN_PROPERTIES") match {
@@ -137,7 +132,12 @@ object SparkBuild extends PomBuild {
     },
     publishMavenStyle in MavenCompile := true,
     publishLocal in MavenCompile <<= publishTask(publishLocalConfiguration in MavenCompile, deliverLocal),
-    publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
+    publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn,
+
+    javacOptions in (Compile, doc) ++= {
+      val Array(major, minor, _) = System.getProperty("java.version").split("\\.", 3)
+      if (major.toInt >= 1 && minor.toInt >= 8) Seq("-Xdoclint:all", "-Xdoclint:-missing") else Seq.empty
+    }
   )
 
   def enable(settings: Seq[Setting[_]])(projectRef: ProjectRef) = {
@@ -155,7 +155,7 @@ object SparkBuild extends PomBuild {
 
   // TODO: Add Sql to mima checks
   allProjects.filterNot(x => Seq(spark, sql, hive, hiveThriftServer, catalyst, repl,
-    streamingFlumeSink, networkCommon, networkShuffle, networkYarn).contains(x)).foreach {
+    networkCommon, networkShuffle, networkYarn).contains(x)).foreach {
       x => enable(MimaBuild.mimaSettings(sparkHome, x))(x)
     }
 
@@ -216,8 +216,6 @@ object OldDeps {
   def oldDepsSettings() = Defaults.coreDefaultSettings ++ Seq(
     name := "old-deps",
     scalaVersion := "2.10.4",
-    // TODO: remove this as soon as 1.2.0 is published on Maven central.
-    resolvers += "spark-staging-1038" at "https://repository.apache.org/content/repositories/orgapachespark-1038/",
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
     libraryDependencies := Seq("spark-streaming-mqtt", "spark-streaming-zeromq",
@@ -245,10 +243,10 @@ object SQL {
         |import org.apache.spark.sql.catalyst.expressions._
         |import org.apache.spark.sql.catalyst.plans.logical._
         |import org.apache.spark.sql.catalyst.rules._
-        |import org.apache.spark.sql.catalyst.types._
         |import org.apache.spark.sql.catalyst.util._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.test.TestSQLContext._
+        |import org.apache.spark.sql.types._
         |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin,
     cleanupCommands in console := "sparkContext.stop()"
   )
@@ -258,6 +256,8 @@ object Hive {
 
   lazy val settings = Seq(
     javaOptions += "-XX:MaxPermSize=1g",
+    // Specially disable assertions since some Hive tests fail them
+    javaOptions in Test := (javaOptions in Test).value.filterNot(_ == "-ea"),
     // Multiple queries rely on the TestHive singleton. See comments there for more details.
     parallelExecution in Test := false,
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
@@ -273,11 +273,11 @@ object Hive {
         |import org.apache.spark.sql.catalyst.expressions._
         |import org.apache.spark.sql.catalyst.plans.logical._
         |import org.apache.spark.sql.catalyst.rules._
-        |import org.apache.spark.sql.catalyst.types._
         |import org.apache.spark.sql.catalyst.util._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.hive._
         |import org.apache.spark.sql.hive.test.TestHive._
+        |import org.apache.spark.sql.types._
         |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin,
     cleanupCommands in console := "sparkContext.stop()",
     // Some of our log4j jars make it impossible to submit jobs from this JVM to Hive Map/Reduce
@@ -292,17 +292,15 @@ object Assembly {
   import sbtassembly.Plugin._
   import AssemblyKeys._
 
+  val hadoopVersion = taskKey[String]("The version of hadoop that spark is compiled against.")
+
   lazy val settings = assemblySettings ++ Seq(
     test in assembly := {},
-    jarName in assembly <<= (version, moduleName) map { (v, mName) =>
-      if (mName.contains("network-yarn")) {
-        // This must match the same name used in maven (see network/yarn/pom.xml)
-        "spark-" + v + "-yarn-shuffle.jar"
-      } else {
-        mName + "-" + v + "-hadoop" +
-          Option(System.getProperty("hadoop.version")).getOrElse("1.0.4") + ".jar"
-      }
+    hadoopVersion := {
+      sys.props.get("hadoop.version")
+        .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
+    jarName in assembly := s"${moduleName.value}-${version.value}-hadoop${hadoopVersion.value}.jar",
     mergeStrategy in assembly := {
       case PathList("org", "datanucleus", xs @ _*)             => MergeStrategy.discard
       case m if m.toLowerCase.endsWith("manifest.mf")          => MergeStrategy.discard
@@ -313,7 +311,6 @@ object Assembly {
       case _                                                   => MergeStrategy.first
     }
   )
-
 }
 
 object Unidoc {
@@ -331,9 +328,9 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, catalyst, streamingFlumeSink, yarn),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, bagel, graphx, examples, tools, catalyst, streamingFlumeSink, yarn, yarnAlpha),
+      inAnyProject -- inProjects(OldDeps.project, repl, bagel, examples, tools, catalyst, streamingFlumeSink, yarn),
 
     // Skip class names containing $ and some internal packages in Javadocs
     unidocAllSources in (JavaUnidoc, unidoc) := {
@@ -361,7 +358,10 @@ object Unidoc {
         "mllib.classification", "mllib.clustering", "mllib.evaluation.binary", "mllib.linalg",
         "mllib.linalg.distributed", "mllib.optimization", "mllib.rdd", "mllib.recommendation",
         "mllib.regression", "mllib.stat", "mllib.tree", "mllib.tree.configuration",
-        "mllib.tree.impurity", "mllib.tree.model", "mllib.util"
+        "mllib.tree.impurity", "mllib.tree.model", "mllib.util",
+        "mllib.evaluation", "mllib.feature", "mllib.random", "mllib.stat.correlation",
+        "mllib.stat.test", "mllib.tree.impl", "mllib.tree.loss",
+        "ml", "ml.classification", "ml.evaluation", "ml.feature", "ml.param", "ml.tuning"
       ),
       "-group", "Spark SQL", packageList("sql.api.java", "sql.api.java.types", "sql.hive.api.java"),
       "-noqualifier", "java.lang"
@@ -384,6 +384,7 @@ object TestSettings {
     javaOptions in Test += "-Dsun.io.serialization.extendedDebugInfo=true",
     javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark")
       .map { case (k,v) => s"-D$k=$v" }.toSeq,
+    javaOptions in Test += "-ea",
     javaOptions in Test ++= "-Xmx3g -XX:PermSize=128M -XX:MaxNewSize=256m -XX:MaxPermSize=1g"
       .split(" ").toSeq,
     // This places test scope jars on the classpath of executors during tests.

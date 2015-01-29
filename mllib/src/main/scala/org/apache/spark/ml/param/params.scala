@@ -17,13 +17,12 @@
 
 package org.apache.spark.ml.param
 
-import java.lang.reflect.Modifier
-
-import org.apache.spark.annotation.AlphaComponent
-
 import scala.annotation.varargs
 import scala.collection.mutable
 
+import java.lang.reflect.Modifier
+
+import org.apache.spark.annotation.AlphaComponent
 import org.apache.spark.ml.Identifiable
 
 /**
@@ -166,6 +165,13 @@ trait Params extends Identifiable with Serializable {
   }
 
   /**
+   * Sets a parameter (by name) in the embedded param map.
+   */
+  private[ml] def set(param: String, value: Any): this.type = {
+    set(getParam(param), value)
+  }
+
+  /**
    * Gets the value of a parameter in the embedded param map.
    */
   private[ml] def get[T](param: Param[T]): T = {
@@ -222,6 +228,7 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
   /**
    * Puts a list of param pairs (overwrites if the input params exists).
    */
+  @varargs
   def put(paramPairs: ParamPair[_]*): this.type = {
     paramPairs.foreach { p =>
       put(p.param.asInstanceOf[Param[Any]], p.value)
@@ -282,14 +289,15 @@ class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any]) exten
    * where the latter overwrites this if there exists conflicts.
    */
   def ++(other: ParamMap): ParamMap = {
+    // TODO: Provide a better method name for Java users.
     new ParamMap(this.map ++ other.map)
   }
-
 
   /**
    * Adds all parameters from the input param map into this param map.
    */
   def ++=(other: ParamMap): this.type = {
+    // TODO: Provide a better method name for Java users.
     this.map ++= other.map
     this
   }

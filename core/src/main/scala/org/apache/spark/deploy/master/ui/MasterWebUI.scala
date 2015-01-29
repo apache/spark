@@ -41,8 +41,6 @@ class MasterWebUI(val master: Master, requestedPort: Int)
     attachPage(new HistoryNotFoundPage(this))
     attachPage(new MasterPage(this))
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
-    master.masterMetricsSystem.getServletHandlers.foreach(attachHandler)
-    master.applicationMetricsSystem.getServletHandlers.foreach(attachHandler)
   }
 
   /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */

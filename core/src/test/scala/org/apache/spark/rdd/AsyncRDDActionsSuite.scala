@@ -27,7 +27,6 @@ import org.scalatest.{BeforeAndAfterAll, FunSuite}
 import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.{SparkContext, SparkException, LocalSparkContext}
 
 class AsyncRDDActionsSuite extends FunSuite with BeforeAndAfterAll with Timeouts {

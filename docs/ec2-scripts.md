@@ -12,16 +12,14 @@ on the [Amazon Web Services site](http://aws.amazon.com/).
 
 `spark-ec2` is designed to manage multiple named clusters. You can
 launch a new cluster (telling the script its size and giving it a name),
-shutdown an existing cluster, or log into a cluster. Each cluster
-launches a set of instances, which are tagged with the cluster name,
-and placed into EC2 security groups.  If you don't specify a security
-group, the `spark-ec2` script will create security groups based on the
-cluster name you request. For example, a cluster named
+shutdown an existing cluster, or log into a cluster. Each cluster is
+identified by placing its machines into EC2 security groups whose names
+are derived from the name of the cluster. For example, a cluster named
 `test` will contain a master node in a security group called
 `test-master`, and a number of slave nodes in a security group called
-`test-slaves`.  You can also specify a security group prefix to be used
-in place of the cluster name.  Machines in a cluster can be identified
-by looking for the "Name" tag of the instance in the Amazon EC2 Console.
+`test-slaves`. The `spark-ec2` script will create these security groups
+for you based on the cluster name you request. You can also use them to
+identify machines belonging to each cluster in the Amazon EC2 Console.
 
 
 # Before You Start
@@ -87,9 +85,33 @@ another.
      specified version of Spark. The `<version>` can be a version number
      (e.g. "0.7.3") or a specific git hash. By default, a recent
      version will be used.
+-    `--spark-git-repo=<repository url>` will let you run a custom version of
+     Spark that is built from the given git repository. By default, the
+     [Apache Github mirror](https://github.com/apache/spark) will be used.
+     When using a custom Spark version, `--spark-version` must be set to git
+     commit hash, such as 317e114, instead of a version number.
 -    If one of your launches fails due to e.g. not having the right
 permissions on your private key file, you can run `launch` with the
 `--resume` option to restart the setup process on an existing cluster.
+
+# Launching a Cluster in a VPC
+
+-   Run
+    `./spark-ec2 -k <keypair> -i <key-file> -s <num-slaves> --vpc-id=<vpc-id> --subnet-id=<subnet-id> launch <cluster-name>`,
+    where `<keypair>` is the name of your EC2 key pair (that you gave it
+    when you created it), `<key-file>` is the private key file for your
+    key pair, `<num-slaves>` is the number of slave nodes to launch (try
+    1 at first), `<vpc-id>` is the name of your VPC, `<subnet-id>` is the
+    name of your subnet, and `<cluster-name>` is the name to give to your
+    cluster.
+
+    For example:
+
+    ```bash
+    export AWS_SECRET_ACCESS_KEY=AaBbCcDdEeFGgHhIiJjKkLlMmNnOoPpQqRrSsTtU
+export AWS_ACCESS_KEY_ID=ABCDEFG1234567890123
+./spark-ec2 --key-pair=awskey --identity-file=awskey.pem --region=us-west-1 --zone=us-west-1a --vpc-id=vpc-a28d24c7 --subnet-id=subnet-4eb27b39 --spark-version=1.1.0 launch my-spark-cluster
+    ```
 
 # Running Applications
 

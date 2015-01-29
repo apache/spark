@@ -26,7 +26,8 @@ import org.apache.spark.Logging
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils extends Logging {
-  val TABLE_CLASS = "table table-bordered table-striped-custom table-condensed sortable"
+  val TABLE_CLASS_NOT_STRIPED = "table table-bordered table-condensed sortable"
+  val TABLE_CLASS_STRIPED = TABLE_CLASS_NOT_STRIPED + " table-striped"
 
   // SimpleDateFormat is not thread-safe. Don't expose it to avoid improper use.
   private val dateFormat = new ThreadLocal[SimpleDateFormat]() {
@@ -169,7 +170,8 @@ private[spark] object UIUtils extends Logging {
       title: String,
       content: => Seq[Node],
       activeTab: SparkUITab,
-      refreshInterval: Option[Int] = None): Seq[Node] = {
+      refreshInterval: Option[Int] = None,
+      helpText: Option[String] = None): Seq[Node] = {
 
     val appName = activeTab.appName
     val shortAppName = if (appName.length < 36) appName else appName.take(32) + "..."
@@ -178,6 +180,11 @@ private[spark] object UIUtils extends Logging {
         <a href={prependBaseUri(activeTab.basePath, "/" + tab.prefix + "/")}>{tab.name}</a>
       </li>
     }
+    val helpButton: Seq[Node] = helpText.map { helpText =>
+      <sup>
+        (<a data-toggle="tooltip" data-placement="bottom" title={helpText}>?</a>)
+      </sup>
+    }.getOrElse(Seq.empty)
 
     <html>
       <head>
@@ -187,9 +194,12 @@ private[spark] object UIUtils extends Logging {
       <body>
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
-            <a href={prependBaseUri("/")} class="brand">
-              <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
-            </a>
+            <div class="brand">
+              <a href={prependBaseUri("/")} class="brand">
+                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
+                <span class="version">{org.apache.spark.SPARK_VERSION}</span>
+              </a>
+            </div>
             <ul class="nav">{header}</ul>
             <p class="navbar-text pull-right">
               <strong title={appName}>{shortAppName}</strong> application UI
@@ -201,6 +211,7 @@ private[spark] object UIUtils extends Logging {
             <div class="span12">
               <h3 style="vertical-align: bottom; display: inline-block;">
                 {title}
+                {helpButton}
               </h3>
             </div>
           </div>
@@ -223,8 +234,9 @@ private[spark] object UIUtils extends Logging {
             <div class="span12">
               <h3 style="vertical-align: middle; display: inline-block;">
                 <a style="text-decoration: none" href={prependBaseUri("/")}>
-                  <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")}
-                       style="margin-right: 15px;" />
+                  <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
+                  <span class="version" 
+                        style="margin-right: 15px;">{org.apache.spark.SPARK_VERSION}</span>
                 </a>
                 {title}
               </h3>
@@ -243,12 +255,10 @@ private[spark] object UIUtils extends Logging {
       data: Iterable[T],
       fixedWidth: Boolean = false,
       id: Option[String] = None,
-      headerClasses: Seq[String] = Seq.empty): Seq[Node] = {
+      headerClasses: Seq[String] = Seq.empty,
+      stripeRowsWithCss: Boolean = true): Seq[Node] = {
 
-    var listingTableClass = TABLE_CLASS
-    if (fixedWidth) {
-      listingTableClass += " table-fixed"
-    }
+    val listingTableClass = if (stripeRowsWithCss) TABLE_CLASS_STRIPED else TABLE_CLASS_NOT_STRIPED
     val colWidth = 100.toDouble / headers.size
     val colWidthAttr = if (fixedWidth) colWidth + "%" else ""
 
@@ -282,5 +292,25 @@ private[spark] object UIUtils extends Logging {
         {data.map(r => generateDataRow(r))}
       </tbody>
     </table>
+  }
+
+  def makeProgressBar(
+      started: Int,
+      completed: Int,
+      failed: Int,
+      skipped:Int,
+      total: Int): Seq[Node] = {
+    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
+    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
+
+    <div class="progress">
+      <span style="text-align:center; position:absolute; width:100%; left:0;">
+        {completed}/{total}
+        { if (failed > 0) s"($failed failed)" }
+        { if (skipped > 0) s"($skipped skipped)" }
+      </span>
+      <div class="bar bar-completed" style={completeWidth}></div>
+      <div class="bar bar-running" style={startWidth}></div>
+    </div>
   }
 }

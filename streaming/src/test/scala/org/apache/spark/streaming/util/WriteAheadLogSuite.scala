@@ -22,11 +22,8 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.language.{implicitConversions, postfixOps}
-import scala.util.Random
 
 import WriteAheadLogSuite._
-import com.google.common.io.Files
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.spark.util.Utils
@@ -42,9 +39,9 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
   var manager: WriteAheadLogManager = null
 
   before {
-    tempDir = Files.createTempDir()
+    tempDir = Utils.createTempDir()
     testDir = tempDir.toString
-    testFile = new File(tempDir, Random.nextString(10)).toString
+    testFile = new File(tempDir, "testFile").toString
     if (manager != null) {
       manager.stop()
       manager = null
@@ -52,7 +49,7 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
   }
 
   after {
-    FileUtils.deleteQuietly(tempDir)
+    Utils.deleteRecursively(tempDir)
   }
 
   test("WriteAheadLogWriter - writing data") {
@@ -185,15 +182,29 @@ class WriteAheadLogSuite extends FunSuite with BeforeAndAfter {
   }
 
   test("WriteAheadLogManager - cleanup old logs") {
+    logCleanUpTest(waitForCompletion = false)
+  }
+
+  test("WriteAheadLogManager - cleanup old logs synchronously") {
+    logCleanUpTest(waitForCompletion = true)
+  }
+
+  private def logCleanUpTest(waitForCompletion: Boolean): Unit = {
     // Write data with manager, recover with new manager and verify
     val manualClock = new ManualClock
     val dataToWrite = generateRandomData()
     manager = writeDataUsingManager(testDir, dataToWrite, manualClock, stopManager = false)
     val logFiles = getLogFilesInDirectory(testDir)
     assert(logFiles.size > 1)
-    manager.cleanupOldLogs(manualClock.currentTime() / 2)
-    eventually(timeout(1 second), interval(10 milliseconds)) {
+
+    manager.cleanupOldLogs(manualClock.currentTime() / 2, waitForCompletion)
+
+    if (waitForCompletion) {
       assert(getLogFilesInDirectory(testDir).size < logFiles.size)
+    } else {
+      eventually(timeout(1 second), interval(10 milliseconds)) {
+        assert(getLogFilesInDirectory(testDir).size < logFiles.size)
+      }
     }
   }
 

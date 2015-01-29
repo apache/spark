@@ -19,7 +19,7 @@ from collections import namedtuple
 
 from pyspark import SparkContext
 from pyspark.rdd import RDD
-from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc, _to_java_object_rdd
+from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 
 __all__ = ['MatrixFactorizationModel', 'ALS', 'Rating']
 
@@ -110,7 +110,7 @@ class ALS(object):
                 ratings = ratings.map(lambda x: Rating(*x))
             else:
                 raise ValueError("rating should be RDD of Rating or tuple/list")
-        return _to_java_object_rdd(ratings, True)
+        return ratings
 
     @classmethod
     def train(cls, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, nonnegative=False,

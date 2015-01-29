@@ -25,7 +25,11 @@ FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 
 . "$FWDIR"/bin/load-spark-env.sh
 
-CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH"
+if [ -n "$SPARK_CLASSPATH" ]; then
+  CLASSPATH="$SPARK_CLASSPATH:$SPARK_SUBMIT_CLASSPATH"
+else
+  CLASSPATH="$SPARK_SUBMIT_CLASSPATH"
+fi
 
 # Build up classpath
 if [ -n "$SPARK_CONF_DIR" ]; then
@@ -68,21 +72,24 @@ else
   assembly_folder="$ASSEMBLY_DIR"
 fi
 
-num_jars="$(ls "$assembly_folder" | grep "spark-assembly.*hadoop.*\.jar" | wc -l)"
-if [ "$num_jars" -eq "0" ]; then
-  echo "Failed to find Spark assembly in $assembly_folder"
-  echo "You need to build Spark before running this program."
-  exit 1
-fi
-if [ "$num_jars" -gt "1" ]; then
-  jars_list=$(ls "$assembly_folder" | grep "spark-assembly.*hadoop.*.jar")
-  echo "Found multiple Spark assembly jars in $assembly_folder:"
-  echo "$jars_list"
-  echo "Please remove all but one jar."
-  exit 1
-fi
+num_jars=0
 
-ASSEMBLY_JAR="$(ls "$assembly_folder"/spark-assembly*hadoop*.jar 2>/dev/null)"
+for f in ${assembly_folder}/spark-assembly*hadoop*.jar; do
+  if [[ ! -e "$f" ]]; then
+    echo "Failed to find Spark assembly in $assembly_folder" 1>&2
+    echo "You need to build Spark before running this program." 1>&2
+    exit 1
+  fi
+  ASSEMBLY_JAR="$f"
+  num_jars=$((num_jars+1))
+done
+
+if [ "$num_jars" -gt "1" ]; then
+  echo "Found multiple Spark assembly jars in $assembly_folder:" 1>&2
+  ls ${assembly_folder}/spark-assembly*hadoop*.jar 1>&2
+  echo "Please remove all but one jar." 1>&2
+  exit 1
+fi
 
 # Verify that versions of java used to build the jars and run Spark are compatible
 jar_error_check=$("$JAR_CMD" -tf "$ASSEMBLY_JAR" nonexistent/class/path 2>&1)
@@ -108,7 +115,7 @@ else
   datanucleus_dir="$FWDIR"/lib_managed/jars
 fi
 
-datanucleus_jars="$(find "$datanucleus_dir" 2>/dev/null | grep "datanucleus-.*\\.jar")"
+datanucleus_jars="$(find "$datanucleus_dir" 2>/dev/null | grep "datanucleus-.*\\.jar$")"
 datanucleus_jars="$(echo "$datanucleus_jars" | tr "\n" : | sed s/:$//g)"
 
 if [ -n "$datanucleus_jars" ]; then
@@ -140,6 +147,13 @@ if [ -n "$HADOOP_CONF_DIR" ]; then
 fi
 if [ -n "$YARN_CONF_DIR" ]; then
   CLASSPATH="$CLASSPATH:$YARN_CONF_DIR"
+fi
+
+# To allow for distributions to append needed libraries to the classpath (e.g. when
+# using the "hadoop-provided" profile to build Spark), check SPARK_DIST_CLASSPATH and
+# append it to tbe final classpath.
+if [ -n "$SPARK_DIST_CLASSPATH" ]; then
+  CLASSPATH="$CLASSPATH:$SPARK_DIST_CLASSPATH"
 fi
 
 echo "$CLASSPATH"

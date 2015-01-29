@@ -97,6 +97,20 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   def cache(): Graph[VD, ED]
 
   /**
+   * Mark this Graph for checkpointing. It will be saved to a file inside the checkpoint
+   * directory set with SparkContext.setCheckpointDir() and all references to its parent
+   * RDDs will be removed. It is strongly recommended that this Graph is persisted in
+   * memory, otherwise saving it on a file will require recomputation.
+   */
+  def checkpoint(): Unit
+
+  /**
+   * Uncaches both vertices and edges of this graph. This is useful in iterative algorithms that
+   * build a new graph in each iteration.
+   */
+  def unpersist(blocking: Boolean = true): Graph[VD, ED]
+
+  /**
    * Uncaches only the vertices of this graph, leaving the edges alone. This is useful in iterative
    * algorithms that modify the vertex attributes but reuse the edges. This method can be used to
    * uncache the vertex attributes of previous iterations once they are no longer needed, improving

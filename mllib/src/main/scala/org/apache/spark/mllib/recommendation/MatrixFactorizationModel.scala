@@ -21,12 +21,16 @@ import java.lang.{Integer => JavaInteger}
 
 import org.jblas.DoubleMatrix
 
-import org.apache.spark.SparkContext._
+import org.apache.spark.Logging
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Model representing the result of matrix factorization.
+ *
+ * Note: If you create the model directly using constructor, please be aware that fast prediction
+ * requires cached user/product features and their associated partitioners.
  *
  * @param rank Rank for the features in this model.
  * @param userFeatures RDD of tuples where each tuple represents the userId and
@@ -34,10 +38,28 @@ import org.apache.spark.rdd.RDD
  * @param productFeatures RDD of tuples where each tuple represents the productId
  *                        and the features computed for this product.
  */
-class MatrixFactorizationModel private[mllib] (
+class MatrixFactorizationModel(
     val rank: Int,
     val userFeatures: RDD[(Int, Array[Double])],
-    val productFeatures: RDD[(Int, Array[Double])]) extends Serializable {
+    val productFeatures: RDD[(Int, Array[Double])]) extends Serializable with Logging {
+
+  require(rank > 0)
+  validateFeatures("User", userFeatures)
+  validateFeatures("Product", productFeatures)
+
+  /** Validates factors and warns users if there are performance concerns. */
+  private def validateFeatures(name: String, features: RDD[(Int, Array[Double])]): Unit = {
+    require(features.first()._2.size == rank,
+      s"$name feature dimension does not match the rank $rank.")
+    if (features.partitioner.isEmpty) {
+      logWarning(s"$name factor does not have a partitioner. "
+        + "Prediction on individual records could be slow.")
+    }
+    if (features.getStorageLevel == StorageLevel.NONE) {
+      logWarning(s"$name factor is not cached. Prediction could be slow.")
+    }
+  }
+
   /** Predict the rating of one user for one product. */
   def predict(user: Int, product: Int): Double = {
     val userVector = new DoubleMatrix(userFeatures.lookup(user).head)
