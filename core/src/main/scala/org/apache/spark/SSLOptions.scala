@@ -98,16 +98,31 @@ private[spark] object SSLOptions extends Logging {
    * The parent directory of that location is used as a base directory to resolve relative paths
    * to keystore and truststore.
    */
-  def parse(conf: SparkConf, ns: String): SSLOptions = {
-    val enabled = conf.getBoolean(s"$ns.enabled", defaultValue = false)
+  def parse(conf: SparkConf, ns: String, defaults: Option[SSLOptions] = None): SSLOptions = {
+    val enabled = conf.getBoolean(s"$ns.enabled", defaultValue = defaults.exists(_.enabled))
+
     val keyStore = conf.getOption(s"$ns.keyStore").map(new File(_))
+        .orElse(defaults.flatMap(_.keyStore))
+
     val keyStorePassword = conf.getOption(s"$ns.keyStorePassword")
+        .orElse(defaults.flatMap(_.keyStorePassword))
+
     val keyPassword = conf.getOption(s"$ns.keyPassword")
+        .orElse(defaults.flatMap(_.keyPassword))
+
     val trustStore = conf.getOption(s"$ns.trustStore").map(new File(_))
+        .orElse(defaults.flatMap(_.trustStore))
+
     val trustStorePassword = conf.getOption(s"$ns.trustStorePassword")
+        .orElse(defaults.flatMap(_.trustStorePassword))
+
     val protocol = conf.getOption(s"$ns.protocol")
-    val enabledAlgorithms = conf.get(s"$ns.enabledAlgorithms", defaultValue = "")
-        .split(",").map(_.trim).filter(_.nonEmpty).toSet
+        .orElse(defaults.flatMap(_.protocol))
+
+    val enabledAlgorithms = conf.getOption(s"$ns.enabledAlgorithms")
+        .map(_.split(",").map(_.trim).filter(_.nonEmpty).toSet)
+        .orElse(defaults.map(_.enabledAlgorithms))
+        .getOrElse(Set.empty)
 
     new SSLOptions(
       enabled,

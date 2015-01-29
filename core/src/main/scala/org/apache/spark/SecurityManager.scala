@@ -201,7 +201,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     )
   }
 
-  val sslOptions = SSLOptions.parse(sparkConf, "spark.ssl")
+  val sslOptions = SSLOptions.parse(sparkConf, "spark.ssl", defaults = None)
   logDebug(s"SSLConfiguration: $sslOptions")
 
   val (sslSocketFactory, hostnameVerifier) = if (sslOptions.enabled) {
