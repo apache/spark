@@ -2342,7 +2342,7 @@ SCALA_METHOD_MAPPINGS = {
 
 def _create_column_from_literal(literal):
     sc = SparkContext._active_spark_context
-    return sc._jvm.org.apache.spark.sql.api.java.dsl.lit(literal)
+    return sc._jvm.org.apache.spark.sql.Dsl.lit(literal)
 
 
 def _create_column_from_name(name):
@@ -2515,7 +2515,7 @@ def _aggregate_func(name):
             jcol = col._jc
         else:
             jcol = _create_column_from_name(col)
-        jc = getattr(sc._jvm.org.apache.spark.sql.api.java.dsl, name)(jcol)
+        jc = getattr(sc._jvm.org.apache.spark.sql.Dsl, name)(jcol)
         return Column(jc)
     return staticmethod(_)
 
