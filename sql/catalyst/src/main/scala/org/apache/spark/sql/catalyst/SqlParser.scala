@@ -146,9 +146,13 @@ class SqlParser extends AbstractSparkSQLParser {
       }
 
   protected lazy val insert: Parser[LogicalPlan] =
-    INSERT ~> OVERWRITE.? ~ (INTO ~> relation) ~ select ^^ {
-      case o ~ r ~ s => InsertIntoTable(r, Map.empty[String, Option[String]], s, o.isDefined)
-    }
+    ( INSERT ~> OVERWRITE ~> TABLE ~> relation ~ select ^^ {
+        case r ~ s => InsertIntoTable(r, Map.empty[String, Option[String]], s, true)
+      }
+    | INSERT ~> INTO ~> TABLE ~> relation ~ select ^^ {
+      case r ~ s => InsertIntoTable(r, Map.empty[String, Option[String]], s, false)
+      }
+    )
 
   protected lazy val projection: Parser[Expression] =
     expression ~ (AS.? ~> ident.?) ^^ {
