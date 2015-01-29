@@ -26,7 +26,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.util.{AkkaUtils, Utils}
 import org.apache.spark.deploy.{Command, DriverDescription}
 import org.apache.spark.deploy.ClientArguments._
-import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.deploy.DeployMessages
 import org.apache.spark.deploy.master.Master
 
 /**
@@ -56,52 +56,49 @@ private[spark] class StandaloneRestServerHandler(
 
   /** Handle a request to submit a driver. */
   override protected def handleSubmit(
-      request: SubmitDriverRequestMessage): SubmitDriverResponseMessage = {
-    import SubmitDriverResponseField._
+      request: SubmitDriverRequest): SubmitDriverResponse = {
     val driverDescription = buildDriverDescription(request)
-    val response = AkkaUtils.askWithReply[SubmitDriverResponse](
-      RequestSubmitDriver(driverDescription), masterActor, askTimeout)
-    new SubmitDriverResponseMessage()
-      .setField(SERVER_SPARK_VERSION, sparkVersion)
-      .setField(MESSAGE, response.message)
-      .setField(SUCCESS, response.success.toString)
-      .setFieldIfNotNull(DRIVER_ID, response.driverId.orNull)
+    val response = AkkaUtils.askWithReply[DeployMessages.SubmitDriverResponse](
+      DeployMessages.RequestSubmitDriver(driverDescription), masterActor, askTimeout)
+    new SubmitDriverResponse()
+      .setSparkVersion(sparkVersion)
+      .setMessage(response.message)
+      .setSuccess(response.success.toString)
+      .setDriverId(response.driverId.orNull)
   }
 
   /** Handle a request to kill a driver. */
   override protected def handleKill(
-      request: KillDriverRequestMessage): KillDriverResponseMessage = {
-    import KillDriverResponseField._
-    val driverId = request.getFieldNotNull(KillDriverRequestField.DRIVER_ID)
-    val response = AkkaUtils.askWithReply[KillDriverResponse](
-      RequestKillDriver(driverId), masterActor, askTimeout)
-    new KillDriverResponseMessage()
-      .setField(SERVER_SPARK_VERSION, sparkVersion)
-      .setField(MESSAGE, response.message)
-      .setField(DRIVER_ID, driverId)
-      .setField(SUCCESS, response.success.toString)
+      request: KillDriverRequest): KillDriverResponse = {
+    val driverId = request.getDriverId
+    val response = AkkaUtils.askWithReply[DeployMessages.KillDriverResponse](
+      DeployMessages.RequestKillDriver(driverId), masterActor, askTimeout)
+    new KillDriverResponse()
+      .setSparkVersion(sparkVersion)
+      .setMessage(response.message)
+      .setDriverId(driverId)
+      .setSuccess(response.success.toString)
   }
 
   /** Handle a request for a driver's status. */
   override protected def handleStatus(
-      request: DriverStatusRequestMessage): DriverStatusResponseMessage = {
-    import DriverStatusResponseField._
-    val driverId = request.getField(DriverStatusRequestField.DRIVER_ID)
-    val response = AkkaUtils.askWithReply[DriverStatusResponse](
-      RequestDriverStatus(driverId), masterActor, askTimeout)
+      request: DriverStatusRequest): DriverStatusResponse = {
+    val driverId = request.getDriverId
+    val response = AkkaUtils.askWithReply[DeployMessages.DriverStatusResponse](
+      DeployMessages.RequestDriverStatus(driverId), masterActor, askTimeout)
     // Format exception nicely, if it exists
     val message = response.exception.map { e =>
       val stackTraceString = e.getStackTrace.map { "\t" + _ }.mkString("\n")
       s"Exception from the cluster:\n$e\n$stackTraceString"
     }
-    new DriverStatusResponseMessage()
-      .setField(SERVER_SPARK_VERSION, sparkVersion)
-      .setField(DRIVER_ID, driverId)
-      .setField(SUCCESS, response.found.toString)
-      .setFieldIfNotNull(DRIVER_STATE, response.state.map(_.toString).orNull)
-      .setFieldIfNotNull(WORKER_ID, response.workerId.orNull)
-      .setFieldIfNotNull(WORKER_HOST_PORT, response.workerHostPort.orNull)
-      .setFieldIfNotNull(MESSAGE, message.orNull)
+    new DriverStatusResponse()
+      .setSparkVersion(sparkVersion)
+      .setDriverId(driverId)
+      .setSuccess(response.found.toString)
+      .setDriverState(response.state.map(_.toString).orNull)
+      .setWorkerId(response.workerId.orNull)
+      .setWorkerHostPort(response.workerHostPort.orNull)
+      .setMessage(message.orNull)
   }
 
   /**
@@ -109,25 +106,23 @@ private[spark] class StandaloneRestServerHandler(
    * This does not currently consider fields used by python applications since
    * python is not supported in standalone cluster mode yet.
    */
-  private def buildDriverDescription(request: SubmitDriverRequestMessage): DriverDescription = {
-    import SubmitDriverRequestField._
-
+  private def buildDriverDescription(request: SubmitDriverRequest): DriverDescription = {
     // Required fields, including the main class because python is not yet supported
-    val appName = request.getFieldNotNull(APP_NAME)
-    val appResource = request.getFieldNotNull(APP_RESOURCE)
-    val mainClass = request.getFieldNotNull(MAIN_CLASS)
+    val appName = request.getAppName
+    val appResource = request.getAppResource
+    val mainClass = request.getMainClass
 
     // Optional fields
-    val jars = request.getFieldOption(JARS)
-    val files = request.getFieldOption(FILES)
-    val driverMemory = request.getFieldOption(DRIVER_MEMORY)
-    val driverCores = request.getFieldOption(DRIVER_CORES)
-    val driverExtraJavaOptions = request.getFieldOption(DRIVER_EXTRA_JAVA_OPTIONS)
-    val driverExtraClassPath = request.getFieldOption(DRIVER_EXTRA_CLASS_PATH)
-    val driverExtraLibraryPath = request.getFieldOption(DRIVER_EXTRA_LIBRARY_PATH)
-    val superviseDriver = request.getFieldOption(SUPERVISE_DRIVER)
-    val executorMemory = request.getFieldOption(EXECUTOR_MEMORY)
-    val totalExecutorCores = request.getFieldOption(TOTAL_EXECUTOR_CORES)
+    val jars = Option(request.getJars)
+    val files = Option(request.getFiles)
+    val driverMemory = Option(request.getDriverMemory)
+    val driverCores = Option(request.getDriverCores)
+    val driverExtraJavaOptions = Option(request.getDriverExtraJavaOptions)
+    val driverExtraClassPath = Option(request.getDriverExtraClassPath)
+    val driverExtraLibraryPath = Option(request.getDriverExtraLibraryPath)
+    val superviseDriver = Option(request.getSuperviseDriver)
+    val executorMemory = Option(request.getExecutorMemory)
+    val totalExecutorCores = Option(request.getTotalExecutorCores)
     val appArgs = request.getAppArgs
     val sparkProperties = request.getSparkProperties
     val environmentVariables = request.getEnvironmentVariables
@@ -155,7 +150,7 @@ private[spark] class StandaloneRestServerHandler(
       "org.apache.spark.deploy.worker.DriverWrapper",
       Seq("{{WORKER_URL}}", mainClass) ++ appArgs, // args to the DriverWrapper
       environmentVariables, extraClassPath, extraLibraryPath, javaOpts)
-    val actualDriverMemory = driverMemory.map(_.toInt).getOrElse(DEFAULT_MEMORY)
+    val actualDriverMemory = driverMemory.map(Utils.memoryStringToMb).getOrElse(DEFAULT_MEMORY)
     val actualDriverCores = driverCores.map(_.toInt).getOrElse(DEFAULT_CORES)
     val actualSuperviseDriver = superviseDriver.map(_.toBoolean).getOrElse(DEFAULT_SUPERVISE)
     new DriverDescription(

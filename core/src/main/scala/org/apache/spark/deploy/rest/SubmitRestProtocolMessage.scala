@@ -17,185 +17,185 @@
 
 package org.apache.spark.deploy.rest
 
-import scala.collection.Map
-import scala.collection.JavaConversions._
-
-import org.json4s.jackson.JsonMethods._
+import com.fasterxml.jackson.annotation._
+import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility
+import com.fasterxml.jackson.annotation.JsonInclude.Include
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.json4s.JsonAST._
+import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.Logging
 import org.apache.spark.util.Utils
+import org.apache.spark.deploy.rest.SubmitRestProtocolAction._
 
-/**
- * A general message exchanged in the stable application submission REST protocol.
- *
- * The message is represented by a set of fields in the form of key value pairs.
- * Each message must contain an ACTION field, which fully specifies the type of the message.
- * For compatibility with older versions of Spark, existing fields must not be removed or
- * modified, though new fields can be added as necessary.
- */
-private[spark] abstract class SubmitRestProtocolMessage(
-    action: SubmitRestProtocolAction,
-    actionField: ActionField,
-    requiredFields: Seq[SubmitRestProtocolField]) {
+@JsonInclude(Include.NON_NULL)
+@JsonAutoDetect(getterVisibility = Visibility.ANY, setterVisibility = Visibility.ANY)
+@JsonPropertyOrder(alphabetic = true)
+abstract class SubmitRestProtocolMessage {
+  import SubmitRestProtocolMessage._
 
-  // Maintain the insert order for converting to JSON later
-  private val fields = new java.util.LinkedHashMap[SubmitRestProtocolField, String]
-  val className = Utils.getFormattedClassName(this)
+  private val messageType = Utils.getFormattedClassName(this)
+  protected val action: SubmitRestProtocolAction
+  protected val sparkVersion = new SubmitRestProtocolField[String]
+  protected val message = new SubmitRestProtocolField[String]
 
-  // Set the action field
-  fields.put(actionField, action.toString)
+  // Required for JSON de/serialization and not explicitly used
+  private def getAction: String = action.toString
+  private def setAction(s: String): this.type = this
 
-  /** Return all fields currently set in this message. */
-  def getFields: Map[SubmitRestProtocolField, String] = fields.toMap
+  // Spark version implementation depends on whether this is a request or a response
+  @JsonIgnore
+  def getSparkVersion: String
+  @JsonIgnore
+  def setSparkVersion(s: String): this.type
 
-  /** Return the value of the given field. If the field is not present, return null. */
-  def getField(key: SubmitRestProtocolField): String = getFieldOption(key).orNull
+  def getMessage: String = message.toString
+  def setMessage(s: String): this.type = setField(message, s)
 
-  /** Return the value of the given field. If the field is not present, throw an exception. */
-  def getFieldNotNull(key: SubmitRestProtocolField): String = {
-    getFieldOption(key).getOrElse {
-      throw new IllegalArgumentException(s"Field $key is not set in message $className")
-    }
+  def toJson: String = {
+    validate()
+    val mapper = new ObjectMapper
+    val json = mapper.writeValueAsString(this)
+    postProcessJson(json)
   }
 
-  /** Return the value of the given field as an option. */
-  def getFieldOption(key: SubmitRestProtocolField): Option[String] = Option(fields.get(key))
+  def validate(): Unit = {
+    assert(action != null, s"The action field is missing in $messageType!")
+  }
 
-  /** Assign the given value to the field, overriding any existing value. */
-  def setField(key: SubmitRestProtocolField, value: String): this.type = {
-    key.validateValue(value)
-    fields.put(key, value)
+  protected def assertFieldIsSet(field: SubmitRestProtocolField[_], name: String): Unit = {
+    assert(field.isSet, s"The $name field is missing in $messageType!")
+  }
+
+  protected def setField(field: SubmitRestProtocolField[String], value: String): this.type = {
+    if (value == null) { field.clearValue() } else { field.setValue(value) }
     this
   }
 
-  /** Assign the given value to the field only if the value is not null. */
-  def setFieldIfNotNull(key: SubmitRestProtocolField, value: String): this.type = {
-    if (value != null) {
-      setField(key, value)
-    }
+  protected def setBooleanField(
+      field: SubmitRestProtocolField[Boolean],
+      value: String): this.type = {
+    if (value == null) { field.clearValue() } else { field.setValue(value.toBoolean) }
     this
   }
 
-  /**
-   * Validate that all required fields are set and the value of the ACTION field is as expected.
-   * If any of these conditions are not met, throw an exception.
-   */
-  def validate(): this.type = {
-    if (!fields.contains(actionField)) {
-      throw new IllegalArgumentException(s"The action field is missing from message $className.")
-    }
-    if (fields(actionField) != action.toString) {
-      throw new IllegalArgumentException(
-        s"Expected action $action in message $className, but actual was ${fields(actionField)}.")
-    }
-    val missingFields = requiredFields.filterNot(fields.contains)
-    if (missingFields.nonEmpty) {
-      val missingFieldsString = missingFields.mkString(", ")
-      throw new IllegalArgumentException(
-        s"The following fields are missing from message $className: $missingFieldsString.")
-    }
+  protected def setNumericField(
+      field: SubmitRestProtocolField[Int],
+      value: String): this.type = {
+    if (value == null) { field.clearValue() } else { field.setValue(value.toInt) }
     this
   }
 
-  /** Return the JSON representation of this message. */
-  def toJson: String = pretty(render(toJsonObject))
+  protected def setMemoryField(
+      field: SubmitRestProtocolField[String],
+      value: String): this.type = {
+    Utils.memoryStringToMb(value)
+    setField(field, value)
+    this
+  }
 
-  /**
-   * Return a JObject that represents the JSON form of this message.
-   * This ignores fields with null values.
-   */
-  protected def toJsonObject: JObject = {
-    val jsonFields = fields.toSeq
-      .filter { case (_, v) => v != null }
-      .map { case (k, v) => JField(k.toString, JString(v)) }
-      .toList
-    JObject(jsonFields)
+  private def postProcessJson(json: String): String = {
+    val fields = parse(json).asInstanceOf[JObject].obj
+    val newFields = fields.map { case (k, v) => (camelCaseToUnderscores(k), v) }
+    pretty(render(JObject(newFields)))
   }
 }
 
-private[spark] object SubmitRestProtocolMessage {
-  import SubmitRestProtocolField._
-  import SubmitRestProtocolAction._
+abstract class SubmitRestProtocolRequest extends SubmitRestProtocolMessage {
+  def getClientSparkVersion: String = sparkVersion.toString
+  def setClientSparkVersion(s: String): this.type = setField(sparkVersion, s)
+  override def getSparkVersion: String = getClientSparkVersion
+  override def setSparkVersion(s: String) = setClientSparkVersion(s)
+  override def validate(): Unit = {
+    super.validate()
+    assertFieldIsSet(sparkVersion, "client_spark_version")
+  }
+}
 
-  /**
-   * Construct a SubmitRestProtocolMessage from its JSON representation.
-   * This uses the ACTION field to determine the type of the message to reconstruct.
-   * If such a field does not exist, throw an exception.
-   */
+abstract class SubmitRestProtocolResponse extends SubmitRestProtocolMessage {
+  def getServerSparkVersion: String = sparkVersion.toString
+  def setServerSparkVersion(s: String): this.type = setField(sparkVersion, s)
+  override def getSparkVersion: String = getServerSparkVersion
+  override def setSparkVersion(s: String) = setServerSparkVersion(s)
+  override def validate(): Unit = {
+    super.validate()
+    assertFieldIsSet(sparkVersion, "server_spark_version")
+  }
+}
+
+object SubmitRestProtocolMessage {
+  private val mapper = new ObjectMapper
+
   def fromJson(json: String): SubmitRestProtocolMessage = {
-    val jsonObject = parse(json).asInstanceOf[JObject]
-    val action = getAction(jsonObject).getOrElse {
-      throw new IllegalArgumentException(s"ACTION not found in message:\n$json")
+    val fields = parse(json).asInstanceOf[JObject].obj
+    val action = fields
+      .find { case (f, _) => f == "action" }
+      .map { case (_, v) => v.asInstanceOf[JString].s }
+      .getOrElse {
+        throw new IllegalArgumentException(s"Could not find action field in message:\n$json")
+      }
+    val clazz = SubmitRestProtocolAction.fromString(action) match {
+      case SUBMIT_DRIVER_REQUEST => classOf[SubmitDriverRequest]
+      case SUBMIT_DRIVER_RESPONSE => classOf[SubmitDriverResponse]
+      case KILL_DRIVER_REQUEST => classOf[KillDriverRequest]
+      case KILL_DRIVER_RESPONSE => classOf[KillDriverResponse]
+      case DRIVER_STATUS_REQUEST => classOf[DriverStatusRequest]
+      case DRIVER_STATUS_RESPONSE => classOf[DriverStatusResponse]
+      case ERROR => classOf[ErrorResponse]
     }
-    SubmitRestProtocolAction.fromString(action) match {
-      case SUBMIT_DRIVER_REQUEST => SubmitDriverRequestMessage.fromJsonObject(jsonObject)
-      case SUBMIT_DRIVER_RESPONSE => SubmitDriverResponseMessage.fromJsonObject(jsonObject)
-      case KILL_DRIVER_REQUEST => KillDriverRequestMessage.fromJsonObject(jsonObject)
-      case KILL_DRIVER_RESPONSE => KillDriverResponseMessage.fromJsonObject(jsonObject)
-      case DRIVER_STATUS_REQUEST => DriverStatusRequestMessage.fromJsonObject(jsonObject)
-      case DRIVER_STATUS_RESPONSE => DriverStatusResponseMessage.fromJsonObject(jsonObject)
-      case ERROR => ErrorMessage.fromJsonObject(jsonObject)
-    }
+    fromJson(json, clazz)
   }
 
-  /**
-   * Extract the value of the ACTION field in the JSON object.
-   */
-  private def getAction(jsonObject: JObject): Option[String] = {
-    jsonObject.obj
-      .collect { case JField(k, JString(v)) if isActionField(k) => v }
-      .headOption
+  def fromJson[T <: SubmitRestProtocolMessage](json: String, clazz: Class[T]): T = {
+    val fields = parse(json).asInstanceOf[JObject].obj
+    val processedFields = fields.map { case (k, v) => (underscoresToCamelCase(k), v) }
+    val processedJson = compact(render(JObject(processedFields)))
+    mapper.readValue(processedJson, clazz)
+  }
+
+  private def camelCaseToUnderscores(s: String): String = {
+    val newString = new StringBuilder
+    s.foreach { c =>
+      if (c.isUpper) {
+        newString.append("_" + c.toLower)
+      } else {
+        newString.append(c)
+      }
+    }
+    newString.toString()
+  }
+
+  private def underscoresToCamelCase(s: String): String = {
+    val newString = new StringBuilder
+    var capitalizeNext = false
+    s.foreach { c =>
+      if (c == '_') {
+        capitalizeNext = true
+      } else {
+        val nextChar = if (capitalizeNext) c.toUpper else c
+        newString.append(nextChar)
+        capitalizeNext = false
+      }
+    }
+    newString.toString()
   }
 }
 
-/**
- * Common methods used by companion objects of SubmitRestProtocolMessage's subclasses.
- */
-private[spark] trait SubmitRestProtocolMessageCompanion[MessageType <: SubmitRestProtocolMessage]
-  extends Logging {
-
-  import SubmitRestProtocolField._
-
-  /** Construct a new message of the relevant type. */
-  protected def newMessage(): MessageType
-
-  /** Return a field of the relevant type from the field's string representation. */
-  protected def fieldFromString(field: String): SubmitRestProtocolField
-
-  /**
-   * Populate the given field and value in the provided message.
-   * The default behavior only handles fields that have flat values and ignores other fields.
-   * If the subclass uses fields with nested values, it should override this method appropriately.
-   */
-  protected def handleField(
-      message: MessageType,
-      field: SubmitRestProtocolField,
-      value: JValue): Unit = {
-    value match {
-      case JString(s) => message.setField(field, s)
-      case _ => logWarning(
-        s"Unexpected value for field $field in message ${message.className}:\n$value")
+object SubmitRestProtocolRequest {
+  def fromJson(s: String): SubmitRestProtocolRequest = {
+    SubmitRestProtocolMessage.fromJson(s) match {
+      case req: SubmitRestProtocolRequest => req
+      case res: SubmitRestProtocolResponse =>
+        throw new IllegalArgumentException(s"Message was not a request:\n$s")
     }
   }
+}
 
-  /** Construct a SubmitRestProtocolMessage from the given JSON object. */
-  def fromJsonObject(jsonObject: JObject): MessageType = {
-    val message = newMessage()
-    val fields = jsonObject.obj
-      .map { case JField(k, v) => (k, v) }
-      // The ACTION field is already handled on instantiation
-      .filter { case (k, _) => !isActionField(k) }
-      .flatMap { case (k, v) =>
-        try {
-          Some((fieldFromString(k), v))
-        } catch {
-          case e: IllegalArgumentException =>
-            logWarning(s"Unexpected field $k in message ${Utils.getFormattedClassName(this)}")
-            None
-        }
-      }
-    fields.foreach { case (k, v) => handleField(message, k, v) }
-    message
+object SubmitRestProtocolResponse {
+  def fromJson(s: String): SubmitRestProtocolResponse = {
+    SubmitRestProtocolMessage.fromJson(s) match {
+      case req: SubmitRestProtocolRequest =>
+        throw new IllegalArgumentException(s"Message was not a response:\n$s")
+      case res: SubmitRestProtocolResponse => res
+    }
   }
 }

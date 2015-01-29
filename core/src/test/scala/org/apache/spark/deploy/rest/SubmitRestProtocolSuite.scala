@@ -17,36 +17,37 @@
 
 package org.apache.spark.deploy.rest
 
-import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.FunSuite
 
-/**
- * Dummy fields and messages for testing.
- */
-private abstract class DummyField extends SubmitRestProtocolField
-private object DummyField extends SubmitRestProtocolFieldCompanion[DummyField] {
-  case object ACTION extends DummyField with ActionField
-  case object DUMMY_FIELD extends DummyField
-  case object BOOLEAN_FIELD extends DummyField with BooleanField
-  case object MEMORY_FIELD extends DummyField with MemoryField
-  case object NUMERIC_FIELD extends DummyField with NumericField
-  case object REQUIRED_FIELD extends DummyField
-  override val requiredFields = Seq(ACTION, REQUIRED_FIELD)
-  override val optionalFields = Seq(DUMMY_FIELD, BOOLEAN_FIELD, MEMORY_FIELD, NUMERIC_FIELD)
-}
-private object DUMMY_ACTION extends SubmitRestProtocolAction {
-  override def toString: String = "DUMMY_ACTION"
-}
-private class DummyMessage extends SubmitRestProtocolMessage(
-    DUMMY_ACTION,
-    DummyField.ACTION,
-    DummyField.requiredFields)
-private object DummyMessage extends SubmitRestProtocolMessageCompanion[DummyMessage] {
-  protected override def newMessage() = new DummyMessage
-  protected override def fieldFromString(f: String) = DummyField.fromString(f)
+case object DUMMY_REQUEST extends SubmitRestProtocolAction
+case object DUMMY_RESPONSE extends SubmitRestProtocolAction
+
+class DummyRequest extends SubmitRestProtocolRequest {
+  protected override val action = DUMMY_REQUEST
+  private val active = new SubmitRestProtocolField[Boolean]
+  private val age = new SubmitRestProtocolField[Int]
+  private val name = new SubmitRestProtocolField[String]
+
+  def getActive: String = active.toString
+  def getAge: String = age.toString
+  def getName: String = name.toString
+
+  def setActive(s: String): this.type = setBooleanField(active, s)
+  def setAge(s: String): this.type = setNumericField(age, s)
+  def setName(s: String): this.type = setField(name, s)
+
+  override def validate(): Unit = {
+    super.validate()
+    assertFieldIsSet(name, "name")
+    assertFieldIsSet(age, "age")
+    assert(age.getValue > 5, "Not old enough!")
+  }
 }
 
+class DummyResponse extends SubmitRestProtocolResponse {
+  protected override val action = DUMMY_RESPONSE
+}
 
 /**
  * Tests for the stable application submission REST protocol.
@@ -65,110 +66,123 @@ class SubmitRestProtocolSuite extends FunSuite {
   }
 
   test("get and set fields") {
-    import DummyField._
-    val message = new DummyMessage
-    // action field is already set on instantiation
-    assert(message.getFields.size === 1)
-    assert(message.getField(ACTION) === DUMMY_ACTION.toString)
-    // required field not set yet
-    intercept[IllegalArgumentException] { message.validate() }
-    intercept[IllegalArgumentException] { message.getFieldNotNull(DUMMY_FIELD) }
-    intercept[IllegalArgumentException] { message.getFieldNotNull(REQUIRED_FIELD) }
-    message.setField(DUMMY_FIELD, "dummy value")
-    message.setField(BOOLEAN_FIELD, "true")
-    message.setField(MEMORY_FIELD, "401k")
-    message.setField(NUMERIC_FIELD, "401")
-    message.setFieldIfNotNull(REQUIRED_FIELD, null) // no-op because value is null
-    assert(message.getFields.size === 5)
-    // required field still not set
-    intercept[IllegalArgumentException] { message.validate() }
-    intercept[IllegalArgumentException] { message.getFieldNotNull(REQUIRED_FIELD) }
-    message.setFieldIfNotNull(REQUIRED_FIELD, "dummy value")
-    // all required fields are now set
-    assert(message.getFields.size === 6)
-    assert(message.getField(DUMMY_FIELD) === "dummy value")
-    assert(message.getField(BOOLEAN_FIELD) === "true")
-    assert(message.getField(MEMORY_FIELD) === "401k")
-    assert(message.getField(NUMERIC_FIELD) === "401")
-    assert(message.getField(REQUIRED_FIELD) === "dummy value")
-    message.validate()
-    // bad field values
-    intercept[IllegalArgumentException] { message.setField(ACTION, "anything") }
-    intercept[IllegalArgumentException] { message.setField(BOOLEAN_FIELD, "not T nor F") }
-    intercept[IllegalArgumentException] { message.setField(MEMORY_FIELD, "not memory") }
-    intercept[IllegalArgumentException] { message.setField(NUMERIC_FIELD, "not a number") }
+    val request = new DummyRequest
+    assert(request.getSparkVersion === null)
+    assert(request.getMessage === null)
+    assert(request.getActive === null)
+    assert(request.getAge === null)
+    assert(request.getName === null)
+    request.setSparkVersion("1.2.3")
+    request.setActive("true")
+    request.setAge("10")
+    request.setName("dolphin")
+    assert(request.getSparkVersion === "1.2.3")
+    assert(request.getMessage === null)
+    assert(request.getActive === "true")
+    assert(request.getAge === "10")
+    assert(request.getName === "dolphin")
+    // overwrite
+    request.setName("shark")
+    request.setActive("false")
+    assert(request.getName === "shark")
+    assert(request.getActive === "false")
   }
 
-  test("to and from JSON") {
-    import DummyField._
-    val message = new DummyMessage()
-      .setField(DUMMY_FIELD, "dummy value")
-      .setField(BOOLEAN_FIELD, "true")
-      .setField(MEMORY_FIELD, "401k")
-      .setField(NUMERIC_FIELD, "401")
-      .setField(REQUIRED_FIELD, "dummy value")
-      .validate()
-    val expectedJson =
-      """
-        |{
-        |  "ACTION" : "DUMMY_ACTION",
-        |  "DUMMY_FIELD" : "dummy value",
-        |  "BOOLEAN_FIELD" : "true",
-        |  "MEMORY_FIELD" : "401k",
-        |  "NUMERIC_FIELD" : "401",
-        |  "REQUIRED_FIELD" : "dummy value"
-        |}
-      """.stripMargin
-    val actualJson = message.toJson
-    assertJsonEquals(actualJson, expectedJson)
-    // Do not use SubmitRestProtocolMessage.fromJson here
-    // because DUMMY_ACTION is not a known action
-    val jsonObject = parse(expectedJson).asInstanceOf[JObject]
-    val newMessage = DummyMessage.fromJsonObject(jsonObject)
-    assert(newMessage.getFieldNotNull(ACTION) === "DUMMY_ACTION")
-    assert(newMessage.getFieldNotNull(DUMMY_FIELD) === "dummy value")
-    assert(newMessage.getFieldNotNull(BOOLEAN_FIELD) === "true")
-    assert(newMessage.getFieldNotNull(MEMORY_FIELD) === "401k")
-    assert(newMessage.getFieldNotNull(NUMERIC_FIELD) === "401")
-    assert(newMessage.getFieldNotNull(REQUIRED_FIELD) === "dummy value")
-    assert(newMessage.getFields.size === 6)
+  test("get and set fields with null values") {
+    val request = new DummyRequest
+    request.setSparkVersion(null)
+    request.setActive(null)
+    request.setAge(null)
+    request.setName(null)
+    request.setMessage(null)
+    assert(request.getSparkVersion === null)
+    assert(request.getMessage === null)
+    assert(request.getActive === null)
+    assert(request.getAge === null)
+    assert(request.getName === null)
   }
 
-  test("SubmitDriverRequestMessage") {
-    import SubmitDriverRequestField._
-    val message = new SubmitDriverRequestMessage
-    intercept[IllegalArgumentException] { message.validate() }
-    message.setField(CLIENT_SPARK_VERSION, "1.2.3")
-    message.setField(MESSAGE, "Submitting them drivers.")
-    message.setField(APP_NAME, "SparkPie")
-    message.setField(APP_RESOURCE, "honey-walnut-cherry.jar")
-    // all required fields are now set
+  test("set fields with illegal argument") {
+    val request = new DummyRequest
+    intercept[IllegalArgumentException] { request.setActive("not-a-boolean") }
+    intercept[IllegalArgumentException] { request.setActive("150") }
+    intercept[IllegalArgumentException] { request.setAge("not-a-number") }
+    intercept[IllegalArgumentException] { request.setAge("true") }
+  }
+
+  test("validate") {
+    val request = new DummyRequest
+    intercept[AssertionError] { request.validate() } // missing everything
+    request.setSparkVersion("1.4.8")
+    intercept[AssertionError] { request.validate() } // missing name and age
+    request.setName("something")
+    intercept[AssertionError] { request.validate() } // missing only age
+    request.setAge("2")
+    intercept[AssertionError] { request.validate() } // age too low
+    request.setAge("10")
+    request.validate() // everything is set
+    request.setSparkVersion(null)
+    intercept[AssertionError] { request.validate() } // missing only Spark version
+    request.setSparkVersion("1.2.3")
+    request.setName(null)
+    intercept[AssertionError] { request.validate() } // missing only name
+    request.setMessage("not-setting-name")
+    intercept[AssertionError] { request.validate() } // still missing name
+  }
+
+  test("request to and from JSON") {
+    val request = new DummyRequest()
+      .setSparkVersion("1.2.3")
+      .setActive("true")
+      .setAge("25")
+      .setName("jung")
+    val json = request.toJson
+    assertJsonEquals(json, dummyRequestJson)
+    val newRequest = SubmitRestProtocolMessage.fromJson(json, classOf[DummyRequest])
+    assert(newRequest.getSparkVersion === "1.2.3")
+    assert(newRequest.getClientSparkVersion === "1.2.3")
+    assert(newRequest.getActive === "true")
+    assert(newRequest.getAge === "25")
+    assert(newRequest.getName === "jung")
+    assert(newRequest.getMessage === null)
+  }
+
+  test("response to and from JSON") {
+    val response = new DummyResponse().setSparkVersion("3.3.4")
+    val json = response.toJson
+    assertJsonEquals(json, dummyResponseJson)
+    val newResponse = SubmitRestProtocolMessage.fromJson(json, classOf[DummyResponse])
+    assert(newResponse.getSparkVersion === "3.3.4")
+    assert(newResponse.getServerSparkVersion === "3.3.4")
+    assert(newResponse.getMessage === null)
+  }
+
+  test("SubmitDriverRequest") {
+    val message = new SubmitDriverRequest
+    intercept[AssertionError] { message.validate() }
+    intercept[IllegalArgumentException] { message.setDriverCores("one hundred feet") }
+    intercept[IllegalArgumentException] { message.setSuperviseDriver("nope, never") }
+    intercept[IllegalArgumentException] { message.setTotalExecutorCores("two men") }
+    message.setSparkVersion("1.2.3")
+    message.setAppName("SparkPie")
+    message.setAppResource("honey-walnut-cherry.jar")
     message.validate()
-    message.setField(MAIN_CLASS, "org.apache.spark.examples.SparkPie")
-    message.setField(JARS, "mayonnaise.jar,ketchup.jar")
-    message.setField(FILES, "fireball.png")
-    message.setField(PY_FILES, "do-not-eat-my.py")
-    message.setField(DRIVER_MEMORY, "512m")
-    message.setField(DRIVER_CORES, "180")
-    message.setField(DRIVER_EXTRA_JAVA_OPTIONS, " -Dslices=5 -Dcolor=mostly_red")
-    message.setField(DRIVER_EXTRA_CLASS_PATH, "food-coloring.jar")
-    message.setField(DRIVER_EXTRA_LIBRARY_PATH, "pickle.jar")
-    message.setField(SUPERVISE_DRIVER, "false")
-    message.setField(EXECUTOR_MEMORY, "256m")
-    message.setField(TOTAL_EXECUTOR_CORES, "10000")
-    // bad field values
-    intercept[IllegalArgumentException] { message.setField(ACTION, "anything") }
-    intercept[IllegalArgumentException] { message.setField(DRIVER_MEMORY, "more than expected") }
-    intercept[IllegalArgumentException] { message.setField(DRIVER_CORES, "one hundred feet") }
-    intercept[IllegalArgumentException] { message.setField(SUPERVISE_DRIVER, "nope, never") }
-    intercept[IllegalArgumentException] { message.setField(EXECUTOR_MEMORY, "less than expected") }
-    intercept[IllegalArgumentException] { message.setField(TOTAL_EXECUTOR_CORES, "two men") }
-    intercept[IllegalArgumentException] { message.setField(APP_ARGS, "anything") }
-    intercept[IllegalArgumentException] { message.setField(SPARK_PROPERTIES, "anything") }
-    intercept[IllegalArgumentException] { message.setField(ENVIRONMENT_VARIABLES, "anything") }
+    // optional fields
+    message.setMainClass("org.apache.spark.examples.SparkPie")
+    message.setJars("mayonnaise.jar,ketchup.jar")
+    message.setFiles("fireball.png")
+    message.setPyFiles("do-not-eat-my.py")
+    message.setDriverMemory("512m")
+    message.setDriverCores("180")
+    message.setDriverExtraJavaOptions(" -Dslices=5 -Dcolor=mostly_red")
+    message.setDriverExtraClassPath("food-coloring.jar")
+    message.setDriverExtraLibraryPath("pickle.jar")
+    message.setSuperviseDriver("false")
+    message.setExecutorMemory("256m")
+    message.setTotalExecutorCores("10000")
     // special fields
-    message.appendAppArg("two slices")
-    message.appendAppArg("a hint of cinnamon")
+    message.addAppArg("two slices")
+    message.addAppArg("a hint of cinnamon")
     message.setSparkProperty("spark.live.long", "true")
     message.setSparkProperty("spark.shuffle.enabled", "false")
     message.setEnvironmentVariable("PATH", "/dev/null")
@@ -181,231 +195,234 @@ class SubmitRestProtocolSuite extends FunSuite {
     assert(message.getEnvironmentVariables("PATH") === "/dev/null")
     assert(message.getEnvironmentVariables("PYTHONPATH") === "/dev/null")
     // test JSON
-    val expectedJson = submitDriverRequestJson
-    assertJsonEquals(message.toJson, expectedJson)
-    val newMessage = SubmitRestProtocolMessage.fromJson(expectedJson)
-      .asInstanceOf[SubmitDriverRequestMessage]
-    assert(newMessage.getFields === message.getFields)
+    val json = message.toJson
+    assertJsonEquals(json, submitDriverRequestJson)
+    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[SubmitDriverRequest])
+    assert(newMessage.getSparkVersion === "1.2.3")
+    assert(newMessage.getClientSparkVersion === "1.2.3")
+    assert(newMessage.getAppName === "SparkPie")
+    assert(newMessage.getAppResource === "honey-walnut-cherry.jar")
+    assert(newMessage.getMainClass === "org.apache.spark.examples.SparkPie")
+    assert(newMessage.getJars === "mayonnaise.jar,ketchup.jar")
+    assert(newMessage.getFiles === "fireball.png")
+    assert(newMessage.getPyFiles === "do-not-eat-my.py")
+    assert(newMessage.getDriverMemory === "512m")
+    assert(newMessage.getDriverCores === "180")
+    assert(newMessage.getDriverExtraJavaOptions === " -Dslices=5 -Dcolor=mostly_red")
+    assert(newMessage.getDriverExtraClassPath === "food-coloring.jar")
+    assert(newMessage.getDriverExtraLibraryPath === "pickle.jar")
+    assert(newMessage.getSuperviseDriver === "false")
+    assert(newMessage.getExecutorMemory === "256m")
+    assert(newMessage.getTotalExecutorCores === "10000")
     assert(newMessage.getAppArgs === message.getAppArgs)
     assert(newMessage.getSparkProperties === message.getSparkProperties)
     assert(newMessage.getEnvironmentVariables === message.getEnvironmentVariables)
   }
 
-  test("SubmitDriverResponseMessage") {
-    import SubmitDriverResponseField._
-    val message = new SubmitDriverResponseMessage
-    intercept[IllegalArgumentException] { message.validate() }
-    message.setField(SERVER_SPARK_VERSION, "1.2.3")
-    message.setField(MESSAGE, "Dem driver is now submitted.")
-    message.setField(DRIVER_ID, "driver_123")
-    message.setField(SUCCESS, "true")
-    // all required fields are now set
+  test("SubmitDriverResponse") {
+    val message = new SubmitDriverResponse
+    intercept[AssertionError] { message.validate() }
+    intercept[IllegalArgumentException] { message.setSuccess("maybe not") }
+    message.setSparkVersion("1.2.3")
+    message.setDriverId("driver_123")
+    message.setSuccess("true")
     message.validate()
-    // bad field values
-    intercept[IllegalArgumentException] { message.setField(ACTION, "anything") }
-    intercept[IllegalArgumentException] { message.setField(SUCCESS, "maybe not") }
     // test JSON
-    val expectedJson = submitDriverResponseJson
-    val actualJson = message.toJson
-    assertJsonEquals(actualJson, expectedJson)
-    val newMessage = SubmitRestProtocolMessage.fromJson(expectedJson)
-    assert(newMessage.isInstanceOf[SubmitDriverResponseMessage])
-    assert(newMessage.getFields === message.getFields)
+    val json = message.toJson
+    assertJsonEquals(json, submitDriverResponseJson)
+    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[SubmitDriverResponse])
+    assert(newMessage.getSparkVersion === "1.2.3")
+    assert(newMessage.getServerSparkVersion === "1.2.3")
+    assert(newMessage.getDriverId === "driver_123")
+    assert(newMessage.getSuccess === "true")
   }
 
-  test("KillDriverRequestMessage") {
-    import KillDriverRequestField._
-    val message = new KillDriverRequestMessage
-    intercept[IllegalArgumentException] { message.validate() }
-    intercept[IllegalArgumentException] { message.setField(ACTION, "anything") }
-    message.setField(CLIENT_SPARK_VERSION, "1.2.3")
-    message.setField(DRIVER_ID, "driver_123")
-    // all required fields are now set
+  test("KillDriverRequest") {
+    val message = new KillDriverRequest
+    intercept[AssertionError] { message.validate() }
+    message.setSparkVersion("1.2.3")
+    message.setDriverId("driver_123")
     message.validate()
     // test JSON
-    val expectedJson = killDriverRequestJson
-    val actualJson = message.toJson
-    assertJsonEquals(actualJson, expectedJson)
-    val newMessage = SubmitRestProtocolMessage.fromJson(expectedJson)
-    assert(newMessage.isInstanceOf[KillDriverRequestMessage])
-    assert(newMessage.getFields === message.getFields)
+    val json = message.toJson
+    assertJsonEquals(json, killDriverRequestJson)
+    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[KillDriverRequest])
+    assert(newMessage.getSparkVersion === "1.2.3")
+    assert(newMessage.getClientSparkVersion === "1.2.3")
+    assert(newMessage.getDriverId === "driver_123")
   }
 
-  test("KillDriverResponseMessage") {
-    import KillDriverResponseField._
-    val message = new KillDriverResponseMessage
-    intercept[IllegalArgumentException] { message.validate() }
-    message.setField(SERVER_SPARK_VERSION, "1.2.3")
-    message.setField(DRIVER_ID, "driver_123")
-    message.setField(SUCCESS, "true")
-    // all required fields are now set
+  test("KillDriverResponse") {
+    val message = new KillDriverResponse
+    intercept[AssertionError] { message.validate() }
+    intercept[IllegalArgumentException] { message.setSuccess("maybe not") }
+    message.setSparkVersion("1.2.3")
+    message.setDriverId("driver_123")
+    message.setSuccess("true")
     message.validate()
-    message.setField(MESSAGE, "Killing dem reckless drivers.")
-    // bad field values
-    intercept[IllegalArgumentException] { message.setField(ACTION, "anything") }
-    intercept[IllegalArgumentException] { message.setField(SUCCESS, "maybe?") }
     // test JSON
-    val expectedJson = killDriverResponseJson
-    val actualJson = message.toJson
-    assertJsonEquals(actualJson, expectedJson)
-    val newMessage = SubmitRestProtocolMessage.fromJson(expectedJson)
-    assert(newMessage.isInstanceOf[KillDriverResponseMessage])
-    assert(newMessage.getFields === message.getFields)
+    val json = message.toJson
+    assertJsonEquals(json, killDriverResponseJson)
+    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[KillDriverResponse])
+    assert(newMessage.getSparkVersion === "1.2.3")
+    assert(newMessage.getServerSparkVersion === "1.2.3")
+    assert(newMessage.getDriverId === "driver_123")
+    assert(newMessage.getSuccess === "true")
   }
 
-  test("DriverStatusRequestMessage") {
-    import DriverStatusRequestField._
-    val message = new DriverStatusRequestMessage
-    intercept[IllegalArgumentException] { message.validate() }
-    intercept[IllegalArgumentException] { message.setField(ACTION, "anything") }
-    message.setField(CLIENT_SPARK_VERSION, "1.2.3")
-    message.setField(DRIVER_ID, "driver_123")
-    // all required fields are now set
+  test("DriverStatusRequest") {
+    val message = new DriverStatusRequest
+    intercept[AssertionError] { message.validate() }
+    message.setSparkVersion("1.2.3")
+    message.setDriverId("driver_123")
     message.validate()
     // test JSON
-    val expectedJson = driverStatusRequestJson
-    val actualJson = message.toJson
-    assertJsonEquals(actualJson, expectedJson)
-    val newMessage = SubmitRestProtocolMessage.fromJson(expectedJson)
-    assert(newMessage.isInstanceOf[DriverStatusRequestMessage])
-    assert(newMessage.getFields === message.getFields)
+    val json = message.toJson
+    assertJsonEquals(json, driverStatusRequestJson)
+    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[DriverStatusRequest])
+    assert(newMessage.getSparkVersion === "1.2.3")
+    assert(newMessage.getClientSparkVersion === "1.2.3")
+    assert(newMessage.getDriverId === "driver_123")
   }
 
-  test("DriverStatusResponseMessage") {
-    import DriverStatusResponseField._
-    val message = new DriverStatusResponseMessage
-    intercept[IllegalArgumentException] { message.validate() }
-    message.setField(SERVER_SPARK_VERSION, "1.2.3")
-    message.setField(DRIVER_ID, "driver_123")
-    message.setField(SUCCESS, "true")
-    // all required fields are now set
+  test("DriverStatusResponse") {
+    val message = new DriverStatusResponse
+    intercept[AssertionError] { message.validate() }
+    intercept[IllegalArgumentException] { message.setSuccess("maybe") }
+    message.setSparkVersion("1.2.3")
+    message.setDriverId("driver_123")
+    message.setSuccess("true")
     message.validate()
-    message.setField(MESSAGE, "Your driver is having some trouble...")
-    message.setField(DRIVER_STATE, "RUNNING")
-    message.setField(WORKER_ID, "worker_123")
-    message.setField(WORKER_HOST_PORT, "1.2.3.4:7780")
-    // bad field values
-    intercept[IllegalArgumentException] { message.setField(ACTION, "anything") }
-    intercept[IllegalArgumentException] { message.setField(SUCCESS, "maybe") }
+    // optional fields
+    message.setDriverState("RUNNING")
+    message.setWorkerId("worker_123")
+    message.setWorkerHostPort("1.2.3.4:7780")
     // test JSON
-    val expectedJson = driverStatusResponseJson
-    val actualJson = message.toJson
-    assertJsonEquals(actualJson, expectedJson)
-    val newMessage = SubmitRestProtocolMessage.fromJson(expectedJson)
-    assert(newMessage.isInstanceOf[DriverStatusResponseMessage])
-    assert(newMessage.getFields === message.getFields)
+    val json = message.toJson
+    assertJsonEquals(json, driverStatusResponseJson)
+    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[DriverStatusResponse])
+    assert(newMessage.getSparkVersion === "1.2.3")
+    assert(newMessage.getServerSparkVersion === "1.2.3")
+    assert(newMessage.getDriverId === "driver_123")
+    assert(newMessage.getSuccess === "true")
   }
 
-  test("ErrorMessage") {
-    import ErrorField._
-    val message = new ErrorMessage
-    intercept[IllegalArgumentException] { message.validate() }
-    intercept[IllegalArgumentException] { message.setField(ACTION, "anything") }
-    message.setField(SERVER_SPARK_VERSION, "1.2.3")
-    message.setField(MESSAGE, "Your wife threw an exception!")
-    // all required fields are now set
+  test("ErrorResponse") {
+    val message = new ErrorResponse
+    intercept[AssertionError] { message.validate() }
+    message.setSparkVersion("1.2.3")
+    message.setMessage("Field not found in submit request: X")
     message.validate()
     // test JSON
-    val expectedJson = errorJson
-    val actualJson = message.toJson
-    assertJsonEquals(actualJson, expectedJson)
-    val newMessage = SubmitRestProtocolMessage.fromJson(expectedJson)
-    assert(newMessage.isInstanceOf[ErrorMessage])
-    assert(newMessage.getFields === message.getFields)
+    val json = message.toJson
+    assertJsonEquals(json, errorJson)
+    val newMessage = SubmitRestProtocolMessage.fromJson(json, classOf[ErrorResponse])
+    assert(newMessage.getSparkVersion === "1.2.3")
+    assert(newMessage.getServerSparkVersion === "1.2.3")
+    assert(newMessage.getMessage === "Field not found in submit request: X")
   }
+
+  private val dummyRequestJson =
+    """
+      |{
+      |  "action" : "DUMMY_REQUEST",
+      |  "active" : "true",
+      |  "age" : "25",
+      |  "client_spark_version" : "1.2.3",
+      |  "name" : "jung"
+      |}
+    """.stripMargin
+
+  private val dummyResponseJson =
+    """
+      |{
+      |  "action" : "DUMMY_RESPONSE",
+      |  "server_spark_version" : "3.3.4"
+      |}
+    """.stripMargin
 
   private val submitDriverRequestJson =
     """
       |{
-      |  "ACTION" : "SUBMIT_DRIVER_REQUEST",
-      |  "CLIENT_SPARK_VERSION" : "1.2.3",
-      |  "MESSAGE" : "Submitting them drivers.",
-      |  "APP_NAME" : "SparkPie",
-      |  "APP_RESOURCE" : "honey-walnut-cherry.jar",
-      |  "MAIN_CLASS" : "org.apache.spark.examples.SparkPie",
-      |  "JARS" : "mayonnaise.jar,ketchup.jar",
-      |  "FILES" : "fireball.png",
-      |  "PY_FILES" : "do-not-eat-my.py",
-      |  "DRIVER_MEMORY" : "512m",
-      |  "DRIVER_CORES" : "180",
-      |  "DRIVER_EXTRA_JAVA_OPTIONS" : " -Dslices=5 -Dcolor=mostly_red",
-      |  "DRIVER_EXTRA_CLASS_PATH" : "food-coloring.jar",
-      |  "DRIVER_EXTRA_LIBRARY_PATH" : "pickle.jar",
-      |  "SUPERVISE_DRIVER" : "false",
-      |  "EXECUTOR_MEMORY" : "256m",
-      |  "TOTAL_EXECUTOR_CORES" : "10000",
-      |  "APP_ARGS" : [ "two slices", "a hint of cinnamon" ],
-      |  "SPARK_PROPERTIES" : {
-      |    "spark.live.long" : "true",
-      |    "spark.shuffle.enabled" : "false"
-      |  },
-      |  "ENVIRONMENT_VARIABLES" : {
-      |    "PATH" : "/dev/null",
-      |    "PYTHONPATH" : "/dev/null"
-      |  }
+      |  "action" : "SUBMIT_DRIVER_REQUEST",
+      |  "app_args" : "[\"two slices\",\"a hint of cinnamon\"]",
+      |  "app_name" : "SparkPie",
+      |  "app_resource" : "honey-walnut-cherry.jar",
+      |  "client_spark_version" : "1.2.3",
+      |  "driver_cores" : "180",
+      |  "driver_extra_class_path" : "food-coloring.jar",
+      |  "driver_extra_java_options" : " -Dslices=5 -Dcolor=mostly_red",
+      |  "driver_extra_library_path" : "pickle.jar",
+      |  "driver_memory" : "512m",
+      |  "environment_variables" : "{\"PATH\":\"/dev/null\",\"PYTHONPATH\":\"/dev/null\"}",
+      |  "executor_memory" : "256m",
+      |  "files" : "fireball.png",
+      |  "jars" : "mayonnaise.jar,ketchup.jar",
+      |  "main_class" : "org.apache.spark.examples.SparkPie",
+      |  "py_files" : "do-not-eat-my.py",
+      |  "spark_properties" : "{\"spark.live.long\":\"true\",\"spark.shuffle.enabled\":\"false\"}",
+      |  "supervise_driver" : "false",
+      |  "total_executor_cores" : "10000"
       |}
     """.stripMargin
 
   private val submitDriverResponseJson =
     """
       |{
-      |  "ACTION" : "SUBMIT_DRIVER_RESPONSE",
-      |  "SERVER_SPARK_VERSION" : "1.2.3",
-      |  "MESSAGE" : "Dem driver is now submitted.",
-      |  "DRIVER_ID" : "driver_123",
-      |  "SUCCESS" : "true"
+      |  "action" : "SUBMIT_DRIVER_RESPONSE",
+      |  "driver_id" : "driver_123",
+      |  "server_spark_version" : "1.2.3",
+      |  "success" : "true"
       |}
     """.stripMargin
 
   private val killDriverRequestJson =
     """
       |{
-      |  "ACTION" : "KILL_DRIVER_REQUEST",
-      |  "CLIENT_SPARK_VERSION" : "1.2.3",
-      |  "DRIVER_ID" : "driver_123"
+      |  "action" : "KILL_DRIVER_REQUEST",
+      |  "client_spark_version" : "1.2.3",
+      |  "driver_id" : "driver_123"
       |}
     """.stripMargin
 
   private val killDriverResponseJson =
     """
       |{
-      |  "ACTION" : "KILL_DRIVER_RESPONSE",
-      |  "SERVER_SPARK_VERSION" : "1.2.3",
-      |  "DRIVER_ID" : "driver_123",
-      |  "SUCCESS" : "true",
-      |  "MESSAGE" : "Killing dem reckless drivers."
+      |  "action" : "KILL_DRIVER_RESPONSE",
+      |  "driver_id" : "driver_123",
+      |  "server_spark_version" : "1.2.3",
+      |  "success" : "true"
       |}
     """.stripMargin
 
   private val driverStatusRequestJson =
     """
       |{
-      |  "ACTION" : "DRIVER_STATUS_REQUEST",
-      |  "CLIENT_SPARK_VERSION" : "1.2.3",
-      |  "DRIVER_ID" : "driver_123"
+      |  "action" : "DRIVER_STATUS_REQUEST",
+      |  "client_spark_version" : "1.2.3",
+      |  "driver_id" : "driver_123"
       |}
     """.stripMargin
 
   private val driverStatusResponseJson =
     """
       |{
-      |  "ACTION" : "DRIVER_STATUS_RESPONSE",
-      |  "SERVER_SPARK_VERSION" : "1.2.3",
-      |  "DRIVER_ID" : "driver_123",
-      |  "SUCCESS" : "true",
-      |  "MESSAGE" : "Your driver is having some trouble...",
-      |  "DRIVER_STATE" : "RUNNING",
-      |  "WORKER_ID" : "worker_123",
-      |  "WORKER_HOST_PORT" : "1.2.3.4:7780"
+      |  "action" : "DRIVER_STATUS_RESPONSE",
+      |  "driver_id" : "driver_123",
+      |  "driver_state" : "RUNNING",
+      |  "server_spark_version" : "1.2.3",
+      |  "success" : "true",
+      |  "worker_host_port" : "1.2.3.4:7780",
+      |  "worker_id" : "worker_123"
       |}
     """.stripMargin
 
   private val errorJson =
     """
       |{
-      |  "ACTION" : "ERROR",
-      |  "SERVER_SPARK_VERSION" : "1.2.3",
-      |  "MESSAGE" : "Your wife threw an exception!"
+      |  "action" : "ERROR",
+      |  "message" : "Field not found in submit request: X",
+      |  "server_spark_version" : "1.2.3"
       |}
     """.stripMargin
 }

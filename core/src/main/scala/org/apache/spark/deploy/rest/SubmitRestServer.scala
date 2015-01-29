@@ -70,9 +70,9 @@ private[spark] abstract class SubmitRestServer(host: String, requestedPort: Int,
  * This represents the main handler used in the SubmitRestServer.
  */
 private[spark] abstract class SubmitRestServerHandler extends AbstractHandler with Logging {
-  protected def handleSubmit(request: SubmitDriverRequestMessage): SubmitDriverResponseMessage
-  protected def handleKill(request: KillDriverRequestMessage): KillDriverResponseMessage
-  protected def handleStatus(request: DriverStatusRequestMessage): DriverStatusResponseMessage
+  protected def handleSubmit(request: SubmitDriverRequest): SubmitDriverResponse
+  protected def handleKill(request: KillDriverRequest): KillDriverResponse
+  protected def handleStatus(request: DriverStatusRequest): DriverStatusResponse
 
   /**
    * Handle a request submitted by the SubmitRestClient.
@@ -85,7 +85,7 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
       response: HttpServletResponse): Unit = {
     try {
       val requestMessageJson = Source.fromInputStream(request.getInputStream).mkString
-      val requestMessage = SubmitRestProtocolMessage.fromJson(requestMessageJson)
+      val requestMessage = SubmitRestProtocolRequest.fromJson(requestMessageJson)
       val responseMessage = constructResponseMessage(requestMessage)
       response.setContentType("application/json")
       response.setCharacterEncoding("utf-8")
@@ -105,7 +105,7 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
    * If an IllegalArgumentException is thrown in the process, construct an error message instead.
    */
   private def constructResponseMessage(
-      request: SubmitRestProtocolMessage): SubmitRestProtocolMessage = {
+      request: SubmitRestProtocolRequest): SubmitRestProtocolResponse = {
     // Validate the request message to ensure that it is correctly constructed. If the request
     // is sent via the SubmitRestClient, it should have already been validated remotely. In case
     // this is not true, do it again here to guard against potential NPEs. If validation fails,
@@ -114,9 +114,9 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
       try {
         request.validate()
         request match {
-          case submit: SubmitDriverRequestMessage => handleSubmit(submit)
-          case kill: KillDriverRequestMessage => handleKill(kill)
-          case status: DriverStatusRequestMessage => handleStatus(status)
+          case submit: SubmitDriverRequest => handleSubmit(submit)
+          case kill: KillDriverRequest => handleKill(kill)
+          case status: DriverStatusRequest => handleStatus(status)
           case unexpected => handleError(
             s"Received message of unexpected type ${Utils.getFormattedClassName(unexpected)}.")
         }
@@ -130,13 +130,13 @@ private[spark] abstract class SubmitRestServerHandler extends AbstractHandler wi
     } catch {
       case e: IllegalArgumentException => handleError(s"Internal server error: ${e.getMessage}")
     }
+    response
   }
 
   /** Construct an error message to signal the fact that an exception has been thrown. */
-  private def handleError(message: String): ErrorMessage = {
-    import ErrorField._
-    new ErrorMessage()
-      .setField(SERVER_SPARK_VERSION, sparkVersion)
-      .setField(MESSAGE, message)
+  private def handleError(message: String): ErrorResponse = {
+    new ErrorResponse()
+      .setSparkVersion(sparkVersion)
+      .setMessage(message)
   }
 }

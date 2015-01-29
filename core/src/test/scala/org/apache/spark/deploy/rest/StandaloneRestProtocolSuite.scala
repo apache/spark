@@ -60,7 +60,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
 
   test("kill empty driver") {
     val killResponse = client.killDriver(masterRestUrl, "driver-that-does-not-exist")
-    val killSuccess = killResponse.getFieldNotNull(KillDriverResponseField.SUCCESS)
+    val killSuccess = killResponse.getSuccess
     assert(killSuccess === "false")
   }
 
@@ -70,11 +70,11 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     val size = 500
     val driverId = submitApplication(resultsFile, numbers, size)
     val killResponse = client.killDriver(masterRestUrl, driverId)
-    val killSuccess = killResponse.getFieldNotNull(KillDriverResponseField.SUCCESS)
+    val killSuccess = killResponse.getSuccess
     waitUntilFinished(driverId)
     val statusResponse = client.requestDriverStatus(masterRestUrl, driverId)
-    val statusSuccess = statusResponse.getFieldNotNull(DriverStatusResponseField.SUCCESS)
-    val driverState = statusResponse.getFieldNotNull(DriverStatusResponseField.DRIVER_STATE)
+    val statusSuccess = statusResponse.getSuccess
+    val driverState = statusResponse.getDriverState
     assert(killSuccess === "true")
     assert(statusSuccess === "true")
     assert(driverState === DriverState.KILLED.toString)
@@ -83,7 +83,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
 
   test("request status for empty driver") {
     val statusResponse = client.requestDriverStatus(masterRestUrl, "driver-that-does-not-exist")
-    val statusSuccess = statusResponse.getFieldNotNull(DriverStatusResponseField.SUCCESS)
+    val statusSuccess = statusResponse.getSuccess
     assert(statusSuccess === "false")
   }
 
@@ -125,7 +125,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     val args = new SparkSubmitArguments(commandLineArgs)
     SparkSubmit.prepareSubmitEnvironment(args)
     val submitResponse = client.submitDriver(args)
-    submitResponse.getFieldNotNull(SubmitDriverResponseField.DRIVER_ID)
+    submitResponse.getDriverId
   }
 
   /** Wait until the given driver has finished running up to the specified timeout. */
@@ -134,7 +134,7 @@ class StandaloneRestProtocolSuite extends FunSuite with BeforeAndAfterAll with B
     val expireTime = System.currentTimeMillis + maxSeconds * 1000
     while (!finished) {
       val statusResponse = client.requestDriverStatus(masterRestUrl, driverId)
-      val driverState = statusResponse.getFieldNotNull(DriverStatusResponseField.DRIVER_STATE)
+      val driverState = statusResponse.getDriverState
       finished =
         driverState != DriverState.SUBMITTED.toString &&
         driverState != DriverState.RUNNING.toString

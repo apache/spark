@@ -37,16 +37,15 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
    * just submitted and reports it to the user. Otherwise, if the submission was unsuccessful,
    * this reports failure and logs an error message provided by the REST server.
    */
-  override def submitDriver(args: SparkSubmitArguments): SubmitDriverResponseMessage = {
-    import SubmitDriverResponseField._
-    val submitResponse = super.submitDriver(args).asInstanceOf[SubmitDriverResponseMessage]
-    val submitSuccess = submitResponse.getFieldNotNull(SUCCESS).toBoolean
+  override def submitDriver(args: SparkSubmitArguments): SubmitDriverResponse = {
+    val submitResponse = super.submitDriver(args).asInstanceOf[SubmitDriverResponse]
+    val submitSuccess = submitResponse.getSuccess.toBoolean
     if (submitSuccess) {
-      val driverId = submitResponse.getFieldNotNull(DRIVER_ID)
+      val driverId = submitResponse.getDriverId
       logInfo(s"Driver successfully submitted as $driverId. Polling driver state...")
       pollSubmittedDriverStatus(args.master, driverId)
     } else {
-      val submitMessage = submitResponse.getFieldNotNull(MESSAGE)
+      val submitMessage = submitResponse.getMessage
       logError(s"Application submission failed: $submitMessage")
     }
     submitResponse
@@ -57,16 +56,15 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
    * This retries up to a fixed number of times until giving up.
    */
   private def pollSubmittedDriverStatus(master: String, driverId: String): Unit = {
-    import DriverStatusResponseField._
     (1 to REPORT_DRIVER_STATUS_MAX_TRIES).foreach { _ =>
       val statusResponse = requestDriverStatus(master, driverId)
-        .asInstanceOf[DriverStatusResponseMessage]
-      val statusSuccess = statusResponse.getFieldNotNull(SUCCESS).toBoolean
+        .asInstanceOf[DriverStatusResponse]
+      val statusSuccess = statusResponse.getSuccess.toBoolean
       if (statusSuccess) {
-        val driverState = statusResponse.getFieldNotNull(DRIVER_STATE)
-        val workerId = statusResponse.getFieldOption(WORKER_ID)
-        val workerHostPort = statusResponse.getFieldOption(WORKER_HOST_PORT)
-        val exception = statusResponse.getFieldOption(MESSAGE)
+        val driverState = statusResponse.getDriverState
+        val workerId = Option(statusResponse.getWorkerId)
+        val workerHostPort = Option(statusResponse.getWorkerHostPort)
+        val exception = Option(statusResponse.getMessage)
         logInfo(s"State of driver $driverId is now $driverState.")
         // Log worker node, if present
         (workerId, workerHostPort) match {
@@ -83,26 +81,23 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
 
   /** Construct a submit driver request message. */
   override protected def constructSubmitRequest(
-      args: SparkSubmitArguments): SubmitDriverRequestMessage = {
-    import SubmitDriverRequestField._
-    val dm = Option(args.driverMemory).map { m => Utils.memoryStringToMb(m).toString }.orNull
-    val em = Option(args.executorMemory).map { m => Utils.memoryStringToMb(m).toString }.orNull
-    val message = new SubmitDriverRequestMessage()
-      .setField(CLIENT_SPARK_VERSION, sparkVersion)
-      .setField(APP_NAME, args.name)
-      .setField(APP_RESOURCE, args.primaryResource)
-      .setFieldIfNotNull(MAIN_CLASS, args.mainClass)
-      .setFieldIfNotNull(JARS, args.jars)
-      .setFieldIfNotNull(FILES, args.files)
-      .setFieldIfNotNull(DRIVER_MEMORY, dm)
-      .setFieldIfNotNull(DRIVER_CORES, args.driverCores)
-      .setFieldIfNotNull(DRIVER_EXTRA_JAVA_OPTIONS, args.driverExtraJavaOptions)
-      .setFieldIfNotNull(DRIVER_EXTRA_CLASS_PATH, args.driverExtraClassPath)
-      .setFieldIfNotNull(DRIVER_EXTRA_LIBRARY_PATH, args.driverExtraLibraryPath)
-      .setFieldIfNotNull(SUPERVISE_DRIVER, args.supervise.toString)
-      .setFieldIfNotNull(EXECUTOR_MEMORY, em)
-      .setFieldIfNotNull(TOTAL_EXECUTOR_CORES, args.totalExecutorCores)
-    args.childArgs.foreach(message.appendAppArg)
+      args: SparkSubmitArguments): SubmitDriverRequest = {
+    val message = new SubmitDriverRequest()
+      .setSparkVersion(sparkVersion)
+      .setAppName(args.name)
+      .setAppResource(args.primaryResource)
+      .setMainClass(args.mainClass)
+      .setJars(args.jars)
+      .setFiles(args.files)
+      .setDriverMemory(args.driverMemory)
+      .setDriverCores(args.driverCores)
+      .setDriverExtraJavaOptions(args.driverExtraJavaOptions)
+      .setDriverExtraClassPath(args.driverExtraClassPath)
+      .setDriverExtraLibraryPath(args.driverExtraLibraryPath)
+      .setSuperviseDriver(args.supervise.toString)
+      .setExecutorMemory(args.executorMemory)
+      .setTotalExecutorCores(args.totalExecutorCores)
+    args.childArgs.foreach(message.addAppArg)
     args.sparkProperties.foreach { case (k, v) => message.setSparkProperty(k, v) }
     // TODO: send special environment variables?
     message
@@ -111,21 +106,19 @@ private[spark] class StandaloneRestClient extends SubmitRestClient {
   /** Construct a kill driver request message. */
   override protected def constructKillRequest(
       master: String,
-      driverId: String): KillDriverRequestMessage = {
-    import KillDriverRequestField._
-    new KillDriverRequestMessage()
-      .setField(CLIENT_SPARK_VERSION, sparkVersion)
-      .setField(DRIVER_ID, driverId)
+      driverId: String): KillDriverRequest = {
+    new KillDriverRequest()
+      .setSparkVersion(sparkVersion)
+      .setDriverId(driverId)
   }
 
   /** Construct a driver status request message. */
   override protected def constructStatusRequest(
       master: String,
-      driverId: String): DriverStatusRequestMessage = {
-    import DriverStatusRequestField._
-    new DriverStatusRequestMessage()
-      .setField(CLIENT_SPARK_VERSION, sparkVersion)
-      .setField(DRIVER_ID, driverId)
+      driverId: String): DriverStatusRequest = {
+    new DriverStatusRequest()
+      .setSparkVersion(sparkVersion)
+      .setDriverId(driverId)
   }
 
   /** Throw an exception if this is not standalone mode. */
