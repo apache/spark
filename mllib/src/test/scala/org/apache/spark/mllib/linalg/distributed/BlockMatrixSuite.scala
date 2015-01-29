@@ -166,5 +166,13 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
     assert(originalPartitioner.rowsPerPart === ATpartitioner.colsPerPart)
     assert(originalPartitioner.cols === ATpartitioner.rows)
     assert(originalPartitioner.rows === ATpartitioner.cols)
+
+    // make sure it works when matrices are cached as well
+    gridBasedMat.cache()
+    val AT2 = gridBasedMat.transpose
+    AT2.cache()
+    assert(AT2.toBreeze() === AT.toBreeze())
+    val A = AT2.transpose
+    assert(A.toBreeze() === gridBasedMat.toBreeze())
   }
 }
