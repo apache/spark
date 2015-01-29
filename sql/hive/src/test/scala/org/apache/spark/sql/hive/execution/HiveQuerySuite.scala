@@ -57,14 +57,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     Locale.setDefault(originalLocale)
   }
 
-  test("SPARK-4908: concurent hive native commands") {
+  test("SPARK-4908: concurrent hive native commands") {
     (1 to 100).par.map { _ =>
       sql("USE default")
       sql("SHOW TABLES")
     }
   }
   
-  test("SPARK-5324 Results of describe can't be queried") {
+  test("SPARK-5324 query result of describe command") {
     loadTestTable("src")
     
     // register a describe command to be a temp table
