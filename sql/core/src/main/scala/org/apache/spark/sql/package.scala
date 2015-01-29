@@ -37,5 +37,5 @@ package object sql {
    * Converts a logical plan into zero or more SparkPlans.
    */
   @DeveloperApi
-  type Strategy = org.apache.spark.sql.catalyst.planning.GenericStrategy[SparkPlan]
+  protected[sql] type Strategy = org.apache.spark.sql.catalyst.planning.GenericStrategy[SparkPlan]
 }
