@@ -20,6 +20,7 @@ package org.apache.spark.util
 import scala.collection.JavaConversions.mapAsJavaMap
 import scala.concurrent.Await
 import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.util.Try
 
 import akka.actor.{ActorRef, ActorSystem, ExtendedActorSystem}
 import akka.pattern.ask
@@ -27,7 +28,7 @@ import akka.pattern.ask
 import com.typesafe.config.ConfigFactory
 import org.apache.log4j.{Level, Logger}
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, SparkException, SSLOptions}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkEnv, SparkException}
 
 /**
  * Various utility classes for working with Akka.
@@ -91,7 +92,8 @@ private[spark] object AkkaUtils extends Logging {
     val secureCookie = if (isAuthOn) secretKey else ""
     logDebug(s"In createActorSystem, requireCookie is: $requireCookie")
 
-    val akkaSslConfig = securityManager.sslOptions.createAkkaConfig.getOrElse(ConfigFactory.empty())
+    val akkaSslConfig = securityManager.akkaSSLOptions.createAkkaConfig
+        .getOrElse(ConfigFactory.empty())
 
     val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String])
       .withFallback(akkaSslConfig).withFallback(ConfigFactory.parseString(
@@ -216,7 +218,7 @@ private[spark] object AkkaUtils extends Logging {
     val driverHost: String = conf.get("spark.driver.host", "localhost")
     val driverPort: Int = conf.getInt("spark.driver.port", 7077)
     Utils.checkHost(driverHost, "Expected hostname")
-    val url = address(driverActorSystemName, driverHost, driverPort, name, conf)
+    val url = address(protocol(actorSystem), driverActorSystemName, driverHost, driverPort, name)
     val timeout = AkkaUtils.lookupTimeout(conf)
     logInfo(s"Connecting to $name: $url")
     Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
@@ -230,14 +232,20 @@ private[spark] object AkkaUtils extends Logging {
       actorSystem: ActorSystem): ActorRef = {
     val executorActorSystemName = SparkEnv.executorActorSystemName
     Utils.checkHost(host, "Expected hostname")
-    val url = address(executorActorSystemName, host, port, name, conf)
+    val url = address(protocol(actorSystem), executorActorSystemName, host, port, name)
     val timeout = AkkaUtils.lookupTimeout(conf)
     logInfo(s"Connecting to $name: $url")
     Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
   }
 
-  def protocol(conf: SparkConf): String = {
-    if (conf.getBoolean("spark.ssl.enabled", defaultValue = false)) {
+  def protocol(actorSystem: ActorSystem): String = {
+    protocol(Try {
+      actorSystem.settings.config.getBoolean("akka.remote.netty.tcp.enable-ssl")
+    }.getOrElse(false))
+  }
+
+  def protocol(ssl: Boolean = false): String = {
+    if (ssl) {
       "akka.ssl.tcp"
     } else {
       "akka.tcp"
@@ -245,11 +253,12 @@ private[spark] object AkkaUtils extends Logging {
   }
 
   def address(
+      protocol: String,
       systemName: String,
       host: String,
       port: Any,
-      actorName: String,
-      conf: SparkConf): String = {
-    s"${protocol(conf)}://$systemName@$host:$port/user/$actorName"
+      actorName: String): String = {
+    s"$protocol://$systemName@$host:$port/user/$actorName"
   }
+
 }

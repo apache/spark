@@ -63,7 +63,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
       conf = conf, securityManager = securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = slaveSystem.actorSelection(
-      AkkaUtils.address("spark", "localhost", boundPort, "MapOutputTracker", conf))
+      AkkaUtils.address(AkkaUtils.protocol(slaveSystem), "spark", "localhost", boundPort, "MapOutputTracker"))
     val timeout = AkkaUtils.lookupTimeout(conf)
     intercept[akka.actor.ActorNotFound] {
       slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
@@ -99,7 +99,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
       conf = badconf, securityManager = securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = slaveSystem.actorSelection(
-      AkkaUtils.address("spark", "localhost", boundPort, "MapOutputTracker", conf))
+      AkkaUtils.address(AkkaUtils.protocol(slaveSystem), "spark", "localhost", boundPort, "MapOutputTracker"))
     val timeout = AkkaUtils.lookupTimeout(conf)
     slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
 
@@ -151,7 +151,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
       conf = goodconf, securityManager = securityManagerGood)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = slaveSystem.actorSelection(
-      AkkaUtils.address("spark", "localhost", boundPort, "MapOutputTracker", conf))
+      AkkaUtils.address(AkkaUtils.protocol(slaveSystem), "spark", "localhost", boundPort, "MapOutputTracker"))
     val timeout = AkkaUtils.lookupTimeout(conf)
     slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
 
@@ -202,7 +202,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
       conf = badconf, securityManager = securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = slaveSystem.actorSelection(
-      AkkaUtils.address("spark", "localhost", boundPort, "MapOutputTracker", conf))
+      AkkaUtils.address(AkkaUtils.protocol(slaveSystem), "spark", "localhost", boundPort, "MapOutputTracker"))
     val timeout = AkkaUtils.lookupTimeout(conf)
     intercept[akka.actor.ActorNotFound] {
       slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
@@ -234,7 +234,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
       conf = slaveConf, securityManager = securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = slaveSystem.actorSelection(
-      AkkaUtils.address("spark", "localhost", boundPort, "MapOutputTracker", conf))
+      AkkaUtils.address(AkkaUtils.protocol(slaveSystem), "spark", "localhost", boundPort, "MapOutputTracker"))
     val timeout = AkkaUtils.lookupTimeout(conf)
     slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
 
@@ -285,7 +285,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
       conf = slaveConf, securityManager = securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = slaveSystem.actorSelection(
-      AkkaUtils.address("spark", "localhost", boundPort, "MapOutputTracker", conf))
+      AkkaUtils.address(AkkaUtils.protocol(slaveSystem), "spark", "localhost", boundPort, "MapOutputTracker"))
     val timeout = AkkaUtils.lookupTimeout(conf)
     slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
 
@@ -335,7 +335,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
       conf = slaveConf, securityManager = securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = slaveSystem.actorSelection(
-      AkkaUtils.address("spark", "localhost", boundPort, "MapOutputTracker", conf))
+      AkkaUtils.address(AkkaUtils.protocol(slaveSystem), "spark", "localhost", boundPort, "MapOutputTracker"))
     val timeout = AkkaUtils.lookupTimeout(conf)
     intercept[akka.actor.ActorNotFound] {
       slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
@@ -368,7 +368,7 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext with ResetSystemPro
       conf = slaveConf, securityManager = securityManagerBad)
     val slaveTracker = new MapOutputTrackerWorker(conf)
     val selection = slaveSystem.actorSelection(
-      AkkaUtils.address("spark", "localhost", boundPort, "MapOutputTracker", conf))
+      AkkaUtils.address(AkkaUtils.protocol(slaveSystem), "spark", "localhost", boundPort, "MapOutputTracker"))
     val timeout = AkkaUtils.lookupTimeout(conf)
     intercept[TimeoutException] {
       slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)

@@ -40,11 +40,11 @@ private[spark] class SimrSchedulerBackend(
     super.start()
 
     val driverUrl = AkkaUtils.address(
+      AkkaUtils.protocol(actorSystem),
       SparkEnv.driverActorSystemName,
       sc.conf.get("spark.driver.host"),
       sc.conf.get("spark.driver.port"),
-      CoarseGrainedSchedulerBackend.ACTOR_NAME,
-      sc.conf)
+      CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
     val conf = SparkHadoopUtil.get.newConfiguration(sc.conf)
     val fs = FileSystem.get(conf)

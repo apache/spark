@@ -144,11 +144,11 @@ private[spark] class CoarseMesosSchedulerBackend(
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
     val driverUrl = AkkaUtils.address(
+      AkkaUtils.protocol(sc.env.actorSystem),
       SparkEnv.driverActorSystemName,
       conf.get("spark.driver.host"),
       conf.get("spark.driver.port"),
-      CoarseGrainedSchedulerBackend.ACTOR_NAME,
-      conf)
+      CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
     val uri = conf.get("spark.executor.uri", null)
     if (uri == null) {

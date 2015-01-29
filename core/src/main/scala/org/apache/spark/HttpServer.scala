@@ -74,7 +74,7 @@ private[spark] class HttpServer(
   private def doStart(startPort: Int): (Server, Int) = {
     val server = new Server()
 
-    val connector = securityManager.sslOptions.createJettySslContextFactory()
+    val connector = securityManager.fileServerSSLOptions.createJettySslContextFactory()
       .map(new SslSocketConnector(_)).getOrElse(new SocketConnector)
 
     connector.setMaxIdleTime(60 * 1000)
@@ -159,7 +159,7 @@ private[spark] class HttpServer(
     if (server == null) {
       throw new ServerStateException("Server is not started")
     } else {
-      val scheme = if (securityManager.sslOptions.enabled) "https" else "http"
+      val scheme = if (securityManager.fileServerSSLOptions.enabled) "https" else "http"
       s"$scheme://${Utils.localIpAddress}:$port"
     }
   }

@@ -201,17 +201,25 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
     )
   }
 
-  val sslOptions = SSLOptions.parse(sparkConf, "spark.ssl", defaults = None)
-  logDebug(s"SSLConfiguration: $sslOptions")
+  // the default SSL configuration - it will be used by all communication layers unless overwritten
+  private val defaultSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl", defaults = None)
 
-  val (sslSocketFactory, hostnameVerifier) = if (sslOptions.enabled) {
+  // SSL configuration for different communication layers - they can override the default
+  // configuration at a specified namespace. The namespace *must* start with spark.ssl.
+  val fileServerSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.fs", Some(defaultSSLOptions))
+  val akkaSSLOptions = SSLOptions.parse(sparkConf, "spark.ssl.akka", Some(defaultSSLOptions))
+
+  logDebug(s"SSLConfiguration for file server: $fileServerSSLOptions")
+  logDebug(s"SSLConfiguration for Akka: $akkaSSLOptions")
+
+  val (sslSocketFactory, hostnameVerifier) = if (fileServerSSLOptions.enabled) {
     val trustStoreManagers =
-      for (trustStore <- sslOptions.trustStore) yield {
-        val input = Files.asByteSource(sslOptions.trustStore.get).openStream()
+      for (trustStore <- fileServerSSLOptions.trustStore) yield {
+        val input = Files.asByteSource(fileServerSSLOptions.trustStore.get).openStream()
 
         try {
           val ks = KeyStore.getInstance(KeyStore.getDefaultType)
-          ks.load(input, sslOptions.trustStorePassword.get.toCharArray)
+          ks.load(input, fileServerSSLOptions.trustStorePassword.get.toCharArray)
 
           val tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm)
           tmf.init(ks)
@@ -232,7 +240,7 @@ private[spark] class SecurityManager(sparkConf: SparkConf)
       }: TrustManager
     })
 
-    val sslContext = SSLContext.getInstance(sslOptions.protocol.getOrElse("Default"))
+    val sslContext = SSLContext.getInstance(fileServerSSLOptions.protocol.getOrElse("Default"))
     sslContext.init(null, trustStoreManagers.getOrElse(credulousTrustStoreManagers), null)
 
     val hostVerifier = new HostnameVerifier {

@@ -130,19 +130,32 @@ class SecurityManagerSuite extends FunSuite {
 
     val securityManager = new SecurityManager(conf)
 
-    assert(securityManager.sslOptions.enabled === true)
+    assert(securityManager.fileServerSSLOptions.enabled === true)
+    assert(securityManager.akkaSSLOptions.enabled === true)
+
     assert(securityManager.sslSocketFactory.isDefined === true)
     assert(securityManager.hostnameVerifier.isDefined === true)
 
-    assert(securityManager.sslOptions.trustStore.isDefined === true)
-    assert(securityManager.sslOptions.trustStore.get.getName === "truststore")
-    assert(securityManager.sslOptions.keyStore.isDefined === true)
-    assert(securityManager.sslOptions.keyStore.get.getName === "keystore")
-    assert(securityManager.sslOptions.trustStorePassword === Some("password"))
-    assert(securityManager.sslOptions.keyStorePassword === Some("password"))
-    assert(securityManager.sslOptions.keyPassword === Some("password"))
-    assert(securityManager.sslOptions.protocol === Some("TLSv1"))
-    assert(securityManager.sslOptions.enabledAlgorithms ===
+    assert(securityManager.fileServerSSLOptions.trustStore.isDefined === true)
+    assert(securityManager.fileServerSSLOptions.trustStore.get.getName === "truststore")
+    assert(securityManager.fileServerSSLOptions.keyStore.isDefined === true)
+    assert(securityManager.fileServerSSLOptions.keyStore.get.getName === "keystore")
+    assert(securityManager.fileServerSSLOptions.trustStorePassword === Some("password"))
+    assert(securityManager.fileServerSSLOptions.keyStorePassword === Some("password"))
+    assert(securityManager.fileServerSSLOptions.keyPassword === Some("password"))
+    assert(securityManager.fileServerSSLOptions.protocol === Some("TLSv1"))
+    assert(securityManager.fileServerSSLOptions.enabledAlgorithms ===
+        Set("TLS_RSA_WITH_AES_128_CBC_SHA", "SSL_RSA_WITH_DES_CBC_SHA"))
+
+    assert(securityManager.akkaSSLOptions.trustStore.isDefined === true)
+    assert(securityManager.akkaSSLOptions.trustStore.get.getName === "truststore")
+    assert(securityManager.akkaSSLOptions.keyStore.isDefined === true)
+    assert(securityManager.akkaSSLOptions.keyStore.get.getName === "keystore")
+    assert(securityManager.akkaSSLOptions.trustStorePassword === Some("password"))
+    assert(securityManager.akkaSSLOptions.keyStorePassword === Some("password"))
+    assert(securityManager.akkaSSLOptions.keyPassword === Some("password"))
+    assert(securityManager.akkaSSLOptions.protocol === Some("TLSv1"))
+    assert(securityManager.akkaSSLOptions.enabledAlgorithms ===
         Set("TLS_RSA_WITH_AES_128_CBC_SHA", "SSL_RSA_WITH_DES_CBC_SHA"))
   }
 
@@ -155,7 +168,8 @@ class SecurityManagerSuite extends FunSuite {
 
     val securityManager = new SecurityManager(conf)
 
-    assert(securityManager.sslOptions.enabled === false)
+    assert(securityManager.fileServerSSLOptions.enabled === false)
+    assert(securityManager.akkaSSLOptions.enabled === false)
     assert(securityManager.sslSocketFactory.isDefined === false)
     assert(securityManager.hostnameVerifier.isDefined === false)
   }

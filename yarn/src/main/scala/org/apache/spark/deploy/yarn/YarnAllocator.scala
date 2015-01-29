@@ -108,11 +108,11 @@ private[yarn] class YarnAllocator(
   launcherPool.allowCoreThreadTimeOut(true)
 
   private val driverUrl = AkkaUtils.address(
+    AkkaUtils.protocol(securityMgr.akkaSSLOptions.enabled),
     SparkEnv.driverActorSystemName,
     sparkConf.get("spark.driver.host"),
     sparkConf.get("spark.driver.port"),
-    CoarseGrainedSchedulerBackend.ACTOR_NAME,
-    sparkConf)
+    CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
   // For testing
   private val launchContainers = sparkConf.getBoolean("spark.yarn.launchContainers", true)
