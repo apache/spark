@@ -155,7 +155,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
   }
 
   test("RatingBlockBuilder") {
-    val emptyBuilder = new RatingBlockBuilder[Int, Int]()
+    val emptyBuilder = new RatingBlockBuilder[Int]()
     assert(emptyBuilder.size === 0)
     val emptyBlock = emptyBuilder.build()
     assert(emptyBlock.srcIds.isEmpty)
@@ -228,15 +228,15 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       numItems: Int,
       rank: Int,
       noiseStd: Double = 0.0,
-      seed: Long = 11L): (RDD[Rating[Int, Int]], RDD[Rating[Int, Int]]) = {
+      seed: Long = 11L): (RDD[Rating[Int]], RDD[Rating[Int]]) = {
     val trainingFraction = 0.6
     val testFraction = 0.3
     val totalFraction = trainingFraction + testFraction
     val random = new Random(seed)
     val userFactors = genFactors(numUsers, rank, random)
     val itemFactors = genFactors(numItems, rank, random)
-    val training = ArrayBuffer.empty[Rating[Int, Int]]
-    val test = ArrayBuffer.empty[Rating[Int, Int]]
+    val training = ArrayBuffer.empty[Rating[Int]]
+    val test = ArrayBuffer.empty[Rating[Int]]
     for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
       val x = random.nextDouble()
       if (x < totalFraction) {
@@ -268,7 +268,7 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
       numItems: Int,
       rank: Int,
       noiseStd: Double = 0.0,
-      seed: Long = 11L): (RDD[Rating[Int, Int]], RDD[Rating[Int, Int]]) = {
+      seed: Long = 11L): (RDD[Rating[Int]], RDD[Rating[Int]]) = {
     // The assumption of the implicit feedback model is that unobserved ratings are more likely to
     // be negatives.
     val positiveFraction = 0.8
@@ -279,8 +279,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
     val random = new Random(seed)
     val userFactors = genFactors(numUsers, rank, random)
     val itemFactors = genFactors(numItems, rank, random)
-    val training = ArrayBuffer.empty[Rating[Int, Int]]
-    val test = ArrayBuffer.empty[Rating[Int, Int]]
+    val training = ArrayBuffer.empty[Rating[Int]]
+    val test = ArrayBuffer.empty[Rating[Int]]
     for ((userId, userFactor) <- userFactors; (itemId, itemFactor) <- itemFactors) {
       val rating = blas.sdot(rank, userFactor, 1, itemFactor, 1)
       val threshold = if (rating > 0) positiveFraction else negativeFraction
@@ -340,8 +340,8 @@ class ALSSuite extends FunSuite with MLlibTestSparkContext with Logging {
    * @param targetRMSE target test RMSE
    */
   def testALS(
-      training: RDD[Rating[Int, Int]],
-      test: RDD[Rating[Int, Int]],
+      training: RDD[Rating[Int]],
+      test: RDD[Rating[Int]],
       rank: Int,
       maxIter: Int,
       regParam: Double,
