@@ -37,10 +37,10 @@ install_app() {
   local curl_opts=""
   local wget_opts=""
   if [ -n "$AMPLAB_JENKINS" ]; then
-    curl_opts="-s"
+    curl_opts="-s -L"
     wget_opts="--quiet"
   else
-    curl_opts="--progress-bar"
+    curl_opts="--progress-bar -L"
     wget_opts="--progress=bar:force"
   fi
 
