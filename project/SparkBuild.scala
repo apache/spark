@@ -397,11 +397,6 @@ object TestSettings {
     testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     // Enable Junit testing.
     libraryDependencies += "com.novocode" % "junit-interface" % "0.9" % "test",
-    // Needed for SQL JDBC tests.
-    libraryDependencies += "com.h2database" % "h2" % "1.4.183" % "test",
-    libraryDependencies += "mysql" % "mysql-connector-java" % "5.1.34" % "test",
-    libraryDependencies += "org.postgresql" % "postgresql" % "9.3-1102-jdbc41" % "test",
-    libraryDependencies += "com.spotify" % "docker-client" % "2.7.5" % "test",
     // Only allow one test at a time, even across projects, since they run in the same JVM
     parallelExecution in Test := false,
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
