@@ -303,9 +303,9 @@ class BlockMatrix(
     val newNumColBlocks = math.ceil(n * 1.0 / newColsPerBlock).toInt
     val slicedBlocks = blocks.flatMap { case ((blockRowIndex, blockColIndex), mat) =>
       val rowStartOffset = blockRowIndex * rowsPerBlock
-      //val rowEndOffset = rowStartOffset + mat.numRows
+      // val rowEndOffset = rowStartOffset + mat.numRows
       val colStartOffset = blockColIndex * colsPerBlock
-      //val colEndOffset = colStartOffset + mat.numCols
+      // val colEndOffset = colStartOffset + mat.numCols
 
       /*
       // The range of indices that the parts of this block are going to be mapped to
