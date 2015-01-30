@@ -17,7 +17,7 @@
 
 package org.apache.spark.examples.mllib
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable
 
 import java.text.BreakIterator
 
@@ -47,7 +47,9 @@ object LDAExample {
       docConcentration: Double = -1,
       topicConcentration: Double = -1,
       vocabSize: Int = 10000,
-      stopwordFile: String = "") extends AbstractParams[Params]
+      stopwordFile: String = "",
+      checkpointDir: Option[String] = None,
+      checkpointInterval: Int = 10) extends AbstractParams[Params]
 
   def main(args: Array[String]) {
     val defaultParams = Params()
@@ -69,15 +71,25 @@ object LDAExample {
         s"  default: ${defaultParams.topicConcentration}")
         .action((x, c) => c.copy(topicConcentration = x))
       opt[Int]("vocabSize")
-        .text(s"number of distinct word types to use, chosen by frequency." +
+        .text(s"number of distinct word types to use, chosen by frequency. (-1=all)" +
           s"  default: ${defaultParams.vocabSize}")
         .action((x, c) => c.copy(vocabSize = x))
       opt[String]("stopwordFile")
         .text(s"filepath for a list of stopwords. Note: This must fit on a single machine." +
         s"  default: ${defaultParams.stopwordFile}")
         .action((x, c) => c.copy(stopwordFile = x))
+      opt[String]("checkpointDir")
+        .text(s"Directory for checkpointing intermediate results." +
+        s"  Checkpointing helps with recovery and eliminates temporary shuffle files on disk." +
+        s"  default: ${defaultParams.checkpointDir}")
+        .action((x, c) => c.copy(checkpointDir = Some(x)))
+      opt[Int]("checkpointInterval")
+        .text(s"Iterations between each checkpoint.  Only used if checkpointDir is set." +
+        s" default: ${defaultParams.checkpointInterval}")
+        .action((x, c) => c.copy(checkpointInterval = x))
       arg[String]("<input>...")
-        .text("input paths (directories) to plain text corpora")
+        .text("input paths (directories) to plain text corpora." +
+        "  Each text file line should hold 1 document.")
         .unbounded()
         .required()
         .action((x, c) => c.copy(input = c.input :+ x))
@@ -98,8 +110,21 @@ object LDAExample {
     Logger.getRootLogger.setLevel(Level.WARN)
 
     // Load documents, and prepare them for LDA.
+    val preprocessStart = System.nanoTime()
     val (corpus, vocabArray) = preprocess(sc, params.input, params.vocabSize, params.stopwordFile)
-    corpus.cache() // cache since LDA is iterative
+    corpus.cache()
+    val actualCorpusSize = corpus.count()
+    val actualVocabSize = vocabArray.size
+    val actualNumTokens = corpus.map(_._2.toArray.sum.toLong).sum().toLong
+    val preprocessElapsed = (System.nanoTime() - preprocessStart) / 1e9
+
+    println()
+    println(s"Corpus summary:")
+    println(s"\t Training set size: $actualCorpusSize documents")
+    println(s"\t Vocabulary size: $actualVocabSize terms")
+    println(s"\t Training set size: $actualNumTokens tokens")
+    println(s"\t Preprocessing time: $preprocessElapsed sec")
+    println()
 
     // Run LDA.
     val lda = new LDA()
@@ -107,15 +132,18 @@ object LDAExample {
       .setMaxIterations(params.maxIterations)
       .setDocConcentration(params.docConcentration)
       .setTopicConcentration(params.topicConcentration)
+      .setCheckpointInterval(params.checkpointInterval)
+    if (params.checkpointDir.nonEmpty) {
+      lda.setCheckpointDir(params.checkpointDir.get)
+    }
     val startTime = System.nanoTime()
     val ldaModel = lda.run(corpus)
     val elapsed = (System.nanoTime() - startTime) / 1e9
 
     println(s"Finished training LDA model.  Summary:")
     println(s"\t Training time: $elapsed sec")
-    println(s"\t Training set size: ${corpus.count()} documents")
-    println(s"\t Vocabulary size: ${vocabArray.size} terms")
-    println(s"\t Training data average log likelihood: ${ldaModel.logLikelihood / corpus.count()}")
+    val avgLogLikelihood = ldaModel.logLikelihood / actualCorpusSize.toDouble
+    println(s"\t Training data average log likelihood: $avgLogLikelihood")
     println()
 
     // Print the topics, showing the top-weighted terms for each topic.
@@ -143,37 +171,41 @@ object LDAExample {
       vocabSize: Int,
       stopwordFile: String): (RDD[(Long, Vector)], Array[String]) = {
 
-    val files: Seq[RDD[(String, String)]] = for (p <- paths) yield {
-      sc.wholeTextFiles(p)
+    // Get dataset of document texts
+    // One document per line in each text file.
+    val files: Seq[RDD[String]] = for (p <- paths) yield {
+      sc.textFile(p)
     }
-
-    // Dataset of document texts
-    val textRDD: RDD[String] =
-      files.reduce(_ ++ _) // combine results from multiple paths
-      .map { case (path, text) => text }
+    val textRDD: RDD[String] = files.reduce(_ ++ _) // combine results from multiple paths
 
     // Split text into words
     val tokenizer = new SimpleTokenizer(sc, stopwordFile)
     val tokenized: RDD[(Long, IndexedSeq[String])] = textRDD.zipWithIndex().map { case (text, id) =>
       id -> tokenizer.getWords(text)
     }
-
-    // Counts words: RDD[(word, wordCount)]
-    val wordCounts: RDD[(String, Int)] = tokenized
-      .flatMap { case (_, tokens) => tokens.map(_ -> 1) }
-      .reduceByKey(_ + _)
+    tokenized.cache()
 
     // Choose vocabulary: Map[word -> id]
-    val vocab: Map[String, Int] = wordCounts
-      .sortBy(_._2, ascending = false)
-      .take(vocabSize)
-      .map(_._1)
-      .zipWithIndex
-      .toMap
+    val vocab: Map[String, Int] = {
+      // Counts words: RDD[(word, wordCount)]
+      val wordCounts: RDD[(String, Int)] = tokenized
+        .flatMap { case (_, tokens) => tokens.map(_ -> 1) }
+        .reduceByKey(_ + _)
+      val sortedWC = wordCounts
+        .sortBy(_._2, ascending = false)
+      val selectedWC = if (vocabSize == -1) {
+        sortedWC.collect()
+      } else {
+        sortedWC.take(vocabSize)
+      }
+      selectedWC.map(_._1)
+        .zipWithIndex
+        .toMap
+    }
 
     val documents = tokenized.map { case (id, tokens) =>
       // Filter tokens by vocabulary, and create word count vector representation of document.
-      val wc = new scala.collection.mutable.HashMap[Int, Int]()
+      val wc = new mutable.HashMap[Int, Int]()
       tokens.foreach { term =>
         if (vocab.contains(term)) {
           val termIndex = vocab(term)
@@ -216,7 +248,7 @@ private class SimpleTokenizer(sc: SparkContext, stopwordFile: String) extends Se
 
   def getWords(text: String): IndexedSeq[String] = {
 
-    val words = new ArrayBuffer[String]()
+    val words = new mutable.ArrayBuffer[String]()
 
     // Use Java BreakIterator to tokenize text into words.
     val wb = BreakIterator.getWordInstance

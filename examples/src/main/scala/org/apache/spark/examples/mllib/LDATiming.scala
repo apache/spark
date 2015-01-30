@@ -29,7 +29,7 @@ import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.mllib.clustering.LDA
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.collection.OpenHashSet
+
 
 /**
  * An app for timing Latent Dirichlet Allocation (LDA).
@@ -55,8 +55,8 @@ object LDATiming {
       ks: Array[Int] = Array(20),
       numPartitions: Int = 16,
       maxIterations: Int = 10,
-      docConcentration: Double = 0.1,
-      topicConcentration: Double = 0.1,
+      docConcentration: Double = -1,
+      topicConcentration: Double = -1,
       vocabSizes: Array[Int] = Array(10000),
       stopwordFile: String = "",
       checkpointDir: Option[String] = None,
@@ -129,7 +129,7 @@ object LDATiming {
 
         val preprocessStart = System.nanoTime()
         val (corpus, vocabArray) = preprocess(sc, params.input, corpusSize, vocabSize, params.stopwordFile)
-        corpus.repartition(params.numPartitions).cache() // cache since LDA is iterative
+        corpus.repartition(params.numPartitions).cache()
         val actualCorpusSize = corpus.count()
         val actualVocabSize = vocabArray.size
         val actualNumTokens = corpus.map(_._2.toArray.sum.toLong).sum().toLong
@@ -141,6 +141,7 @@ object LDATiming {
         println(s"\t Vocabulary size: $actualVocabSize terms")
         println(s"\t Training set size: $actualNumTokens tokens")
         println(s"\t Preprocessing time: $preprocessElapsed sec")
+        println()
 
         for (k <- params.ks) {
           // Run LDA.
@@ -222,54 +223,24 @@ object LDATiming {
     val tokenized: RDD[(Long, IndexedSeq[String])] = textRDD.zipWithIndex().map { case (text, id) =>
       id -> tokenizer.getWords(text)
     }
-
-    /*
-    // Counts words: RDD[(word, wordCount)]
-    val wordCounts: RDD[(String, Int)] = tokenized
-      .flatMap { case (_, tokens) => tokens.map(_ -> 1) }
-      .reduceByKey(_ + _)
-    */
+    tokenized.cache()
 
     // Choose vocabulary: Map[word -> id]
-    val vocab: Map[String, Int] = if (vocabSize == -1) {
-      val allWords = tokenized.aggregate(new OpenHashSet[String])({
-        case (wordSet, (docId, words)) =>
-          words.foreach(word => wordSet.add(word))
-          wordSet
-      }, { case (a, b) =>
-        b.iterator.foreach(w => a.add(w))
-        a
-      })
-      allWords
-        .iterator
-        .zipWithIndex
-        .toMap
-    } else {
-      val allWords = tokenized.aggregate(new mutable.HashMap[String, Long])({
-        case (wc, (docId, words)) =>
-          words.foreach(word => wc(word) = wc.getOrElse(word, 0L) + 1)
-          wc
-      }, { case (a, b) =>
-        b.iterator.foreach { case (w: String, cnt: Long) =>
-          a(w) = a.getOrElse(w, 0L) + cnt
-        }
-        a
-      })
-      allWords
-        .toSeq
-        .sortBy(-_._2)
-        .take(vocabSize)
-        .map(_._1)
-        .zipWithIndex
-        .toMap
-      /*
-      wordCounts
+    val vocab: Map[String, Int] = {
+      // Counts words: RDD[(word, wordCount)]
+      val wordCounts: RDD[(String, Int)] = tokenized
+        .flatMap { case (_, tokens) => tokens.map(_ -> 1) }
+        .reduceByKey(_ + _)
+      val sortedWC = wordCounts
         .sortBy(_._2, ascending = false)
-        .take(vocabSize)
-        .map(_._1)
+      val selectedWC = if (vocabSize == -1) {
+        sortedWC.collect()
+      } else {
+        sortedWC.take(vocabSize)
+      }
+      selectedWC.map(_._1)
         .zipWithIndex
         .toMap
-        */
     }
 
     val documents = tokenized.map { case (id, tokens) =>
