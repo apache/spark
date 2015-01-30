@@ -28,7 +28,9 @@ import org.apache.spark.rdd.RDD
  * Regression model for isotonic regression.
  *
  * @param boundaries Array of boundaries for which predictions are known.
+ *                   Boundaries must be sorted in increasing order.
  * @param predictions Array of predictions associated to the boundaries at the same index.
+ *                    Result of isotonic regression and therefore is monotone.
  */
 class IsotonicRegressionModel (
     boundaries: Array[Double],
@@ -75,11 +77,11 @@ class IsotonicRegressionModel (
    *
    * @param testData Feature to be labeled.
    * @return Predicted label.
-   *         If testData exactly matches a boundary then associated prediction is directly returned
-   *         If testData is lower or higher than all boundaries
-   *           then first or last prediction is returned respectively
-   *         If testData falls between two values in boundary then predictions is treated
-   *         as piecewise linear function and interpolated value is returned
+   *         If testData exactly matches a boundary then associated prediction is directly returned.
+   *         If testData is lower or higher than all boundaries.
+   *           then first or last prediction is returned respectively.
+   *         If testData falls between two values in boundary array then predictions is treated
+   *         as piecewise linear function and interpolated value is returned.
    */
   def predict(testData: Double): Double = {
 
@@ -87,25 +89,24 @@ class IsotonicRegressionModel (
       y1 + (y2 - y1) * (x - x1) / (x2 - x1)
     }
 
-    val insertIndex = binarySearch(boundaries, testData)
-
-    val normalisedInsertIndex = -insertIndex - 1
+    val foundIndex = binarySearch(boundaries, testData)
+    val insertIndex = -foundIndex - 1
 
     // Find if the index was lower than all values,
-    // higher than all values, inbetween two values or exact match.
-    if (insertIndex == -1) {
+    // higher than all values, in between two values or exact match.
+    if (insertIndex == 0) {
       predictions.head
-    } else if (normalisedInsertIndex == boundaries.length){
+    } else if (insertIndex == boundaries.length){
       predictions.last
-    } else if (insertIndex < 0) {
+    } else if (foundIndex < 0) {
       linearInterpolation(
-        boundaries(normalisedInsertIndex - 1),
-        predictions(normalisedInsertIndex - 1),
-        boundaries(normalisedInsertIndex),
-        predictions(normalisedInsertIndex),
+        boundaries(insertIndex - 1),
+        predictions(insertIndex - 1),
+        boundaries(insertIndex),
+        predictions(insertIndex),
         testData)
     } else {
-      predictions(insertIndex)
+      predictions(foundIndex)
     }
   }
 }
@@ -113,29 +114,31 @@ class IsotonicRegressionModel (
 /**
  * Isotonic regression.
  * Currently implemented using parallelized pool adjacent violators algorithm.
- * Currently only univariate (single feature) algorithm supported.
+ * Only univariate (single feature) algorithm supported.
  *
  * Sequential PAV implementation based on:
  * Tibshirani, Ryan J., Holger Hoefling, and Robert Tibshirani.
  *   "Nearly-isotonic regression." Technometrics 53.1 (2011): 54-61.
+ *   Available from http://www.stat.cmu.edu/~ryantibs/papers/neariso.pdf
  *
- * Sequential PAV parallelized as per:
+ * Sequential PAV parallelization based on:
  * Kearsley, Anthony J., Richard A. Tapia, and Michael W. Trosset.
  *   "An approach to parallelizing isotonic regression."
  *   Applied Mathematics and Parallel Computing. Physica-Verlag HD, 1996. 141-147.
+ *   Available from http://softlib.rice.edu/pub/CRPC-TRs/reports/CRPC-TR96640.pdf
  */
 class IsotonicRegression private (private var isotonic: Boolean) extends Serializable {
 
   /**
-   * Constructs IsotonicRegression instance with default parameter isotonic = true
-   * @return New instance of IsotonicRegression
+   * Constructs IsotonicRegression instance with default parameter isotonic = true.
+   * @return New instance of IsotonicRegression.
    */
   def this() = this(true)
 
   /**
-   * Sets the isotonic parameter
+   * Sets the isotonic parameter.
    * @param isotonic Isotonic (increasing) or antitonic (decreasing) sequence.
-   * @return The instance of IsotonicRegression
+   * @return This instance of IsotonicRegression.
    */
   def setIsotonic(isotonic: Boolean): this.type = {
     this.isotonic = isotonic
@@ -148,7 +151,6 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    * @param input RDD of tuples (label, feature, weight) where label is dependent variable
    *              for which we calculate isotonic regression, feature is independent variable
    *              and weight represents number of measures with default 1.
-   *
    * @return Isotonic regression model.
    */
   def run(input: RDD[(Double, Double, Double)]): IsotonicRegressionModel = {
@@ -186,7 +188,7 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
   /**
    * Performs a pool adjacent violators algorithm (PAV).
    * Uses approach with single processing of data where violators
-   * in previously processed data created by pooling are fixed immediatelly.
+   * in previously processed data created by pooling are fixed immediately.
    * Uses optimization of discovering monotonicity violating sequences (blocks).
    *
    * @param input Input data of tuples (label, feature, weight).
