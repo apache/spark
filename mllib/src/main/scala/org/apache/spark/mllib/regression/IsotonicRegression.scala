@@ -75,7 +75,7 @@ class IsotonicRegressionModel (
    * @return Predicted labels.
    */
   def predict(testData: JavaDoubleRDD): JavaDoubleRDD = {
-    JavaDoubleRDD.fromRDD(predict(testData.rdd.asInstanceOf[RDD[Double]]))
+    JavaDoubleRDD.fromRDD(predict(testData.rdd.retag.asInstanceOf[RDD[Double]]))
   }
 
   /**
@@ -194,7 +194,7 @@ class IsotonicRegression private (private var isotonic: Boolean) extends Seriali
    * @return Isotonic regression model.
    */
   def run(input: JavaRDD[(JDouble, JDouble, JDouble)]): IsotonicRegressionModel = {
-    run(input.rdd.asInstanceOf[RDD[(Double, Double, Double)]])
+    run(input.rdd.retag.asInstanceOf[RDD[(Double, Double, Double)]])
   }
 
   /**
