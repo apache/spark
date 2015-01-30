@@ -40,6 +40,8 @@
     <deb.install.path>/usr/share/spark</deb.install.path>
     <deb.user>root</deb.user>
     <deb.bin.filemode>744</deb.bin.filemode>
+    <spark.examples.jar.basename>spark-examples-${project.version}-hadoop${hadoop.version}.jar</spark.examples.jar.basename>
+    <spark.examples.jar>${basedir}/../examples/target/${spark.jar.dir}/${spark.examples.jar.basename}</spark.examples.jar>
   </properties>
 
   <dependencies>
@@ -76,6 +78,11 @@
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-repl_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-examples_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
   </dependencies>
@@ -240,17 +247,20 @@
           <plugin>
             <groupId>org.vafer</groupId>
             <artifactId>jdeb</artifactId>
-            <version>0.11</version>
+            <version>1.3</version>
             <executions>
               <execution>
+                <id>spark_core</id>
                 <phase>package</phase>
                 <goals>
                   <goal>jdeb</goal>
                 </goals>
                 <configuration>
-                  <deb>${project.build.directory}/${deb.pkg.name}_${project.version}-${buildNumber}_all.deb</deb>
+                  <deb>${project.build.directory}/${deb.pkg.name}_${project.version}-${buildNumber}_core.deb</deb>
                   <attach>false</attach>
                   <compression>gzip</compression>
+                  <controlDir>${basedir}/src/deb/control/core</controlDir>
+                  <skipPOMs>false</skipPOMs>
                   <dataSet>
                     <data>
                       <src>${spark.jar}</src>
@@ -271,6 +281,12 @@
                         <group>${deb.user}</group>
                         <prefix>${deb.install.path}</prefix>
                       </mapper>
+                    </data>
+                    <data>
+                      <type>link</type>
+                      <symlink>true</symlink>
+                      <linkName>${deb.install.path}/lib</linkName>
+                      <linkTarget>${deb.install.path}/jars</linkTarget>
                     </data>
                     <data>
                       <src>${basedir}/../conf</src>
@@ -314,6 +330,32 @@
                         <group>${deb.user}</group>
                         <prefix>${deb.install.path}/python</prefix>
                         <filemode>744</filemode>
+                      </mapper>
+                    </data>
+                  </dataSet>
+                </configuration>
+              </execution>
+              <execution>
+                <id>spark_examples</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>jdeb</goal>
+                </goals>
+                <configuration>
+                  <deb>${project.build.directory}/${deb.pkg.name}_${project.version}-${buildNumber}_examples.deb</deb>
+                  <attach>false</attach>
+                  <compression>gzip</compression>
+                  <controlDir>${basedir}/src/deb/control/examples</controlDir>
+                  <skipPOMs>false</skipPOMs>
+                  <dataSet>
+                    <data>
+                      <src>${spark.examples.jar}</src>
+                      <type>file</type>
+                      <mapper>
+                        <type>perm</type>
+                        <user>${deb.user}</user>
+                        <group>${deb.user}</group>
+                        <prefix>${deb.install.path}/jars</prefix>
                       </mapper>
                     </data>
                   </dataSet>
