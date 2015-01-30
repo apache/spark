@@ -17,13 +17,12 @@
 
 package org.apache.spark.mllib.linalg.distributed
 
-import org.apache.spark.SparkException
-
 import scala.util.Random
 
 import breeze.linalg.{DenseMatrix => BDM}
 import org.scalatest.FunSuite
 
+import org.apache.spark.SparkException
 import org.apache.spark.mllib.linalg.{DenseMatrix, Matrices, Matrix}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
@@ -151,8 +150,7 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
 
   test("validate") {
     // No error
-    gridBasedMat.validate
-
+    gridBasedMat.validate()
     // Wrong MatrixBlock dimensions
     val blocks: Seq[((Int, Int), Matrix)] = Seq(
       ((0, 0), new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 2.0))),
@@ -164,28 +162,20 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
     val wrongRowPerParts = new BlockMatrix(rdd, rowPerPart + 1, colPerPart)
     val wrongColPerParts = new BlockMatrix(rdd, rowPerPart, colPerPart + 1)
     intercept[SparkException] {
-      wrongRowPerParts.validate
+      wrongRowPerParts.validate()
     }
     intercept[SparkException] {
-      wrongColPerParts.validate
+      wrongColPerParts.validate()
     }
-    // Large number of mismatching MatrixBlock dimensions
-    val manyBlocks = for (i <- 0 until 60) yield ((i, 0), DenseMatrix.eye(1))
-    val manyWrongDims = new BlockMatrix(sc.parallelize(manyBlocks, numPartitions), 2, 2, 140, 4)
-    intercept[SparkException] {
-      manyWrongDims.validate
-    }
-
     // Wrong BlockMatrix dimensions
     val wrongRowSize = new BlockMatrix(rdd, rowPerPart, colPerPart, 4, 4)
     intercept[SparkException] {
-      wrongRowSize.validate
+      wrongRowSize.validate()
     }
     val wrongColSize = new BlockMatrix(rdd, rowPerPart, colPerPart, 5, 2)
     intercept[SparkException] {
-      wrongColSize.validate
+      wrongColSize.validate()
     }
-
     // Duplicate indices
     val duplicateBlocks: Seq[((Int, Int), Matrix)] = Seq(
       ((0, 0), new DenseMatrix(2, 2, Array(1.0, 0.0, 0.0, 2.0))),
@@ -195,12 +185,7 @@ class BlockMatrixSuite extends FunSuite with MLlibTestSparkContext {
       ((2, 1), new DenseMatrix(1, 2, Array(1.0, 5.0))))
     val dupMatrix = new BlockMatrix(sc.parallelize(duplicateBlocks, numPartitions), 2, 2)
     intercept[SparkException] {
-      dupMatrix.validate
-    }
-    val duplicateBlocks2 = for (i <- 0 until 110) yield ((i / 2, i / 2), DenseMatrix.eye(1))
-    val largeDupMatrix = new BlockMatrix(sc.parallelize(duplicateBlocks2, numPartitions), 1, 1)
-    intercept[SparkException] {
-      largeDupMatrix.validate
+      dupMatrix.validate()
     }
   }
 }
