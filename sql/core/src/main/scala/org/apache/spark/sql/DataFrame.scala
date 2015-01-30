@@ -31,7 +31,7 @@ import org.apache.spark.api.python.SerDeUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{ResolvedStar, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.{JoinType, Inner}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -265,7 +265,7 @@ class DataFrame protected[sql](
    */
   override def apply(colName: String): Column = colName match {
     case "*" =>
-      Column("*")
+      new Column(ResolvedStar(schema.fieldNames.map(resolve)))
     case _ =>
       val expr = resolve(colName)
       new Column(Some(sqlContext), Some(Project(Seq(expr), logicalPlan)), expr)
