@@ -27,7 +27,7 @@ import org.json4s.JValue
 
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
-import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
+import org.apache.spark.deploy.master.{ApplicationInfo, ApplicationState, DriverInfo, WorkerInfo}
 import org.apache.spark.ui.{WebUIPage, UIUtils}
 import org.apache.spark.util.Utils
 
@@ -39,6 +39,21 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
     val state = Await.result(stateFuture, timeout)
     JsonProtocol.writeMasterState(state)
+  }
+
+  def handleKillRequest(request: HttpServletRequest): Unit = {
+    if (parent.killEnabled &&
+        parent.master.securityMgr.checkModifyPermissions(request.getRemoteUser)) {
+      val killFlag = Option(request.getParameter("terminate")).getOrElse("false").toBoolean
+      val appId = Option(request.getParameter("id"))
+      if (appId.isDefined && killFlag) {
+        parent.master.idToApp.get(appId.get).map { app =>
+          parent.master.removeApplication(app, ApplicationState.KILLED)
+        }
+      }
+
+      Thread.sleep(100)
+    }
   }
 
   /** Index view listing applications and executors */
@@ -167,9 +182,20 @@ private[spark] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   }
 
   private def appRow(app: ApplicationInfo, active: Boolean): Seq[Node] = {
+    val killLink = if (parent.killEnabled && app.state == ApplicationState.RUNNING) {
+    val killLinkUri = "app/kill?id=%s&terminate=true"
+      .format(app.id)
+    val confirm = "return window.confirm('Are you sure you want to kill application %s ?');"
+      .format(app.id)
+      <span class="kill-link">
+        (<a href={killLinkUri} onclick={confirm}>kill</a>)
+      </span>
+    }
+
     <tr>
       <td>
         <a href={"app?appId=" + app.id}>{app.id}</a>
+        {killLink}
       </td>
       <td>
         <a href={app.desc.appUiUrl}>{app.desc.name}</a>
