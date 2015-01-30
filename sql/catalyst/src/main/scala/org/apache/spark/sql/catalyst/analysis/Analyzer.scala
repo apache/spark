@@ -230,6 +230,10 @@ class Analyzer(catalog: Catalog,
    */
   object CheckMultiAlias extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case p @ Project(projectList, _)
+        if projectList.exists(_.isInstanceOf[MultiAlias]) && projectList.size != 1 =>
+        throw new TreeNodeException(p, "only single Generator supported for SELECT clause")
+
       case q: LogicalPlan => q transformExpressions {
         case multiAlias @ MultiAlias(generator, names) if generator.isInstanceOf[Generator] =>
           assert(generator.asInstanceOf[Generator].output.size == names.size,

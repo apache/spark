@@ -116,7 +116,7 @@ case class Alias(child: Expression, name: String)
 }
 
 /**
- * Used to assign a new name to a computation with more than one column output, such as hive udtf.
+ * Used to assign new names to Generator's output, such as hive udtf.
  * For example the SQL expression "stack(2, key, value, key, value) as (a, b)" could be represented
  * as follows:
  *  Alias(stack_function, Seq(a, b))()
