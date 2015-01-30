@@ -103,7 +103,8 @@ object LDATiming {
         s" default: ${defaultParams.checkpointInterval}")
         .action((x, c) => c.copy(checkpointInterval = x))
       arg[String]("<input>...")
-        .text("input paths (directories) to plain text corpora.  Each text file line should hold 1 document.")
+        .text("input paths (directories) to plain text corpora."
+        + "  Each text file line should hold 1 document.")
         .unbounded()
         .required()
         .action((x, c) => c.copy(input = c.input :+ x))
@@ -128,7 +129,8 @@ object LDATiming {
       for (vocabSize <- params.vocabSizes) {
 
         val preprocessStart = System.nanoTime()
-        val (corpus, vocabArray) = preprocess(sc, params.input, corpusSize, vocabSize, params.stopwordFile)
+        val (corpus, vocabArray) = preprocess(sc, params.input, corpusSize, vocabSize,
+          params.stopwordFile)
         corpus.repartition(params.numPartitions).cache()
         val actualCorpusSize = corpus.count()
         val actualVocabSize = vocabArray.size
@@ -162,7 +164,8 @@ object LDATiming {
           println(s"\t Training time: $elapsed sec")
           val avgLogLikelihood = ldaModel.logLikelihood / actualCorpusSize.toDouble
           println(s"\t Training data average log likelihood: $avgLogLikelihood")
-          println(s"\t Training times per iteration (sec):\n${ldaModel.iterationTimes.mkString("\t", "\n\t", "\n")}")
+          println(s"\t Training times per iteration (sec):\n" +
+            s"${ldaModel.iterationTimes.mkString("\t", "\n\t", "\n")}")
           println()
 
           // Print the topics, showing the top-weighted terms for each topic.
@@ -181,7 +184,9 @@ object LDATiming {
           println()
           println("--------------------------------------------------------------")
           println()
-          println(s"RESULTS: $corpusSize $vocabSize $actualCorpusSize $actualVocabSize $actualNumTokens $k $elapsed $avgLogLikelihood ${ldaModel.iterationTimes.mkString(" ")}")
+          println(s"RESULTS: $corpusSize $vocabSize $actualCorpusSize $actualVocabSize" +
+            s" $actualNumTokens $k $elapsed $avgLogLikelihood" +
+            s" ${ldaModel.iterationTimes.mkString(" ")}")
           println()
           println("==============================================================")
           println()

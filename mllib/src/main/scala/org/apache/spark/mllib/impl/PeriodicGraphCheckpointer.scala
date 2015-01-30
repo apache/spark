@@ -50,10 +50,10 @@ private[mllib] class PeriodicGraphCheckpointer[VD, ED](
     val checkpointDir: Option[String],
     val checkpointInterval: Int) extends Logging {
 
-  /** FIFO queue of past checkpointed RDDs*/
+  /** FIFO queue of past checkpointed RDDs */
   private val checkpointQueue = mutable.Queue[Graph[VD, ED]]()
 
-  /** FIFO queue of past persisted RDDs*/
+  /** FIFO queue of past persisted RDDs */
   private val persistedQueue = mutable.Queue[Graph[VD, ED]]()
 
   /** Number of times [[updateGraph()]] has been called */
@@ -91,7 +91,8 @@ private[mllib] class PeriodicGraphCheckpointer[VD, ED](
     // before the graph has been materialized.
     while (persistedQueue.size > 3) {
       val graphToUnpersist = persistedQueue.dequeue()
-      println(s"PeriodicGraphCheckpointer.updateGraph: unpersisting ${graphToUnpersist.vertices.id}")
+      println(s"PeriodicGraphCheckpointer.updateGraph:" +
+        s" unpersisting ${graphToUnpersist.vertices.id}")
       graphToUnpersist.unpersist(blocking = false)
     }
     updateCount += 1

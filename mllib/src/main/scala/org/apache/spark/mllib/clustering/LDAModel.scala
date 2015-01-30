@@ -93,7 +93,7 @@ abstract class LDAModel private[clustering] {
    *          (if available) or the term index.
    *          Each topic's terms are sorted in order of decreasing weight.
    */
-  //def describeTopicsAsStrings(maxTermsPerTopic: Int): Array[(Array[Double], Array[String])]
+  // def describeTopicsAsStrings(maxTermsPerTopic: Int): Array[(Array[Double], Array[String])]
 
   /* TODO (once LDA can be trained with Strings or given a dictionary)
    * Return the topics described by weighted terms.
@@ -109,7 +109,7 @@ abstract class LDAModel private[clustering] {
    *          (if available) or the term index.
    *          Each topic's terms are sorted in order of decreasing weight.
    */
-  //def describeTopicsAsStrings(): Array[(Array[Double], Array[String])] =
+  // def describeTopicsAsStrings(): Array[(Array[Double], Array[String])] =
   //  describeTopicsAsStrings(vocabSize)
 
   /* TODO
