@@ -50,6 +50,7 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
   .Object@env$serialized <- prev@env$serialized
 
   # NOTE: We use prev_serialized to track if prev_jrdd is serialized
+  # prev_serialized is used during the delayed computation of JRDD in getJRDD
   .Object@prev <- prev
 
   isPipelinable <- function(rdd) {
