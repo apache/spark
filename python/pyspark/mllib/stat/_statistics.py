@@ -15,17 +15,14 @@
 # limitations under the License.
 #
 
-"""
-Python package for statistical functions in MLlib.
-"""
-
 from pyspark import RDD
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.linalg import Matrix, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
+from pyspark.mllib.stat.test import ChiSqTestResult
 
 
-__all__ = ['MultivariateStatisticalSummary', 'ChiSqTestResult', 'Statistics']
+__all__ = ['MultivariateStatisticalSummary', 'Statistics']
 
 
 class MultivariateStatisticalSummary(JavaModelWrapper):
@@ -51,54 +48,6 @@ class MultivariateStatisticalSummary(JavaModelWrapper):
 
     def min(self):
         return self.call("min").toArray()
-
-
-class ChiSqTestResult(JavaModelWrapper):
-    """
-    .. note:: Experimental
-
-    Object containing the test results for the chi-squared hypothesis test.
-    """
-    @property
-    def method(self):
-        """
-        Name of the test method
-        """
-        return self._java_model.method()
-
-    @property
-    def pValue(self):
-        """
-        The probability of obtaining a test statistic result at least as
-        extreme as the one that was actually observed, assuming that the
-        null hypothesis is true.
-        """
-        return self._java_model.pValue()
-
-    @property
-    def degreesOfFreedom(self):
-        """
-        Returns the degree(s) of freedom of the hypothesis test.
-        Return type should be Number(e.g. Int, Double) or tuples of Numbers.
-        """
-        return self._java_model.degreesOfFreedom()
-
-    @property
-    def statistic(self):
-        """
-        Test statistic.
-        """
-        return self._java_model.statistic()
-
-    @property
-    def nullHypothesis(self):
-        """
-        Null hypothesis of the test.
-        """
-        return self._java_model.nullHypothesis()
-
-    def __str__(self):
-        return self._java_model.toString()
 
 
 class Statistics(object):
