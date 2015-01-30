@@ -352,16 +352,6 @@ def launch_cluster(conn, opts, cluster_name):
         print >> stderr, "ERROR: Must provide an identity file (-i) for ssh connections."
         sys.exit(1)
 
-    if not os.path.exists(opts.identity_file):
-        print >> stderr, "ERROR: The identity file '{f}' doesn't exist.".format(f=opts.identity_file)
-        sys.exit(1)
-
-    file_mode = os.stat(opts.identity_file).st_mode
-    if not (file_mode & S_IRUSR) or \
-       not oct(file_mode)[-2:] == '00':
-        print >> stderr, "ERROR: The identity file must be accessible only by you."
-        sys.exit(1)
-
     if opts.key_pair is None:
         print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
         sys.exit(1)
@@ -1016,6 +1006,16 @@ def real_main():
             DeprecationWarning
         )
 
+    if opts.identity_file is not None:
+        if not os.path.exists(opts.identity_file):
+            print >> stderr, "ERROR: The identity file '{f}' doesn't exist.".format(f=opts.identity_file)
+            sys.exit(1)
+
+        file_mode = os.stat(opts.identity_file).st_mode
+        if not (file_mode & S_IRUSR) or  not oct(file_mode)[-2:] == '00':
+            print >> stderr, "ERROR: The identity file must be accessible only by you."
+            sys.exit(1)
+ 
     if opts.ebs_vol_num > 8:
         print >> stderr, "ebs-vol-num cannot be greater than 8"
         sys.exit(1)
