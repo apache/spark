@@ -17,8 +17,10 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.File
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
+import java.nio.file.Files
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, ListBuffer, Map}
@@ -61,7 +63,7 @@ private[spark] class Client(
 
   private val yarnClient = YarnClient.createYarnClient
   private val yarnConf = new YarnConfiguration(hadoopConf)
-  private val credentials = UserGroupInformation.getCurrentUser.getCredentials
+  private var credentials: Credentials = null
   private val amMemoryOverhead = args.amMemoryOverhead // MB
   private val executorMemoryOverhead = args.executorMemoryOverhead // MB
   private val distCacheMgr = new ClientDistributedCacheManager()
@@ -538,6 +540,23 @@ private[spark] class Client(
     UserGroupInformation.getCurrentUser().addCredentials(credentials)
 
     amContainer
+  }
+
+  def setupCredentials(): Unit = {
+    Option(args.principal) match {
+      case Some(principal) =>
+        Option(args.keytab) match {
+          case Some(keytabPath) =>
+            File principalFile = Files.createTempF
+            val ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytabPath)
+            credentials = ugi.getCredentials
+          case None =>
+        }
+      case None =>
+        credentials = UserGroupInformation.getCurrentUser.getCredentials
+
+    }
+
   }
 
   /**
